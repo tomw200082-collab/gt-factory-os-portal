@@ -84,11 +84,26 @@ const schema = z.object({
   target_kind: z.enum(TARGET_KINDS),
   target_id: z.string().min(1, "Choose a target"),
   relationship: z.string().optional(),
-  order_uom: z.enum(UOMS).optional(),
-  inventory_uom: z.enum(UOMS).optional(),
+  // Preprocess empty string -> undefined on optional enum + numeric
+  // fields so unchosen '—' options and empty number inputs pass
+  // .optional() checks. Same pattern as items/components pages.
+  order_uom: z.preprocess(
+    (v) => (v === "" || v == null ? undefined : v),
+    z.enum(UOMS).optional(),
+  ),
+  inventory_uom: z.preprocess(
+    (v) => (v === "" || v == null ? undefined : v),
+    z.enum(UOMS).optional(),
+  ),
   pack_conversion: z.coerce.number().positive().default(1),
-  lead_time_days: z.coerce.number().int().nonnegative().optional(),
-  moq: z.coerce.number().nonnegative().optional(),
+  lead_time_days: z.preprocess(
+    (v) => (v === "" || v == null ? undefined : v),
+    z.coerce.number().int().nonnegative().optional(),
+  ),
+  moq: z.preprocess(
+    (v) => (v === "" || v == null ? undefined : v),
+    z.coerce.number().nonnegative().optional(),
+  ),
   payment_terms: z.string().optional(),
   safety_days: z.coerce.number().int().nonnegative().default(0),
   approval_status: z.string().optional(),

@@ -58,16 +58,35 @@ const itemSchema = z.object({
   item_name: z.string().min(2, "Item name is required."),
   family: z.string().optional(),
   pack_size: z.string().optional(),
-  sales_uom: z.enum(UOMS).optional(),
+  // Preprocess empty string -> undefined so an unchosen '—' option
+  // from the dropdown passes .optional() rather than failing the
+  // enum check with 'Invalid enum value ... received '''.
+  sales_uom: z.preprocess(
+    (v) => (v === "" || v == null ? undefined : v),
+    z.enum(UOMS).optional(),
+  ),
   sweetness: z.string().optional(),
   supply_method: z.enum(SUPPLY_METHODS),
   item_type: z.string().optional(),
   status: z.enum(ITEM_STATUSES),
   barcode: z.string().optional(),
   legacy_sku: z.string().optional(),
-  shelf_life_days: z.coerce.number().int().nonnegative().optional(),
+  // Optional numeric fields: preprocess empty strings to undefined so
+  // .coerce.number() does not turn "" into 0 and trip .positive()
+  // silently. react-hook-form sends "" for untouched <input type=
+  // "number"> fields; zod's default .optional() allows undefined but
+  // does not treat "" as absent. This was the submit-silently-fails
+  // bug caught by the Phase A admin-items-crud E2E regression in
+  // Wave 5b.
+  shelf_life_days: z.preprocess(
+    (v) => (v === "" || v == null ? undefined : v),
+    z.coerce.number().int().nonnegative().optional(),
+  ),
   storage: z.string().optional(),
-  case_pack: z.coerce.number().int().positive().optional(),
+  case_pack: z.preprocess(
+    (v) => (v === "" || v == null ? undefined : v),
+    z.coerce.number().int().positive().optional(),
+  ),
   sub_type: z.string().optional(),
   product_group: z.string().optional(),
   notes: z.string().optional(),

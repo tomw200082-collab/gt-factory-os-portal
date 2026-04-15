@@ -24,7 +24,10 @@ test.describe("Admin items — happy-path create", () => {
     await expect(page.getByRole("heading", { name: "New item" })).toBeVisible();
 
     // Fill the form.
-    await page.getByTestId("item-sku-input").fill("FG-TEST-001");
+    // Phase A: the input for the item primary key is now data-testid
+    // 'item-id-input' (renamed from 'item-sku-input') because the
+    // locked schema uses item_id as the text PK, not a synthetic sku.
+    await page.getByTestId("item-id-input").fill("FG-TEST-001");
     await page.getByTestId("item-name-input").fill("Test item from E2E");
 
     // Submit.

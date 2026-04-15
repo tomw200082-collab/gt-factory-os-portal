@@ -14,9 +14,14 @@ test.describe("Goods Receipt — success path (mock view swap)", () => {
     // Pick a supplier via the scoped data-testid — this avoids collision
     // with the top-bar FAKE SESSION role switcher, which is the first
     // <select> in DOM order on every page.
+    //
+    // Phase A: the seed supplier_name_official is now the Hebrew
+    // ' שיקרי אליהו בע"מ ' (locked decision 6 — Hebrew permitted in
+    // data fields). Selecting by index rather than label avoids the
+    // Hebrew-in-test-string fragility.
     await page
       .getByTestId("receipt-supplier-select")
-      .selectOption({ label: "Shikarei Eliyahu Ltd" });
+      .selectOption({ index: 1 });
 
     // Fill the first line's item picker — first option after the blank.
     await page.getByTestId("receipt-line-item-0").selectOption({ index: 1 });

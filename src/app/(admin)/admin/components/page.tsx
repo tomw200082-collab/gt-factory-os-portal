@@ -46,17 +46,45 @@ const schema = z.object({
   component_class: z.string().optional(),
   component_group: z.string().optional(),
   status: z.enum(COMPONENT_STATUSES),
-  inventory_uom: z.enum(UOMS).optional(),
-  purchase_uom: z.enum(UOMS).optional(),
-  bom_uom: z.enum(UOMS).optional(),
+  // Preprocess empty string -> undefined so unchosen '—' options from
+  // the enum dropdowns and untouched <input type="number"> fields pass
+  // .optional() rather than failing the enum/coerce check. Same pattern
+  // applied across all Wave 3 admin create forms (see items/page.tsx).
+  inventory_uom: z.preprocess(
+    (v) => (v === "" || v == null ? undefined : v),
+    z.enum(UOMS).optional(),
+  ),
+  purchase_uom: z.preprocess(
+    (v) => (v === "" || v == null ? undefined : v),
+    z.enum(UOMS).optional(),
+  ),
+  bom_uom: z.preprocess(
+    (v) => (v === "" || v == null ? undefined : v),
+    z.enum(UOMS).optional(),
+  ),
   purchase_to_inv_factor: z.coerce.number().positive().default(1),
   planning_policy_code: z.string().optional(),
   primary_supplier_id: z.string().optional(),
-  lead_time_days: z.coerce.number().int().nonnegative().optional(),
-  moq_purchase_uom: z.coerce.number().nonnegative().optional(),
-  order_multiple_purchase_uom: z.coerce.number().nonnegative().optional(),
-  std_cost_per_purchase_uom: z.coerce.number().nonnegative().optional(),
-  std_cost_per_inv_uom: z.coerce.number().nonnegative().optional(),
+  lead_time_days: z.preprocess(
+    (v) => (v === "" || v == null ? undefined : v),
+    z.coerce.number().int().nonnegative().optional(),
+  ),
+  moq_purchase_uom: z.preprocess(
+    (v) => (v === "" || v == null ? undefined : v),
+    z.coerce.number().nonnegative().optional(),
+  ),
+  order_multiple_purchase_uom: z.preprocess(
+    (v) => (v === "" || v == null ? undefined : v),
+    z.coerce.number().nonnegative().optional(),
+  ),
+  std_cost_per_purchase_uom: z.preprocess(
+    (v) => (v === "" || v == null ? undefined : v),
+    z.coerce.number().nonnegative().optional(),
+  ),
+  std_cost_per_inv_uom: z.preprocess(
+    (v) => (v === "" || v == null ? undefined : v),
+    z.coerce.number().nonnegative().optional(),
+  ),
   criticality: z.string().optional(),
   planned_flag: z.boolean().default(true),
   notes: z.string().optional(),

@@ -49,8 +49,17 @@ const schema = z.object({
   primary_contact_phone: z.string().optional(),
   currency: z.string().min(3).max(3),
   payment_terms: z.string().optional(),
-  default_lead_time_days: z.coerce.number().int().nonnegative().optional(),
-  default_moq: z.coerce.number().nonnegative().optional(),
+  // Preprocess empty string -> undefined so empty number inputs pass
+  // .optional() rather than coerce("") -> 0 tripping the semantic
+  // check. Same pattern as items/components/supplier-items.
+  default_lead_time_days: z.preprocess(
+    (v) => (v === "" || v == null ? undefined : v),
+    z.coerce.number().int().nonnegative().optional(),
+  ),
+  default_moq: z.preprocess(
+    (v) => (v === "" || v == null ? undefined : v),
+    z.coerce.number().nonnegative().optional(),
+  ),
   approval_status: z.string().optional(),
   notes: z.string().optional(),
 });
