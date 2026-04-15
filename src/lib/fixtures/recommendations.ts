@@ -1,18 +1,31 @@
 import type { PurchaseRecommendationDto } from "@/lib/contracts/dto";
 
+// ---------------------------------------------------------------------------
+// Fixture purchase recommendations — reshaped for Phase A.
+//
+// PurchaseRecommendationDto itself is an OPERATIONAL DTO, not a master
+// DTO, so Phase A Wave 1 left its shape unchanged. This fixture updates
+// only the field values to match the new master fixtures (uppercase
+// UOMs, text supplier_ids like SUP-MSH, text component_ids like
+// RAW-MINT-LEAVES). Real recommendations land when the Tranche 5
+// planning engine ships; until then this fixture hydrates the planner
+// recommendations page only.
+// ---------------------------------------------------------------------------
+
 export const SEED_PURCHASE_RECS: PurchaseRecommendationDto[] = [
   {
     id: "rec_0001",
     planning_run_id: "run_2026-04-14",
-    supplier_id: "sup_mishtalot_hagalil",
+    supplier_id: "SUP-MSH",
     supplier_name: "Mishtalot HaGalil",
-    component_id: "cmp_mint_leaves",
+    component_id: "RAW-MINT-LEAVES",
     component_name: "Fresh mint leaves",
     recommended_quantity: 8,
-    unit: "kg",
+    unit: "KG",
     target_receive_date: "2026-04-16",
     urgency: "critical",
-    reason: "Projected stockout in 1 day; mojito and mint tea production lines exposed.",
+    reason:
+      "Projected stockout in 1 day; mojito and mint tea production lines exposed.",
     on_hand: 0.6,
     open_po_quantity: 0,
     projected_stockout_at: "2026-04-15",
@@ -21,15 +34,16 @@ export const SEED_PURCHASE_RECS: PurchaseRecommendationDto[] = [
   {
     id: "rec_0002",
     planning_run_id: "run_2026-04-14",
-    supplier_id: "sup_prigat_citrus",
-    supplier_name: "Prigat Citrus Cooperative",
-    component_id: "cmp_lime_juice",
+    supplier_id: "SUP-PRG",
+    supplier_name: "Prigat",
+    component_id: "RAW-LIME-JUICE",
     component_name: "Fresh lime juice",
     recommended_quantity: 40,
-    unit: "l",
+    unit: "L",
     target_receive_date: "2026-04-17",
     urgency: "high",
-    reason: "3-day projected coverage; mojito and margarita demand rising into summer.",
+    reason:
+      "3-day projected coverage; mojito and margarita demand rising into summer.",
     on_hand: 9.4,
     open_po_quantity: 0,
     projected_stockout_at: "2026-04-17",
@@ -38,15 +52,16 @@ export const SEED_PURCHASE_RECS: PurchaseRecommendationDto[] = [
   {
     id: "rec_0003",
     planning_run_id: "run_2026-04-14",
-    supplier_id: "sup_tovalim_press",
+    supplier_id: "SUP-TVL",
     supplier_name: "Tovalim Press",
-    component_id: "cmp_label_mojito",
+    component_id: "PKG-LBL-MOJ",
     component_name: "Label — Mojito 450ml",
     recommended_quantity: 8000,
-    unit: "each",
+    unit: "PCS",
     target_receive_date: "2026-04-28",
     urgency: "high",
-    reason: "14-day lead time + 5-day projected coverage = risk of production pause.",
+    reason:
+      "14-day lead time + 5-day projected coverage = risk of production pause.",
     on_hand: 420,
     open_po_quantity: 0,
     projected_stockout_at: "2026-04-19",
@@ -55,12 +70,12 @@ export const SEED_PURCHASE_RECS: PurchaseRecommendationDto[] = [
   {
     id: "rec_0004",
     planning_run_id: "run_2026-04-14",
-    supplier_id: "sup_phoenicia",
+    supplier_id: "SUP-PHX",
     supplier_name: "Phoenicia Glass Works",
-    component_id: "cmp_bottle_450_glass",
+    component_id: "PKG-BTL-450-GLASS",
     component_name: "Glass bottle 450ml",
     recommended_quantity: 6000,
-    unit: "each",
+    unit: "PCS",
     target_receive_date: "2026-04-25",
     urgency: "normal",
     reason: "Reorder point reached; cover cocktail production 6 weeks forward.",
@@ -71,12 +86,12 @@ export const SEED_PURCHASE_RECS: PurchaseRecommendationDto[] = [
   {
     id: "rec_0005",
     planning_run_id: "run_2026-04-14",
-    supplier_id: "sup_phoenicia",
+    supplier_id: "SUP-PHX",
     supplier_name: "Phoenicia Glass Works",
-    component_id: "cmp_bottle_330_glass",
+    component_id: "PKG-BTL-330-GLASS",
     component_name: "Glass bottle 330ml",
     recommended_quantity: 5000,
-    unit: "each",
+    unit: "PCS",
     target_receive_date: "2026-04-25",
     urgency: "normal",
     reason: "Reorder point for smoothie and piña colada lines.",
@@ -87,15 +102,16 @@ export const SEED_PURCHASE_RECS: PurchaseRecommendationDto[] = [
   {
     id: "rec_0006",
     planning_run_id: "run_2026-04-14",
-    supplier_id: "sup_sugat_sugar",
-    supplier_name: "Sugat Industries",
-    component_id: "cmp_cane_sugar",
+    supplier_id: "SUP-SUG",
+    supplier_name: "Sugat",
+    component_id: "RAW-SUGAR-CANE",
     component_name: "Cane sugar",
     recommended_quantity: 100,
-    unit: "kg",
+    unit: "KG",
     target_receive_date: "2026-04-22",
     urgency: "normal",
-    reason: "Routine replenishment; pending count variance approval may adjust.",
+    reason:
+      "Routine replenishment; pending count variance approval may adjust.",
     on_hand: 24.5,
     open_po_quantity: 0,
     state: "held",
@@ -103,15 +119,16 @@ export const SEED_PURCHASE_RECS: PurchaseRecommendationDto[] = [
   {
     id: "rec_0007",
     planning_run_id: "run_2026-04-14",
-    supplier_id: "sup_shikarei_eliyahu",
-    supplier_name: "Shikarei Eliyahu Ltd",
-    component_id: "cmp_white_rum",
+    supplier_id: "SUP-SHI",
+    supplier_name: "Shikarei Eliyahu",
+    component_id: "RAW-RUM-WHITE",
     component_name: "White rum 37.5%",
     recommended_quantity: 24,
-    unit: "l",
+    unit: "L",
     target_receive_date: "2026-04-24",
     urgency: "low",
-    reason: "Normal replenishment; found-stock adjustment pending approval may reduce need.",
+    reason:
+      "Normal replenishment; found-stock adjustment pending approval may reduce need.",
     on_hand: 38,
     open_po_quantity: 0,
     state: "pending",
@@ -119,12 +136,12 @@ export const SEED_PURCHASE_RECS: PurchaseRecommendationDto[] = [
   {
     id: "rec_0008",
     planning_run_id: "run_2026-04-14",
-    supplier_id: "sup_carton_tamir",
+    supplier_id: "SUP-TMR",
     supplier_name: "Carton Tamir",
-    component_id: "cmp_case_12",
+    component_id: "PKG-CASE-12",
     component_name: "Cardboard case — 12 bottles",
     recommended_quantity: 1200,
-    unit: "each",
+    unit: "PCS",
     target_receive_date: "2026-04-30",
     urgency: "low",
     reason: "Standing replenishment against rolling cocktail output.",

@@ -1,86 +1,87 @@
 import type { PlanningPolicyDto } from "@/lib/contracts/dto";
-import { seedAudit } from "./audit";
+
+// ---------------------------------------------------------------------------
+// Fixture planning policies — reshaped for Phase A.
+//
+// Matches the locked PlanningPolicyDto shape from 0002_masters.sql:
+// flat text key/value with nullable uom + description + updated_at.
+// No synthetic id, no audit envelope, no value_type/scope discriminator.
+// Values are always text strings at this layer — the admin screen is
+// responsible for parsing them on read.
+// ---------------------------------------------------------------------------
+
+const now = "2026-04-15T00:00:00Z";
 
 export const SEED_POLICIES: PlanningPolicyDto[] = [
   {
-    id: "pp_adj_small_abs",
     key: "adjustment.auto_post.small_threshold",
-    description: "Small waste/adjustment auto-posts up to this absolute quantity.",
-    value: 5,
-    value_type: "number",
-    scope: "global",
-    audit: seedAudit(),
+    value: "5",
+    uom: "qty",
+    description:
+      "Small waste/adjustment auto-posts up to this absolute quantity.",
+    updated_at: now,
   },
   {
-    id: "pp_adj_large_abs",
     key: "adjustment.approval.large_threshold",
-    description: "Waste/adjustment at or above this quantity routes to planner approval.",
-    value: 25,
-    value_type: "number",
-    scope: "global",
-    audit: seedAudit(),
+    value: "25",
+    uom: "qty",
+    description:
+      "Waste/adjustment at or above this quantity routes to planner approval.",
+    updated_at: now,
   },
   {
-    id: "pp_positive_strict",
     key: "adjustment.positive.always_approval",
-    description: "When true, every positive-direction adjustment requires approval regardless of quantity.",
-    value: true,
-    value_type: "boolean",
-    scope: "global",
-    audit: seedAudit(),
+    value: "true",
+    uom: null,
+    description:
+      "When true, every positive-direction adjustment requires approval regardless of quantity.",
+    updated_at: now,
   },
   {
-    id: "pp_count_variance_pct",
     key: "count.variance.auto_post_pct",
-    description: "Variance under this percent auto-posts; over this, routes to approval.",
-    value: 5,
-    value_type: "number",
-    scope: "global",
-    audit: seedAudit(),
+    value: "5",
+    uom: "percent",
+    description:
+      "Variance under this percent auto-posts; over this, routes to approval.",
+    updated_at: now,
   },
   {
-    id: "pp_count_variance_abs",
     key: "count.variance.auto_post_abs",
-    description: "Absolute variance floor that always auto-posts regardless of percent.",
-    value: 2,
-    value_type: "number",
-    scope: "global",
-    audit: seedAudit(),
+    value: "2",
+    uom: "qty",
+    description:
+      "Absolute variance floor that always auto-posts regardless of percent.",
+    updated_at: now,
   },
   {
-    id: "pp_receipt_backdate_days",
     key: "receipt.backdate.warn_days",
-    description: "Receipt event_at more than this many days in the past triggers a UI warning.",
-    value: 14,
-    value_type: "number",
-    scope: "global",
-    audit: seedAudit(),
+    value: "14",
+    uom: "days",
+    description:
+      "Receipt event_at more than this many days in the past triggers a UI warning.",
+    updated_at: now,
   },
   {
-    id: "pp_forecast_horizon_weeks",
     key: "forecast.horizon_weeks",
+    value: "8",
+    uom: "weeks",
     description: "Number of forward weeks the forecast workspace renders.",
-    value: 8,
-    value_type: "number",
-    scope: "global",
-    audit: seedAudit(),
+    updated_at: now,
   },
   {
-    id: "pp_price_change_threshold",
     key: "supplier.price.auto_update_change_pct",
-    description: "Maximum percent price change allowed for Green Invoice auto-update; above this requires review.",
-    value: 10,
-    value_type: "number",
-    scope: "global",
-    audit: seedAudit(),
+    value: "10",
+    uom: "percent",
+    description:
+      "Maximum percent price change allowed for Green Invoice auto-update; above this requires review.",
+    updated_at: now,
   },
   {
-    id: "pp_bulk_approve_warn",
     key: "purchase_recs.bulk_approve.confirm_count",
-    description: "Approving more than this many purchase recs at once triggers a confirm dialog.",
-    value: 10,
-    value_type: "number",
-    scope: "global",
-    audit: seedAudit(),
+    value: "10",
+    uom: "count",
+    description:
+      "Approving more than this many purchase recs at once triggers a confirm dialog.",
+    updated_at: now,
   },
 ];
