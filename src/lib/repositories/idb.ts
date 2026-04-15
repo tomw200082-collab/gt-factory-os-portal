@@ -109,3 +109,22 @@ export async function resetDb(): Promise<void> {
   await metaTx.store.put({ id: "seed_flag", seeded: false });
   await metaTx.done;
 }
+
+/**
+ * Test-only hook: close the cached db handle and clear the cached
+ * promise so the next getDb() call re-opens a fresh database. Used by
+ * tests/setup-vitest.ts resetFakeIDB(). Must be called BEFORE
+ * indexedDB.deleteDatabase so the delete is not blocked by an open
+ * connection.
+ */
+export async function __resetDbPromiseForTests(): Promise<void> {
+  if (dbPromise) {
+    try {
+      const db = await dbPromise;
+      db.close();
+    } catch {
+      // ignore — best effort close
+    }
+  }
+  dbPromise = null;
+}

@@ -5,16 +5,23 @@ import { SEED_ITEMS } from "@/lib/fixtures/items";
 import type { ItemDto } from "@/lib/contracts/dto";
 import { resetFakeIDB } from "../../setup-vitest";
 
-// A real-shaped repo tied to the items store, using the real fixture.
-// All the behavior we care about (optimistic concurrency, soft delete,
-// audit bump) lives in GenericIdbRepo, so we exercise it end-to-end
-// against fake-indexeddb instead of mocking the store.
+// ---------------------------------------------------------------------------
+// Generic repo tests — reconciled for Phase A.
+//
+// The canonical GenericIdbRepo now takes an options object with a
+// pluggable idOf extractor (see generic-repo.ts) instead of relying on
+// a synthetic `id` field. ItemDto uses `item_id` as its PK per the
+// locked schema (0002_masters.sql). All assertions are updated to
+// match.
+// ---------------------------------------------------------------------------
+
 function itemsRepoForTest() {
-  return new GenericIdbRepo<ItemDto>(
-    STORES.items,
-    ["name", "sku"],
-    () => "test-user"
-  );
+  return new GenericIdbRepo<ItemDto>({
+    store: STORES.items,
+    idOf: (row) => row.item_id,
+    searchFields: ["item_name", "family"],
+    currentUser: () => "test-user",
+  });
 }
 
 async function seedOneItem(): Promise<ItemDto> {
@@ -38,12 +45,12 @@ describe("GenericIdbRepo — optimistic concurrency", () => {
     const repo = itemsRepoForTest();
 
     const updated = await repo.update(
-      seeded.id,
-      { name: "Renamed mojito" } as Partial<ItemDto>,
-      seeded.audit.version
+      seeded.item_id,
+      { item_name: "Renamed mojito" } as Partial<ItemDto>,
+      seeded.audit.version,
     );
 
-    expect(updated.name).toBe("Renamed mojito");
+    expect(updated.item_name).toBe("Renamed mojito");
     expect(updated.audit.version).toBe(seeded.audit.version + 1);
     expect(updated.audit.updated_by).toBe("test-user");
   });
@@ -54,22 +61,22 @@ describe("GenericIdbRepo — optimistic concurrency", () => {
 
     // First writer wins.
     await repo.update(
-      seeded.id,
-      { name: "First writer" } as Partial<ItemDto>,
-      seeded.audit.version
+      seeded.item_id,
+      { item_name: "First writer" } as Partial<ItemDto>,
+      seeded.audit.version,
     );
 
     // Second writer holds the old version snapshot and tries to write.
     await expect(
       repo.update(
-        seeded.id,
-        { name: "Second writer" } as Partial<ItemDto>,
-        seeded.audit.version
-      )
+        seeded.item_id,
+        { item_name: "Second writer" } as Partial<ItemDto>,
+        seeded.audit.version,
+      ),
     ).rejects.toBeInstanceOf(RepoError);
 
-    const fresh = await repo.get(seeded.id);
-    expect(fresh?.name).toBe("First writer");
+    const fresh = await repo.get(seeded.item_id);
+    expect(fresh?.item_name).toBe("First writer");
   });
 
   it("carries the current row on RepoError('stale') so the caller can reconcile", async () => {
@@ -77,16 +84,16 @@ describe("GenericIdbRepo — optimistic concurrency", () => {
     const repo = itemsRepoForTest();
 
     await repo.update(
-      seeded.id,
-      { name: "After v1" } as Partial<ItemDto>,
-      seeded.audit.version
+      seeded.item_id,
+      { item_name: "After v1" } as Partial<ItemDto>,
+      seeded.audit.version,
     );
 
     try {
       await repo.update(
-        seeded.id,
-        { name: "Tries v1 again" } as Partial<ItemDto>,
-        seeded.audit.version
+        seeded.item_id,
+        { item_name: "Tries v1 again" } as Partial<ItemDto>,
+        seeded.audit.version,
       );
       throw new Error("should have thrown");
     } catch (e) {
@@ -94,9 +101,24 @@ describe("GenericIdbRepo — optimistic concurrency", () => {
       const err = e as RepoError;
       expect(err.code).toBe("stale");
       const current = err.current as ItemDto;
-      expect(current.name).toBe("After v1");
+      expect(current.item_name).toBe("After v1");
       expect(current.audit.version).toBe(seeded.audit.version + 1);
     }
+  });
+
+  it("rejects an update that tries to mutate the primary key", async () => {
+    const seeded = await seedOneItem();
+    const repo = itemsRepoForTest();
+
+    // Runtime invariant: item_id is immutable. A patch that tries to
+    // change it should be rejected with RepoError 'validation'.
+    await expect(
+      repo.update(
+        seeded.item_id,
+        { item_id: "FG-DIFFERENT" } as Partial<ItemDto>,
+        seeded.audit.version,
+      ),
+    ).rejects.toMatchObject({ code: "validation" });
   });
 });
 
@@ -109,11 +131,10 @@ describe("GenericIdbRepo — soft delete / archive", () => {
     const seeded = await seedOneItem();
     const repo = itemsRepoForTest();
 
-    const archived = await repo.setActive(seeded.id, false);
+    const archived = await repo.setActive(seeded.item_id, false);
     expect(archived.audit.active).toBe(false);
 
-    // Row still exists in the store.
-    const fetched = await repo.get(seeded.id);
+    const fetched = await repo.get(seeded.item_id);
     expect(fetched).not.toBeNull();
     expect(fetched!.audit.active).toBe(false);
   });
@@ -122,30 +143,30 @@ describe("GenericIdbRepo — soft delete / archive", () => {
     const seeded = await seedOneItem();
     const repo = itemsRepoForTest();
 
-    await repo.setActive(seeded.id, false);
+    await repo.setActive(seeded.item_id, false);
 
     const visible = await repo.list();
-    expect(visible.find((r) => r.id === seeded.id)).toBeUndefined();
+    expect(visible.find((r) => r.item_id === seeded.item_id)).toBeUndefined();
   });
 
   it("includes archived rows when includeArchived is true", async () => {
     const seeded = await seedOneItem();
     const repo = itemsRepoForTest();
-    await repo.setActive(seeded.id, false);
+    await repo.setActive(seeded.item_id, false);
 
     const visible = await repo.list({ includeArchived: true });
-    expect(visible.find((r) => r.id === seeded.id)).toBeDefined();
+    expect(visible.find((r) => r.item_id === seeded.item_id)).toBeDefined();
   });
 
   it("reactivates an archived row via setActive(id, true)", async () => {
     const seeded = await seedOneItem();
     const repo = itemsRepoForTest();
-    await repo.setActive(seeded.id, false);
+    await repo.setActive(seeded.item_id, false);
 
-    const reactivated = await repo.setActive(seeded.id, true);
+    const reactivated = await repo.setActive(seeded.item_id, true);
     expect(reactivated.audit.active).toBe(true);
 
     const visible = await repo.list();
-    expect(visible.find((r) => r.id === seeded.id)).toBeDefined();
+    expect(visible.find((r) => r.item_id === seeded.item_id)).toBeDefined();
   });
 });

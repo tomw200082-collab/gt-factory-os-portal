@@ -8,16 +8,37 @@
  */
 
 import "fake-indexeddb/auto";
+import { __resetDbPromiseForTests } from "@/lib/repositories/idb";
 
 // Explicit hook for tests that want to wipe the fake DB between cases.
+// Two steps:
+//   1. Delete the underlying fake-indexeddb databases (awaited properly
+//      this time — the deleteDatabase request is wrapped in a promise
+//      so we block on its completion).
+//   2. Clear the module-level cached dbPromise in idb.ts so the next
+//      getDb() call re-opens the fresh database instead of reusing the
+//      stale handle.
 export async function resetFakeIDB(): Promise<void> {
+  // Close the cached db handle first — otherwise deleteDatabase is
+  // blocked by the open connection and the delete request never fires
+  // onsuccess, which would hang the beforeEach hook.
+  await __resetDbPromiseForTests();
+
   const { indexedDB } = globalThis as unknown as { indexedDB: IDBFactory };
   const dbs = await indexedDB.databases();
-  for (const meta of dbs) {
-    if (meta.name) {
-      indexedDB.deleteDatabase(meta.name);
-    }
-  }
+  await Promise.all(
+    dbs
+      .filter((m) => m.name)
+      .map(
+        (m) =>
+          new Promise<void>((resolve, reject) => {
+            const req = indexedDB.deleteDatabase(m.name!);
+            req.onsuccess = () => resolve();
+            req.onerror = () => reject(req.error);
+            req.onblocked = () => resolve();
+          }),
+      ),
+  );
 }
 
 // Make crypto.randomUUID available (happy-dom provides it; guard for Node).

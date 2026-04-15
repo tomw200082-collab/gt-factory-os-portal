@@ -1,12 +1,14 @@
 import { describe, expect, it } from "vitest";
 import { wasteAdjustmentSchema } from "@/features/ops/waste-adjustment-schema";
 
+// Values reconciled for Phase A: uppercase UOM literals + text PK
+// IDs matching the locked schema seed.
 const base = {
   event_at: "2026-04-14T10:00",
   direction: "loss" as const,
-  item_id: "cmp_white_rum",
+  item_id: "RAW-RUM-WHITE",
   quantity: 1,
-  unit: "l" as const,
+  unit: "L" as const,
   reason_code: "breakage" as const,
 };
 

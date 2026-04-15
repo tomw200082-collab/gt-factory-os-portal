@@ -4,16 +4,18 @@ import {
   goodsReceiptSchema,
 } from "@/features/ops/goods-receipt-schema";
 
+// Values reconciled for Phase A: uppercase UOM literals + text PK IDs
+// matching the locked schema seed (see src/lib/fixtures/*).
 const validLine = {
-  item_id: "cmp_white_rum",
+  item_id: "RAW-RUM-WHITE",
   item_name: "White rum 37.5%",
   quantity: 12,
-  unit: "l" as const,
+  unit: "L" as const,
 };
 
 const validReceipt = {
   event_at: "2026-04-14T10:00",
-  supplier_id: "sup_shikarei_eliyahu",
+  supplier_id: "SUP-SHI",
   lines: [validLine],
 };
 
@@ -55,7 +57,7 @@ describe("goodsReceiptSchema — header + lines", () => {
       ...validReceipt,
       lines: [
         validLine,
-        { ...validLine, item_id: "cmp_lime_juice", quantity: 5 },
+        { ...validLine, item_id: "RAW-LIME-JUICE", quantity: 5 },
       ],
     });
     expect(r.success).toBe(true);

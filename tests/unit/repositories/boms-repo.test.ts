@@ -2,17 +2,49 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { IdbBomsRepo } from "@/lib/repositories/boms-repo";
 import { RepoError } from "@/lib/repositories/generic-repo";
 import { getDb, STORES } from "@/lib/repositories/idb";
-import { SEED_BOMS } from "@/lib/fixtures/boms";
-import type { BomHeadDto, BomLineDto } from "@/lib/contracts/dto";
+import {
+  SEED_BOM_HEADS,
+  SEED_BOM_VERSIONS,
+  SEED_BOM_LINES,
+} from "@/lib/fixtures/boms";
+import type {
+  BomHeadDto,
+  BomLineDto,
+  BomVersionDto,
+} from "@/lib/contracts/dto";
 import { resetFakeIDB } from "../../setup-vitest";
 
-const MOJITO_BOM_ID = "bom_mojito_450";
+// ---------------------------------------------------------------------------
+// BomsRepo tests — reconciled for Phase A three-table BOM model.
+//
+// The new IdbBomsRepo talks to three stores (boms, bom_versions,
+// bom_lines) instead of embedding versions inside BomHeadDto. State
+// machine is DRAFT -> ACTIVE -> ARCHIVED (not draft|active|retired).
+// Activation enforces the atomic demote-then-promote invariant from
+// pgTAP tests A20/A21 in db/tests/0002_masters.test.sql.
+//
+// The test fixtures use a MOJITO base BOM with a single ACTIVE version
+// and a PEACH TEA base BOM with one ARCHIVED + one ACTIVE version so
+// we can assert ARCHIVED-stays-put behavior during later activation.
+// ---------------------------------------------------------------------------
 
-async function seedMojitoBom(): Promise<BomHeadDto> {
+const MOJITO_HEAD_ID = "BOM-BASE-MOJ-REG";
+const MOJITO_ACTIVE_VERSION_ID = "bv-base-moj-reg-v1";
+const PEACH_HEAD_ID = "BOM-BASE-TEA-PCH";
+const PEACH_ACTIVE_VERSION_ID = "bv-base-tea-pch-v2";
+const PEACH_ARCHIVED_VERSION_ID = "bv-base-tea-pch-v1";
+
+async function seedBoms(): Promise<void> {
   const db = await getDb();
-  const bom = structuredClone(SEED_BOMS.find((b) => b.id === MOJITO_BOM_ID)!);
-  await db.put(STORES.boms, bom);
-  return bom;
+  for (const h of SEED_BOM_HEADS) {
+    await db.put(STORES.boms, structuredClone(h));
+  }
+  for (const v of SEED_BOM_VERSIONS) {
+    await db.put(STORES.bomVersions, structuredClone(v));
+  }
+  for (const l of SEED_BOM_LINES) {
+    await db.put(STORES.bomLines, structuredClone(l));
+  }
 }
 
 function repo() {
@@ -22,131 +54,226 @@ function repo() {
 describe("IdbBomsRepo — draft-only edit rule", () => {
   beforeEach(async () => {
     await resetFakeIDB();
+    await seedBoms();
   });
 
-  it("rejects line edits on an active (non-draft) version", async () => {
-    const bom = await seedMojitoBom();
-    const activeVersion = bom.versions.find((v) => v.status === "active")!;
+  it("rejects line edits on an ACTIVE version", async () => {
     const r = repo();
+    const active = (await r.getVersion(
+      MOJITO_ACTIVE_VERSION_ID,
+    )) as BomVersionDto;
+    expect(active.status).toBe("ACTIVE");
 
-    const newLines: BomLineDto[] = activeVersion.lines.map((l) => ({
+    const lines = await r.listLines(MOJITO_ACTIVE_VERSION_ID);
+    const doubled: BomLineDto[] = lines.map((l) => ({
       ...l,
-      quantity_per: l.quantity_per * 2,
+      final_component_qty: (l.final_component_qty ?? 0) * 2,
     }));
 
     await expect(
-      r.updateLines(bom.id, activeVersion.id, newLines, bom.audit.version)
-    ).rejects.toMatchObject({
-      code: "conflict",
-    });
+      r.updateLines(MOJITO_ACTIVE_VERSION_ID, doubled, 0),
+    ).rejects.toMatchObject({ code: "conflict" });
   });
 
-  it("allows line edits on a draft version", async () => {
-    const bom = await seedMojitoBom();
+  it("allows line edits on a DRAFT version created via createDraftVersion", async () => {
     const r = repo();
 
-    // Create a new draft first.
-    const withDraft = await r.addVersion(bom.id, bom.audit.version);
-    const draft = withDraft.versions[withDraft.versions.length - 1];
-    expect(draft.status).toBe("draft");
+    const draft = await r.createDraftVersion(
+      MOJITO_HEAD_ID,
+      MOJITO_ACTIVE_VERSION_ID,
+    );
+    expect(draft.status).toBe("DRAFT");
+    expect(draft.bom_head_id).toBe(MOJITO_HEAD_ID);
 
-    const newLines: BomLineDto[] = draft.lines.map((l, i) => ({
+    // Cloned lines should exist and belong to the new draft.
+    const clonedLines = await r.listLines(draft.bom_version_id);
+    expect(clonedLines.length).toBeGreaterThan(0);
+    for (const l of clonedLines) {
+      expect(l.bom_version_id).toBe(draft.bom_version_id);
+    }
+
+    // Edit the cloned lines in place.
+    const nudged: BomLineDto[] = clonedLines.map((l, i) => ({
       ...l,
-      quantity_per: l.quantity_per + 0.001 * (i + 1),
+      final_component_qty: (l.final_component_qty ?? 0) + 0.001 * (i + 1),
     }));
 
-    const updated = await r.updateLines(
-      bom.id,
-      draft.id,
-      newLines,
-      withDraft.audit.version
+    const updated = await r.updateLines(draft.bom_version_id, nudged, 0);
+    expect(updated.status).toBe("DRAFT");
+
+    const refetched = await r.listLines(draft.bom_version_id);
+    expect(refetched[0].final_component_qty).toBeCloseTo(
+      (clonedLines[0].final_component_qty ?? 0) + 0.001,
+      5,
     );
-    const updatedDraft = updated.versions.find((v) => v.id === draft.id)!;
-    expect(updatedDraft.lines[0].quantity_per).toBeCloseTo(
-      draft.lines[0].quantity_per + 0.001,
-      5
-    );
-    expect(updatedDraft.status).toBe("draft");
   });
 
-  it("rejects draft line edits when head version is stale", async () => {
-    const bom = await seedMojitoBom();
+  it("updateLines rejects a line whose bom_version_id does not match", async () => {
     const r = repo();
-
-    const withDraft = await r.addVersion(bom.id, bom.audit.version);
-    const draft = withDraft.versions[withDraft.versions.length - 1];
-
-    // Passing the pre-addVersion head version is stale.
+    const draft = await r.createDraftVersion(MOJITO_HEAD_ID);
+    const bogus: BomLineDto[] = [
+      {
+        line_id: "line-bogus",
+        bom_version_id: "wrong-version",
+        bom_head_id: MOJITO_HEAD_ID,
+        line_no: 1,
+        bom_kind: "BASE",
+        component_ref_type: "COMPONENT",
+        final_component_id: "RAW-RUM-WHITE",
+        final_component_name: "White rum 37.5%",
+        final_component_qty: 1,
+        component_uom: "L",
+        status: "ACTIVE",
+        scaling_method: "RATIO",
+        qty_per_l_output: null,
+        std_cost_per_uom: null,
+        line_std_cost: null,
+        notes: null,
+        site_id: "GT-MAIN",
+      },
+    ];
     await expect(
-      r.updateLines(bom.id, draft.id, draft.lines, bom.audit.version)
-    ).rejects.toBeInstanceOf(RepoError);
+      r.updateLines(draft.bom_version_id, bogus, 0),
+    ).rejects.toMatchObject({ code: "validation" });
   });
 });
 
-describe("IdbBomsRepo — activation retires prior active version", () => {
+describe("IdbBomsRepo — activation atomic demote-then-promote (A20 pattern)", () => {
   beforeEach(async () => {
     await resetFakeIDB();
+    await seedBoms();
   });
 
-  it("retires the currently active version and activates the target", async () => {
-    const bom = await seedMojitoBom();
+  it("archives the currently ACTIVE version and activates the target", async () => {
     const r = repo();
+    const head = (await r.getHead(MOJITO_HEAD_ID)) as BomHeadDto;
+    const priorActive = (await r.getVersion(
+      MOJITO_ACTIVE_VERSION_ID,
+    )) as BomVersionDto;
+    expect(priorActive.status).toBe("ACTIVE");
 
-    const priorActive = bom.versions.find((v) => v.status === "active")!;
-
-    // Add a draft v2 from latest.
-    const withDraft = await r.addVersion(bom.id, bom.audit.version);
-    const newDraft = withDraft.versions[withDraft.versions.length - 1];
-
-    // Activate the new draft.
-    const activated = await r.activateVersion(
-      bom.id,
-      newDraft.id,
-      withDraft.audit.version
+    const draft = await r.createDraftVersion(
+      MOJITO_HEAD_ID,
+      MOJITO_ACTIVE_VERSION_ID,
+    );
+    const nextHead = await r.activateVersion(
+      MOJITO_HEAD_ID,
+      draft.bom_version_id,
+      head.audit.version,
     );
 
-    const newActive = activated.versions.find((v) => v.id === newDraft.id)!;
-    const oldActive = activated.versions.find((v) => v.id === priorActive.id)!;
+    expect(nextHead.active_version_id).toBe(draft.bom_version_id);
 
-    expect(newActive.status).toBe("active");
-    expect(newActive.effective_at).toBeDefined();
-    expect(oldActive.status).toBe("retired");
-    expect(activated.active_version_id).toBe(newDraft.id);
+    const newActive = (await r.getVersion(
+      draft.bom_version_id,
+    )) as BomVersionDto;
+    const oldActive = (await r.getVersion(
+      MOJITO_ACTIVE_VERSION_ID,
+    )) as BomVersionDto;
+
+    expect(newActive.status).toBe("ACTIVE");
+    expect(newActive.activated_at).not.toBeNull();
+    expect(oldActive.status).toBe("ARCHIVED");
+    expect(oldActive.archived_at).not.toBeNull();
   });
 
-  it("leaves historical retired versions untouched during activation", async () => {
-    const db = await getDb();
-    const bom = structuredClone(
-      SEED_BOMS.find((b) => b.id === "bom_peach_tea_1l")!
-    );
-    await db.put(STORES.boms, bom);
-
+  it("leaves historical ARCHIVED versions untouched during activation", async () => {
     const r = repo();
-    const v1 = bom.versions.find((v) => v.version_number === 1)!;
-    expect(v1.status).toBe("retired");
+    const head = (await r.getHead(PEACH_HEAD_ID)) as BomHeadDto;
 
-    const withDraft = await r.addVersion(bom.id, bom.audit.version);
-    const newDraft = withDraft.versions[withDraft.versions.length - 1];
-    const activated = await r.activateVersion(
-      bom.id,
-      newDraft.id,
-      withDraft.audit.version
+    const draft = await r.createDraftVersion(
+      PEACH_HEAD_ID,
+      PEACH_ACTIVE_VERSION_ID,
+    );
+    await r.activateVersion(
+      PEACH_HEAD_ID,
+      draft.bom_version_id,
+      head.audit.version,
     );
 
-    const v1After = activated.versions.find((v) => v.id === v1.id)!;
-    expect(v1After.status).toBe("retired");
+    // The pre-existing ARCHIVED version should still be ARCHIVED,
+    // untouched — ARCHIVED is a terminal state and activation of a
+    // different draft must not reset its archived_at.
+    const v1 = (await r.getVersion(
+      PEACH_ARCHIVED_VERSION_ID,
+    )) as BomVersionDto;
+    expect(v1.status).toBe("ARCHIVED");
   });
 
-  it("emits RepoError('stale') when head version is wrong at activation time", async () => {
-    const bom = await seedMojitoBom();
+  it("raises RepoError('stale') when head version is wrong at activation time", async () => {
     const r = repo();
+    const head = (await r.getHead(MOJITO_HEAD_ID)) as BomHeadDto;
+    const draft = await r.createDraftVersion(MOJITO_HEAD_ID);
 
-    const withDraft = await r.addVersion(bom.id, bom.audit.version);
-    const newDraft = withDraft.versions[withDraft.versions.length - 1];
-
-    // Pass the pre-addVersion head version = stale.
     await expect(
-      r.activateVersion(bom.id, newDraft.id, bom.audit.version)
+      r.activateVersion(
+        MOJITO_HEAD_ID,
+        draft.bom_version_id,
+        head.audit.version + 5,
+      ),
     ).rejects.toMatchObject({ code: "stale" });
+  });
+
+  it("rejects activating a version whose head_id does not match", async () => {
+    const r = repo();
+    const mojitoHead = (await r.getHead(MOJITO_HEAD_ID)) as BomHeadDto;
+    const peachDraft = await r.createDraftVersion(PEACH_HEAD_ID);
+
+    // Try to activate a peach-tea draft against the mojito head.
+    await expect(
+      r.activateVersion(
+        MOJITO_HEAD_ID,
+        peachDraft.bom_version_id,
+        mojitoHead.audit.version,
+      ),
+    ).rejects.toBeInstanceOf(RepoError);
+  });
+
+  it("rejects activating a non-DRAFT version", async () => {
+    const r = repo();
+    const head = (await r.getHead(MOJITO_HEAD_ID)) as BomHeadDto;
+    // The mojito head's v1 is already ACTIVE. Attempting to activate it
+    // again should fail because activation is for DRAFT transitions only.
+    await expect(
+      r.activateVersion(
+        MOJITO_HEAD_ID,
+        MOJITO_ACTIVE_VERSION_ID,
+        head.audit.version,
+      ),
+    ).rejects.toMatchObject({ code: "conflict" });
+  });
+});
+
+describe("IdbBomsRepo — list/get/head create", () => {
+  beforeEach(async () => {
+    await resetFakeIDB();
+    await seedBoms();
+  });
+
+  it("listHeads sorts by bom_head_id", async () => {
+    const r = repo();
+    const heads = await r.listHeads();
+    expect(heads.length).toBeGreaterThan(0);
+    const ids = heads.map((h) => h.bom_head_id);
+    const sorted = [...ids].sort();
+    expect(ids).toEqual(sorted);
+  });
+
+  it("listVersions filters to a specific head", async () => {
+    const r = repo();
+    const versions = await r.listVersions(PEACH_HEAD_ID);
+    expect(versions.length).toBe(2);
+    for (const v of versions) {
+      expect(v.bom_head_id).toBe(PEACH_HEAD_ID);
+    }
+  });
+
+  it("listLines filters to a specific version and sorts by line_no", async () => {
+    const r = repo();
+    const lines = await r.listLines(MOJITO_ACTIVE_VERSION_ID);
+    expect(lines.length).toBeGreaterThan(0);
+    const nums = lines.map((l) => l.line_no);
+    const sorted = [...nums].sort((a, b) => a - b);
+    expect(nums).toEqual(sorted);
   });
 });
