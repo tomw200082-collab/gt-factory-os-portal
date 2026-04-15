@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
@@ -14,20 +14,80 @@ import { QuantityInput } from "@/components/fields/QuantityInput";
 import { ApprovalBanner } from "@/components/workflow/ApprovalBanner";
 import { SplitListLayout } from "@/features/master-data/SplitListLayout";
 import { useHasRole } from "@/lib/auth/role-gate";
-import { bomsRepo, componentsRepo, itemsRepo } from "@/lib/repositories";
-import { UOMS, type Uom } from "@/lib/contracts/enums";
-import type { BomHeadDto, BomLineDto, BomVersionDto } from "@/lib/contracts/dto";
+import {
+  bomsRepo,
+  componentsRepo,
+  itemsRepo,
+} from "@/lib/repositories";
+import { BOM_KINDS, UOMS, type BomKind, type Uom } from "@/lib/contracts/enums";
+import type {
+  BomHeadDto,
+  BomLineDto,
+  BomVersionDto,
+  ComponentDto,
+  ItemDto,
+} from "@/lib/contracts/dto";
 
-type DetailMode = { kind: "closed" } | { kind: "create" } | { kind: "edit"; id: string };
+// ---------------------------------------------------------------------------
+// BOMs admin — reconciled for Phase A (three-table model).
+//
+// Matches the locked 0003_bom_three_table.sql schema:
+//
+//   bom_head        — text PK bom_head_id, bom_kind BASE/PACK/REPACK,
+//                     PK linked to items.primary_bom_head_id AND/OR
+//                     items.base_bom_head_id (two-heads-per-item model)
+//   bom_version     — uuid PK, DRAFT -> ACTIVE -> ARCHIVED state machine,
+//                     at most one ACTIVE per head
+//   bom_lines       — uuid PK, only editable on DRAFT versions
+//
+// Major reshapes from the pre-Phase-A draft:
+//
+//   - Versions are no longer embedded in BomHeadDto. The screen
+//     fetches versions via bomsRepo.listVersions(headId) as a separate
+//     React Query, and lines via bomsRepo.listLines(versionId) as a
+//     third query that only runs when a version is selected.
+//
+//   - State machine is DRAFT -> ACTIVE -> ARCHIVED (uppercase). The
+//     pre-Phase-A 'retired' terminal state has been removed from the
+//     repo and the UI. Historical ARCHIVED versions stay put — they
+//     are not mutated when a new draft activates.
+//
+//   - bom_kind selector on create (BASE/PACK/REPACK). This is the
+//     Tranche 1 workbook reality, not the plan draft's 'FINAL'.
+//
+//   - Line model uses final_component_qty + line_no instead of the
+//     previous quantity_per + sort_order. scrap_factor is DROPPED
+//     entirely — the locked schema does not have it, and scrap
+//     belongs to the waste/adjustment ledger, not on BOM lines.
+//
+//   - The one-active-version-per-head invariant is enforced at the
+//     repo layer via activateVersion() which atomically demotes the
+//     previously ACTIVE version (A20 pattern). The UI exposes an
+//     "Activate" button but the ordering logic is in the repo.
+//
+//   - Line UOM defaults carry over from ComponentDto.bom_uom /
+//     inventory_uom rather than the previous .default_uom.
+//
+// BOM wiring to items (items.primary_bom_head_id and items.base_bom_
+// head_id) is NOT edited on this screen either — it belongs to a
+// future work: "how do we attach a BOM to an item" is a separate
+// flow. For Phase A we only edit BOM heads / versions / lines
+// in isolation.
+// ---------------------------------------------------------------------------
+
+type DetailMode =
+  | { kind: "closed" }
+  | { kind: "create" }
+  | { kind: "edit"; id: string };
 
 interface EditableLine {
-  id: string;
+  line_id: string;
+  bom_version_id: string;
   component_id: string;
   component_name: string;
-  quantity_per: number;
-  unit: Uom;
-  scrap_factor: number;
-  sort_order: number;
+  final_component_qty: number;
+  component_uom: Uom;
+  line_no: number;
 }
 
 export default function BomsAdminPage() {
@@ -36,28 +96,30 @@ export default function BomsAdminPage() {
   const [query, setQuery] = useState("");
   const [detail, setDetail] = useState<DetailMode>({ kind: "closed" });
 
-  const { data: boms = [] } = useQuery({
+  const { data: heads = [] } = useQuery({
     queryKey: ["boms", query],
-    queryFn: () => bomsRepo.list({ query }),
+    queryFn: () => bomsRepo.listHeads({ query }),
   });
   const { data: items = [] } = useQuery({
     queryKey: ["items-for-boms"],
-    queryFn: () => itemsRepo.list(),
+    queryFn: () => itemsRepo.list({ includeArchived: true }),
   });
   const { data: components = [] } = useQuery({
     queryKey: ["components-for-boms"],
     queryFn: () => componentsRepo.list(),
   });
 
-  const selectedBom =
-    detail.kind === "edit" ? boms.find((b) => b.id === detail.id) ?? null : null;
+  const selectedHead =
+    detail.kind === "edit"
+      ? (heads.find((b) => b.bom_head_id === detail.id) ?? null)
+      : null;
 
   return (
     <>
       <WorkflowHeader
         eyebrow="Master data"
         title="Bills of materials"
-        description="Versioned BOMs per finished-good item. New versions are drafted, edited, then activated. Historical production postings keep their original version pinning."
+        description="Three-table BOM model: head + version + lines. DRAFT is editable; ACTIVE and ARCHIVED are read-only. At most one ACTIVE version per head; activation atomically demotes the previous primary."
         actions={
           canWrite ? (
             <button
@@ -65,7 +127,7 @@ export default function BomsAdminPage() {
               className="btn btn-primary"
               onClick={() => setDetail({ kind: "create" })}
             >
-              + New BOM
+              + New BOM head
             </button>
           ) : (
             <Badge tone="neutral">read-only for planner</Badge>
@@ -76,65 +138,61 @@ export default function BomsAdminPage() {
       <SplitListLayout
         isDetailOpen={detail.kind !== "closed"}
         list={
-          <SectionCard title={`${boms.length} BOM${boms.length === 1 ? "" : "s"}`}>
+          <SectionCard
+            title={`${heads.length} BOM head${heads.length === 1 ? "" : "s"}`}
+          >
             <div className="mb-3">
               <SearchFilterBar
                 query={query}
                 onQueryChange={setQuery}
-                placeholder="Search by item name…"
+                placeholder="Search by BOM head ID, family, parent…"
               />
             </div>
             <div className="overflow-x-auto">
               <table className="table-base">
                 <thead>
                   <tr>
-                    <th>Item</th>
-                    <th>Active version</th>
-                    <th className="text-right">Lines</th>
-                    <th>Versions</th>
+                    <th>BOM head ID</th>
+                    <th>Kind</th>
+                    <th>Display family</th>
+                    <th>Parent</th>
+                    <th className="text-right">Output qty</th>
+                    <th>Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {boms.map((b) => {
-                    const active = b.versions.find((v) => v.id === b.active_version_id);
-                    return (
-                      <tr
-                        key={b.id}
-                        className="cursor-pointer"
-                        onClick={() => setDetail({ kind: "edit", id: b.id })}
-                      >
-                        <td className="font-medium">{b.item_name}</td>
-                        <td>
-                          {active ? (
-                            <Badge tone="success">v{active.version_number}</Badge>
-                          ) : (
-                            <Badge tone="neutral">no active</Badge>
-                          )}
-                        </td>
-                        <td className="text-right font-mono tabular-nums">
-                          {active?.lines.length ?? "—"}
-                        </td>
-                        <td>
-                          <div className="flex gap-1">
-                            {b.versions.map((v) => (
-                              <Badge
-                                key={v.id}
-                                tone={
-                                  v.status === "active"
-                                    ? "success"
-                                    : v.status === "draft"
-                                      ? "warning"
-                                      : "neutral"
-                                }
-                              >
-                                v{v.version_number}·{v.status}
-                              </Badge>
-                            ))}
-                          </div>
-                        </td>
-                      </tr>
-                    );
-                  })}
+                  {heads.map((h) => (
+                    <tr
+                      key={h.bom_head_id}
+                      className="cursor-pointer"
+                      onClick={() =>
+                        setDetail({ kind: "edit", id: h.bom_head_id })
+                      }
+                    >
+                      <td className="font-mono text-xs">{h.bom_head_id}</td>
+                      <td>
+                        <Badge tone="neutral">{h.bom_kind}</Badge>
+                      </td>
+                      <td className="text-xs">{h.display_family ?? "—"}</td>
+                      <td className="text-xs text-fg-muted">
+                        {h.parent_name ?? h.parent_ref_id ?? "—"}
+                      </td>
+                      <td className="text-right font-mono tabular-nums">
+                        {h.final_bom_output_qty} {h.final_bom_output_uom}
+                      </td>
+                      <td>
+                        {h.status === "ACTIVE" ? (
+                          <Badge tone="success">ACTIVE</Badge>
+                        ) : h.status === "PENDING" ? (
+                          <Badge tone="warning">PENDING</Badge>
+                        ) : h.status === "ARCHIVED" ? (
+                          <Badge tone="neutral">ARCHIVED</Badge>
+                        ) : (
+                          <Badge tone="neutral">INACTIVE</Badge>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
                 </tbody>
               </table>
             </div>
@@ -142,7 +200,7 @@ export default function BomsAdminPage() {
         }
         detail={
           detail.kind === "create" ? (
-            <CreateBomPanel
+            <CreateBomHeadPanel
               items={items}
               onClose={() => setDetail({ kind: "closed" })}
               onCreated={(id) => {
@@ -150,9 +208,9 @@ export default function BomsAdminPage() {
                 setDetail({ kind: "edit", id });
               }}
             />
-          ) : detail.kind === "edit" && selectedBom ? (
+          ) : detail.kind === "edit" && selectedHead ? (
             <BomDetailPanel
-              bom={selectedBom}
+              head={selectedHead}
               components={components}
               onClose={() => setDetail({ kind: "closed" })}
               onSaved={() => qc.invalidateQueries({ queryKey: ["boms"] })}
@@ -164,61 +222,159 @@ export default function BomsAdminPage() {
   );
 }
 
-function CreateBomPanel({
+// ---------------------------------------------------------------------------
+// Create panel — spawns a new BOM head with an empty DRAFT version.
+//
+// The locked schema has separate bom_head and bom_version tables. This
+// flow creates the head first (via bomsRepo.createHead) with
+// status=PENDING and active_version_id=null, then calls
+// createDraftVersion(headId) to seed an empty draft. The user then
+// edits lines in the detail panel and Activates when ready.
+// ---------------------------------------------------------------------------
+function CreateBomHeadPanel({
   items,
   onClose,
   onCreated,
 }: {
-  items: { id: string; name: string; active_bom_id?: string }[];
+  items: ItemDto[];
   onClose: () => void;
   onCreated: (id: string) => void;
 }) {
-  const [itemId, setItemId] = useState("");
+  const [headId, setHeadId] = useState("");
+  const [bomKind, setBomKind] = useState<BomKind>("BASE");
+  const [outputQty, setOutputQty] = useState<number>(1);
+  const [outputUom, setOutputUom] = useState<Uom>("L");
+  const [displayFamily, setDisplayFamily] = useState("");
+  const [parentItemId, setParentItemId] = useState<string>("");
+
   const createMut = useMutation({
     mutationFn: async () => {
-      const item = items.find((i) => i.id === itemId);
-      if (!item) throw new Error("choose an item");
-      return bomsRepo.create({ item_id: item.id, item_name: item.name });
+      if (!headId) throw new Error("Enter a BOM head ID");
+      const draft = {
+        bom_head_id: headId,
+        bom_kind: bomKind,
+        display_family: displayFamily || null,
+        sweetness: null,
+        pack_size: null,
+        parent_ref_type: parentItemId ? "ITEM" : null,
+        parent_ref_id: parentItemId || null,
+        parent_name:
+          items.find((i) => i.item_id === parentItemId)?.item_name ?? null,
+        linked_base_bom_head_id: null,
+        final_bom_output_qty: outputQty,
+        final_bom_output_uom: outputUom,
+        active_version_id: null,
+        status: "PENDING" as const,
+        review_flag: null,
+        owner_notes: null,
+        site_id: "GT-MAIN",
+      };
+      const head = await bomsRepo.createHead(draft);
+      // Seed an empty DRAFT version so the editor has something to
+      // point at immediately.
+      await bomsRepo.createDraftVersion(head.bom_head_id);
+      return head;
     },
-    onSuccess: (bom) => onCreated(bom.id),
+    onSuccess: (head) => onCreated(head.bom_head_id),
   });
 
   return (
     <SectionCard
-      title="New BOM"
-      description="Creates a BOM head with an empty draft version v1."
+      title="New BOM head"
+      description="Creates a head plus an empty DRAFT version. Edit lines next, then Activate."
       actions={
-        <button type="button" className="btn btn-ghost text-xs" onClick={onClose}>
+        <button
+          type="button"
+          className="btn btn-ghost text-xs"
+          onClick={onClose}
+        >
           Close
         </button>
       }
     >
       <div className="space-y-4">
-        <Field label="For item" required>
-          <select
-            className="input"
-            value={itemId}
-            onChange={(e) => setItemId(e.target.value)}
+        <FieldGrid columns={2}>
+          <Field label="BOM head ID" required>
+            <input
+              className="input font-mono"
+              placeholder="e.g. BOM-BASE-NEW-REG"
+              value={headId}
+              onChange={(e) => setHeadId(e.target.value)}
+            />
+          </Field>
+          <Field label="Kind" required>
+            <select
+              className="input"
+              value={bomKind}
+              onChange={(e) => setBomKind(e.target.value as BomKind)}
+            >
+              {BOM_KINDS.map((k) => (
+                <option key={k} value={k}>
+                  {k}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field label="Display family" span={2}>
+            <input
+              className="input"
+              placeholder="e.g. MOJITO"
+              value={displayFamily}
+              onChange={(e) => setDisplayFamily(e.target.value)}
+            />
+          </Field>
+          <Field label="Output qty" required>
+            <input
+              type="number"
+              step="any"
+              min="0"
+              className="input"
+              value={outputQty}
+              onChange={(e) => setOutputQty(Number(e.target.value))}
+            />
+          </Field>
+          <Field label="Output UOM" required>
+            <select
+              className="input"
+              value={outputUom}
+              onChange={(e) => setOutputUom(e.target.value as Uom)}
+            >
+              {UOMS.map((u) => (
+                <option key={u} value={u}>
+                  {u}
+                </option>
+              ))}
+            </select>
+          </Field>
+          <Field
+            label="Parent item (optional)"
+            span={2}
+            hint="PACK and REPACK heads typically point at a specific FG item. BASE heads usually do not."
           >
-            <option value="">— select an item —</option>
-            {items.map((i) => (
-              <option key={i.id} value={i.id} disabled={!!i.active_bom_id}>
-                {i.name}
-                {i.active_bom_id ? " (already has BOM)" : ""}
-              </option>
-            ))}
-          </select>
-        </Field>
+            <select
+              className="input"
+              value={parentItemId}
+              onChange={(e) => setParentItemId(e.target.value)}
+            >
+              <option value="">— none —</option>
+              {items.map((i) => (
+                <option key={i.item_id} value={i.item_id}>
+                  {i.item_name}
+                </option>
+              ))}
+            </select>
+          </Field>
+        </FieldGrid>
         <FormActionsBar
           hint="You will edit the empty draft next, then activate it."
           primary={
             <button
               type="button"
               className="btn btn-primary"
-              disabled={!itemId || createMut.isPending}
+              disabled={!headId || createMut.isPending}
               onClick={() => createMut.mutate()}
             >
-              Create draft v1
+              Create head + DRAFT v1
             </button>
           }
         />
@@ -227,84 +383,182 @@ function CreateBomPanel({
   );
 }
 
+// ---------------------------------------------------------------------------
+// Detail panel — edits versions + lines for a selected head.
+//
+// Versions and lines are fetched with their own React Queries so the
+// embedded-versions model from the pre-Phase-A draft does not leak
+// back in.
+// ---------------------------------------------------------------------------
 function BomDetailPanel({
-  bom,
+  head,
   components,
   onClose,
   onSaved,
 }: {
-  bom: BomHeadDto;
-  components: { id: string; name: string; default_uom: Uom }[];
+  head: BomHeadDto;
+  components: ComponentDto[];
   onClose: () => void;
   onSaved: () => void;
 }) {
   const canWrite = useHasRole("admin");
   const qc = useQueryClient();
-  const [selectedVersionId, setSelectedVersionId] = useState<string>(
-    bom.active_version_id ?? bom.versions[bom.versions.length - 1]?.id
-  );
-  const selectedVersion = useMemo(
-    () => bom.versions.find((v) => v.id === selectedVersionId) ?? null,
-    [bom, selectedVersionId]
-  );
-  const isDraft = selectedVersion?.status === "draft" && canWrite;
 
-  const [lines, setLines] = useState<EditableLine[]>(
-    selectedVersion ? selectedVersion.lines.map((l) => ({ ...l, unit: l.unit as Uom })) : []
+  const { data: versions = [] } = useQuery({
+    queryKey: ["bom-versions", head.bom_head_id],
+    queryFn: () => bomsRepo.listVersions(head.bom_head_id),
+  });
+
+  const [selectedVersionId, setSelectedVersionId] = useState<string | null>(
+    null,
   );
+  // Keep selection in sync when versions arrive or change.
+  useEffect(() => {
+    if (versions.length === 0) {
+      setSelectedVersionId(null);
+      return;
+    }
+    if (
+      selectedVersionId &&
+      versions.some((v) => v.bom_version_id === selectedVersionId)
+    ) {
+      return;
+    }
+    // Prefer the head's declared active version; fall back to the
+    // latest by version_label ordering (listVersions returns sorted).
+    const fallback =
+      (head.active_version_id &&
+        versions.find((v) => v.bom_version_id === head.active_version_id)
+          ?.bom_version_id) ??
+      versions[versions.length - 1].bom_version_id;
+    setSelectedVersionId(fallback);
+  }, [versions, head.active_version_id, selectedVersionId]);
+
+  const selectedVersion: BomVersionDto | null = useMemo(
+    () =>
+      versions.find((v) => v.bom_version_id === selectedVersionId) ?? null,
+    [versions, selectedVersionId],
+  );
+
+  const { data: fetchedLines = [] } = useQuery({
+    queryKey: ["bom-lines", selectedVersionId],
+    queryFn: () =>
+      selectedVersionId
+        ? bomsRepo.listLines(selectedVersionId)
+        : Promise.resolve([]),
+    enabled: selectedVersionId != null,
+  });
+
+  const isDraft = selectedVersion?.status === "DRAFT" && canWrite;
+
+  const [lines, setLines] = useState<EditableLine[]>([]);
   const [dirty, setDirty] = useState(false);
 
-  const addVersionMut = useMutation({
-    mutationFn: () => bomsRepo.addVersion(bom.id, bom.audit.version),
-    onSuccess: (next) => {
+  // Reload editable-lines state whenever the server-side lines change
+  // (new version selected, save completed, activation happened).
+  useEffect(() => {
+    setLines(
+      fetchedLines.map((l) => ({
+        line_id: l.line_id,
+        bom_version_id: l.bom_version_id,
+        component_id: l.final_component_id ?? "",
+        component_name: l.final_component_name ?? "",
+        final_component_qty: l.final_component_qty ?? 0,
+        component_uom: (l.component_uom ?? "KG") as Uom,
+        line_no: l.line_no,
+      })),
+    );
+    setDirty(false);
+  }, [fetchedLines]);
+
+  const createDraftMut = useMutation({
+    mutationFn: () =>
+      bomsRepo.createDraftVersion(
+        head.bom_head_id,
+        selectedVersion?.bom_version_id,
+      ),
+    onSuccess: (draft) => {
       onSaved();
-      const draft = next.versions[next.versions.length - 1];
-      setSelectedVersionId(draft.id);
-      setLines(draft.lines.map((l) => ({ ...l, unit: l.unit as Uom })));
-      setDirty(false);
-      qc.invalidateQueries({ queryKey: ["boms"] });
+      qc.invalidateQueries({
+        queryKey: ["bom-versions", head.bom_head_id],
+      });
+      setSelectedVersionId(draft.bom_version_id);
     },
   });
 
   const saveLinesMut = useMutation({
-    mutationFn: () => {
+    mutationFn: async () => {
       if (!selectedVersion) throw new Error("no version");
       const payload: BomLineDto[] = lines.map((l, idx) => ({
-        id: l.id || `bl_${crypto.randomUUID()}`,
-        component_id: l.component_id,
-        component_name: l.component_name,
-        quantity_per: Number(l.quantity_per) || 0,
-        unit: l.unit,
-        scrap_factor: Number(l.scrap_factor) || 0,
-        sort_order: idx + 1,
+        line_id:
+          l.line_id && !l.line_id.startsWith("new_")
+            ? l.line_id
+            : typeof crypto !== "undefined" && "randomUUID" in crypto
+              ? crypto.randomUUID()
+              : `line-${Date.now()}-${idx}`,
+        bom_version_id: selectedVersion.bom_version_id,
+        bom_head_id: head.bom_head_id,
+        line_no: idx + 1,
+        bom_kind: head.bom_kind,
+        component_ref_type: "COMPONENT",
+        final_component_id: l.component_id || null,
+        final_component_name: l.component_name || null,
+        final_component_qty: Number(l.final_component_qty) || 0,
+        component_uom: l.component_uom,
+        status: "ACTIVE",
+        scaling_method: "RATIO",
+        qty_per_l_output: null,
+        std_cost_per_uom: null,
+        line_std_cost: null,
+        notes: null,
+        site_id: head.site_id,
       }));
-      return bomsRepo.updateLines(bom.id, selectedVersion.id, payload, bom.audit.version);
+      return bomsRepo.updateLines(
+        selectedVersion.bom_version_id,
+        payload,
+        // BomVersionDto does not carry an audit.version; the repo
+        // keeps the parameter for API symmetry but ignores it. See
+        // boms-repo.ts updateLines comment.
+        0,
+      );
     },
     onSuccess: () => {
       setDirty(false);
       onSaved();
+      qc.invalidateQueries({
+        queryKey: ["bom-lines", selectedVersion?.bom_version_id],
+      });
     },
   });
 
   const activateMut = useMutation({
     mutationFn: () => {
       if (!selectedVersion) throw new Error("no version");
-      return bomsRepo.activateVersion(bom.id, selectedVersion.id, bom.audit.version);
+      return bomsRepo.activateVersion(
+        head.bom_head_id,
+        selectedVersion.bom_version_id,
+        head.audit.version,
+      );
     },
-    onSuccess: () => onSaved(),
+    onSuccess: () => {
+      onSaved();
+      qc.invalidateQueries({
+        queryKey: ["bom-versions", head.bom_head_id],
+      });
+    },
   });
 
   const addLine = () => {
     setLines((l) => [
       ...l,
       {
-        id: `new_${l.length + 1}_${Date.now()}`,
+        line_id: `new_${l.length + 1}_${Date.now()}`,
+        bom_version_id: selectedVersion?.bom_version_id ?? "",
         component_id: "",
         component_name: "",
-        quantity_per: 0,
-        unit: "kg",
-        scrap_factor: 0,
-        sort_order: l.length + 1,
+        final_component_qty: 0,
+        component_uom: "KG",
+        line_no: l.length + 1,
       },
     ]);
     setDirty(true);
@@ -318,14 +572,48 @@ function BomDetailPanel({
     setDirty(true);
   };
 
-  if (!selectedVersion) return null;
+  if (!selectedVersion) {
+    return (
+      <SectionCard
+        title={head.bom_head_id}
+        description="No versions yet. Create one to start editing."
+        actions={
+          <button
+            type="button"
+            className="btn btn-ghost text-xs"
+            onClick={onClose}
+          >
+            Close
+          </button>
+        }
+      >
+        {canWrite ? (
+          <FormActionsBar
+            primary={
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => createDraftMut.mutate()}
+              >
+                Create first DRAFT version
+              </button>
+            }
+          />
+        ) : null}
+      </SectionCard>
+    );
+  }
 
   return (
     <SectionCard
-      title={bom.item_name}
-      description="Versioned BOM editor. Only draft versions are editable."
+      title={head.bom_head_id}
+      description={`${head.bom_kind} — ${head.display_family ?? "no family"} — output ${head.final_bom_output_qty} ${head.final_bom_output_uom}`}
       actions={
-        <button type="button" className="btn btn-ghost text-xs" onClick={onClose}>
+        <button
+          type="button"
+          className="btn btn-ghost text-xs"
+          onClick={onClose}
+        >
           Close
         </button>
       }
@@ -335,29 +623,27 @@ function BomDetailPanel({
           <span className="text-2xs font-medium uppercase tracking-wider text-fg-subtle">
             Versions
           </span>
-          {bom.versions.map((v) => (
+          {versions.map((v) => (
             <button
-              key={v.id}
+              key={v.bom_version_id}
               type="button"
-              onClick={() => {
-                setSelectedVersionId(v.id);
-                setLines(v.lines.map((l) => ({ ...l, unit: l.unit as Uom })));
-                setDirty(false);
-              }}
+              onClick={() => setSelectedVersionId(v.bom_version_id)}
               className={
                 "chip cursor-pointer " +
-                (v.id === selectedVersionId ? "border-accent bg-accent-soft text-accent" : "")
+                (v.bom_version_id === selectedVersionId
+                  ? "border-accent bg-accent-soft text-accent"
+                  : "")
               }
             >
-              v{v.version_number} · {v.status}
+              {v.version_label} · {v.status}
             </button>
           ))}
           {canWrite ? (
             <button
               type="button"
               className="btn btn-ghost text-xs"
-              onClick={() => addVersionMut.mutate()}
-              disabled={addVersionMut.isPending}
+              onClick={() => createDraftMut.mutate()}
+              disabled={createDraftMut.isPending}
             >
               + New draft from latest
             </button>
@@ -367,14 +653,14 @@ function BomDetailPanel({
         {!isDraft ? (
           <ApprovalBanner
             tone="info"
-            title={`Viewing version v${selectedVersion.version_number} (${selectedVersion.status})`}
-            reason="Lines are read-only. Create a new draft to propose changes; activating it will retire the current active version."
+            title={`Viewing version ${selectedVersion.version_label} (${selectedVersion.status})`}
+            reason="Lines are read-only. Create a new draft to propose changes; activating it will atomically archive the current active version."
           />
         ) : null}
 
         <LineEditorTable<EditableLine>
           rows={lines}
-          keyFor={(row, i) => row.id + i}
+          keyFor={(row, i) => row.line_id + i}
           onAddRow={isDraft ? addLine : undefined}
           onRemoveRow={isDraft ? removeLine : undefined}
           addLabel="Add BOM line"
@@ -382,25 +668,30 @@ function BomDetailPanel({
             {
               key: "component",
               header: "Component",
-              width: "40%",
+              width: "45%",
               render: (row, i) =>
                 isDraft ? (
                   <select
                     className="input h-8"
                     value={row.component_id}
                     onChange={(e) => {
-                      const comp = components.find((c) => c.id === e.target.value);
+                      const comp = components.find(
+                        (c) => c.component_id === e.target.value,
+                      );
                       updateLine(i, {
                         component_id: e.target.value,
-                        component_name: comp?.name ?? "",
-                        unit: comp?.default_uom ?? row.unit,
+                        component_name: comp?.component_name ?? "",
+                        component_uom:
+                          (comp?.bom_uom ??
+                            comp?.inventory_uom ??
+                            row.component_uom) as Uom,
                       });
                     }}
                   >
                     <option value="">— select —</option>
                     {components.map((c) => (
-                      <option key={c.id} value={c.id}>
-                        {c.name}
+                      <option key={c.component_id} value={c.component_id}>
+                        {c.component_name}
                       </option>
                     ))}
                   </select>
@@ -410,21 +701,23 @@ function BomDetailPanel({
             },
             {
               key: "qty",
-              header: "Qty per",
+              header: "Qty per output",
               align: "right",
               render: (row, i) =>
                 isDraft ? (
                   <QuantityInput
-                    value={row.quantity_per}
-                    unit={row.unit}
+                    value={row.final_component_qty}
+                    unit={row.component_uom}
                     onChange={(e) =>
-                      updateLine(i, { quantity_per: Number(e.target.value) })
+                      updateLine(i, {
+                        final_component_qty: Number(e.target.value),
+                      })
                     }
                     className="h-8"
                   />
                 ) : (
                   <span className="font-mono text-xs tabular-nums">
-                    {row.quantity_per} {row.unit}
+                    {row.final_component_qty} {row.component_uom}
                   </span>
                 ),
             },
@@ -435,8 +728,10 @@ function BomDetailPanel({
                 isDraft ? (
                   <select
                     className="input h-8"
-                    value={row.unit}
-                    onChange={(e) => updateLine(i, { unit: e.target.value as Uom })}
+                    value={row.component_uom}
+                    onChange={(e) =>
+                      updateLine(i, { component_uom: e.target.value as Uom })
+                    }
                   >
                     {UOMS.map((u) => (
                       <option key={u} value={u}>
@@ -445,30 +740,7 @@ function BomDetailPanel({
                     ))}
                   </select>
                 ) : (
-                  <span className="text-xs">{row.unit}</span>
-                ),
-            },
-            {
-              key: "scrap",
-              header: "Scrap",
-              align: "right",
-              render: (row, i) =>
-                isDraft ? (
-                  <input
-                    type="number"
-                    step="0.001"
-                    min="0"
-                    max="1"
-                    className="input h-8 text-right font-mono tabular-nums"
-                    value={row.scrap_factor}
-                    onChange={(e) =>
-                      updateLine(i, { scrap_factor: Number(e.target.value) })
-                    }
-                  />
-                ) : (
-                  <span className="font-mono text-xs tabular-nums">
-                    {(row.scrap_factor * 100).toFixed(1)}%
-                  </span>
+                  <span className="text-xs">{row.component_uom}</span>
                 ),
             },
           ]}
@@ -476,10 +748,10 @@ function BomDetailPanel({
 
         <details className="rounded-md border border-border bg-bg-subtle p-3">
           <summary className="cursor-pointer text-xs font-medium text-fg-muted">
-            Audit
+            Audit (head)
           </summary>
           <div className="mt-2">
-            <AuditSnippet audit={bom.audit} />
+            <AuditSnippet audit={head.audit} />
           </div>
         </details>
 
@@ -488,8 +760,8 @@ function BomDetailPanel({
             !canWrite
               ? "Read-only for planner role."
               : isDraft
-                ? "Save changes first, then activate to replace the current active version."
-                : "Read-only view."
+                ? "Save changes first, then activate to atomically archive the current active version."
+                : "Read-only view. Create a new draft to propose changes."
           }
           secondary={
             canWrite && isDraft ? (
@@ -498,7 +770,11 @@ function BomDetailPanel({
                 className="btn"
                 onClick={() => activateMut.mutate()}
                 disabled={dirty || activateMut.isPending}
-                title={dirty ? "Save changes first" : "Replace current active version"}
+                title={
+                  dirty
+                    ? "Save changes first"
+                    : "Atomically archive the current ACTIVE version and promote this DRAFT"
+                }
               >
                 Activate version
               </button>
@@ -518,9 +794,9 @@ function BomDetailPanel({
               <button
                 type="button"
                 className="btn"
-                onClick={() => addVersionMut.mutate()}
+                onClick={() => createDraftMut.mutate()}
               >
-                Start new draft
+                Start new draft from this version
               </button>
             )
           }
