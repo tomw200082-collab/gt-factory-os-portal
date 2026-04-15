@@ -39,10 +39,10 @@ export default function ProductionActualPage() {
               </select>
             </Field>
             <Field label="Produced quantity" required>
-              <QuantityInput unit="bottle" />
+              <QuantityInput unit="BOTTLE" />
             </Field>
             <Field label="Scrap quantity">
-              <QuantityInput unit="bottle" />
+              <QuantityInput unit="BOTTLE" />
             </Field>
             <Field label="Shift">
               <select className="input">

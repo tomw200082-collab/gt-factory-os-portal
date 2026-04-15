@@ -62,23 +62,29 @@ export default function GoodsReceiptPage() {
     queryFn: () => componentsRepo.list(),
   });
 
+  // Phase A reconciliation: components and items now use locked-schema
+  // field names (component_id / component_name, item_id / item_name,
+  // legacy_sku, etc.). A local adapter here flattens both entity types
+  // into a uniform pick-list shape — this is a view-local display
+  // normalization, not a compatibility alias at the DTO level.
   const receivable = useMemo(
     () =>
       [
         ...components.map((c) => ({
-          id: c.id,
-          label: c.name,
-          sku: c.code,
-          default_uom: c.default_uom,
+          id: c.component_id,
+          label: c.component_name,
+          sku: c.component_id,
+          default_uom:
+            (c.purchase_uom ?? c.inventory_uom ?? c.bom_uom ?? "UNIT") as Uom,
         })),
         ...items.map((i) => ({
-          id: i.id,
-          label: i.name,
-          sku: i.sku,
-          default_uom: i.default_uom,
+          id: i.item_id,
+          label: i.item_name,
+          sku: i.legacy_sku ?? i.item_id,
+          default_uom: (i.sales_uom ?? "UNIT") as Uom,
         })),
       ].sort((a, b) => a.label.localeCompare(b.label)),
-    [components, items]
+    [components, items],
   );
 
   const form = useForm<FormValues>({
@@ -87,7 +93,7 @@ export default function GoodsReceiptPage() {
       event_at: nowLocal(),
       supplier_id: "",
       po_id: "",
-      lines: [{ item_id: "", quantity: 0, unit: "each" }],
+      lines: [{ item_id: "", quantity: 0, unit: "UNIT" }],
       notes: "",
     },
   });
@@ -247,8 +253,8 @@ export default function GoodsReceiptPage() {
               >
                 <option value="">— select —</option>
                 {suppliers.map((s) => (
-                  <option key={s.id} value={s.id}>
-                    {s.name}
+                  <option key={s.supplier_id} value={s.supplier_id}>
+                    {s.supplier_name_official}
                   </option>
                 ))}
               </select>
@@ -274,7 +280,7 @@ export default function GoodsReceiptPage() {
           <LineEditorTable
             rows={fields}
             onAddRow={() =>
-              append({ item_id: "", quantity: 0, unit: "each" as Uom })
+              append({ item_id: "", quantity: 0, unit: "UNIT" as Uom })
             }
             onRemoveRow={(i) => remove(i)}
             keyFor={(row, i) => row.id ?? String(i)}

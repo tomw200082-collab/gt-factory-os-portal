@@ -55,23 +55,27 @@ export default function WasteAdjustmentPage() {
     queryFn: () => itemsRepo.list(),
   });
 
+  // Phase A reconciliation: local adapter to the locked-schema DTOs.
+  // Same pattern as the receipts page — view-local flattening, not a
+  // DTO alias.
   const adjustable = useMemo(
     () =>
       [
         ...components.map((c) => ({
-          id: c.id,
-          label: c.name,
-          sku: c.code,
-          unit: c.default_uom,
+          id: c.component_id,
+          label: c.component_name,
+          sku: c.component_id,
+          unit:
+            (c.inventory_uom ?? c.bom_uom ?? c.purchase_uom ?? "UNIT") as Uom,
         })),
         ...items.map((i) => ({
-          id: i.id,
-          label: i.name,
-          sku: i.sku,
-          unit: i.default_uom,
+          id: i.item_id,
+          label: i.item_name,
+          sku: i.legacy_sku ?? i.item_id,
+          unit: (i.sales_uom ?? "UNIT") as Uom,
         })),
       ].sort((a, b) => a.label.localeCompare(b.label)),
-    [components, items]
+    [components, items],
   );
 
   const form = useForm<FormValues>({
@@ -81,7 +85,7 @@ export default function WasteAdjustmentPage() {
       direction: "loss",
       item_id: "",
       quantity: 0,
-      unit: "kg",
+      unit: "KG",
       notes: "",
     },
   });

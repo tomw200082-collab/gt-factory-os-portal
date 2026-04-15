@@ -45,13 +45,15 @@ function nowLocal(): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
 }
 
-// Mock system quantities keyed by item id. TODO-WINDOW1: this read model is
-// forbidden pre-submit by the blind-count rule; server must NOT return it.
+// Mock system quantities keyed by component/item id. TODO-WINDOW1: this
+// read model is forbidden pre-submit by the blind-count rule; server must
+// NOT return it. Phase A: keys reconciled to the locked-schema text PKs
+// from the reshaped fixture seed.
 const MOCK_SYSTEM_QTY: Record<string, number> = {
-  cmp_white_rum: 38,
-  cmp_cane_sugar: 27,
-  cmp_mint_leaves: 0.6,
-  cmp_lime_juice: 9.4,
+  "RAW-RUM-WHITE": 38,
+  "RAW-SUGAR-CANE": 27,
+  "RAW-MINT-LEAVES": 0.6,
+  "RAW-LIME-JUICE": 9.4,
 };
 
 export default function PhysicalCountPage() {
@@ -66,23 +68,25 @@ export default function PhysicalCountPage() {
     queryKey: ["items-for-counts"],
     queryFn: () => itemsRepo.list(),
   });
+  // Phase A reconciliation: local adapter to the locked-schema DTOs.
   const countable = useMemo(
     () =>
       [
         ...components.map((c) => ({
-          id: c.id,
-          label: c.name,
-          sku: c.code,
-          unit: c.default_uom,
+          id: c.component_id,
+          label: c.component_name,
+          sku: c.component_id,
+          unit:
+            (c.inventory_uom ?? c.bom_uom ?? c.purchase_uom ?? "UNIT") as Uom,
         })),
         ...items.map((i) => ({
-          id: i.id,
-          label: i.name,
-          sku: i.sku,
-          unit: i.default_uom,
+          id: i.item_id,
+          label: i.item_name,
+          sku: i.legacy_sku ?? i.item_id,
+          unit: (i.sales_uom ?? "UNIT") as Uom,
         })),
       ].sort((a, b) => a.label.localeCompare(b.label)),
-    [components, items]
+    [components, items],
   );
 
   const form = useForm<FormValues>({
@@ -91,7 +95,7 @@ export default function PhysicalCountPage() {
       event_at: nowLocal(),
       item_id: "",
       counted_quantity: 0,
-      unit: "kg",
+      unit: "KG",
       notes: "",
     },
   });
