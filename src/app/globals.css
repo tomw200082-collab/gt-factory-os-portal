@@ -1,0 +1,337 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* ══════════════════════════════════════════════════════════════════════════
+   "Operational Precision" — base styles
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@layer base {
+  :root {
+    color-scheme: light;
+    --radius: 6px;
+  }
+
+  html,
+  body {
+    @apply bg-bg text-fg antialiased;
+    font-feature-settings: "cv05" on, "cv11" on, "ss01" on, "ss03" on;
+    font-variant-numeric: tabular-nums;
+  }
+
+  body {
+    background-image:
+      radial-gradient(
+        circle at 1px 1px,
+        hsl(30 10% 80% / 0.35) 1px,
+        transparent 0
+      );
+    background-size: 24px 24px;
+    background-position: 0 0;
+    background-attachment: fixed;
+  }
+
+  *,
+  *::before,
+  *::after {
+    @apply border-border;
+  }
+
+  ::selection {
+    background: hsl(186 42% 24% / 0.2);
+    color: hsl(30 14% 6%);
+  }
+
+  button:focus-visible,
+  a:focus-visible,
+  input:focus-visible,
+  select:focus-visible,
+  textarea:focus-visible,
+  [role="button"]:focus-visible,
+  [role="tab"]:focus-visible {
+    @apply outline-none;
+    box-shadow: 0 0 0 2px hsl(42 18% 95%), 0 0 0 4px hsl(186 42% 24% / 0.4);
+  }
+
+  /* Fine scrollbars — Chromium only, quietly ignored elsewhere. */
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(30 8% 78% / 0.6);
+    border-radius: 999px;
+    border: 2px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(30 10% 68% / 0.8);
+    background-clip: padding-box;
+    border: 2px solid transparent;
+  }
+
+  /* Tabular numerics everywhere numerics show up. */
+  input[type="number"],
+  .font-mono,
+  .tabular-nums {
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Strip the Chrome number spinners — they look like admin-template crud. */
+  input[type="number"]::-webkit-outer-spin-button,
+  input[type="number"]::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+    margin: 0;
+  }
+  input[type="number"] {
+    -moz-appearance: textfield;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Component primitives
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@layer components {
+  /* ——— Surfaces ———————————————————————————————————————————————————————— */
+
+  .surface {
+    @apply bg-bg-raised border border-border/80 rounded-md;
+  }
+
+  .card {
+    @apply bg-bg-raised border border-border/70 rounded-md shadow-raised;
+  }
+
+  .card-raised {
+    @apply bg-bg-raised border border-border/70 rounded-md shadow-pop;
+  }
+
+  .well {
+    @apply bg-bg-subtle border border-border/60 rounded;
+  }
+
+  /* ——— Eyebrows / uppercase labels ————————————————————————————————— */
+
+  .eyebrow {
+    @apply text-2xs font-semibold uppercase tracking-sops text-fg-subtle;
+  }
+
+  .eyebrow-strong {
+    @apply text-2xs font-semibold uppercase tracking-sops text-fg-muted;
+  }
+
+  /* ——— Chips / micro-badges —————————————————————————————————————————— */
+
+  .chip {
+    @apply inline-flex items-center gap-1.5 rounded-sm border border-border/70 bg-bg-subtle px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-sops text-fg-muted;
+  }
+
+  .chip-ghost {
+    @apply inline-flex items-center gap-1.5 rounded-sm bg-transparent px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-sops text-fg-subtle;
+  }
+
+  .chip-accent {
+    @apply border-accent/40 bg-accent-soft text-accent;
+  }
+
+  .chip-warning {
+    @apply border-warning/40 bg-warning-soft text-warning-fg;
+  }
+
+  /* ——— Buttons ————————————————————————————————————————————————————— */
+
+  .btn {
+    @apply inline-flex h-9 items-center justify-center gap-1.5 rounded
+      border border-border/80 bg-bg-raised px-3 text-sm font-medium text-fg
+      transition-all duration-150 ease-out-quart
+      hover:border-border-strong hover:bg-bg
+      active:translate-y-px active:shadow-none
+      disabled:pointer-events-none disabled:opacity-45;
+    box-shadow: inset 0 0 0 1px hsl(42 20% 100% / 0.6);
+  }
+
+  .btn-primary {
+    @apply border-accent bg-accent text-accent-fg
+      hover:border-accent-hover hover:bg-accent-hover hover:text-accent-fg
+      active:translate-y-px;
+    box-shadow: inset 0 1px 0 0 hsl(186 60% 40% / 0.3), 0 1px 2px 0 hsl(186 40% 10% / 0.15);
+  }
+
+  .btn-danger {
+    @apply border-danger bg-danger text-white hover:bg-danger/90;
+  }
+
+  .btn-ghost {
+    @apply border-transparent bg-transparent shadow-none hover:border-transparent hover:bg-bg-subtle;
+  }
+
+  .btn-outline {
+    @apply border-border/80 bg-transparent shadow-none hover:bg-bg-subtle;
+  }
+
+  .btn-sm {
+    @apply h-7 px-2.5 text-xs;
+  }
+
+  .btn-xs {
+    @apply h-6 px-2 text-2xs;
+  }
+
+  .btn-lg {
+    @apply h-10 px-4 text-sm;
+  }
+
+  /* ——— Inputs ————————————————————————————————————————————————————— */
+
+  .input {
+    @apply block h-9 w-full rounded border border-border/80 bg-bg-raised px-3 text-sm text-fg
+      transition-all duration-150 ease-out-quart
+      placeholder:text-fg-faint
+      hover:border-border-strong
+      focus:border-accent focus:outline-none
+      disabled:cursor-not-allowed disabled:bg-bg-subtle disabled:text-fg-muted;
+  }
+
+  .textarea {
+    @apply block min-h-[80px] w-full rounded border border-border/80 bg-bg-raised px-3 py-2 text-sm text-fg leading-relaxed
+      transition-all duration-150 ease-out-quart
+      placeholder:text-fg-faint
+      hover:border-border-strong
+      focus:border-accent focus:outline-none
+      disabled:cursor-not-allowed disabled:bg-bg-subtle;
+  }
+
+  .input-error {
+    @apply border-danger/80 bg-danger-softer/40;
+  }
+
+  .label {
+    @apply mb-1.5 block text-2xs font-semibold uppercase tracking-sops text-fg-muted;
+  }
+
+  .field-error {
+    @apply mt-1 flex items-center gap-1 text-xs text-danger-fg;
+  }
+
+  .field-hint {
+    @apply mt-1 text-xs text-fg-subtle;
+  }
+
+  /* ——— Tables ————————————————————————————————————————————————————— */
+
+  .table-base {
+    @apply w-full border-collapse text-left text-sm;
+  }
+
+  .table-base thead tr {
+    @apply border-b border-border;
+  }
+
+  .table-base th {
+    @apply bg-bg-subtle px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle;
+  }
+
+  .table-base tbody tr {
+    @apply border-b border-border/60 transition-colors duration-150 ease-out-quart;
+  }
+
+  .table-base tbody tr:last-child {
+    @apply border-b-0;
+  }
+
+  .table-base tbody tr:hover {
+    @apply bg-bg-subtle/60;
+  }
+
+  .table-base tbody tr[data-selected="true"] {
+    @apply bg-accent-soft/70;
+  }
+
+  .table-base td {
+    @apply px-3 py-2.5 align-middle text-sm text-fg;
+  }
+
+  .table-base tbody tr:hover td {
+    @apply bg-transparent;
+  }
+
+  .table-dense td {
+    @apply py-1.5;
+  }
+
+  /* ——— Status dot (used inline before badge labels) ————————————————— */
+
+  .dot {
+    @apply inline-block h-1.5 w-1.5 rounded-full;
+  }
+
+  /* ——— Kbd hint ————————————————————————————————————————————————————— */
+
+  kbd {
+    @apply inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-xs border border-border bg-bg-subtle px-1.5 font-mono text-3xs text-fg-muted;
+    box-shadow: inset 0 -1px 0 0 hsl(30 8% 82% / 1);
+  }
+
+  /* ——— Divider glyph ————————————————————————————————————————————————— */
+
+  .divider-dot {
+    @apply text-fg-faint;
+  }
+  .divider-dot::before {
+    content: "·";
+    @apply mx-2;
+  }
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Utilities
+   ══════════════════════════════════════════════════════════════════════════ */
+
+@layer utilities {
+  .bg-grid {
+    background-image:
+      linear-gradient(to right, hsl(30 8% 82% / 0.3) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(30 8% 82% / 0.3) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+
+  .bg-grid-fade {
+    mask-image: radial-gradient(
+      ellipse at center,
+      black 30%,
+      transparent 75%
+    );
+  }
+
+  .stripe-border {
+    background-image: repeating-linear-gradient(
+      135deg,
+      hsl(30 8% 82%) 0,
+      hsl(30 8% 82%) 1px,
+      transparent 1px,
+      transparent 6px
+    );
+  }
+
+  /* A subtle raised affordance for nav items and cards */
+  .elev-1 {
+    box-shadow: 0 0 0 1px hsl(30 10% 82% / 0.6),
+      0 1px 2px 0 hsl(30 12% 10% / 0.04);
+  }
+
+  /* First-visit reveal animation */
+  .reveal {
+    animation: fade-in-up 320ms cubic-bezier(0.165, 0.84, 0.44, 1) both;
+  }
+
+  .reveal-delay-1 { animation-delay: 40ms; }
+  .reveal-delay-2 { animation-delay: 80ms; }
+  .reveal-delay-3 { animation-delay: 120ms; }
+  .reveal-delay-4 { animation-delay: 160ms; }
+  .reveal-delay-5 { animation-delay: 200ms; }
+  .reveal-delay-6 { animation-delay: 240ms; }
+}
