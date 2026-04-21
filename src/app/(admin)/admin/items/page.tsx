@@ -166,14 +166,23 @@ export default function AdminItemsPage(): JSX.Element {
         }
         actions={
           isAdmin ? (
-            <button
-              type="button"
-              className="btn-primary inline-flex items-center gap-1.5"
-              onClick={() => setShowCreate(true)}
-            >
-              <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
-              New item
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => setShowCreate(true)}
+                title="Quick create — minimum fields only. The wizard is the guided flow."
+              >
+                Quick create
+              </button>
+              <Link
+                href="/admin/products/new"
+                className="btn-primary inline-flex items-center gap-1.5"
+              >
+                <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+                New product
+              </Link>
+            </div>
           ) : null
         }
       />
