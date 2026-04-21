@@ -80,6 +80,9 @@ const NAV_GROUPS: NavGroup[] = [
   {
     title: "Purchasing",
     items: [
+      // Live read-only list (endgame-phase-c2). Any authenticated role may
+      // view. POs are created from /runs/[run_id] Convert-to-PO action.
+      { label: "Purchase Orders", href: "/purchase-orders", icon: ShoppingCart, roles: ["planner", "admin", "viewer", "operator"] },
       { label: "PO Creation", href: "/purchasing/po", icon: FileText, roles: ["planner", "admin"], blocked: "backend" },
     ],
   },
