@@ -20,12 +20,37 @@ import { useQuery } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { UOMS, type Uom } from "@/lib/contracts/enums";
-import {
-  PHYSICAL_COUNT_ITEM_TYPES,
-  type PhysicalCountItemType,
-  type PhysicalCountOpenResponse,
-  type PhysicalCountSubmit,
-} from "@/lib/contracts/physical-count";
+
+// ---------------------------------------------------------------------------
+// Physical Count contract — inlined.
+//
+// Mirror of api/src/physical-counts/schemas.ts + docs/physical_count_runtime
+// _contract.md. Inlined because src/lib/contracts/physical-count.ts is held
+// out of the committed tree pending a Gate-3 commit-hygiene tranche. Keep
+// aligned with upstream schema.
+// ---------------------------------------------------------------------------
+
+const PHYSICAL_COUNT_ITEM_TYPES = ["FG", "RM", "PKG"] as const;
+type PhysicalCountItemType = (typeof PHYSICAL_COUNT_ITEM_TYPES)[number];
+
+interface PhysicalCountOpenResponse {
+  snapshot_id: string;
+  item_type: PhysicalCountItemType;
+  item_id: string;
+  item_display_name: string;
+  unit_default: string;
+  opened_at: string;
+  idempotent_open: boolean;
+}
+
+interface PhysicalCountSubmit {
+  idempotency_key: string;
+  snapshot_id: string;
+  event_at: string;
+  counted_quantity: number;
+  unit: string;
+  notes: string | null;
+}
 
 interface ItemRow {
   item_id: string;

@@ -18,13 +18,65 @@ import { useQuery } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { UOMS, type Uom } from "@/lib/contracts/enums";
-import {
-  REASON_CODES_BY_DIRECTION,
-  REASON_CODES_REQUIRING_NOTES,
-  type WasteAdjustmentRequest,
-  type WasteReasonCode,
-  type ItemType,
-} from "@/lib/contracts/waste-adjustments";
+
+// ---------------------------------------------------------------------------
+// Waste / Adjustment contract — inlined.
+//
+// Mirror of api/src/waste-adjustments/schemas.ts + docs/waste_adjustment_
+// runtime_contract.md. Inlined because the local contract file at
+// src/lib/contracts/waste-adjustments.ts is intentionally held out of the
+// committed tree pending a Gate-3 commit-hygiene tranche. Keep aligned
+// with upstream schema.
+// ---------------------------------------------------------------------------
+
+type ItemType = "FG" | "RM" | "PKG";
+
+const WASTE_REASON_CODES = [
+  "breakage",
+  "spoilage",
+  "production_waste",
+  "sampling",
+  "theft_loss",
+  "found_stock",
+  "correction",
+  "other",
+] as const;
+type WasteReasonCode = (typeof WASTE_REASON_CODES)[number];
+
+const REASON_CODES_BY_DIRECTION: Record<
+  "loss" | "positive",
+  readonly WasteReasonCode[]
+> = {
+  loss: [
+    "breakage",
+    "spoilage",
+    "production_waste",
+    "sampling",
+    "theft_loss",
+    "correction",
+    "other",
+  ],
+  positive: ["found_stock", "correction", "other"],
+};
+
+const REASON_CODES_REQUIRING_NOTES: readonly WasteReasonCode[] = [
+  "theft_loss",
+  "found_stock",
+  "correction",
+  "other",
+];
+
+interface WasteAdjustmentRequest {
+  idempotency_key: string;
+  event_at: string;
+  direction: "loss" | "positive";
+  item_type: ItemType;
+  item_id: string;
+  quantity: number;
+  unit: string;
+  reason_code: string;
+  notes: string | null;
+}
 
 interface ItemRow {
   item_id: string;

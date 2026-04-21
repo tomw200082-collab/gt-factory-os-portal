@@ -21,12 +21,58 @@ import { useQuery } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { UOMS, type Uom } from "@/lib/contracts/enums";
-import type {
-  GoodsReceiptRequest,
-  GoodsReceiptCommittedResponse,
-  GoodsReceiptLine,
-  ItemType,
-} from "@/lib/contracts/goods-receipts";
+
+// ---------------------------------------------------------------------------
+// Goods Receipt contract — inlined.
+//
+// Mirror of the authoritative API schema at
+//   api/src/goods-receipts/schemas.ts (GoodsReceiptRequestSchema)
+// and the runtime-contract doc
+//   docs/goods_receipt_runtime_contract.md §1.1.
+//
+// Inlined here (rather than imported from src/lib/contracts/goods-receipts.ts)
+// because the latter is intentionally held out of the committed tree pending
+// a separate Gate-3 commit-hygiene tranche. Keep these types byte-aligned
+// with the upstream schema; drift is a bug.
+// ---------------------------------------------------------------------------
+
+type ItemType = "FG" | "RM" | "PKG";
+
+interface GoodsReceiptLine {
+  item_type: ItemType;
+  item_id: string;
+  quantity: number;
+  unit: string;
+  po_line_id: string | null;
+  notes: string | null;
+}
+
+interface GoodsReceiptRequest {
+  idempotency_key: string;
+  event_at: string;
+  supplier_id: string;
+  po_id: string | null;
+  notes: string | null;
+  lines: GoodsReceiptLine[];
+}
+
+interface GoodsReceiptCommittedResponse {
+  submission_id: string;
+  status: "posted";
+  event_at: string;
+  posted_at: string;
+  supplier_id: string;
+  po_id: string | null;
+  lines: Array<{
+    line_id: string;
+    item_type: ItemType;
+    item_id: string;
+    quantity: string;
+    unit: string;
+    stock_ledger_movement_id: string;
+  }>;
+  idempotent_replay: boolean;
+}
 
 interface ItemRow {
   item_id: string;
