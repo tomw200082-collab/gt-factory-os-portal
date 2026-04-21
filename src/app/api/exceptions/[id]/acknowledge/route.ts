@@ -7,7 +7,7 @@ export async function POST(
   const { id } = await params;
   return proxyRequest(req, {
     method: "POST",
-    upstreamPath: `/api/v1/mutations/planning/recommendations/${encodeURIComponent(id)}/approve`,
-    errorLabel: "planning recommendation approve",
+    upstreamPath: `/api/v1/mutations/exceptions/${encodeURIComponent(id)}/acknowledge`,
+    errorLabel: "exceptions acknowledge",
   });
 }
