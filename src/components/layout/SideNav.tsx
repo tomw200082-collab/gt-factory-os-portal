@@ -58,8 +58,13 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Home", href: "/home", icon: Home, roles: ["operator"] },
       { label: "Goods Receipt", href: "/ops/receipts", icon: PackageOpen, roles: ["operator"], blocked: "ledger" },
       { label: "Waste / Adjustment", href: "/ops/waste-adjustments", icon: Sliders, roles: ["operator"], blocked: "ledger" },
-      { label: "Physical Count", href: "/ops/counts", icon: ClipboardCheck, roles: ["operator"], blocked: "ledger" },
-      { label: "Production Actual", href: "/ops/production-actual", icon: Factory, roles: ["operator"], blocked: "ledger" },
+      // Mode B landed 2026-04-18: real-API surface at /ops/physical-count.
+      // Route updated; `blocked: "ledger"` removed since PC runtime is live.
+      { label: "Physical Count", href: "/ops/physical-count", icon: ClipboardCheck, roles: ["operator"] },
+      // Mode B landed endgame-phase-b2: real-API surface at /ops/production-actual
+      // (live contract per CLAUDE.md §"Production reporting v1": output + scrap
+      // + notes; consumption computed from pinned BOM version).
+      { label: "Production Actual", href: "/ops/production-actual", icon: Factory, roles: ["operator", "admin"] },
       { label: "My Submissions", href: "/my-submissions", icon: Inbox, roles: ["operator"] },
     ],
   },
