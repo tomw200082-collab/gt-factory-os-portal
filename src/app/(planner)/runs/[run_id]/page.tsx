@@ -26,7 +26,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { ArrowLeft, Check, X } from "lucide-react";
+import { ArrowLeft, Check, X, FileOutput } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
@@ -124,6 +124,7 @@ interface RecommendationRow {
   item_name: string | null;
   component_name: string | null;
   supplier_name: string | null;
+  converted_to_po_id?: string | null;
 }
 
 interface RecsResponse {
@@ -221,6 +222,32 @@ async function dismissRec(
     const body = await res.text().catch(() => "");
     throw new Error(`Dismiss failed (HTTP ${res.status}): ${body}`);
   }
+}
+
+interface ConvertToPOResult {
+  po_id: string;
+  po_number: string | null;
+  idempotent_replay: boolean;
+}
+
+async function convertRecToPO(
+  session: FakeSession,
+  id: string,
+): Promise<ConvertToPOResult> {
+  const res = await fetch(
+    `/api/planning/recommendations/${encodeURIComponent(id)}/convert-to-po`,
+    {
+      method: "POST",
+      headers: sessionHeaders(session),
+      body: JSON.stringify({ idempotency_key: genIdempotencyKey() }),
+    },
+  );
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`Convert-to-PO failed (HTTP ${res.status}): ${body}`);
+  }
+  const body = (await res.json()) as ConvertToPOResult;
+  return body;
 }
 
 function RunStatusBadge({ status }: { status: PlanningRunStatus }) {
@@ -418,6 +445,26 @@ export default function PlanningRunDetailPage() {
         queryKey: ["planning", "run", runId, "recs"],
       });
       window.setTimeout(() => setToast(null), 3500);
+    },
+    onError: (err: Error) => {
+      setToast({ kind: "error", message: err.message });
+      window.setTimeout(() => setToast(null), 6000);
+    },
+  });
+
+  const convertMutation = useMutation({
+    mutationFn: (id: string) => convertRecToPO(session, id),
+    onSuccess: (result) => {
+      setToast({
+        kind: "success",
+        message: result.idempotent_replay
+          ? `Already converted to PO ${result.po_number ?? result.po_id.slice(0, 8)} (idempotent replay).`
+          : `Converted to PO ${result.po_number ?? result.po_id.slice(0, 8)}.`,
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["planning", "run", runId, "recs"],
+      });
+      window.setTimeout(() => setToast(null), 5000);
     },
     onError: (err: Error) => {
       setToast({ kind: "error", message: err.message });
@@ -737,6 +784,11 @@ export default function PlanningRunDetailPage() {
                   {activeRecs.map((r) => {
                     const canActThisRow =
                       canAct && r.recommendation_status === "draft";
+                    const canConvertThisRow =
+                      canAct &&
+                      activeTab === "purchase" &&
+                      r.recommendation_status === "approved" &&
+                      !r.converted_to_po_id;
                     const rowKey = r.recommendation_id;
                     const isApproving =
                       approveMutation.isPending &&
@@ -744,6 +796,9 @@ export default function PlanningRunDetailPage() {
                     const isDismissing =
                       dismissMutation.isPending &&
                       dismissMutation.variables === rowKey;
+                    const isConverting =
+                      convertMutation.isPending &&
+                      convertMutation.variables === rowKey;
                     return (
                       <tr
                         key={rowKey}
@@ -816,6 +871,28 @@ export default function PlanningRunDetailPage() {
                                   Dismiss
                                 </button>
                               </div>
+                            ) : canConvertThisRow ? (
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-sm gap-1.5 text-accent"
+                                data-testid="planning-run-rec-convert-to-po"
+                                disabled={isConverting}
+                                onClick={() => convertMutation.mutate(rowKey)}
+                              >
+                                <FileOutput
+                                  className="h-3 w-3"
+                                  strokeWidth={2.5}
+                                />
+                                {isConverting ? "Converting…" : "Convert to PO"}
+                              </button>
+                            ) : r.converted_to_po_id ? (
+                              <span
+                                className="font-mono text-3xs text-fg-muted"
+                                data-testid="planning-run-rec-converted-ref"
+                                title={r.converted_to_po_id}
+                              >
+                                PO {r.converted_to_po_id.slice(0, 8)}…
+                              </span>
                             ) : (
                               <span className="text-3xs text-fg-subtle">
                                 —
