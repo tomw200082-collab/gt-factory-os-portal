@@ -1,19 +1,34 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// Admin · Items — read-only live view.
+// Admin · Items — AMMC v1 Slice 4 (crystalline-drifting-dusk §G Slice 4).
 //
-// Endgame Phase D1 (crystalline-drifting-dusk §B.D1): un-quarantine the
-// admin items page against live API GET /api/v1/queries/items (via the
-// portal proxy at /api/items). v1 is strictly read-only — no edit buttons.
-// CRUD UIs for items ship post-launch per plan §A.2.
+// Extensions over the prior read-only list:
+//   - Readiness pill column (consumes ?include_readiness=true from list GET)
+//   - "+ New item" button in the header → opens <QuickCreateItem> drawer
+//   - Inline status toggle action per row (POST /api/items/[id]/status)
+//   - List query invalidation on every create / status change
 // ---------------------------------------------------------------------------
 
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Plus, Power } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
+import { ReadinessPill } from "@/components/readiness/ReadinessPill";
+import { QuickCreateItem } from "@/components/admin/quick-create/QuickCreateItem";
+import {
+  AdminMutationError,
+  postStatus,
+} from "@/lib/admin/mutations";
+import { useSession } from "@/lib/auth/session-provider";
+
+interface ReadinessPayload {
+  is_ready: boolean;
+  readiness_summary?: string;
+  blockers: unknown[];
+}
 
 interface ItemRow {
   item_id: string;
@@ -31,6 +46,7 @@ interface ItemRow {
   site_id: string;
   created_at: string;
   updated_at: string;
+  readiness?: ReadinessPayload | null;
 }
 
 type ListEnvelope<T> = { rows: T[]; count: number };
@@ -47,13 +63,22 @@ async function fetchJson<T>(url: string): Promise<T> {
 function StatusBadge({ status }: { status: string }): JSX.Element {
   if (status === "ACTIVE") return <Badge tone="success" dotted>Active</Badge>;
   if (status === "PENDING") return <Badge tone="warning" dotted>Pending</Badge>;
+  if (status === "INACTIVE") return <Badge tone="neutral" dotted>Inactive</Badge>;
   return <Badge tone="neutral" dotted>{status}</Badge>;
 }
 
 export default function AdminItemsPage(): JSX.Element {
+  const { session } = useSession();
+  const isAdmin = session.role === "admin";
+  const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ACTIVE");
   const [supplyFilter, setSupplyFilter] = useState<string>("");
+  const [showCreate, setShowCreate] = useState(false);
+  const [banner, setBanner] = useState<
+    | { kind: "success" | "error"; message: string }
+    | null
+  >(null);
 
   const itemsQuery = useQuery<ListEnvelope<ItemRow>>({
     queryKey: ["admin", "items", statusFilter, supplyFilter],
@@ -61,8 +86,39 @@ export default function AdminItemsPage(): JSX.Element {
       const q = new URLSearchParams();
       if (statusFilter) q.set("status", statusFilter);
       if (supplyFilter) q.set("supply_method", supplyFilter);
+      q.set("include_readiness", "true");
       q.set("limit", "1000");
       return fetchJson(`/api/items?${q.toString()}`);
+    },
+  });
+
+  const statusMutation = useMutation({
+    mutationFn: async (args: {
+      item_id: string;
+      newStatus: string;
+      updated_at: string;
+    }) =>
+      postStatus({
+        url: `/api/items/${encodeURIComponent(args.item_id)}/status`,
+        status: args.newStatus,
+        ifMatchUpdatedAt: args.updated_at,
+      }),
+    onSuccess: (_data, vars) => {
+      setBanner({
+        kind: "success",
+        message: `Status updated for ${vars.item_id} → ${vars.newStatus}.`,
+      });
+      void queryClient.invalidateQueries({ queryKey: ["admin", "items"] });
+    },
+    onError: (err: Error, vars) => {
+      const msg =
+        err instanceof AdminMutationError
+          ? `${err.status}${err.code ? ` ${err.code}` : ""}: ${err.message}`
+          : err.message;
+      setBanner({
+        kind: "error",
+        message: `Status update failed on ${vars.item_id}: ${msg}`,
+      });
     },
   });
 
@@ -79,12 +135,24 @@ export default function AdminItemsPage(): JSX.Element {
     );
   }, [rows, query]);
 
+  const handleToggleStatus = (row: ItemRow) => {
+    if (!isAdmin) return;
+    const next = row.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+    if (!window.confirm(`Set ${row.item_id} status to ${next}?`)) return;
+    setBanner(null);
+    statusMutation.mutate({
+      item_id: row.item_id,
+      newStatus: next,
+      updated_at: row.updated_at,
+    });
+  };
+
   return (
     <>
       <WorkflowHeader
-        eyebrow="Admin · read-only"
+        eyebrow="Admin · items"
         title="Items"
-        description="Finished-goods and bought-finished master data. CRUD actions ship post-launch; this view is read-only."
+        description="Finished-goods and bought-finished master data. AMMC v1 Slice 4: readiness pills + status toggle + inline create. Detail pages (Product 360) land in Slice 5."
         meta={
           <>
             <Badge tone="info" dotted>
@@ -95,7 +163,31 @@ export default function AdminItemsPage(): JSX.Element {
             </Badge>
           </>
         }
+        actions={
+          isAdmin ? (
+            <button
+              type="button"
+              className="btn-primary inline-flex items-center gap-1.5"
+              onClick={() => setShowCreate(true)}
+            >
+              <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+              New item
+            </button>
+          ) : null
+        }
       />
+
+      {banner ? (
+        <div
+          className={
+            banner.kind === "success"
+              ? "rounded-md border border-success/40 bg-success-softer p-3 text-sm text-success-fg"
+              : "rounded-md border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg"
+          }
+        >
+          {banner.message}
+        </div>
+      ) : null}
 
       <SectionCard title="Filters" density="compact">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
@@ -177,8 +269,16 @@ export default function AdminItemsPage(): JSX.Element {
                     Sales UoM
                   </th>
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    Readiness
+                  </th>
+                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Status
                   </th>
+                  {isAdmin ? (
+                    <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                      Actions
+                    </th>
+                  ) : null}
                 </tr>
               </thead>
               <tbody>
@@ -201,8 +301,25 @@ export default function AdminItemsPage(): JSX.Element {
                       {r.sales_uom ?? "—"}
                     </td>
                     <td className="px-3 py-2">
+                      <ReadinessPill readiness={r.readiness} />
+                    </td>
+                    <td className="px-3 py-2">
                       <StatusBadge status={r.status} />
                     </td>
+                    {isAdmin ? (
+                      <td className="px-3 py-2 text-right">
+                        <button
+                          type="button"
+                          title={`Toggle status (currently ${r.status})`}
+                          className="btn btn-ghost btn-sm inline-flex items-center gap-1"
+                          onClick={() => handleToggleStatus(r)}
+                          disabled={statusMutation.isPending}
+                        >
+                          <Power className="h-3 w-3" strokeWidth={2} />
+                          {r.status === "ACTIVE" ? "Deactivate" : "Activate"}
+                        </button>
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>
@@ -210,6 +327,18 @@ export default function AdminItemsPage(): JSX.Element {
           </div>
         )}
       </SectionCard>
+
+      <QuickCreateItem
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        onCreated={(newId) => {
+          setBanner({
+            kind: "success",
+            message: `Created item ${newId}. Detail edits land in Slice 5.`,
+          });
+          void queryClient.invalidateQueries({ queryKey: ["admin", "items"] });
+        }}
+      />
     </>
   );
 }

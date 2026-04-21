@@ -1,28 +1,57 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// Admin · Supplier-items — read-only live view.
+// Admin · Supplier-items — AMMC v1 Slice 4.
 //
-// Endgame Phase D1: un-quarantine against GET /api/v1/queries/supplier-items.
-// Read-only v1. Admin role-gate at the layout level.
+// Keeps the supplier-picker-first structure from the prior read-only page
+// (upstream endpoint requires one-of filter). Extensions:
+//   - InlineEditCell on lead_time_days, moq, pack_conversion columns
+//     (Enter saves via PATCH /api/supplier-items/:id with if_match_updated_at)
+//   - is_primary radio-like toggle per row (promote this row to primary;
+//     DB partial-unique index prevents conflicting primaries per
+//     component_id / item_id and returns 409 UNIQUE_VIOLATION)
+//   - "+ New supplier-item" button → opens <QuickCreateSupplierItem>
+//     drawer prefilled with the selected supplier
+//   - Readiness pill column — NOTE: list endpoint does not forward
+//     include_readiness yet (deferred per A13; Slice 2 added v_supplier_item_readiness
+//     but only /api/v1/queries/items/:id/readiness single-item endpoint is
+//     wired in Slice 1). Column shows "—" until list-scoped endpoint lands.
 //
-// The upstream endpoint requires a one-of filter (supplier_id | component_id
-// | item_id). This page presents a supplier picker first (sourced from
-// GET /api/suppliers) and fetches supplier-items scoped to the chosen
-// supplier. Rows include is_primary flag + pack-conversion + lead days +
-// MOQ, all v1-actionable planner review context.
+// A13 on price: supplier_items.price does not exist as a column (see Slice 2
+// checkpoint §6.1). Price is tracked via price_history. No inline-edit on
+// price in this slice; surface covered by future price_history admin screen.
 // ---------------------------------------------------------------------------
 
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Plus } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
+import { InlineEditCell } from "@/components/tables/InlineEditCell";
+import { ReadinessPill } from "@/components/readiness/ReadinessPill";
+import { QuickCreateSupplierItem } from "@/components/admin/quick-create/QuickCreateSupplierItem";
+import type { EntityOption } from "@/components/fields/EntityPickerPlus";
+import {
+  AdminMutationError,
+  patchEntity,
+} from "@/lib/admin/mutations";
+import { useSession } from "@/lib/auth/session-provider";
 
 interface SupplierRow {
   supplier_id: string;
   supplier_name_official: string;
   status: string;
+}
+
+interface ComponentRow {
+  component_id: string;
+  component_name: string;
+}
+
+interface ItemRow {
+  item_id: string;
+  item_name: string;
 }
 
 interface SupplierItemRow {
@@ -44,6 +73,10 @@ interface SupplierItemRow {
   site_id: string;
   created_at: string;
   updated_at: string;
+  readiness?: {
+    is_ready?: boolean;
+    blockers?: unknown[];
+  } | null;
 }
 
 type ListEnvelope<T> = { rows: T[]; count: number };
@@ -58,14 +91,33 @@ async function fetchJson<T>(url: string): Promise<T> {
 }
 
 export default function AdminSupplierItemsPage(): JSX.Element {
+  const { session } = useSession();
+  const isAdmin = session.role === "admin";
+  const queryClient = useQueryClient();
+
   const suppliersQuery = useQuery<ListEnvelope<SupplierRow>>({
     queryKey: ["admin", "suppliers", "all"],
     queryFn: () => fetchJson("/api/suppliers?limit=1000"),
   });
-
   const suppliers = suppliersQuery.data?.rows ?? [];
+
+  const componentsQuery = useQuery<ListEnvelope<ComponentRow>>({
+    queryKey: ["admin", "components", "all"],
+    queryFn: () => fetchJson("/api/components?limit=1000"),
+  });
+
+  const itemsQuery = useQuery<ListEnvelope<ItemRow>>({
+    queryKey: ["admin", "items", "all"],
+    queryFn: () => fetchJson("/api/items?limit=1000"),
+  });
+
   const [supplierId, setSupplierId] = useState<string>("");
   const [query, setQuery] = useState("");
+  const [showCreate, setShowCreate] = useState(false);
+  const [banner, setBanner] = useState<
+    | { kind: "success" | "error"; message: string }
+    | null
+  >(null);
 
   const sortedSuppliers = useMemo(
     () =>
@@ -87,6 +139,62 @@ export default function AdminSupplierItemsPage(): JSX.Element {
     enabled: !!supplierId,
   });
 
+  // Single-row field update used by InlineEditCell.
+  const fieldMutation = useMutation({
+    mutationFn: async (args: {
+      supplier_item_id: string;
+      field: "lead_time_days" | "moq" | "pack_conversion";
+      value: string | number;
+      updated_at: string;
+    }) =>
+      patchEntity({
+        url: `/api/supplier-items/${encodeURIComponent(args.supplier_item_id)}`,
+        fields: { [args.field]: args.value },
+        ifMatchUpdatedAt: args.updated_at,
+      }),
+    onSuccess: (_data, vars) => {
+      setBanner({
+        kind: "success",
+        message: `Updated ${vars.field} on row ${vars.supplier_item_id.slice(0, 8)}…`,
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["admin", "supplier-items"],
+      });
+    },
+    onError: (err: Error) => {
+      const msg =
+        err instanceof AdminMutationError
+          ? `${err.status}${err.code ? ` ${err.code}` : ""}: ${err.message}`
+          : err.message;
+      setBanner({ kind: "error", message: `Update failed: ${msg}` });
+    },
+  });
+
+  const promotePrimaryMutation = useMutation({
+    mutationFn: async (args: {
+      supplier_item_id: string;
+      updated_at: string;
+    }) =>
+      patchEntity({
+        url: `/api/supplier-items/${encodeURIComponent(args.supplier_item_id)}`,
+        fields: { is_primary: true },
+        ifMatchUpdatedAt: args.updated_at,
+      }),
+    onSuccess: () => {
+      setBanner({ kind: "success", message: "Promoted to primary." });
+      void queryClient.invalidateQueries({
+        queryKey: ["admin", "supplier-items"],
+      });
+    },
+    onError: (err: Error) => {
+      const msg =
+        err instanceof AdminMutationError
+          ? `${err.status}${err.code ? ` ${err.code}` : ""}: ${err.message}`
+          : err.message;
+      setBanner({ kind: "error", message: `Promote-primary failed: ${msg}` });
+    },
+  });
+
   const rows = supplierItemsQuery.data?.rows ?? [];
   const filtered = useMemo(() => {
     if (!query) return rows;
@@ -98,12 +206,41 @@ export default function AdminSupplierItemsPage(): JSX.Element {
     );
   }, [rows, query]);
 
+  // Options maps for the QuickCreateSupplierItem drawer.
+  const supplierOptions: EntityOption[] = useMemo(
+    () =>
+      suppliers.map((s) => ({
+        id: s.supplier_id,
+        label: s.supplier_name_official,
+        sublabel: s.supplier_id,
+      })),
+    [suppliers],
+  );
+  const componentOptions: EntityOption[] = useMemo(
+    () =>
+      (componentsQuery.data?.rows ?? []).map((c) => ({
+        id: c.component_id,
+        label: c.component_name,
+        sublabel: c.component_id,
+      })),
+    [componentsQuery.data],
+  );
+  const itemOptions: EntityOption[] = useMemo(
+    () =>
+      (itemsQuery.data?.rows ?? []).map((i) => ({
+        id: i.item_id,
+        label: i.item_name,
+        sublabel: i.item_id,
+      })),
+    [itemsQuery.data],
+  );
+
   return (
     <>
       <WorkflowHeader
-        eyebrow="Admin · read-only"
+        eyebrow="Admin · supplier-items"
         title="Supplier items"
-        description="Supplier-to-component (and supplier-to-item) mapping. Choose a supplier to view its catalog. CRUD actions ship post-launch; read-only v1."
+        description="Supplier-to-component / supplier-to-item mapping. AMMC v1 Slice 4: inline-edit lead/moq/pack + promote primary + + New drawer. Price lives in price_history; dedicated admin surface ships post-launch."
         meta={
           <>
             <Badge tone="neutral" dotted>
@@ -111,7 +248,31 @@ export default function AdminSupplierItemsPage(): JSX.Element {
             </Badge>
           </>
         }
+        actions={
+          isAdmin && supplierId ? (
+            <button
+              type="button"
+              className="btn-primary inline-flex items-center gap-1.5"
+              onClick={() => setShowCreate(true)}
+            >
+              <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+              New supplier-item
+            </button>
+          ) : null
+        }
       />
+
+      {banner ? (
+        <div
+          className={
+            banner.kind === "success"
+              ? "rounded-md border border-success/40 bg-success-softer p-3 text-sm text-success-fg"
+              : "rounded-md border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg"
+          }
+        >
+          {banner.message}
+        </div>
+      ) : null}
 
       <SectionCard title="Choose supplier" density="compact">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -203,6 +364,9 @@ export default function AdminSupplierItemsPage(): JSX.Element {
                     MOQ
                   </th>
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    Readiness
+                  </th>
+                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Primary
                   </th>
                 </tr>
@@ -223,19 +387,104 @@ export default function AdminSupplierItemsPage(): JSX.Element {
                       {r.order_uom ?? "—"}
                     </td>
                     <td className="px-3 py-2 text-right font-mono text-xs tabular-nums text-fg-muted">
-                      {r.pack_conversion}
+                      {isAdmin ? (
+                        <InlineEditCell
+                          value={r.pack_conversion}
+                          type="number"
+                          inputMode="decimal"
+                          ifMatchUpdatedAt={r.updated_at}
+                          onSave={async (newValue) => {
+                            await fieldMutation.mutateAsync({
+                              supplier_item_id: r.supplier_item_id,
+                              field: "pack_conversion",
+                              value: newValue,
+                              updated_at: r.updated_at,
+                            });
+                          }}
+                          ariaLabel={`Edit pack_conversion for ${
+                            r.component_id ?? r.item_id ?? r.supplier_item_id
+                          }`}
+                        />
+                      ) : (
+                        r.pack_conversion
+                      )}
                     </td>
                     <td className="px-3 py-2 text-right text-xs tabular-nums text-fg-muted">
-                      {r.lead_time_days ?? "—"}
+                      {isAdmin ? (
+                        <InlineEditCell
+                          value={r.lead_time_days ?? ""}
+                          type="number"
+                          inputMode="numeric"
+                          ifMatchUpdatedAt={r.updated_at}
+                          onSave={async (newValue) => {
+                            await fieldMutation.mutateAsync({
+                              supplier_item_id: r.supplier_item_id,
+                              field: "lead_time_days",
+                              value: newValue,
+                              updated_at: r.updated_at,
+                            });
+                          }}
+                          ariaLabel={`Edit lead_time_days for ${
+                            r.component_id ?? r.item_id ?? r.supplier_item_id
+                          }`}
+                        />
+                      ) : (
+                        (r.lead_time_days ?? "—")
+                      )}
                     </td>
                     <td className="px-3 py-2 text-right font-mono text-xs tabular-nums text-fg-muted">
-                      {r.moq ?? "—"}
+                      {isAdmin ? (
+                        <InlineEditCell
+                          value={r.moq ?? ""}
+                          type="number"
+                          inputMode="decimal"
+                          ifMatchUpdatedAt={r.updated_at}
+                          onSave={async (newValue) => {
+                            await fieldMutation.mutateAsync({
+                              supplier_item_id: r.supplier_item_id,
+                              field: "moq",
+                              value: newValue,
+                              updated_at: r.updated_at,
+                            });
+                          }}
+                          ariaLabel={`Edit moq for ${
+                            r.component_id ?? r.item_id ?? r.supplier_item_id
+                          }`}
+                        />
+                      ) : (
+                        (r.moq ?? "—")
+                      )}
+                    </td>
+                    <td className="px-3 py-2">
+                      <ReadinessPill readiness={r.readiness} />
                     </td>
                     <td className="px-3 py-2">
                       {r.is_primary ? (
                         <Badge tone="success" dotted>
                           Primary
                         </Badge>
+                      ) : isAdmin ? (
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm"
+                          onClick={() => {
+                            if (
+                              !window.confirm(
+                                `Promote this row to primary for ${
+                                  r.component_id ?? r.item_id
+                                }? Existing primary (if any) will be demoted.`,
+                              )
+                            )
+                              return;
+                            promotePrimaryMutation.mutate({
+                              supplier_item_id: r.supplier_item_id,
+                              updated_at: r.updated_at,
+                            });
+                          }}
+                          disabled={promotePrimaryMutation.isPending}
+                        >
+                          Promote
+                        </button>
                       ) : (
                         <span className="text-3xs text-fg-subtle">—</span>
                       )}
@@ -247,6 +496,25 @@ export default function AdminSupplierItemsPage(): JSX.Element {
           </div>
         )}
       </SectionCard>
+
+      {isAdmin ? (
+        <QuickCreateSupplierItem
+          open={showCreate}
+          onClose={() => setShowCreate(false)}
+          onCreated={() => {
+            setBanner({
+              kind: "success",
+              message: "Created supplier-item. List refreshing…",
+            });
+            void queryClient.invalidateQueries({
+              queryKey: ["admin", "supplier-items"],
+            });
+          }}
+          suppliers={supplierOptions}
+          components={componentOptions}
+          items={itemOptions}
+        />
+      ) : null}
     </>
   );
 }

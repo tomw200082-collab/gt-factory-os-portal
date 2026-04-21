@@ -1,17 +1,28 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// Admin · Suppliers — read-only live view.
+// Admin · Suppliers — AMMC v1 Slice 4.
 //
-// Endgame Phase D1: un-quarantine against GET /api/v1/queries/suppliers.
-// Read-only v1. Admin role-gate at the layout level.
+// Extensions: + New supplier drawer, inline status toggle.
+// A13 decision: no v_supplier_readiness view exists in migration 0069 (plan
+// §E names 4 views: item / component / bom_version / supplier_item).
+// Supplier-level readiness would require a new view for aggregate
+// supplier → supplier_item health; deferred as follow-on. Readiness column
+// omitted for suppliers in this slice.
 // ---------------------------------------------------------------------------
 
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { Plus, Power } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
+import { QuickCreateSupplier } from "@/components/admin/quick-create/QuickCreateSupplier";
+import {
+  AdminMutationError,
+  postStatus,
+} from "@/lib/admin/mutations";
+import { useSession } from "@/lib/auth/session-provider";
 
 interface SupplierRow {
   supplier_id: string;
@@ -44,12 +55,21 @@ async function fetchJson<T>(url: string): Promise<T> {
 
 function StatusBadge({ status }: { status: string }): JSX.Element {
   if (status === "ACTIVE") return <Badge tone="success" dotted>Active</Badge>;
+  if (status === "INACTIVE") return <Badge tone="neutral" dotted>Inactive</Badge>;
   return <Badge tone="neutral" dotted>{status}</Badge>;
 }
 
 export default function AdminSuppliersPage(): JSX.Element {
+  const { session } = useSession();
+  const isAdmin = session.role === "admin";
+  const queryClient = useQueryClient();
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ACTIVE");
+  const [showCreate, setShowCreate] = useState(false);
+  const [banner, setBanner] = useState<
+    | { kind: "success" | "error"; message: string }
+    | null
+  >(null);
 
   const suppliersQuery = useQuery<ListEnvelope<SupplierRow>>({
     queryKey: ["admin", "suppliers", statusFilter],
@@ -58,6 +78,36 @@ export default function AdminSuppliersPage(): JSX.Element {
       if (statusFilter) q.set("status", statusFilter);
       q.set("limit", "1000");
       return fetchJson(`/api/suppliers?${q.toString()}`);
+    },
+  });
+
+  const statusMutation = useMutation({
+    mutationFn: async (args: {
+      supplier_id: string;
+      newStatus: string;
+      updated_at: string;
+    }) =>
+      postStatus({
+        url: `/api/suppliers/${encodeURIComponent(args.supplier_id)}/status`,
+        status: args.newStatus,
+        ifMatchUpdatedAt: args.updated_at,
+      }),
+    onSuccess: (_data, vars) => {
+      setBanner({
+        kind: "success",
+        message: `Status updated for ${vars.supplier_id} → ${vars.newStatus}.`,
+      });
+      void queryClient.invalidateQueries({ queryKey: ["admin", "suppliers"] });
+    },
+    onError: (err: Error, vars) => {
+      const msg =
+        err instanceof AdminMutationError
+          ? `${err.status}${err.code ? ` ${err.code}` : ""}: ${err.message}`
+          : err.message;
+      setBanner({
+        kind: "error",
+        message: `Status update failed on ${vars.supplier_id}: ${msg}`,
+      });
     },
   });
 
@@ -73,12 +123,24 @@ export default function AdminSuppliersPage(): JSX.Element {
     );
   }, [rows, query]);
 
+  const handleToggleStatus = (row: SupplierRow) => {
+    if (!isAdmin) return;
+    const next = row.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
+    if (!window.confirm(`Set ${row.supplier_id} status to ${next}?`)) return;
+    setBanner(null);
+    statusMutation.mutate({
+      supplier_id: row.supplier_id,
+      newStatus: next,
+      updated_at: row.updated_at,
+    });
+  };
+
   return (
     <>
       <WorkflowHeader
-        eyebrow="Admin · read-only"
+        eyebrow="Admin · suppliers"
         title="Suppliers"
-        description="Supplier master. CRUD actions ship post-launch; this view is read-only."
+        description="Supplier master. AMMC v1 Slice 4: + New drawer, status toggle. Per-supplier catalog + readiness land in Slice 5."
         meta={
           <>
             <Badge tone="info" dotted>
@@ -89,7 +151,31 @@ export default function AdminSuppliersPage(): JSX.Element {
             </Badge>
           </>
         }
+        actions={
+          isAdmin ? (
+            <button
+              type="button"
+              className="btn-primary inline-flex items-center gap-1.5"
+              onClick={() => setShowCreate(true)}
+            >
+              <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+              New supplier
+            </button>
+          ) : null
+        }
       />
+
+      {banner ? (
+        <div
+          className={
+            banner.kind === "success"
+              ? "rounded-md border border-success/40 bg-success-softer p-3 text-sm text-success-fg"
+              : "rounded-md border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg"
+          }
+        >
+          {banner.message}
+        </div>
+      ) : null}
 
       <SectionCard title="Filters" density="compact">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
@@ -159,6 +245,11 @@ export default function AdminSuppliersPage(): JSX.Element {
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Status
                   </th>
+                  {isAdmin ? (
+                    <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                      Actions
+                    </th>
+                  ) : null}
                 </tr>
               </thead>
               <tbody>
@@ -195,6 +286,20 @@ export default function AdminSuppliersPage(): JSX.Element {
                     <td className="px-3 py-2">
                       <StatusBadge status={r.status} />
                     </td>
+                    {isAdmin ? (
+                      <td className="px-3 py-2 text-right">
+                        <button
+                          type="button"
+                          title={`Toggle status (currently ${r.status})`}
+                          className="btn btn-ghost btn-sm inline-flex items-center gap-1"
+                          onClick={() => handleToggleStatus(r)}
+                          disabled={statusMutation.isPending}
+                        >
+                          <Power className="h-3 w-3" strokeWidth={2} />
+                          {r.status === "ACTIVE" ? "Deactivate" : "Activate"}
+                        </button>
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>
@@ -202,6 +307,18 @@ export default function AdminSuppliersPage(): JSX.Element {
           </div>
         )}
       </SectionCard>
+
+      <QuickCreateSupplier
+        open={showCreate}
+        onClose={() => setShowCreate(false)}
+        onCreated={(newId) => {
+          setBanner({
+            kind: "success",
+            message: `Created supplier ${newId}. Detail edits land in Slice 5.`,
+          });
+          void queryClient.invalidateQueries({ queryKey: ["admin", "suppliers"] });
+        }}
+      />
     </>
   );
 }

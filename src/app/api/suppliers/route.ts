@@ -1,11 +1,11 @@
 import { proxyRequest } from "@/lib/api-proxy";
 
 // ---------------------------------------------------------------------------
-// GET /api/suppliers — proxy to Fastify API GET /api/v1/queries/suppliers
+// /api/suppliers — dual-method proxy.
 //
-// Feeds Goods Receipt supplier dropdown + admin suppliers page with live
-// suppliers master (56 rows). Forwards the Supabase Bearer JWT; auth upstream.
-// Query forwarding default (?status=ACTIVE / ?supplier_type= / ?limit=).
+// GET   → Fastify GET  /api/v1/queries/suppliers   (forwards filters)
+// POST  → Fastify POST /api/v1/mutations/suppliers (AMMC v1 Slice 2: admin-
+//         only create)
 // ---------------------------------------------------------------------------
 
 export async function GET(req: Request): Promise<Response> {
@@ -13,5 +13,13 @@ export async function GET(req: Request): Promise<Response> {
     method: "GET",
     upstreamPath: "/api/v1/queries/suppliers",
     errorLabel: "suppliers list",
+  });
+}
+
+export async function POST(req: Request): Promise<Response> {
+  return proxyRequest(req, {
+    method: "POST",
+    upstreamPath: "/api/v1/mutations/suppliers",
+    errorLabel: "suppliers create",
   });
 }

@@ -1,11 +1,11 @@
 import { proxyRequest } from "@/lib/api-proxy";
 
 // ---------------------------------------------------------------------------
-// GET /api/components — proxy to Fastify API GET /api/v1/queries/components
+// /api/components — dual-method proxy.
 //
-// Feeds operator + admin dropdowns with live components master (158 rows).
-// Forwards the Supabase Bearer JWT via proxyRequest; auth enforced upstream.
-// Query forwarding default (?status=active / ?component_class= / ?limit=).
+// GET   → Fastify GET  /api/v1/queries/components   (forwards filters)
+// POST  → Fastify POST /api/v1/mutations/components (AMMC v1 Slice 2: admin-
+//         only create; body passes through untouched)
 // ---------------------------------------------------------------------------
 
 export async function GET(req: Request): Promise<Response> {
@@ -13,5 +13,13 @@ export async function GET(req: Request): Promise<Response> {
     method: "GET",
     upstreamPath: "/api/v1/queries/components",
     errorLabel: "components list",
+  });
+}
+
+export async function POST(req: Request): Promise<Response> {
+  return proxyRequest(req, {
+    method: "POST",
+    upstreamPath: "/api/v1/mutations/components",
+    errorLabel: "components create",
   });
 }
