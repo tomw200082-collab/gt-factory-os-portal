@@ -11,6 +11,7 @@
 // ---------------------------------------------------------------------------
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Power } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
@@ -288,9 +289,21 @@ export default function AdminItemsPage(): JSX.Element {
                     className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
                   >
                     <td className="px-3 py-2 font-mono text-xs text-fg">
-                      {r.item_id}
+                      <Link
+                        href={`/admin/products/${encodeURIComponent(r.item_id)}`}
+                        className="hover:text-accent"
+                      >
+                        {r.item_id}
+                      </Link>
                     </td>
-                    <td className="px-3 py-2 text-fg-strong">{r.item_name}</td>
+                    <td className="px-3 py-2 text-fg-strong">
+                      <Link
+                        href={`/admin/products/${encodeURIComponent(r.item_id)}`}
+                        className="hover:text-accent"
+                      >
+                        {r.item_name}
+                      </Link>
+                    </td>
                     <td className="px-3 py-2 text-xs text-fg-muted">
                       {r.family ?? "—"}
                     </td>

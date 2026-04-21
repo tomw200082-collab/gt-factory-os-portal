@@ -12,6 +12,7 @@
 // ---------------------------------------------------------------------------
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Power } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
@@ -259,15 +260,25 @@ export default function AdminSuppliersPage(): JSX.Element {
                     className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
                   >
                     <td className="px-3 py-2 font-mono text-xs text-fg">
-                      {r.supplier_id}
+                      <Link
+                        href={`/admin/suppliers/${encodeURIComponent(r.supplier_id)}`}
+                        className="hover:text-accent"
+                      >
+                        {r.supplier_id}
+                      </Link>
                     </td>
                     <td className="px-3 py-2 text-fg-strong">
-                      {r.supplier_name_official}
-                      {r.supplier_name_short ? (
-                        <span className="ml-2 text-xs text-fg-muted">
-                          ({r.supplier_name_short})
-                        </span>
-                      ) : null}
+                      <Link
+                        href={`/admin/suppliers/${encodeURIComponent(r.supplier_id)}`}
+                        className="hover:text-accent"
+                      >
+                        {r.supplier_name_official}
+                        {r.supplier_name_short ? (
+                          <span className="ml-2 text-xs text-fg-muted">
+                            ({r.supplier_name_short})
+                          </span>
+                        ) : null}
+                      </Link>
                     </td>
                     <td className="px-3 py-2 text-xs text-fg-muted">
                       {r.primary_contact_name ?? "—"}

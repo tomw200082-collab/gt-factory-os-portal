@@ -13,6 +13,7 @@
 // ---------------------------------------------------------------------------
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus, Power } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
@@ -277,10 +278,20 @@ export default function AdminComponentsPage(): JSX.Element {
                     className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
                   >
                     <td className="px-3 py-2 font-mono text-xs text-fg">
-                      {r.component_id}
+                      <Link
+                        href={`/admin/components/${encodeURIComponent(r.component_id)}`}
+                        className="hover:text-accent"
+                      >
+                        {r.component_id}
+                      </Link>
                     </td>
                     <td className="px-3 py-2 text-fg-strong">
-                      {r.component_name}
+                      <Link
+                        href={`/admin/components/${encodeURIComponent(r.component_id)}`}
+                        className="hover:text-accent"
+                      >
+                        {r.component_name}
+                      </Link>
                     </td>
                     <td className="px-3 py-2 text-xs text-fg-muted">
                       {r.component_class ?? "—"}
