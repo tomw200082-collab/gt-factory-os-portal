@@ -17,3 +17,5 @@ tsconfig.tsbuildinfo
 *.tsbuildinfo
 coverage/
 playwright-report/
+
+.vercel
