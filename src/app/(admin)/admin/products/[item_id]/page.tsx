@@ -946,14 +946,24 @@ function BomTab({
         eyebrow="BOM versions"
         title={`${versions.length} versions`}
         actions={
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm"
-            disabled
-            title="BOM editor lands in Slice 6"
-          >
-            Open in BOM editor (Slice 6)
-          </button>
+          // Slice 6: BOM editor is live. Link points at the active version
+          // when one exists; otherwise at the head page so admin can create
+          // a new draft. The head page also exposes the full version list.
+          head.active_version_id ? (
+            <Link
+              href={`/admin/boms/${encodeURIComponent(head.bom_head_id)}/versions/${encodeURIComponent(head.active_version_id)}`}
+              className="btn btn-ghost btn-sm"
+            >
+              Open in BOM editor
+            </Link>
+          ) : (
+            <Link
+              href={`/admin/boms/${encodeURIComponent(head.bom_head_id)}`}
+              className="btn btn-ghost btn-sm"
+            >
+              Open BOM head
+            </Link>
+          )
         }
         contentClassName="p-0"
       >
