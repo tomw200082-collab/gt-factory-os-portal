@@ -23,6 +23,7 @@ import {
   Plug,
   ShoppingCart,
   Sliders,
+  Tags,
   TriangleAlert,
   Users,
   type LucideIcon,
@@ -103,6 +104,9 @@ const NAV_GROUPS: NavGroup[] = [
       { label: "Users", href: "/admin/users", icon: Users, roles: ["admin"] },
       { label: "Jobs", href: "/admin/jobs", icon: Activity, roles: ["admin", "planner"] },
       { label: "Integrations", href: "/admin/integrations", icon: Plug, roles: ["admin"], blocked: "backend" },
+      // Endgame Phase E1-UI: external-SKU → item_id review surface.
+      // Admin-only (upstream POST approve handler is admin-gated).
+      { label: "SKU Aliases", href: "/admin/sku-aliases", icon: Tags, roles: ["admin"] },
     ],
   },
 ];
