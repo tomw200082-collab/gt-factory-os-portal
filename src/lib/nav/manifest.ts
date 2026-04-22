@@ -292,6 +292,13 @@ export const NAV_MANIFEST: NavGroup[] = [
         min_role: "admin",
         required_capability: "admin:execute",
       },
+      {
+        href: "/admin/sku-map",
+        label: "SKU Mappings",
+        icon: Tags,
+        min_role: "admin",
+        required_capability: "admin:execute",
+      },
       // /admin/signals is a plan §B.1 target URL; its page is a Tranche G
       // deliverable. Omitted from nav until that surface lands.
     ],
