@@ -43,7 +43,7 @@ export default function AdminIntegrationsPage() {
               <ul className="text-xs space-y-1">
                 {relevant.slice(0, 5).map(e => (
                   <li key={e.exception_id} className="text-muted-foreground">
-                    <span className="font-mono">{e.category}</span> — {e.title} <span className="opacity-50">({new Date(e.created_at).toLocaleDateString()})</span>
+                    <span className="font-mono">{e.category}</span> — {e.title} <span className="opacity-50">({e.created_at ? new Date(e.created_at).toLocaleDateString() : "—"})</span>
                   </li>
                 ))}
                 {relevant.length > 5 && <li className="opacity-50">+{relevant.length - 5} more → see Exceptions Inbox</li>}
