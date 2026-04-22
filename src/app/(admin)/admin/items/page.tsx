@@ -153,7 +153,7 @@ export default function AdminItemsPage(): JSX.Element {
       <WorkflowHeader
         eyebrow="Admin · items"
         title="Items"
-        description="Finished-goods and bought-finished master data. Readiness pills + status toggle + inline create. Detail pages (Product 360) on row click."
+        description="Finished-goods and bought-finished master data. Readiness pills + status toggle + inline create. Detail page on row click."
         meta={
           <>
             <Badge tone="info" dotted>
@@ -299,7 +299,7 @@ export default function AdminItemsPage(): JSX.Element {
                   >
                     <td className="px-3 py-2 font-mono text-xs text-fg">
                       <Link
-                        href={`/admin/products/${encodeURIComponent(r.item_id)}`}
+                        href={`/admin/masters/items/${encodeURIComponent(r.item_id)}`}
                         className="hover:text-accent"
                       >
                         {r.item_id}
@@ -307,7 +307,7 @@ export default function AdminItemsPage(): JSX.Element {
                     </td>
                     <td className="px-3 py-2 text-fg-strong">
                       <Link
-                        href={`/admin/products/${encodeURIComponent(r.item_id)}`}
+                        href={`/admin/masters/items/${encodeURIComponent(r.item_id)}`}
                         className="hover:text-accent"
                       >
                         {r.item_name}

@@ -18,6 +18,7 @@
 // ---------------------------------------------------------------------------
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
@@ -262,7 +263,12 @@ export default function PurchaseOrdersListPage() {
                     data-status={r.status}
                   >
                     <td className="px-3 py-2 font-mono text-xs text-fg">
-                      {r.po_number}
+                      <Link
+                        href={`/purchase-orders/${encodeURIComponent(r.po_id)}`}
+                        className="hover:text-accent"
+                      >
+                        {r.po_number}
+                      </Link>
                     </td>
                     <td className="px-3 py-2 font-mono text-xs text-fg-muted">
                       {r.supplier_id}

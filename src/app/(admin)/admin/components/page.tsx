@@ -279,7 +279,7 @@ export default function AdminComponentsPage(): JSX.Element {
                   >
                     <td className="px-3 py-2 font-mono text-xs text-fg">
                       <Link
-                        href={`/admin/components/${encodeURIComponent(r.component_id)}`}
+                        href={`/admin/masters/components/${encodeURIComponent(r.component_id)}`}
                         className="hover:text-accent"
                       >
                         {r.component_id}
@@ -287,7 +287,7 @@ export default function AdminComponentsPage(): JSX.Element {
                     </td>
                     <td className="px-3 py-2 text-fg-strong">
                       <Link
-                        href={`/admin/components/${encodeURIComponent(r.component_id)}`}
+                        href={`/admin/masters/components/${encodeURIComponent(r.component_id)}`}
                         className="hover:text-accent"
                       >
                         {r.component_name}
