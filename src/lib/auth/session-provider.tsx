@@ -13,7 +13,7 @@
 //      Use the fake-auth localStorage machinery for role switching in tests.
 //
 // Fix history:
-//   - 2026-04-21 hotfix: previously read getFakeSession() unconditionally,
+//   - 2026-04-21 hotfix: previously read getDevShimSession() unconditionally,
 //     which returned FAKE_USERS.viewer when dev-shim was off. Every page
 //     thought the user was a viewer regardless of their actual app_users
 //     role. Replaced with a real /api/me fetch for the production path.
@@ -29,16 +29,16 @@ import {
 } from "react";
 import {
   FAKE_USERS,
-  getFakeSession,
+  getDevShimSession,
   isFakeAuthEnabled,
   setFakeRole,
-  subscribeFakeSession,
-  type FakeSession,
+  subscribeDevShimSession,
+  type DevShimSession,
 } from "./fake-auth";
 import type { Role } from "@/lib/contracts/enums";
 
 interface SessionContextValue {
-  session: FakeSession;
+  session: DevShimSession;
   setRole: (role: Role) => void;
   availableRoles: Role[];
   isLoading: boolean;
@@ -49,14 +49,14 @@ const SessionContext = createContext<SessionContextValue | null>(null);
 
 // A neutral placeholder used ONLY while /api/me is in-flight on first render.
 // No role grants until the real session lands.
-const LOADING_SESSION: FakeSession = {
+const LOADING_SESSION: DevShimSession = {
   user_id: "",
   display_name: "",
   email: "",
   role: "viewer",
 };
 
-async function fetchRealSession(): Promise<FakeSession> {
+async function fetchRealSession(): Promise<DevShimSession> {
   const res = await fetch("/api/me", {
     headers: { Accept: "application/json" },
     cache: "no-store",
@@ -82,7 +82,7 @@ async function fetchRealSession(): Promise<FakeSession> {
 export function SessionProvider({ children }: { children: ReactNode }) {
   const devShim = isFakeAuthEnabled();
 
-  const [session, setSession] = useState<FakeSession>(() =>
+  const [session, setSession] = useState<DevShimSession>(() =>
     devShim ? FAKE_USERS.planner : LOADING_SESSION,
   );
   const [hydrated, setHydrated] = useState(false);
@@ -93,9 +93,9 @@ export function SessionProvider({ children }: { children: ReactNode }) {
 
     if (devShim) {
       // Dev mode: honor localStorage + role switcher.
-      setSession(getFakeSession());
+      setSession(getDevShimSession());
       setHydrated(true);
-      const unsub = subscribeFakeSession((s) => {
+      const unsub = subscribeDevShimSession((s) => {
         if (!cancelled) setSession(s);
       });
       return () => {

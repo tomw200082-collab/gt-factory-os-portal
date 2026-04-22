@@ -15,6 +15,7 @@
 //   - Contract: src/lib/contracts/physical-count.ts.
 // ---------------------------------------------------------------------------
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
@@ -110,6 +111,8 @@ interface DoneState {
   kind: "success" | "pending" | "error";
   message: string;
   detail?: string;
+  href?: string;
+  hrefLabel?: string;
 }
 
 export default function PhysicalCountPage() {
@@ -256,11 +259,16 @@ export default function PhysicalCountPage() {
         });
         resetFlow();
       } else if (body && body.status === "pending") {
+        const sid = body.submission_id;
         setDone({
           kind: "pending",
           message:
             "Count variance exceeds threshold — held for planner approval.",
-          detail: `submission_id=${body.submission_id} · delta=${body.computed_delta ?? "?"}`,
+          detail: `submission_id=${sid} · delta=${body.computed_delta ?? "?"}`,
+          href: sid
+            ? `/inbox/approvals/physical-count/${encodeURIComponent(sid)}`
+            : undefined,
+          hrefLabel: "Open approval",
         });
         resetFlow();
       } else {
@@ -291,6 +299,38 @@ export default function PhysicalCountPage() {
     setEventAt(nowLocalDateTime());
   }
 
+  async function handleCancel(): Promise<void> {
+    // If there's no open snapshot, just reset the client state.
+    if (!snapshot) {
+      resetFlow();
+      return;
+    }
+    const snapshotId = snapshot.snapshot_id;
+    const idempotencyKey = newIdempotencyKey();
+    setPhase("submitting");
+    try {
+      // Fire-and-reset: the POST must land to free the server-side snapshot,
+      // but the operator-visible UX should reset regardless of transient
+      // network errors (a stuck snapshot would auto-expire server-side and
+      // the next /open for the same item would idempotently heal).
+      await fetch(
+        `/api/physical-count/${encodeURIComponent(snapshotId)}/cancel`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({ idempotency_key: idempotencyKey }),
+        },
+      );
+    } catch {
+      // Swallow — client reset still proceeds.
+    } finally {
+      resetFlow();
+    }
+  }
+
   return (
     <>
       <WorkflowHeader
@@ -311,7 +351,18 @@ export default function PhysicalCountPage() {
           }
           role="status"
         >
-          <div className="font-medium">{done.message}</div>
+          <div className="flex items-center justify-between gap-3">
+            <div className="font-medium">{done.message}</div>
+            {done.href ? (
+              <Link
+                href={done.href}
+                className="shrink-0 text-xs font-semibold underline underline-offset-2 hover:no-underline"
+                data-testid="physical-count-banner-link"
+              >
+                {done.hrefLabel ?? "Open"}
+              </Link>
+            ) : null}
+          </div>
           {done.detail ? (
             <div className="mt-1 font-mono text-xs opacity-80">
               {done.detail}
@@ -495,7 +546,8 @@ export default function PhysicalCountPage() {
             <button
               type="button"
               className="btn"
-              onClick={resetFlow}
+              onClick={handleCancel}
+              disabled={phase === "submitting"}
             >
               Cancel snapshot
             </button>

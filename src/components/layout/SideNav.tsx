@@ -63,7 +63,7 @@ function readBadgeCount(
   return 0;
 }
 
-export function SideNav() {
+export function SideNav({ onNavigate }: { onNavigate?: () => void } = {}) {
   const { session } = useSession();
   const pathname = usePathname();
   const queryClient = useQueryClient();
@@ -174,6 +174,7 @@ export function SideNav() {
                     ) : (
                       <Link
                         href={item.href}
+                        onClick={onNavigate}
                         className={cn(
                           "group relative flex items-center gap-2.5 rounded-sm px-2.5 py-1.5 text-sm text-fg transition-colors duration-150 ease-out-quart",
                           active
