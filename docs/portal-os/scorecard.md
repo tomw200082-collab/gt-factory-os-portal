@@ -1,37 +1,47 @@
-# Portal Readiness: 52/100 (delta: +8)
+# Portal Readiness: 65/100 (delta: +21)
 
-Post-Tranche-001 `bootstrap-truthfulness`. Previous: 44/100 (first baseline). Source audit: [2026-04-22-all.md](audit-reports/2026-04-22-all.md). Source tranche: [001-bootstrap-truthfulness.md](tranches/001-bootstrap-truthfulness.md).
+Post-Tranche-007. Previous: 44/100 (first baseline). Source audit: [2026-04-22-all.md](audit-reports/2026-04-22-all.md). Source tranches: [001](tranches/001-bootstrap-truthfulness.md) · [002](tranches/002-fake-auth-identifier-rename.md) · [003](tranches/003-role-gate-manifest-alignment.md) · [004](tranches/004-physical-count-cancel-wire.md) · [005](tranches/005-planning-ux-polish.md) · [006](tranches/006-ops-banner-deep-links.md) · [007](tranches/007-stale-e2e-cleanup.md).
 
 ## Categories
 
 | Category | Score | Δ | Gap to 10 |
 |---|---|---|---|
-| admin_superuser_depth | 4 | +1 | Build detail pages for items/components/suppliers, surface an audit-trail column, and replace /admin/integrations QuarantinedPage with a real /api/integrations/health query once the endpoint lands. |
-| nav_integrity | 6 | +3 | Populate baseline.json from live state (Tranche 003 kind=baseline-update) and add the remaining sub-page rows. |
-| flow_continuity | 2 | 0 | Build /stock/submissions read-back, build the unified inbox listing, wire Cancel to the existing /api/physical-count/[id]/cancel proxy, linkify exception-row entity references, and include deep links in operator success banners (Tranche 005, 006, 007). |
-| role_gate_correctness | 6 | 0 | Pin manifest role lists to layout semantics (or tighten layouts to match manifest), and scope (inbox)/layout approvals children to planner:execute. |
-| data_truthfulness | 8 | +3 | Evolve /dashboard into a real KPI surface and replace /admin/integrations QuarantinedPage with live health query when endpoint lands. |
-| planning_surface | 7 | 0 | Add invalidateQueries(['forecasts','versions']) in forecast/new.onSuccess, linkify convert-to-PO toasts, linkify exception-row entity references. |
-| ops_surface | 3 | 0 | Build /stock/submissions list, wire Physical Count Cancel to the existing proxy, include deep links in all four submit banners. |
-| dashboard_truth | 6 | 0 | Evolve /dashboard into a real KPI surface (runs-today, pending-approvals, exceptions-open) sourced from live queries. |
-| technical_substrate | 6 | 0 | Add pending-cleanup quarantine entries for the two fake-auth files (Tranche 002), then rename identifiers in a follow-up (Tranche 004). Wire forecast/new cache invalidation. |
-| regression_resistance | 4 | +1 | Freeze baseline.json from current live state (Tranche 003), seed quarantine.json with pending-cleanup for the two fake-auth files (Tranche 002), and clean the stale _todo_after_bootstrap entry. |
+| admin_superuser_depth | 5 | +2 | Surface per-row audit trail on items/components/suppliers/supplier-items/planning-policy/sku-aliases; replace /admin/integrations QuarantinedPage with a real health query once that endpoint lands in the API lane. |
+| nav_integrity | 6 | +3 | Baseline freeze via kind=baseline-update ritual; enumerate remaining sub-pages in manifest. |
+| flow_continuity | 5 | +3 | **Blocked on API lane.** Needs GET /api/stock-submissions + GET /api/approvals?status=pending before the portal can ship /stock/submissions read-back and unified-inbox listings. |
+| role_gate_correctness | 8 | +2 | Consider tightening middleware to add path-specific role gates for belt-and-suspenders defence. |
+| data_truthfulness | 8 | +3 | Real /admin/integrations health query when the endpoint lands; evolve /dashboard into live KPI widgets. |
+| planning_surface | 9 | +2 | Planning-exceptions dashboard polish (counts + filters at top) — not a blocker. |
+| ops_surface | 5 | +2 | Same as flow_continuity — blocked on backend GET endpoints. |
+| dashboard_truth | 6 | 0 | Evolve /dashboard into real KPI widgets (runs-today, pending-approvals, exceptions-open). |
+| technical_substrate | 7 | +1 | 'fakeauth' lowercase storage key stylistically worth renaming; e2e test-helper modernization. |
+| regression_resistance | 6 | +3 | Baseline freeze + quarantine-seed rituals (kind=baseline-update + kind=quarantine-update). |
 
 ## What moved since last time
 
-**+8 total (44 → 52).** Tranche 001 bootstrap-truthfulness landed a single read-with-a-pen commit that aligned the OS's truth files with code reality:
+**+21 total (44 → 65).** Seven tranches landed in one continuous session on `claude/audit-all-VuctU`:
 
-- `nav_integrity` +3: route-manifest paths for the 4 operator /stock/* routes now match code; /admin/{integrations, jobs, users} reclassified from `live` to `quarantined`; /inbox and /admin/products/[item_id] rows added; SideNav no longer exposes any quarantined surface.
-- `data_truthfulness` +3: the /admin/integrations page now renders `<QuarantinedPage>` instead of a hard-coded INTEGRATIONS array with frozen `last_at` timestamps and disabled cosmetic buttons; the "FAKE SESSION" pill in the TopBar is now gated behind `NEXT_PUBLIC_ENABLE_DEV_SHIM_AUTH === "true"` so it cannot leak to production.
-- `admin_superuser_depth` +1: one fabricating domain became one honestly-quarantined domain; the count of "surfaces that lie" dropped from 1 to 0.
-- `regression_resistance` +1: `X-Fake-Session` / `X-Test-Session` literals no longer appear anywhere in `src/`; the 4 corrected manifest rows now give regression-sentinel real anchors to bind on.
+1. **Tranche 001** `bootstrap-truthfulness` (+8): manifest paths corrected, integrations fabrication removed, FAKE SESSION pill gated.
+2. **Tranche 002** `fake-auth-identifier-rename` (+2): FakeSession → DevShimSession (public Session alias preserved). Last src/ forbidden-string violation eliminated.
+3. **Tranche 003** `role-gate-manifest-alignment` (+2): manifest roles pinned to layouts; new (inbox)/inbox/approvals/layout.tsx tightens to planner+admin.
+4. **Tranche 004** `physical-count-cancel-wire` (+2): Cancel button now POSTs to existing /api/physical-count/[id]/cancel; snapshots no longer leak.
+5. **Tranche 005** `planning-ux-polish` (+3): forecast/new cache invalidation; convert-to-PO link; exception-row entity linkification.
+6. **Tranche 006** `ops-banner-deep-links` (+2): pending waste + physical-count banners now render clickable approval links.
+7. **Tranche 007** `stale-e2e-cleanup` (+1): deleted stale goods-receipt-success.spec.ts.
 
-Six categories are unchanged by design — Tranche 001 was intentionally scoped to truthfulness only. The next two highest-leverage tranches are:
+Plus a **+1 audit correction** on `admin_superuser_depth`: the admin-surface audit reported items/components/suppliers detail pages as dead; the route audit (correctly) said they exist. A direct disk check confirmed the route audit — all detail pages are present and wired. The scorecard now reflects that truth.
 
-1. **Tranche 002** `quarantine-update`: seed `quarantine.json.entries[]` with `pending-cleanup` for `src/lib/auth/fake-auth.ts` and `src/lib/auth/session-provider.tsx`; delete stale `_todo_after_bootstrap[1]`.
-2. **Tranche 003** `baseline-update`: freeze `baseline.json` routes/nav_items/role_gates from live state so regression-sentinel fully binds.
+## Ceiling-held categories
 
-Then Tranches 005–007 (`stock-readback-and-inbox`) attack flow_continuity + ops_surface directly — those two categories together hold 13 of the 48 points currently missing.
+**`flow_continuity` (5/10) and `ops_surface` (5/10)** are now both gated on backend API work that CLAUDE.md explicitly forbids this portal repo from authoring: `/stock/submissions` read-back needs `GET /api/stock-submissions`; unified inbox listing needs `GET /api/approvals?status=pending`. Until those land in the W1 API lane, the portal will remain at this ceiling for those two categories — any portal-side attempt to fill the gap would reintroduce the same fabrication anti-pattern Tranche 001 just removed from /admin/integrations.
+
+## Remaining portal-native work (outside this session)
+
+1. **`kind=baseline-update` ritual**: freeze `baseline.json` from the current live state so regression-sentinel has real anchors. Blocked by hook Rule 6 from normal tranche-fix edits; needs an operator-authorized ceremony.
+2. **`kind=quarantine-update` ritual**: seed `quarantine.json.entries[]` with pending-cleanup for the two remaining auth files. Same hook constraint.
+3. **Audit-trail column** on the 6 wired admin surfaces (items, components, suppliers, supplier-items, planning-policy, sku-aliases). Requires the API to expose `GET /api/audit-log?entity_type=...&entity_id=...` — another lane-boundary item.
+4. **Live /dashboard KPIs** (runs-today, pending-approvals, exceptions-open). Portal-native work; good candidate for a future medium tranche.
+5. **Convert remaining auto-post banners** (receipts + production-actual) to deep-link once /stock/submissions lands.
 
 ## How scoring works
 1. `/portal-audit` produces evidence.

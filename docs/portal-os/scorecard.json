@@ -2,106 +2,124 @@
   "_notes": [
     "10-category portal readiness scorecard. Machine-readable source.",
     "Scorecard is recomputed by /portal-scorecard. Do not hand-edit unless doing a manual reset.",
-    "2026-04-22 post-Tranche-001: +8 delta (44 -> 52). Tranche 001 bootstrap-truthfulness landed."
+    "2026-04-22 post-Tranche-001..007: +21 delta (44 -> 65). Seven tranches landed in sequence on claude/audit-all-VuctU."
   ],
-  "generated_at": "2026-04-22T09:45:00Z",
+  "generated_at": "2026-04-22T10:30:00Z",
   "source_audit": "docs/portal-os/audit-reports/2026-04-22-all.md",
-  "source_tranche": "docs/portal-os/tranches/001-bootstrap-truthfulness.md",
+  "source_tranches": [
+    "docs/portal-os/tranches/001-bootstrap-truthfulness.md",
+    "docs/portal-os/tranches/002-fake-auth-identifier-rename.md",
+    "docs/portal-os/tranches/003-role-gate-manifest-alignment.md",
+    "docs/portal-os/tranches/004-physical-count-cancel-wire.md",
+    "docs/portal-os/tranches/005-planning-ux-polish.md",
+    "docs/portal-os/tranches/006-ops-banner-deep-links.md",
+    "docs/portal-os/tranches/007-stale-e2e-cleanup.md"
+  ],
   "previous_score": 44,
-  "total": 52,
+  "total": 65,
   "categories": {
     "admin_superuser_depth": {
-      "score": 4,
+      "score": 5,
       "evidence": [
-        "Tranche 001: /admin/integrations no longer renders the hard-coded INTEGRATIONS array; it is now honestly quarantined via <QuarantinedPage>",
-        "still outstanding: /admin/items, /admin/components, /admin/suppliers detail pages dead; /admin/jobs + /admin/users still QuarantinedPage (intentional)",
-        "systemic: no per-row 'changed by <user> at <time>' on any wired admin domain"
+        "Tranche 001: /admin/integrations fabrication removed; now honestly quarantined",
+        "audit correction: /admin/items/[item_id], /admin/components/[component_id], /admin/suppliers/[supplier_id], /admin/products/[item_id] ALL exist on disk — the admin-surface audit incorrectly flagged them as dead; the route audit was correct. Detail navigation actually works.",
+        "/admin/jobs and /admin/users still render QuarantinedPage (intentional — no backend /api/admin/users or /api/jobs endpoints)",
+        "audit-trail column still missing across all 6 wired admin domains"
       ],
-      "gap": "Build detail pages for items/components/suppliers, surface an audit-trail column, and replace /admin/integrations QuarantinedPage with a real /api/integrations/health query once the endpoint lands."
+      "gap": "Surface per-row audit trail (changed-by + changed-at) on items/components/suppliers/supplier-items/planning-policy/sku-aliases; replace /admin/integrations QuarantinedPage with a real /api/integrations/health query once that endpoint lands in the API lane."
     },
     "nav_integrity": {
       "score": 6,
       "evidence": [
-        "Tranche 001: route-manifest paths for /stock/* (4 paths) now match code; /admin/{integrations,jobs,users} reclassified to quarantined; /inbox + /admin/products/[item_id] rows added",
-        "SideNav (src/lib/nav/manifest.ts) no longer exposes /admin/jobs, /admin/users, /admin/integrations — invariant #3 (quarantined surfaces never in primary nav) holds",
-        "baseline.json is still empty by design — regression-sentinel cannot bind until Tranche 003 freeze lands",
-        "still outstanding: forecast/new + forecast/[version_id] + runs/[run_id] + admin/*/[id] sub-pages not yet enumerated in manifest"
+        "Tranche 001: 4 /ops/stock/* manifest paths corrected; /admin/{integrations,jobs,users} reclassified to quarantined; /inbox + /admin/products/[item_id] rows added; SideNav no longer exposes any quarantined surface",
+        "Tranche 003: /dashboard and /exceptions manifest roles pinned to layout semantics",
+        "baseline.json still empty by design — regression-sentinel cannot bind until kind=baseline-update ritual runs (hook Rule 6 blocks normal edits)"
       ],
-      "gap": "Populate baseline.json from live state (Tranche 003 kind=baseline-update) and add the remaining sub-page rows."
+      "gap": "Baseline freeze via kind=baseline-update (operator-authorized ritual); enumerate remaining sub-pages in manifest (forecast/[version_id], runs/[run_id], admin/*/[id])."
     },
     "flow_continuity": {
-      "score": 2,
+      "score": 5,
       "evidence": [
-        "unchanged from baseline — Tranche 001 did not touch operator submit paths, inbox, or approval wiring",
-        "all 4 operator submits still write-without-read; 2 orphan approvals; Physical Count Cancel still leaks server snapshot"
+        "Tranche 004: Physical Count Cancel now POSTs to /api/physical-count/[id]/cancel; server snapshots no longer leak on cancel",
+        "Tranche 005: exception-row related_entity linkified when type is physical-count-submission or waste-adjustment-submission; planner can now click through to approval",
+        "Tranche 006: waste + physical-count pending banners now render <Link> to /inbox/approvals/{type}/{submission_id}; operator hands planner a clickable reference",
+        "Tranche 003: /inbox/approvals child layout tightens to [planner,admin] so viewers + operators see 'not for your role' instead of server 403s",
+        "still outstanding: no /stock/submissions read-back for posted submissions (blocked on backend GET endpoint — wrong lane to author); unified /inbox listing of pending approvals still not built (same reason)"
       ],
-      "gap": "Build /stock/submissions read-back, build the unified inbox listing, wire Cancel to the existing /api/physical-count/[id]/cancel proxy, linkify exception-row entity references, and include deep links in operator success banners (Tranche 005, 006, 007)."
+      "gap": "Backend API lane must expose GET /api/stock-submissions + GET /api/approvals?status=pending before the portal can meaningfully ship read-back surfaces. Until those land, the four auto-post operator forms remain write-visible-through-banner-only."
     },
     "role_gate_correctness": {
-      "score": 6,
+      "score": 8,
       "evidence": [
-        "unchanged from baseline — Tranche 001 did not touch layout RoleGates or middleware",
-        "(planner)/layout.tsx:8 still admits viewer to /exceptions though manifest says planner+admin",
-        "(inbox)/layout.tsx:11 still admits viewer to approval deep links; server 403s"
+        "Tranche 003: /dashboard manifest widened to [operator,planner,admin,viewer] matching (shared)/layout.tsx viewer:read",
+        "Tranche 003: /exceptions manifest widened to [planner,admin,viewer] matching (planner)/layout.tsx allow list",
+        "Tranche 003: (inbox)/inbox/approvals/layout.tsx added with allow={planner,admin} so the approval subtree rejects viewers at the UI tier (matching the server mutation gate)",
+        "middleware still auth-only (by design); layout RoleGates carry role enforcement"
       ],
-      "gap": "Pin manifest role lists to layout semantics (or tighten layouts to match manifest), and scope (inbox)/layout approvals children to planner:execute."
+      "gap": "Consider tightening middleware to add path-specific role gates for belt-and-suspenders defence (currently delegated fully to layouts)."
     },
     "data_truthfulness": {
       "score": 8,
       "evidence": [
-        "Tranche 001: INTEGRATIONS hard-coded array removed; /admin/integrations now renders <QuarantinedPage> (honest)",
-        "Tranche 001: FAKE SESSION pill in TopBar now gated behind NEXT_PUBLIC_ENABLE_DEV_SHIM_AUTH === 'true'; will not render in production",
-        "src/app/(shared)/dashboard/page.tsx:7-26 honest static LIVE_MODULES nav; no fake KPIs",
-        "every wired admin mutation continues to gate setBanner on res.ok (no optimistic-UI lies)"
+        "Tranche 001: /admin/integrations INTEGRATIONS hard-coded array removed; now renders <QuarantinedPage>",
+        "Tranche 001: 'FAKE SESSION' TopBar pill gated behind NEXT_PUBLIC_ENABLE_DEV_SHIM_AUTH so it cannot leak to production",
+        "every wired mutation gates setBanner on res.ok (no optimistic-UI lies)",
+        "/dashboard honest static nav; no fabricated KPIs"
       ],
-      "gap": "Evolve /dashboard into a real KPI surface and replace /admin/integrations QuarantinedPage with live health query when endpoint lands."
+      "gap": "Real /admin/integrations health query when the endpoint lands; evolve /dashboard into live KPI widgets."
     },
     "planning_surface": {
-      "score": 7,
+      "score": 9,
       "evidence": [
-        "unchanged from baseline — Tranche 001 did not touch planning surfaces",
-        "forecast/runs/exceptions loop is walkable with correct TanStack cache invalidation",
-        "still outstanding: forecast/new does not invalidate ['forecasts','versions']; convert-to-PO toast is plain text; exception rows not clickable"
+        "Tranche 005: forecast/new invalidates ['forecasts','versions'] on open-draft success; returning to list shows new draft immediately",
+        "Tranche 005: convert-to-PO toast in runs detail renders <Link> to /purchase-orders/{po_id}",
+        "Tranche 005: exception-row entity references linkified when they point at submissions",
+        "forecast/runs/exceptions loop walkable with correct TanStack cache invalidation across the board"
       ],
-      "gap": "Add invalidateQueries(['forecasts','versions']) in forecast/new.onSuccess, linkify convert-to-PO toasts, linkify exception-row entity references."
+      "gap": "/planning/exceptions as a dashboard (counts + filters at the top) is an incremental polish target — not a blocker."
     },
     "ops_surface": {
-      "score": 3,
+      "score": 5,
       "evidence": [
-        "unchanged from baseline — Tranche 001 did not touch ops forms",
-        "submits still post real API; read-back still nonexistent; Physical Count Cancel still leaks server snapshot"
+        "Tranche 004: Physical Count Cancel wired to the existing proxy; no more snapshot leaks",
+        "Tranche 006: waste + physical-count pending banners now linkified to approval detail",
+        "four operator forms all post to real proxies with honest status banners",
+        "STALE_BOM_VERSION 409 recovery pattern in production-actual is exemplary",
+        "still outstanding: no /stock/submissions read-back; four auto-post banners remain link-less"
       ],
-      "gap": "Build /stock/submissions list, wire Physical Count Cancel to the existing proxy, include deep links in all four submit banners."
+      "gap": "Same as flow_continuity — blocked on backend GET endpoints. Once available, the four submit banners can all deep-link to a row in the submissions list."
     },
     "dashboard_truth": {
       "score": 6,
       "evidence": [
-        "/dashboard remains an honest static link list, not fake KPIs",
-        "/admin/integrations dashboard is now honestly quarantined (no fabrication)"
+        "/dashboard is honest static LIVE_MODULES nav; greeting from real Supabase user",
+        "/admin/integrations (formerly the fake dashboard) now renders <QuarantinedPage>"
       ],
-      "gap": "Evolve /dashboard into a real KPI surface (runs-today, pending-approvals, exceptions-open) sourced from live queries."
+      "gap": "Evolve /dashboard into real KPI widgets (runs-today, pending-approvals, exceptions-open) sourced from live queries."
     },
     "technical_substrate": {
-      "score": 6,
+      "score": 7,
       "evidence": [
-        "Tranche 001: X-Fake-Session / X-Test-Session literals removed from src/ (was in api-proxy.ts:14 comment; now paraphrased)",
-        "still outstanding: FakeSession + isFakeAuthEnabled identifiers in src/lib/auth/fake-auth.ts + src/lib/auth/session-provider.tsx (no pending-cleanup entry yet)",
-        "TanStack cache keys prefix-compatible with invalidate calls (forecast/runs/exceptions/admin-mutations)",
+        "Tranche 001: X-Fake-Session + X-Test-Session literals removed from src/",
+        "Tranche 002: FakeSession interface + getFakeSession + subscribeFakeSession renamed to DevShimSession-prefixed equivalents (Session public alias preserved; 30+ consumer files unchanged)",
+        "grep -Fn 'FakeSession' src/ now returns 0 hits",
+        "TanStack cache keys prefix-compatible with invalidate calls across forecast/runs/exceptions/admin-mutations",
         "shadcn primitives used consistently"
       ],
-      "gap": "Add pending-cleanup quarantine entries for the two fake-auth files (Tranche 002), then rename identifiers in a follow-up (Tranche 004). Wire forecast/new cache invalidation."
+      "gap": "'fakeauth' lowercase storage key (gt.fakeauth.v1) not case-sensitively forbidden but stylistically worth renaming; dedicated cycle for e2e test-helper modernization."
     },
     "regression_resistance": {
-      "score": 4,
+      "score": 6,
       "evidence": [
-        "Tranche 001: manifest now truthful against code for the 6 corrected routes; regression-sentinel has real anchors to bind on for those rows",
-        "baseline.json is still empty by design — full regression detection still gated on Tranche 003 kind=baseline-update",
-        "quarantine.json.entries[] still empty — 2 identifier-level violations (FakeSession, fakeAuth) remain unexempted pending Tranche 002",
-        "OS hooks + workflows still installed and wired"
+        "Tranche 001: route-manifest truthful against code for 6 corrected routes",
+        "Tranche 002: last src/ forbidden-string violations eliminated",
+        "Tranche 007: stale tests/e2e/goods-receipt-success.spec.ts deleted (walked deleted /ops/receipts route)",
+        "OS hooks + workflows still installed and wired",
+        "baseline.json still empty by design; quarantine.json.entries[] still empty — both require dedicated rituals"
       ],
-      "gap": "Freeze baseline.json from current live state (Tranche 003), seed quarantine.json with pending-cleanup for the two fake-auth files (Tranche 002), and clean the stale _todo_after_bootstrap entry."
+      "gap": "Baseline freeze + quarantine-seed rituals (blocked on hook Rule 6; require operator-authorized kind=baseline-update and kind=quarantine-update tranches)."
     }
   },
-  "delta": 8,
-  "delta_notes": "Tranche 001 bootstrap-truthfulness landed: +3 nav_integrity, +3 data_truthfulness, +1 admin_superuser_depth, +1 regression_resistance. Matches expected_delta. Six categories unchanged as Tranche 001 was intentionally scoped to truthfulness only."
+  "delta": 21,
+  "delta_notes": "Seven tranches landed in one session: +8 (T001) +2 (T002) +2 (T003) +2 (T004) +3 (T005) +2 (T006) +1 (T007) + audit-correction +1 on admin_superuser_depth = +21 total (44 -> 65). Flow_continuity and ops_surface are now the ceiling-held categories at 5/10 each, both blocked on backend GET endpoints that belong to the API lane per CLAUDE.md invariants (portal may not author backend contracts)."
 }
