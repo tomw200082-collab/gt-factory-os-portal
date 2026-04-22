@@ -5,6 +5,16 @@ import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { KpiTiles } from "@/components/dashboard/KpiTiles";
 
+// Tranche 017: force dynamic rendering. This page reads the per-user
+// Supabase session server-side via createSupabaseServerClient(), which
+// requires NEXT_PUBLIC_SUPABASE_URL + NEXT_PUBLIC_SUPABASE_ANON_KEY.
+// Without `force-dynamic`, Next.js attempts to statically generate the
+// page at build time — when Supabase env vars are unavailable to the
+// build step (typical in Vercel preview deploys), the prerender crashes
+// and takes the whole build down. This page is inherently per-request,
+// so SSG isn't appropriate; marking it dynamic fixes the deploy.
+export const dynamic = "force-dynamic";
+
 const LIVE_MODULES: Array<{ label: string; href: string; blurb: string }> = [
   {
     label: "Planning Runs",
