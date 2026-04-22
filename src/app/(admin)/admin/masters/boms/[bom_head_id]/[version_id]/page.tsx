@@ -363,7 +363,7 @@ export default function AdminMastersBomVersionDetailPage({
                     <td className="px-3 py-2">
                       <div className="min-w-0">
                         <Link
-                          href={`/admin/masters/components/${encodeURIComponent(
+                          href={`/admin/components/${encodeURIComponent(
                             l.final_component_id,
                           )}`}
                           className="font-medium text-fg hover:text-accent"
@@ -485,7 +485,7 @@ export default function AdminMastersBomVersionDetailPage({
       items: [
         {
           label: item.item_id,
-          href: `/admin/masters/items/${encodeURIComponent(item.item_id)}`,
+          href: `/admin/products/${encodeURIComponent(item.item_id)}`,
           subtitle: `${item.item_name} · ${item.supply_method}`,
           badge: (
             <Badge tone="info" dotted>
@@ -682,7 +682,7 @@ function DiffSection({
           >
             <div className="min-w-0">
               <Link
-                href={`/admin/masters/components/${encodeURIComponent(
+                href={`/admin/components/${encodeURIComponent(
                   r.component_id,
                 )}`}
                 className="font-medium text-fg hover:text-accent"

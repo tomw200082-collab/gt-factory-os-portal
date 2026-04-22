@@ -1,11 +1,8 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// Admin · Planning policy — AMMC v1 Slice 4 UN-QUARANTINE.
-//
-// Prior state: src/components/system/QuarantinedPage stub only. This slice
-// lights up the live KV table read + inline-edit on value column per plan
-// §C.2 + §D.2:
+// Admin · Planning policy — live KV table read + inline-edit on value column
+// per plan §C.2 + §D.2:
 //
 //   - Fetches the full list via GET /api/planning-policy (14 rows v1)
 //   - Renders key / value (InlineEditCell) / uom / description / updated_at

@@ -299,7 +299,7 @@ export default function AdminItemsPage(): JSX.Element {
                   >
                     <td className="px-3 py-2 font-mono text-xs text-fg">
                       <Link
-                        href={`/admin/masters/items/${encodeURIComponent(r.item_id)}`}
+                        href={`/admin/products/${encodeURIComponent(r.item_id)}`}
                         className="hover:text-accent"
                       >
                         {r.item_id}
@@ -307,7 +307,7 @@ export default function AdminItemsPage(): JSX.Element {
                     </td>
                     <td className="px-3 py-2 text-fg-strong">
                       <Link
-                        href={`/admin/masters/items/${encodeURIComponent(r.item_id)}`}
+                        href={`/admin/products/${encodeURIComponent(r.item_id)}`}
                         className="hover:text-accent"
                       >
                         {r.item_name}

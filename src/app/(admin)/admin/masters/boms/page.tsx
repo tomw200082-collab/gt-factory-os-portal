@@ -14,7 +14,7 @@
 //   GET /api/boms/versions?bom_head_id=<id>   (per-row version count)
 //   GET /api/items?limit=1000                 (item_name lookup)
 //
-// Columns: item (linked to /admin/masters/items/<item_id>), bom_head_id,
+// Columns: item (linked to /admin/products/<item_id>), bom_head_id,
 // supply_method badge, active_version_id (short), version count, status.
 // Row click → /admin/masters/boms/<bom_head_id>.
 // ---------------------------------------------------------------------------
@@ -231,7 +231,7 @@ function BomHeadListRow({
       <td className="px-3 py-2">
         {item ? (
           <Link
-            href={`/admin/masters/items/${encodeURIComponent(item.item_id)}`}
+            href={`/admin/products/${encodeURIComponent(item.item_id)}`}
             className="font-medium text-fg hover:text-accent"
           >
             {item.item_name}

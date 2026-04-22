@@ -10,7 +10,7 @@
 //   - versions     LIVE   — /api/boms/versions?bom_head_id=<id>, timeline
 //   - exceptions   LIVE   — /api/exceptions client-filtered by related_entity_id
 //
-// Linkage card: linked item (to /admin/masters/items/<item_id>), active BOM
+// Linkage card: linked item (to /admin/products/<item_id>), active BOM
 // version deep-link, exceptions summary.
 //
 // View-only strict. No "New version" button, no line editor, no approval UI.
@@ -245,7 +245,7 @@ export default function AdminMastersBomHeadDetailPage({
           label: "parent_ref_id",
           value: item ? (
             <Link
-              href={`/admin/masters/items/${encodeURIComponent(item.item_id)}`}
+              href={`/admin/products/${encodeURIComponent(item.item_id)}`}
               className="font-mono text-accent hover:underline"
             >
               {head.parent_ref_id}
@@ -429,7 +429,7 @@ export default function AdminMastersBomHeadDetailPage({
       items: [
         {
           label: item.item_id,
-          href: `/admin/masters/items/${encodeURIComponent(item.item_id)}`,
+          href: `/admin/products/${encodeURIComponent(item.item_id)}`,
           subtitle: `${item.item_name} · ${item.supply_method}`,
           badge: (
             <Badge tone="info" dotted>

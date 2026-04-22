@@ -261,7 +261,7 @@ export default function AdminSuppliersPage(): JSX.Element {
                   >
                     <td className="px-3 py-2 font-mono text-xs text-fg">
                       <Link
-                        href={`/admin/masters/suppliers/${encodeURIComponent(r.supplier_id)}`}
+                        href={`/admin/suppliers/${encodeURIComponent(r.supplier_id)}`}
                         className="hover:text-accent"
                       >
                         {r.supplier_id}
@@ -269,7 +269,7 @@ export default function AdminSuppliersPage(): JSX.Element {
                     </td>
                     <td className="px-3 py-2 text-fg-strong">
                       <Link
-                        href={`/admin/masters/suppliers/${encodeURIComponent(r.supplier_id)}`}
+                        href={`/admin/suppliers/${encodeURIComponent(r.supplier_id)}`}
                         className="hover:text-accent"
                       >
                         {r.supplier_name_official}

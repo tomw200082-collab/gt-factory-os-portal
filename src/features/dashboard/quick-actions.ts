@@ -139,7 +139,11 @@ export const QUICK_ACTIONS: readonly QuickAction[] = [
     category: "admin",
   },
   {
-    href: "/admin/boms",
+    // Aligned with src/lib/nav/manifest.ts — both entrypoints now route
+    // users to the canonical view-only BOM browser. Editing is reached
+    // per-version from that tree (or via the legacy /admin/boms editor for
+    // draft lines + publish, linked from BOM head / version pages).
+    href: "/admin/masters/boms",
     label: "BOMs",
     blurb: "BOM heads + versions + line structure.",
     icon: Network,

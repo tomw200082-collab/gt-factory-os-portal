@@ -237,7 +237,7 @@ export default function PurchaseOrderDetailPage({
           label: "supplier_id",
           value: (
             <Link
-              href={`/admin/masters/suppliers/${encodeURIComponent(po.supplier_id)}`}
+              href={`/admin/suppliers/${encodeURIComponent(po.supplier_id)}`}
               className="font-mono text-accent hover:underline"
             >
               {po.supplier_id}
@@ -358,7 +358,7 @@ export default function PurchaseOrderDetailPage({
       items: [
         {
           label: po.supplier_id,
-          href: `/admin/masters/suppliers/${encodeURIComponent(po.supplier_id)}`,
+          href: `/admin/suppliers/${encodeURIComponent(po.supplier_id)}`,
           subtitle: supplier
             ? supplier.supplier_name_short ?? supplier.supplier_name_official
             : undefined,

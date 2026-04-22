@@ -350,43 +350,7 @@ export default function DashboardPage() {
       </SectionCard>
 
       {/* -------------------------------------------------------------- */}
-      {/* Block 2 — Stock truth                                          */}
-      {/* -------------------------------------------------------------- */}
-      <SectionCard
-        eyebrow="Stock truth"
-        title="Rebuild verifier + anchors"
-        description="Parity between the stock ledger and the projected current-balance read model. Zero drift is the only acceptable state."
-        className="mt-6"
-      >
-        <StockTruthBlock signal={stockTruthQ.data} now={now} />
-      </SectionCard>
-
-      {/* -------------------------------------------------------------- */}
-      {/* Block 3 — Integration freshness                                */}
-      {/* -------------------------------------------------------------- */}
-      <SectionCard
-        eyebrow="Integrations"
-        title="Per-producer freshness"
-        description="LionWheel, Shopify, Green Invoice, forecast-publication, heartbeat. A producer going stale emits its own exception."
-        className="mt-6"
-      >
-        <IntegrationFreshnessBlock signal={freshnessQ.data} now={now} />
-      </SectionCard>
-
-      {/* -------------------------------------------------------------- */}
-      {/* Block 4 — Jobs 24h health                                      */}
-      {/* -------------------------------------------------------------- */}
-      <SectionCard
-        eyebrow="Jobs"
-        title="Last 24 hours"
-        description="Successes, failures, and skipped runs (break-glass / preconditions)."
-        className="mt-6"
-      >
-        <JobsHealth24hBlock signal={jobsHealthQ.data} />
-      </SectionCard>
-
-      {/* -------------------------------------------------------------- */}
-      {/* Block 5 — Latest forecast                                      */}
+      {/* Block 2 — Latest forecast (LIVE — promoted above pending block) */}
       {/* -------------------------------------------------------------- */}
       <SectionCard
         eyebrow="Forecast"
@@ -398,15 +362,70 @@ export default function DashboardPage() {
       </SectionCard>
 
       {/* -------------------------------------------------------------- */}
-      {/* Block 6 — RUNTIME_READY registry                               */}
+      {/* Block 3 — Pending control-tower signals (collapsed)            */}
+      {/* -------------------------------------------------------------- */}
+      {/* Stock truth, Integration freshness, Jobs 24h, RUNTIME_READY    */}
+      {/* are all `pending_tranche_i` in the Signal<T> discriminant      */}
+      {/* (verified in src/features/dashboard/client.ts). They occupy    */}
+      {/* four full-width SectionCards of placeholder chrome — collapse  */}
+      {/* them into a single `<details>` so live signals stay above the  */}
+      {/* fold. The fetchers return synchronously without a network call */}
+      {/* so leaving the queries mounted inside a closed <details>       */}
+      {/* preserves correctness with zero HTTP noise.                    */}
       {/* -------------------------------------------------------------- */}
       <SectionCard
-        eyebrow="Authorization"
-        title="RUNTIME_READY signals"
-        description="Which operational forms have backend closure? Authoritative source is the harness file .claude/state/runtime_ready.json."
+        eyebrow="Pending Tranche I"
+        title="Control-tower signals"
+        description="Four dashboard panels blocked on backend endpoints. Expand to see the pending placeholder details and the named endpoints."
         className="mt-6"
+        actions={
+          <Badge tone="neutral" dotted>
+            4 pending
+          </Badge>
+        }
       >
-        <RuntimeReadyBlock signal={runtimeReadyQ.data} now={now} />
+        <details
+          className="group"
+          data-testid="dashboard-pending-signals-details"
+        >
+          <summary className="flex cursor-pointer list-none items-center gap-2 rounded border border-border/60 bg-bg-subtle/60 px-3 py-2 text-xs text-fg-muted transition-colors hover:border-accent/40 hover:text-fg">
+            <span className="text-3xs font-semibold uppercase tracking-sops">
+              Show pending panels
+            </span>
+            <span className="ml-auto font-mono text-3xs uppercase tracking-sops text-fg-subtle group-open:hidden">
+              closed
+            </span>
+            <span className="ml-auto hidden font-mono text-3xs uppercase tracking-sops text-fg-subtle group-open:inline">
+              open
+            </span>
+          </summary>
+          <div className="mt-4 grid grid-cols-1 gap-4">
+            <div>
+              <div className="mb-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                Stock truth · Rebuild verifier + anchors
+              </div>
+              <StockTruthBlock signal={stockTruthQ.data} now={now} />
+            </div>
+            <div>
+              <div className="mb-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                Integrations · Per-producer freshness
+              </div>
+              <IntegrationFreshnessBlock signal={freshnessQ.data} now={now} />
+            </div>
+            <div>
+              <div className="mb-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                Jobs · Last 24 hours
+              </div>
+              <JobsHealth24hBlock signal={jobsHealthQ.data} />
+            </div>
+            <div>
+              <div className="mb-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                Authorization · RUNTIME_READY signals
+              </div>
+              <RuntimeReadyBlock signal={runtimeReadyQ.data} now={now} />
+            </div>
+          </div>
+        </details>
       </SectionCard>
 
       {/* -------------------------------------------------------------- */}
