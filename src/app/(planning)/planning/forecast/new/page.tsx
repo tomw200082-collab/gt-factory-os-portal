@@ -15,7 +15,7 @@
 
 import { useRouter } from "next/navigation";
 import { useState } from "react";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { NotesBox } from "@/components/fields/NotesBox";
@@ -86,6 +86,7 @@ async function postOpenDraft(
 
 export default function NewForecastDraftPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { session } = useSession();
   const canAuthor = session.role === "planner" || session.role === "admin";
 
@@ -96,6 +97,12 @@ export default function NewForecastDraftPage() {
   const openMut = useMutation({
     mutationFn: (body: OpenDraftRequest) => postOpenDraft(session, body),
     onSuccess: (resp) => {
+      // Invalidate the parent forecast-versions list so returning to
+      // /planning/forecast immediately shows the new draft instead of
+      // a stale cached page.
+      void queryClient.invalidateQueries({
+        queryKey: ["forecasts", "versions"],
+      });
       router.push(`/planning/forecast/${encodeURIComponent(resp.version.version_id)}`);
     },
     onError: (err: unknown) => {

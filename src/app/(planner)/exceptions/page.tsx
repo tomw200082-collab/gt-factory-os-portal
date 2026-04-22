@@ -21,6 +21,7 @@
 // invented fields. The row projection is the API response verbatim.
 // ---------------------------------------------------------------------------
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -247,6 +248,21 @@ function entityShortform(row: ExceptionRow): string {
   const t = row.related_entity_type ?? "?";
   const id = row.related_entity_id ?? "?";
   return `${t}:${truncate(id, 12)}`;
+}
+
+// Map an exception's related entity to a portal deep-link when we know one.
+// Returns null when no clickable target exists; callers render plain text
+// in that case.
+function entityHref(row: ExceptionRow): string | null {
+  if (!row.related_entity_type || !row.related_entity_id) return null;
+  switch (row.related_entity_type) {
+    case "physical-count-submission":
+      return `/inbox/approvals/physical-count/${encodeURIComponent(row.related_entity_id)}`;
+    case "waste-adjustment-submission":
+      return `/inbox/approvals/waste/${encodeURIComponent(row.related_entity_id)}`;
+    default:
+      return null;
+  }
 }
 
 function StatusPill({ status }: { status: ExceptionStatus }) {
@@ -617,9 +633,19 @@ export default function ExceptionsInboxPage() {
                       <div className="mt-2 flex flex-wrap gap-3 text-3xs text-fg-subtle">
                         <span>
                           entity:{" "}
-                          <span className="font-mono text-fg-muted">
-                            {entityShortform(row)}
-                          </span>
+                          {entityHref(row) ? (
+                            <Link
+                              href={entityHref(row)!}
+                              className="font-mono text-fg-muted underline underline-offset-2 hover:no-underline"
+                              data-testid="exceptions-row-entity-link"
+                            >
+                              {entityShortform(row)}
+                            </Link>
+                          ) : (
+                            <span className="font-mono text-fg-muted">
+                              {entityShortform(row)}
+                            </span>
+                          )}
                         </span>
                       </div>
                       {row.recommended_action ? (
