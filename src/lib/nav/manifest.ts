@@ -209,7 +209,11 @@ export const NAV_MANIFEST: NavGroup[] = [
         required_capability: "admin:execute",
       },
       {
-        href: "/admin/boms",
+        // Tranche E lands /admin/masters/boms as the view-only BOM browser.
+        // Legacy /admin/boms editor remains available for direct linking but
+        // is no longer surfaced in the sidebar (editing is owned by the
+        // separate BOM-deep-logic window per plan §G).
+        href: "/admin/masters/boms",
         label: "BOMs",
         icon: Network,
         min_role: "viewer",
