@@ -291,6 +291,38 @@ export default function PhysicalCountPage() {
     setEventAt(nowLocalDateTime());
   }
 
+  async function handleCancel(): Promise<void> {
+    // If there's no open snapshot, just reset the client state.
+    if (!snapshot) {
+      resetFlow();
+      return;
+    }
+    const snapshotId = snapshot.snapshot_id;
+    const idempotencyKey = newIdempotencyKey();
+    setPhase("submitting");
+    try {
+      // Fire-and-reset: the POST must land to free the server-side snapshot,
+      // but the operator-visible UX should reset regardless of transient
+      // network errors (a stuck snapshot would auto-expire server-side and
+      // the next /open for the same item would idempotently heal).
+      await fetch(
+        `/api/physical-count/${encodeURIComponent(snapshotId)}/cancel`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({ idempotency_key: idempotencyKey }),
+        },
+      );
+    } catch {
+      // Swallow — client reset still proceeds.
+    } finally {
+      resetFlow();
+    }
+  }
+
   return (
     <>
       <WorkflowHeader
@@ -495,7 +527,8 @@ export default function PhysicalCountPage() {
             <button
               type="button"
               className="btn"
-              onClick={resetFlow}
+              onClick={handleCancel}
+              disabled={phase === "submitting"}
             >
               Cancel snapshot
             </button>
