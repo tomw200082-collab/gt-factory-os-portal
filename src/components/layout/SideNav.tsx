@@ -44,7 +44,16 @@ interface SideNavEntry {
   subdued: boolean;
 }
 
-export function SideNav() {
+interface SideNavProps {
+  /**
+   * Called when the user clicks a navigation link. The MobileNav drawer
+   * passes this so the drawer auto-closes after navigation. Desktop callers
+   * omit it.
+   */
+  onNavigate?: () => void;
+}
+
+export function SideNav({ onNavigate }: SideNavProps = {}) {
   const { session } = useSession();
   const pathname = usePathname();
 
@@ -125,7 +134,7 @@ export function SideNav() {
                     {subdued ? (
                       <span
                         className={cn(
-                          "group relative flex items-center gap-2.5 rounded-sm px-2.5 py-1.5 text-sm text-fg-faint",
+                          "group relative flex items-center gap-2.5 rounded-sm px-3 py-2 text-sm text-fg-faint",
                           "cursor-not-allowed opacity-70",
                         )}
                         title={tooltip}
@@ -136,8 +145,9 @@ export function SideNav() {
                     ) : (
                       <Link
                         href={item.href}
+                        onClick={onNavigate}
                         className={cn(
-                          "group relative flex items-center gap-2.5 rounded-sm px-2.5 py-1.5 text-sm text-fg transition-colors duration-150 ease-out-quart",
+                          "group relative flex items-center gap-2.5 rounded-sm px-3 py-2 text-sm text-fg transition-colors duration-150 ease-out-quart",
                           active
                             ? "bg-accent-soft text-accent"
                             : "text-fg-muted hover:bg-bg-subtle hover:text-fg",

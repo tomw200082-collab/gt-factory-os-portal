@@ -4,6 +4,7 @@ import { ChevronDown, Eye } from "lucide-react";
 import { useSession } from "@/lib/auth/session-provider";
 import { useReviewMode } from "@/lib/review-mode/store";
 import type { Role } from "@/lib/contracts/enums";
+import { MobileNav } from "./MobileNav";
 
 const ROLE_OPTIONS: Role[] = ["operator", "planner", "admin", "viewer"];
 
@@ -19,11 +20,14 @@ export function TopBar() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/70 bg-bg/85 backdrop-blur-md">
-      <div className="mx-auto flex h-16 w-full max-w-[1440px] items-center gap-5 px-8 xl:px-10">
+      <div className="mx-auto flex h-16 w-full max-w-[1440px] items-center gap-2 px-4 sm:gap-5 sm:px-8 xl:px-10">
+        {/* Mobile hamburger — renders <md only ———————————————————————————— */}
+        <MobileNav />
+
         {/* Brand mark ——————————————————————————————————————————————————— */}
         <div className="flex items-center gap-3">
           <BrandMark />
-          <div className="flex flex-col leading-none">
+          <div className="hidden flex-col leading-none sm:flex">
             <div className="text-[0.8125rem] font-semibold tracking-tightish text-fg-strong">
               GT Factory OS
             </div>
@@ -61,12 +65,13 @@ export function TopBar() {
           {/* Review mode button ————————————————————————————————————————— */}
           <button
             type="button"
-            className="btn btn-ghost btn-sm gap-1.5"
+            className="btn btn-ghost gap-1.5"
             onClick={() => setOpen(true)}
             title="Open review-mode panel (force any screen state)"
+            aria-label="Open review-mode panel"
           >
             <Eye className="h-3.5 w-3.5" strokeWidth={1.75} />
-            <span>Review</span>
+            <span className="hidden sm:inline">Review</span>
             {forcedScreenState ? (
               <span className="ml-0.5 rounded-xs bg-warning-soft px-1 py-px text-3xs font-semibold text-warning-fg">
                 FORCED

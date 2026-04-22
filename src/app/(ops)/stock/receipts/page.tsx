@@ -412,7 +412,7 @@ export default function GoodsReceiptPage() {
               {lines.map((line, idx) => (
                 <div
                   key={idx}
-                  className="grid grid-cols-1 gap-2 rounded-md border border-border/60 p-3 md:grid-cols-[2fr_1fr_1fr_2fr_auto]"
+                  className="grid grid-cols-1 gap-3 rounded-md border border-border/60 p-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,2fr)_auto]"
                 >
                   <select
                     className="input"
