@@ -152,7 +152,7 @@ export default function AdminComponentsPage(): JSX.Element {
       <WorkflowHeader
         eyebrow="Admin · components"
         title="Components"
-        description="Raw-material and packaging master data. AMMC v1 Slice 4: + New drawer, status toggle. Detail page + per-component readiness land in Slice 5."
+        description="Raw-material and packaging master data. + New drawer, status toggle. Detail page + per-component readiness on the detail view."
         meta={
           <>
             <Badge tone="info" dotted>
@@ -339,7 +339,7 @@ export default function AdminComponentsPage(): JSX.Element {
         onCreated={(newId) => {
           setBanner({
             kind: "success",
-            message: `Created component ${newId}. Detail edits land in Slice 5.`,
+            message: `Created component ${newId}. Open the detail page to edit.`,
           });
           void queryClient.invalidateQueries({ queryKey: ["admin", "components"] });
         }}

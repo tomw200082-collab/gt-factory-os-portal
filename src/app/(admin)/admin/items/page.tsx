@@ -153,7 +153,7 @@ export default function AdminItemsPage(): JSX.Element {
       <WorkflowHeader
         eyebrow="Admin · items"
         title="Items"
-        description="Finished-goods and bought-finished master data. AMMC v1 Slice 4: readiness pills + status toggle + inline create. Detail pages (Product 360) land in Slice 5."
+        description="Finished-goods and bought-finished master data. Readiness pills + status toggle + inline create. Detail pages (Product 360) on row click."
         meta={
           <>
             <Badge tone="info" dotted>
@@ -356,7 +356,7 @@ export default function AdminItemsPage(): JSX.Element {
         onCreated={(newId) => {
           setBanner({
             kind: "success",
-            message: `Created item ${newId}. Detail edits land in Slice 5.`,
+            message: `Created item ${newId}. Open the detail page to edit.`,
           });
           void queryClient.invalidateQueries({ queryKey: ["admin", "items"] });
         }}

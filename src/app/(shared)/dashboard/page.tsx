@@ -6,14 +6,14 @@ import { SectionCard } from "@/components/workflow/SectionCard";
 
 const LIVE_MODULES: Array<{ label: string; href: string; blurb: string }> = [
   {
-    label: "Planner — Planning Runs",
-    href: "/planner/runs",
+    label: "Planning Runs",
+    href: "/planning/runs",
     blurb:
       "Review planning runs + purchase/production recommendations. Live against production data.",
   },
   {
-    label: "Planner — Forecast",
-    href: "/planner/forecast",
+    label: "Forecast",
+    href: "/planning/forecast",
     blurb:
       "Create, edit, and publish forecast versions (8-week horizon). Live.",
   },

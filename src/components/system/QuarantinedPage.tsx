@@ -25,12 +25,12 @@ export interface QuarantinedPageProps {
 const LIVE_MODULES: Array<{ label: string; href: string; blurb: string }> = [
   {
     label: "Planning Runs",
-    href: "/planner/runs",
+    href: "/planning/runs",
     blurb: "Review planning runs + purchase/production recommendations (live).",
   },
   {
-    label: "Forecast Planner",
-    href: "/planner/forecast",
+    label: "Forecast",
+    href: "/planning/forecast",
     blurb: "Create / edit / publish forecast versions (live).",
   },
   {

@@ -141,7 +141,7 @@ export default function AdminSuppliersPage(): JSX.Element {
       <WorkflowHeader
         eyebrow="Admin · suppliers"
         title="Suppliers"
-        description="Supplier master. AMMC v1 Slice 4: + New drawer, status toggle. Per-supplier catalog + readiness land in Slice 5."
+        description="Supplier master. + New drawer, status toggle. Per-supplier catalog + readiness on the detail page."
         meta={
           <>
             <Badge tone="info" dotted>
@@ -325,7 +325,7 @@ export default function AdminSuppliersPage(): JSX.Element {
         onCreated={(newId) => {
           setBanner({
             kind: "success",
-            message: `Created supplier ${newId}. Detail edits land in Slice 5.`,
+            message: `Created supplier ${newId}. Open the detail page to edit.`,
           });
           void queryClient.invalidateQueries({ queryKey: ["admin", "suppliers"] });
         }}

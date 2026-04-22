@@ -368,7 +368,7 @@ export default function AdminComponentDetailPage({
       <WorkflowHeader
         eyebrow={`Admin · components · ${component.component_id}`}
         title={component.component_name}
-        description={`Component master detail. AMMC v1 Slice 5: inline-edit scalars + supplier coverage + readiness card.${
+        description={`Component master detail: inline-edit scalars + supplier coverage + readiness card.${
           component.component_class ? ` Class: ${component.component_class}.` : ""
         }`}
         meta={

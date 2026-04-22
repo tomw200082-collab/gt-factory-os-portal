@@ -3,10 +3,11 @@ import { RoleGate } from "@/lib/auth/role-gate";
 import { SeedGate } from "@/lib/repositories/seed-gate";
 import { AppPageShell } from "@/components/layout/AppPageShell";
 
-// Shared surfaces — dashboard, profile. Any authenticated role passes.
-export default function SharedLayout({ children }: { children: ReactNode }) {
+// Stock execute capability — admin + operator pass; planner does NOT
+// inherit this per portal-full-production-refactor plan §B.2 lattice lock.
+export default function OpsLayout({ children }: { children: ReactNode }) {
   return (
-    <RoleGate minimum="viewer:read">
+    <RoleGate minimum="stock:execute">
       <SeedGate>
         <AppPageShell>{children}</AppPageShell>
       </SeedGate>

@@ -107,7 +107,7 @@ export default function AdminPlanningPolicyPage(): JSX.Element {
       <WorkflowHeader
         eyebrow="Admin · planning policy"
         title="Planning policy"
-        description="Canonical KV configuration consumed by planning engine. AMMC v1 Slice 4: inline-edit value column. No key creation in v1 per plan §D.2 — schema-controlled."
+        description="Canonical KV configuration consumed by planning engine. Inline-edit value column. No key creation in v1 — schema-controlled."
         meta={
           <>
             <Badge tone="info" dotted>

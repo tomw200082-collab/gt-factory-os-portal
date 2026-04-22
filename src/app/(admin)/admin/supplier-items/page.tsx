@@ -240,7 +240,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
       <WorkflowHeader
         eyebrow="Admin · supplier-items"
         title="Supplier items"
-        description="Supplier-to-component / supplier-to-item mapping. AMMC v1 Slice 4: inline-edit lead/moq/pack + promote primary + + New drawer. Price lives in price_history; dedicated admin surface ships post-launch."
+        description="Supplier-to-component / supplier-to-item mapping. Inline-edit lead/moq/pack + promote primary + + New drawer. Price lives in price_history; dedicated admin surface ships post-launch."
         meta={
           <>
             <Badge tone="neutral" dotted>

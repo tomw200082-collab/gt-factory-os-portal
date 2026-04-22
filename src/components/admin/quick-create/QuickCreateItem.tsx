@@ -112,9 +112,8 @@ export function QuickCreateItem({
     >
       {banner?.kind === "endpoint_pending" ? (
         <div className="mb-4 rounded-md border border-warning/40 bg-warning-softer p-3 text-xs text-warning-fg">
-          Server endpoint not yet available — Slice 4 pending. The form
-          validates client-side but the POST cannot land until the proxy
-          route is wired.
+          Server endpoint not yet available. The form validates client-side
+          but the POST cannot land until the proxy route is wired.
         </div>
       ) : null}
       {banner?.kind === "error" ? (

@@ -30,6 +30,11 @@ export interface FakeSession {
   role: Role;
 }
 
+// Alias used by production client code. `FakeSession` stays for backward
+// compatibility with Playwright real-HTTP fixtures; application pages and
+// features import `Session` instead.
+export type Session = FakeSession;
+
 // user_id values are canonical UUIDs because the API's
 // private_core.app_users.user_id is uuid-typed. Text pseudo-IDs
 // ("u_op_01" etc.) were rejected by Postgres with 22P02. The UUIDs below

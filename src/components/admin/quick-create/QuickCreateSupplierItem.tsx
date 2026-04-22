@@ -169,7 +169,7 @@ export function QuickCreateSupplierItem({
       >
         {banner?.kind === "endpoint_pending" ? (
           <div className="mb-4 rounded-md border border-warning/40 bg-warning-softer p-3 text-xs text-warning-fg">
-            Server endpoint not yet available — Slice 4 pending.
+            Server endpoint not yet available.
           </div>
         ) : null}
         {banner?.kind === "error" ? (

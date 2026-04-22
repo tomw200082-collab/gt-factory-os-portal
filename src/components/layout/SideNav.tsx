@@ -1,121 +1,48 @@
 "use client";
 
+// ---------------------------------------------------------------------------
+// SideNav — rewritten in Tranche A of portal-full-production-refactor to
+// consume src/lib/nav/manifest.ts and filter by authorizeCapability.
+//
+// Previous implementation hand-curated per-item `roles: [...]` arrays and
+// shipped "backend" / "ledger" / "planning" blocked-tag strings that went
+// stale as backend surfaces landed. The new design has a single truth
+// source (the manifest) and a single decision function
+// (authorizeCapability) that both sidebar and layouts consume.
+//
+// Rendering rules:
+//   - If the signed-in role does not pass `min_role`, the item is HIDDEN.
+//   - If the role passes `min_role` but NOT `required_capability`, the
+//     item renders SUBDUED with a tooltip naming the missing capability.
+//     (This is the truthfulness rule: we tell users why they can't do
+//     something rather than pretending it doesn't exist.)
+//   - If both gates pass, the item renders in full active/inactive style.
+// ---------------------------------------------------------------------------
+
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import {
-  Activity,
-  Building2,
-  CheckSquare,
-  ClipboardCheck,
-  Cog,
-  Factory,
-  FileText,
-  Hammer,
-  Home,
-  Inbox,
-  LayoutDashboard,
-  LineChart,
-  Link2,
-  Lock,
-  Network,
-  Package,
-  PackageOpen,
-  Plug,
-  ShoppingCart,
-  Sliders,
-  Tags,
-  TriangleAlert,
-  Users,
-  type LucideIcon,
-} from "lucide-react";
+import { Lock } from "lucide-react";
 import { useSession } from "@/lib/auth/session-provider";
+import { authorizeCapability } from "@/lib/auth/authorize";
+import { NAV_MANIFEST, type NavItem } from "@/lib/nav/manifest";
 import type { Role } from "@/lib/contracts/enums";
 import { cn } from "@/lib/cn";
 
-interface NavItem {
-  label: string;
-  href: string;
-  roles: Role[];
-  icon: LucideIcon;
-  blocked?: "backend" | "ledger" | "planning";
-}
-
-interface NavGroup {
-  title: string;
-  items: NavItem[];
-}
-
-const NAV_GROUPS: NavGroup[] = [
-  {
-    title: "Overview",
-    items: [
-      { label: "Dashboard", href: "/dashboard", icon: LayoutDashboard, roles: ["operator", "planner", "admin", "viewer"] },
-      { label: "Exceptions", href: "/exceptions", icon: TriangleAlert, roles: ["planner", "admin"] },
-    ],
-  },
-  {
-    title: "Operations",
-    items: [
-      { label: "Home", href: "/home", icon: Home, roles: ["operator"] },
-      { label: "Goods Receipt", href: "/ops/receipts", icon: PackageOpen, roles: ["operator"], blocked: "ledger" },
-      { label: "Waste / Adjustment", href: "/ops/waste-adjustments", icon: Sliders, roles: ["operator"], blocked: "ledger" },
-      // Mode B landed 2026-04-18: real-API surface at /ops/physical-count.
-      // Route updated; `blocked: "ledger"` removed since PC runtime is live.
-      { label: "Physical Count", href: "/ops/physical-count", icon: ClipboardCheck, roles: ["operator"] },
-      // Mode B landed endgame-phase-b2: real-API surface at /ops/production-actual
-      // (live contract per CLAUDE.md §"Production reporting v1": output + scrap
-      // + notes; consumption computed from pinned BOM version).
-      { label: "Production Actual", href: "/ops/production-actual", icon: Factory, roles: ["operator", "admin"] },
-      { label: "My Submissions", href: "/my-submissions", icon: Inbox, roles: ["operator"] },
-    ],
-  },
-  {
-    title: "Planning",
-    items: [
-      { label: "Forecast", href: "/planning/forecast", icon: LineChart, roles: ["planner", "admin", "viewer"], blocked: "backend" },
-      { label: "Purchase Recs", href: "/planning/purchase-recommendations", icon: ShoppingCart, roles: ["planner", "admin", "viewer"], blocked: "planning" },
-      { label: "Production Recs", href: "/planning/production-recommendations", icon: Hammer, roles: ["planner", "admin", "viewer"], blocked: "planning" },
-      { label: "Approvals", href: "/approvals", icon: CheckSquare, roles: ["planner", "admin"] },
-    ],
-  },
-  {
-    title: "Purchasing",
-    items: [
-      // Live read-only list (endgame-phase-c2). Any authenticated role may
-      // view. POs are created from /runs/[run_id] Convert-to-PO action.
-      { label: "Purchase Orders", href: "/purchase-orders", icon: ShoppingCart, roles: ["planner", "admin", "viewer", "operator"] },
-      { label: "PO Creation", href: "/purchasing/po", icon: FileText, roles: ["planner", "admin"], blocked: "backend" },
-    ],
-  },
-  {
-    title: "Master data",
-    items: [
-      { label: "Items", href: "/admin/items", icon: Package, roles: ["admin", "planner"] },
-      { label: "Components", href: "/admin/components", icon: Cog, roles: ["admin", "planner"] },
-      { label: "BOMs", href: "/admin/boms", icon: Network, roles: ["admin", "planner"] },
-      { label: "Suppliers", href: "/admin/suppliers", icon: Building2, roles: ["admin", "planner"] },
-      { label: "Supplier items", href: "/admin/supplier-items", icon: Link2, roles: ["admin", "planner"] },
-      { label: "Planning policy", href: "/admin/planning-policy", icon: Sliders, roles: ["admin", "planner"] },
-    ],
-  },
-  {
-    title: "System",
-    items: [
-      { label: "Users", href: "/admin/users", icon: Users, roles: ["admin"] },
-      { label: "Jobs", href: "/admin/jobs", icon: Activity, roles: ["admin", "planner"] },
-      { label: "Integrations", href: "/admin/integrations", icon: Plug, roles: ["admin"], blocked: "backend" },
-      // Endgame Phase E1-UI: external-SKU → item_id review surface.
-      // Admin-only (upstream POST approve handler is admin-gated).
-      { label: "SKU Aliases", href: "/admin/sku-aliases", icon: Tags, roles: ["admin"] },
-    ],
-  },
-];
-
-const BLOCKED_LABEL: Record<NonNullable<NavItem["blocked"]>, string> = {
-  backend: "backend contract",
-  ledger: "stock-ledger phase",
-  planning: "planning engine phase",
+const ROLE_ORDER: Record<Role, number> = {
+  viewer: 1,
+  operator: 2,
+  planner: 3,
+  admin: 4,
 };
+
+function meetsMinRole(role: Role, min: Role): boolean {
+  return ROLE_ORDER[role] >= ROLE_ORDER[min];
+}
+
+interface SideNavEntry {
+  item: NavItem;
+  subdued: boolean;
+}
 
 export function SideNav() {
   const { session } = useSession();
@@ -123,9 +50,18 @@ export function SideNav() {
 
   return (
     <nav className="flex flex-col gap-6">
-      {NAV_GROUPS.map((group) => {
-        const visible = group.items.filter((i) => i.roles.includes(session.role));
-        if (visible.length === 0) return null;
+      {NAV_MANIFEST.map((group) => {
+        const entries: SideNavEntry[] = group.items
+          .filter((i) => meetsMinRole(session.role, i.min_role))
+          .map((i) => {
+            const grantOK =
+              i.required_capability === undefined ||
+              authorizeCapability(session.role, i.required_capability);
+            return { item: i, subdued: !grantOK };
+          });
+
+        if (entries.length === 0) return null;
+
         return (
           <div key={group.title}>
             <div className="mb-2 flex items-center gap-2 px-2">
@@ -135,54 +71,81 @@ export function SideNav() {
               <div className="h-px flex-1 bg-border/50" />
             </div>
             <ul className="flex flex-col gap-px">
-              {visible.map((item) => {
+              {entries.map(({ item, subdued }) => {
                 const active =
-                  pathname === item.href ||
-                  pathname?.startsWith(item.href + "/");
+                  !subdued &&
+                  (pathname === item.href ||
+                    pathname?.startsWith(item.href + "/"));
                 const Icon = item.icon;
-                return (
-                  <li key={item.href}>
-                    <Link
-                      href={item.href}
+                const tooltip = subdued
+                  ? `Requires capability: ${item.required_capability}`
+                  : undefined;
+
+                const inner = (
+                  <>
+                    {active ? (
+                      <span
+                        className="absolute left-0 top-1/2 h-4 w-[2px] -translate-y-1/2 rounded-full bg-accent"
+                        aria-hidden
+                      />
+                    ) : null}
+                    <Icon
                       className={cn(
-                        "group relative flex items-center gap-2.5 rounded-sm px-2.5 py-1.5 text-sm text-fg transition-colors duration-150 ease-out-quart",
+                        "h-[15px] w-[15px] shrink-0",
                         active
-                          ? "bg-accent-soft text-accent"
-                          : "text-fg-muted hover:bg-bg-subtle hover:text-fg"
+                          ? "text-accent"
+                          : subdued
+                            ? "text-fg-faint"
+                            : "text-fg-faint group-hover:text-fg-subtle",
+                      )}
+                      strokeWidth={active ? 2 : 1.75}
+                    />
+                    <span
+                      className={cn(
+                        "flex-1 truncate text-[0.8125rem]",
+                        active && "font-semibold tracking-tightish",
+                        subdued && "text-fg-faint",
                       )}
                     >
-                      {active ? (
-                        <span
-                          className="absolute left-0 top-1/2 h-4 w-[2px] -translate-y-1/2 rounded-full bg-accent"
-                          aria-hidden
-                        />
-                      ) : null}
-                      <Icon
-                        className={cn(
-                          "h-[15px] w-[15px] shrink-0",
-                          active
-                            ? "text-accent"
-                            : "text-fg-faint group-hover:text-fg-subtle"
-                        )}
-                        strokeWidth={active ? 2 : 1.75}
-                      />
+                      {item.label}
+                    </span>
+                    {subdued ? (
+                      <span
+                        className="flex items-center gap-0.5 text-3xs font-semibold uppercase tracking-sops text-fg-faint"
+                        title={tooltip}
+                      >
+                        <Lock className="h-2.5 w-2.5" strokeWidth={2.25} />
+                      </span>
+                    ) : null}
+                  </>
+                );
+
+                return (
+                  <li key={item.href}>
+                    {subdued ? (
                       <span
                         className={cn(
-                          "flex-1 truncate text-[0.8125rem]",
-                          active && "font-semibold tracking-tightish"
+                          "group relative flex items-center gap-2.5 rounded-sm px-2.5 py-1.5 text-sm text-fg-faint",
+                          "cursor-not-allowed opacity-70",
+                        )}
+                        title={tooltip}
+                        aria-disabled="true"
+                      >
+                        {inner}
+                      </span>
+                    ) : (
+                      <Link
+                        href={item.href}
+                        className={cn(
+                          "group relative flex items-center gap-2.5 rounded-sm px-2.5 py-1.5 text-sm text-fg transition-colors duration-150 ease-out-quart",
+                          active
+                            ? "bg-accent-soft text-accent"
+                            : "text-fg-muted hover:bg-bg-subtle hover:text-fg",
                         )}
                       >
-                        {item.label}
-                      </span>
-                      {item.blocked ? (
-                        <span
-                          className="flex items-center gap-0.5 text-3xs font-semibold uppercase tracking-sops text-fg-faint"
-                          title={`Blocked — ${BLOCKED_LABEL[item.blocked]}`}
-                        >
-                          <Lock className="h-2.5 w-2.5" strokeWidth={2.25} />
-                        </span>
-                      ) : null}
-                    </Link>
+                        {inner}
+                      </Link>
+                    )}
                   </li>
                 );
               })}
@@ -198,7 +161,7 @@ export function SideNav() {
         <div className="mt-1 flex items-center gap-1.5">
           <span className="dot bg-warning" />
           <span className="text-sm font-medium text-fg-strong">
-            {session.display_name.split(" (")[0]}
+            {session.display_name.split(" (")[0] || session.email}
           </span>
         </div>
         <div className="mt-0.5 font-mono text-3xs uppercase tracking-sops text-fg-muted">
