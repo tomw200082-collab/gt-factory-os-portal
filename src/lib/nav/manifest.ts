@@ -23,6 +23,7 @@ import {
   Cog,
   Factory,
   Inbox,
+  Layers,
   LayoutDashboard,
   LineChart,
   Link2,
@@ -31,6 +32,7 @@ import {
   Package,
   PackageOpen,
   Plug,
+  ScrollText,
   ShoppingCart,
   Sliders,
   Tags,
@@ -141,6 +143,20 @@ export const NAV_MANIFEST: NavGroup[] = [
         icon: Factory,
         min_role: "viewer",
         required_capability: "stock:execute",
+      },
+      {
+        href: "/inventory",
+        label: "Inventory",
+        icon: Layers,
+        min_role: "viewer",
+        required_capability: "viewer:read",
+      },
+      {
+        href: "/stock/movement-log",
+        label: "Movement Log",
+        icon: ScrollText,
+        min_role: "viewer",
+        required_capability: "viewer:read",
       },
       // /stock/submissions is a Tranche A target URL per plan §B.1 but its
       // consolidation from legacy /my-submissions is explicitly out of
