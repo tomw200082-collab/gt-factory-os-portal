@@ -54,6 +54,10 @@ function findRoleGate(
 }
 
 function isPublicPath(pathname: string): boolean {
+  // Root path is the Tranche 018 public landing — no auth required so the
+  // deploy renders something visible even when Supabase env vars are
+  // unset in the Vercel environment.
+  if (pathname === "/") return true;
   if (pathname === "/login") return true;
   if (pathname.startsWith("/auth/callback")) return true;
   if (pathname.startsWith("/_next")) return true;
