@@ -2,24 +2,126 @@
   "_notes": [
     "10-category portal readiness scorecard. Machine-readable source.",
     "Scorecard is recomputed by /portal-scorecard. Do not hand-edit unless doing a manual reset.",
-    "Until the first /portal-audit + /portal-scorecard run against the live repo, the scores below are placeholders (-1 = unset)."
+    "First concrete score: lands 2026-04-22 from docs/portal-os/audit-reports/2026-04-22-all.md."
   ],
-  "generated_at": "2026-04-22T00:00:00Z",
-  "source_audit": null,
+  "generated_at": "2026-04-22T09:10:00Z",
+  "source_audit": "docs/portal-os/audit-reports/2026-04-22-all.md",
   "previous_score": null,
-  "total": -1,
+  "total": 44,
   "categories": {
-    "admin_superuser_depth": { "score": -1, "evidence": [], "gap": "not yet scored" },
-    "nav_integrity": { "score": -1, "evidence": [], "gap": "not yet scored" },
-    "flow_continuity": { "score": -1, "evidence": [], "gap": "not yet scored" },
-    "role_gate_correctness": { "score": -1, "evidence": [], "gap": "not yet scored" },
-    "data_truthfulness": { "score": -1, "evidence": [], "gap": "not yet scored" },
-    "planning_surface": { "score": -1, "evidence": [], "gap": "not yet scored" },
-    "ops_surface": { "score": -1, "evidence": [], "gap": "not yet scored" },
-    "dashboard_truth": { "score": -1, "evidence": [], "gap": "not yet scored" },
-    "technical_substrate": { "score": -1, "evidence": [], "gap": "not yet scored" },
-    "regression_resistance": { "score": -1, "evidence": [], "gap": "not yet scored" }
+    "admin_superuser_depth": {
+      "score": 3,
+      "evidence": [
+        "audit: 6/10 admin domains FAIL with critical gaps (items, components, suppliers, integrations, jobs, users); only planning-policy fully PASS",
+        "src/app/(admin)/admin/integrations/page.tsx:9-31 — hard-coded INTEGRATIONS array; disabled cosmetic buttons at lines 60,63",
+        "src/app/(admin)/admin/jobs/page.tsx:1-5 — renders <QuarantinedPage /> despite manifest 'live'",
+        "src/app/(admin)/admin/users/page.tsx:1-5 — renders <QuarantinedPage /> despite manifest 'live'",
+        "src/app/(admin)/admin/{items,components,suppliers}/page.tsx — detail-page links point at routes that don't exist on disk",
+        "systemic: no per-row 'changed by <user> at <time>' on any wired admin domain"
+      ],
+      "gap": "Replace /admin/integrations fabrication with a real /api/integrations/health query, build detail pages for items/components/suppliers, de-quarantine or reclassify jobs+users, and surface an audit-trail column."
+    },
+    "nav_integrity": {
+      "score": 3,
+      "evidence": [
+        "docs/portal-os/route-manifest.json:15-18 — declares /ops/stock/* for routes that actually live at /stock/* (4 paths wrong)",
+        "src/lib/nav/manifest.ts:230-243 — SideNav exposes quarantined /admin/users and /admin/jobs (invariant #3 violation)",
+        "src/app/(inbox)/inbox/page.tsx:23 — /inbox exists in code + nav but absent from manifest",
+        "src/app/(admin)/admin/products/[item_id]/page.tsx — redirect target for /admin/items/[item_id]; not in manifest",
+        "baseline.json is empty by design — cannot detect nav drift against a frozen anchor until this audit's findings land"
+      ],
+      "gap": "Correct the 4 /ops/stock/* manifest paths, remove QuarantinedPage surfaces from SideNav (or flip their manifest status to quarantined), add /inbox + /admin/products/[item_id] rows, and freeze baseline."
+    },
+    "flow_continuity": {
+      "score": 2,
+      "evidence": [
+        "all 4 operator submits are write-without-read (receipts/waste/physical-count/production-actual) — no /stock/submissions, no ledger surface exists",
+        "src/app/(ops)/stock/physical-count/page.tsx:285-292,498 — Cancel button only does client resetFlow(); server snapshot leaks",
+        "src/app/(inbox)/inbox/page.tsx:14-21 — unified inbox listing is not built; only a one-link FALLBACK_LINKS",
+        "grep -rn \"/inbox/approvals\" src/ tests/ returns 0 — waste + physical-count approval surfaces are orphan deep-links",
+        "src/app/(planner)/exceptions/page.tsx:617-624 — related_entity_type:id rendered as plain text; cannot click through to approval"
+      ],
+      "gap": "Build /stock/submissions read-back, build the unified inbox listing, wire Cancel to the existing /api/physical-count/[id]/cancel proxy, linkify exception-row entity references, and include deep links in operator success banners."
+    },
+    "role_gate_correctness": {
+      "score": 6,
+      "evidence": [
+        "(admin)/layout.tsx:13 — minimum='admin:execute' — admin gates correct",
+        "(planner)/layout.tsx:8 — allow=['planner','admin','viewer'] admits viewer to /exceptions though manifest says planner+admin",
+        "(shared)/layout.tsx:9 — viewer:read admits any auth; manifest declares /dashboard as planner+admin",
+        "(inbox)/layout.tsx:11 — viewer:read; viewers reach approval deep links and see clickable buttons that server 403s",
+        "src/middleware.ts:43-48 — auth-only; no path-specific role gating (delegated to layouts)"
+      ],
+      "gap": "Pin manifest role lists to layout semantics (or tighten layouts to match manifest), and scope (inbox)/layout approvals children to planner:execute."
+    },
+    "data_truthfulness": {
+      "score": 5,
+      "evidence": [
+        "src/app/(admin)/admin/integrations/page.tsx:9-31 — INTEGRATIONS is hard-coded; last_at=2026-04-14 frozen; status badges fabricated",
+        "src/components/layout/TopBar.tsx:74-118 — 'FAKE SESSION' pill renders unconditionally",
+        "src/app/(shared)/dashboard/page.tsx:7-26 — honest static LIVE_MODULES nav, no fake KPIs",
+        "(admin)/admin/components/page.tsx:309 — readiness pill degrades honestly to '—' when payload missing",
+        "every wired admin mutation gates setBanner on res.ok (no optimistic-UI lies)"
+      ],
+      "gap": "Replace the INTEGRATIONS fabrication with a real health query and hide the FAKE SESSION pill behind NEXT_PUBLIC_ENABLE_DEV_SHIM_AUTH."
+    },
+    "planning_surface": {
+      "score": 7,
+      "evidence": [
+        "src/app/(planning)/planning/forecast/[version_id]/page.tsx:317,330-333 — invalidates ['forecast','version',id] and ['forecasts','versions'] correctly",
+        "src/app/(planning)/planning/forecast/new/page.tsx:96-99 — openMut does not invalidate ['forecasts','versions'] before redirect",
+        "src/app/(planning)/planning/runs/page.tsx:212,221 — cache key ['planning','runs',…] + invalidate on trigger success",
+        "src/app/(planning)/planning/runs/[run_id]/page.tsx:454-466 — convert-to-PO toast is plain text, not a <Link>",
+        "src/app/(planner)/exceptions/page.tsx:351-365 — acknowledge/resolve invalidate ['exceptions'] prefix correctly"
+      ],
+      "gap": "Add invalidateQueries(['forecasts','versions']) in forecast/new.onSuccess, linkify convert-to-PO toasts, linkify exception-row entity references."
+    },
+    "ops_surface": {
+      "score": 3,
+      "evidence": [
+        "src/app/(ops)/stock/receipts/page.tsx:298,301 — submit posts real API; banner is plain-text submission_id with no read-back surface",
+        "src/app/(ops)/stock/waste-adjustments/page.tsx:267 — pending submissions create orphan approvals; no link in banner",
+        "src/app/(ops)/stock/physical-count/page.tsx:285-292 — Cancel is client-only; leaks server snapshot",
+        "src/app/(ops)/stock/production-actual/page.tsx:261-276 — returns consumption[*].stock_ledger_movement_id with no ledger view",
+        "STALE_BOM_VERSION 409 recovery at production-actual/page.tsx:444-453 is honest (good pattern to extend)"
+      ],
+      "gap": "Build /stock/submissions list (already in nav-manifest plan §B.1), wire Physical Count Cancel to the existing proxy, include deep links in all four submit banners."
+    },
+    "dashboard_truth": {
+      "score": 6,
+      "evidence": [
+        "src/app/(shared)/dashboard/page.tsx:7-26 — LIVE_MODULES is honest static nav, not fake KPIs",
+        "src/app/(shared)/dashboard/page.tsx:29-32 — greeting reads real Supabase user via createSupabaseServerClient",
+        "/admin/integrations acts as a de-facto dashboard for boundary systems and is fully fabricated (see data_truthfulness)",
+        "no dashboards with hard-coded counters or mock percentages observed"
+      ],
+      "gap": "Evolve /dashboard into a real KPI surface (runs-today, pending-approvals, exceptions-open) sourced from live queries; fix the integrations dashboard fabrication in tandem."
+    },
+    "technical_substrate": {
+      "score": 6,
+      "evidence": [
+        "shadcn primitives used consistently across admin + planning surfaces; no raw HTML drift observed",
+        "TanStack cache keys prefix-compatible with invalidateQueries calls (forecast/runs/exceptions/admin-mutations)",
+        "src/lib/auth/fake-auth.ts:5,26,30,36,70,73,85,90,94,105 — FakeSession + isFakeAuthEnabled identifiers violate quarantine.json forbidden_strings",
+        "src/lib/auth/session-provider.tsx:31,36,41,52,59,85 — same",
+        "src/lib/api-proxy.ts:14 — X-Fake-Session + X-Test-Session in a source comment",
+        "no exported any types observed in the audited admin pages"
+      ],
+      "gap": "Rename the fake-auth identifiers (or add pending-cleanup quarantine entries naming these three files), paraphrase the api-proxy comment, and wire forecast/new invalidation."
+    },
+    "regression_resistance": {
+      "score": 3,
+      "evidence": [
+        "docs/portal-os/baseline.json — routes[] / nav_items[] / role_gates{} all empty by design; regression-sentinel cannot bind until populated",
+        "docs/portal-os/quarantine.json — entries[] empty; forbidden_strings set but 3 strings (X-Fake-Session, FakeSession, fakeAuth) violated in src/ without pending-cleanup exemption",
+        "docs/portal-os/quarantine.json:19 — TODO references tests/e2e/goods-receipt-real-submit.spec.ts which does not exist",
+        ".claude/hooks/{pre_tool_use,subagent_stop,stop,session_start}.sh — OS hooks installed",
+        ".github/workflows/{portal-pr-guard,portal-drift-weekly,claude}.yml — OS workflows wired",
+        "tests/e2e/goods-receipt-success.spec.ts:1-41 — walks deleted route /ops/receipts and uses setFakeRole; will fail against live portal"
+      ],
+      "gap": "Freeze baseline.json from this audit (populate routes/nav_items/role_gates), seed quarantine.json with pending-cleanup entries for the three fake-auth files, delete the stale TODO, and clean the legacy e2e spec."
+    }
   },
   "delta": 0,
-  "delta_notes": "Placeholder. First real score lands after the first /portal-audit + /portal-scorecard pair."
+  "delta_notes": "First concrete score; previous was unset (-1 placeholder). Baseline: 44/100."
 }
