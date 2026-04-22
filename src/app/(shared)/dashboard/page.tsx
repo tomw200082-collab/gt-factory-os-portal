@@ -3,6 +3,7 @@ import { ArrowRight } from "lucide-react";
 import { createSupabaseServerClient } from "@/lib/supabase/server";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
+import { KpiTiles } from "@/components/dashboard/KpiTiles";
 
 const LIVE_MODULES: Array<{ label: string; href: string; blurb: string }> = [
   {
@@ -39,8 +40,10 @@ export default async function DashboardPage() {
       <WorkflowHeader
         eyebrow="GT Factory OS"
         title={greeting}
-        description="Operational modules below are live against production data. Dashboard analytics tiles are not yet wired and will ship in a future cycle — this landing surface links you straight to what is live."
+        description="Live portal against production data. The tiles below are live counts; the modules section links you into each workflow."
       />
+
+      <KpiTiles />
 
       <SectionCard
         eyebrow="Live modules"
