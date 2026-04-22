@@ -13,6 +13,7 @@
 //   - Quarantine stub removed.
 // ---------------------------------------------------------------------------
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
@@ -136,6 +137,8 @@ interface DoneState {
   kind: "success" | "pending" | "error";
   message: string;
   detail?: string;
+  href?: string;
+  hrefLabel?: string;
 }
 
 export default function WasteAdjustmentPage() {
@@ -261,10 +264,15 @@ export default function WasteAdjustmentPage() {
         setNotes("");
         setReasonCode("");
       } else if (body && body.status === "pending") {
+        const sid = body.submission_id;
         setDone({
           kind: "pending",
           message: "Adjustment submitted — held for planner approval.",
-          detail: `submission_id=${body.submission_id}`,
+          detail: `submission_id=${sid}`,
+          href: sid
+            ? `/inbox/approvals/waste/${encodeURIComponent(sid)}`
+            : undefined,
+          hrefLabel: "Open approval",
         });
         setQuantity("");
         setNotes("");
@@ -308,7 +316,18 @@ export default function WasteAdjustmentPage() {
           }
           role="status"
         >
-          <div className="font-medium">{done.message}</div>
+          <div className="flex items-center justify-between gap-3">
+            <div className="font-medium">{done.message}</div>
+            {done.href ? (
+              <Link
+                href={done.href}
+                className="shrink-0 text-xs font-semibold underline underline-offset-2 hover:no-underline"
+                data-testid="waste-adjustment-banner-link"
+              >
+                {done.hrefLabel ?? "Open"}
+              </Link>
+            ) : null}
+          </div>
           {done.detail ? (
             <div className="mt-1 font-mono text-xs opacity-80">
               {done.detail}
