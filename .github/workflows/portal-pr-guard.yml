@@ -1,0 +1,75 @@
+# GT Factory OS Portal — PR guard
+#
+# Runs on every PR against main. Required check for merge.
+# Enforces: typecheck, vitest, playwright (headless), registry presence for new portal-os artifacts.
+# Does NOT run portal-regression-guard unless a PR label `drift-scan` is applied (keeps PR cycle fast).
+
+name: portal-pr-guard
+
+on:
+  pull_request:
+    branches: [main]
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install
+        run: npm ci
+
+      - name: Typecheck
+        run: npx tsc --noEmit
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Vitest
+        run: npm run test -- --run
+
+      - name: Install Playwright browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Playwright (headless)
+        run: npm run test:e2e
+        env:
+          CI: 'true'
+
+      - name: Registry presence check for new portal-os artifacts
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          NEW_FILES=$(git diff --name-only --diff-filter=A origin/main...HEAD | grep '^docs/portal-os/' || true)
+          if [ -z "$NEW_FILES" ]; then
+            echo "no new portal-os artifacts"
+            exit 0
+          fi
+          MISSING=0
+          for f in $NEW_FILES; do
+            # skip the registry itself and generated subtree dirs
+            case "$f" in
+              docs/portal-os/registry.md) continue;;
+              docs/portal-os/audit-reports/*|docs/portal-os/drift-reports/*|docs/portal-os/readiness/*) continue;;
+            esac
+            if ! grep -Fq "$f" docs/portal-os/registry.md; then
+              echo "::error file=docs/portal-os/registry.md::new artifact $f is missing from docs/portal-os/registry.md"
+              MISSING=1
+            fi
+          done
+          exit $MISSING
+
+      - name: Drift scan (only if label 'drift-scan' present)
+        if: contains(github.event.pull_request.labels.*.name, 'drift-scan')
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: '/portal-regression-guard'
