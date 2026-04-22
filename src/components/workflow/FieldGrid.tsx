@@ -56,7 +56,10 @@ export function Field({
   children,
 }: FieldProps) {
   return (
-    <div className={cn(SPAN[span])}>
+    <div
+      className={cn(SPAN[span])}
+      data-invalid={error ? "true" : undefined}
+    >
       <label
         htmlFor={htmlFor}
         className="mb-1.5 flex items-center justify-between gap-2 text-2xs font-semibold uppercase tracking-sops text-fg-muted"

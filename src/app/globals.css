@@ -209,6 +209,15 @@
     @apply border-danger/80 bg-danger-softer/40;
   }
 
+  /* Field-level error propagation: when <Field error="…"> is set, it marks
+     its wrapper with data-invalid="true". Any .input / .textarea inside then
+     picks up the same error styling as .input-error, so feature pages don't
+     have to wire `errored` on every field primitive by hand. */
+  [data-invalid="true"] .input,
+  [data-invalid="true"] .textarea {
+    @apply border-danger/80 bg-danger-softer/40;
+  }
+
   .label {
     @apply mb-1.5 block text-2xs font-semibold uppercase tracking-sops text-fg-muted;
   }

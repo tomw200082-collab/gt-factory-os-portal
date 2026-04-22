@@ -12,27 +12,29 @@ export async function setFakeRole(
   page: Page,
   role: "operator" | "planner" | "admin" | "viewer"
 ): Promise<void> {
+  // UUIDs match src/lib/auth/fake-auth.ts (UUID form required because
+  // private_core.app_users.user_id is uuid-typed).
   const sessions: Record<typeof role, unknown> = {
     operator: {
-      user_id: "u_op_01",
+      user_id: "aaaaaaaa-0000-0000-0000-0000000000a1",
       display_name: "Avi (operator)",
       email: "operator@fake.gtfactory",
       role: "operator",
     },
     planner: {
-      user_id: "u_pl_01",
+      user_id: "aaaaaaaa-0000-0000-0000-0000000000a2",
       display_name: "Tom (planner)",
       email: "planner@fake.gtfactory",
       role: "planner",
     },
     admin: {
-      user_id: "u_ad_01",
+      user_id: "aaaaaaaa-0000-0000-0000-0000000000a3",
       display_name: "Alex (admin)",
       email: "admin@fake.gtfactory",
       role: "admin",
     },
     viewer: {
-      user_id: "u_vw_01",
+      user_id: "aaaaaaaa-0000-0000-0000-0000000000a4",
       display_name: "Guest (viewer)",
       email: "viewer@fake.gtfactory",
       role: "viewer",

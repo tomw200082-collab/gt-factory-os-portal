@@ -51,6 +51,8 @@ interface SupplierRow {
   default_lead_time_days: number | null;
   default_moq: string | null;
   approval_status: string | null;
+  // Green Invoice ↔ platform supplier mapping (migration 0071). Authored here.
+  green_invoice_supplier_id: string | null;
   site_id: string;
   created_at: string;
   updated_at: string;
@@ -493,6 +495,24 @@ export default function AdminSupplierDetailPage({
               />
             ) : (
               supplier.currency ?? "—"
+            )}
+          </Field>
+          <Field label="green_invoice_supplier_id">
+            {isAdmin ? (
+              <InlineEditCell
+                value={supplier.green_invoice_supplier_id ?? ""}
+                type="text"
+                ifMatchUpdatedAt={ifMatch}
+                onSave={async (v) => {
+                  await fieldMutation.mutateAsync({
+                    field: "green_invoice_supplier_id",
+                    value: v,
+                    updated_at: ifMatch,
+                  });
+                }}
+              />
+            ) : (
+              supplier.green_invoice_supplier_id ?? "—"
             )}
           </Field>
         </div>

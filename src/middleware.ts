@@ -30,8 +30,22 @@ function isPublicPath(pathname: string): boolean {
 }
 
 export async function middleware(request: NextRequest) {
-  // Dev-shim bypass: when the fake-session flag is on, skip Supabase entirely
-  // and let the existing local dev flow work.
+  // Dev-shim hard-kill in production. If anyone mis-sets the flag on
+  // Vercel (e.g. accidentally imports a dev env profile), we refuse every
+  // request rather than silently allowing unauthenticated access.
+  // Tom-locked 2026-04-22 (dev-shim kill pass).
+  if (
+    process.env.NODE_ENV === "production" &&
+    process.env.NEXT_PUBLIC_ENABLE_DEV_SHIM_AUTH === "true"
+  ) {
+    return new NextResponse(
+      "dev-shim auth cannot run in production (NEXT_PUBLIC_ENABLE_DEV_SHIM_AUTH must be unset or 'false'). Refusing request.",
+      { status: 500 },
+    );
+  }
+
+  // Dev-shim bypass: when the fake-session flag is on (non-production only),
+  // skip Supabase entirely and let the existing local dev flow work.
   if (process.env.NEXT_PUBLIC_ENABLE_DEV_SHIM_AUTH === "true") {
     return NextResponse.next({ request });
   }
