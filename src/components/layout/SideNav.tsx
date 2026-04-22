@@ -22,9 +22,14 @@
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Lock } from "lucide-react";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSession } from "@/lib/auth/session-provider";
 import { authorizeCapability } from "@/lib/auth/authorize";
-import { NAV_MANIFEST, type NavItem } from "@/lib/nav/manifest";
+import {
+  NAV_MANIFEST,
+  type NavItem,
+  type NavItemBadge,
+} from "@/lib/nav/manifest";
 import type { Role } from "@/lib/contracts/enums";
 import { cn } from "@/lib/cn";
 
@@ -44,9 +49,24 @@ interface SideNavEntry {
   subdued: boolean;
 }
 
+function readBadgeCount(
+  queryClient: ReturnType<typeof useQueryClient>,
+  badge: NavItemBadge | undefined,
+): number {
+  if (!badge) return 0;
+  const data = queryClient.getQueryData<unknown>(
+    badge.queryKey as readonly unknown[],
+  );
+  if (badge.countSelector === "length") {
+    if (Array.isArray(data)) return data.length;
+  }
+  return 0;
+}
+
 export function SideNav() {
   const { session } = useSession();
   const pathname = usePathname();
+  const queryClient = useQueryClient();
 
   return (
     <nav className="flex flex-col gap-6">
@@ -81,6 +101,10 @@ export function SideNav() {
                   ? `Requires capability: ${item.required_capability}`
                   : undefined;
 
+                const badgeCount = !subdued
+                  ? readBadgeCount(queryClient, item.badge)
+                  : 0;
+
                 const inner = (
                   <>
                     {active ? (
@@ -109,6 +133,20 @@ export function SideNav() {
                     >
                       {item.label}
                     </span>
+                    {!subdued && badgeCount > 0 ? (
+                      <span
+                        className={cn(
+                          "inline-flex min-w-[1.25rem] items-center justify-center rounded-full border px-1.5 py-0.5 text-3xs font-semibold tabular-nums",
+                          active
+                            ? "border-accent/40 bg-accent text-white"
+                            : "border-border/70 bg-bg-subtle text-fg-strong",
+                        )}
+                        data-testid={`sidenav-badge-${item.href}`}
+                        aria-label={`${badgeCount} pending`}
+                      >
+                        {badgeCount > 99 ? "99+" : badgeCount}
+                      </span>
+                    ) : null}
                     {subdued ? (
                       <span
                         className="flex items-center gap-0.5 text-3xs font-semibold uppercase tracking-sops text-fg-faint"

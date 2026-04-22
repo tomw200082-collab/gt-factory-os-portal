@@ -34,12 +34,22 @@ import {
   ShoppingCart,
   Sliders,
   Tags,
-  TriangleAlert,
   Users,
 } from "lucide-react";
 
 import type { Role } from "@/lib/contracts/enums";
 import type { CapabilityRequirement } from "@/lib/auth/authorize";
+
+// Badge descriptor for a nav item. When present, the sidebar reads the
+// TanStack Query cache at `queryKey` and renders a count pill next to the
+// label. The cached value is expected to be an array (of inbox rows, typically).
+// `countSelector: "length"` means the count is `data.length`. This shape is
+// intentionally minimal; extend only when a second selector is actually
+// needed.
+export interface NavItemBadge {
+  queryKey: readonly (string | number | boolean | null | undefined)[];
+  countSelector: "length";
+}
 
 export interface NavItem {
   href: string;
@@ -54,6 +64,9 @@ export interface NavItem {
   // have min_role access but lack this capability. When absent, the entry
   // is fully available to any role that passes min_role.
   required_capability?: CapabilityRequirement;
+  // Optional count badge. The SideNav reads the cache key during render; if
+  // the cache is cold or the count is 0, the label renders without a pill.
+  badge?: NavItemBadge;
 }
 
 export interface NavGroup {
@@ -83,18 +96,19 @@ export const NAV_MANIFEST: NavGroup[] = [
         icon: Inbox,
         min_role: "viewer",
         required_capability: "viewer:read",
+        // Tranche B: the inbox page seeds an ["inbox", "all_rows"] cache with
+        // the merged, unfiltered row set. SideNav reads that cache here and
+        // renders a count pill when rows > 0. Cold cache (sidebar rendered
+        // before the first inbox visit) = no pill, which is the correct
+        // visible state.
+        badge: {
+          queryKey: ["inbox", "all_rows"] as const,
+          countSelector: "length",
+        },
       },
-      {
-        href: "/exceptions",
-        label: "Exceptions",
-        icon: TriangleAlert,
-        min_role: "viewer",
-        // Legacy (planner)/layout.tsx allow={planner, admin, viewer} means
-        // operators get a "not for your role" card on click. Tranche B will
-        // move /exceptions under /inbox or tighten its gate; for now the
-        // nav item is visible to everyone and the layout is the blocker.
-        required_capability: "planning:read",
-      },
+      // Exceptions entry removed in Tranche B — the /exceptions route now
+      // redirects to /inbox?view=exceptions (see src/app/(planner)/
+      // exceptions/page.tsx). Triage lives inside the unified inbox.
     ],
   },
   {
