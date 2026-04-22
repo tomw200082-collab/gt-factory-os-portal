@@ -17,7 +17,6 @@
 
 import type { LucideIcon } from "lucide-react";
 import {
-  Activity,
   Building2,
   ClipboardCheck,
   Cog,
@@ -30,12 +29,10 @@ import {
   Network,
   Package,
   PackageOpen,
-  Plug,
   ShoppingCart,
   Sliders,
   Tags,
   TriangleAlert,
-  Users,
 } from "lucide-react";
 
 import type { Role } from "@/lib/contracts/enums";
@@ -228,27 +225,6 @@ export const NAV_MANIFEST: NavGroup[] = [
     title: "System",
     items: [
       {
-        href: "/admin/users",
-        label: "Users",
-        icon: Users,
-        min_role: "admin",
-        required_capability: "admin:execute",
-      },
-      {
-        href: "/admin/jobs",
-        label: "Jobs",
-        icon: Activity,
-        min_role: "viewer",
-        required_capability: "admin:execute",
-      },
-      {
-        href: "/admin/integrations",
-        label: "Integrations",
-        icon: Plug,
-        min_role: "admin",
-        required_capability: "admin:execute",
-      },
-      {
         // Page currently lives at /admin/sku-aliases; plan §B.1 target URL
         // is /admin/integrations/sku-aliases. Move is a later tranche; keep
         // the current live URL to preserve zero-404.
@@ -258,6 +234,13 @@ export const NAV_MANIFEST: NavGroup[] = [
         min_role: "admin",
         required_capability: "admin:execute",
       },
+      // /admin/users, /admin/jobs, /admin/integrations are route-manifest
+      // status=quarantined as of Tranche 001 (their pages render
+      // <QuarantinedPage>). They are intentionally omitted from SideNav so
+      // primary nav never points at a quarantined surface. When real
+      // implementations land, add rows here and flip route-manifest status
+      // back to live in the same tranche.
+      //
       // /admin/signals is a plan §B.1 target URL; its page is a Tranche G
       // deliverable. Omitted from nav until that surface lands.
     ],
