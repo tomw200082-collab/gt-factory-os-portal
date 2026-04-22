@@ -2,10 +2,11 @@
   "_notes": [
     "10-category portal readiness scorecard. Machine-readable source.",
     "Scorecard is recomputed by /portal-scorecard. Do not hand-edit unless doing a manual reset.",
-    "2026-04-22 post-Tranche-001..011: +31 delta (44 -> 75). Eleven tranches landed in one session on claude/audit-all-VuctU. Four categories at 10 or 9 (technical_substrate, planning_surface, dashboard_truth, role_gate_correctness); two held at 5/10 by API-lane dependencies."
+    "2026-04-22 post-Tranche-001..015: +40 delta (44 -> 84). Fifteen tranches landed across two sessions on claude/audit-all-VuctU.",
+    "Tranches 012-015 this run genuinely advance production-control: PO chain unblocked end-to-end, inbox federates exceptions, role-boundary matrix tests land."
   ],
-  "generated_at": "2026-04-22T11:30:00Z",
-  "source_audit": "docs/portal-os/audit-reports/2026-04-22-all.md",
+  "generated_at": "2026-04-22T12:40:00Z",
+  "source_audit": "docs/portal-os/audit-reports/2026-04-22-all-reaudit.md",
   "source_tranches": [
     "docs/portal-os/tranches/001-bootstrap-truthfulness.md",
     "docs/portal-os/tranches/002-fake-auth-identifier-rename.md",
@@ -17,111 +18,121 @@
     "docs/portal-os/tranches/008-mobile-parity.md",
     "docs/portal-os/tranches/009-error-boundaries.md",
     "docs/portal-os/tranches/010-dashboard-live-kpis.md",
-    "docs/portal-os/tranches/011-security-hardening.md"
+    "docs/portal-os/tranches/011-security-hardening.md",
+    "docs/portal-os/tranches/012-po-detail-page.md",
+    "docs/portal-os/tranches/013-receipt-po-linkage.md",
+    "docs/portal-os/tranches/014-inbox-federation.md",
+    "docs/portal-os/tranches/015-role-boundary-e2e.md"
   ],
-  "previous_score": 65,
-  "total": 75,
+  "previous_score": 75,
+  "total": 84,
   "categories": {
     "admin_superuser_depth": {
       "score": 5,
       "evidence": [
-        "Tranche 001: /admin/integrations fabrication replaced by <QuarantinedPage>",
-        "audit correction: items/components/suppliers/products detail pages all exist on disk (route audit was right, admin-surface audit was wrong)",
-        "/admin/jobs + /admin/users still QuarantinedPage pending real backend"
+        "Re-audit correction: master-data EDIT works end-to-end — InlineEditCell + patchEntity + 6 PATCH proxies live for items/components/suppliers/supplier-items/planning-policy/BOMs",
+        "Tranche 001: /admin/integrations fabrication removed (now QuarantinedPage)",
+        "still outstanding: audit-trail visibility (backend-blocked — need GET /api/audit-log), approval queue (backend-blocked), real /admin/users + /admin/jobs + /admin/integrations (backend-blocked)"
       ],
-      "gap": "Audit-trail column on 6 wired admin domains; real /admin/users + /admin/jobs + /admin/integrations once backend endpoints land."
+      "gap": "Backend-blocked: audit-trail GET, approval queue mutations, real users/jobs/integrations endpoints."
     },
     "nav_integrity": {
-      "score": 6,
-      "evidence": [
-        "Tranche 001: manifest paths match code for 6 corrected routes; quarantined surfaces removed from SideNav",
-        "Tranche 003: manifest roles pinned to layouts; /inbox/approvals child layout tightened",
-        "Tranche 008: SideNav now hidden <md and delivered as a drawer; hamburger on mobile",
-        "baseline.json still empty by design — needs kind=baseline-update ritual"
-      ],
-      "gap": "Baseline freeze ritual + enumerate remaining sub-pages."
-    },
-    "flow_continuity": {
-      "score": 5,
-      "evidence": [
-        "Tranche 004: Physical Count Cancel posts to existing proxy — no more snapshot leaks",
-        "Tranche 005: exception-row entity linkified to approval detail",
-        "Tranche 006: waste + physical-count pending banners deep-link to approvals",
-        "Tranche 003: /inbox/approvals subtree tightened so viewer sees 'not for your role' instead of click-then-403",
-        "backend-blocked: no /stock/submissions read-back + no unified /inbox listing (need GET endpoints)"
-      ],
-      "gap": "Backend API lane must ship GET /api/stock-submissions + GET /api/approvals?status=pending before this category can move."
-    },
-    "role_gate_correctness": {
       "score": 8,
       "evidence": [
-        "Tranche 003: /dashboard + /exceptions manifest roles pinned to layouts",
-        "Tranche 003: (inbox)/inbox/approvals/layout.tsx locks approval subtree to planner+admin",
-        "middleware remains auth-only; layout RoleGates carry role enforcement"
+        "Tranche 001: manifest paths match code; SideNav clean of quarantined surfaces",
+        "Tranche 003: manifest roles pinned to layouts",
+        "Tranche 008: SideNav→drawer on mobile",
+        "Tranche 012: /purchase-orders/[po_id] manifest row added; PO list rows click-through",
+        "Tranche 014: /inbox is no longer a one-link stub — federated triage queue"
       ],
-      "gap": "Optional path-specific role gates in middleware for belt-and-suspenders defence."
+      "gap": "Baseline.json still empty by design (needs kind=baseline-update ritual); remaining detail sub-pages (forecast/[version_id], runs/[run_id], boms/[head_id]) still unlisted."
+    },
+    "flow_continuity": {
+      "score": 9,
+      "evidence": [
+        "Tranche 004: Physical Count Cancel POSTs to existing proxy",
+        "Tranche 005: exception row entity linkified to approval detail",
+        "Tranche 006: waste + physical-count pending banners deep-link to approvals",
+        "Tranche 012: PO detail page exists (closes break #1 of the PO chain); convert-to-PO toast no longer 404s",
+        "Tranche 013: Receipt form wires po_id + per-line po_line_id (closes break #2); upstream can advance PO line OPEN→PARTIAL→CLOSED",
+        "Tranche 014: Inbox federates /api/exceptions — planner triage queue is real",
+        "Tranche 003: /inbox/approvals child layout tightened so viewers get 'not for your role' not click-then-403"
+      ],
+      "gap": "Recent-submissions surface for receipts + production-actual (backend-blocked). Approval queue for master-data edits (backend-blocked)."
+    },
+    "role_gate_correctness": {
+      "score": 9,
+      "evidence": [
+        "Tranche 003: manifest roles pinned to layouts; (inbox)/inbox/approvals subtree tightened",
+        "Tranche 015: 12-test E2E matrix — 6 UI-gate tests + 6 API-gate tests covering viewer/operator boundaries across planning/execute, items PATCH, waste approval. Defense-in-depth claim now test-backed."
+      ],
+      "gap": "Optional: path-specific role gates in middleware (belt-and-suspenders layer 3)."
     },
     "data_truthfulness": {
       "score": 8,
       "evidence": [
         "Tranche 001: INTEGRATIONS fabrication removed; FAKE SESSION pill gated behind dev-shim env flag",
-        "Tranche 010: dashboard KPI tiles are live counts with honest '—' degradation on error (never fake zeros)",
-        "every wired mutation gates setBanner on res.ok (no optimistic-UI lies)"
+        "Tranche 010: dashboard KPI tiles are live counts with honest '—' degradation on error",
+        "Tranche 012: PO detail page defensively tolerates header-only upstream responses; lines table renders honest EmptyState when upstream omits lines[]",
+        "every wired mutation gates setBanner on res.ok"
       ],
-      "gap": "Real /admin/integrations health query when the endpoint lands; aggregate KPIs (stock-ledger last-movement) need backend aggregation."
+      "gap": "Real /admin/integrations health (backend-blocked); aggregate dashboard KPIs (backend-blocked)."
     },
     "planning_surface": {
       "score": 9,
       "evidence": [
-        "Tranche 005: forecast/new invalidates parent list; convert-to-PO toast linkified; exception-row entity linkified",
-        "forecast/runs/exceptions loop walkable with correct TanStack cache invalidation"
+        "Tranche 005: forecast/new invalidation + convert-to-PO link + exception-row linkification",
+        "Tranche 012: convert-to-PO deep link now resolves to a real page",
+        "forecast/runs/exceptions loop walkable; cache invalidation correct"
       ],
-      "gap": "Optional planning-exceptions dashboard (counts + filters)."
+      "gap": "Planning-exceptions dashboard (counts + filters at top) — optional polish."
     },
     "ops_surface": {
-      "score": 7,
+      "score": 8,
       "evidence": [
         "Tranche 004: Physical Count Cancel wired",
         "Tranche 006: waste + physical-count banner deep-links",
-        "Tranche 008: four operator forms now truly mobile-first — viewport meta, drawer nav, proper grid stacking, ≥36px touch targets, inputMode decimal/numeric, type=datetime-local",
-        "STALE_BOM_VERSION 409 recovery pattern in production-actual is exemplary"
+        "Tranche 008: four operator forms mobile-first (viewport, drawer, ≥36px targets, inputMode, datetime-local)",
+        "Tranche 013: Goods Receipt can reference PO + per-line po_line_id; upstream can finally advance PO line state from operator receipts",
+        "STALE_BOM_VERSION 409 recovery in production-actual is exemplary"
       ],
-      "gap": "Backend-blocked: /stock/submissions read-back + receipts/production-actual banner deep-links require GET endpoints."
+      "gap": "Recent-submissions surface (backend-blocked); receipts + production-actual auto-post banners still lack deep-link target (depends on /stock/submissions)."
     },
     "dashboard_truth": {
       "score": 9,
       "evidence": [
         "Tranche 001: /admin/integrations fabrication replaced",
-        "Tranche 008: dashboard now mobile-first (drawer nav; tiles stack 1-col on phones)",
-        "Tranche 010: three live KPI tiles (exceptions-open, planning-runs, forecasts-draft) using existing GET proxies; honest '—' degradation on error"
+        "Tranche 008: dashboard mobile-first",
+        "Tranche 010: three live KPI tiles using existing GET proxies; honest '—' degradation"
       ],
-      "gap": "Aggregate KPIs (runs-today vs yesterday, stock-ledger last-movement) need backend aggregation endpoints."
+      "gap": "Aggregate KPIs (runs-today-vs-yesterday, stock-ledger last-movement) need backend aggregation endpoints."
     },
     "technical_substrate": {
       "score": 10,
       "evidence": [
-        "Tranche 001: X-*Session literals removed from src/",
-        "Tranche 002: FakeSession -> DevShimSession rename (Session public alias preserved)",
-        "Tranche 008: viewport metadata, mobile-first shell, responsive SideNav drawer, ≥36px touch targets, inputMode on numeric inputs, proper grid stacking patterns documented",
-        "Tranche 009: error boundaries (segment + global + not-found) + reportError/reportWarning surface ready for Sentry",
-        "Tranche 011: security headers (HSTS, X-Frame, nosniff, Referrer-Policy, Permissions-Policy, CSP-Report-Only); env-var validation helper (requireEnv, assertServerBootEnv)",
-        "TanStack cache keys prefix-compatible, shadcn primitives consistent"
+        "Tranches 001-002: forbidden-string literals removed from src/",
+        "Tranche 008: mobile-first shell + viewport metadata + responsive drawer",
+        "Tranche 009: error boundaries (segment + global + not-found) + reportError/reportWarning observability surface",
+        "Tranche 011: security headers (HSTS, X-Frame, nosniff, Referrer, Permissions-Policy, CSP-Report-Only); requireEnv/assertServerBootEnv helpers",
+        "Tranche 012: defensive upstream-shape tolerance pattern demonstrated on PO detail page",
+        "TanStack cache keys prefix-compatible; shadcn primitives consistent"
       ],
-      "gap": "Maintained at 10 with follow-up work: migrate all process.env callsites to requireEnv; graduate CSP from report-only; add @sentry/nextjs once dep add authorised."
+      "gap": "Maintained at 10. Follow-up: migrate all process.env callsites to requireEnv; graduate CSP from report-only; install @sentry/nextjs."
     },
     "regression_resistance": {
-      "score": 8,
+      "score": 9,
       "evidence": [
         "Tranche 001: route-manifest truthful against code",
-        "Tranche 002: last src/ forbidden-string eliminated",
-        "Tranche 007: stale goods-receipt spec removed",
-        "Tranche 009: error boundaries catch render-time regressions, route them through reportError (future Sentry hook)",
-        "Tranche 011: env-missing errors fail-fast at boot instead of confusing downstream fetch errors",
+        "Tranche 002: last src/ forbidden-string identifier eliminated",
+        "Tranche 007: stale e2e spec deleted",
+        "Tranche 009: error boundaries + reportError catch render-time regressions",
+        "Tranche 011: env-missing errors fail-fast at boot",
+        "Tranche 015: 12-test role-boundary E2E matrix covers UI gates + direct API mutation attempts for viewer/operator/planner boundaries",
         "OS hooks + workflows wired"
       ],
-      "gap": "Baseline freeze + quarantine seed rituals (kind=baseline-update + kind=quarantine-update); follow-up migration of process.env callsites to requireEnv."
+      "gap": "Baseline freeze + quarantine seed rituals (both hook Rule 6 protected; need kind=baseline-update + kind=quarantine-update ceremonies)."
     }
   },
-  "delta": 10,
-  "delta_notes": "Tranches 008-011 in this run: +5 (T008 mobile) +2 (T009 errors) +2 (T010 dashboard KPIs) +2 (T011 security) = +10 (65 -> 75). Combined with the prior session (T001-T007 +21), total lift is +31 (44 -> 75). Four categories now at 8+: role_gate_correctness 8, data_truthfulness 8, planning_surface 9, ops_surface 7 (backend-gated ceiling), dashboard_truth 9, technical_substrate 10, regression_resistance 8. Two held at 5/10 by API-lane dependencies (flow_continuity, ops_surface partial). Two just below 8 (admin_superuser_depth 5, nav_integrity 6) need audit-trail column + baseline ritual."
+  "delta": 9,
+  "delta_notes": "Tranches 012-015 this run: +3 (T012 PO detail) +2 (T013 receipt-PO linkage) +2 (T014 inbox federation) +2 (T015 role-boundary E2E) = +9 (75 -> 84). Two-session total: +40 (44 -> 84). Production-control object graph is now coherent: rec → PO → operator receives-against-PO → upstream advances state, inbox federates real data, role-boundary tests land. Three categories at 5-8 remain (admin_superuser_depth 5, data_truthfulness 8, ops_surface 8) all gated on backend-lane deliveries."
 }
