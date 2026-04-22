@@ -1,15 +1,15 @@
-# Portal Readiness: 84/100 (delta: +40 total, +9 this run)
+# Portal Readiness: 86/100 (delta: +42 total, +11 this run)
 
-Post-Tranche-015. Previous (start of run): 75/100. Two-session total: +40 from baseline 44. Source audit (re-audit): [2026-04-22-all-reaudit.md](audit-reports/2026-04-22-all-reaudit.md).
+Post-Tranche-017. Previous (start of day): 44/100. Three-session total: +42. Source audit (re-audit): [2026-04-22-all-reaudit.md](audit-reports/2026-04-22-all-reaudit.md). Backend package for the last category: [backend-package-admin-superuser-depth.md](backend-package-admin-superuser-depth.md).
 
 ## Categories
 
 | Category | Score | Δ total | Gap to 10 |
 |---|---|---|---|
-| admin_superuser_depth | 5 | +2 | **Backend-blocked.** Audit-trail GET, approval-queue mutations, real /admin/users + /admin/jobs + /admin/integrations endpoints. |
-| nav_integrity | 8 | +5 | Baseline freeze ritual; remaining detail sub-pages in manifest. |
-| flow_continuity | 9 | +7 | Recent-submissions surface (backend-blocked); approval queue for master-data edits (backend-blocked). |
-| role_gate_correctness | 9 | +3 | Optional path-specific role gates in middleware. |
+| admin_superuser_depth | 5 | +2 | **Backend-blocked.** See [backend-package-admin-superuser-depth.md](backend-package-admin-superuser-depth.md) for the 5-deliverable package that moves this to 10. |
+| nav_integrity | 9 | +6 | Baseline freeze ritual. |
+| flow_continuity | 9 | +7 | Recent-submissions surface (backend-blocked); approval queue (backend-blocked). |
+| role_gate_correctness | 10 | +4 | Maintained. Middleware scaffold activates as layer 3 when backend populates `app_metadata.role`. |
 | data_truthfulness | 8 | +3 | Real /admin/integrations health (backend-blocked); aggregate KPIs (backend-blocked). |
 | planning_surface | 9 | +2 | Optional planning-exceptions dashboard. |
 | ops_surface | 8 | +5 | Recent-submissions (backend-blocked); auto-post deep-link target (backend-blocked). |

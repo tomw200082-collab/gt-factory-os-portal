@@ -5,7 +5,7 @@
     "2026-04-22 post-Tranche-001..015: +40 delta (44 -> 84). Fifteen tranches landed across two sessions on claude/audit-all-VuctU.",
     "Tranches 012-015 this run genuinely advance production-control: PO chain unblocked end-to-end, inbox federates exceptions, role-boundary matrix tests land."
   ],
-  "generated_at": "2026-04-22T12:40:00Z",
+  "generated_at": "2026-04-22T13:15:00Z",
   "source_audit": "docs/portal-os/audit-reports/2026-04-22-all-reaudit.md",
   "source_tranches": [
     "docs/portal-os/tranches/001-bootstrap-truthfulness.md",
@@ -22,10 +22,13 @@
     "docs/portal-os/tranches/012-po-detail-page.md",
     "docs/portal-os/tranches/013-receipt-po-linkage.md",
     "docs/portal-os/tranches/014-inbox-federation.md",
-    "docs/portal-os/tranches/015-role-boundary-e2e.md"
+    "docs/portal-os/tranches/015-role-boundary-e2e.md",
+    "docs/portal-os/tranches/016-middleware-role-gates-and-manifest-completeness.md",
+    "docs/portal-os/tranches/017-deploy-unblock-dashboard-dynamic.md"
   ],
-  "previous_score": 75,
-  "total": 84,
+  "backend_package_reference": "docs/portal-os/backend-package-admin-superuser-depth.md",
+  "previous_score": 84,
+  "total": 86,
   "categories": {
     "admin_superuser_depth": {
       "score": 5,
@@ -37,15 +40,16 @@
       "gap": "Backend-blocked: audit-trail GET, approval queue mutations, real users/jobs/integrations endpoints."
     },
     "nav_integrity": {
-      "score": 8,
+      "score": 9,
       "evidence": [
         "Tranche 001: manifest paths match code; SideNav clean of quarantined surfaces",
         "Tranche 003: manifest roles pinned to layouts",
         "Tranche 008: SideNav→drawer on mobile",
         "Tranche 012: /purchase-orders/[po_id] manifest row added; PO list rows click-through",
-        "Tranche 014: /inbox is no longer a one-link stub — federated triage queue"
+        "Tranche 014: /inbox is no longer a one-link stub — federated triage queue",
+        "Tranche 016: 11 detail sub-page rows added to manifest (forecast/new, forecast/[version_id], runs/[run_id], items/[item_id], products/new, components/[component_id], suppliers/[supplier_id], boms/[head_id], boms/[head_id]/versions/[version_id], inbox/approvals/waste/[submission_id], inbox/approvals/physical-count/[submission_id])"
       ],
-      "gap": "Baseline.json still empty by design (needs kind=baseline-update ritual); remaining detail sub-pages (forecast/[version_id], runs/[run_id], boms/[head_id]) still unlisted."
+      "gap": "Baseline.json still empty by design (needs kind=baseline-update ritual)."
     },
     "flow_continuity": {
       "score": 9,
@@ -61,12 +65,13 @@
       "gap": "Recent-submissions surface for receipts + production-actual (backend-blocked). Approval queue for master-data edits (backend-blocked)."
     },
     "role_gate_correctness": {
-      "score": 9,
+      "score": 10,
       "evidence": [
         "Tranche 003: manifest roles pinned to layouts; (inbox)/inbox/approvals subtree tightened",
-        "Tranche 015: 12-test E2E matrix — 6 UI-gate tests + 6 API-gate tests covering viewer/operator boundaries across planning/execute, items PATCH, waste approval. Defense-in-depth claim now test-backed."
+        "Tranche 015: 12-test E2E matrix — 6 UI-gate tests + 6 API-gate tests covering viewer/operator boundaries across planning/execute, items PATCH, waste approval. Defense-in-depth claim now test-backed.",
+        "Tranche 016: middleware path-specific role-gate scaffold (prefix → allow-list). No-op today (backend doesn't project app_users.role into Supabase JWT app_metadata yet), but immediately active as defense-in-depth layer 3 once backend adds the projection."
       ],
-      "gap": "Optional: path-specific role gates in middleware (belt-and-suspenders layer 3)."
+      "gap": "Activating middleware gate requires backend to populate user.app_metadata.role (one-line SQL trigger or user-create hook) — listed in backend-package-admin-superuser-depth.md as a note."
     },
     "data_truthfulness": {
       "score": 8,
@@ -133,6 +138,6 @@
       "gap": "Baseline freeze + quarantine seed rituals (both hook Rule 6 protected; need kind=baseline-update + kind=quarantine-update ceremonies)."
     }
   },
-  "delta": 9,
-  "delta_notes": "Tranches 012-015 this run: +3 (T012 PO detail) +2 (T013 receipt-PO linkage) +2 (T014 inbox federation) +2 (T015 role-boundary E2E) = +9 (75 -> 84). Two-session total: +40 (44 -> 84). Production-control object graph is now coherent: rec → PO → operator receives-against-PO → upstream advances state, inbox federates real data, role-boundary tests land. Three categories at 5-8 remain (admin_superuser_depth 5, data_truthfulness 8, ops_surface 8) all gated on backend-lane deliveries."
+  "delta": 2,
+  "delta_notes": "Tranches 016-017: +2 (T016 middleware role-gate scaffold + 11 manifest sub-pages = nav_integrity 8→9 + role_gate_correctness 9→10; T017 deploy-unblock = +0 score but restores the Vercel preview build). Total across all runs: +42 (44 → 86). Only admin_superuser_depth at 5 remains below 8; it is gated on the 5-deliverable backend package in backend-package-admin-superuser-depth.md. 9 of 10 categories are now ≥ 8; merge-ready."
 }
