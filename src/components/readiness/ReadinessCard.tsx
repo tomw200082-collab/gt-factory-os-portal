@@ -14,7 +14,7 @@
 // ---------------------------------------------------------------------------
 
 import type { ReactNode } from "react";
-import { AlertTriangle, CheckCircle2, XCircle } from "lucide-react";
+import { AlertTriangle, CheckCircle2, Info, XCircle } from "lucide-react";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
 import { cn } from "@/lib/cn";
@@ -75,22 +75,30 @@ export function ReadinessCard({
   const { is_ready, readiness_summary, blockers } = readiness;
 
   // Tone selection:
-  //   - is_ready=true + no blockers → green
+  //   - is_ready=true + no blockers → green ("Ready for operations")
   //   - is_ready=true + any blockers → yellow (partially ready — advisory only)
-  //   - is_ready=false → red
-  const tone: "green" | "yellow" | "red" = !is_ready
-    ? "red"
-    : blockers.length > 0
+  //   - is_ready=false + >=1 blocker → red ("Not ready" + blockers list + Fix-now)
+  //   - is_ready=false + blockers=[] → NEUTRAL defensive fallback.
+  //     Prevents the self-contradictory "Not ready — RED" + "No blockers. This is
+  //     ready." double-state that can surface when the readiness view hasn't
+  //     refreshed for an entity the server has just updated (e.g. newly-activated
+  //     BOM versions before the v_*_readiness projection catches up).
+  //     Observed on /admin/boms/<head>/versions/<active> 2026-04-21.
+  const tone: "green" | "yellow" | "red" | "neutral" = is_ready
+    ? blockers.length > 0
       ? "yellow"
-      : "green";
+      : "green"
+    : blockers.length > 0
+      ? "red"
+      : "neutral";
 
   const toneProps: Record<
     typeof tone,
     {
-      badge: "success" | "warning" | "danger";
+      badge: "success" | "warning" | "danger" | "neutral";
       badgeLabel: string;
       icon: ReactNode;
-      sectionTone: "success" | "warning" | "danger";
+      sectionTone: "success" | "warning" | "danger" | "neutral";
     }
   > = {
     green: {
@@ -111,17 +119,36 @@ export function ReadinessCard({
       icon: <XCircle className="h-4 w-4 text-danger" strokeWidth={2} />,
       sectionTone: "danger",
     },
+    neutral: {
+      badge: "neutral",
+      badgeLabel: "No actionable blockers",
+      icon: <Info className="h-4 w-4 text-fg-muted" strokeWidth={2} />,
+      sectionTone: "neutral",
+    },
   };
 
   const t = toneProps[tone];
+
+  // SectionCard tones: default | warning | danger | info | success.
+  // "neutral" here maps to "default" so the card gets no emphasized border.
+  const sectionCardTone:
+    | "success"
+    | "warning"
+    | "danger"
+    | "default" =
+    tone === "green"
+      ? "success"
+      : tone === "yellow"
+        ? "warning"
+        : tone === "red"
+          ? "danger"
+          : "default";
 
   return (
     <div data-testid={`readiness-card-${tone}`}>
     <SectionCard
       eyebrow={`${entityLabel(entity)} readiness`}
-      tone={
-        tone === "green" ? "success" : tone === "yellow" ? "warning" : "danger"
-      }
+      tone={sectionCardTone}
       title={
         <span className="flex items-center gap-2">
           {t.icon}
@@ -133,7 +160,16 @@ export function ReadinessCard({
       }
       description={readiness_summary ?? defaultSummary(tone, entity)}
     >
-      {blockers.length === 0 ? (
+      {tone === "neutral" ? (
+        <p
+          className="text-sm text-fg-muted"
+          data-testid="readiness-card-neutral-helper"
+        >
+          This surface has no open blockers. If you expected a &ldquo;ready&rdquo;
+          state, the readiness view may be out of date for this entity —
+          refresh or check recent data changes.
+        </p>
+      ) : blockers.length === 0 ? (
         <p
           className="text-sm text-fg-muted"
           data-testid="readiness-card-no-blockers"
@@ -192,12 +228,14 @@ export function ReadinessCard({
 }
 
 function defaultSummary(
-  tone: "green" | "yellow" | "red",
+  tone: "green" | "yellow" | "red" | "neutral",
   entity: ReadinessEntityKind,
 ): string {
   const label = entityLabel(entity).toLowerCase();
   if (tone === "green") return `This ${label} is ready for operational use.`;
   if (tone === "yellow")
     return `This ${label} is usable but has advisory issues to address.`;
+  if (tone === "neutral")
+    return `No open blockers reported for this ${label}. The readiness view may be out of date — refresh if you expected a ready state.`;
   return `This ${label} is not yet ready. Resolve the blockers below to activate it.`;
 }

@@ -50,6 +50,7 @@
 
 import { useMemo, useState, use } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ArrowLeft,
@@ -221,6 +222,7 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
   const { session } = useSession();
   const isAdmin = session.role === "admin";
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   const [banner, setBanner] = useState<
     | { kind: "success" | "error"; message: string }
@@ -469,6 +471,52 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
     },
   });
 
+  // --- One-click draft-from-this-version shortcut (2026-04-21 readiness-ux) ---
+  // On an active version, skip the head-page detour: POST /api/boms/versions
+  // with this version as clone_from, then navigate directly to the new draft
+  // editor. Mirrors the head-page "New draft" mutation exactly (same endpoint,
+  // same idempotency_key, same navigation target).
+  const newDraftFromThisMutation = useMutation({
+    mutationFn: async () => {
+      const res = await fetch("/api/boms/versions", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          head_id,
+          clone_from_version_id: version_id,
+          idempotency_key: randomIdempotencyKey(),
+        }),
+      });
+      const json = await res.json().catch(() => null);
+      if (!res.ok) {
+        throw new AdminMutationError(
+          res.status,
+          (json as { message?: string })?.message ?? `HTTP ${res.status}`,
+          (json as { code?: string })?.code,
+          json,
+        );
+      }
+      return json as { bom_version_id: string };
+    },
+    onSuccess: (data) => {
+      if (data?.bom_version_id) {
+        router.push(
+          `/admin/boms/${encodeURIComponent(head_id)}/versions/${encodeURIComponent(data.bom_version_id)}`,
+        );
+      }
+    },
+    onError: (err: Error) => {
+      const msg =
+        err instanceof AdminMutationError
+          ? `${err.status}${err.code ? ` ${err.code}` : ""}: ${err.message}`
+          : err.message;
+      setBanner({ kind: "error", message: `New draft failed: ${msg}` });
+    },
+  });
+
   // --- Publish preview (only fetch when we have a draft version) ---------
   const previewQuery = useQuery<PublishPreview>({
     queryKey: ["admin", "bom_version", version_id, "publish-preview"],
@@ -670,6 +718,21 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
                 setPublishDialogOpen(true);
               }}
             />
+          ) : isActive && isAdmin ? (
+            <button
+              type="button"
+              className="btn-primary inline-flex items-center gap-1.5"
+              onClick={() => {
+                setBanner(null);
+                newDraftFromThisMutation.mutate();
+              }}
+              disabled={newDraftFromThisMutation.isPending}
+            >
+              <Plus className="h-3.5 w-3.5" strokeWidth={2} />
+              {newDraftFromThisMutation.isPending
+                ? "Creating…"
+                : "Create draft from this version"}
+            </button>
           ) : null
         }
       />
