@@ -17,7 +17,11 @@
 
 import Link from "next/link";
 
-export const dynamic = "force-dynamic";
+// T019: removed `export const dynamic = "force-dynamic"`. The env vars
+// this page reads (VERCEL_GIT_COMMIT_SHA / VERCEL_ENV) are injected at
+// BUILD time by Vercel, so there is no reason to render per-request.
+// Keeping this page static means the edge serves it as pure HTML with
+// no Node process involved — the most bulletproof possible delivery.
 
 export default function RootLandingPage() {
   const commitSha =

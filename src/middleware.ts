@@ -67,50 +67,67 @@ function isPublicPath(pathname: string): boolean {
 }
 
 export async function middleware(request: NextRequest) {
-  // Dev-shim bypass: when the fake-session flag is on, skip Supabase entirely
-  // and let the existing local dev flow work.
-  if (process.env.NEXT_PUBLIC_ENABLE_DEV_SHIM_AUTH === "true") {
-    return NextResponse.next({ request });
-  }
+  // T019: wrap the entire body in try/catch. Any failure inside
+  // updateSupabaseSession (env-var missing, upstream Supabase timeout,
+  // unexpected throw) must NOT result in a 500 for the end user — fall
+  // back to letting the request through so the target page can render
+  // (and show its own error UI if applicable).
+  try {
+    // Dev-shim bypass: when the fake-session flag is on, skip Supabase
+    // entirely and let the existing local dev flow work.
+    if (process.env.NEXT_PUBLIC_ENABLE_DEV_SHIM_AUTH === "true") {
+      return NextResponse.next({ request });
+    }
 
-  const { response, user } = await updateSupabaseSession(request);
+    const { response, user } = await updateSupabaseSession(request);
 
-  const { pathname } = request.nextUrl;
+    const { pathname } = request.nextUrl;
 
-  if (!user && !isPublicPath(pathname)) {
-    const loginUrl = request.nextUrl.clone();
-    loginUrl.pathname = "/login";
-    loginUrl.searchParams.set("redirectTo", pathname);
-    return NextResponse.redirect(loginUrl);
-  }
+    if (!user && !isPublicPath(pathname)) {
+      const loginUrl = request.nextUrl.clone();
+      loginUrl.pathname = "/login";
+      loginUrl.searchParams.set("redirectTo", pathname);
+      return NextResponse.redirect(loginUrl);
+    }
 
-  // Tranche 016: path-specific role gating. Only fires when (a) user is
-  // authenticated AND (b) app_metadata.role is populated. Today the
-  // backend does not project the app_users.role into Supabase JWT
-  // app_metadata, so `role` will be undefined and this block is a no-op
-  // — existing layout-level RoleGate + upstream 403 remain the active
-  // defense. When the backend adds the projection, this code
-  // immediately upgrades to a third defense layer.
-  if (user) {
-    const role = (user.app_metadata as { role?: string } | undefined)?.role;
-    if (role) {
-      const gate = findRoleGate(pathname);
-      if (gate && !gate.allow.includes(role)) {
-        const forbidden = request.nextUrl.clone();
-        forbidden.pathname = "/dashboard";
-        forbidden.searchParams.set("forbidden", pathname);
-        return NextResponse.redirect(forbidden);
+    // Tranche 016: path-specific role gating. Only fires when (a) user
+    // is authenticated AND (b) app_metadata.role is populated. Today
+    // the backend does not project the app_users.role into Supabase JWT
+    // app_metadata, so `role` will be undefined and this block is a
+    // no-op — existing layout-level RoleGate + upstream 403 remain the
+    // active defense. When the backend adds the projection, this code
+    // immediately upgrades to a third defense layer.
+    if (user) {
+      const role = (user.app_metadata as { role?: string } | undefined)?.role;
+      if (role) {
+        const gate = findRoleGate(pathname);
+        if (gate && !gate.allow.includes(role)) {
+          const forbidden = request.nextUrl.clone();
+          forbidden.pathname = "/dashboard";
+          forbidden.searchParams.set("forbidden", pathname);
+          return NextResponse.redirect(forbidden);
+        }
       }
     }
-  }
 
-  return response;
+    return response;
+  } catch (err) {
+    // Never 500 from middleware. Log and pass through.
+    // eslint-disable-next-line no-console
+    console.error(
+      "[middleware] unexpected error; passing through:",
+      err instanceof Error ? err.message : String(err),
+    );
+    return NextResponse.next({ request });
+  }
 }
 
 export const config = {
-  // Run on everything except Next.js internals and static assets. The
-  // isPublicPath check inside middleware() does the fine-grained filtering.
+  // Run on everything except Next.js internals, static assets, and the
+  // root landing page. Excluding `/` at the matcher level (T019) means
+  // the landing page is served as pure static HTML with zero middleware
+  // — the most bulletproof path for first paint.
   matcher: [
-    "/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
+    "/((?!$|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp)$).*)",
   ],
 };
