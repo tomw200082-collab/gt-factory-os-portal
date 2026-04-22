@@ -23,6 +23,7 @@
     { "path": "/planning/runs", "status": "live", "roles": ["planner", "admin"], "group": "planning" },
     { "path": "/exceptions", "status": "live", "roles": ["planner", "admin", "viewer"], "group": "planner", "notes": "Tranche 003: roles widened to match (planner)/layout.tsx allow list (planner+admin+viewer); per-row actions gated server-side by capability" },
     { "path": "/purchase-orders", "status": "live", "roles": ["planner", "admin"], "group": "po" },
+    { "path": "/purchase-orders/[po_id]", "status": "live", "roles": ["planner", "admin", "viewer"], "group": "po", "notes": "Tranche 012: read-only PO detail; lines table degrades honestly when upstream omits lines[]" },
     { "path": "/admin/items", "status": "live", "roles": ["admin"], "group": "admin" },
     { "path": "/admin/products/[item_id]", "status": "live", "roles": ["admin"], "group": "admin", "notes": "detail redirect target from /admin/items/[item_id]" },
     { "path": "/admin/components", "status": "live", "roles": ["admin"], "group": "admin" },
