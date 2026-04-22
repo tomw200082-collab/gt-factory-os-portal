@@ -1,0 +1,24 @@
+{
+  "_notes": [
+    "Frozen snapshot the regression-sentinel compares against.",
+    "This file is human-ritual-only — hook refuses normal edits.",
+    "Update via a tranche-fix with kind=baseline-update after an intentional surface change has landed."
+  ],
+  "generated_at": "2026-04-22T00:00:00Z",
+  "anchor_sha": "55682bb",
+  "routes": [],
+  "nav_items": [],
+  "role_gates": {},
+  "critical_invariants": [
+    "grep:X-Fake-Session:src/  → 0 matches",
+    "grep:X-Test-Session:src/  → 0 matches (except files listed in quarantine.json.pending-cleanup)",
+    "all (admin)/* pages require role=admin at layout or page level",
+    "(ops)/* pages require role in {operator, admin}",
+    "(planning)/* pages require role in {planner, admin}",
+    "middleware.ts protects /admin/*, /ops/*, /planning/*, /exceptions, /purchase-orders"
+  ],
+  "_todo_after_bootstrap": [
+    "Task 7 of the bootstrap plan regenerates routes[] / nav_items[] / role_gates{} from the live repo via /portal-audit.",
+    "Until Task 7 runs, the regression-sentinel will BLOCK on missing anchors — that is intentional, not a bug."
+  ]
+}

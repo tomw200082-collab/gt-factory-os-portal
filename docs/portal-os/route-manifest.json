@@ -1,0 +1,39 @@
+{
+  "_notes": [
+    "Canonical list of portal routes. Seeded from window2-portal-sandbox main @ 55682bb on 2026-04-22.",
+    "status values: live | quarantined | dead | fake | planned.",
+    "roles: array of role strings from { operator, planner, admin, viewer }.",
+    "This file is edited by the tranche-fix author when a route moves status; the regression-sentinel + pr-guard enforce consistency with src/app/."
+  ],
+  "generated_at": "2026-04-22T00:00:00Z",
+  "anchor_sha_at_seed": "55682bb",
+  "routes": [
+    { "path": "/", "status": "live", "roles": ["viewer"], "group": "root", "notes": "landing redirect" },
+    { "path": "/login", "status": "live", "roles": ["viewer"], "group": "auth" },
+    { "path": "/dashboard", "status": "live", "roles": ["planner", "admin"], "group": "shared" },
+    { "path": "/profile", "status": "live", "roles": ["operator", "planner", "admin", "viewer"], "group": "shared" },
+    { "path": "/ops/stock/receipts", "status": "live", "roles": ["operator", "admin"], "group": "ops", "form": "GoodsReceipt" },
+    { "path": "/ops/stock/waste-adjustments", "status": "live", "roles": ["operator", "admin"], "group": "ops", "form": "WasteAdjustment" },
+    { "path": "/ops/stock/physical-count", "status": "live", "roles": ["operator", "admin"], "group": "ops", "form": "PhysicalCount" },
+    { "path": "/ops/stock/production-actual", "status": "live", "roles": ["operator", "admin"], "group": "ops", "form": "ProductionActual" },
+    { "path": "/planning", "status": "live", "roles": ["planner", "admin"], "group": "planning" },
+    { "path": "/planning/forecast", "status": "live", "roles": ["planner", "admin"], "group": "planning" },
+    { "path": "/planning/runs", "status": "live", "roles": ["planner", "admin"], "group": "planning" },
+    { "path": "/exceptions", "status": "live", "roles": ["planner", "admin"], "group": "planner" },
+    { "path": "/purchase-orders", "status": "live", "roles": ["planner", "admin"], "group": "po" },
+    { "path": "/admin/items", "status": "live", "roles": ["admin"], "group": "admin" },
+    { "path": "/admin/components", "status": "live", "roles": ["admin"], "group": "admin" },
+    { "path": "/admin/boms", "status": "live", "roles": ["admin"], "group": "admin" },
+    { "path": "/admin/suppliers", "status": "live", "roles": ["admin"], "group": "admin" },
+    { "path": "/admin/supplier-items", "status": "live", "roles": ["admin"], "group": "admin" },
+    { "path": "/admin/sku-aliases", "status": "live", "roles": ["admin"], "group": "admin" },
+    { "path": "/admin/planning-policy", "status": "live", "roles": ["admin"], "group": "admin" },
+    { "path": "/admin/integrations", "status": "live", "roles": ["admin"], "group": "admin" },
+    { "path": "/admin/jobs", "status": "live", "roles": ["admin"], "group": "admin" },
+    { "path": "/admin/users", "status": "live", "roles": ["admin"], "group": "admin" }
+  ],
+  "_todo_after_bootstrap": [
+    "Task 7 of the bootstrap plan regenerates this file from a fresh /portal-audit and freezes baseline alongside.",
+    "Any (inbox) group routes need to be enumerated — route listing at bootstrap time only caught depth 4; inbox may be deeper."
+  ]
+}

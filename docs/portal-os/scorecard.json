@@ -1,0 +1,25 @@
+{
+  "_notes": [
+    "10-category portal readiness scorecard. Machine-readable source.",
+    "Scorecard is recomputed by /portal-scorecard. Do not hand-edit unless doing a manual reset.",
+    "Until the first /portal-audit + /portal-scorecard run against the live repo, the scores below are placeholders (-1 = unset)."
+  ],
+  "generated_at": "2026-04-22T00:00:00Z",
+  "source_audit": null,
+  "previous_score": null,
+  "total": -1,
+  "categories": {
+    "admin_superuser_depth": { "score": -1, "evidence": [], "gap": "not yet scored" },
+    "nav_integrity": { "score": -1, "evidence": [], "gap": "not yet scored" },
+    "flow_continuity": { "score": -1, "evidence": [], "gap": "not yet scored" },
+    "role_gate_correctness": { "score": -1, "evidence": [], "gap": "not yet scored" },
+    "data_truthfulness": { "score": -1, "evidence": [], "gap": "not yet scored" },
+    "planning_surface": { "score": -1, "evidence": [], "gap": "not yet scored" },
+    "ops_surface": { "score": -1, "evidence": [], "gap": "not yet scored" },
+    "dashboard_truth": { "score": -1, "evidence": [], "gap": "not yet scored" },
+    "technical_substrate": { "score": -1, "evidence": [], "gap": "not yet scored" },
+    "regression_resistance": { "score": -1, "evidence": [], "gap": "not yet scored" }
+  },
+  "delta": 0,
+  "delta_notes": "Placeholder. First real score lands after the first /portal-audit + /portal-scorecard pair."
+}
