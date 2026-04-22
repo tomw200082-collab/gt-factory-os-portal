@@ -1,0 +1,21 @@
+{
+  "_notes": [
+    "Paths and patterns that must NOT re-enter production surface.",
+    "kinds: dead (route should not exist), fake (fake-session / mocked state), quarantined (route exists but must not appear in primary nav), pending-cleanup (known vestige, scheduled for removal).",
+    "forbidden_strings is enforced by pre_tool_use.sh rule 5 AND regression-sentinel.",
+    "This file is human-ritual-only — hook refuses normal edits. Update via a tranche-fix with kind=quarantine-update."
+  ],
+  "generated_at": "2026-04-22T00:00:00Z",
+  "entries": [],
+  "forbidden_strings": [
+    "X-Fake-Session",
+    "X-Test-Session",
+    "FakeSession",
+    "fakeAuth",
+    "useFakeUser"
+  ],
+  "_todo_after_bootstrap": [
+    "Seed with actual quarantined surfaces discovered by the first /portal-audit.",
+    "Reference the known X-Fake-Session vestiges in tests/e2e/goods-receipt-real-submit.spec.ts:109,160 (per PRODUCTION/.claude/state/active_mode.json ProductionActual exit note 2026-04-21) — add them as pending-cleanup entries, not dead."
+  ]
+}

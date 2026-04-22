@@ -97,6 +97,34 @@ interface SupplierRow {
   status: string;
 }
 
+// Tranche 013: optional PO linkage. Subset of the PurchaseOrderRow shape
+// from /api/purchase-orders — only the fields we need to render the picker.
+interface PoOption {
+  po_id: string;
+  po_number: string;
+  supplier_id: string;
+  status: string;
+  expected_receive_date: string | null;
+}
+
+interface PoLineOption {
+  po_line_id: string;
+  line_no?: number | null;
+  item_id?: string | null;
+  component_id?: string | null;
+  display_label?: string | null;
+  ordered_qty: string;
+  received_qty: string | null;
+  unit: string | null;
+  status?: string | null;
+}
+
+interface PoDetailEnvelope {
+  lines?: PoLineOption[];
+  po_lines?: PoLineOption[];
+  po?: { po_id?: string };
+}
+
 type ListEnvelope<T> = { rows: T[]; count: number };
 
 type ReceivableRow = {
@@ -139,10 +167,18 @@ interface LineDraft {
   quantity: string; // keep as string; validated on submit
   unit: Uom;
   notes: string;
+  // Tranche 013: optional per-line PO line reference. Empty string = unmatched.
+  po_line_id: string;
 }
 
 function emptyLine(): LineDraft {
-  return { receivable_key: "", quantity: "", unit: "UNIT", notes: "" };
+  return {
+    receivable_key: "",
+    quantity: "",
+    unit: "UNIT",
+    notes: "",
+    po_line_id: "",
+  };
 }
 
 type SubmitPhase = "idle" | "submitting" | "done";
@@ -164,6 +200,19 @@ export default function GoodsReceiptPage() {
   const suppliersQuery = useQuery<ListEnvelope<SupplierRow>>({
     queryKey: ["master", "suppliers", "ACTIVE"],
     queryFn: () => fetchJson("/api/suppliers?status=ACTIVE&limit=1000"),
+  });
+
+  // Tranche 013: open POs for the optional reference dropdown. We fetch
+  // OPEN + PARTIAL because either accepts further receipts. The query is
+  // tolerant: if the upstream errors or returns zero rows, the dropdown
+  // simply hides and manual receipts (po_id=null) keep working.
+  const openPosQuery = useQuery<ListEnvelope<PoOption>>({
+    queryKey: ["ops", "receipts", "open-pos"],
+    queryFn: () =>
+      fetchJson(
+        "/api/purchase-orders?status=OPEN&status=PARTIAL&limit=200",
+      ),
+    staleTime: 30_000,
   });
 
   const receivable: ReceivableRow[] = useMemo(() => {
@@ -204,6 +253,44 @@ export default function GoodsReceiptPage() {
   const [lines, setLines] = useState<LineDraft[]>([emptyLine()]);
   const [phase, setPhase] = useState<SubmitPhase>("idle");
   const [done, setDone] = useState<DoneState | null>(null);
+  // Tranche 013: optional PO reference. When set, all receipt lines
+  // submit with envelope.po_id = poId; per-line po_line_id is picked
+  // from the selected PO's lines[].
+  const [poId, setPoId] = useState<string>("");
+
+  // Lazy-load the chosen PO's detail to populate the per-line
+  // po_line_id picker. enabled only when poId is set so we don't
+  // hammer the proxy when no PO is referenced.
+  const poDetailQuery = useQuery<PoDetailEnvelope>({
+    queryKey: ["ops", "receipts", "po-detail", poId],
+    queryFn: () => fetchJson(`/api/purchase-orders/${encodeURIComponent(poId)}`),
+    enabled: !!poId,
+    staleTime: 30_000,
+  });
+
+  const poLines: PoLineOption[] = useMemo(() => {
+    const data = poDetailQuery.data;
+    if (!data) return [];
+    return data.po_lines ?? data.lines ?? [];
+  }, [poDetailQuery.data]);
+
+  // When the operator picks a PO, default the supplier to the PO's
+  // supplier so the supplier dropdown stays consistent. The operator can
+  // still change it; the API will 409 SUPPLIER_MISMATCH if so.
+  function handlePoChange(nextPoId: string): void {
+    setPoId(nextPoId);
+    if (!nextPoId) {
+      // Clear per-line po_line_id selections when un-linking the PO.
+      setLines((prev) => prev.map((l) => ({ ...l, po_line_id: "" })));
+      return;
+    }
+    const picked = openPosQuery.data?.rows.find((p) => p.po_id === nextPoId);
+    if (picked && !supplierId) {
+      setSupplierId(picked.supplier_id);
+    }
+    // Reset per-line po_line_id since they refer to the previous PO.
+    setLines((prev) => prev.map((l) => ({ ...l, po_line_id: "" })));
+  }
 
   const loading =
     itemsQuery.isLoading ||
@@ -262,7 +349,7 @@ export default function GoodsReceiptPage() {
         item_id: row.id,
         quantity: qtyNum,
         unit: l.unit,
-        po_line_id: null,
+        po_line_id: l.po_line_id ? l.po_line_id : null,
         notes: l.notes ? l.notes : null,
       });
     }
@@ -271,7 +358,7 @@ export default function GoodsReceiptPage() {
       idempotency_key: newIdempotencyKey(),
       event_at: new Date(eventAt).toISOString(),
       supplier_id: supplierId,
-      po_id: null,
+      po_id: poId ? poId : null,
       notes: notes ? notes : null,
       lines: envelopeLines,
     };
@@ -391,6 +478,44 @@ export default function GoodsReceiptPage() {
               </label>
               <label className="block sm:col-span-2">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Reference PO (optional)
+                </span>
+                <select
+                  className="input"
+                  value={poId}
+                  onChange={(e) => handlePoChange(e.target.value)}
+                  data-testid="receipt-po-select"
+                >
+                  <option value="">— manual receipt (no PO) —</option>
+                  {(openPosQuery.data?.rows ?? []).map((p) => (
+                    <option key={p.po_id} value={p.po_id}>
+                      {p.po_number} · {p.supplier_id} · {p.status}
+                      {p.expected_receive_date
+                        ? ` · exp ${p.expected_receive_date}`
+                        : ""}
+                    </option>
+                  ))}
+                </select>
+                {poId && poDetailQuery.isError ? (
+                  <span className="mt-1 block text-3xs text-warning-fg">
+                    Couldn&apos;t load PO lines — picker will fall back to
+                    unmatched. {(poDetailQuery.error as Error).message}
+                  </span>
+                ) : null}
+                {poId && poDetailQuery.isLoading ? (
+                  <span className="mt-1 block text-3xs text-fg-muted">
+                    Loading PO lines…
+                  </span>
+                ) : null}
+                {poId && !poDetailQuery.isLoading && poLines.length === 0 ? (
+                  <span className="mt-1 block text-3xs text-warning-fg">
+                    Selected PO returned no lines — receipt will post with
+                    po_id but each line will be unmatched.
+                  </span>
+                ) : null}
+              </label>
+              <label className="block sm:col-span-2">
+                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Header notes
                 </span>
                 <textarea
@@ -412,7 +537,7 @@ export default function GoodsReceiptPage() {
               {lines.map((line, idx) => (
                 <div
                   key={idx}
-                  className="grid grid-cols-1 gap-2 rounded-md border border-border/60 p-3 md:grid-cols-[2fr_1fr_1fr_2fr_auto]"
+                  className="grid grid-cols-1 gap-3 rounded-md border border-border/60 p-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,2fr)_auto]"
                 >
                   <select
                     className="input"
@@ -495,6 +620,46 @@ export default function GoodsReceiptPage() {
                   >
                     Remove
                   </button>
+                  {poId ? (
+                    <label
+                      className="block sm:col-span-5"
+                      data-testid={`receipt-line-${idx}-po-line`}
+                    >
+                      <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                        PO line (optional)
+                      </span>
+                      <select
+                        className="input"
+                        value={line.po_line_id}
+                        onChange={(e) =>
+                          updateLine(idx, { po_line_id: e.target.value })
+                        }
+                        disabled={poDetailQuery.isLoading || poLines.length === 0}
+                      >
+                        <option value="">— unmatched —</option>
+                        {poLines.map((pl, plIdx) => {
+                          const idLabel =
+                            pl.display_label ??
+                            pl.item_id ??
+                            pl.component_id ??
+                            "—";
+                          const remaining =
+                            pl.received_qty != null
+                              ? `${pl.ordered_qty} ordered · ${pl.received_qty} received`
+                              : `${pl.ordered_qty} ordered`;
+                          return (
+                            <option
+                              key={pl.po_line_id}
+                              value={pl.po_line_id}
+                            >
+                              #{pl.line_no ?? plIdx + 1} · {idLabel} · {remaining}
+                              {pl.unit ? ` ${pl.unit}` : ""}
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </label>
+                  ) : null}
                 </div>
               ))}
               <button
@@ -514,6 +679,7 @@ export default function GoodsReceiptPage() {
               onClick={() => {
                 setLines([emptyLine()]);
                 setNotes("");
+                setPoId("");
                 setDone(null);
               }}
             >

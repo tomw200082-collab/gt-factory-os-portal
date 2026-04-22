@@ -4,8 +4,15 @@ import { ChevronDown, Eye } from "lucide-react";
 import { useSession } from "@/lib/auth/session-provider";
 import { useReviewMode } from "@/lib/review-mode/store";
 import type { Role } from "@/lib/contracts/enums";
+import { MobileNav } from "./MobileNav";
 
 const ROLE_OPTIONS: Role[] = ["operator", "planner", "admin", "viewer"];
+
+// The FAKE SESSION pill is a dev-shim affordance for local / e2e work. It
+// must never render in production. Gate on the same env var that the
+// middleware uses to allow unauthenticated-request pass-through.
+const DEV_SHIM_ENABLED =
+  process.env.NEXT_PUBLIC_ENABLE_DEV_SHIM_AUTH === "true";
 
 export function TopBar() {
   const { session, setRole } = useSession();
@@ -13,11 +20,14 @@ export function TopBar() {
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/70 bg-bg/85 backdrop-blur-md">
-      <div className="mx-auto flex h-16 w-full max-w-[1440px] items-center gap-5 px-8 xl:px-10">
+      <div className="mx-auto flex h-16 w-full max-w-[1440px] items-center gap-2 px-4 sm:gap-5 sm:px-8 xl:px-10">
+        {/* Mobile hamburger — renders <md only ———————————————————————————— */}
+        <MobileNav />
+
         {/* Brand mark ——————————————————————————————————————————————————— */}
         <div className="flex items-center gap-3">
           <BrandMark />
-          <div className="flex flex-col leading-none">
+          <div className="hidden flex-col leading-none sm:flex">
             <div className="text-[0.8125rem] font-semibold tracking-tightish text-fg-strong">
               GT Factory OS
             </div>
@@ -55,12 +65,13 @@ export function TopBar() {
           {/* Review mode button ————————————————————————————————————————— */}
           <button
             type="button"
-            className="btn btn-ghost btn-sm gap-1.5"
+            className="btn btn-ghost gap-1.5"
             onClick={() => setOpen(true)}
             title="Open review-mode panel (force any screen state)"
+            aria-label="Open review-mode panel"
           >
             <Eye className="h-3.5 w-3.5" strokeWidth={1.75} />
-            <span>Review</span>
+            <span className="hidden sm:inline">Review</span>
             {forcedScreenState ? (
               <span className="ml-0.5 rounded-xs bg-warning-soft px-1 py-px text-3xs font-semibold text-warning-fg">
                 FORCED
@@ -68,54 +79,58 @@ export function TopBar() {
             ) : null}
           </button>
 
-          <div className="h-6 w-px bg-border/70" aria-hidden />
+          {DEV_SHIM_ENABLED ? (
+            <>
+              <div className="h-6 w-px bg-border/70" aria-hidden />
 
-          {/* Fake session pill ——————————————————————————————————————— */}
-          <div
-            className="group relative flex h-9 items-center gap-2 rounded border border-warning/50 bg-warning-softer pl-2 pr-1.5 shadow-raised"
-            data-testid="fake-session-pill"
-          >
-            <span className="flex items-center gap-1">
-              <span className="dot bg-warning animate-pulse-soft" />
-              <span className="text-3xs font-bold uppercase tracking-sops text-warning-fg">
-                FAKE SESSION
-              </span>
-            </span>
-            <div className="h-4 w-px bg-warning/40" aria-hidden />
-            <div className="flex items-center gap-1.5">
-              <span
-                className="text-xs font-medium text-fg-strong"
-                data-testid="fake-session-name"
+              {/* Fake session pill — dev-shim only; never renders in production ——— */}
+              <div
+                className="group relative flex h-9 items-center gap-2 rounded border border-warning/50 bg-warning-softer pl-2 pr-1.5 shadow-raised"
+                data-testid="fake-session-pill"
               >
-                {session.display_name}
-              </span>
-              <span
-                className="font-mono text-3xs uppercase tracking-sops text-warning-fg"
-                data-testid="fake-session-role"
-              >
-                {session.role}
-              </span>
-            </div>
-            <div className="relative flex items-center">
-              <ChevronDown
-                className="h-3.5 w-3.5 text-warning-fg"
-                strokeWidth={2}
-                aria-hidden
-              />
-              <select
-                value={session.role}
-                onChange={(e) => setRole(e.target.value as Role)}
-                className="absolute inset-0 cursor-pointer opacity-0"
-                aria-label="Fake session role switcher"
-              >
-                {ROLE_OPTIONS.map((r) => (
-                  <option key={r} value={r}>
-                    {r}
-                  </option>
-                ))}
-              </select>
-            </div>
-          </div>
+                <span className="flex items-center gap-1">
+                  <span className="dot bg-warning animate-pulse-soft" />
+                  <span className="text-3xs font-bold uppercase tracking-sops text-warning-fg">
+                    FAKE SESSION
+                  </span>
+                </span>
+                <div className="h-4 w-px bg-warning/40" aria-hidden />
+                <div className="flex items-center gap-1.5">
+                  <span
+                    className="text-xs font-medium text-fg-strong"
+                    data-testid="fake-session-name"
+                  >
+                    {session.display_name}
+                  </span>
+                  <span
+                    className="font-mono text-3xs uppercase tracking-sops text-warning-fg"
+                    data-testid="fake-session-role"
+                  >
+                    {session.role}
+                  </span>
+                </div>
+                <div className="relative flex items-center">
+                  <ChevronDown
+                    className="h-3.5 w-3.5 text-warning-fg"
+                    strokeWidth={2}
+                    aria-hidden
+                  />
+                  <select
+                    value={session.role}
+                    onChange={(e) => setRole(e.target.value as Role)}
+                    className="absolute inset-0 cursor-pointer opacity-0"
+                    aria-label="Fake session role switcher"
+                  >
+                    {ROLE_OPTIONS.map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+            </>
+          ) : null}
         </div>
       </div>
     </header>

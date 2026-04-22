@@ -401,7 +401,12 @@ export default function PlanningRunDetailPage() {
   const [activeTab, setActiveTab] =
     useState<RecommendationType>("purchase");
   const [toast, setToast] = useState<
-    { kind: "success" | "error"; message: string } | null
+    {
+      kind: "success" | "error";
+      message: string;
+      href?: string;
+      hrefLabel?: string;
+    } | null
   >(null);
 
   const detailQuery = useQuery({
@@ -454,11 +459,14 @@ export default function PlanningRunDetailPage() {
   const convertMutation = useMutation({
     mutationFn: (id: string) => convertRecToPO(session, id),
     onSuccess: (result) => {
+      const poLabel = result.po_number ?? result.po_id.slice(0, 8);
       setToast({
         kind: "success",
         message: result.idempotent_replay
-          ? `Already converted to PO ${result.po_number ?? result.po_id.slice(0, 8)} (idempotent replay).`
-          : `Converted to PO ${result.po_number ?? result.po_id.slice(0, 8)}.`,
+          ? `Already converted to PO ${poLabel} (idempotent replay).`
+          : `Converted to PO ${poLabel}.`,
+        href: `/purchase-orders/${encodeURIComponent(result.po_id)}`,
+        hrefLabel: `Open PO ${poLabel}`,
       });
       void queryClient.invalidateQueries({
         queryKey: ["planning", "run", runId, "recs"],
@@ -551,7 +559,7 @@ export default function PlanningRunDetailPage() {
       {toast ? (
         <div
           className={cn(
-            "mb-4 rounded-md border px-4 py-3 text-sm",
+            "mb-4 flex items-center justify-between gap-3 rounded-md border px-4 py-3 text-sm",
             toast.kind === "success"
               ? "border-success/40 bg-success-softer text-success-fg"
               : "border-danger/40 bg-danger-softer text-danger-fg",
@@ -559,7 +567,16 @@ export default function PlanningRunDetailPage() {
           data-testid="planning-run-toast"
           role="status"
         >
-          {toast.message}
+          <span>{toast.message}</span>
+          {toast.href ? (
+            <Link
+              href={toast.href}
+              className="text-xs font-semibold underline underline-offset-2 hover:no-underline"
+              data-testid="planning-run-toast-link"
+            >
+              {toast.hrefLabel ?? "Open"}
+            </Link>
+          ) : null}
         </div>
       ) : null}
 

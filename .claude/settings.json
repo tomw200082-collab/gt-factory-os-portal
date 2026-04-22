@@ -1,0 +1,150 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings",
+  "_notes": [
+    "Portal Improvement OS settings (window2-portal-sandbox).",
+    "Hooks registered for tranche-scope enforcement, evidence-required claims, no-dead-air endings.",
+    "Permissions default to safe local edits + read-only portal introspection. Destructive commands denied.",
+    "Honors the PRODUCTION multi-lane harness by refusing out-of-lane writes (schema, integrations, secrets)."
+  ],
+  "hooks": {
+    "SessionStart": [
+      {
+        "matcher": "",
+        "hooks": [
+          { "type": "command", "command": "bash .claude/hooks/session_start.sh" }
+        ]
+      }
+    ],
+    "PreToolUse": [
+      {
+        "matcher": "Write|Edit|NotebookEdit|Bash",
+        "hooks": [
+          { "type": "command", "command": "bash .claude/hooks/pre_tool_use.sh" }
+        ]
+      }
+    ],
+    "SubagentStop": [
+      {
+        "matcher": "",
+        "hooks": [
+          { "type": "command", "command": "bash .claude/hooks/subagent_stop.sh" }
+        ]
+      }
+    ],
+    "Stop": [
+      {
+        "matcher": "",
+        "hooks": [
+          { "type": "command", "command": "bash .claude/hooks/stop.sh" }
+        ]
+      }
+    ]
+  },
+  "permissions": {
+    "allow": [
+      "Read(**)",
+      "Glob(**)",
+      "Grep(**)",
+      "Edit(src/**)",
+      "Edit(tests/**)",
+      "Edit(docs/portal-os/**)",
+      "Edit(.claude/**)",
+      "Edit(.github/workflows/**)",
+      "Edit(package.json)",
+      "Edit(tsconfig.json)",
+      "Edit(next.config.mjs)",
+      "Edit(tailwind.config.ts)",
+      "Edit(playwright.config.ts)",
+      "Edit(vitest.config.ts)",
+      "Edit(middleware.ts)",
+      "Write(src/**)",
+      "Write(tests/**)",
+      "Write(docs/portal-os/**)",
+      "Write(.claude/**)",
+      "Write(.github/workflows/**)",
+      "Bash(git status)",
+      "Bash(git status *)",
+      "Bash(git diff)",
+      "Bash(git diff *)",
+      "Bash(git log)",
+      "Bash(git log *)",
+      "Bash(git show *)",
+      "Bash(git branch)",
+      "Bash(git branch *)",
+      "Bash(git checkout -b *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git restore *)",
+      "Bash(ls)",
+      "Bash(ls *)",
+      "Bash(pwd)",
+      "Bash(head *)",
+      "Bash(tail *)",
+      "Bash(wc *)",
+      "Bash(which *)",
+      "Bash(node *)",
+      "Bash(npm run lint*)",
+      "Bash(npm run typecheck*)",
+      "Bash(npm run test*)",
+      "Bash(npm run test:e2e*)",
+      "Bash(npm run build*)",
+      "Bash(npx playwright show-report*)",
+      "Bash(npx tsc --noEmit*)",
+      "Bash(npx vitest *)"
+    ],
+    "deny": [
+      "Read(**/.env)",
+      "Read(**/.env.*)",
+      "Read(**/secrets/**)",
+      "Read(**/credentials/**)",
+      "Read(**/.ssh/**)",
+      "Read(**/.aws/**)",
+      "Read(**/.vercel/**)",
+      "Edit(**/.env)",
+      "Edit(**/.env.*)",
+      "Edit(**/secrets/**)",
+      "Edit(**/credentials/**)",
+      "Edit(**/.vercel/**)",
+      "Write(**/.env)",
+      "Write(**/.env.*)",
+      "Write(**/secrets/**)",
+      "Write(**/credentials/**)",
+      "Write(**/.vercel/**)",
+      "Edit(docs/portal-os/baseline.json)",
+      "Edit(docs/portal-os/quarantine.json)",
+      "Bash(rm -rf /*)",
+      "Bash(rm -rf ~*)",
+      "Bash(rm -rf .*)",
+      "Bash(rm -fr /*)",
+      "Bash(git push --force*)",
+      "Bash(git push -f*)",
+      "Bash(git reset --hard*)",
+      "Bash(git clean -fd*)",
+      "Bash(git clean -fdx*)",
+      "Bash(sudo *)",
+      "Bash(curl * | sh)",
+      "Bash(curl * | bash)",
+      "Bash(wget * | sh)",
+      "Bash(wget * | bash)",
+      "Bash(npm install -g *)",
+      "Bash(pnpm add -g *)",
+      "Bash(npm uninstall -g *)"
+    ],
+    "ask": [
+      "Bash(git push*)",
+      "Bash(git merge*)",
+      "Bash(git rebase*)",
+      "Bash(git reset *)",
+      "Bash(npm install*)",
+      "Bash(npm uninstall*)",
+      "Bash(pnpm install*)",
+      "Bash(pnpm add*)",
+      "Bash(pnpm remove*)",
+      "Bash(gh pr *)",
+      "Bash(gh issue *)",
+      "Bash(gh release *)",
+      "Write(docs/portal-os/baseline.json)",
+      "Write(docs/portal-os/quarantine.json)"
+    ]
+  }
+}

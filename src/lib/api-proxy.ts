@@ -10,9 +10,10 @@
 //    loud, not silent.
 // 2. Extracts the Supabase session from request cookies via the SSR server
 //    client. Missing/expired session returns 401.
-// 3. Forwards `Authorization: Bearer <jwt>` to upstream. The legacy
-//    X-Fake-Session → X-Test-Session path is removed — dev-shim lives on the
-//    API server behind ENABLE_DEV_SHIM_AUTH, not in portal proxies.
+// 3. Forwards `Authorization: Bearer <jwt>` to upstream. The legacy dev-shim
+//    header path (previously used for local/e2e auth bypass) has been removed
+//    from the portal; dev-shim now lives on the API server behind
+//    ENABLE_DEV_SHIM_AUTH, not in portal proxies.
 // 4. Preserves upstream status + content-type on the response.
 // ---------------------------------------------------------------------------
 
