@@ -14,7 +14,7 @@
 //   versionLabel   — active version label for display
 // ---------------------------------------------------------------------------
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Calculator, AlertTriangle, ChevronRight, RefreshCw } from "lucide-react";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
@@ -81,30 +81,45 @@ export function BomSimulator({
     !loading &&
     parseFloat(targetQty) !== result.target_qty;
 
+  const runSimulationForQty = useCallback(
+    async (qty: number) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const url = `/api/boms/heads/${encodeURIComponent(headId)}/simulate?qty=${qty}`;
+        const res = await fetch(url, { headers: { Accept: "application/json" } });
+        const json = await res.json();
+        if (!res.ok) {
+          const e = json as SimulateError;
+          setError(`${e.reason_code}: ${e.detail}`);
+        } else {
+          setResult(json as SimulateResponse);
+          onSimulated?.(String(qty));
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Request failed");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [headId, onSimulated],
+  );
+
+  // Auto-simulate on mount so users who arrive via "Simulate this BOM" CTA
+  // see results immediately without a required click.
+  useEffect(() => {
+    if (!hasActiveVersion) return;
+    const qty = parseFloat(baseOutputQty);
+    if (!isNaN(qty) && qty > 0) void runSimulationForQty(qty);
+  }, [headId, hasActiveVersion, baseOutputQty, runSimulationForQty]);
+
   async function runSimulation() {
     const qty = parseFloat(targetQty);
     if (isNaN(qty) || qty <= 0) {
       setError("Target quantity must be a positive number.");
       return;
     }
-    setLoading(true);
-    setError(null);
-    try {
-      const url = `/api/boms/heads/${encodeURIComponent(headId)}/simulate?qty=${qty}`;
-      const res = await fetch(url, { headers: { Accept: "application/json" } });
-      const json = await res.json();
-      if (!res.ok) {
-        const e = json as SimulateError;
-        setError(`${e.reason_code}: ${e.detail}`);
-      } else {
-        setResult(json as SimulateResponse);
-        onSimulated?.(String(qty));
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Request failed");
-    } finally {
-      setLoading(false);
-    }
+    await runSimulationForQty(qty);
   }
 
   if (!hasActiveVersion) {
