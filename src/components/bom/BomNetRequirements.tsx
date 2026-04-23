@@ -312,6 +312,25 @@ export function BomNetRequirements({
             )}
           </div>
 
+          {/* All-covered confirmation */}
+          {result.lines_not_covered === 0 &&
+            result.lines_partial === 0 &&
+            result.lines_no_stock_data === 0 &&
+            result.total_lines > 0 ? (
+            <div className="flex items-center gap-2 rounded-md border border-success/40 bg-success-softer px-3 py-2 text-xs text-success-fg">
+              <CheckCircle2 className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+              All materials covered — ready to produce.
+            </div>
+          ) : null}
+
+          {/* No-stock-data notice */}
+          {result.lines_no_stock_data > 0 ? (
+            <div className="flex items-start gap-2 rounded-md border border-warning/30 bg-warning-softer/60 px-3 py-2 text-xs text-warning-fg">
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+              {result.lines_no_stock_data} component{result.lines_no_stock_data === 1 ? "" : "s"} have no stock data — verify on-hand quantities manually before starting production.
+            </div>
+          ) : null}
+
           {/* Warnings */}
           {result.warnings.length > 0 ? (
             <div className="rounded-md border border-warning/40 bg-warning-softer p-3 text-xs text-warning-fg">
