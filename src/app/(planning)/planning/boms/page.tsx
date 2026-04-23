@@ -118,8 +118,8 @@ export default function PlanningBomsPage(): JSX.Element {
       {/* BOM picker */}
       {!selectedHead ? (
         <SectionCard
-          eyebrow="Step 1"
-          title="Select a BOM"
+          eyebrow="BOM picker"
+          title="Select a BOM to simulate"
           contentClassName="p-4 space-y-3"
         >
           <p className="text-xs text-fg-muted">
@@ -141,6 +141,10 @@ export default function PlanningBomsPage(): JSX.Element {
           </div>
           {headsQuery.isLoading ? (
             <p className="text-xs text-fg-muted">Loading BOMs…</p>
+          ) : headsQuery.isError ? (
+            <p className="text-xs text-danger-fg">
+              {(headsQuery.error as Error).message}
+            </p>
           ) : (
             <div className="max-h-96 overflow-y-auto rounded-md border border-border/50">
               {filtered.length === 0 ? (
@@ -185,7 +189,7 @@ export default function PlanningBomsPage(): JSX.Element {
       ) : (
         <>
           {/* Selected BOM header */}
-          <SectionCard contentClassName="px-4 py-3">
+          <SectionCard eyebrow="Simulating" contentClassName="px-4 py-3">
             <div className="flex items-center justify-between gap-3">
               <div>
                 <div className="text-sm font-semibold text-fg">
