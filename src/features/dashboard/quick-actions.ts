@@ -139,7 +139,7 @@ export const QUICK_ACTIONS: readonly QuickAction[] = [
     category: "admin",
   },
   {
-    href: "/admin/boms",
+    href: "/admin/masters/boms",
     label: "BOMs",
     blurb: "BOM heads + versions + line structure.",
     icon: Network,

@@ -21,8 +21,9 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, Search } from "lucide-react";
+import { AlertTriangle, ArrowUpRight, Search } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
@@ -177,9 +178,9 @@ export default function AdminMastersBomsListPage(): JSX.Element {
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b border-border/70 bg-bg-subtle/60">
-                  <Th>Item</Th>
-                  <Th>BOM head</Th>
-                  <Th>Supply method</Th>
+                  <Th>BOM / Item</Th>
+                  <Th align="right">Output</Th>
+                  <Th>Type</Th>
                   <Th>Active version</Th>
                   <Th align="right">Versions</Th>
                   <Th>Status</Th>
@@ -213,9 +214,9 @@ function BomHeadListRow({
   head: BomHeadRow;
   item: ItemRow | null;
 }): JSX.Element {
-  // Per-row version count — small catalog (<200 heads) makes N+1 acceptable
-  // at current scale. Matches the AMMC slice 6 pattern (readinessQuery on
-  // each row) that already ships without measurable UI lag.
+  const router = useRouter();
+  const bomHref = `/admin/masters/boms/${encodeURIComponent(head.bom_head_id)}`;
+
   const versionsQuery = useQuery<ListEnvelope<BomVersionRow>>({
     queryKey: ["admin", "masters", "bom_version", "by-head", head.bom_head_id],
     queryFn: () =>
@@ -227,31 +228,47 @@ function BomHeadListRow({
   const versionCount =
     versionsQuery.data?.count ?? versionsQuery.data?.rows.length ?? null;
 
+  const activeVersionLabel = versionsQuery.data?.rows.find(
+    (v) => v.bom_version_id === head.active_version_id,
+  )?.version_label ?? null;
+
+  const displayName =
+    item?.item_name ?? head.parent_name ?? head.parent_ref_id;
+
   return (
-    <tr className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40">
+    <tr
+      className="cursor-pointer border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
+      onClick={() => router.push(bomHref)}
+    >
+      {/* BOM / Item — whole row clicks to BOM head; item external-links separately */}
       <td className="px-3 py-2">
-        {item ? (
-          <Link
-            href={`/admin/masters/items/${encodeURIComponent(item.item_id)}`}
-            className="font-medium text-fg hover:text-accent"
-          >
-            {item.item_name}
-          </Link>
-        ) : (
-          <span className="text-fg-muted">{head.parent_name ?? head.parent_ref_id}</span>
-        )}
+        <div className="flex items-center gap-1.5">
+          <span className="font-medium text-fg">{displayName}</span>
+          {item && (
+            <Link
+              href={`/admin/masters/items/${encodeURIComponent(item.item_id)}`}
+              className="shrink-0 text-fg-faint hover:text-accent"
+              title={`Open item ${item.item_id}`}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <ArrowUpRight className="h-3 w-3" strokeWidth={2} />
+            </Link>
+          )}
+        </div>
         <div className="text-3xs font-mono text-fg-subtle">
-          {head.parent_ref_id}
+          {head.bom_head_id}
         </div>
       </td>
-      <td className="px-3 py-2 text-xs font-mono text-fg-muted">
-        <Link
-          href={`/admin/masters/boms/${encodeURIComponent(head.bom_head_id)}`}
-          className="hover:text-accent"
-        >
-          {head.bom_head_id}
-        </Link>
+      {/* Output — what this BOM produces */}
+      <td className="px-3 py-2 text-right font-mono text-xs tabular-nums text-fg-muted">
+        {head.final_bom_output_qty}
+        {head.final_bom_output_uom ? (
+          <span className="ml-1 font-sans text-3xs text-fg-subtle">
+            {head.final_bom_output_uom}
+          </span>
+        ) : null}
       </td>
+      {/* Type badge */}
       <td className="px-3 py-2">
         {item ? (
           <Badge tone="info" dotted>
@@ -263,17 +280,28 @@ function BomHeadListRow({
           </Badge>
         )}
       </td>
+      {/* Active version — show human-readable label, not UUID */}
       <td className="px-3 py-2">
         {head.active_version_id ? (
-          <span className="font-mono text-3xs text-fg-muted">
-            {head.active_version_id.slice(0, 8)}…
-          </span>
+          versionsQuery.isLoading ? (
+            <span className="text-3xs text-fg-subtle">…</span>
+          ) : (
+            <Link
+              href={`${bomHref}/${encodeURIComponent(head.active_version_id)}`}
+              className="font-mono text-xs font-medium text-success-fg hover:underline"
+              onClick={(e) => e.stopPropagation()}
+            >
+              {activeVersionLabel ?? head.active_version_id.slice(0, 8)}
+            </Link>
+          )
         ) : (
           <Badge tone="warning" dotted>
-            <AlertTriangle className="mr-1 inline h-3 w-3" /> No active
+            <AlertTriangle className="mr-1 inline h-3 w-3" strokeWidth={2} />
+            No active
           </Badge>
         )}
       </td>
+      {/* Version count */}
       <td className="px-3 py-2 text-right font-mono text-xs tabular-nums text-fg-muted">
         {versionsQuery.isLoading ? (
           <span className="text-3xs text-fg-subtle">…</span>

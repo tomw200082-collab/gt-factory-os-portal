@@ -192,6 +192,13 @@ export const NAV_MANIFEST: NavGroup[] = [
         min_role: "viewer",
         required_capability: "planning:read",
       },
+      {
+        href: "/planning/boms",
+        label: "BOM Simulation",
+        icon: Network,
+        min_role: "viewer",
+        required_capability: "planning:read",
+      },
     ],
   },
   {
