@@ -7,20 +7,25 @@
 // 4 tabs:
 //   - overview          LIVE   — supplier row fields via list + client-filter
 //   - supplier-items    LIVE   — /api/supplier-items?supplier_id=<id>
-//   - po-history        LIVE   — /api/purchase-orders?supplier_id=<id> (supported
-//                                by upstream schema — verified 2026-04-22)
+//                                Loop 11: added inline cost edit per row
+//                                (PATCH /api/supplier-items/:id with
+//                                std_cost_per_inv_uom + if_match_updated_at).
+//                                Note: GET list does not return
+//                                std_cost_per_inv_uom (not in backend query
+//                                schema); current cost always shows "—" until
+//                                a value is entered and saved; edit field
+//                                starts blank. updated_at IS returned and is
+//                                used for optimistic concurrency.
+//   - po-history        LIVE   — /api/purchase-orders?supplier_id=<id>
 //   - exceptions        LIVE   — /api/exceptions client-filtered by
-//                                related_entity_id (also scans for
-//                                related_entity_type='supplier')
+//                                related_entity_id
 //
 // Linkage card: components sourced (via supplier-items), recent POs, GI mapping.
-//
-// View-only (Tranche D boundary).
 // ---------------------------------------------------------------------------
 
-import { use } from "react";
+import { use, useState, useCallback } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import {
   DetailPage,
   DetailFieldGrid,
@@ -71,6 +76,10 @@ interface SupplierItemRow {
   lead_time_days: number | null;
   moq: string | null;
   approval_status: string | null;
+  // Note: std_cost_per_inv_uom is NOT returned by GET /api/v1/queries/supplier-items
+  // (not in backend SupplierItemRow schema). Cost always shows "—" in this list.
+  // updated_at IS returned and is used as if_match_updated_at for the PATCH.
+  updated_at: string;
 }
 
 interface SupplierItemsListResponse {
@@ -177,6 +186,138 @@ function SeverityBadge({ severity }: { severity: string }): JSX.Element {
 }
 
 // ---------------------------------------------------------------------------
+// Inline cost edit cell — Loop 11.
+// Renders "—" by default (std_cost not in GET list response).
+// On click, shows a number input. On save, PATCHes
+//   /api/supplier-items/:supplier_item_id with
+//   { std_cost_per_inv_uom, if_match_updated_at, idempotency_key }.
+// On success, invalidates the supplier-items query cache so the table
+// refreshes (which will show "—" again since the GET list does not return the
+// cost column — the user gets confirmation via the success text).
+// ---------------------------------------------------------------------------
+
+interface CostPatchBody {
+  std_cost_per_inv_uom: number | null;
+  if_match_updated_at: string;
+  idempotency_key: string;
+}
+
+async function patchSupplierItemCost(
+  supplierItemId: string,
+  body: CostPatchBody,
+): Promise<void> {
+  const res = await fetch(
+    `/api/supplier-items/${encodeURIComponent(supplierItemId)}`,
+    {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    },
+  );
+  if (!res.ok) {
+    const text = await res.text().catch(() => "");
+    throw new Error(`PATCH failed (HTTP ${res.status}): ${text}`);
+  }
+}
+
+function CostEditCell({
+  supplierItemId,
+  updatedAt,
+  queryKey,
+}: {
+  supplierItemId: string;
+  updatedAt: string;
+  queryKey: readonly unknown[];
+}): JSX.Element {
+  const queryClient = useQueryClient();
+  const [editing, setEditing] = useState(false);
+  const [inputValue, setInputValue] = useState("");
+  const [saved, setSaved] = useState(false);
+
+  const mutation = useMutation({
+    mutationFn: (body: CostPatchBody) =>
+      patchSupplierItemCost(supplierItemId, body),
+    onSuccess: () => {
+      setSaved(true);
+      setEditing(false);
+      void queryClient.invalidateQueries({ queryKey: queryKey as string[] });
+    },
+  });
+
+  const handleSave = useCallback(() => {
+    const trimmed = inputValue.trim();
+    const parsed = trimmed === "" ? null : Number(trimmed);
+    if (trimmed !== "" && (isNaN(parsed as number) || (parsed as number) < 0)) {
+      return; // invalid — don't submit
+    }
+    mutation.mutate({
+      std_cost_per_inv_uom: parsed,
+      if_match_updated_at: updatedAt,
+      idempotency_key: crypto.randomUUID(),
+    });
+  }, [inputValue, updatedAt, mutation]);
+
+  const handleKeyDown = useCallback(
+    (e: React.KeyboardEvent<HTMLInputElement>) => {
+      if (e.key === "Enter") handleSave();
+      if (e.key === "Escape") { setEditing(false); setInputValue(""); setSaved(false); }
+    },
+    [handleSave],
+  );
+
+  if (editing) {
+    return (
+      <span className="inline-flex items-center gap-1">
+        <input
+          type="number"
+          min="0"
+          step="0.0001"
+          value={inputValue}
+          onChange={(e) => setInputValue(e.target.value)}
+          onKeyDown={handleKeyDown}
+          placeholder="0.0000"
+          autoFocus
+          className="w-24 rounded border border-border px-1.5 py-0.5 text-xs font-mono focus:outline-none focus:ring-1 focus:ring-accent"
+        />
+        <button
+          onClick={handleSave}
+          disabled={mutation.isPending}
+          className="rounded bg-accent px-1.5 py-0.5 text-xs text-white hover:opacity-80 disabled:opacity-50"
+        >
+          {mutation.isPending ? "…" : "Save"}
+        </button>
+        <button
+          onClick={() => { setEditing(false); setInputValue(""); }}
+          className="rounded px-1 py-0.5 text-xs text-fg-muted hover:text-fg"
+        >
+          ✕
+        </button>
+        {mutation.isError ? (
+          <span className="text-xs text-red-600" title={(mutation.error as Error).message}>
+            Error
+          </span>
+        ) : null}
+      </span>
+    );
+  }
+
+  return (
+    <span className="inline-flex items-center gap-1.5">
+      <span className="text-fg-faint">—</span>
+      {saved ? (
+        <span className="text-xs text-green-600">Saved</span>
+      ) : null}
+      <button
+        onClick={() => { setEditing(true); setSaved(false); }}
+        className="rounded px-1 py-0.5 text-3xs text-fg-subtle hover:bg-bg-subtle hover:text-fg"
+      >
+        Edit cost
+      </button>
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
@@ -195,8 +336,16 @@ export default function AdminSupplierDetailPage({
     (r) => r.supplier_id === supplier_id,
   );
 
+  const supplierItemsQueryKey = [
+    "admin",
+    "masters",
+    "supplier",
+    supplier_id,
+    "supplier-items",
+  ] as const;
+
   const supplierItemsQuery = useQuery<SupplierItemsListResponse>({
-    queryKey: ["admin", "masters", "supplier", supplier_id, "supplier-items"],
+    queryKey: supplierItemsQueryKey,
     queryFn: () =>
       fetchJson(
         `/api/supplier-items?supplier_id=${encodeURIComponent(supplier_id)}&limit=1000`,
@@ -333,6 +482,9 @@ export default function AdminSupplierDetailPage({
                 <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Approval
                 </th>
+                <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Std cost (ILS)
+                </th>
               </tr>
             </thead>
             <tbody>
@@ -387,6 +539,13 @@ export default function AdminSupplierDetailPage({
                     ) : (
                       <span className="text-fg-faint">—</span>
                     )}
+                  </td>
+                  <td className="px-3 py-2 text-right">
+                    <CostEditCell
+                      supplierItemId={r.supplier_item_id}
+                      updatedAt={r.updated_at}
+                      queryKey={supplierItemsQueryKey}
+                    />
                   </td>
                 </tr>
               ))}

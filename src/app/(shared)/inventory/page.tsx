@@ -20,6 +20,7 @@ interface StockValueRow {
   item_id: string;
   unit_cost_ils: string | null;
   total_value_ils: string | null;
+  supply_method: string | null;
 }
 
 interface StockValueResponse {
@@ -75,7 +76,7 @@ function OnHandCell({ value }: { value: string }) {
   );
 }
 
-type ValueMap = Map<string, { unit_cost: string | null; total_value: string | null }>;
+type ValueMap = Map<string, { unit_cost: string | null; total_value: string | null; supply_method: string | null }>;
 
 function StockTable({
   rows,
@@ -131,10 +132,30 @@ function StockTable({
                 </td>
                 <td className="py-2 pr-4 text-gray-600">{row.base_uom ?? "—"}</td>
                 <td className="py-2 pr-4 text-right text-gray-600">
-                  {v ? fmtIls(v.unit_cost) : "—"}
+                  {v && v.unit_cost !== null
+                    ? fmtIls(v.unit_cost)
+                    : (() => {
+                        if (row.item_type === "FG" && v?.supply_method === "MANUFACTURED") {
+                          return <span className="text-xs text-gray-400 italic">Computed (Phase 2)</span>;
+                        }
+                        if (v !== null) {
+                          return <span className="text-xs text-amber-600">Cost not set</span>;
+                        }
+                        return <span>—</span>;
+                      })()}
                 </td>
                 <td className="py-2 pr-4 text-right font-medium text-gray-800">
-                  {v ? fmtIls(v.total_value) : "—"}
+                  {v && v.total_value !== null
+                    ? fmtIls(v.total_value)
+                    : (() => {
+                        if (row.item_type === "FG" && v?.supply_method === "MANUFACTURED") {
+                          return <span className="text-xs text-gray-400 italic">Computed (Phase 2)</span>;
+                        }
+                        if (v !== null) {
+                          return <span className="text-xs text-amber-600">Cost not set</span>;
+                        }
+                        return <span>—</span>;
+                      })()}
                 </td>
                 <td className="py-2 text-gray-500">{formatDate(row.last_event_at)}</td>
               </tr>
@@ -175,6 +196,7 @@ export default function InventoryPage() {
       m.set(`${r.item_type}:${r.item_id}`, {
         unit_cost: r.unit_cost_ils,
         total_value: r.total_value_ils,
+        supply_method: r.supply_method,
       });
     }
     return m;
@@ -200,6 +222,9 @@ export default function InventoryPage() {
             </span>
             <div className="mt-0.5 text-xl font-semibold text-gray-900">
               {fmtIls(valueData.total_value_ils)}
+            </div>
+            <div className="mt-0.5 text-xs text-gray-500">
+              RM &amp; packaging + purchased finished goods. Manufactured FG value computed separately.
             </div>
           </div>
           <div className="ml-6 border-l border-gray-200 pl-6 text-sm text-gray-500">
