@@ -186,6 +186,7 @@ interface DoneState {
   kind: "success" | "error";
   message: string;
   detail?: string;
+  itemSummary?: string;
 }
 
 export default function GoodsReceiptPage() {
@@ -377,11 +378,24 @@ export default function GoodsReceiptPage() {
         (body as { status?: unknown }).status === "posted"
       ) {
         const committed = body as GoodsReceiptCommittedResponse;
+        // Capture display context from current form state before reset clears it.
+        const supplierName =
+          suppliersQuery.data?.rows.find((s) => s.supplier_id === supplierId)
+            ?.supplier_name_official ?? supplierId;
+        const lineParts = lines
+          .map((l) => {
+            const row = receivableByKey.get(l.receivable_key);
+            if (!row || !l.quantity) return null;
+            return `${row.label} · ${l.quantity} ${l.unit}`;
+          })
+          .filter((s): s is string => s !== null);
+        const itemSummary = [supplierName, ...lineParts].join(" · ");
         setDone({
           kind: "success",
           message: committed.idempotent_replay
             ? "Receipt already posted (idempotent replay)."
             : "Receipt posted.",
+          itemSummary,
           detail: `submission_id=${committed.submission_id} · lines=${committed.lines.length}`,
         });
         // Reset form for a fresh submission
@@ -428,8 +442,13 @@ export default function GoodsReceiptPage() {
           role="status"
         >
           <div className="font-medium">{done.message}</div>
+          {done.itemSummary ? (
+            <div className="mt-1 text-xs font-medium opacity-90">
+              {done.itemSummary}
+            </div>
+          ) : null}
           {done.detail ? (
-            <div className="mt-1 font-mono text-xs opacity-80">
+            <div className="mt-1 font-mono text-xs opacity-60">
               {done.detail}
             </div>
           ) : null}

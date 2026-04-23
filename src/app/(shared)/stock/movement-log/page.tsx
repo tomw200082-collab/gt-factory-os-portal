@@ -15,6 +15,7 @@ interface LedgerRow {
   event_at: string;
   post_status: string;
   reported_by_user_id: string | null;
+  reported_by_snapshot: string | null;
   source_event_id: string | null;
   notes: string | null;
 }
@@ -28,9 +29,7 @@ const PAGE_SIZE = 100;
 
 const MOVEMENT_TYPES = [
   "GR_POSTED",
-  "WASTE_LOSS",
-  "WASTE_GAIN",
-  "COUNT_ADJUST",
+  "WASTE_POSTED",
   "production_output",
   "production_consumption",
   "production_scrap",
@@ -59,8 +58,9 @@ function buildQuery(filters: Filters, offset: number): string {
   if (filters.item_id) params.set("item_id", filters.item_id);
   if (filters.item_type) params.set("item_type", filters.item_type);
   if (filters.movement_type) params.set("movement_type", filters.movement_type);
-  if (filters.from_date) params.set("from_date", filters.from_date);
-  if (filters.to_date) params.set("to_date", filters.to_date);
+  // API expects ISO datetime params named "from"/"to"; inputs are date-only so append time bounds.
+  if (filters.from_date) params.set("from", `${filters.from_date}T00:00:00Z`);
+  if (filters.to_date) params.set("to", `${filters.to_date}T23:59:59Z`);
   params.set("limit", String(PAGE_SIZE));
   params.set("offset", String(offset));
   return params.toString();
@@ -249,8 +249,8 @@ export default function MovementLogPage() {
                     <th className="py-2 pr-4">Item</th>
                     <th className="py-2 pr-4 text-right">Qty Δ</th>
                     <th className="py-2 pr-4">UOM</th>
-                    <th className="py-2 pr-4">Status</th>
-                    <th className="py-2">Source</th>
+                    <th className="py-2 pr-4">Submitted by</th>
+                    <th className="py-2">Status</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
@@ -270,10 +270,10 @@ export default function MovementLogPage() {
                         <QtyDeltaCell value={row.qty_delta} />
                       </td>
                       <td className="py-2 pr-4 text-gray-600">{row.uom}</td>
-                      <td className="py-2 pr-4 text-gray-600">{row.post_status}</td>
-                      <td className="py-2 font-mono text-xs text-gray-400">
-                        {row.source_event_id ?? "—"}
+                      <td className="py-2 pr-4 text-gray-600">
+                        {row.reported_by_snapshot ?? (row.reported_by_user_id ? row.reported_by_user_id.slice(0, 8) + "…" : "—")}
                       </td>
+                      <td className="py-2 text-gray-600">{row.post_status}</td>
                     </tr>
                   ))}
                 </tbody>
