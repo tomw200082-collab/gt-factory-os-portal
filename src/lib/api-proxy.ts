@@ -46,21 +46,14 @@ export async function proxyRequest(
   req: Request,
   opts: ProxyOptions,
 ): Promise<Response> {
-  const apiBase = process.env.API_BASE;
+  // API_BASE (server-only) takes precedence; fall back to NEXT_PUBLIC_API_BASE
+  // so Vercel deployments that only configure the public var still work.
+  const apiBase = process.env.API_BASE ?? process.env.NEXT_PUBLIC_API_BASE;
   if (!apiBase) {
     return NextResponse.json(
       { error: "API_BASE env var not configured on server" },
       { status: 500 },
     );
-  }
-
-  const supabase = await createSupabaseServerClient();
-  const {
-    data: { session },
-  } = await supabase.auth.getSession();
-
-  if (!session?.access_token) {
-    return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
   }
 
   const forwardQuery = opts.forwardQuery ?? opts.method === "GET";
@@ -73,9 +66,27 @@ export async function proxyRequest(
     if (incoming.search) url += incoming.search;
   }
 
-  const headers: Record<string, string> = {
-    Authorization: `Bearer ${session.access_token}`,
-  };
+  const headers: Record<string, string> = {};
+
+  const devShimOn = process.env.NEXT_PUBLIC_ENABLE_DEV_SHIM_AUTH === "true";
+  if (devShimOn) {
+    // Local dev: pass fake admin session so API dev-shim path handles auth.
+    // API must be running with ENABLE_DEV_SHIM_AUTH=true.
+    headers["x-test-session"] = JSON.stringify({
+      user_id: "0db008a9-05e3-4521-8b30-42e5d444818d",
+      role: "admin",
+    });
+  } else {
+    const supabase = await createSupabaseServerClient();
+    const {
+      data: { session },
+    } = await supabase.auth.getSession();
+
+    if (!session?.access_token) {
+      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+    }
+    headers["Authorization"] = `Bearer ${session.access_token}`;
+  }
 
   let bodyInit: BodyInit | undefined;
   if (forwardBody) {
