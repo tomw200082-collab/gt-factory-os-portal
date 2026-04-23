@@ -20,7 +20,7 @@
 // is the separate BOM-deep-logic window / future Tranche J scope.
 // ---------------------------------------------------------------------------
 
-import { use, useMemo, useState } from "react";
+import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -35,6 +35,8 @@ import {
 } from "@/components/patterns/DetailPage";
 import { Badge } from "@/components/badges/StatusBadge";
 import { SectionCard } from "@/components/workflow/SectionCard";
+import { BomSimulator } from "@/components/bom/BomSimulator";
+import { BomNetRequirements } from "@/components/bom/BomNetRequirements";
 
 // --- Types (mirrored from upstream schemas) ------------------------------
 
@@ -200,6 +202,7 @@ export default function AdminMastersBomVersionDetailPage({
   }, [versionsQuery.data, version_id]);
 
   const [compareTargetId, setCompareTargetId] = useState<string | null>(null);
+  const [simulatedQty, setSimulatedQty] = useState<string | undefined>(undefined);
   const compareLinesQuery = useQuery<ListEnvelope<BomLineRow>>({
     queryKey: [
       "admin",
@@ -525,20 +528,40 @@ export default function AdminMastersBomVersionDetailPage({
     : `Version ${version_id}`;
 
   return (
-    <DetailPage
-      header={{
-        eyebrow: `Admin · Masters · BOMs · ${bom_head_id}`,
-        title,
-        description: isActive
-          ? "Active version — read-only view. Editing happens in the separate BOM editor surface."
-          : statusLower === "draft"
-            ? "Draft version — read-only here. Editing happens in the separate BOM editor surface."
-            : "Historic version — read-only audit record.",
-        meta: headerMeta,
-      }}
-      tabs={[overviewTab, linesTab, compareTab]}
-      linkages={linkages}
-    />
+    <div className="space-y-6">
+      <DetailPage
+        header={{
+          eyebrow: `Admin · Masters · BOMs · ${bom_head_id}`,
+          title,
+          description: isActive
+            ? "Active version — read-only view. Editing happens in the separate BOM editor surface."
+            : statusLower === "draft"
+              ? "Draft version — read-only here. Editing happens in the separate BOM editor surface."
+              : "Historic version — read-only audit record.",
+          meta: headerMeta,
+        }}
+        tabs={[overviewTab, linesTab, compareTab]}
+        linkages={linkages}
+      />
+      {head && (
+        <>
+          <BomSimulator
+            headId={head.bom_head_id}
+            baseOutputQty={head.final_bom_output_qty}
+            outputUom={head.final_bom_output_uom}
+            hasActiveVersion={!!head.active_version_id}
+            onSimulated={setSimulatedQty}
+          />
+          <BomNetRequirements
+            headId={head.bom_head_id}
+            baseOutputQty={head.final_bom_output_qty}
+            outputUom={head.final_bom_output_uom}
+            hasActiveVersion={!!head.active_version_id}
+            suggestedQty={simulatedQty}
+          />
+        </>
+      )}
+    </div>
   );
 }
 
