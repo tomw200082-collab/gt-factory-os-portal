@@ -27,7 +27,7 @@
 // ---------------------------------------------------------------------------
 
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { useSession } from "@/lib/auth/session-provider";
@@ -104,6 +104,37 @@ interface ItemRow {
 
 type ListEnvelope<T> = { rows: T[]; count: number };
 
+// ---------------------------------------------------------------------------
+// History row — mirrors GET /api/v1/queries/production-actuals response shape
+// (W1 backend; being deployed in parallel by W1).
+// ---------------------------------------------------------------------------
+interface ProductionActualListRow {
+  submission_id: string;
+  item_id: string;
+  item_name: string;
+  output_qty: string;
+  scrap_qty: string;
+  output_uom: string;
+  bom_version_label: string;
+  event_at: string;
+  posted_at: string;
+  consumption_count: number;
+}
+
+function fmtDate(iso: string): string {
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
 function nowLocalDateTime(): string {
   const d = new Date();
   const pad = (n: number) => String(n).padStart(2, "0");
@@ -147,6 +178,25 @@ function stringDiv(num: string, denom: string, prodQty: number): string {
 export default function ProductionActualPage() {
   const { session } = useSession();
   const canSubmit = session.role === "operator" || session.role === "admin";
+
+  const queryClient = useQueryClient();
+
+  const historyQuery = useQuery<ListEnvelope<ProductionActualListRow>>({
+    queryKey: ["production-actuals", "history"],
+    queryFn: () =>
+      fetch("/api/production-actuals/history?limit=10", {
+        headers: { Accept: "application/json" },
+      }).then((r) => {
+        // Graceful degrade: if endpoint not yet deployed, surface nothing.
+        if (!r.ok) throw new Error(`history ${r.status}`);
+        return r.json() as Promise<ListEnvelope<ProductionActualListRow>>;
+      }),
+    staleTime: 60_000,
+    // Do not throw to error boundary on 404 / 500 — endpoint may not be live yet.
+    retry: false,
+  });
+
+  const historyRows = historyQuery.data?.rows ?? [];
 
   const itemsQuery = useQuery<ListEnvelope<ItemRow>>({
     queryKey: ["master", "items", "PRODUCIBLE"],
@@ -271,10 +321,44 @@ export default function ProductionActualPage() {
             : "Production posted — output, scrap, and consumption recorded.",
           detail: `submission_id=${committed.submission_id} · consumption_rows=${committed.consumption.length}`,
         });
+        // Refresh the recent-runs history so the new submission appears immediately.
+        void queryClient.invalidateQueries({
+          queryKey: ["production-actuals", "history"],
+        });
         resetFlow();
         return;
       }
-      // 409 conflicts
+      // 409 INSUFFICIENT_STOCK — check before generic reason_code handler
+      if (
+        res.status === 409 &&
+        body &&
+        typeof body === "object" &&
+        (body as { error?: unknown }).error === "INSUFFICIENT_STOCK"
+      ) {
+        const insuffBody = body as {
+          error: string;
+          message?: string;
+          shortfalls?: Array<{
+            component_id: string;
+            required_qty: string | number;
+            available_qty: string | number;
+          }>;
+        };
+        const shortfallLines = (insuffBody.shortfalls ?? [])
+          .map(
+            (s) =>
+              `${s.component_id}: need ${s.required_qty}, have ${s.available_qty}`,
+          )
+          .join("; ");
+        setDone({
+          kind: "error",
+          message: `Insufficient stock: ${shortfallLines || (insuffBody.message ?? "check component stock levels.")}`,
+          detail: insuffBody.message,
+        });
+        setPhase("entering");
+        return;
+      }
+      // 409 conflicts (other reason_codes)
       if (
         res.status === 409 &&
         body &&
@@ -705,6 +789,90 @@ export default function ProductionActualPage() {
             </button>
           </div>
         </form>
+      ) : null}
+
+      {/* ---------------------------------------------------------------------------
+          Recent production runs — shows the last 10 submissions.
+          Section is hidden entirely when there are no rows (endpoint not yet
+          deployed, or no submissions recorded yet). Graceful degrade: if the
+          backend endpoint is not yet live, historyQuery.isError is true and
+          historyRows is empty, so the section stays hidden with no user-facing
+          error noise.
+          Output = good units produced; FG stock increases by output qty only.
+          Scrap = consumed but not usable as finished goods (FG stock unchanged).
+      --------------------------------------------------------------------------- */}
+      {historyRows.length > 0 ? (
+        <div className="mt-8">
+          <SectionCard
+            title="Recent production runs"
+            description="Last 10 submitted production actuals. Output = good units produced (FG stock increases by output qty only). Scrap = consumed but not yielded as finished goods."
+          >
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse text-xs">
+                <thead>
+                  <tr className="border-b border-border/70 bg-bg-subtle/60">
+                    <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                      Item
+                    </th>
+                    <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                      Output
+                    </th>
+                    <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                      Scrap
+                    </th>
+                    <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                      UoM
+                    </th>
+                    <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                      BOM version
+                    </th>
+                    <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                      Event time
+                    </th>
+                    <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                      Consumed
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {historyRows.map((r) => (
+                    <tr
+                      key={r.submission_id}
+                      className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
+                    >
+                      <td className="px-3 py-2">
+                        <div className="font-medium text-fg">
+                          {r.item_name}
+                        </div>
+                        <div className="font-mono text-3xs text-fg-muted">
+                          {r.item_id}
+                        </div>
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono text-fg">
+                        {r.output_qty}
+                      </td>
+                      <td className="px-3 py-2 text-right font-mono text-fg-muted">
+                        {r.scrap_qty}
+                      </td>
+                      <td className="px-3 py-2 text-fg-muted">
+                        {r.output_uom}
+                      </td>
+                      <td className="px-3 py-2 font-mono text-fg-muted">
+                        {r.bom_version_label}
+                      </td>
+                      <td className="px-3 py-2 text-fg-muted">
+                        {fmtDate(r.event_at)}
+                      </td>
+                      <td className="px-3 py-2 text-right text-fg-muted">
+                        {r.consumption_count}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </SectionCard>
+        </div>
       ) : null}
     </>
   );
