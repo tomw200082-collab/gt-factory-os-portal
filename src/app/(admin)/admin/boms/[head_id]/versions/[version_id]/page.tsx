@@ -360,6 +360,9 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
   const [publishOverrideChecked, setPublishOverrideChecked] = useState(false);
   const [publishing, setPublishing] = useState(false);
 
+  // Shared qty: syncs simulator → net-requirements so operator types qty once
+  const [simulatedQty, setSimulatedQty] = useState<string | undefined>(undefined);
+
   // --- Mutations ----------------------------------------------------------
 
   const patchLineQty = useMutation({
@@ -896,6 +899,7 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
         baseOutputQty={head.final_bom_output_qty}
         outputUom={head.final_bom_output_uom}
         hasActiveVersion={!!head.active_version_id}
+        onSimulated={setSimulatedQty}
       />
 
       {/* Net requirements / purchase assistant */}
@@ -904,6 +908,7 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
         baseOutputQty={head.final_bom_output_qty}
         outputUom={head.final_bom_output_uom}
         hasActiveVersion={!!head.active_version_id}
+        suggestedQty={simulatedQty}
       />
 
       {/* --- Drawer stack: picker + QuickCreateComponent --------------- */}

@@ -10,7 +10,7 @@
 // the shortage so the operator can make an informed decision.
 // ---------------------------------------------------------------------------
 
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   ShoppingCart,
   AlertTriangle,
@@ -129,6 +129,7 @@ interface BomNetRequirementsProps {
   baseOutputQty: string;
   outputUom: string | null;
   hasActiveVersion: boolean;
+  suggestedQty?: string;
 }
 
 export function BomNetRequirements({
@@ -136,8 +137,13 @@ export function BomNetRequirements({
   baseOutputQty,
   outputUom,
   hasActiveVersion,
+  suggestedQty,
 }: BomNetRequirementsProps): JSX.Element {
   const [targetQty, setTargetQty] = useState<string>(baseOutputQty);
+
+  useEffect(() => {
+    if (suggestedQty) setTargetQty(suggestedQty);
+  }, [suggestedQty]);
   const [result, setResult] = useState<NetRequirementsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);

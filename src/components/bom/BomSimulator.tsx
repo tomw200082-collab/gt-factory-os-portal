@@ -61,6 +61,7 @@ interface BomSimulatorProps {
   baseOutputQty: string;
   outputUom: string | null;
   hasActiveVersion: boolean;
+  onSimulated?: (qty: string) => void;
 }
 
 export function BomSimulator({
@@ -68,6 +69,7 @@ export function BomSimulator({
   baseOutputQty,
   outputUom,
   hasActiveVersion,
+  onSimulated,
 }: BomSimulatorProps): JSX.Element {
   const [targetQty, setTargetQty] = useState<string>(baseOutputQty);
   const [result, setResult] = useState<SimulateResponse | null>(null);
@@ -92,6 +94,7 @@ export function BomSimulator({
         setError(`${e.reason_code}: ${e.detail}`);
       } else {
         setResult(json as SimulateResponse);
+        onSimulated?.(String(qty));
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Request failed");
