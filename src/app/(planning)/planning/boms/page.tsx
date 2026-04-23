@@ -148,9 +148,15 @@ export default function PlanningBomsPage(): JSX.Element {
           ) : (
             <div className="max-h-96 overflow-y-auto rounded-md border border-border/50">
               {filtered.length === 0 ? (
-                <p className="px-3 py-4 text-sm text-fg-muted">
-                  No active BOMs match your search.
-                </p>
+                <div className="px-4 py-5 text-sm text-fg-muted">
+                  {query ? (
+                    "No active BOMs match your search — try a shorter term."
+                  ) : activeHeads.length === 0 ? (
+                    "No BOMs have an active version yet. Ask your admin to publish a BOM version to enable simulation."
+                  ) : (
+                    "No active BOMs match your search."
+                  )}
+                </div>
               ) : (
                 <ul className="divide-y divide-border/30">
                   {filtered.slice(0, 50).map((h) => (
