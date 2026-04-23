@@ -54,6 +54,7 @@ interface NetRequirementsResponse {
   lines_no_stock_data: number;
   availability_note: string;
   open_po_qty_note: string;
+  balances_as_of: string | null;
   lines: NetLine[];
   warnings: string[];
 }
@@ -288,6 +289,14 @@ export function BomNetRequirements({
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={2} />
             <div className="space-y-0.5">
               <div>{result.availability_note}</div>
+              {result.balances_as_of ? (
+                <div className="text-fg-muted">
+                  Stock data as of:{" "}
+                  <span className="font-mono">
+                    {new Date(result.balances_as_of).toLocaleString()}
+                  </span>
+                </div>
+              ) : null}
               <div>{result.open_po_qty_note}</div>
             </div>
           </div>
