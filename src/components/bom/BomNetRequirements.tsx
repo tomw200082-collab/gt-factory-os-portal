@@ -40,7 +40,10 @@ interface NetLine {
 
 interface NetRequirementsResponse {
   bom_head_id: string;
+  bom_type: string | null;
   item_name: string | null;
+  active_version_id: string;
+  version_label: string;
   target_qty: number;
   output_uom: string | null;
   base_output_qty: string;
@@ -227,6 +230,20 @@ export function BomNetRequirements({
       {/* Results */}
       {result ? (
         <div className="space-y-3">
+          {/* Context header — what are we making and which version */}
+          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+            {result.item_name ? (
+              <span className="text-sm font-semibold text-fg">
+                {result.item_name}
+              </span>
+            ) : null}
+            <span className="text-xs text-fg-muted">
+              version{" "}
+              <span className="font-mono font-medium text-fg">
+                {result.version_label}
+              </span>
+            </span>
+          </div>
           {/* Summary bar */}
           <div className="flex flex-wrap items-center gap-3 rounded-md border border-border/70 bg-bg-subtle/50 px-3 py-2">
             <Badge tone="info" dotted>
