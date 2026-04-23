@@ -20,6 +20,7 @@ import {
   Activity,
   Building2,
   ClipboardCheck,
+  Clock,
   Cog,
   Factory,
   Inbox,
@@ -158,11 +159,13 @@ export const NAV_MANIFEST: NavGroup[] = [
         min_role: "viewer",
         required_capability: "viewer:read",
       },
-      // /stock/submissions is a Tranche A target URL per plan §B.1 but its
-      // consolidation from legacy /my-submissions is explicitly out of
-      // Tranche A scope (plan §C.5). The nav entry is omitted for now so
-      // the zero-404 walk stays green; it will land with Tranche F or the
-      // dedicated consolidation cycle.
+      {
+        href: "/stock/submissions",
+        label: "My Submissions",
+        icon: Clock,
+        min_role: "viewer",
+        required_capability: "stock:execute",
+      },
     ],
   },
   {
