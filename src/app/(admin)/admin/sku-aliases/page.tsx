@@ -5,46 +5,36 @@
 //
 // Endgame Phase E1-UI (crystalline-drifting-dusk §B.E1):
 //
-//   Problem: LionWheel (and soon Shopify / Green Invoice) send us external
-//   SKUs that do not match our canonical `items.item_id`. When the poller
-//   receives an order line with an unknown SKU, it opens an
-//   `exceptions` row with category='lionwheel_unknown_sku'. Today there
-//   are ~42 such exceptions. The planner cannot bridge MC-U2 (LionWheel
-//   orders → planning demand) until every one of those external SKUs has
-//   an approved alias row in `private_core.integration_sku_map`.
+//   Problem: LionWheel (and Shopify) send us external SKUs / item IDs that
+//   do not match our canonical items. When the poller receives an unknown
+//   SKU/item, it opens an exceptions row:
+//     - LionWheel: category='lionwheel_unknown_sku', title='Unknown SKU <sku>'
+//     - Shopify:   category='shopify_unmapped_item', title='Unmapped FG item <item_id>'
 //
 //   This surface lets admin-Tom:
-//     1. SEE the list of unmapped external SKUs (from /api/exceptions,
-//        category=lionwheel_unknown_sku, status=open; grouped by
-//        external_sku with a count of distinct exceptions).
-//     2. CHOOSE an internal `items.item_id` for each external SKU
-//        (dropdown sourced from /api/items).
-//     3. BATCH-APPROVE the selected rows via POST /api/integration-sku-map/
-//        approve. Approval inserts/updates an `integration_sku_map` row
-//        with approval_status='approved' AND auto-resolves any matching
-//        open exceptions (the latter is the upstream handler's job).
-//     4. Review the existing ALREADY-APPROVED aliases as a read-only
-//        audit list at the bottom.
+//     1. SEE the list of unmapped external SKUs / items, filtered by channel.
+//     2. CHOOSE an internal items.item_id for each.
+//     3. BATCH-APPROVE the selected rows via POST /api/integration-sku-map/approve.
+//     4. Review the existing ALREADY-APPROVED aliases as a read-only audit list.
 //
-//   Graceful-degrade: if the upstream W1 E1-backend endpoints are not
-//   yet deployed, the query simply returns empty / errors softly — the
-//   exceptions + items panels still render, and the admin can see the
-//   problem shape even before approval is wired.
+//   Channel tabs: "LionWheel" (default) | "Shopify". The active channel is
+//   URL-backed via ?channel=shopify. The approve mutation accepts
+//   source_channel='lionwheel' or 'shopify' verbatim — confirmed in
+//   api/src/integration-sku-map/schemas.ts IntegrationSkuMapApproveAliasSchema.
 //
-// Role gate: admin only (client-defense; admin layout allows planner too,
-// so this component refuses planner explicitly).
+// Role gate: admin only.
 // ---------------------------------------------------------------------------
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useRouter, useSearchParams } from "next/navigation";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
 import { useSession } from "@/lib/auth/session-provider";
 
 // ---------------------------------------------------------------------------
-// Inline response shapes — mirror the expected W1 E1-backend envelope +
-// the existing /api/exceptions + /api/items payloads.
+// Inline response shapes
 // ---------------------------------------------------------------------------
 
 type ListEnvelope<T> = { rows: T[]; count: number };
@@ -70,8 +60,6 @@ interface ItemRow {
   family: string | null;
 }
 
-// Expected W1 E1-backend shape (best-effort; page renders gracefully if
-// envelope shape differs slightly — we tolerate unknown fields).
 interface SkuAliasRow {
   alias_id: string;
   source_channel: "lionwheel" | "shopify" | "green_invoice" | string;
@@ -83,10 +71,6 @@ interface SkuAliasRow {
   approved_at: string | null;
 }
 
-// ---------------------------------------------------------------------------
-// Derived row shape — one row per distinct external_sku on the left pane.
-// ---------------------------------------------------------------------------
-
 interface UnmappedSkuRow {
   external_sku: string;
   source_channel: string;
@@ -95,28 +79,56 @@ interface UnmappedSkuRow {
 }
 
 // ---------------------------------------------------------------------------
-// Fetch helper — graceful errors (return empty rather than throw when the
-// endpoint is unreachable, so the page renders even before W1 E1-backend
-// lands).
+// Channel configuration
 // ---------------------------------------------------------------------------
 
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`GET ${url} failed (HTTP ${res.status}): ${body}`);
-  }
-  return (await res.json()) as T;
+type ChannelKey = "lionwheel" | "shopify";
+
+interface ChannelConfig {
+  key: ChannelKey;
+  label: string;
+  exceptionCategory: string;
+  externalSkuColumnLabel: string;
+  /**
+   * Extract the external SKU from the exception title.
+   * LionWheel: "Unknown SKU <sku>"    → sku
+   * Shopify:   "Unmapped FG item <id>" → id
+   */
+  extractSku: (title: string | null | undefined) => string | null;
 }
 
-// Extract the external_sku from an exception's title field.
-// The LionWheel poller writes: title = "Unknown SKU <sku>", detail = plain
-// text "lw_task_id=..., lw_order_item_id=...". The detail field is NOT a
-// JSON object, so SKU extraction must come from title.
-function extractExternalSku(title: string | null | undefined): string | null {
-  if (!title) return null;
-  const match = title.match(/Unknown SKU (.+)$/);
-  return match ? match[1].trim() : null;
+const CHANNEL_CONFIGS: Record<ChannelKey, ChannelConfig> = {
+  lionwheel: {
+    key: "lionwheel",
+    label: "LionWheel",
+    exceptionCategory: "lionwheel_unknown_sku",
+    externalSkuColumnLabel: "External SKU",
+    extractSku: (title) => {
+      if (!title) return null;
+      // title: "Unknown SKU <sku>"
+      const match = title.match(/Unknown SKU (.+)$/);
+      return match ? match[1].trim() : null;
+    },
+  },
+  shopify: {
+    key: "shopify",
+    label: "Shopify",
+    exceptionCategory: "shopify_unmapped_item",
+    externalSkuColumnLabel: "Item ID",
+    extractSku: (title) => {
+      if (!title) return null;
+      // title: "Unmapped FG item <item_id>"
+      // Verified against supabase/functions/factory_os_jobs/index.ts line ~1837:
+      //   title: `Unmapped FG item ${item_id}`
+      const match = title.match(/Unmapped FG item (.+)$/);
+      return match ? match[1].trim() : null;
+    },
+  },
+};
+
+function parseChannel(raw: string | null): ChannelKey {
+  if (raw === "shopify") return "shopify";
+  return "lionwheel";
 }
 
 function extractSourceChannel(category: string): string {
@@ -128,11 +140,23 @@ function extractSourceChannel(category: string): string {
 }
 
 // ---------------------------------------------------------------------------
-// Page component.
+// Fetch helper
+// ---------------------------------------------------------------------------
+
+async function fetchJson<T>(url: string): Promise<T> {
+  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!res.ok) {
+    const body = await res.text().catch(() => "");
+    throw new Error(`GET ${url} failed (HTTP ${res.status}): ${body}`);
+  }
+  return (await res.json()) as T;
+}
+
+// ---------------------------------------------------------------------------
+// Page component
 // ---------------------------------------------------------------------------
 
 interface AssignmentState {
-  // external_sku -> item_id chosen from dropdown (empty string = none)
   [externalSku: string]: string;
 }
 
@@ -142,11 +166,13 @@ interface NotesState {
 
 export default function AdminSkuAliasesPage(): JSX.Element {
   const { session } = useSession();
-  const queryClient = useQueryClient();
+  const router = useRouter();
+  const searchParams = useSearchParams();
 
-  // Client-defense admin gate. Admin layout already allows planner, but the
-  // upstream handler is admin-only; make the UI truthful rather than letting
-  // a planner stage approvals the backend will 403.
+  const activeChannel = parseChannel(searchParams.get("channel"));
+  const channelCfg = CHANNEL_CONFIGS[activeChannel];
+
+  // Client-defense admin gate.
   if (session.role !== "admin") {
     return (
       <div className="card mx-auto mt-8 max-w-lg p-6 text-center">
@@ -170,13 +196,30 @@ export default function AdminSkuAliasesPage(): JSX.Element {
     | null
   >(null);
 
+  // Reset per-channel state when channel tab changes.
+  const handleChannelSwitch = (ch: ChannelKey) => {
+    if (ch === activeChannel) return;
+    setAssignments({});
+    setNotes({});
+    setSelected(new Set());
+    setBanner(null);
+    const params = new URLSearchParams(searchParams.toString());
+    if (ch === "lionwheel") {
+      params.delete("channel");
+    } else {
+      params.set("channel", ch);
+    }
+    const qs = params.toString();
+    router.replace(`/admin/sku-aliases${qs ? `?${qs}` : ""}`);
+  };
+
   // ---- Queries --------------------------------------------------------------
 
   const exceptionsQuery = useQuery<ListEnvelope<ExceptionRow>>({
-    queryKey: ["admin", "sku-aliases", "unknown-sku-exceptions"],
+    queryKey: ["admin", "sku-aliases", "exceptions", activeChannel],
     queryFn: () =>
       fetchJson(
-        "/api/exceptions?category=lionwheel_unknown_sku&status=open&limit=500",
+        `/api/exceptions?category=${channelCfg.exceptionCategory}&status=open&limit=500`,
       ),
   });
 
@@ -185,8 +228,6 @@ export default function AdminSkuAliasesPage(): JSX.Element {
     queryFn: () => fetchJson("/api/items?limit=1000"),
   });
 
-  // Existing approved aliases (read-only bottom pane). Tolerates missing
-  // endpoint — renders empty state if W1 E1-backend not yet live.
   const approvedQuery = useQuery<ListEnvelope<SkuAliasRow>>({
     queryKey: ["admin", "sku-aliases", "approved"],
     queryFn: () =>
@@ -210,13 +251,11 @@ export default function AdminSkuAliasesPage(): JSX.Element {
 
   // ---- Derived state --------------------------------------------------------
 
-  // Deduplicate exceptions by external_sku; count occurrences; earliest
-  // emitted_at wins as first_seen_at.
   const unmappedRows = useMemo<UnmappedSkuRow[]>(() => {
     const rows = exceptionsQuery.data?.rows ?? [];
     const byKey = new Map<string, UnmappedSkuRow>();
     for (const r of rows) {
-      const sku = extractExternalSku(r.title);
+      const sku = channelCfg.extractSku(r.title);
       if (!sku) continue;
       const channel = extractSourceChannel(r.category);
       const key = `${channel}::${sku}`;
@@ -238,7 +277,7 @@ export default function AdminSkuAliasesPage(): JSX.Element {
     return [...byKey.values()].sort((a, b) =>
       a.external_sku.localeCompare(b.external_sku),
     );
-  }, [exceptionsQuery.data]);
+  }, [exceptionsQuery.data, channelCfg]);
 
   const items = itemsQuery.data?.rows ?? [];
 
@@ -256,6 +295,9 @@ export default function AdminSkuAliasesPage(): JSX.Element {
   const pendingCount = pendingQuery.data?.count ?? 0;
   const approvedCount = approvedQuery.data?.count ?? approvedRows.length;
   const rejectedCount = rejectedQuery.data?.count ?? 0;
+
+  const backendLive =
+    !approvedQuery.isError && !pendingQuery.isError && !rejectedQuery.isError;
 
   // ---- Mutation -------------------------------------------------------------
 
@@ -280,7 +322,10 @@ export default function AdminSkuAliasesPage(): JSX.Element {
       const res = await fetch("/api/integration-sku-map/approve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ idempotency_key: crypto.randomUUID(), aliases: rows }),
+        body: JSON.stringify({
+          idempotency_key: crypto.randomUUID(),
+          aliases: rows,
+        }),
       });
       const body = await res.json().catch(() => null);
       if (!res.ok) {
@@ -295,12 +340,13 @@ export default function AdminSkuAliasesPage(): JSX.Element {
     onSuccess: (data, rows) => {
       const resolvedCount = data?.resolved_exceptions_count ?? 0;
       const aliasWord = rows.length === 1 ? "alias" : "aliases";
+      const channelLabel = channelCfg.label;
       setBanner({
         kind: "success",
-        message: `${rows.length} ${aliasWord} approved. ${resolvedCount} LionWheel exception${resolvedCount === 1 ? "" : "s"} resolved.`,
+        message: `${rows.length} ${aliasWord} approved. ${resolvedCount} ${channelLabel} exception${resolvedCount === 1 ? "" : "s"} resolved.`,
         detail:
           resolvedCount < rows.length
-            ? "Remaining exceptions stay open if no matching order lines were found for those SKUs."
+            ? "Remaining exceptions stay open if no matching records were found for those SKUs."
             : "All matching exceptions resolved. Refresh in ~30s to confirm.",
       });
       setSelected(new Set());
@@ -318,6 +364,8 @@ export default function AdminSkuAliasesPage(): JSX.Element {
       });
     },
   });
+
+  const queryClient = useQueryClient();
 
   // ---- Handlers -------------------------------------------------------------
 
@@ -362,7 +410,8 @@ export default function AdminSkuAliasesPage(): JSX.Element {
     if (payload.length === 0) {
       setBanner({
         kind: "error",
-        message: "Select at least one row with an item_id assignment to approve.",
+        message:
+          "Select at least one row with an item_id assignment to approve.",
       });
       return;
     }
@@ -375,8 +424,6 @@ export default function AdminSkuAliasesPage(): JSX.Element {
   const loadingItems = itemsQuery.isLoading;
   const exceptionsError = exceptionsQuery.error as Error | null;
   const itemsError = itemsQuery.error as Error | null;
-  const backendLive =
-    !approvedQuery.isError && !pendingQuery.isError && !rejectedQuery.isError;
 
   const canApprove =
     selected.size > 0 &&
@@ -388,7 +435,7 @@ export default function AdminSkuAliasesPage(): JSX.Element {
       <WorkflowHeader
         eyebrow="Admin · SKU aliases"
         title="External SKU → item_id review"
-        description="Map external SKUs observed in LionWheel (and later Shopify / Green Invoice) to our canonical items. Approved aliases unblock MC-U2 FG_OUT bridge so planning demand can include LionWheel orders."
+        description="Map external SKUs observed in LionWheel and Shopify to our canonical items. Approved aliases unblock planning demand and FG sync."
         meta={
           <>
             <Badge tone="warning" dotted>
@@ -415,6 +462,28 @@ export default function AdminSkuAliasesPage(): JSX.Element {
           </>
         }
       />
+
+      {/* ---- Channel tabs ------------------------------------------------- */}
+      <div className="flex gap-1 border-b border-border/60">
+        {(["lionwheel", "shopify"] as ChannelKey[]).map((ch) => {
+          const cfg = CHANNEL_CONFIGS[ch];
+          const isActive = activeChannel === ch;
+          return (
+            <button
+              key={ch}
+              type="button"
+              onClick={() => handleChannelSwitch(ch)}
+              className={
+                isActive
+                  ? "px-4 py-2 text-sm font-semibold text-accent border-b-2 border-accent -mb-px"
+                  : "px-4 py-2 text-sm text-fg-muted hover:text-fg border-b-2 border-transparent -mb-px"
+              }
+            >
+              {cfg.label}
+            </button>
+          );
+        })}
+      </div>
 
       {banner ? (
         <div
@@ -458,21 +527,28 @@ export default function AdminSkuAliasesPage(): JSX.Element {
 
       {/* --------- Left pane: unmapped external SKUs --------------- */}
       <SectionCard
-        eyebrow="Step 1"
+        eyebrow={`Step 1 · ${channelCfg.label}`}
         title="Unmapped external SKUs"
-        description="Grouped by external_sku (multiple exceptions per SKU = same SKU seen on multiple orders). Assign each to an internal item, then select rows and click Approve."
+        description={
+          activeChannel === "lionwheel"
+            ? "Grouped by external_sku (multiple exceptions per SKU = same SKU seen on multiple orders). Assign each to an internal item, then select rows and click Approve."
+            : "Shopify FG items with no approved alias. Each exception corresponds to one FG item scanned during sync that has no integration_sku_map row. Assign a canonical item_id to each, then approve."
+        }
         contentClassName="p-0"
       >
         {loadingExceptions ? (
-          <div className="p-5 text-sm text-fg-muted">Loading exceptions…</div>
+          <div className="p-5 text-sm text-fg-muted">
+            Loading {channelCfg.label} exceptions…
+          </div>
         ) : exceptionsError ? (
           <div className="p-5 text-sm text-danger-fg">
             Failed to load exceptions: {exceptionsError.message}
           </div>
         ) : unmappedRows.length === 0 ? (
           <div className="p-5 text-sm text-fg-muted">
-            No unmapped SKU exceptions open. All LionWheel SKUs either resolve
-            through an approved alias or have not been observed yet.
+            {activeChannel === "shopify"
+              ? "No unmapped Shopify FG item exceptions open. Either all items have approved aliases, or no sync cycle has run yet."
+              : "No unmapped SKU exceptions open. All LionWheel SKUs either resolve through an approved alias or have not been observed yet."}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -496,7 +572,7 @@ export default function AdminSkuAliasesPage(): JSX.Element {
                     />
                   </th>
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    External SKU
+                    {channelCfg.externalSkuColumnLabel}
                   </th>
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Source
@@ -561,9 +637,6 @@ export default function AdminSkuAliasesPage(): JSX.Element {
                               ...prev,
                               [row.external_sku]: v,
                             }));
-                            // If row had no assignment previously and is
-                            // selected, clear selection (invariant: selected
-                            // rows must have an assignment).
                             if (!v && isSelected) {
                               setSelected((prev) => {
                                 const next = new Set(prev);
@@ -686,7 +759,9 @@ export default function AdminSkuAliasesPage(): JSX.Element {
         contentClassName="p-0"
       >
         {approvedQuery.isLoading ? (
-          <div className="p-5 text-sm text-fg-muted">Loading approved aliases…</div>
+          <div className="p-5 text-sm text-fg-muted">
+            Loading approved aliases…
+          </div>
         ) : approvedQuery.isError ? (
           <div className="p-5 text-sm text-fg-muted">
             Approved-alias list not available yet. W1 E1-backend endpoint{" "}
