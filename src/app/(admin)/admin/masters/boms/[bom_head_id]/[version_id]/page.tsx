@@ -43,6 +43,7 @@ interface BomHeadRow {
   bom_kind: string;
   display_family: string | null;
   parent_ref_id: string;
+  parent_name: string | null;
   active_version_id: string | null;
   final_bom_output_qty: string;
   final_bom_output_uom: string | null;
@@ -473,7 +474,7 @@ export default function AdminMastersBomVersionDetailPage({
         {
           label: head.bom_head_id,
           href: `/admin/masters/boms/${encodeURIComponent(head.bom_head_id)}`,
-          subtitle: item ? `${item.item_name} · ${head.bom_kind}` : head.bom_kind,
+          subtitle: item ? `${item.item_name} · ${head.bom_kind}` : (head.parent_name ? `${head.parent_name} · ${head.bom_kind}` : head.bom_kind),
         },
       ],
     });
