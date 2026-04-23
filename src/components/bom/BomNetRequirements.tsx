@@ -312,9 +312,19 @@ export function BomNetRequirements({
                   </tr>
                 </thead>
                 <tbody>
-                  {result.lines.map((line) => (
-                    <NetRequirementsRow key={line.line_no} line={line} />
-                  ))}
+                  {[...result.lines]
+                    .sort((a, b) => {
+                      const order: Record<CoverageStatus, number> = {
+                        not_covered: 0,
+                        partial: 1,
+                        no_stock_data: 2,
+                        covered: 3,
+                      };
+                      return order[a.coverage_status] - order[b.coverage_status];
+                    })
+                    .map((line) => (
+                      <NetRequirementsRow key={line.line_no} line={line} />
+                    ))}
                 </tbody>
               </table>
             </div>
