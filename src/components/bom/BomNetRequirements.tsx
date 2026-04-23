@@ -424,9 +424,16 @@ function NetRequirementsRow({ line }: { line: NetLine }): JSX.Element {
             : "text-fg-muted"
         }`}
       >
-        {parseFloat(line.net_shortage_qty) > 0
-          ? formatQty(line.net_shortage_qty)
-          : "—"}
+        {parseFloat(line.net_shortage_qty) > 0 ? (
+          <>
+            {formatQty(line.net_shortage_qty)}
+            {line.component_uom ? (
+              <span className="ml-1 font-sans text-3xs font-normal text-danger-fg/70">
+                {line.component_uom}
+              </span>
+            ) : null}
+          </>
+        ) : "—"}
       </td>
       <td className="px-3 py-2 text-xs text-fg-muted">
         {line.component_uom ?? "—"}
@@ -439,7 +446,13 @@ function NetRequirementsRow({ line }: { line: NetLine }): JSX.Element {
           <div>
             <div className="text-xs text-fg">{line.supplier_short}</div>
             {line.supplier_phone ? (
-              <div className="text-3xs font-mono text-fg-subtle">{line.supplier_phone}</div>
+              <a
+                href={`tel:${line.supplier_phone.replace(/\s/g, "")}`}
+                className="text-3xs font-mono text-accent hover:underline"
+                onClick={(e) => e.stopPropagation()}
+              >
+                {line.supplier_phone}
+              </a>
             ) : null}
           </div>
         ) : (
