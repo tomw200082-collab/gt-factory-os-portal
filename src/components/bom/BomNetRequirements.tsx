@@ -20,6 +20,8 @@ import {
   Info,
   ChevronRight,
   RefreshCw,
+  Copy,
+  Check,
 } from "lucide-react";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
@@ -145,6 +147,7 @@ export function BomNetRequirements({
   const [result, setResult] = useState<NetRequirementsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [copied, setCopied] = useState(false);
 
   const runNetReqForQty = useCallback(
     async (qty: number) => {
@@ -334,6 +337,43 @@ export function BomNetRequirements({
               <div>{result.open_po_qty_note}</div>
             </div>
           </div>
+
+          {/* Copy shortage list */}
+          {(result.lines_not_covered > 0 || result.lines_partial > 0) ? (
+            <div className="flex justify-end">
+              <button
+                type="button"
+                className="btn-secondary inline-flex items-center gap-1.5 text-xs"
+                onClick={() => {
+                  const shortLines = result.lines.filter(
+                    (l) => l.coverage_status === "not_covered" || l.coverage_status === "partial",
+                  );
+                  const header = `Shortage list — ${result.item_name ?? result.bom_head_id} (v${result.version_label}) — ${result.target_qty} ${result.output_uom ?? "units"}`;
+                  const rows = shortLines.map((l) => {
+                    const shortage = parseFloat(l.net_shortage_qty) > 0
+                      ? `short ${formatQty(l.net_shortage_qty)} ${l.component_uom ?? ""}`
+                      : "partial";
+                    const supplier = l.supplier_short
+                      ? `— ${l.supplier_short}${l.supplier_phone ? ` ${l.supplier_phone}` : ""}`
+                      : "";
+                    return `  • ${l.component_name}: need ${formatQty(l.gross_required_qty)} ${l.component_uom ?? ""}, have ${formatQty(l.available_qty)} ${l.component_uom ?? ""}, ${shortage} ${supplier}`;
+                  });
+                  const text = [header, "", ...rows].join("\n");
+                  void navigator.clipboard.writeText(text).then(() => {
+                    setCopied(true);
+                    setTimeout(() => setCopied(false), 2000);
+                  });
+                }}
+              >
+                {copied ? (
+                  <Check className="h-3.5 w-3.5 text-success-fg" strokeWidth={2} />
+                ) : (
+                  <Copy className="h-3.5 w-3.5" strokeWidth={2} />
+                )}
+                {copied ? "Copied!" : "Copy shortage list"}
+              </button>
+            </div>
+          ) : null}
 
           {/* Lines table */}
           {result.lines.length === 0 ? (
