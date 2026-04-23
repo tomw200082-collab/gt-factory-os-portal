@@ -276,7 +276,7 @@ export default function AdminSkuAliasesPage(): JSX.Element {
       const res = await fetch("/api/integration-sku-map/approve", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ aliases: rows }),
+        body: JSON.stringify({ idempotency_key: crypto.randomUUID(), aliases: rows }),
       });
       const body = await res.json().catch(() => null);
       if (!res.ok) {
