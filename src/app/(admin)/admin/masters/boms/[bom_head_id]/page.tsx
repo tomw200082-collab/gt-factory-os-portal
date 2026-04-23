@@ -215,9 +215,6 @@ export default function AdminMastersBomHeadDetailPage({
       <Badge tone="neutral" dotted>
         {head.final_bom_output_qty} {head.final_bom_output_uom ?? ""}
       </Badge>
-      <Badge tone="info" dotted>
-        view-only
-      </Badge>
     </>
   ) : null;
 

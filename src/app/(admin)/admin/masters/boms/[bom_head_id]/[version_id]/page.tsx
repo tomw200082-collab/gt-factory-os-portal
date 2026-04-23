@@ -247,9 +247,6 @@ export default function AdminMastersBomVersionDetailPage({
           {item.supply_method}
         </Badge>
       ) : null}
-      <Badge tone="info" dotted>
-        view-only
-      </Badge>
     </>
   ) : null;
 
@@ -285,9 +282,9 @@ export default function AdminMastersBomVersionDetailPage({
         );
       }
       const rows: FieldRow[] = [
-        { label: "bom_version_id", value: version.bom_version_id, mono: true },
+        { label: "Version ID", value: version.bom_version_id, mono: true },
         {
-          label: "bom_head_id",
+          label: "BOM head",
           value: (
             <Link
               href={`/admin/masters/boms/${encodeURIComponent(
@@ -300,9 +297,9 @@ export default function AdminMastersBomVersionDetailPage({
           ),
           mono: true,
         },
-        { label: "version_label", value: version.version_label, mono: true },
+        { label: "Label", value: version.version_label, mono: true },
         {
-          label: "status",
+          label: "Status",
           value: (
             <VersionStatusBadge
               version={version}
@@ -310,11 +307,11 @@ export default function AdminMastersBomVersionDetailPage({
             />
           ),
         },
-        { label: "created_at", value: fmtDateTime(version.created_at) },
-        { label: "activated_at", value: fmtDateTime(version.activated_at) },
-        { label: "updated_at", value: fmtDateTime(version.updated_at) },
+        { label: "Created", value: fmtDateTime(version.created_at) },
+        { label: "Activated", value: fmtDateTime(version.activated_at) },
+        { label: "Last updated", value: fmtDateTime(version.updated_at) },
         {
-          label: "final_bom_output",
+          label: "Base batch output",
           value: `${head.final_bom_output_qty} ${head.final_bom_output_uom ?? ""}`,
           mono: true,
         },
@@ -534,10 +531,10 @@ export default function AdminMastersBomVersionDetailPage({
           eyebrow: `Admin · Masters · BOMs · ${bom_head_id}`,
           title,
           description: isActive
-            ? "Active version — read-only view. Editing happens in the separate BOM editor surface."
+            ? "Active version — component lines and quantities below. Use the simulator to check material coverage."
             : statusLower === "draft"
-              ? "Draft version — read-only here. Editing happens in the separate BOM editor surface."
-              : "Historic version — read-only audit record.",
+              ? "Draft version — component lines are editable in the BOM editor. Simulation requires an active version."
+              : "Historic version — read-only audit record of a superseded formula.",
           meta: headerMeta,
         }}
         tabs={[overviewTab, linesTab, compareTab]}
