@@ -15,7 +15,7 @@
 // ---------------------------------------------------------------------------
 
 import { useState } from "react";
-import { Calculator, AlertTriangle, ChevronRight } from "lucide-react";
+import { Calculator, AlertTriangle, ChevronRight, RefreshCw } from "lucide-react";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
 
@@ -75,6 +75,11 @@ export function BomSimulator({
   const [result, setResult] = useState<SimulateResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const isStale =
+    result !== null &&
+    !loading &&
+    parseFloat(targetQty) !== result.target_qty;
 
   async function runSimulation() {
     const qty = parseFloat(targetQty);
@@ -177,25 +182,26 @@ export function BomSimulator({
 
       {/* Results */}
       {result ? (
-        <div className="space-y-2">
-          {/* Context header — what are we making and which version */}
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <div className={`space-y-2 ${isStale ? "opacity-60" : ""}`}>
+          {/* Staleness banner */}
+          {isStale ? (
+            <div className="flex items-center gap-2 rounded-md border border-warning/40 bg-warning-softer px-3 py-2 text-xs text-warning-fg">
+              <RefreshCw className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+              Quantity changed — click Simulate to update results.
+            </div>
+          ) : null}
+          {/* Summary */}
+          <div className="flex flex-wrap items-center gap-3 rounded-md border border-border/70 bg-bg-subtle/50 px-3 py-2">
             {result.item_name ? (
               <span className="text-sm font-semibold text-fg">
                 {result.item_name}
               </span>
             ) : null}
-            <span className="text-xs text-fg-muted">
-              version{" "}
-              <span className="font-mono font-medium text-fg">
-                {result.version_label}
-              </span>
-            </span>
-          </div>
-          {/* Summary */}
-          <div className="flex flex-wrap items-center gap-3 rounded-md border border-border/70 bg-bg-subtle/50 px-3 py-2">
             <Badge tone="info" dotted>
               {result.target_qty} {result.output_uom ?? "units"} of output
+            </Badge>
+            <Badge tone="success" dotted>
+              v{result.version_label}
             </Badge>
             <span className="text-3xs font-mono text-fg-muted">
               {result.math_note}
