@@ -84,6 +84,7 @@ interface BomHeadRow {
   bom_head_id: string;
   bom_kind: string;
   parent_ref_id: string;
+  parent_name: string | null;
   active_version_id: string | null;
   final_bom_output_qty: string;
   final_bom_output_uom: string | null;
@@ -681,12 +682,12 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
           className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-sops text-fg-muted hover:text-fg"
         >
           <ArrowLeft className="h-3 w-3" strokeWidth={2.5} />
-          {item?.item_name ?? head.parent_ref_id} · versions
+          {item?.item_name ?? head.parent_name ?? head.parent_ref_id} · versions
         </Link>
       </div>
 
       <WorkflowHeader
-        eyebrow={`Admin · BOM · ${item?.item_id ?? head.parent_ref_id} · ${head.bom_head_id}`}
+        eyebrow={`Admin · BOM · ${item?.item_id ?? head.parent_name ?? head.parent_ref_id} · ${head.bom_head_id}`}
         title={`BOM v${version.version_label}`}
         description={
           isDraft
