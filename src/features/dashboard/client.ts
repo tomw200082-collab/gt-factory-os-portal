@@ -203,17 +203,54 @@ export async function fetchIntegrationFreshness(): Promise<
   );
 }
 
+interface AdminJobRow {
+  job_name: string;
+  last_status: string | null;
+  last_error: string | null;
+  run_count_24h: number;
+  failed_count_24h: number;
+  skipped_count_24h: number;
+}
+
 /**
  * Jobs 24h health (DR-6).
  *
- * No portal proxy for /api/job-runs or /api/jobs. Returns pending_tranche_i.
- * When an endpoint lands, project {successes, failures, skipped} counts AS
- * SEPARATE BUCKETS — skipped does NOT count as a failure nor as a success.
+ * Reads /api/admin/jobs (proxied to GET /api/v1/queries/admin/jobs).
+ * Aggregates run_count_24h / failed_count_24h / skipped_count_24h across all
+ * jobs. DR-6: skipped counts separately, not merged into failures or successes.
  */
-export async function fetchJobsHealth24h(): Promise<Signal<JobsHealth24h>> {
-  return pending<JobsHealth24h>(
-    "Jobs 24h health ({successes, failures, skipped}) pending backend endpoint (Tranche I).",
-  );
+export async function fetchJobsHealth24h(
+  signal?: AbortSignal,
+): Promise<Signal<JobsHealth24h>> {
+  const res = await get<{ rows: AdminJobRow[] }>("/api/admin/jobs", { signal });
+  if (!res.ok) return unavailable(res);
+  const rows = res.data.rows;
+  let successes = 0;
+  let failures = 0;
+  let skipped = 0;
+  let lastErr: string | null = null;
+  for (const row of rows) {
+    failures += Number(row.failed_count_24h ?? 0);
+    skipped += Number(row.skipped_count_24h ?? 0);
+    successes += Math.max(
+      0,
+      Number(row.run_count_24h ?? 0) -
+        Number(row.failed_count_24h ?? 0) -
+        Number(row.skipped_count_24h ?? 0),
+    );
+    if (row.last_status === "failed" && row.last_error && !lastErr) {
+      lastErr = `${row.job_name}: ${row.last_error}`;
+    }
+  }
+  return {
+    state: "ok",
+    data: {
+      successes,
+      failures,
+      skipped,
+      last_failure_reason: lastErr ?? undefined,
+    },
+  };
 }
 
 /**

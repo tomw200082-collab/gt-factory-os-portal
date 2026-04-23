@@ -125,6 +125,8 @@ interface RecommendationRow {
   component_name: string | null;
   supplier_name: string | null;
   converted_to_po_id?: string | null;
+  uom: string | null;
+  current_stock_bal: string | null;
 }
 
 interface RecsResponse {
@@ -777,11 +779,20 @@ export default function PlanningRunDetailPage() {
                     <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                       Recommended
                     </th>
+                    <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                      On hand
+                    </th>
                     <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                       {activeTab === "purchase" ? "Supplier" : "BOM version"}
                     </th>
                     <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                       Target period
+                    </th>
+                    <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                      Order by
+                    </th>
+                    <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                      Shortage by
                     </th>
                     <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                       Feasibility
@@ -837,9 +848,15 @@ export default function PlanningRunDetailPage() {
                         </td>
                         <td className="px-3 py-2.5 text-right font-mono tabular-nums text-fg-muted">
                           {r.required_qty}
+                          {r.uom ? <span className="ml-1 text-3xs text-fg-subtle">{r.uom}</span> : null}
                         </td>
                         <td className="px-3 py-2.5 text-right font-mono tabular-nums text-fg-strong">
                           {r.recommended_qty}
+                          {r.uom ? <span className="ml-1 text-3xs text-fg-subtle">{r.uom}</span> : null}
+                        </td>
+                        <td className="px-3 py-2.5 text-right font-mono tabular-nums text-fg-muted">
+                          {r.current_stock_bal ?? "—"}
+                          {r.current_stock_bal && r.uom ? <span className="ml-1 text-3xs text-fg-subtle">{r.uom}</span> : null}
                         </td>
                         <td className="px-3 py-2.5 text-xs text-fg-muted">
                           {activeTab === "purchase"
@@ -848,6 +865,12 @@ export default function PlanningRunDetailPage() {
                         </td>
                         <td className="px-3 py-2.5 font-mono text-xs tabular-nums text-fg-muted">
                           {r.target_period_bucket_key}
+                        </td>
+                        <td className="px-3 py-2.5 font-mono text-xs tabular-nums text-fg-muted">
+                          {r.order_by_date ?? "—"}
+                        </td>
+                        <td className="px-3 py-2.5 font-mono text-xs tabular-nums text-fg-muted">
+                          {r.shortage_date ?? "—"}
                         </td>
                         <td className="px-3 py-2.5">
                           <FeasibilityBadge status={r.feasibility_status} />
