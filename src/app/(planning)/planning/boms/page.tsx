@@ -177,7 +177,7 @@ export default function PlanningBomsPage(): JSX.Element {
                           </div>
                         </div>
                         <Badge tone="neutral" dotted>
-                          {h.bom_kind}
+                          {itemsById.get(h.parent_ref_id)?.supply_method ?? h.bom_kind}
                         </Badge>
                       </button>
                     </li>
