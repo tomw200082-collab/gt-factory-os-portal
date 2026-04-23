@@ -208,13 +208,8 @@ export default function AdminMastersBomHeadDetailPage({
         {head.bom_head_id}
       </Badge>
       <Badge tone="info" dotted>
-        {head.bom_kind}
+        {item?.supply_method ?? head.bom_kind}
       </Badge>
-      {item ? (
-        <Badge tone="info" dotted>
-          {item.supply_method}
-        </Badge>
-      ) : null}
       <Badge tone="neutral" dotted>
         {head.final_bom_output_qty} {head.final_bom_output_uom ?? ""}
       </Badge>
@@ -242,7 +237,7 @@ export default function AdminMastersBomHeadDetailPage({
         { label: "BOM ID", value: head.bom_head_id, mono: true },
         {
           label: "Type",
-          value: <Badge tone="info" dotted>{head.bom_kind}</Badge>,
+          value: <Badge tone="info" dotted>{item?.supply_method ?? head.bom_kind}</Badge>,
         },
         {
           label: "Family",
