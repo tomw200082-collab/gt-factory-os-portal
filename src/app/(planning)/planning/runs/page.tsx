@@ -57,6 +57,19 @@ interface JobContextRow {
   failed_count_24h: number;
 }
 
+interface DemandCoverageRow {
+  as_of: string;
+  total_lines: number;
+  resolved_lines: number;
+  bundle_lines: number;
+  unresolved_lines: number;
+  total_distinct_skus: number;
+  resolved_distinct_skus: number;
+  bundle_distinct_skus: number;
+  unresolved_distinct_skus: number;
+  is_partial: boolean;
+}
+
 interface PlanningRunListRow {
   run_id: string;
   executed_at: string;
@@ -255,11 +268,22 @@ export default function PlanningRunsListPage() {
     staleTime: 5 * 60 * 1000,
   });
 
+  const demandCoverageQuery = useQuery<DemandCoverageRow>({
+    queryKey: ["planning", "demand-coverage"],
+    queryFn: async () => {
+      const res = await fetch("/api/planning/demand-coverage");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json() as Promise<DemandCoverageRow>;
+    },
+    staleTime: 3 * 60 * 1000,
+  });
+
   const latestForecast = forecastQuery.data?.rows?.[0] ?? null;
   const lionwheelJob =
     jobsQuery.data?.rows?.find(
       (j) => j.job_name === "integration.lionwheel" || j.job_name === "lionwheel_poll",
     ) ?? null;
+  const coverage = demandCoverageQuery.data ?? null;
 
   const query = useQuery<ListResponse>({
     queryKey: ["planning", "runs", statusFilter ?? "all", session.role],
@@ -387,16 +411,60 @@ export default function PlanningRunsListPage() {
           )}
         </div>
 
-        {/* Demand coverage caveat */}
-        <div className="rounded-md border border-warning/30 bg-warning-softer px-4 py-3">
-          <div className="mb-1.5 text-3xs font-semibold uppercase tracking-sops text-warning-fg">
+        {/* Demand coverage — live from demand-coverage endpoint */}
+        <div
+          className={cn(
+            "rounded-md border px-4 py-3",
+            demandCoverageQuery.isLoading
+              ? "border-border/60 bg-bg-raised"
+              : coverage?.is_partial
+                ? "border-warning/30 bg-warning-softer"
+                : "border-success/30 bg-success-softer",
+          )}
+        >
+          <div
+            className={cn(
+              "mb-1.5 text-3xs font-semibold uppercase tracking-sops",
+              demandCoverageQuery.isLoading
+                ? "text-fg-subtle"
+                : coverage?.is_partial
+                  ? "text-warning-fg"
+                  : "text-success-fg",
+            )}
+          >
             Demand coverage
           </div>
-          <div className="text-xs text-fg">Partial</div>
-          <div className="mt-0.5 text-3xs text-fg-muted">
-            Bundle SKUs and unresolved LionWheel mappings are excluded.
-            Recommendations reflect resolved demand only.
-          </div>
+          {demandCoverageQuery.isLoading ? (
+            <div className="text-xs text-fg-muted">Loading…</div>
+          ) : !coverage ? (
+            <div className="text-xs text-fg-muted">Coverage data unavailable</div>
+          ) : (
+            <>
+              <div className="text-xs font-medium text-fg">
+                {coverage.resolved_lines} / {coverage.total_lines} lines resolved
+                {" · "}
+                {coverage.resolved_distinct_skus} SKUs
+              </div>
+              {coverage.bundle_lines > 0 || coverage.unresolved_lines > 0 ? (
+                <div className="mt-0.5 text-3xs text-fg-muted">
+                  {[
+                    coverage.bundle_lines > 0
+                      ? `${coverage.bundle_lines} bundle lines (${coverage.bundle_distinct_skus} SKUs) excluded`
+                      : null,
+                    coverage.unresolved_lines > 0
+                      ? `${coverage.unresolved_lines} unresolved lines (${coverage.unresolved_distinct_skus} SKUs) excluded`
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                </div>
+              ) : (
+                <div className="mt-0.5 text-3xs text-success-fg">
+                  All active order lines resolved
+                </div>
+              )}
+            </>
+          )}
         </div>
       </div>
 
