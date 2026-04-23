@@ -61,11 +61,20 @@ export interface LatestPlanningRunSummary {
 }
 
 export interface BreakGlassState {
-  // DR-8: Active Yes/No is the only guaranteed field in v1. set_at / set_by
-  // render only when exposed by a future endpoint.
+  // DR-8: Active Yes/No + jobs_paused. set_at renders when present (Loop 15).
   active: boolean;
+  jobs_paused: boolean;
   set_at?: string;
   set_by?: string;
+}
+
+// ---------------------------------------------------------------------------
+// Parity check block (Loop 15 — live endpoint).
+// ---------------------------------------------------------------------------
+export interface ParityCheckSummary {
+  parity_ok: boolean;
+  drift_count: number;
+  checked_at: string;
 }
 
 // ---------------------------------------------------------------------------

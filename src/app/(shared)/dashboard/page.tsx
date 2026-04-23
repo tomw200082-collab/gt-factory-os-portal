@@ -52,6 +52,7 @@ import {
   fetchJobsHealth24h,
   fetchLatestForecast,
   fetchLatestPlanningRun,
+  fetchParityCheck,
   fetchRuntimeReadyRegistry,
   fetchStockTruth,
   summarizeInbox,
@@ -70,6 +71,7 @@ import type { InboxRow } from "@/features/inbox/types";
 const QK_PLANNING_RUN = ["dashboard", "latest_planning_run"] as const;
 const QK_FORECAST = ["dashboard", "latest_forecast"] as const;
 const QK_BREAK_GLASS = ["dashboard", "break_glass"] as const;
+const QK_PARITY_CHECK = ["dashboard", "parity_check"] as const;
 const QK_STOCK_TRUTH = ["dashboard", "stock_truth"] as const;
 const QK_FRESHNESS = ["dashboard", "integration_freshness"] as const;
 const QK_JOBS_HEALTH = ["dashboard", "jobs_health_24h"] as const;
@@ -79,6 +81,9 @@ const INBOX_CACHE_KEY = ["inbox", "all_rows"] as const;
 
 // All dashboard signals share the same cadence per DR-1. No server cache.
 const DASHBOARD_STALE_TIME_MS = 30_000;
+
+// Health-check signals (parity, break-glass) refresh every 60s per Loop 15 spec.
+const HEALTH_STALE_TIME_MS = 60_000;
 
 // ---------------------------------------------------------------------------
 // Helpers.
@@ -252,8 +257,15 @@ export default function DashboardPage() {
       },
       {
         queryKey: QK_BREAK_GLASS,
-        queryFn: () => fetchBreakGlassState(),
-        staleTime: DASHBOARD_STALE_TIME_MS,
+        queryFn: ({ signal }: { signal: AbortSignal }) =>
+          fetchBreakGlassState(signal),
+        staleTime: HEALTH_STALE_TIME_MS,
+      },
+      {
+        queryKey: QK_PARITY_CHECK,
+        queryFn: ({ signal }: { signal: AbortSignal }) =>
+          fetchParityCheck(signal),
+        staleTime: HEALTH_STALE_TIME_MS,
       },
       {
         queryKey: QK_STOCK_TRUTH,
@@ -282,6 +294,7 @@ export default function DashboardPage() {
     planningRunQ,
     forecastQ,
     breakGlassQ,
+    parityCheckQ,
     stockTruthQ,
     freshnessQ,
     jobsHealthQ,
@@ -350,15 +363,18 @@ export default function DashboardPage() {
       </SectionCard>
 
       {/* -------------------------------------------------------------- */}
-      {/* Block 2 — Stock truth                                          */}
+      {/* Block 2 — Stock truth + parity check                          */}
       {/* -------------------------------------------------------------- */}
       <SectionCard
         eyebrow="Stock truth"
-        title="Rebuild verifier + anchors"
+        title="Rebuild verifier + parity"
         description="Parity between the stock ledger and the projected current-balance read model. Zero drift is the only acceptable state."
         className="mt-6"
       >
-        <StockTruthBlock signal={stockTruthQ.data} now={now} />
+        <div className="space-y-4">
+          <ParityCheckBlock signal={parityCheckQ.data} now={now} />
+          <StockTruthBlock signal={stockTruthQ.data} now={now} />
+        </div>
       </SectionCard>
 
       {/* -------------------------------------------------------------- */}
@@ -672,22 +688,30 @@ function LatestPlanningRunCard({
 function BreakGlassCard({
   signal,
 }: {
-  signal: Signal<{ active: boolean; set_at?: string; set_by?: string }> | undefined;
+  signal:
+    | Signal<{ active: boolean; jobs_paused: boolean; set_at?: string; set_by?: string }>
+    | undefined;
 }) {
-  if (!signal || signal.state === "pending_tranche_i") {
+  if (!signal) {
+    return (
+      <StatPill
+        label="Break-glass"
+        value="…"
+        tone="neutral"
+        icon={<ShieldAlert className="h-3 w-3" strokeWidth={2} />}
+        sub={<span className="text-fg-muted">Loading.</span>}
+        testid="dashboard-stat-break-glass"
+      />
+    );
+  }
+  if (signal.state === "pending_tranche_i") {
     return (
       <StatPill
         label="Break-glass"
         value="—"
         tone="neutral"
         icon={<ShieldAlert className="h-3 w-3" strokeWidth={2} />}
-        sub={
-          signal ? (
-            <PendingBadge note={signal.note} />
-          ) : (
-            <span className="text-fg-muted">Loading.</span>
-          )
-        }
+        sub={<PendingBadge note={signal.note} />}
         testid="dashboard-stat-break-glass"
       />
     );
@@ -705,17 +729,24 @@ function BreakGlassCard({
     );
   }
   const d = signal.data;
+  // Priority: break_glass_active > jobs_paused > normal.
+  const label = d.active
+    ? "Read-Only Mode"
+    : d.jobs_paused
+      ? "Jobs Paused"
+      : "Normal";
+  const tone = d.active ? "danger" : d.jobs_paused ? "warning" : "success";
   return (
     <StatPill
       label="Break-glass"
-      value={d.active ? "Active: Yes" : "Active: No"}
-      tone={d.active ? "danger" : "success"}
+      value={label}
+      tone={tone}
       icon={<ShieldAlert className="h-3 w-3" strokeWidth={2} />}
       sub={
         <div className="text-xs text-fg-muted">
           {d.set_at ? (
             <div>
-              Set: <span className="font-mono">{d.set_at}</span>
+              Since: <span className="font-mono">{d.set_at}</span>
             </div>
           ) : null}
           {d.set_by ? (
@@ -723,8 +754,8 @@ function BreakGlassCard({
               By: <span className="font-mono">{d.set_by}</span>
             </div>
           ) : null}
-          {!d.set_at && !d.set_by ? (
-            <span>v1 metadata: state only.</span>
+          {!d.set_at && !d.set_by && !d.active && !d.jobs_paused ? (
+            <span className="text-success-fg">All systems operational.</span>
           ) : null}
         </div>
       }
@@ -736,6 +767,73 @@ function BreakGlassCard({
 function ListChecksIcon() {
   return (
     <BadgeCheck className="h-3 w-3" strokeWidth={2} />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Parity check block (Loop 15 — live endpoint).
+// ---------------------------------------------------------------------------
+function ParityCheckBlock({
+  signal,
+  now,
+}: {
+  signal:
+    | Signal<{ parity_ok: boolean; drift_count: number; checked_at: string }>
+    | undefined;
+  now: Date;
+}) {
+  if (!signal) {
+    return (
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <StatPill
+          label="Parity"
+          value="…"
+          tone="neutral"
+          sub={<span className="text-fg-muted">Loading.</span>}
+        />
+      </div>
+    );
+  }
+  if (signal.state === "pending_tranche_i") {
+    return <PendingBadge note={signal.note} />;
+  }
+  if (signal.state === "unavailable") {
+    return <UnavailableBadge reason={signal.reason} />;
+  }
+  const d = signal.data;
+  const parityTone = d.parity_ok ? "success" : "danger";
+  const parityLabel = d.parity_ok ? "Parity OK" : "Parity Drift";
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      <StatPill
+        label="Rebuild / parity"
+        value={parityLabel}
+        tone={parityTone}
+        sub={
+          d.parity_ok ? (
+            <span className="text-success-fg">
+              0 drift rows — projection matches ledger rebuild.
+            </span>
+          ) : (
+            <span className="text-danger-fg">
+              {d.drift_count.toLocaleString()} row
+              {d.drift_count !== 1 ? "s" : ""} of drift — investigate before
+              trusting stock.
+            </span>
+          )
+        }
+        testid="dashboard-stat-parity-status"
+      />
+      <StatPill
+        label="Last parity check"
+        value={ageHumanized(d.checked_at, now)}
+        tone="neutral"
+        sub={
+          <span className="font-mono text-fg-muted">{d.checked_at}</span>
+        }
+        testid="dashboard-stat-parity-checked-at"
+      />
+    </div>
   );
 }
 

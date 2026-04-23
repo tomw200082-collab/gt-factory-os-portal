@@ -10,12 +10,12 @@
 //                                Loop 11: added inline cost edit per row
 //                                (PATCH /api/supplier-items/:id with
 //                                std_cost_per_inv_uom + if_match_updated_at).
-//                                Note: GET list does not return
-//                                std_cost_per_inv_uom (not in backend query
-//                                schema); current cost always shows "—" until
-//                                a value is entered and saved; edit field
-//                                starts blank. updated_at IS returned and is
-//                                used for optimistic concurrency.
+//                                Loop 15: backend fix (commit 3b787a0) now
+//                                returns std_cost_per_inv_uom in the GET list
+//                                response; CostEditCell initializes with the
+//                                current value and displays it in the table.
+//                                updated_at IS returned and is used for
+//                                optimistic concurrency.
 //   - po-history        LIVE   — /api/purchase-orders?supplier_id=<id>
 //   - exceptions        LIVE   — /api/exceptions client-filtered by
 //                                related_entity_id
@@ -76,9 +76,10 @@ interface SupplierItemRow {
   lead_time_days: number | null;
   moq: string | null;
   approval_status: string | null;
-  // Note: std_cost_per_inv_uom is NOT returned by GET /api/v1/queries/supplier-items
-  // (not in backend SupplierItemRow schema). Cost always shows "—" in this list.
-  // updated_at IS returned and is used as if_match_updated_at for the PATCH.
+  // Loop 13 backend fix (commit 3b787a0) added std_cost_per_inv_uom to the
+  // GET /api/v1/queries/supplier-items response. Field is now included.
+  // updated_at is used as if_match_updated_at for the PATCH.
+  std_cost_per_inv_uom: string | null;
   updated_at: string;
 }
 
@@ -223,15 +224,17 @@ async function patchSupplierItemCost(
 function CostEditCell({
   supplierItemId,
   updatedAt,
+  currentCost,
   queryKey,
 }: {
   supplierItemId: string;
   updatedAt: string;
+  currentCost: string | null;
   queryKey: readonly unknown[];
 }): JSX.Element {
   const queryClient = useQueryClient();
   const [editing, setEditing] = useState(false);
-  const [inputValue, setInputValue] = useState("");
+  const [inputValue, setInputValue] = useState(currentCost ?? "");
   const [saved, setSaved] = useState(false);
 
   const mutation = useMutation({
@@ -260,9 +263,9 @@ function CostEditCell({
   const handleKeyDown = useCallback(
     (e: React.KeyboardEvent<HTMLInputElement>) => {
       if (e.key === "Enter") handleSave();
-      if (e.key === "Escape") { setEditing(false); setInputValue(""); setSaved(false); }
+      if (e.key === "Escape") { setEditing(false); setInputValue(currentCost ?? ""); setSaved(false); }
     },
-    [handleSave],
+    [handleSave, currentCost],
   );
 
   if (editing) {
@@ -287,7 +290,7 @@ function CostEditCell({
           {mutation.isPending ? "…" : "Save"}
         </button>
         <button
-          onClick={() => { setEditing(false); setInputValue(""); }}
+          onClick={() => { setEditing(false); setInputValue(currentCost ?? ""); }}
           className="rounded px-1 py-0.5 text-xs text-fg-muted hover:text-fg"
         >
           ✕
@@ -303,12 +306,16 @@ function CostEditCell({
 
   return (
     <span className="inline-flex items-center gap-1.5">
-      <span className="text-fg-faint">—</span>
+      {currentCost !== null && currentCost !== "" ? (
+        <span className="font-mono text-xs text-fg">{currentCost}</span>
+      ) : (
+        <span className="text-fg-faint">—</span>
+      )}
       {saved ? (
         <span className="text-xs text-green-600">Saved</span>
       ) : null}
       <button
-        onClick={() => { setEditing(true); setSaved(false); }}
+        onClick={() => { setEditing(true); setSaved(false); setInputValue(currentCost ?? ""); }}
         className="rounded px-1 py-0.5 text-3xs text-fg-subtle hover:bg-bg-subtle hover:text-fg"
       >
         Edit cost
@@ -544,6 +551,7 @@ export default function AdminSupplierDetailPage({
                     <CostEditCell
                       supplierItemId={r.supplier_item_id}
                       updatedAt={r.updated_at}
+                      currentCost={r.std_cost_per_inv_uom}
                       queryKey={supplierItemsQueryKey}
                     />
                   </td>

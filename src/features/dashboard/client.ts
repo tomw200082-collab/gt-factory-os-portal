@@ -14,10 +14,10 @@
 //     /api/exceptions                          — inbox working set
 //     /api/planning/runs                       — latest planning run + summary
 //     /api/forecasts/versions                  — latest published forecast
+//     /api/stock/parity-check                  — parity OK + drift count (Loop 15)
+//     /api/system/break-glass                  — break-glass + jobs-paused state (Loop 15)
 //
 //   PENDING TRANCHE I (no portal proxy endpoint exists):
-//     rebuild_verifier drift                   — no endpoint
-//     break-glass state                        — no endpoint
 //     integration_runs / integration freshness — no endpoint (DR-10 note)
 //     jobs 24h health                          — no endpoint
 //     RUNTIME_READY registry                   — no endpoint (authoritative
@@ -154,19 +154,58 @@ export async function fetchLatestPlanningRun(
   };
 }
 
+// ---------------------------------------------------------------------------
+// Parity check + break-glass (Loop 15 — W1 endpoints deployed commit 8a32a0a).
+// ---------------------------------------------------------------------------
+
+interface ParityCheckResponse {
+  parity_ok: boolean;
+  drift_count: number;
+  checked_at: string;
+}
+
 /**
- * Break-glass state.
- *
- * No portal proxy endpoint currently exposes a break-glass flag readable from
- * the browser side. Returns pending_tranche_i — dashboard renders a muted
- * "Active: —" card with the pending note. Per DR-8, when such an endpoint is
- * later authored by W1, replace the pending path with a GET against it and
- * decode {active, set_at?, set_by?}.
+ * Parity check — reads /api/stock/parity-check.
+ * Response: { parity_ok: boolean, drift_count: number, checked_at: string }.
+ * staleTime on the query side is 60_000 ms (dashboard page sets this per-query).
  */
-export async function fetchBreakGlassState(): Promise<Signal<BreakGlassState>> {
-  return pending<BreakGlassState>(
-    "Break-glass readout pending backend endpoint (Tranche I).",
-  );
+export async function fetchParityCheck(
+  signal?: AbortSignal,
+): Promise<Signal<ParityCheckResponse>> {
+  const res = await get<ParityCheckResponse>("/api/stock/parity-check", {
+    signal,
+  });
+  if (!res.ok) return unavailable(res);
+  return { state: "ok", data: res.data };
+}
+
+interface BreakGlassResponse {
+  break_glass_active: boolean;
+  jobs_paused: boolean;
+  set_at: string | null;
+}
+
+/**
+ * Break-glass state — reads /api/system/break-glass.
+ * Response: { break_glass_active: boolean, jobs_paused: boolean, set_at: string | null }.
+ * staleTime on the query side is 60_000 ms.
+ */
+export async function fetchBreakGlassState(
+  signal?: AbortSignal,
+): Promise<Signal<BreakGlassState>> {
+  const res = await get<BreakGlassResponse>("/api/system/break-glass", {
+    signal,
+  });
+  if (!res.ok) return unavailable(res);
+  const d = res.data;
+  return {
+    state: "ok",
+    data: {
+      active: d.break_glass_active,
+      jobs_paused: d.jobs_paused,
+      set_at: d.set_at ?? undefined,
+    },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -174,15 +213,15 @@ export async function fetchBreakGlassState(): Promise<Signal<BreakGlassState>> {
 // ---------------------------------------------------------------------------
 
 /**
- * Stock truth — rebuild_verifier drift + anchors + last parity.
+ * Stock truth — rebuild_verifier drift + anchors.
  *
- * None of these are exposed by any current portal proxy. Returns
- * pending_tranche_i; dashboard renders a placeholder card referencing the
- * W1 rebuild-verifier rationale.
+ * Anchors count is not exposed by any current portal proxy. Returns
+ * pending_tranche_i for the remaining fields (anchors count, rebuild verifier
+ * drift). The parity-check tile is now a separate signal (fetchParityCheck).
  */
 export async function fetchStockTruth(): Promise<Signal<StockTruthSummary>> {
   return pending<StockTruthSummary>(
-    "rebuild_verifier drift + anchors + last parity read — pending backend endpoint (Tranche I).",
+    "rebuild_verifier drift + anchors count — pending backend endpoint (Tranche I). Parity is now live via the dedicated parity-check tile.",
   );
 }
 
