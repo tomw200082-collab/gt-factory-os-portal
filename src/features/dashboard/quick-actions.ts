@@ -114,6 +114,14 @@ export const QUICK_ACTIONS: readonly QuickAction[] = [
     category: "planning",
   },
   {
+    href: "/planning/boms",
+    label: "BOM Simulation",
+    blurb: "Simulate production quantities and check material coverage.",
+    icon: Network,
+    required: "planning:read",
+    category: "planning",
+  },
+  {
     href: "/purchase-orders",
     label: "Purchase Orders",
     blurb: "Open / partial / received POs.",
