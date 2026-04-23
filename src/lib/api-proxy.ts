@@ -74,13 +74,25 @@ export async function proxyRequest(
     // API must be running with ENABLE_DEV_SHIM_AUTH=true.
     headers["x-test-session"] = JSON.stringify({
       user_id: "0db008a9-05e3-4521-8b30-42e5d444818d",
+      email: "tom@gteveryday.com",
       role: "admin",
+      display_name: "Tom",
     });
   } else {
-    const supabase = await createSupabaseServerClient();
-    const {
-      data: { session },
-    } = await supabase.auth.getSession();
+    let session: { access_token: string } | null = null;
+    try {
+      const supabase = await createSupabaseServerClient();
+      const { data } = await supabase.auth.getSession();
+      session = data.session;
+    } catch (err) {
+      return NextResponse.json(
+        {
+          error: `${opts.errorLabel} session error`,
+          detail: err instanceof Error ? err.message : String(err),
+        },
+        { status: 500 },
+      );
+    }
 
     if (!session?.access_token) {
       return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
