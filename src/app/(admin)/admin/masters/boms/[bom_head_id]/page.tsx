@@ -503,6 +503,14 @@ export default function AdminMastersBomHeadDetailPage({
             )}
           </>
         ),
+        actions: (
+          <Link
+            href="/admin/masters/boms"
+            className="btn-secondary inline-flex items-center gap-1 text-xs"
+          >
+            ← BOMs
+          </Link>
+        ),
       }}
       tabs={[overviewTab, versionsTab, exceptionsTab]}
       linkages={linkages}

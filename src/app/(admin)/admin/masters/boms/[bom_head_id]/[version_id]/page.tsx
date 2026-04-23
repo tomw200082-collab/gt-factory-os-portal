@@ -511,6 +511,14 @@ export default function AdminMastersBomVersionDetailPage({
               ? "Draft version — component lines are editable in the BOM editor. Simulation requires an active version."
               : "Historic version — read-only audit record of a superseded formula.",
           meta: headerMeta,
+          actions: (
+            <Link
+              href={`/admin/masters/boms/${encodeURIComponent(bom_head_id)}`}
+              className="btn-secondary inline-flex items-center gap-1 text-xs"
+            >
+              ← {bom_head_id}
+            </Link>
+          ),
         }}
         tabs={[overviewTab, linesTab, compareTab]}
         linkages={linkages}
