@@ -188,11 +188,14 @@ export default function AdminMastersBomHeadDetailPage({
 
   // --- Derived ------------------------------------------------------------
   const versionsSorted = useMemo(() => {
-    return (versionsQuery.data?.rows ?? []).slice().sort(
-      (a, b) =>
-        new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-    );
-  }, [versionsQuery.data]);
+    const activeId = head?.active_version_id ?? null;
+    return (versionsQuery.data?.rows ?? []).slice().sort((a, b) => {
+      // Active version always pins to top
+      if (a.bom_version_id === activeId) return -1;
+      if (b.bom_version_id === activeId) return 1;
+      return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+    });
+  }, [versionsQuery.data, head?.active_version_id]);
 
   const activeVersion = versionsSorted.find(
     (v) => v.bom_version_id === head?.active_version_id,
@@ -350,14 +353,7 @@ export default function AdminMastersBomHeadDetailPage({
                       />
                     </td>
                     <td className="px-3 py-2 text-3xs font-mono text-fg-muted">
-                      <Link
-                        href={`/admin/masters/boms/${encodeURIComponent(
-                          head.bom_head_id,
-                        )}/${encodeURIComponent(v.bom_version_id)}`}
-                        className="hover:text-accent"
-                      >
-                        {v.bom_version_id}
-                      </Link>
+                      {v.bom_version_id}
                     </td>
                     <td className="px-3 py-2 text-xs text-fg-muted">
                       {fmtDateTime(v.created_at)}
