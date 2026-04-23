@@ -11,6 +11,7 @@
 // ---------------------------------------------------------------------------
 
 import { useState, useEffect, useCallback } from "react";
+import Link from "next/link";
 import {
   ShoppingCart,
   AlertTriangle,
@@ -320,6 +321,22 @@ export function BomNetRequirements({
             <div className="flex items-center gap-2 rounded-md border border-success/40 bg-success-softer px-3 py-2 text-xs text-success-fg">
               <CheckCircle2 className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
               All materials covered — ready to produce.
+            </div>
+          ) : null}
+
+          {/* Purchase Orders shortcut when shortages exist */}
+          {(result.lines_not_covered > 0 || result.lines_partial > 0) ? (
+            <div className="flex items-center justify-between rounded-md border border-border/50 bg-bg-subtle/50 px-3 py-2">
+              <span className="text-xs text-fg-muted">
+                Need to purchase missing materials?
+              </span>
+              <Link
+                href="/purchase-orders"
+                className="btn-secondary inline-flex items-center gap-1.5 text-xs"
+              >
+                <ShoppingCart className="h-3.5 w-3.5" strokeWidth={2} />
+                Purchase Orders
+              </Link>
             </div>
           ) : null}
 
