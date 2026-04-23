@@ -19,6 +19,7 @@ import {
   HelpCircle,
   Info,
   ChevronRight,
+  RefreshCw,
 } from "lucide-react";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
@@ -187,6 +188,11 @@ export function BomNetRequirements({
     await runNetReqForQty(qty);
   }
 
+  const isStale =
+    result !== null &&
+    !loading &&
+    parseFloat(targetQty) !== result.target_qty;
+
   if (!hasActiveVersion) {
     return (
       <SectionCard
@@ -257,25 +263,26 @@ export function BomNetRequirements({
 
       {/* Results */}
       {result ? (
-        <div className="space-y-3">
-          {/* Context header — what are we making and which version */}
-          <div className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
+        <div className={`space-y-3 ${isStale ? "opacity-60" : ""}`}>
+          {/* Staleness banner */}
+          {isStale ? (
+            <div className="flex items-center gap-2 rounded-md border border-warning/40 bg-warning-softer px-3 py-2 text-xs text-warning-fg">
+              <RefreshCw className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+              Quantity changed — click Check coverage to update.
+            </div>
+          ) : null}
+          {/* Summary bar */}
+          <div className="flex flex-wrap items-center gap-3 rounded-md border border-border/70 bg-bg-subtle/50 px-3 py-2">
             {result.item_name ? (
               <span className="text-sm font-semibold text-fg">
                 {result.item_name}
               </span>
             ) : null}
-            <span className="text-xs text-fg-muted">
-              version{" "}
-              <span className="font-mono font-medium text-fg">
-                {result.version_label}
-              </span>
-            </span>
-          </div>
-          {/* Summary bar */}
-          <div className="flex flex-wrap items-center gap-3 rounded-md border border-border/70 bg-bg-subtle/50 px-3 py-2">
             <Badge tone="info" dotted>
               {result.target_qty} {result.output_uom ?? "units"}
+            </Badge>
+            <Badge tone="success" dotted>
+              v{result.version_label}
             </Badge>
             <span className="text-xs font-semibold text-fg">
               {result.total_lines} components:
