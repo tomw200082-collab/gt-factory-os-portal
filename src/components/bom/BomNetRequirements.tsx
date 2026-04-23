@@ -36,6 +36,9 @@ interface NetLine {
   net_shortage_qty: string;
   coverage_status: CoverageStatus;
   coverage_pct: string;
+  supplier_id: string | null;
+  supplier_short: string | null;
+  supplier_phone: string | null;
 }
 
 interface NetRequirementsResponse {
@@ -318,6 +321,7 @@ export function BomNetRequirements({
                     <Th align="right">Net shortage</Th>
                     <Th>Unit</Th>
                     <Th>Coverage</Th>
+                    <Th>Supplier</Th>
                   </tr>
                 </thead>
                 <tbody>
@@ -398,6 +402,18 @@ function NetRequirementsRow({ line }: { line: NetLine }): JSX.Element {
       </td>
       <td className="px-3 py-2">
         <CoverageBadge status={line.coverage_status} />
+      </td>
+      <td className="px-3 py-2">
+        {line.supplier_short ? (
+          <div>
+            <div className="text-xs text-fg">{line.supplier_short}</div>
+            {line.supplier_phone ? (
+              <div className="text-3xs font-mono text-fg-subtle">{line.supplier_phone}</div>
+            ) : null}
+          </div>
+        ) : (
+          <span className="text-xs text-fg-muted">—</span>
+        )}
       </td>
     </tr>
   );
