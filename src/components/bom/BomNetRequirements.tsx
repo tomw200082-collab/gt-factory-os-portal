@@ -10,7 +10,7 @@
 // the shortage so the operator can make an informed decision.
 // ---------------------------------------------------------------------------
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import {
   ShoppingCart,
   AlertTriangle,
@@ -18,6 +18,7 @@ import {
   MinusCircle,
   HelpCircle,
   Info,
+  ChevronRight,
 } from "lucide-react";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
@@ -140,13 +141,42 @@ export function BomNetRequirements({
   suggestedQty,
 }: BomNetRequirementsProps): JSX.Element {
   const [targetQty, setTargetQty] = useState<string>(baseOutputQty);
-
-  useEffect(() => {
-    if (suggestedQty) setTargetQty(suggestedQty);
-  }, [suggestedQty]);
   const [result, setResult] = useState<NetRequirementsResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const runNetReqForQty = useCallback(
+    async (qty: number) => {
+      setLoading(true);
+      setError(null);
+      try {
+        const url = `/api/boms/heads/${encodeURIComponent(headId)}/net-requirements?qty=${qty}`;
+        const res = await fetch(url, { headers: { Accept: "application/json" } });
+        const json = await res.json();
+        if (!res.ok) {
+          setError(
+            `${(json as { reason_code?: string }).reason_code ?? "ERROR"}: ${(json as { detail?: string }).detail ?? JSON.stringify(json)}`,
+          );
+        } else {
+          setResult(json as NetRequirementsResponse);
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Request failed");
+      } finally {
+        setLoading(false);
+      }
+    },
+    [headId],
+  );
+
+  // Auto-trigger coverage check when the simulator fires a suggestedQty.
+  useEffect(() => {
+    if (!suggestedQty) return;
+    const qty = parseFloat(suggestedQty);
+    if (isNaN(qty) || qty <= 0) return;
+    setTargetQty(suggestedQty);
+    void runNetReqForQty(qty);
+  }, [suggestedQty, runNetReqForQty]);
 
   async function runNetReq() {
     const qty = parseFloat(targetQty);
@@ -154,23 +184,7 @@ export function BomNetRequirements({
       setError("Target quantity must be a positive number.");
       return;
     }
-    setLoading(true);
-    setError(null);
-    setResult(null);
-    try {
-      const url = `/api/boms/heads/${encodeURIComponent(headId)}/net-requirements?qty=${qty}`;
-      const res = await fetch(url, { headers: { Accept: "application/json" } });
-      const json = await res.json();
-      if (!res.ok) {
-        setError(`${(json as { reason_code?: string }).reason_code ?? "ERROR"}: ${(json as { detail?: string }).detail ?? JSON.stringify(json)}`);
-      } else {
-        setResult(json as NetRequirementsResponse);
-      }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Request failed");
-    } finally {
-      setLoading(false);
-    }
+    await runNetReqForQty(qty);
   }
 
   if (!hasActiveVersion) {
@@ -227,6 +241,10 @@ export function BomNetRequirements({
           <ShoppingCart className="h-3.5 w-3.5" strokeWidth={2} />
           {loading ? "Calculating…" : "Check coverage"}
         </button>
+        <div className="flex items-center gap-2 text-xs text-fg-muted">
+          <ChevronRight className="h-3 w-3 text-fg-faint" strokeWidth={2} />
+          Base batch: {baseOutputQty} {outputUom ?? "units"}
+        </div>
       </div>
 
       {/* Error */}
