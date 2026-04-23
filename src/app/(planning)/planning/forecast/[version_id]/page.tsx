@@ -67,6 +67,68 @@ interface GetVersionResponse {
   lines: ForecastLine[];
 }
 
+interface ItemRow {
+  item_id: string;
+  item_name: string;
+  status: string;
+  supply_method: string;
+  sales_uom: string | null;
+}
+
+async function fetchJsonSilent<T>(url: string): Promise<T> {
+  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!res.ok) throw new Error(`GET ${url} HTTP ${res.status}`);
+  return (await res.json()) as T;
+}
+
+// Generate expected period bucket keys from version metadata when the draft
+// has no existing lines yet (fresh draft). Keys are ISO date strings matching
+// the server's period_bucket_key format: YYYY-MM-DD (first day of month for
+// monthly, Monday for weekly, daily date for daily).
+function generateBucketsFromMetadata(
+  horizonStartAt: string,
+  horizonWeeks: number,
+  cadence: "monthly" | "weekly" | "daily",
+): string[] {
+  const start = new Date(horizonStartAt + "T00:00:00Z");
+  const endMs = start.getTime() + horizonWeeks * 7 * 24 * 60 * 60 * 1000;
+  const buckets: string[] = [];
+  if (cadence === "monthly") {
+    let d = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
+    while (d.getTime() < endMs && buckets.length < 24) {
+      const y = d.getUTCFullYear();
+      const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+      buckets.push(`${y}-${m}-01`);
+      d = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1));
+    }
+  } else if (cadence === "weekly") {
+    let d = new Date(
+      Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()),
+    );
+    const dow = d.getUTCDay();
+    d.setUTCDate(d.getUTCDate() - (dow === 0 ? 6 : dow - 1));
+    while (d.getTime() < endMs && buckets.length < horizonWeeks + 2) {
+      const y = d.getUTCFullYear();
+      const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+      const dd = String(d.getUTCDate()).padStart(2, "0");
+      buckets.push(`${y}-${m}-${dd}`);
+      d.setUTCDate(d.getUTCDate() + 7);
+    }
+  } else {
+    let d = new Date(
+      Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()),
+    );
+    for (let i = 0; i < Math.min(horizonWeeks * 7, 62); i++) {
+      const y = d.getUTCFullYear();
+      const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+      const dd = String(d.getUTCDate()).padStart(2, "0");
+      buckets.push(`${y}-${m}-${dd}`);
+      d.setUTCDate(d.getUTCDate() + 1);
+    }
+  }
+  return buckets;
+}
+
 // Matches api/src/forecasts/schemas.ts FORECAST_FREEZE_HORIZON_WEEKS.
 // FP-2 = 1 per contract §B.4.
 const FREEZE_HORIZON_WEEKS = 1;
@@ -246,6 +308,8 @@ export default function ForecastVersionDetailPage() {
 
   const [localCells, setLocalCells] = useState<Record<string, string>>({});
   const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [addedItemIds, setAddedItemIds] = useState<Set<string>>(new Set());
+  const [addItemInput, setAddItemInput] = useState<string>("");
 
   const query = useQuery<GetVersionResponse>({
     queryKey: ["forecast", "version", versionId, session.role],
@@ -260,19 +324,55 @@ export default function ForecastVersionDetailPage() {
   const isPublished = version?.status === "published";
   const isEditable = isDraft && canAuthor;
 
+  const itemsQuery = useQuery<{ rows: ItemRow[]; count: number }>({
+    queryKey: ["master", "items", "ALL_ACTIVE"],
+    queryFn: () => fetchJsonSilent("/api/items?status=ACTIVE&limit=1000"),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const itemsById = useMemo(() => {
+    const m = new Map<string, ItemRow>();
+    for (const r of itemsQuery.data?.rows ?? []) {
+      m.set(r.item_id, r);
+    }
+    return m;
+  }, [itemsQuery.data]);
+
   // Group lines by item for a stable row order, distinct buckets as columns.
+  // Existing items are sorted alphabetically; locally-added items trail at bottom
+  // in insertion order so the user sees them immediately after adding.
+  // When the draft has no existing lines, buckets are generated from version
+  // metadata (horizon_start_at + horizon_weeks + cadence) so a fresh draft is
+  // immediately editable without requiring a prior API seed call.
   const { items, buckets } = useMemo(() => {
-    const itemSet = new Set<string>();
+    const lineItemSet = new Set<string>();
     const bucketSet = new Set<string>();
     for (const l of lines) {
-      itemSet.add(l.item_id);
+      lineItemSet.add(l.item_id);
       bucketSet.add(l.period_bucket_key);
     }
+    const sortedExisting = Array.from(lineItemSet).sort();
+    const newItems = Array.from(addedItemIds).filter(
+      (id) => !lineItemSet.has(id),
+    );
+    const derivedBuckets =
+      bucketSet.size > 0
+        ? Array.from(bucketSet).sort()
+        : version
+          ? generateBucketsFromMetadata(
+              version.horizon_start_at,
+              version.horizon_weeks,
+              version.cadence,
+            )
+          : [];
     return {
-      items: Array.from(itemSet).sort(),
-      buckets: Array.from(bucketSet).sort(),
+      items: [...sortedExisting, ...newItems],
+      buckets: derivedBuckets,
     };
-  }, [lines]);
+  }, [lines, addedItemIds, version]);
+
+  // Set used for O(1) membership checks in the add-item combobox filter.
+  const itemsInForecast = useMemo(() => new Set(items), [items]);
 
   const cellKey = (item_id: string, bucket: string) => `${item_id}|${bucket}`;
   const originalByKey = useMemo(() => {
@@ -314,6 +414,7 @@ export default function ForecastVersionDetailPage() {
     onSuccess: () => {
       setActionMessage("Saved.");
       setLocalCells({});
+      setAddedItemIds(new Set());
       queryClient.invalidateQueries({
         queryKey: ["forecast", "version", versionId],
       });
@@ -461,14 +562,14 @@ export default function ForecastVersionDetailPage() {
         }
         contentClassName="p-0"
       >
-        {lines.length === 0 ? (
+        {items.length === 0 ? (
           <div className="p-5">
             <EmptyState
-              title="No lines yet."
+              title="No items yet."
               description={
                 isEditable
-                  ? "This draft has no saved lines. Save operations require a lines array, so start with adding lines via the API or a seed flow (line-authoring UI is not yet wired)."
-                  : "Nothing to show."
+                  ? "Use the add-item control below to start populating this draft."
+                  : "This version has no forecast lines."
               }
             />
           </div>
@@ -507,12 +608,20 @@ export default function ForecastVersionDetailPage() {
                 {items.map((itemId) => (
                   <tr
                     key={itemId}
-                    className="border-b border-border/40"
+                    className={cn(
+                      "border-b border-border/40",
+                      addedItemIds.has(itemId) && "bg-accent-soft/10",
+                    )}
                     data-testid="forecast-lines-row"
                     data-item-id={itemId}
                   >
-                    <td className="sticky left-0 z-[1] bg-bg-raised px-4 py-1.5 font-mono text-xs text-fg">
-                      {itemId}
+                    <td className="sticky left-0 z-[1] bg-bg-raised px-4 py-1.5 text-xs">
+                      <div className="font-medium text-fg leading-tight">
+                        {itemsById.get(itemId)?.item_name ?? itemId}
+                      </div>
+                      <div className="mt-0.5 font-mono text-3xs text-fg-faint">
+                        {itemId}
+                      </div>
                     </td>
                     {buckets.map((b) => {
                       const k = cellKey(itemId, b);
@@ -561,6 +670,70 @@ export default function ForecastVersionDetailPage() {
             </table>
           </div>
         )}
+        {isEditable ? (
+          <div className="border-t border-border/40 px-4 py-3">
+            <div className="mb-1.5 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+              Add item to forecast
+            </div>
+            <div className="flex items-center gap-2">
+              <select
+                value={addItemInput}
+                onChange={(e) => setAddItemInput(e.target.value)}
+                disabled={itemsQuery.isLoading}
+                className="min-w-0 flex-1 rounded border border-border/60 bg-bg-subtle px-2 py-1.5 text-xs text-fg disabled:opacity-50"
+                data-testid="forecast-add-item-select"
+              >
+                <option value="">
+                  {itemsQuery.isLoading
+                    ? "Loading items…"
+                    : "— select item to add —"}
+                </option>
+                {(itemsQuery.data?.rows ?? [])
+                  .filter((r) => !itemsInForecast.has(r.item_id))
+                  .sort((a, b) => a.item_name.localeCompare(b.item_name))
+                  .map((r) => (
+                    <option key={r.item_id} value={r.item_id}>
+                      {r.item_name}
+                    </option>
+                  ))}
+              </select>
+              <button
+                type="button"
+                disabled={!addItemInput || itemsQuery.isLoading}
+                className="btn btn-sm shrink-0"
+                data-testid="forecast-add-item-btn"
+                onClick={() => {
+                  if (!addItemInput) return;
+                  setAddedItemIds((prev) => {
+                    const next = new Set(prev);
+                    next.add(addItemInput);
+                    return next;
+                  });
+                  setAddItemInput("");
+                }}
+              >
+                + Add
+              </button>
+            </div>
+            {addedItemIds.size > 0 ? (
+              <p
+                className="mt-1.5 text-3xs text-fg-muted"
+                data-testid="forecast-added-hint"
+              >
+                {addedItemIds.size} item
+                {addedItemIds.size !== 1 ? "s" : ""} added — fill quantities
+                in the grid above, then click Save.
+              </p>
+            ) : null}
+            {buckets.length === 0 ? (
+              <p className="mt-1.5 text-3xs text-warning-fg">
+                No period columns yet — period buckets are derived from the
+                draft&apos;s horizon. Check that horizon_start_at and
+                horizon_weeks are set.
+              </p>
+            ) : null}
+          </div>
+        ) : null}
       </SectionCard>
     </>
   );
