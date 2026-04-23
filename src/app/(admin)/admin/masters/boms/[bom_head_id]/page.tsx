@@ -40,6 +40,7 @@ interface BomHeadRow {
   bom_kind: string;
   display_family: string | null;
   parent_ref_id: string;
+  parent_name: string | null;
   active_version_id: string | null;
   final_bom_output_qty: string;
   final_bom_output_uom: string | null;
@@ -479,7 +480,7 @@ export default function AdminMastersBomHeadDetailPage({
     <DetailPage
       header={{
         eyebrow: "Admin · Masters · BOMs",
-        title: item?.item_name ?? head?.parent_ref_id ?? bom_head_id,
+        title: item?.item_name ?? head?.parent_name ?? head?.parent_ref_id ?? bom_head_id,
         description:
           "BOM head — version history and linkage. View-only; editing lives in the separate BOM editor surface.",
         meta: headerMeta,

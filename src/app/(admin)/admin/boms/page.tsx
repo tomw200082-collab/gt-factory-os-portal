@@ -41,6 +41,7 @@ interface BomHeadRow {
   bom_kind: string;
   display_family: string | null;
   parent_ref_id: string;
+  parent_name: string | null;
   active_version_id: string | null;
   final_bom_output_qty: string;
   final_bom_output_uom: string | null;
@@ -217,7 +218,7 @@ function BomHeadRow({
           href={`/admin/boms/${encodeURIComponent(head.bom_head_id)}`}
           className="font-medium text-fg hover:text-accent"
         >
-          {item?.item_name ?? head.parent_ref_id}
+          {item?.item_name ?? head.parent_name ?? head.parent_ref_id}
         </Link>
         <div className="text-3xs font-mono text-fg-subtle">
           {head.parent_ref_id}
