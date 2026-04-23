@@ -97,18 +97,28 @@ export default function AdminMastersBomsListPage(): JSX.Element {
 
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
-    return rows.filter((h) => {
-      if (statusFilter === "active" && !h.active_version_id) return false;
-      if (statusFilter === "inactive" && h.active_version_id) return false;
-      if (!q) return true;
-      const item = itemsById.get(h.parent_ref_id);
-      return (
-        h.bom_head_id.toLowerCase().includes(q) ||
-        h.parent_ref_id.toLowerCase().includes(q) ||
-        (item?.item_name ?? "").toLowerCase().includes(q) ||
-        (h.display_family ?? "").toLowerCase().includes(q)
-      );
-    });
+    return rows
+      .filter((h) => {
+        if (statusFilter === "active" && !h.active_version_id) return false;
+        if (statusFilter === "inactive" && h.active_version_id) return false;
+        if (!q) return true;
+        const item = itemsById.get(h.parent_ref_id);
+        return (
+          h.bom_head_id.toLowerCase().includes(q) ||
+          h.parent_ref_id.toLowerCase().includes(q) ||
+          (item?.item_name ?? "").toLowerCase().includes(q) ||
+          (h.display_family ?? "").toLowerCase().includes(q)
+        );
+      })
+      .sort((a, b) => {
+        // Active heads first; within each group, alphabetical by item name
+        const aActive = a.active_version_id ? 0 : 1;
+        const bActive = b.active_version_id ? 0 : 1;
+        if (aActive !== bActive) return aActive - bActive;
+        const aName = (itemsById.get(a.parent_ref_id)?.item_name ?? a.parent_name ?? a.bom_head_id).toLowerCase();
+        const bName = (itemsById.get(b.parent_ref_id)?.item_name ?? b.parent_name ?? b.bom_head_id).toLowerCase();
+        return aName.localeCompare(bName);
+      });
   }, [rows, query, itemsById, statusFilter]);
 
   return (
