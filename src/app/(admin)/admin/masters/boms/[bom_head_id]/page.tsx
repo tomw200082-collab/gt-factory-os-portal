@@ -239,48 +239,56 @@ export default function AdminMastersBomHeadDetailPage({
         );
       }
       const rows: FieldRow[] = [
-        { label: "bom_head_id", value: head.bom_head_id, mono: true },
-        { label: "bom_kind", value: head.bom_kind, mono: true },
-        { label: "display_family", value: head.display_family },
+        { label: "BOM ID", value: head.bom_head_id, mono: true },
         {
-          label: "parent_ref_id",
+          label: "Type",
+          value: <Badge tone="info" dotted>{head.bom_kind}</Badge>,
+        },
+        {
+          label: "Family",
+          value: head.display_family ?? "—",
+        },
+        {
+          label: "Item / Base mix",
           value: item ? (
             <Link
               href={`/admin/masters/items/${encodeURIComponent(item.item_id)}`}
               className="font-mono text-accent hover:underline"
             >
-              {head.parent_ref_id}
+              {item.item_name} ({head.parent_ref_id})
             </Link>
           ) : (
-            head.parent_ref_id
+            head.parent_name ?? head.parent_ref_id
           ),
-          mono: true,
         },
         {
-          label: "active_version_id",
-          value: head.active_version_id ? (
+          label: "Active version",
+          value: activeVersion ? (
             <Link
               href={`/admin/masters/boms/${encodeURIComponent(
                 head.bom_head_id,
-              )}/${encodeURIComponent(head.active_version_id)}`}
+              )}/${encodeURIComponent(activeVersion.bom_version_id)}`}
               className="font-mono text-accent hover:underline"
             >
-              {head.active_version_id}
+              {activeVersion.version_label}
             </Link>
-          ) : null,
-          mono: true,
+          ) : (
+            <Badge tone="warning" dotted>No active version</Badge>
+          ),
         },
         {
-          label: "final_bom_output_qty",
-          value: head.final_bom_output_qty,
-          mono: true,
+          label: "Base batch output",
+          value: (
+            <span className="font-mono">
+              {head.final_bom_output_qty}
+              {head.final_bom_output_uom ? ` ${head.final_bom_output_uom}` : ""}
+            </span>
+          ),
         },
         {
-          label: "final_bom_output_uom",
-          value: head.final_bom_output_uom,
-          mono: true,
+          label: "Status",
+          value: <Badge tone="neutral" dotted>{head.status}</Badge>,
         },
-        { label: "status", value: <Badge tone="neutral" dotted>{head.status}</Badge> },
       ];
       return <DetailFieldGrid rows={rows} />;
     })(),
@@ -476,14 +484,32 @@ export default function AdminMastersBomHeadDetailPage({
     });
   }
 
+  const simulateHref =
+    head && head.active_version_id
+      ? `/admin/masters/boms/${encodeURIComponent(head.bom_head_id)}/${encodeURIComponent(head.active_version_id)}`
+      : null;
+
   return (
     <DetailPage
       header={{
         eyebrow: "Admin · Masters · BOMs",
         title: item?.item_name ?? head?.parent_name ?? head?.parent_ref_id ?? bom_head_id,
-        description:
-          "BOM head — version history and linkage. View-only; editing lives in the separate BOM editor surface.",
-        meta: headerMeta,
+        description: head?.active_version_id
+          ? "Review BOM versions and component lines. Use the active version to simulate production quantities and check material coverage."
+          : "No active version — publish a draft version to enable simulation.",
+        meta: (
+          <>
+            {headerMeta}
+            {simulateHref && (
+              <Link
+                href={simulateHref}
+                className="btn-primary inline-flex items-center gap-1.5 text-xs"
+              >
+                Simulate this BOM
+              </Link>
+            )}
+          </>
+        ),
       }}
       tabs={[overviewTab, versionsTab, exceptionsTab]}
       linkages={linkages}
