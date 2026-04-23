@@ -116,16 +116,11 @@ export default function AdminMastersBomsListPage(): JSX.Element {
       <WorkflowHeader
         eyebrow="Admin · Masters"
         title="Bills of materials"
-        description="View-only BOM browser. One BOM head per manufactured / repack item. Click a row to review versions and lines."
+        description="Browse manufactured and repack BOMs. Click a row to review versions, component lines, and simulate production quantities."
         meta={
-          <>
-            <Badge tone="neutral" dotted>
-              {headsQuery.data?.count ?? rows.length} heads
-            </Badge>
-            <Badge tone="info" dotted>
-              view-only
-            </Badge>
-          </>
+          <Badge tone="neutral" dotted>
+            {headsQuery.data?.count ?? rows.length} heads
+          </Badge>
         }
       />
 
@@ -139,13 +134,13 @@ export default function AdminMastersBomsListPage(): JSX.Element {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Filter by head id, item id, item name, or family…"
+              placeholder="Search by item name, BOM ID, or base mix…"
               className="input h-9 w-full pl-9"
             />
           </div>
           <label className="flex items-center gap-2 text-xs text-fg-muted">
             <span className="font-semibold uppercase tracking-sops text-3xs text-fg-subtle">
-              Active
+              Version status
             </span>
             <select
               value={statusFilter}
