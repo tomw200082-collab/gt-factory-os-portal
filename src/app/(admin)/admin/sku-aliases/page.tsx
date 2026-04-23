@@ -52,9 +52,10 @@ type ListEnvelope<T> = { rows: T[]; count: number };
 interface ExceptionRow {
   exception_id: string;
   category: string;
-  severity: "info" | "warning" | "fail_hard";
+  severity: "info" | "warning" | "critical";
   status: "open" | "acknowledged" | "resolved" | "auto_resolved";
-  detail: Record<string, unknown> | unknown;
+  title: string;
+  detail: string | null;
   item_id: string | null;
   component_id: string | null;
   emitted_at: string;
@@ -108,18 +109,14 @@ async function fetchJson<T>(url: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-// Extract the external_sku from an exception's detail payload. LionWheel
-// poller writes the unmapped SKU under various keys historically; probe a
-// short list tolerantly.
-function extractExternalSku(detail: unknown): string | null {
-  if (!detail || typeof detail !== "object") return null;
-  const d = detail as Record<string, unknown>;
-  const candidates = ["external_sku", "sku", "lionwheel_sku", "unknown_sku"];
-  for (const k of candidates) {
-    const v = d[k];
-    if (typeof v === "string" && v.length > 0) return v;
-  }
-  return null;
+// Extract the external_sku from an exception's title field.
+// The LionWheel poller writes: title = "Unknown SKU <sku>", detail = plain
+// text "lw_task_id=..., lw_order_item_id=...". The detail field is NOT a
+// JSON object, so SKU extraction must come from title.
+function extractExternalSku(title: string | null | undefined): string | null {
+  if (!title) return null;
+  const match = title.match(/Unknown SKU (.+)$/);
+  return match ? match[1].trim() : null;
 }
 
 function extractSourceChannel(category: string): string {
@@ -219,7 +216,7 @@ export default function AdminSkuAliasesPage(): JSX.Element {
     const rows = exceptionsQuery.data?.rows ?? [];
     const byKey = new Map<string, UnmappedSkuRow>();
     for (const r of rows) {
-      const sku = extractExternalSku(r.detail);
+      const sku = extractExternalSku(r.title);
       if (!sku) continue;
       const channel = extractSourceChannel(r.category);
       const key = `${channel}::${sku}`;
@@ -262,8 +259,15 @@ export default function AdminSkuAliasesPage(): JSX.Element {
 
   // ---- Mutation -------------------------------------------------------------
 
+  interface ApproveResponse {
+    approved_aliases: unknown[];
+    resolved_exceptions_count: number;
+    idempotent_replay: boolean;
+    submission_id: string;
+  }
+
   const approveMutation = useMutation<
-    unknown,
+    ApproveResponse | null,
     Error,
     Array<{
       source_channel: string;
@@ -286,14 +290,18 @@ export default function AdminSkuAliasesPage(): JSX.Element {
           }`,
         );
       }
-      return body;
+      return body as ApproveResponse | null;
     },
-    onSuccess: (_data, rows) => {
+    onSuccess: (data, rows) => {
+      const resolvedCount = data?.resolved_exceptions_count ?? 0;
+      const aliasWord = rows.length === 1 ? "alias" : "aliases";
       setBanner({
         kind: "success",
-        message: `Approved ${rows.length} alias${rows.length === 1 ? "" : "es"}.`,
+        message: `${rows.length} ${aliasWord} approved. ${resolvedCount} LionWheel exception${resolvedCount === 1 ? "" : "s"} resolved.`,
         detail:
-          "Matching exceptions should auto-resolve upstream. Refresh in ~30s to confirm.",
+          resolvedCount < rows.length
+            ? "Remaining exceptions stay open if no matching order lines were found for those SKUs."
+            : "All matching exceptions resolved. Refresh in ~30s to confirm.",
       });
       setSelected(new Set());
       setAssignments({});
@@ -705,7 +713,7 @@ export default function AdminSkuAliasesPage(): JSX.Element {
                     Source
                   </th>
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    Item ID
+                    Item
                   </th>
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Approved at
@@ -727,8 +735,22 @@ export default function AdminSkuAliasesPage(): JSX.Element {
                     <td className="px-3 py-2 text-xs text-fg-muted">
                       {r.source_channel}
                     </td>
-                    <td className="px-3 py-2 font-mono text-xs text-fg">
-                      {r.item_id}
+                    <td className="px-3 py-2 text-xs text-fg">
+                      {(() => {
+                        const item = itemsQuery.data?.rows.find(
+                          (i) => i.item_id === r.item_id,
+                        );
+                        return item ? (
+                          <>
+                            <span className="font-medium">{item.item_name}</span>
+                            <span className="ml-1 font-mono text-fg-muted">
+                              ({r.item_id})
+                            </span>
+                          </>
+                        ) : (
+                          <span className="font-mono">{r.item_id}</span>
+                        );
+                      })()}
                     </td>
                     <td className="px-3 py-2 text-xs text-fg-muted">
                       {r.approved_at
