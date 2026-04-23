@@ -75,6 +75,8 @@ import {
   patchEntity,
 } from "@/lib/admin/mutations";
 import { useSession } from "@/lib/auth/session-provider";
+import { BomSimulator } from "@/components/bom/BomSimulator";
+import { BomNetRequirements } from "@/components/bom/BomNetRequirements";
 
 // --- Types ----------------------------------------------------------------
 
@@ -106,6 +108,7 @@ interface BomLineRow {
   final_component_name: string;
   final_component_qty: string;
   component_uom: string | null;
+  qty_per_l_output: string | null;
   updated_at: string;
 }
 
@@ -779,6 +782,41 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
         />
       ) : null}
 
+      {/* Base output context — makes every line's "qty per" denominator explicit */}
+      <SectionCard
+        eyebrow="BOM basis"
+        title="Output quantity"
+        contentClassName="px-4 py-3"
+      >
+        <div className="flex flex-wrap items-center gap-x-6 gap-y-1.5 text-sm">
+          <div className="flex items-center gap-2">
+            <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+              Base output
+            </span>
+            <span className="font-mono font-semibold tabular-nums text-fg">
+              {head.final_bom_output_qty}{" "}
+              <span className="text-fg-muted">{head.final_bom_output_uom ?? "units"}</span>
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+              All line quantities below are
+            </span>
+            <span className="rounded bg-bg-subtle px-2 py-0.5 text-xs font-medium text-fg-muted">
+              per {head.final_bom_output_qty} {head.final_bom_output_uom ?? "units"} of output
+            </span>
+          </div>
+          <div className="flex items-center gap-2">
+            <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+              Rate column
+            </span>
+            <span className="rounded bg-bg-subtle px-2 py-0.5 text-xs font-medium text-fg-muted">
+              qty per 1 {head.final_bom_output_uom ?? "unit"} of output
+            </span>
+          </div>
+        </div>
+      </SectionCard>
+
       {/* Lines table */}
       <SectionCard
         eyebrow="Lines"
@@ -802,7 +840,7 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
         ) : lines.length === 0 ? (
           <div className="p-5 text-sm text-fg-muted">
             No lines on this version.{" "}
-            {editMode ? "Click “Add line” to start building the BOM." : ""}
+            {editMode ? 'Click "Add line" to start building the BOM.' : ""}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -811,7 +849,11 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
                 <tr className="border-b border-border/70 bg-bg-subtle/60">
                   <Th>#</Th>
                   <Th>Component</Th>
-                  <Th align="right">Qty per</Th>
+                  <Th align="right">
+                    Qty per {head.final_bom_output_qty}{" "}
+                    {head.final_bom_output_uom ?? "units"}
+                  </Th>
+                  <Th align="right">Rate per unit</Th>
                   <Th>Unit</Th>
                   <Th>Readiness</Th>
                   {editMode ? <Th align="right">Actions</Th> : null}
@@ -846,6 +888,22 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
           </div>
         )}
       </SectionCard>
+
+      {/* Simulator — below lines, always visible if active version */}
+      <BomSimulator
+        headId={head.bom_head_id}
+        baseOutputQty={head.final_bom_output_qty}
+        outputUom={head.final_bom_output_uom}
+        hasActiveVersion={!!head.active_version_id}
+      />
+
+      {/* Net requirements / purchase assistant */}
+      <BomNetRequirements
+        headId={head.bom_head_id}
+        baseOutputQty={head.final_bom_output_qty}
+        outputUom={head.final_bom_output_uom}
+        hasActiveVersion={!!head.active_version_id}
+      />
 
       {/* --- Drawer stack: picker + QuickCreateComponent --------------- */}
       {pickerTarget ? (
@@ -1184,6 +1242,14 @@ function PublishButton({
   );
 }
 
+function formatRate(raw: string | null | undefined): string {
+  if (!raw) return "—";
+  const n = parseFloat(raw);
+  if (isNaN(n)) return "—";
+  // show up to 6 significant digits, strip trailing zeros
+  return n.toPrecision(6).replace(/\.?0+$/, "");
+}
+
 function BomLineEditorRow({
   line,
   component,
@@ -1200,8 +1266,7 @@ function BomLineEditorRow({
   onDelete: () => void;
 }): JSX.Element {
   const componentName = line.final_component_name || component?.component_name || "—";
-  const unit =
-    line.component_uom ?? component?.inventory_uom ?? "—";
+  const unit = line.component_uom ?? component?.inventory_uom ?? "—";
 
   return (
     <tr className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40">
@@ -1243,6 +1308,10 @@ function BomLineEditorRow({
         ) : (
           line.final_component_qty
         )}
+      </td>
+      <td className="px-3 py-2 text-right font-mono text-xs tabular-nums text-fg-subtle"
+          title={line.qty_per_l_output ? `${line.qty_per_l_output} per 1 unit of output` : "Rate not yet computed"}>
+        {formatRate(line.qty_per_l_output)}
       </td>
       <td className="px-3 py-2 text-xs text-fg-muted">{unit}</td>
       <td className="px-3 py-2">
