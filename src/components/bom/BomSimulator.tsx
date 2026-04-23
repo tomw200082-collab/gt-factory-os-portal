@@ -84,7 +84,6 @@ export function BomSimulator({
     }
     setLoading(true);
     setError(null);
-    setResult(null);
     try {
       const url = `/api/boms/heads/${encodeURIComponent(headId)}/simulate?qty=${qty}`;
       const res = await fetch(url, { headers: { Accept: "application/json" } });
@@ -153,12 +152,10 @@ export function BomSimulator({
           <Calculator className="h-3.5 w-3.5" strokeWidth={2} />
           {loading ? "Calculating…" : "Simulate"}
         </button>
-        {result ? (
-          <div className="flex items-center gap-2 text-xs text-fg-muted">
-            <ChevronRight className="h-3 w-3 text-fg-faint" strokeWidth={2} />
-            Base BOM output: {baseOutputQty} {outputUom ?? ""}
-          </div>
-        ) : null}
+        <div className="flex items-center gap-2 text-xs text-fg-muted">
+          <ChevronRight className="h-3 w-3 text-fg-faint" strokeWidth={2} />
+          Base batch: {baseOutputQty} {outputUom ?? "units"}
+        </div>
       </div>
 
       {/* Error */}
