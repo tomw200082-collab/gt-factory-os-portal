@@ -1,17 +1,16 @@
 "use client";
 
 // Planner-scoped Waste approval/reject screen.
-// Consumes POST /api/waste-adjustments/:submission_id/{approve,reject}
-// which proxy to the backend-verified endpoints (pass-3b 13/13 green).
-//
-// Authored under W2 Mode B, scoped to WasteAdjustment only.
+// Consumes:
+//   GET /api/waste-adjustments/:submission_id  → decision-grade context
+//   POST /api/waste-adjustments/:submission_id/{approve,reject}
 // Contract refs:
 //   docs/waste_adjustment_runtime_contract.md §1.7 (approve/reject envelopes)
 //                                              §1.8 (response shapes)
-// Source-of-truth mirror: src/lib/contracts/waste-adjustments.ts
 
-import { useState } from "react";
+import { useState, type ReactNode } from "react";
 import { useParams } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
 import { useSession } from "@/lib/auth/session-provider";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
@@ -22,6 +21,23 @@ import type {
   WasteRejectionSuccessResponse,
   WasteConflictResponse,
 } from "@/lib/contracts/waste-adjustments";
+
+interface WasteAdjustmentDetail {
+  submission_id: string;
+  status: string;
+  direction: string;
+  item_type: string;
+  item_id: string;
+  item_display_name: string | null;
+  quantity: string;
+  unit: string;
+  reason_code: string;
+  notes: string | null;
+  submitted_by_display_name: string | null;
+  event_at: string;
+  submitted_at: string;
+  exception_category: string | null;
+}
 
 type ReviewOutcome =
   | { kind: "approved"; body: WasteApprovalSuccessResponse }
@@ -86,6 +102,15 @@ async function callReject(
   }
 }
 
+function DetailRow({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="flex gap-2 text-xs">
+      <span className="w-32 shrink-0 text-fg-subtle">{label}</span>
+      <span className="text-fg">{value}</span>
+    </div>
+  );
+}
+
 export default function WasteReviewPage() {
   const { session } = useSession();
   const params = useParams<{ submission_id: string }>();
@@ -94,6 +119,21 @@ export default function WasteReviewPage() {
   const [rejectionReason, setRejectionReason] = useState("");
   const [outcome, setOutcome] = useState<ReviewOutcome | null>(null);
   const [busy, setBusy] = useState(false);
+
+  const detailQuery = useQuery<WasteAdjustmentDetail>({
+    queryKey: ["waste-adjustment-detail", submissionId],
+    queryFn: async () => {
+      const res = await fetch(`/api/waste-adjustments/${encodeURIComponent(submissionId)}`, {
+        headers: { Accept: "application/json" },
+      });
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return (await res.json()) as WasteAdjustmentDetail;
+    },
+    enabled: !!submissionId,
+    staleTime: 30_000,
+  });
+
+  const d = detailQuery.data;
 
   const handleApprove = async () => {
     setBusy(true);
@@ -146,8 +186,80 @@ export default function WasteReviewPage() {
       <WorkflowHeader
         eyebrow="Planner review"
         title="Waste / Adjustment"
-        description={`Submission ${submissionId}`}
+        description={
+          d
+            ? `${d.item_display_name ?? d.item_id} · ${d.direction === "loss" ? "Loss" : "Positive correction"} · ${d.quantity} ${d.unit}`
+            : `Submission ${submissionId}`
+        }
       />
+
+      {detailQuery.isLoading ? (
+        <div className="mb-4 rounded-md border border-border/60 bg-bg-subtle/40 p-4 text-xs text-fg-muted">
+          Loading submission details…
+        </div>
+      ) : detailQuery.isError ? (
+        <div className="mb-4 rounded-md border border-danger/40 bg-danger-softer p-4 text-xs text-danger-fg">
+          Could not load submission details. You may still approve or reject below, but context is unavailable.
+        </div>
+      ) : d ? (
+        <div className="mb-5 rounded-md border border-border/60 bg-bg-subtle/40 p-4 space-y-1.5">
+          <div className="mb-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+            Submission details
+          </div>
+          <DetailRow
+            label="Item"
+            value={
+              d.item_display_name
+                ? `${d.item_display_name} · ${d.item_id}`
+                : d.item_id
+            }
+          />
+          <DetailRow
+            label="Action"
+            value={
+              d.direction === "loss" ? (
+                <span className="text-danger-fg font-medium">Loss / write-down</span>
+              ) : (
+                <span className="text-warning-fg font-medium">Positive correction</span>
+              )
+            }
+          />
+          <DetailRow label="Amount" value={`${d.quantity} ${d.unit}`} />
+          <DetailRow label="Reason" value={d.reason_code.replace(/_/g, " ")} />
+          {d.notes ? <DetailRow label="Notes" value={d.notes} /> : null}
+          <DetailRow
+            label="Event time"
+            value={new Date(d.event_at).toLocaleString()}
+          />
+          <DetailRow
+            label="Submitted"
+            value={`${new Date(d.submitted_at).toLocaleString()}${d.submitted_by_display_name ? ` by ${d.submitted_by_display_name}` : ""}`}
+          />
+          {d.exception_category ? (
+            <DetailRow
+              label="Why approval needed"
+              value={d.exception_category.replace(/_/g, " ")}
+            />
+          ) : null}
+          <DetailRow
+            label="Current status"
+            value={
+              <span
+                className={
+                  d.status === "pending"
+                    ? "text-warning-fg font-medium"
+                    : d.status === "posted"
+                      ? "text-success-fg font-medium"
+                      : "text-fg-muted"
+                }
+              >
+                {d.status}
+              </span>
+            }
+          />
+        </div>
+      ) : null}
+
       <SectionCard
         eyebrow="Approve"
         title="Accept this adjustment"

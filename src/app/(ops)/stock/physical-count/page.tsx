@@ -111,6 +111,7 @@ interface DoneState {
   kind: "success" | "pending" | "error";
   message: string;
   detail?: string;
+  itemSummary?: string;
   href?: string;
   hrefLabel?: string;
 }
@@ -250,21 +251,29 @@ export default function PhysicalCountPage() {
           }
         | null;
       if (body && body.status === "posted") {
+        const itemLabel = snapshot
+          ? `${snapshot.item_display_name} (${snapshot.item_type} ${snapshot.item_id})`
+          : "?";
         setDone({
           kind: "success",
           message: body.idempotent_replay
             ? "Count already posted (idempotent replay)."
             : "Count posted — new anchor applied.",
-          detail: `submission_id=${body.submission_id} · delta=${body.computed_delta ?? "?"}`,
+          itemSummary: `${itemLabel} · counted: ${qtyNum} ${unit} · delta: ${body.computed_delta ?? "?"}`,
+          detail: `submission_id=${body.submission_id}`,
         });
         resetFlow();
       } else if (body && body.status === "pending") {
         const sid = body.submission_id;
+        const itemLabel = snapshot
+          ? `${snapshot.item_display_name} (${snapshot.item_type} ${snapshot.item_id})`
+          : "?";
         setDone({
           kind: "pending",
           message:
             "Count variance exceeds threshold — held for planner approval.",
-          detail: `submission_id=${sid} · delta=${body.computed_delta ?? "?"}`,
+          itemSummary: `${itemLabel} · counted: ${qtyNum} ${unit} · delta: ${body.computed_delta ?? "?"}`,
+          detail: `submission_id=${sid}`,
           href: sid
             ? `/inbox/approvals/physical-count/${encodeURIComponent(sid)}`
             : undefined,
@@ -363,8 +372,13 @@ export default function PhysicalCountPage() {
               </Link>
             ) : null}
           </div>
+          {done.itemSummary ? (
+            <div className="mt-1 text-xs font-medium opacity-90">
+              {done.itemSummary}
+            </div>
+          ) : null}
           {done.detail ? (
-            <div className="mt-1 font-mono text-xs opacity-80">
+            <div className="mt-1 font-mono text-xs opacity-60">
               {done.detail}
             </div>
           ) : null}

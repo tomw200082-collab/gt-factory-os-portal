@@ -137,6 +137,7 @@ interface DoneState {
   kind: "success" | "pending" | "error";
   message: string;
   detail?: string;
+  itemSummary?: string;
   href?: string;
   hrefLabel?: string;
 }
@@ -258,6 +259,7 @@ export default function WasteAdjustmentPage() {
           message: body.idempotent_replay
             ? "Adjustment already posted (idempotent replay)."
             : "Adjustment posted.",
+          itemSummary: `${row.label} · ${direction === "loss" ? "−" : "+"}${qtyNum} ${unit} · ${String(reasonCode).replace(/_/g, " ")}`,
           detail: `submission_id=${body.submission_id}`,
         });
         setQuantity("");
@@ -268,6 +270,7 @@ export default function WasteAdjustmentPage() {
         setDone({
           kind: "pending",
           message: "Adjustment submitted — held for planner approval.",
+          itemSummary: `${row.label} · ${direction === "loss" ? "−" : "+"}${qtyNum} ${unit} · ${String(reasonCode).replace(/_/g, " ")}`,
           detail: `submission_id=${sid}`,
           href: sid
             ? `/inbox/approvals/waste/${encodeURIComponent(sid)}`
@@ -328,8 +331,13 @@ export default function WasteAdjustmentPage() {
               </Link>
             ) : null}
           </div>
+          {done.itemSummary ? (
+            <div className="mt-1 text-xs font-medium opacity-90">
+              {done.itemSummary}
+            </div>
+          ) : null}
           {done.detail ? (
-            <div className="mt-1 font-mono text-xs opacity-80">
+            <div className="mt-1 font-mono text-xs opacity-60">
               {done.detail}
             </div>
           ) : null}
