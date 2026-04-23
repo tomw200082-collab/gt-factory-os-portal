@@ -662,7 +662,7 @@ function CompareDiff({
               rows={added.map((l) => ({
                 component_id: l.final_component_id,
                 component_name: l.final_component_name,
-                detail: `qty_per = ${l.final_component_qty} ${l.component_uom ?? ""}`.trim(),
+                detail: `per batch: ${l.final_component_qty} ${l.component_uom ?? ""}`.trim(),
               }))}
             />
           ) : null}
@@ -673,7 +673,7 @@ function CompareDiff({
               rows={removed.map((l) => ({
                 component_id: l.final_component_id,
                 component_name: l.final_component_name,
-                detail: `was qty_per = ${l.final_component_qty} ${l.component_uom ?? ""}`.trim(),
+                detail: `was: ${l.final_component_qty} ${l.component_uom ?? ""} per batch`.trim(),
               }))}
             />
           ) : null}
@@ -725,6 +725,8 @@ function DiffSection({
                   r.component_id,
                 )}`}
                 className="font-medium text-fg hover:text-accent"
+                target="_blank"
+                rel="noopener noreferrer"
               >
                 {r.component_name || r.component_id}
               </Link>
