@@ -22,6 +22,7 @@
 
 import { use, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
   DetailPage,
@@ -348,41 +349,15 @@ export default function AdminMastersBomVersionDetailPage({
                 <tr className="border-b border-border/70 bg-bg-subtle/60">
                   <Th>#</Th>
                   <Th>Component</Th>
-                  <Th align="right">Qty per</Th>
+                  <Th align="right">
+                    Qty per{head ? ` ${head.final_bom_output_qty} ${head.final_bom_output_uom ?? ""}` : " batch"}
+                  </Th>
                   <Th>Unit</Th>
                 </tr>
               </thead>
               <tbody>
                 {lines.map((l) => (
-                  <tr
-                    key={l.line_id}
-                    className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
-                  >
-                    <td className="px-3 py-2 text-xs tabular-nums text-fg-muted">
-                      {l.line_no}
-                    </td>
-                    <td className="px-3 py-2">
-                      <div className="min-w-0">
-                        <Link
-                          href={`/admin/masters/components/${encodeURIComponent(
-                            l.final_component_id,
-                          )}`}
-                          className="font-medium text-fg hover:text-accent"
-                        >
-                          {l.final_component_name || l.final_component_id}
-                        </Link>
-                        <div className="text-3xs font-mono text-fg-subtle">
-                          {l.final_component_id}
-                        </div>
-                      </div>
-                    </td>
-                    <td className="px-3 py-2 text-right font-mono text-xs tabular-nums text-fg">
-                      {l.final_component_qty}
-                    </td>
-                    <td className="px-3 py-2 text-xs text-fg-muted">
-                      {l.component_uom ?? "—"}
-                    </td>
-                  </tr>
+                  <LineRow key={l.line_id} line={l} />
                 ))}
               </tbody>
             </table>
@@ -559,6 +534,41 @@ export default function AdminMastersBomVersionDetailPage({
         </>
       )}
     </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Lines row — row-click navigates to component detail
+// ---------------------------------------------------------------------------
+
+function LineRow({ line }: { line: BomLineRow }): JSX.Element {
+  const router = useRouter();
+  const componentHref = `/admin/masters/components/${encodeURIComponent(line.final_component_id)}`;
+  return (
+    <tr
+      className="cursor-pointer border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
+      onClick={() => router.push(componentHref)}
+    >
+      <td className="px-3 py-2 text-xs tabular-nums text-fg-muted">
+        {line.line_no}
+      </td>
+      <td className="px-3 py-2">
+        <div className="min-w-0">
+          <div className="font-medium text-fg">
+            {line.final_component_name || line.final_component_id}
+          </div>
+          <div className="text-3xs font-mono text-fg-subtle">
+            {line.final_component_id}
+          </div>
+        </div>
+      </td>
+      <td className="px-3 py-2 text-right font-mono text-xs tabular-nums text-fg">
+        {line.final_component_qty}
+      </td>
+      <td className="px-3 py-2 text-xs text-fg-muted">
+        {line.component_uom ?? "—"}
+      </td>
+    </tr>
   );
 }
 
