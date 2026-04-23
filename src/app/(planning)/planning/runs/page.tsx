@@ -41,6 +41,22 @@ type PlanningRunStatus =
   | "failed"
   | "superseded";
 
+interface ForecastContextRow {
+  version_id: string;
+  cadence: string | null;
+  horizon_start_at: string | null;
+  horizon_weeks: number | null;
+  status: string;
+  published_at: string | null;
+}
+
+interface JobContextRow {
+  job_name: string;
+  last_ended_at: string | null;
+  last_status: string | null;
+  failed_count_24h: number;
+}
+
 interface PlanningRunListRow {
   run_id: string;
   executed_at: string;
@@ -198,6 +214,17 @@ function fmtDate(iso: string | null): string {
   }
 }
 
+function timeAgo(iso: string | null): string {
+  if (!iso) return "—";
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffH = Math.floor(diffMin / 60);
+  if (diffH < 24) return `${diffH}h ago`;
+  return `${Math.floor(diffH / 24)}d ago`;
+}
+
 export default function PlanningRunsListPage() {
   const { session } = useSession();
   const router = useRouter();
@@ -207,6 +234,32 @@ export default function PlanningRunsListPage() {
   const [breakGlass, setBreakGlass] = useState(false);
   const [triggerError, setTriggerError] = useState<string | null>(null);
   const canAuthor = session.role === "planner" || session.role === "admin";
+
+  const forecastQuery = useQuery<{ rows: ForecastContextRow[] }>({
+    queryKey: ["forecast", "versions", "published"],
+    queryFn: async () => {
+      const res = await fetch("/api/forecasts/versions?status=published");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json() as Promise<{ rows: ForecastContextRow[] }>;
+    },
+    staleTime: 2 * 60 * 1000,
+  });
+
+  const jobsQuery = useQuery<{ rows: JobContextRow[] }>({
+    queryKey: ["admin", "jobs"],
+    queryFn: async () => {
+      const res = await fetch("/api/admin/jobs");
+      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      return res.json() as Promise<{ rows: JobContextRow[] }>;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const latestForecast = forecastQuery.data?.rows?.[0] ?? null;
+  const lionwheelJob =
+    jobsQuery.data?.rows?.find(
+      (j) => j.job_name === "integration.lionwheel" || j.job_name === "lionwheel_poll",
+    ) ?? null;
 
   const query = useQuery<ListResponse>({
     queryKey: ["planning", "runs", statusFilter ?? "all", session.role],
@@ -269,6 +322,83 @@ export default function PlanningRunsListPage() {
           ) : null
         }
       />
+
+      {/* Planning context — demand inputs summary */}
+      <div className="mb-4 grid grid-cols-1 gap-3 sm:grid-cols-3">
+        {/* Forecast */}
+        <div className="rounded-md border border-border/60 bg-bg-raised px-4 py-3">
+          <div className="mb-1.5 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+            Forecast
+          </div>
+          {forecastQuery.isLoading ? (
+            <div className="text-xs text-fg-muted">Loading…</div>
+          ) : !latestForecast ? (
+            <div className="text-xs text-warning-fg">
+              No published forecast — planning uses open orders only
+            </div>
+          ) : (
+            <>
+              <div className="text-xs font-medium text-fg">
+                {latestForecast.cadence ?? "forecast"} · {latestForecast.horizon_weeks}w horizon
+              </div>
+              <div className="mt-0.5 font-mono text-3xs text-fg-muted">
+                {latestForecast.version_id.slice(0, 8)}…
+              </div>
+              <div className="mt-0.5 text-3xs text-fg-muted">
+                Published {fmtDate(latestForecast.published_at)}
+              </div>
+            </>
+          )}
+        </div>
+
+        {/* Order sync */}
+        <div className="rounded-md border border-border/60 bg-bg-raised px-4 py-3">
+          <div className="mb-1.5 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+            Order sync (LionWheel)
+          </div>
+          {jobsQuery.isLoading ? (
+            <div className="text-xs text-fg-muted">Loading…</div>
+          ) : !lionwheelJob ? (
+            <div className="text-xs text-fg-muted">No sync data</div>
+          ) : (
+            <>
+              <div
+                className={cn(
+                  "text-xs font-medium",
+                  lionwheelJob.last_status === "failed"
+                    ? "text-danger-fg"
+                    : "text-fg",
+                )}
+              >
+                {lionwheelJob.last_status === "failed"
+                  ? "Last sync failed"
+                  : "Synced"}
+              </div>
+              <div className="mt-0.5 text-3xs text-fg-muted">
+                {timeAgo(lionwheelJob.last_ended_at)}
+              </div>
+              {Number(lionwheelJob.failed_count_24h) > 0 ? (
+                <div className="mt-0.5 text-3xs text-warning-fg">
+                  {lionwheelJob.failed_count_24h} failure
+                  {Number(lionwheelJob.failed_count_24h) !== 1 ? "s" : ""} in 24h
+                </div>
+              ) : null}
+            </>
+          )}
+        </div>
+
+        {/* Demand coverage caveat */}
+        <div className="rounded-md border border-warning/30 bg-warning-softer px-4 py-3">
+          <div className="mb-1.5 text-3xs font-semibold uppercase tracking-sops text-warning-fg">
+            Demand coverage
+          </div>
+          <div className="text-xs text-fg">Partial</div>
+          <div className="mt-0.5 text-3xs text-fg-muted">
+            Bundle SKUs and unresolved LionWheel mappings are excluded.
+            Recommendations reflect resolved demand only.
+          </div>
+        </div>
+      </div>
 
       {breakGlass ? (
         <div
