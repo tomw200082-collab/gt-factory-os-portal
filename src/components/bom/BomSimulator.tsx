@@ -253,11 +253,13 @@ export function BomSimulator({
                         {line.line_no}
                       </td>
                       <td className="px-3 py-2">
-                        <div className="font-medium text-fg">
-                          {line.component_name}
-                        </div>
-                        <div className="text-3xs font-mono text-fg-subtle">
-                          {line.component_id}
+                        <div className="min-w-0 max-w-[220px]">
+                          <div className="truncate font-medium text-fg" title={line.component_name}>
+                            {line.component_name}
+                          </div>
+                          <div className="truncate text-3xs font-mono text-fg-subtle">
+                            {line.component_id}
+                          </div>
                         </div>
                       </td>
                       <td className="px-3 py-2 text-right font-mono text-xs tabular-nums text-fg-muted">
