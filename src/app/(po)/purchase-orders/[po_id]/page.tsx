@@ -1,7 +1,7 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// Purchase Orders · Detail — PO corridor Tranche 3-4 (lines + detail + history).
+// Purchase Orders · Detail — PO corridor Tranche 3-5 (lines + detail + history + GRs).
 // Canonical URL /purchase-orders/[po_id].
 //
 // Header: po_number, supplier link, status badge (OPEN|PARTIAL|RECEIVED|
@@ -11,8 +11,8 @@
 //   - lines                LIVE — GET /api/purchase-order-lines?po_id=X
 //   - overview             LIVE — GET /api/purchase-orders/:po_id
 //   - source-recommendation LIVE — deep-link to /planning/runs/[run_id]
+//   - attached-grs         LIVE — GET /api/goods-receipts?po_id=X
 //   - history              LIVE — GET /api/purchase-orders/:po_id/history
-//   - attached-grs         PENDING — no GR list endpoint upstream yet.
 // ---------------------------------------------------------------------------
 
 import { use } from "react";
@@ -24,7 +24,6 @@ import {
   DetailTabEmpty,
   DetailTabError,
   DetailTabLoading,
-  PendingTabPlaceholder,
   type LinkageGroup,
   type TabDescriptor,
   type FieldRow,
@@ -117,6 +116,34 @@ interface PurchaseOrderHistoryResponse {
   count: number;
 }
 
+interface GoodsReceiptLineRow {
+  line_id: string;
+  item_type: string;
+  item_id: string;
+  quantity: string;
+  unit: string;
+  po_line_id: string | null;
+  notes: string | null;
+}
+
+interface GoodsReceiptSummaryRow {
+  submission_id: string;
+  po_id: string | null;
+  supplier_id: string;
+  status: string;
+  event_at: string;
+  posted_at: string | null;
+  submitted_by: string;
+  gr_notes: string | null;
+  site_id: string;
+  lines: GoodsReceiptLineRow[];
+}
+
+interface GoodsReceiptsListResponse {
+  rows: GoodsReceiptSummaryRow[];
+  count: number;
+}
+
 // --- helpers ----------------------------------------------------------------
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -196,6 +223,72 @@ function LineStatusBadge({ status }: { status: string }): JSX.Element {
   if (status === "CLOSED") return <Badge tone="success" variant="solid">Closed</Badge>;
   if (status === "CANCELLED") return <Badge tone="neutral" dotted>Cancelled</Badge>;
   return <Badge tone="neutral">{status}</Badge>;
+}
+
+// --- Attached GR card -------------------------------------------------------
+
+function GrStatusBadge({ status }: { status: string }): JSX.Element {
+  if (status === "posted") return <Badge tone="success" variant="solid">Posted</Badge>;
+  if (status === "pending") return <Badge tone="warning" dotted>Pending</Badge>;
+  if (status === "rejected") return <Badge tone="danger" dotted>Rejected</Badge>;
+  if (status === "cancelled") return <Badge tone="neutral" dotted>Cancelled</Badge>;
+  return <Badge tone="neutral">{status}</Badge>;
+}
+
+function AttachedGrCard({
+  gr,
+  currency,
+}: {
+  gr: GoodsReceiptSummaryRow;
+  currency: string;
+}): JSX.Element {
+  return (
+    <div
+      className="border border-border/60 rounded-lg overflow-hidden"
+      data-testid="attached-gr-card"
+      data-status={gr.status}
+    >
+      <div className="flex items-center gap-3 px-4 py-3 bg-bg-subtle/40 border-b border-border/40">
+        <GrStatusBadge status={gr.status} />
+        <span className="font-mono text-xs text-fg-muted">{gr.submission_id.slice(0, 8)}…</span>
+        <span className="text-xs text-fg-muted">received {fmtDate(gr.event_at)}</span>
+        {gr.posted_at && (
+          <span className="text-xs text-fg-faint ml-auto">posted {fmtDate(gr.posted_at)}</span>
+        )}
+      </div>
+      {gr.lines.length > 0 && (
+        <table className="w-full text-sm border-collapse">
+          <thead>
+            <tr className="border-b border-border/30">
+              <th className="px-4 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Item</th>
+              <th className="px-4 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Qty</th>
+              <th className="px-4 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">UoM</th>
+              <th className="px-4 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Type</th>
+              <th className="px-4 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">PO line</th>
+            </tr>
+          </thead>
+          <tbody>
+            {gr.lines.map((line) => (
+              <tr key={line.line_id} className="border-b border-border/20 last:border-b-0 hover:bg-bg-subtle/30">
+                <td className="px-4 py-2 font-mono text-xs text-fg">{line.item_id}</td>
+                <td className="px-4 py-2 text-right font-mono text-xs tabular-nums text-fg">{fmtQty(line.quantity)}</td>
+                <td className="px-4 py-2 text-xs text-fg-muted">{line.unit}</td>
+                <td className="px-4 py-2 text-xs text-fg-muted">{line.item_type}</td>
+                <td className="px-4 py-2 font-mono text-3xs text-fg-faint">
+                  {line.po_line_id ? line.po_line_id.slice(0, 8) + "…" : "—"}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {gr.gr_notes && (
+        <div className="px-4 py-2 text-xs text-fg-muted border-t border-border/30">
+          {gr.gr_notes}
+        </div>
+      )}
+    </div>
+  );
 }
 
 // --- Action label map -------------------------------------------------------
@@ -321,6 +414,17 @@ export default function PurchaseOrderDetailPage({
     queryFn: () =>
       fetchJson(
         `/api/purchase-orders/${encodeURIComponent(po_id)}/history`,
+      ),
+    enabled: Boolean(po_id),
+    staleTime: 30_000,
+  });
+
+  // Attached GRs.
+  const grsQuery = useQuery<GoodsReceiptsListResponse>({
+    queryKey: ["goods-receipts", "by-po", po_id],
+    queryFn: () =>
+      fetchJson(
+        `/api/goods-receipts?po_id=${encodeURIComponent(po_id)}`,
       ),
     enabled: Boolean(po_id),
     staleTime: 30_000,
@@ -540,15 +644,31 @@ export default function PurchaseOrderDetailPage({
     })(),
   };
 
-  // --- Attached GRs tab (pending) ------------------------------------------
+  // --- Attached GRs tab ---------------------------------------------------
   const attachedGrsTab: TabDescriptor = {
     key: "attached-grs",
     label: "Attached GRs",
-    content: (
-      <PendingTabPlaceholder
-        reason="Goods receipts linked to this PO will appear here in a future release."
-      />
-    ),
+    content: (() => {
+      if (grsQuery.isLoading) return <DetailTabLoading />;
+      if (grsQuery.isError) {
+        return (
+          <DetailTabError message="Could not load attached goods receipts. Check your connection and try refreshing." />
+        );
+      }
+      const grs = grsQuery.data?.rows ?? [];
+      if (grs.length === 0) {
+        return (
+          <DetailTabEmpty message="No goods receipts have been recorded against this purchase order." />
+        );
+      }
+      return (
+        <div className="space-y-4 py-2" data-testid="attached-grs-list">
+          {grs.map((gr) => (
+            <AttachedGrCard key={gr.submission_id} gr={gr} currency={po?.currency ?? "ILS"} />
+          ))}
+        </div>
+      );
+    })(),
   };
 
   // --- History tab ---------------------------------------------------------
@@ -617,10 +737,15 @@ export default function PurchaseOrderDetailPage({
     });
   }
 
+  const grItems = (grsQuery.data?.rows ?? []).map((gr) => ({
+    label: `GR ${gr.submission_id.slice(0, 8)}…`,
+    href: `/ops/receipts`,
+    subtitle: `${gr.status} · ${fmtDate(gr.event_at)}`,
+  }));
   linkages.push({
     label: "Attached goods receipts",
-    items: [],
-    emptyText: "Goods receipts linked to this PO will appear here in a future release.",
+    items: grItems,
+    emptyText: "No goods receipts recorded for this PO.",
   });
 
   return (
