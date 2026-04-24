@@ -179,6 +179,7 @@ export default function PurchaseOrdersListPage() {
     return rows.filter(
       (r) =>
         r.po_number.toLowerCase().includes(qLower) ||
+        r.po_id.toLowerCase().includes(qLower) ||
         r.supplier_id.toLowerCase().includes(qLower) ||
         (r.supplier_name ?? "").toLowerCase().includes(qLower) ||
         (r.notes ?? "").toLowerCase().includes(qLower),

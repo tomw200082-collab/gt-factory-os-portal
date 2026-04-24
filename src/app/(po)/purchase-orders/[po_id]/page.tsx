@@ -621,6 +621,11 @@ export default function PurchaseOrderDetailPage({
           from recommendation
         </Badge>
       ) : null}
+      {grsQuery.data && grsQuery.data.count > 0 ? (
+        <Badge tone="success" dotted>
+          {grsQuery.data.count} GR{grsQuery.data.count === 1 ? "" : "s"}
+        </Badge>
+      ) : null}
     </>
   ) : null;
 
