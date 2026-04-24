@@ -253,7 +253,8 @@ export default function InboxListPage() {
   const canAct = session.role === "planner" || session.role === "admin";
 
   const [resolvingId, setResolvingId] = useState<string | null>(null);
-  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   // Memoize a stable "now" per render tree so all row ages use the same frame
   // of reference.
@@ -269,21 +270,25 @@ export default function InboxListPage() {
         queryKey: QK_WASTE,
         queryFn: ({ signal }: { signal: AbortSignal }) =>
           fetchPendingWasteApprovals(signal),
+        staleTime: 30_000,
       },
       {
         queryKey: QK_PC,
         queryFn: ({ signal }: { signal: AbortSignal }) =>
           fetchPendingPhysicalCountApprovals(signal),
+        staleTime: 30_000,
       },
       {
         queryKey: QK_REC,
         queryFn: ({ signal }: { signal: AbortSignal }) =>
           fetchPendingPlanningRecApprovals(signal),
+        staleTime: 30_000,
       },
       {
         queryKey: QK_EXC,
         queryFn: ({ signal }: { signal: AbortSignal }) =>
           fetchExceptions(signal),
+        staleTime: 30_000,
       },
     ],
   });
@@ -293,27 +298,11 @@ export default function InboxListPage() {
   const anyLoading =
     wasteQ.isLoading || pcQ.isLoading || recQ.isLoading || excQ.isLoading;
 
-  const sourceErrors: Array<{ label: string; message: string }> = [];
-  if (wasteQ.isError)
-    sourceErrors.push({
-      label: "Waste approvals",
-      message: (wasteQ.error as Error).message,
-    });
-  if (pcQ.isError)
-    sourceErrors.push({
-      label: "Count approvals",
-      message: (pcQ.error as Error).message,
-    });
-  if (recQ.isError)
-    sourceErrors.push({
-      label: "Planning rec approvals",
-      message: (recQ.error as Error).message,
-    });
-  if (excQ.isError)
-    sourceErrors.push({
-      label: "Exceptions",
-      message: (excQ.error as Error).message,
-    });
+  const sourceErrors: Array<{ label: string }> = [];
+  if (wasteQ.isError) sourceErrors.push({ label: "Waste / adjustment approvals" });
+  if (pcQ.isError) sourceErrors.push({ label: "Physical count approvals" });
+  if (recQ.isError) sourceErrors.push({ label: "Planning recommendation approvals" });
+  if (excQ.isError) sourceErrors.push({ label: "Exceptions" });
 
   // -------------------------------------------------------------------------
   // Merge + filter. The unfiltered merged rows are seeded into the
@@ -392,20 +381,19 @@ export default function InboxListPage() {
     mutationFn: (id: string) => acknowledgeException(id, newIdempotencyKey()),
     onSuccess: (res, id) => {
       if (res.ok) {
-        setActionMessage("Acknowledged.");
+        setActionSuccess("Acknowledged.");
+        setActionError(null);
         invalidateExceptions();
       } else {
-        const tail = res.reason_code
-          ? `${res.reason_code}${res.detail ? `: ${res.detail}` : ""}`
-          : res.detail ?? `HTTP ${res.status}`;
-        setActionMessage(`Acknowledge failed — ${tail}`);
+        setActionError(res.detail ? `Acknowledge failed — ${res.detail}` : "Acknowledge failed. Try again.");
+        setActionSuccess(null);
       }
       return id;
     },
     onError: (err: unknown) => {
-      setActionMessage(
-        `Acknowledge failed — ${err instanceof Error ? err.message : String(err)}`,
-      );
+      console.error("[Inbox] acknowledge error:", err);
+      setActionError("Acknowledge failed. Check your connection and try again.");
+      setActionSuccess(null);
     },
   });
 
@@ -414,20 +402,19 @@ export default function InboxListPage() {
       resolveException(id, notes, newIdempotencyKey()),
     onSuccess: (res) => {
       if (res.ok) {
-        setActionMessage("Resolved.");
+        setActionSuccess("Resolved.");
+        setActionError(null);
         setResolvingId(null);
         invalidateExceptions();
       } else {
-        const tail = res.reason_code
-          ? `${res.reason_code}${res.detail ? `: ${res.detail}` : ""}`
-          : res.detail ?? `HTTP ${res.status}`;
-        setActionMessage(`Resolve failed — ${tail}`);
+        setActionError(res.detail ? `Resolve failed — ${res.detail}` : "Resolve failed. Try again.");
+        setActionSuccess(null);
       }
     },
     onError: (err: unknown) => {
-      setActionMessage(
-        `Resolve failed — ${err instanceof Error ? err.message : String(err)}`,
-      );
+      console.error("[Inbox] resolve error:", err);
+      setActionError("Resolve failed. Check your connection and try again.");
+      setActionSuccess(null);
     },
   });
 
@@ -515,20 +502,30 @@ export default function InboxListPage() {
             </div>
             <ul className="mt-1 list-disc space-y-0.5 pl-5">
               {sourceErrors.map((e) => (
-                <li key={e.label}>
-                  <span className="font-medium">{e.label}:</span> {e.message}
-                </li>
+                <li key={e.label}>{e.label}</li>
               ))}
             </ul>
+            <div className="mt-1 text-danger-fg/80">Check your connection and try refreshing. Rows from failed sources are not shown.</div>
           </div>
         ) : null}
 
-        {actionMessage ? (
+        {actionSuccess ? (
           <div
-            className="border-b border-border/60 bg-bg-subtle/40 px-5 py-2 text-xs text-fg-muted"
-            data-testid="inbox-action-message"
+            className="flex items-center gap-2 border-b border-success/30 bg-success-subtle/40 px-5 py-2 text-xs text-success-fg"
+            data-testid="inbox-action-success"
           >
-            {actionMessage}
+            <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+            {actionSuccess}
+          </div>
+        ) : null}
+
+        {actionError ? (
+          <div
+            className="flex items-center gap-2 border-b border-danger/30 bg-danger-softer px-5 py-2 text-xs text-danger-fg"
+            data-testid="inbox-action-error"
+          >
+            <AlertCircle className="h-3.5 w-3.5 shrink-0" />
+            {actionError}
           </div>
         ) : null}
 
@@ -537,8 +534,8 @@ export default function InboxListPage() {
         ) : visibleRows.length === 0 ? (
           <div className="p-5">
             <EmptyState
-              title={`No rows in this view — everything caught up.`}
-              description={`Try the "All" filter to see rows in other domains.`}
+              title={filter.view === "all" ? "Nothing in your inbox." : `No ${VIEW_LABELS[filter.view].toLowerCase()} items.`}
+              description={filter.view === "all" ? "All approvals and exceptions are clear." : `Try the "All" view to see items from other categories.`}
             />
           </div>
         ) : (
@@ -554,7 +551,8 @@ export default function InboxListPage() {
                 canAct={canAct}
                 isResolvingThis={resolvingId === row.id}
                 onStartResolve={(id) => {
-                  setActionMessage(null);
+                  setActionSuccess(null);
+                  setActionError(null);
                   setResolvingId(id);
                 }}
                 onCancelResolve={() => setResolvingId(null)}
@@ -562,7 +560,8 @@ export default function InboxListPage() {
                   resolveMutation.mutate({ id, notes })
                 }
                 onAcknowledge={(id) => {
-                  setActionMessage(null);
+                  setActionSuccess(null);
+                  setActionError(null);
                   ackMutation.mutate(id);
                 }}
                 ackBusy={
@@ -696,6 +695,35 @@ function InboxRowItem({
                 data-testid="inbox-row-review"
               >
                 Review
+                <ArrowRight className="h-3 w-3" strokeWidth={2} />
+              </Link>
+            ) : !isApproval && row.deep_link !== "/inbox" ? (
+              <Link
+                href={row.deep_link}
+                className="btn btn-sm gap-1.5"
+                data-testid="inbox-row-fix-link"
+              >
+                Fix this
+                <ArrowRight className="h-3 w-3" strokeWidth={2} />
+              </Link>
+            ) : null}
+            {!isApproval && row.item_id ? (
+              <Link
+                href={`/admin/masters/items/${encodeURIComponent(row.item_id)}`}
+                className="btn btn-sm gap-1.5"
+                data-testid="inbox-row-item-link"
+              >
+                Item: {row.item_id}
+                <ArrowRight className="h-3 w-3" strokeWidth={2} />
+              </Link>
+            ) : null}
+            {!isApproval && row.component_id && row.component_id !== row.item_id ? (
+              <Link
+                href={`/admin/masters/items/${encodeURIComponent(row.component_id)}`}
+                className="btn btn-sm gap-1.5"
+                data-testid="inbox-row-component-link"
+              >
+                Component: {row.component_id}
                 <ArrowRight className="h-3 w-3" strokeWidth={2} />
               </Link>
             ) : null}

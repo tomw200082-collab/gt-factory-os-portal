@@ -176,6 +176,21 @@ function toApprovalInboxRow(
   };
 }
 
+// Maps exception categories to their actionable fix surface.
+// Returning "/inbox" means "stay in inbox — inline actions are the fix path."
+function resolveExceptionDeepLink(category: string): string {
+  const c = category.toLowerCase();
+  if (c.includes("lionwheel_unknown_sku") || c.includes("sku_unresolved") || c.includes("unknown_sku"))
+    return "/admin/sku-aliases";
+  if (c.startsWith("lionwheel_") || c.startsWith("shopify_") || c.startsWith("gi_") || c.includes("stale"))
+    return "/admin/integrations";
+  if (c.includes("po_line_over_receipt"))
+    return "/purchase-orders";
+  if (c.includes("missing_supplier") || c.includes("missing_bom"))
+    return "/admin/sku-map";
+  return "/inbox";
+}
+
 function toExceptionInboxRow(row: ExceptionRow): InboxRow {
   const itemId = rawIsObject(row)
     ? readEntityIdFromExceptionRaw(row as unknown as Record<string, unknown>, "item_id")
@@ -196,10 +211,7 @@ function toExceptionInboxRow(row: ExceptionRow): InboxRow {
     summary: summarizeException(row),
     item_id: itemId,
     component_id: componentId,
-    // Exceptions stay inside the inbox — no external detail page in
-    // Tranche B. The inline actions (acknowledge / resolve) handle the
-    // state transitions directly on the list row.
-    deep_link: "/inbox",
+    deep_link: resolveExceptionDeepLink(row.category),
     inline_actions:
       row.status === "open"
         ? ["acknowledge", "resolve"]
