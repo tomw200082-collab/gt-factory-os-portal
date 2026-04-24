@@ -614,7 +614,7 @@ export default function PurchaseOrderDetailPage({
         </Badge>
       ) : null}
       <Badge tone="neutral">
-        total {po.total_net} {po.currency}
+        total {fmtMoney(po.total_net, po.currency)}
       </Badge>
       {po.source_recommendation_id ? (
         <Badge tone="info" dotted>
