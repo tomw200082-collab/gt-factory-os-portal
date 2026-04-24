@@ -1,7 +1,7 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// Purchase Orders · Detail — PO corridor Tranche 3 (lines + detail endpoints).
+// Purchase Orders · Detail — PO corridor Tranche 3-4 (lines + detail + history).
 // Canonical URL /purchase-orders/[po_id].
 //
 // Header: po_number, supplier link, status badge (OPEN|PARTIAL|RECEIVED|
@@ -11,8 +11,8 @@
 //   - lines                LIVE — GET /api/purchase-order-lines?po_id=X
 //   - overview             LIVE — GET /api/purchase-orders/:po_id
 //   - source-recommendation LIVE — deep-link to /planning/runs/[run_id]
+//   - history              LIVE — GET /api/purchase-orders/:po_id/history
 //   - attached-grs         PENDING — no GR list endpoint upstream yet.
-//   - history              PENDING — no per-PO change_log endpoint exposed.
 // ---------------------------------------------------------------------------
 
 import { use } from "react";
@@ -99,6 +99,24 @@ interface SuppliersListResponse {
   count: number;
 }
 
+interface ChangeLogHistoryRow {
+  change_log_id: string;
+  entity_table: string;
+  entity_id: string;
+  action: string;
+  changed_fields: string[] | null;
+  old_values: Record<string, unknown> | null;
+  new_values: Record<string, unknown> | null;
+  actor_user_id: string | null;
+  actor_snapshot: string;
+  created_at: string;
+}
+
+interface PurchaseOrderHistoryResponse {
+  rows: ChangeLogHistoryRow[];
+  count: number;
+}
+
 // --- helpers ----------------------------------------------------------------
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -180,6 +198,80 @@ function LineStatusBadge({ status }: { status: string }): JSX.Element {
   return <Badge tone="neutral">{status}</Badge>;
 }
 
+// --- Action label map -------------------------------------------------------
+
+const ACTION_LABELS: Record<string, string> = {
+  PO_CREATE: "PO created",
+  PO_UPDATE: "PO updated",
+  PO_STATUS_CHANGE: "Status changed",
+  PO_CANCEL: "PO cancelled",
+  PO_LINE_CREATE: "Line created",
+  PO_LINE_UPDATE: "Line updated",
+  POL_STATUS_CHANGE: "Line status changed",
+  POL_CANCEL: "Line cancelled",
+};
+
+function actionTone(action: string): "success" | "warning" | "neutral" | "info" {
+  if (action === "PO_CREATE" || action === "PO_LINE_CREATE") return "success";
+  if (action === "PO_CANCEL" || action === "POL_CANCEL") return "neutral";
+  if (action === "PO_STATUS_CHANGE" || action === "POL_STATUS_CHANGE") return "warning";
+  return "info";
+}
+
+function HistoryEventRow({ event }: { event: ChangeLogHistoryRow }): JSX.Element {
+  const label = ACTION_LABELS[event.action] ?? event.action;
+  const isLineEvent = event.entity_table === "purchase_order_lines";
+  const changedFields = Array.isArray(event.changed_fields) ? event.changed_fields : [];
+  const hasValues = event.old_values !== null || event.new_values !== null;
+
+  return (
+    <div
+      className="flex gap-3 px-4 py-3 border-b border-border/30 last:border-b-0 hover:bg-bg-subtle/30"
+      data-action={event.action}
+    >
+      <div className="flex-shrink-0 pt-0.5">
+        <Badge tone={actionTone(event.action)} variant="solid" className="text-3xs min-w-[7rem] justify-center">
+          {label}
+        </Badge>
+      </div>
+      <div className="flex-1 min-w-0">
+        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+          <span className="text-sm font-medium text-fg">{event.actor_snapshot}</span>
+          {isLineEvent && (
+            <span className="text-3xs font-mono text-fg-faint">line {event.entity_id.slice(0, 8)}…</span>
+          )}
+          <span className="text-xs text-fg-muted ml-auto">{fmtDateTime(event.created_at)}</span>
+        </div>
+        {changedFields.length > 0 && (
+          <div className="mt-1 flex flex-wrap gap-1">
+            {changedFields.map((f) => (
+              <span key={f} className="inline-block bg-bg-subtle border border-border/50 rounded px-1.5 py-0.5 text-3xs font-mono text-fg-muted">
+                {f}
+              </span>
+            ))}
+          </div>
+        )}
+        {hasValues && (
+          <div className="mt-1.5 grid grid-cols-2 gap-2 text-3xs font-mono text-fg-faint">
+            {event.old_values !== null && (
+              <div>
+                <span className="text-fg-subtle">before: </span>
+                {JSON.stringify(event.old_values)}
+              </div>
+            )}
+            {event.new_values !== null && (
+              <div>
+                <span className="text-fg-subtle">after: </span>
+                {JSON.stringify(event.new_values)}
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -222,6 +314,17 @@ export default function PurchaseOrderDetailPage({
   const supplier = po?.supplier_id
     ? suppliersQuery.data?.rows.find((s) => s.supplier_id === po.supplier_id)
     : undefined;
+
+  // PO audit history.
+  const historyQuery = useQuery<PurchaseOrderHistoryResponse>({
+    queryKey: ["purchase-orders", "history", po_id],
+    queryFn: () =>
+      fetchJson(
+        `/api/purchase-orders/${encodeURIComponent(po_id)}/history`,
+      ),
+    enabled: Boolean(po_id),
+    staleTime: 30_000,
+  });
 
   // --- Header meta ----------------------------------------------------------
   const headerMeta = po ? (
@@ -448,15 +551,29 @@ export default function PurchaseOrderDetailPage({
     ),
   };
 
-  // --- History tab (pending) -----------------------------------------------
+  // --- History tab ---------------------------------------------------------
   const historyTab: TabDescriptor = {
     key: "history",
     label: "History",
-    content: (
-      <PendingTabPlaceholder
-        reason="Change history for this PO will appear here in a future release."
-      />
-    ),
+    content: (() => {
+      if (historyQuery.isLoading) return <DetailTabLoading />;
+      if (historyQuery.isError) {
+        return (
+          <DetailTabError message="Could not load PO history. Check your connection and try refreshing." />
+        );
+      }
+      const histRows = historyQuery.data?.rows ?? [];
+      if (histRows.length === 0) {
+        return <DetailTabEmpty message="No audit events found for this purchase order." />;
+      }
+      return (
+        <div className="space-y-1 py-1" data-testid="po-history-list">
+          {histRows.map((event) => (
+            <HistoryEventRow key={event.change_log_id} event={event} />
+          ))}
+        </div>
+      );
+    })(),
   };
 
   const tabs: TabDescriptor[] = [
