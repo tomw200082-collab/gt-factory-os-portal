@@ -512,6 +512,58 @@ export default function PurchaseOrderDetailPage({
   const canCancelRole = session.role === "planner" || session.role === "admin";
   const canCancelPo = (po?.status === "OPEN" || po?.status === "DRAFT") && canCancelRole;
 
+  // --- Edit PO mutation (notes + expected_receive_date) ---------------------
+  const [editing, setEditing] = useState(false);
+  const [editNotes, setEditNotes] = useState("");
+  const [editExpected, setEditExpected] = useState("");
+  const [editError, setEditError] = useState<string | null>(null);
+
+  const canEditPo =
+    (session.role === "planner" || session.role === "admin") &&
+    po !== undefined &&
+    po.status !== "RECEIVED" &&
+    po.status !== "CANCELLED";
+
+  function openEdit(): void {
+    setEditNotes(po?.notes ?? "");
+    setEditExpected(
+      po?.expected_receive_date
+        ? (po.expected_receive_date as string).slice(0, 10)
+        : "",
+    );
+    setEditError(null);
+    setEditing(true);
+  }
+
+  const updateMut = useMutation({
+    mutationFn: async () => {
+      const body: Record<string, string | null> = {};
+      body.notes = editNotes.trim() || null;
+      body.expected_receive_date = editExpected.trim() || null;
+      const res = await fetch(`/api/purchase-orders/${encodeURIComponent(po_id)}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(
+          (errBody as { error?: string }).error ?? `Update failed (HTTP ${res.status})`,
+        );
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["purchase-orders", "detail", po_id] });
+      void queryClient.invalidateQueries({ queryKey: ["purchase-orders", "history", po_id] });
+      setEditing(false);
+      setEditError(null);
+    },
+    onError: (err: unknown) => {
+      setEditError((err as Error).message ?? "Update failed. Try again.");
+    },
+  });
+
   // --- Header meta ----------------------------------------------------------
   const headerMeta = po ? (
     <>
@@ -679,10 +731,31 @@ export default function PurchaseOrderDetailPage({
         },
         { label: "Status", value: <POStatusBadge status={po.status} /> },
         { label: "Order date", value: fmtDate(po.order_date) },
-        { label: "Expected receipt", value: fmtDate(po.expected_receive_date) },
+        {
+          label: "Expected receipt",
+          value: editing ? (
+            <input
+              type="date"
+              className="input input-sm w-40"
+              value={editExpected}
+              onChange={(e) => setEditExpected(e.target.value)}
+            />
+          ) : fmtDate(po.expected_receive_date),
+        },
         { label: "Total (net)", value: fmtMoney(po.total_net, po.currency) },
         { label: "Total (gross)", value: po.total_gross ? fmtMoney(po.total_gross, po.currency) : "—" },
-        { label: "Notes", value: po.notes },
+        {
+          label: "Notes",
+          value: editing ? (
+            <textarea
+              className="input input-sm w-full min-h-[4rem] resize-y"
+              value={editNotes}
+              onChange={(e) => setEditNotes(e.target.value)}
+              placeholder="Add notes…"
+              maxLength={2000}
+            />
+          ) : (po.notes ?? <span className="text-fg-faint">—</span>),
+        },
         { label: "Site", value: po.site_id, mono: true },
         {
           label: "Source planning run",
@@ -700,7 +773,45 @@ export default function PurchaseOrderDetailPage({
         { label: "Last updated", value: fmtDateTime(po.updated_at) },
         { label: "Internal ID", value: po.po_id, mono: true },
       ];
-      return <DetailFieldGrid rows={rows} />;
+      return (
+        <div className="space-y-3">
+          {canEditPo && !editing && (
+            <div className="flex justify-end px-1">
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={openEdit}
+              >
+                Edit notes / expected date
+              </button>
+            </div>
+          )}
+          {editing && (
+            <div className="flex items-center gap-2 px-1 justify-end">
+              {editError && (
+                <span className="text-xs text-danger-fg">{editError}</span>
+              )}
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => updateMut.mutate()}
+                disabled={updateMut.isPending}
+              >
+                {updateMut.isPending ? "Saving…" : "Save"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => { setEditing(false); setEditError(null); }}
+                disabled={updateMut.isPending}
+              >
+                Cancel
+              </button>
+            </div>
+          )}
+          <DetailFieldGrid rows={rows} />
+        </div>
+      );
     })(),
   };
 
