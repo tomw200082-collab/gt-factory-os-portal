@@ -15,9 +15,10 @@
 //   - history              LIVE — GET /api/purchase-orders/:po_id/history
 // ---------------------------------------------------------------------------
 
-import { use } from "react";
+import { use, useState } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import {
   DetailPage,
   DetailFieldGrid,
@@ -464,6 +465,42 @@ export default function PurchaseOrderDetailPage({
     staleTime: 30_000,
   });
 
+  // --- Cancel PO mutation ---------------------------------------------------
+  const router = useRouter();
+  const queryClient = useQueryClient();
+  const [cancelConfirming, setCancelConfirming] = useState(false);
+  const [cancelError, setCancelError] = useState<string | null>(null);
+
+  const cancelMut = useMutation({
+    mutationFn: async () => {
+      const res = await fetch(
+        `/api/purchase-orders/${encodeURIComponent(po_id)}/cancel`,
+        { method: "POST" },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error(
+          (body as { error?: string }).error ??
+          `Cancel failed (HTTP ${res.status})`,
+        );
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
+      void queryClient.invalidateQueries({ queryKey: ["purchase-order-lines", po_id] });
+      setCancelConfirming(false);
+      setCancelError(null);
+      router.refresh();
+    },
+    onError: (err: unknown) => {
+      setCancelError((err as Error).message ?? "Cancel failed. Try again.");
+      setCancelConfirming(false);
+    },
+  });
+
+  const canCancelPo = po?.status === "OPEN" || po?.status === "DRAFT";
+
   // --- Header meta ----------------------------------------------------------
   const headerMeta = po ? (
     <>
@@ -810,9 +847,45 @@ export default function PurchaseOrderDetailPage({
           : "Loading purchase order…",
         meta: headerMeta,
         actions: (
-          <Link href="/purchase-orders" className="btn btn-ghost btn-sm">
-            Back to POs
-          </Link>
+          <div className="flex items-center gap-2">
+            {cancelError && (
+              <span className="text-xs text-danger-fg">{cancelError}</span>
+            )}
+            {canCancelPo && !cancelConfirming && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm text-danger-fg hover:bg-danger/10"
+                onClick={() => { setCancelConfirming(true); setCancelError(null); }}
+                disabled={cancelMut.isPending}
+              >
+                Cancel PO
+              </button>
+            )}
+            {canCancelPo && cancelConfirming && (
+              <div className="flex items-center gap-1.5">
+                <span className="text-xs text-fg-muted">Cancel this PO?</span>
+                <button
+                  type="button"
+                  className="btn btn-sm bg-danger text-white hover:bg-danger/90"
+                  onClick={() => cancelMut.mutate()}
+                  disabled={cancelMut.isPending}
+                >
+                  {cancelMut.isPending ? "Cancelling…" : "Yes, cancel"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => { setCancelConfirming(false); setCancelError(null); }}
+                  disabled={cancelMut.isPending}
+                >
+                  Keep
+                </button>
+              </div>
+            )}
+            <Link href="/purchase-orders" className="btn btn-ghost btn-sm">
+              Back to POs
+            </Link>
+          </div>
         ),
       }}
       tabs={tabs}
