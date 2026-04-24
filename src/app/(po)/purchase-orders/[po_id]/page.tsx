@@ -19,6 +19,7 @@ import { use, useState } from "react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
+import { useSession } from "@/lib/auth/session-provider";
 import {
   DetailPage,
   DetailFieldGrid,
@@ -468,6 +469,7 @@ export default function PurchaseOrderDetailPage({
   // --- Cancel PO mutation ---------------------------------------------------
   const router = useRouter();
   const queryClient = useQueryClient();
+  const { session } = useSession();
   const [cancelConfirming, setCancelConfirming] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
 
@@ -494,12 +496,21 @@ export default function PurchaseOrderDetailPage({
       router.refresh();
     },
     onError: (err: unknown) => {
-      setCancelError((err as Error).message ?? "Cancel failed. Try again.");
+      const msg = (err as Error).message ?? "";
+      if (msg.toLowerCase().includes("partial receipts") || msg.toLowerCase().includes("partial receipt")) {
+        setCancelError("Cannot cancel — this PO has posted receipts. Cancel individual open lines first.");
+      } else if (msg.toLowerCase().includes("cannot cancel purchase order in status")) {
+        const status = po?.status?.toLowerCase() ?? "its current state";
+        setCancelError(`Cannot cancel — PO is in ${status}. Only OPEN and DRAFT POs can be cancelled.`);
+      } else {
+        setCancelError(msg || "Cancel failed. Try again.");
+      }
       setCancelConfirming(false);
     },
   });
 
-  const canCancelPo = po?.status === "OPEN" || po?.status === "DRAFT";
+  const canCancelRole = session.role === "planner" || session.role === "admin";
+  const canCancelPo = (po?.status === "OPEN" || po?.status === "DRAFT") && canCancelRole;
 
   // --- Header meta ----------------------------------------------------------
   const headerMeta = po ? (
