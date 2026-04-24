@@ -62,6 +62,7 @@ function fmtMoney(value: string | null | undefined, currency: string): string {
   if (!value) return "—";
   const n = Number(value);
   if (isNaN(n)) return value;
+  if (n === 0) return "—";
   try {
     return new Intl.NumberFormat(undefined, {
       style: "currency", currency,
@@ -122,28 +123,33 @@ function POStatusBadge({ status }: { status: string }): JSX.Element {
 export default function PurchaseOrdersListPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const initialStatus = searchParams.get("status");
-  const [statusFilter, setStatusFilter] = useState<POStatus | null>(
-    STATUS_OPTIONS.includes(initialStatus as POStatus) ? (initialStatus as POStatus) : null,
+  const initialStatuses = searchParams.getAll("status").filter(
+    (s): s is POStatus => STATUS_OPTIONS.includes(s as POStatus),
+  );
+  const [statusFilter, setStatusFilter] = useState<POStatus[] | null>(
+    initialStatuses.length > 0 ? initialStatuses : ["OPEN", "PARTIAL"],
   );
   const [query, setQuery] = useState("");
 
-  const applyStatusFilter = useCallback((s: POStatus | null) => {
+  const applyStatusFilter = useCallback((s: POStatus[] | null) => {
     setStatusFilter(s);
-    const params = new URLSearchParams(searchParams.toString());
-    if (s) {
-      params.set("status", s);
-    } else {
-      params.delete("status");
+    const params = new URLSearchParams();
+    for (const [key, val] of searchParams.entries()) {
+      if (key !== "status") params.append(key, val);
+    }
+    if (s && s.length > 0) {
+      s.forEach((status) => params.append("status", status));
     }
     router.replace(`?${params.toString()}`, { scroll: false });
   }, [router, searchParams]);
 
   const posQuery = useQuery<PurchaseOrdersListResponse>({
-    queryKey: ["planner", "purchase-orders", statusFilter ?? "all"],
+    queryKey: ["planner", "purchase-orders", statusFilter ? [...statusFilter].sort().join(",") : "all"],
     queryFn: () => {
       const q = new URLSearchParams();
-      if (statusFilter) q.set("status", statusFilter);
+      if (statusFilter && statusFilter.length > 0) {
+        statusFilter.forEach((s) => q.append("status", s));
+      }
       q.set("limit", "500");
       return fetchJson(`/api/purchase-orders?${q.toString()}`);
     },
@@ -208,10 +214,13 @@ export default function PurchaseOrdersListPage() {
         <div className="flex flex-wrap gap-3 mb-1" data-testid="po-stats-bar">
           <button
             type="button"
-            onClick={() => applyStatusFilter(statusFilter === "OPEN" ? null : "OPEN")}
+            onClick={() => {
+              const isOnlyOpen = statusFilter?.length === 1 && statusFilter.includes("OPEN");
+              applyStatusFilter(isOnlyOpen ? null : ["OPEN"]);
+            }}
             className={cn(
               "flex flex-col gap-0.5 rounded-md border px-4 py-2.5 text-left transition-colors",
-              statusFilter === "OPEN"
+              statusFilter?.length === 1 && statusFilter.includes("OPEN")
                 ? "border-info/50 bg-info-softer"
                 : "border-border/60 bg-bg-raised hover:border-border-strong",
             )}
@@ -222,10 +231,13 @@ export default function PurchaseOrdersListPage() {
           </button>
           <button
             type="button"
-            onClick={() => applyStatusFilter(statusFilter === "PARTIAL" ? null : "PARTIAL")}
+            onClick={() => {
+              const isOnlyPartial = statusFilter?.length === 1 && statusFilter.includes("PARTIAL");
+              applyStatusFilter(isOnlyPartial ? null : ["PARTIAL"]);
+            }}
             className={cn(
               "flex flex-col gap-0.5 rounded-md border px-4 py-2.5 text-left transition-colors",
-              statusFilter === "PARTIAL"
+              statusFilter?.length === 1 && statusFilter.includes("PARTIAL")
                 ? "border-warning/50 bg-warning/5"
                 : "border-border/60 bg-bg-raised hover:border-border-strong",
             )}
@@ -236,10 +248,13 @@ export default function PurchaseOrdersListPage() {
           </button>
           <button
             type="button"
-            onClick={() => applyStatusFilter(statusFilter === "RECEIVED" ? null : "RECEIVED")}
+            onClick={() => {
+              const isOnlyReceived = statusFilter?.length === 1 && statusFilter.includes("RECEIVED");
+              applyStatusFilter(isOnlyReceived ? null : ["RECEIVED"]);
+            }}
             className={cn(
               "flex flex-col gap-0.5 rounded-md border px-4 py-2.5 text-left transition-colors",
-              statusFilter === "RECEIVED"
+              statusFilter?.length === 1 && statusFilter.includes("RECEIVED")
                 ? "border-success/50 bg-success/5"
                 : "border-border/60 bg-bg-raised hover:border-border-strong",
             )}
@@ -259,16 +274,21 @@ export default function PurchaseOrdersListPage() {
             Status
           </span>
           {STATUS_OPTIONS.map((s) => {
-            const active = statusFilter === s;
+            const active = statusFilter !== null && statusFilter.includes(s);
             return (
               <button
                 key={s}
                 type="button"
                 data-testid={`po-list-filter-status-${s}`}
                 aria-pressed={active}
-                onClick={() =>
-                  applyStatusFilter(statusFilter === s ? null : s)
-                }
+                onClick={() => {
+                  if (active) {
+                    const next = (statusFilter ?? []).filter((x) => x !== s);
+                    applyStatusFilter(next.length > 0 ? next : null);
+                  } else {
+                    applyStatusFilter([s]);
+                  }
+                }}
                 className={cn(
                   "inline-flex items-center gap-1.5 rounded-sm border px-2 py-1 text-3xs font-semibold uppercase tracking-sops transition-colors duration-150",
                   active

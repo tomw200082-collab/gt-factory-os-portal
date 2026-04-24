@@ -109,20 +109,21 @@ interface PoOption {
 
 interface PoLineOption {
   po_line_id: string;
-  line_no?: number | null;
-  item_id?: string | null;
-  component_id?: string | null;
-  display_label?: string | null;
+  line_number: number;
+  component_id: string | null;
+  component_name: string | null;
+  item_id: string | null;
+  item_name: string | null;
   ordered_qty: string;
-  received_qty: string | null;
-  unit: string | null;
-  status?: string | null;
+  uom: string;
+  received_qty: string;
+  open_qty: string;
+  line_status: string;
 }
 
-interface PoDetailEnvelope {
-  lines?: PoLineOption[];
-  po_lines?: PoLineOption[];
-  po?: { po_id?: string };
+interface PoLinesResponse {
+  rows: PoLineOption[];
+  count: number;
 }
 
 type ListEnvelope<T> = { rows: T[]; count: number };
@@ -262,17 +263,15 @@ export default function GoodsReceiptPage() {
   // Lazy-load the chosen PO's detail to populate the per-line
   // po_line_id picker. enabled only when poId is set so we don't
   // hammer the proxy when no PO is referenced.
-  const poDetailQuery = useQuery<PoDetailEnvelope>({
-    queryKey: ["ops", "receipts", "po-detail", poId],
-    queryFn: () => fetchJson(`/api/purchase-orders/${encodeURIComponent(poId)}`),
+  const poDetailQuery = useQuery<PoLinesResponse>({
+    queryKey: ["ops", "receipts", "po-lines", poId],
+    queryFn: () => fetchJson(`/api/purchase-order-lines?po_id=${encodeURIComponent(poId)}`),
     enabled: !!poId,
     staleTime: 30_000,
   });
 
   const poLines: PoLineOption[] = useMemo(() => {
-    const data = poDetailQuery.data;
-    if (!data) return [];
-    return data.po_lines ?? data.lines ?? [];
+    return poDetailQuery.data?.rows ?? [];
   }, [poDetailQuery.data]);
 
   // When the operator picks a PO, default the supplier to the PO's
@@ -518,7 +517,7 @@ export default function GoodsReceiptPage() {
                 {poId && poDetailQuery.isError ? (
                   <span className="mt-1 block text-3xs text-warning-fg">
                     Couldn&apos;t load PO lines — picker will fall back to
-                    unmatched. {(poDetailQuery.error as Error).message}
+                    unmatched. Try refreshing if this persists.
                   </span>
                 ) : null}
                 {poId && poDetailQuery.isLoading ? (
@@ -650,33 +649,48 @@ export default function GoodsReceiptPage() {
                       <select
                         className="input"
                         value={line.po_line_id}
-                        onChange={(e) =>
-                          updateLine(idx, { po_line_id: e.target.value })
-                        }
+                        onChange={(e) => {
+                          const newPoLineId = e.target.value;
+                          const pl = poLines.find((l) => l.po_line_id === newPoLineId);
+                          const patch: Partial<LineDraft> = { po_line_id: newPoLineId };
+                          if (pl && Number(pl.open_qty) > 0) {
+                            patch.quantity = pl.open_qty;
+                            if ((UOMS as readonly string[]).includes(pl.uom)) {
+                              patch.unit = pl.uom as Uom;
+                            }
+                          }
+                          updateLine(idx, patch);
+                        }}
                         disabled={poDetailQuery.isLoading || poLines.length === 0}
                       >
                         <option value="">— unmatched —</option>
-                        {poLines.map((pl, plIdx) => {
-                          const idLabel =
-                            pl.display_label ??
-                            pl.item_id ??
-                            pl.component_id ??
-                            "—";
-                          const remaining =
-                            pl.received_qty != null
-                              ? `${pl.ordered_qty} ordered · ${pl.received_qty} received`
-                              : `${pl.ordered_qty} ordered`;
+                        {poLines.map((pl) => {
+                          const nameLabel = pl.component_name ?? pl.item_name ?? pl.component_id ?? pl.item_id ?? "—";
+                          const statusNote = pl.line_status === "CLOSED" ? " [CLOSED]" : pl.line_status === "CANCELLED" ? " [CANCELLED]" : "";
                           return (
-                            <option
-                              key={pl.po_line_id}
-                              value={pl.po_line_id}
-                            >
-                              #{pl.line_no ?? plIdx + 1} · {idLabel} · {remaining}
-                              {pl.unit ? ` ${pl.unit}` : ""}
+                            <option key={pl.po_line_id} value={pl.po_line_id}>
+                              #{pl.line_number} · {nameLabel} · {pl.open_qty} open / {pl.ordered_qty} ordered {pl.uom}{statusNote}
                             </option>
                           );
                         })}
                       </select>
+                      {(() => {
+                        if (!line.po_line_id) return null;
+                        const selectedPl = poLines.find((pl) => pl.po_line_id === line.po_line_id);
+                        if (!selectedPl) return null;
+                        if (Number(selectedPl.open_qty) <= 0) {
+                          return (
+                            <span className="mt-1 block text-3xs text-warning-fg">
+                              This line is fully received (open qty: 0) — posting will create an over-receipt.
+                            </span>
+                          );
+                        }
+                        return (
+                          <span className="mt-1 block text-3xs text-fg-muted">
+                            Still outstanding: {selectedPl.open_qty} {selectedPl.uom}
+                          </span>
+                        );
+                      })()}
                     </label>
                   ) : null}
                 </div>
