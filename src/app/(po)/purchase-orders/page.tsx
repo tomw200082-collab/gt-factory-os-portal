@@ -149,6 +149,22 @@ export default function PurchaseOrdersListPage() {
     },
   });
 
+  // Separate "all" query used only for stats (avoids distorting stats when a filter is active).
+  const allPosQuery = useQuery<PurchaseOrdersListResponse>({
+    queryKey: ["planner", "purchase-orders", "all"],
+    queryFn: () => fetchJson(`/api/purchase-orders?limit=500`),
+    staleTime: 60_000,
+  });
+  const allRows = allPosQuery.data?.rows ?? [];
+  const stats = useMemo(() => {
+    const openRows = allRows.filter((r) => r.status === "OPEN");
+    const partialRows = allRows.filter((r) => r.status === "PARTIAL");
+    const openValue = openRows.reduce((s, r) => s + Number(r.total_net ?? 0), 0);
+    const partialValue = partialRows.reduce((s, r) => s + Number(r.total_net ?? 0), 0);
+    const currency = allRows[0]?.currency ?? "ILS";
+    return { openCount: openRows.length, partialCount: partialRows.length, openValue, partialValue, currency };
+  }, [allRows]);
+
   const rows = posQuery.data?.rows ?? [];
   const total = posQuery.data?.count ?? 0;
 
@@ -181,6 +197,39 @@ export default function PurchaseOrdersListPage() {
           </>
         }
       />
+
+      {allPosQuery.data && (
+        <div className="flex flex-wrap gap-3 mb-1" data-testid="po-stats-bar">
+          <button
+            type="button"
+            onClick={() => applyStatusFilter(statusFilter === "OPEN" ? null : "OPEN")}
+            className={cn(
+              "flex flex-col gap-0.5 rounded-md border px-4 py-2.5 text-left transition-colors",
+              statusFilter === "OPEN"
+                ? "border-info/50 bg-info-softer"
+                : "border-border/60 bg-bg-raised hover:border-border-strong",
+            )}
+          >
+            <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Open</span>
+            <span className="text-lg font-bold tabular-nums text-fg">{stats.openCount}</span>
+            <span className="text-3xs text-fg-faint">{fmtMoney(String(stats.openValue), stats.currency)}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => applyStatusFilter(statusFilter === "PARTIAL" ? null : "PARTIAL")}
+            className={cn(
+              "flex flex-col gap-0.5 rounded-md border px-4 py-2.5 text-left transition-colors",
+              statusFilter === "PARTIAL"
+                ? "border-warning/50 bg-warning/5"
+                : "border-border/60 bg-bg-raised hover:border-border-strong",
+            )}
+          >
+            <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Partial</span>
+            <span className="text-lg font-bold tabular-nums text-warning-fg">{stats.partialCount}</span>
+            <span className="text-3xs text-fg-faint">{fmtMoney(String(stats.partialValue), stats.currency)}</span>
+          </button>
+        </div>
+      )}
 
       <SectionCard contentClassName="p-0">
         <div
