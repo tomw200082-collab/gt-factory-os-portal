@@ -15,7 +15,7 @@
 //   - history              LIVE — GET /api/purchase-orders/:po_id/history
 // ---------------------------------------------------------------------------
 
-import { use, useState, useCallback } from "react";
+import { use, useState, useCallback, Fragment } from "react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
@@ -697,9 +697,8 @@ export default function PurchaseOrderDetailPage({
                   canEditLines &&
                   (line.line_status === "OPEN" || line.line_status === "PARTIAL");
                 return (
-                  <>
+                  <Fragment key={line.po_line_id}>
                   <tr
-                    key={line.po_line_id}
                     className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
                     data-testid="po-line-row"
                     data-line-status={line.line_status}
@@ -778,7 +777,6 @@ export default function PurchaseOrderDetailPage({
                   </tr>
                   {isLineEditing && (
                     <tr
-                      key={`${line.po_line_id}-edit`}
                       className="bg-bg-subtle/60 border-b border-border/40"
                       data-testid="po-line-edit-row"
                     >
@@ -833,7 +831,7 @@ export default function PurchaseOrderDetailPage({
                       </td>
                     </tr>
                   )}
-                  </>
+                  </Fragment>
                 );
               })}
             </tbody>
