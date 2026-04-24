@@ -199,6 +199,13 @@ export const NAV_MANIFEST: NavGroup[] = [
         min_role: "viewer",
         required_capability: "planning:read",
       },
+      {
+        href: "/planning/weekly-outlook",
+        label: "Weekly Inventory Outlook",
+        icon: Activity,
+        min_role: "viewer",
+        required_capability: "planning:read",
+      },
     ],
   },
   {
