@@ -136,6 +136,19 @@ interface GoodsReceiptsListResponse {
   count: number;
 }
 
+interface ExceptionRow {
+  exception_id: string;
+  category: string;
+  related_entity_id: string | null;
+  status: string;
+  created_at: string;
+}
+
+interface ExceptionsListResponse {
+  rows: ExceptionRow[];
+  count: number;
+}
+
 // --- helpers ----------------------------------------------------------------
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -482,6 +495,15 @@ export default function PurchaseOrderDetailPage({
     staleTime: 30_000,
   });
 
+  // Over-receipt exceptions for this PO's lines.
+  const overReceiptQuery = useQuery<ExceptionsListResponse>({
+    queryKey: ["exceptions", "po_line_over_receipt", po_id],
+    queryFn: () =>
+      fetchJson(`/api/exceptions?category=po_line_over_receipt&status=open,acknowledged`),
+    enabled: Boolean(po_id),
+    staleTime: 60_000,
+  });
+
   // --- Cancel PO mutation ---------------------------------------------------
   const router = useRouter();
   const queryClient = useQueryClient();
@@ -709,6 +731,13 @@ export default function PurchaseOrderDetailPage({
           <DetailTabEmpty message="No lines found for this purchase order." />
         );
       }
+      const lineIds = new Set(lineRows.map((l) => l.po_line_id));
+      const overReceiptExceptions = (overReceiptQuery.data?.rows ?? []).filter(
+        (e) => e.related_entity_id !== null && lineIds.has(e.related_entity_id),
+      );
+      const overReceiptLineIds = new Set(
+        overReceiptExceptions.map((e) => e.related_entity_id!),
+      );
       const hasPartialLines = lineRows.some((l) => l.line_status === "PARTIAL");
       const awaitingLines = lineRows.filter(
         (l) => (l.line_status === "OPEN" || l.line_status === "PARTIAL") && Number(l.open_qty) > 0,
@@ -845,7 +874,18 @@ export default function PurchaseOrderDetailPage({
                         : fmtMoney(line.line_total_net, po?.currency ?? "ILS")}
                     </td>
                     <td className="px-3 py-2">
-                      <LineStatusBadge status={line.line_status} />
+                      <div className="flex flex-col gap-0.5">
+                        <LineStatusBadge status={line.line_status} />
+                        {overReceiptLineIds.has(line.po_line_id) && (
+                          <a
+                            href="/planner/exceptions"
+                            className="inline-flex items-center gap-1 text-3xs text-warning-fg hover:underline"
+                            title="Over-receipt exception open — check exceptions inbox"
+                          >
+                            ⚠ Over-received
+                          </a>
+                        )}
+                      </div>
                     </td>
                     <td className="px-3 py-2 text-xs text-fg-muted">
                       {fmtDate(line.expected_receive_date)}
