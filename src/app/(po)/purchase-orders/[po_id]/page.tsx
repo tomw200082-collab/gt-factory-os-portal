@@ -710,8 +710,48 @@ export default function PurchaseOrderDetailPage({
         );
       }
       const hasPartialLines = lineRows.some((l) => l.line_status === "PARTIAL");
+      const awaitingLines = lineRows.filter(
+        (l) => (l.line_status === "OPEN" || l.line_status === "PARTIAL") && Number(l.open_qty) > 0,
+      );
+      const allSettled = lineRows.every(
+        (l) => l.line_status === "CLOSED" || l.line_status === "CANCELLED",
+      );
+      const supplierLabel = po?.supplier_name ?? po?.supplier_id ?? "supplier";
       return (
         <div className="space-y-3">
+        {po?.status !== "CANCELLED" && allSettled ? (
+          <div className="rounded-md border border-success/40 bg-success/5 px-4 py-3 text-xs text-success-fg" role="note" data-testid="po-all-received-banner">
+            <span className="font-semibold">All items received.</span>{" "}
+            {po?.supplier_name ?? po?.supplier_id ? `Receipt from ${supplierLabel} is complete.` : "This PO is fully received."}
+          </div>
+        ) : awaitingLines.length > 0 ? (
+          <div className="rounded-md border border-border/60 bg-bg-raised px-4 py-3 text-xs" data-testid="po-still-awaiting-panel">
+            <div className="mb-1.5 font-semibold text-fg-strong">
+              Still awaiting from {supplierLabel}:
+            </div>
+            <ul className="space-y-0.5 text-fg-muted">
+              {awaitingLines.map((l) => {
+                const name = l.component_name ?? l.item_name ?? l.component_id ?? l.item_id ?? "—";
+                return (
+                  <li key={l.po_line_id} className="flex items-baseline gap-1.5">
+                    <span className="font-medium text-warning-fg tabular-nums">{l.open_qty}</span>
+                    <span>{l.uom}</span>
+                    <span className="text-fg-subtle">of</span>
+                    <span className="font-medium text-fg">{name}</span>
+                    <span className="text-fg-faint">(ordered {l.ordered_qty}, received {l.received_qty})</span>
+                  </li>
+                );
+              })}
+            </ul>
+            {po?.expected_receive_date ? (
+              <div className="mt-1.5 text-fg-faint">
+                Expected by {po.expected_receive_date}
+              </div>
+            ) : (
+              <div className="mt-1.5 text-fg-faint">No delivery date set.</div>
+            )}
+          </div>
+        ) : null}
         {hasPartialLines && (
           <div className="rounded-md border border-warning/40 bg-warning/5 px-4 py-3 text-xs text-warning-fg" role="note">
             <span className="font-semibold">Partial receipt in progress.</span>{" "}

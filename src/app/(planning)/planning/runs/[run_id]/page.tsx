@@ -26,7 +26,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { ArrowLeft, Check, X, FileOutput } from "lucide-react";
+import { ArrowLeft, Check, X, FileOutput, AlertTriangle } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
@@ -153,11 +153,10 @@ async function fetchDetail(
     return { detail: null, notFound: true, error: null };
   }
   if (!res.ok) {
-    const body = await res.text().catch(() => "");
     return {
       detail: null,
       notFound: false,
-      error: `HTTP ${res.status}: ${body}`,
+      error: "Could not load planning run. Check your connection and try refreshing.",
     };
   }
   const detail = (await res.json()) as RunDetail;
@@ -174,8 +173,7 @@ async function fetchRecsByType(
     { method: "GET", headers: sessionHeaders(session) },
   );
   if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`Recommendations fetch failed (HTTP ${res.status}): ${body}`);
+    throw new Error("Could not load recommendations. Check your connection and try refreshing.");
   }
   return (await res.json()) as RecsResponse;
 }
@@ -202,8 +200,10 @@ async function approveRec(
     },
   );
   if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`Approve failed (HTTP ${res.status}): ${body}`);
+    const txt = await res.text().catch(() => "");
+    let detail = "";
+    try { detail = (JSON.parse(txt) as { detail?: string }).detail ?? ""; } catch { /* ignore */ }
+    throw new Error(detail || "Could not approve this recommendation. Try again.");
   }
 }
 
@@ -220,8 +220,10 @@ async function dismissRec(
     },
   );
   if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`Dismiss failed (HTTP ${res.status}): ${body}`);
+    const txt = await res.text().catch(() => "");
+    let detail = "";
+    try { detail = (JSON.parse(txt) as { detail?: string }).detail ?? ""; } catch { /* ignore */ }
+    throw new Error(detail || "Could not dismiss this recommendation. Try again.");
   }
 }
 
@@ -244,8 +246,10 @@ async function convertRecToPO(
     },
   );
   if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`Convert-to-PO failed (HTTP ${res.status}): ${body}`);
+    const txt = await res.text().catch(() => "");
+    let detail = "";
+    try { detail = (JSON.parse(txt) as { detail?: string }).detail ?? ""; } catch { /* ignore */ }
+    throw new Error(detail || "Could not convert to purchase order. Try again.");
   }
   const body = (await res.json()) as ConvertToPOResult;
   return body;
@@ -330,26 +334,25 @@ function RecStatusBadge({ status }: { status: RecommendationStatus }) {
   );
 }
 
+const FEASIBILITY_LABELS: Record<FeasibilityStatus, string> = {
+  ready_now: "Ready now",
+  ready_if_purchase_executes: "Ready if PO executes",
+  blocked_stock_gap: "Stock gap",
+  blocked_missing_bom: "No BOM",
+  blocked_missing_supplier_mapping: "No supplier mapped",
+  blocked_missing_pack_conversion: "Pack conversion missing",
+  blocked_ambiguous_supplier: "Ambiguous supplier",
+};
+
 function FeasibilityBadge({ status }: { status: FeasibilityStatus }) {
+  const label = FEASIBILITY_LABELS[status] ?? status.replace(/_/g, " ");
   if (status === "ready_now") {
-    return (
-      <Badge tone="success" dotted>
-        Ready now
-      </Badge>
-    );
+    return <Badge tone="success" dotted>{label}</Badge>;
   }
   if (status === "ready_if_purchase_executes") {
-    return (
-      <Badge tone="info" dotted>
-        Ready if PO executes
-      </Badge>
-    );
+    return <Badge tone="info" dotted>{label}</Badge>;
   }
-  return (
-    <Badge tone="danger" dotted>
-      {status.replace(/^blocked_/, "blocked: ").replace(/_/g, " ")}
-    </Badge>
-  );
+  return <Badge tone="danger" dotted>{label}</Badge>;
 }
 
 function fmtDate(iso: string | null): string {
@@ -365,6 +368,49 @@ function fmtDate(iso: string | null): string {
   } catch {
     return iso;
   }
+}
+
+function fmtDateOnly(iso: string | null): string {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleDateString(undefined, {
+      month: "short",
+      day: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function fmtPeriodBucket(key: string): string {
+  // ISO week: "2026-W18" → "Week 18, 2026"
+  const weekMatch = /^(\d{4})-W(\d{1,2})$/.exec(key);
+  if (weekMatch) return `Week ${weekMatch[2]}, ${weekMatch[1]}`;
+  // Month: "2026-04" → "Apr 2026"
+  const monthMatch = /^(\d{4})-(\d{2})$/.exec(key);
+  if (monthMatch) {
+    try {
+      return new Date(`${key}-01`).toLocaleString(undefined, {
+        month: "short",
+        year: "numeric",
+      });
+    } catch {
+      return key;
+    }
+  }
+  return key;
+}
+
+function fmtExceptionDetail(detail: unknown): string | null {
+  if (detail === null || detail === undefined) return null;
+  if (typeof detail === "string" && detail.trim()) return detail.trim();
+  if (typeof detail === "object") {
+    const obj = detail as Record<string, unknown>;
+    if (typeof obj.message === "string" && obj.message.trim()) return obj.message.trim();
+    if (typeof obj.detail === "string" && obj.detail.trim()) return obj.detail.trim();
+    if (typeof obj.description === "string" && obj.description.trim()) return obj.description.trim();
+  }
+  return null;
 }
 
 function SeverityBadge({
@@ -393,6 +439,59 @@ function SeverityBadge({
   );
 }
 
+const EXCEPTION_CATEGORY_LABELS: Record<string, string> = {
+  missing_bom: "Missing BOM",
+  stale_demand_input: "Stale demand input",
+  stale_stock_input: "Stale stock input",
+  missing_supplier_mapping: "No supplier mapped",
+  ambiguous_supplier_mapping: "Ambiguous supplier",
+  impossible_lead_time: "Lead time conflict",
+  stock_gap: "Stock gap",
+  missing_pack_conversion: "Pack conversion missing",
+  unresolvable_order_line: "Unresolvable order line",
+  bundle_line_excluded: "Bundle line excluded",
+};
+
+function fmtExceptionCategory(category: string): string {
+  return EXCEPTION_CATEGORY_LABELS[category] ?? category.replace(/_/g, " ");
+}
+
+function ExceptionActionLink({ category, itemId, componentId }: {
+  category: string;
+  itemId: string | null;
+  componentId: string | null;
+}): JSX.Element | null {
+  if (category === "missing_bom" && itemId) {
+    return (
+      <Link href={`/admin/masters/items/${encodeURIComponent(itemId)}`} className="ml-2 text-3xs text-accent hover:underline">
+        Fix BOM →
+      </Link>
+    );
+  }
+  if ((category === "missing_supplier_mapping" || category === "ambiguous_supplier_mapping" || category === "impossible_lead_time") && componentId) {
+    return (
+      <Link href={`/admin/masters/items/${encodeURIComponent(componentId)}`} className="ml-2 text-3xs text-accent hover:underline">
+        Fix supplier →
+      </Link>
+    );
+  }
+  if (category === "stale_demand_input") {
+    return (
+      <Link href="/planning/forecast" className="ml-2 text-3xs text-accent hover:underline">
+        Publish forecast →
+      </Link>
+    );
+  }
+  if (category === "stale_stock_input") {
+    return (
+      <Link href="/admin/jobs" className="ml-2 text-3xs text-accent hover:underline">
+        Check jobs →
+      </Link>
+    );
+  }
+  return null;
+}
+
 export default function PlanningRunDetailPage() {
   const { session } = useSession();
   const params = useParams();
@@ -414,18 +513,21 @@ export default function PlanningRunDetailPage() {
   const detailQuery = useQuery({
     queryKey: ["planning", "run", runId, session.role],
     queryFn: () => fetchDetail(session, runId),
+    staleTime: 60_000,
   });
 
   const purchaseQuery = useQuery<RecsResponse>({
     queryKey: ["planning", "run", runId, "recs", "purchase", session.role],
     queryFn: () => fetchRecsByType(session, runId, "purchase"),
     enabled: !!detailQuery.data?.detail,
+    staleTime: 60_000,
   });
 
   const productionQuery = useQuery<RecsResponse>({
     queryKey: ["planning", "run", runId, "recs", "production", session.role],
     queryFn: () => fetchRecsByType(session, runId, "production"),
     enabled: !!detailQuery.data?.detail,
+    staleTime: 60_000,
   });
 
   const approveMutation = useMutation({
@@ -492,7 +594,7 @@ export default function PlanningRunDetailPage() {
   if (detailQuery.isError) {
     return (
       <div className="p-5 text-sm text-danger-fg" data-testid="planning-run-error">
-        {(detailQuery.error as Error).message}
+        Could not load this planning run. Check your connection and try refreshing.
       </div>
     );
   }
@@ -547,7 +649,7 @@ export default function PlanningRunDetailPage() {
       <WorkflowHeader
         eyebrow="Planner workspace"
         title={`Run ${detail.run_id.slice(0, 8)}`}
-        description={`Horizon ${detail.planning_horizon_start_at} · ${detail.planning_horizon_weeks} weeks · triggered ${detail.trigger_source}`}
+        description={`Horizon ${fmtDate(detail.planning_horizon_start_at)} · ${detail.planning_horizon_weeks} weeks · triggered ${detail.trigger_source}`}
         meta={
           <>
             <RunStatusBadge status={detail.status} />
@@ -557,6 +659,16 @@ export default function PlanningRunDetailPage() {
           </>
         }
       />
+
+      {detail.status === "superseded" ? (
+        <div className="mb-4 flex items-center gap-3 rounded-md border border-warning/30 bg-warning-softer/50 px-4 py-2.5 text-xs text-warning-fg">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+          <span>
+            This run has been superseded by a newer run. Recommendations shown here are historical —
+            {" "}<Link href="/planning/runs" className="font-semibold underline underline-offset-2 hover:no-underline">view the latest run</Link>.
+          </span>
+        </div>
+      ) : null}
 
       {toast ? (
         <div
@@ -599,7 +711,7 @@ export default function PlanningRunDetailPage() {
             </div>
             <div>
               <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                Actor
+                Triggered by
               </dt>
               <dd className="font-mono text-xs text-fg">
                 {detail.actor_user_id.slice(0, 8)}…
@@ -607,7 +719,7 @@ export default function PlanningRunDetailPage() {
             </div>
             <div>
               <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                Demand (forecast_version_id)
+                Demand — forecast version
               </dt>
               <dd className="font-mono text-xs text-fg">
                 {detail.demand_snapshot_forecast_version_id?.slice(0, 8) ?? "—"}
@@ -615,7 +727,7 @@ export default function PlanningRunDetailPage() {
             </div>
             <div>
               <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                Demand (orders_snapshot_run_id)
+                Demand — orders snapshot
               </dt>
               <dd className="font-mono text-xs text-fg">
                 {detail.demand_snapshot_orders_snapshot_run_id?.slice(0, 8) ??
@@ -632,7 +744,7 @@ export default function PlanningRunDetailPage() {
             </div>
             <div>
               <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                Rebuild verifier drift at run
+                Stock parity drift at run
               </dt>
               <dd className="font-mono text-xs tabular-nums text-fg">
                 {detail.rebuild_verifier_drift_at_run ?? "—"}
@@ -642,7 +754,7 @@ export default function PlanningRunDetailPage() {
 
           <details className="mt-4" data-testid="planning-run-policy-snapshot">
             <summary className="cursor-pointer text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              Policy snapshot keys ({detail.policy_snapshot_preview.key_count})
+              Planning policy at run time ({detail.policy_snapshot_preview.key_count} parameters)
             </summary>
             <ul className="mt-2 grid grid-cols-2 gap-1 text-xs font-mono text-fg-muted sm:grid-cols-3 lg:grid-cols-4">
               {detail.policy_snapshot_preview.keys.map((k) => (
@@ -686,20 +798,41 @@ export default function PlanningRunDetailPage() {
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <SeverityBadge severity={e.severity} />
-                    <span className="font-mono text-3xs uppercase tracking-sops text-fg-subtle">
-                      {e.category}
+                    <span className="text-3xs text-fg-muted">
+                      {fmtExceptionCategory(e.category)}
                     </span>
                     {e.item_id ? (
-                      <span className="font-mono text-3xs text-fg-muted">
-                        item {e.item_id}
-                      </span>
+                      <Link
+                        href={`/admin/masters/items/${encodeURIComponent(e.item_id)}`}
+                        className="font-mono text-3xs text-accent hover:underline"
+                        title="Open item master"
+                      >
+                        {e.item_id}
+                      </Link>
                     ) : null}
                     {e.component_id ? (
-                      <span className="font-mono text-3xs text-fg-muted">
-                        component {e.component_id}
-                      </span>
+                      <Link
+                        href={`/admin/masters/items/${encodeURIComponent(e.component_id)}`}
+                        className="font-mono text-3xs text-accent hover:underline"
+                        title="Open component item master"
+                      >
+                        {e.component_id}
+                      </Link>
                     ) : null}
+                    <ExceptionActionLink
+                      category={e.category}
+                      itemId={e.item_id}
+                      componentId={e.component_id}
+                    />
                   </div>
+                  {(() => {
+                    const d = fmtExceptionDetail(e.detail);
+                    return d ? (
+                      <div className="mt-0.5 text-3xs text-fg-muted">
+                        {d}
+                      </div>
+                    ) : null;
+                  })()}
                 </li>
               ))}
             </ul>
@@ -709,7 +842,11 @@ export default function PlanningRunDetailPage() {
         <SectionCard
           eyebrow="Recommendations"
           title={`${detail.summary.purchase_recs_count + detail.summary.production_recs_count} total`}
-          description="Review each line and approve or dismiss. Approved purchase lines stage to PO creation; nothing orders autonomously."
+          description={
+            canAct
+              ? "Review each line and approve or dismiss. Approved purchase lines stage to PO creation; nothing orders autonomously."
+              : "Read-only view — contact a planner or admin to approve or dismiss recommendations."
+          }
           contentClassName="p-0"
         >
           <div
@@ -753,7 +890,7 @@ export default function PlanningRunDetailPage() {
               className="p-5 text-xs text-danger-fg"
               data-testid="planning-run-recs-error"
             >
-              {(activeRecsQuery.error as Error).message}
+              Could not load recommendations. Check your connection and try refreshing.
             </div>
           ) : activeRecs.length === 0 ? (
             <div className="p-5">
@@ -773,14 +910,23 @@ export default function PlanningRunDetailPage() {
                     <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                       {activeTab === "purchase" ? "Component" : "Item"}
                     </th>
-                    <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    <th
+                      className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle"
+                      title="Gross demand quantity this recommendation covers"
+                    >
                       Required
                     </th>
-                    <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    <th
+                      className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle"
+                      title="Suggested order quantity after applying safety stock, MOQ, and rounding policy"
+                    >
                       Recommended
                     </th>
-                    <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      On hand
+                    <th
+                      className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle"
+                      title="Stock balance captured at planning run time — not current on-hand"
+                    >
+                      Stock at run time
                     </th>
                     <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                       {activeTab === "purchase" ? "Supplier" : "BOM version"}
@@ -788,10 +934,16 @@ export default function PlanningRunDetailPage() {
                     <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                       Target period
                     </th>
-                    <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    <th
+                      className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle"
+                      title="Latest date to place the order for on-time delivery"
+                    >
                       Order by
                     </th>
-                    <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    <th
+                      className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle"
+                      title="When stock will be depleted if no order is placed"
+                    >
                       Shortage by
                     </th>
                     <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
@@ -816,6 +968,9 @@ export default function PlanningRunDetailPage() {
                       activeTab === "purchase" &&
                       r.recommendation_status === "approved" &&
                       !r.converted_to_po_id;
+                    const convertBlockedNoSupplier =
+                      canConvertThisRow &&
+                      r.feasibility_status === "blocked_missing_supplier_mapping";
                     const rowKey = r.recommendation_id;
                     const isApproving =
                       approveMutation.isPending &&
@@ -853,8 +1008,27 @@ export default function PlanningRunDetailPage() {
                         <td className="px-3 py-2.5 text-right font-mono tabular-nums text-fg-strong">
                           {r.recommended_qty}
                           {r.uom ? <span className="ml-1 text-3xs text-fg-subtle">{r.uom}</span> : null}
+                          {(() => {
+                            const req = parseFloat(r.required_qty);
+                            const rec = parseFloat(r.recommended_qty);
+                            if (!isNaN(req) && !isNaN(rec) && rec > req + 0.0001) {
+                              const extra = parseFloat((rec - req).toFixed(4));
+                              return (
+                                <div
+                                  className="font-sans text-3xs font-normal text-fg-subtle"
+                                  title={`Required: ${r.required_qty}${r.uom ? ` ${r.uom}` : ""}. Extra ${extra}${r.uom ? ` ${r.uom}` : ""} from MOQ or safety stock policy.`}
+                                >
+                                  +{extra} policy
+                                </div>
+                              );
+                            }
+                            return null;
+                          })()}
                         </td>
-                        <td className="px-3 py-2.5 text-right font-mono tabular-nums text-fg-muted">
+                        <td
+                          className="px-3 py-2.5 text-right font-mono tabular-nums text-fg-muted"
+                          title="Stock balance as of planning run — may differ from current on-hand"
+                        >
                           {r.current_stock_bal ?? "—"}
                           {r.current_stock_bal && r.uom ? <span className="ml-1 text-3xs text-fg-subtle">{r.uom}</span> : null}
                         </td>
@@ -863,14 +1037,24 @@ export default function PlanningRunDetailPage() {
                             ? r.supplier_name ?? r.supplier_id ?? "—"
                             : r.bom_version_id?.slice(0, 8) ?? "—"}
                         </td>
-                        <td className="px-3 py-2.5 font-mono text-xs tabular-nums text-fg-muted">
-                          {r.target_period_bucket_key}
+                        <td className="px-3 py-2.5 text-xs text-fg-muted">
+                          {fmtPeriodBucket(r.target_period_bucket_key)}
                         </td>
-                        <td className="px-3 py-2.5 font-mono text-xs tabular-nums text-fg-muted">
-                          {r.order_by_date ?? "—"}
+                        <td
+                          className={`px-3 py-2.5 text-xs tabular-nums font-medium ${
+                            r.order_by_date && new Date(r.order_by_date) < new Date()
+                              ? "text-danger-fg"
+                              : "text-fg-muted"
+                          }`}
+                          title={r.order_by_date ? `${r.order_by_date}${new Date(r.order_by_date) < new Date() ? " — past due" : ""}` : undefined}
+                        >
+                          {fmtDateOnly(r.order_by_date)}
+                          {r.order_by_date && new Date(r.order_by_date) < new Date() ? (
+                            <div className="font-sans text-3xs font-normal text-danger-fg/70">Past due</div>
+                          ) : null}
                         </td>
-                        <td className="px-3 py-2.5 font-mono text-xs tabular-nums text-fg-muted">
-                          {r.shortage_date ?? "—"}
+                        <td className={`px-3 py-2.5 text-xs tabular-nums font-medium ${r.shortage_date ? "text-warning-fg" : "text-fg-muted"}`} title={r.shortage_date ?? undefined}>
+                          {fmtDateOnly(r.shortage_date)}
                         </td>
                         <td className="px-3 py-2.5">
                           <FeasibilityBadge status={r.feasibility_status} />
@@ -911,27 +1095,38 @@ export default function PlanningRunDetailPage() {
                                 </button>
                               </div>
                             ) : canConvertThisRow ? (
-                              <button
-                                type="button"
-                                className="btn btn-ghost btn-sm gap-1.5 text-accent"
-                                data-testid="planning-run-rec-convert-to-po"
-                                disabled={isConverting}
-                                onClick={() => convertMutation.mutate(rowKey)}
-                              >
-                                <FileOutput
-                                  className="h-3 w-3"
-                                  strokeWidth={2.5}
-                                />
-                                {isConverting ? "Converting…" : "Convert to PO"}
-                              </button>
+                              <div className="inline-flex flex-col items-end gap-0.5">
+                                <button
+                                  type="button"
+                                  className="btn btn-ghost btn-sm gap-1.5 text-accent disabled:cursor-not-allowed disabled:opacity-50"
+                                  data-testid="planning-run-rec-convert-to-po"
+                                  disabled={isConverting || convertBlockedNoSupplier}
+                                  title={convertBlockedNoSupplier ? "No supplier mapped — add a mapping in Admin → Supplier Items before converting." : undefined}
+                                  onClick={() => {
+                                    if (!convertBlockedNoSupplier) convertMutation.mutate(rowKey);
+                                  }}
+                                >
+                                  <FileOutput
+                                    className="h-3 w-3"
+                                    strokeWidth={2.5}
+                                  />
+                                  {isConverting ? "Converting…" : "Convert to PO"}
+                                </button>
+                                {convertBlockedNoSupplier ? (
+                                  <span className="text-3xs text-warning-fg">
+                                    No supplier mapped
+                                  </span>
+                                ) : null}
+                              </div>
                             ) : r.converted_to_po_id ? (
-                              <span
-                                className="font-mono text-3xs text-fg-muted"
+                              <Link
+                                href={`/purchase-orders/${encodeURIComponent(r.converted_to_po_id)}`}
+                                className="font-mono text-3xs text-accent hover:underline"
                                 data-testid="planning-run-rec-converted-ref"
                                 title={r.converted_to_po_id}
                               >
                                 PO {r.converted_to_po_id.slice(0, 8)}…
-                              </span>
+                              </Link>
                             ) : (
                               <span className="text-3xs text-fg-subtle">
                                 —
