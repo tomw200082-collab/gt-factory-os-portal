@@ -93,9 +93,50 @@ interface PlanningRecommendationListResponse {
 // without inventing one. Upstream handlers always set title; we fall back to
 // detail → category as a belt-and-suspenders chain.
 // ---------------------------------------------------------------------------
+// Human-readable explanations for known exception categories.
+// Used as fallback when the DB row has no title/detail.
+const EXCEPTION_EXPLANATIONS: Record<string, string> = {
+  lionwheel_unknown_sku:
+    "LionWheel order contains an SKU not mapped to any catalog item. Map it in Admin → SKU Aliases to include it in demand.",
+  lionwheel_stale:
+    "LionWheel sync has not completed recently. Demand data may be out of date. Check API credentials and network.",
+  lionwheel_auth_failure:
+    "LionWheel API authentication failed. Check the integration credentials in environment config.",
+  lionwheel_schema_drift:
+    "LionWheel API returned an unexpected response shape. A schema change may have occurred.",
+  shopify_unmapped_item:
+    "A Shopify product has no corresponding catalog item mapping. FG sync for this product is skipped.",
+  shopify_drift:
+    "Shopify stock count disagrees with the platform's projected stock. The platform value is authoritative — review if Shopify was edited outside the platform.",
+  shopify_stale:
+    "Shopify FG sync has not completed recently. Shopify stock counts may be out of date.",
+  shopify_auth_failure:
+    "Shopify API authentication failed. Check integration credentials.",
+  shopify_network_failure:
+    "Shopify API request failed due to a network error. Will retry automatically.",
+  gi_stale:
+    "Green Invoice sync has not completed recently. Supplier prices may be out of date.",
+  gi_unmapped_supplier:
+    "Green Invoice invoice references a supplier not mapped to a platform supplier record.",
+  gi_non_ils_currency:
+    "Green Invoice invoice is in a non-ILS currency. Automatic price import is blocked pending review.",
+  po_line_over_receipt:
+    "A goods receipt posted more than the ordered quantity for a PO line. Review the PO detail for this line.",
+  recommendation_missing_supplier_mapping:
+    "A purchase recommendation has no supplier mapped. Map the item to a supplier in Admin → SKU Map before converting.",
+  missing_bom:
+    "A manufactured item has no active BOM version. Create or activate a BOM before the next planning run.",
+  stock_negative:
+    "Projected stock for an item is negative. A receipt, adjustment, or audit may be needed.",
+  planning_run_failed:
+    "The last planning run failed to complete. Check the jobs monitor for error details.",
+};
+
 function summarizeException(row: ExceptionRow): string {
   if (row.title && row.title.trim().length > 0) return row.title;
   if (row.detail && row.detail.trim().length > 0) return row.detail;
+  const explanation = EXCEPTION_EXPLANATIONS[row.category];
+  if (explanation) return explanation;
   return row.category;
 }
 
