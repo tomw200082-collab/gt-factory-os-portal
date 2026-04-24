@@ -225,6 +225,40 @@ function LineStatusBadge({ status }: { status: string }): JSX.Element {
   return <Badge tone="neutral">{status}</Badge>;
 }
 
+function ReceiptProgress({
+  receivedQty,
+  orderedQty,
+  lineStatus,
+}: {
+  receivedQty: string;
+  orderedQty: string;
+  lineStatus: string;
+}): JSX.Element | null {
+  if (lineStatus === "OPEN" || lineStatus === "CANCELLED") return null;
+  const received = Number(receivedQty);
+  const ordered = Number(orderedQty);
+  if (!ordered || isNaN(received) || isNaN(ordered)) return null;
+  const pct = Math.min(100, Math.round((received / ordered) * 100));
+  const isOver = received > ordered;
+  return (
+    <div
+      className="mt-1 h-1 w-full overflow-hidden rounded-full bg-border/40"
+      title={`${pct}% received`}
+    >
+      <div
+        className={`h-full rounded-full transition-all ${
+          isOver
+            ? "bg-danger"
+            : lineStatus === "CLOSED"
+            ? "bg-success"
+            : "bg-warning"
+        }`}
+        style={{ width: `${pct}%` }}
+      />
+    </div>
+  );
+}
+
 // --- Attached GR card -------------------------------------------------------
 
 function GrStatusBadge({ status }: { status: string }): JSX.Element {
@@ -470,7 +504,17 @@ export default function PurchaseOrderDetailPage({
           <DetailTabEmpty message="No lines found for this purchase order." />
         );
       }
+      const hasPartialLines = lineRows.some((l) => l.line_status === "PARTIAL");
       return (
+        <div className="space-y-3">
+        {hasPartialLines && (
+          <div className="rounded-md border border-warning/40 bg-warning/5 px-4 py-3 text-xs text-warning-fg" role="note">
+            <span className="font-semibold">Partial receipt in progress.</span>{" "}
+            Lines showing <span className="font-mono">Partial</span> status have receipts posted and cannot be cancelled.
+            To close out remaining quantities, post a compensating receipt to each partial line.
+            Open lines (no receipts) can be cancelled individually.
+          </div>
+        )}
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm" data-testid="po-lines-table">
             <thead>
@@ -511,6 +555,11 @@ export default function PurchaseOrderDetailPage({
                     </td>
                     <td className="px-3 py-2 text-right font-mono text-xs tabular-nums text-fg">
                       {fmtQty(line.received_qty)}
+                      <ReceiptProgress
+                        receivedQty={line.received_qty}
+                        orderedQty={line.ordered_qty}
+                        lineStatus={line.line_status}
+                      />
                     </td>
                     <td className="px-3 py-2 text-right font-mono text-xs tabular-nums">
                       <span
@@ -545,6 +594,7 @@ export default function PurchaseOrderDetailPage({
               })}
             </tbody>
           </table>
+        </div>
         </div>
       );
     })(),
