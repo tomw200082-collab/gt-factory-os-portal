@@ -159,10 +159,15 @@ export default function PurchaseOrdersListPage() {
   const stats = useMemo(() => {
     const openRows = allRows.filter((r) => r.status === "OPEN");
     const partialRows = allRows.filter((r) => r.status === "PARTIAL");
+    const receivedRows = allRows.filter((r) => r.status === "RECEIVED");
     const openValue = openRows.reduce((s, r) => s + Number(r.total_net ?? 0), 0);
     const partialValue = partialRows.reduce((s, r) => s + Number(r.total_net ?? 0), 0);
     const currency = allRows[0]?.currency ?? "ILS";
-    return { openCount: openRows.length, partialCount: partialRows.length, openValue, partialValue, currency };
+    return {
+      openCount: openRows.length, partialCount: partialRows.length,
+      receivedCount: receivedRows.length,
+      openValue, partialValue, currency,
+    };
   }, [allRows]);
 
   const rows = posQuery.data?.rows ?? [];
@@ -227,6 +232,19 @@ export default function PurchaseOrdersListPage() {
             <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Partial</span>
             <span className="text-lg font-bold tabular-nums text-warning-fg">{stats.partialCount}</span>
             <span className="text-3xs text-fg-faint">{fmtMoney(String(stats.partialValue), stats.currency)}</span>
+          </button>
+          <button
+            type="button"
+            onClick={() => applyStatusFilter(statusFilter === "RECEIVED" ? null : "RECEIVED")}
+            className={cn(
+              "flex flex-col gap-0.5 rounded-md border px-4 py-2.5 text-left transition-colors",
+              statusFilter === "RECEIVED"
+                ? "border-success/50 bg-success/5"
+                : "border-border/60 bg-bg-raised hover:border-border-strong",
+            )}
+          >
+            <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Received</span>
+            <span className="text-lg font-bold tabular-nums text-success-fg">{stats.receivedCount}</span>
           </button>
         </div>
       )}
