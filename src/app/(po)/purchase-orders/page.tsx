@@ -180,16 +180,28 @@ export default function PurchaseOrdersListPage() {
   const total = posQuery.data?.count ?? 0;
 
   const filtered = useMemo(() => {
-    if (!query) return rows;
-    const qLower = query.toLowerCase();
-    return rows.filter(
-      (r) =>
+    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD for ISO date comparison
+    const base = !query ? rows : rows.filter((r) => {
+      const qLower = query.toLowerCase();
+      return (
         r.po_number.toLowerCase().includes(qLower) ||
         r.po_id.toLowerCase().includes(qLower) ||
         r.supplier_id.toLowerCase().includes(qLower) ||
         (r.supplier_name ?? "").toLowerCase().includes(qLower) ||
-        (r.notes ?? "").toLowerCase().includes(qLower),
-    );
+        (r.notes ?? "").toLowerCase().includes(qLower)
+      );
+    });
+    const isActive = (r: PurchaseOrderRow) => r.status === "OPEN" || r.status === "PARTIAL";
+    const isOverdue = (r: PurchaseOrderRow) => isActive(r) && !!r.expected_receive_date && r.expected_receive_date < today;
+    return [...base].sort((a, b) => {
+      const aOv = isOverdue(a), bOv = isOverdue(b);
+      if (aOv && !bOv) return -1;
+      if (!aOv && bOv) return 1;
+      const aDate = a.expected_receive_date ?? "9999-99-99";
+      const bDate = b.expected_receive_date ?? "9999-99-99";
+      if (aDate !== bDate) return aDate.localeCompare(bDate);
+      return a.po_number.localeCompare(b.po_number);
+    });
   }, [rows, query]);
 
   return (
@@ -403,8 +415,26 @@ export default function PurchaseOrdersListPage() {
                     <td className="px-3 py-2 text-xs text-fg-muted">
                       {fmtDate(r.order_date)}
                     </td>
-                    <td className="px-3 py-2 text-xs text-fg-muted">
-                      {fmtDate(r.expected_receive_date)}
+                    <td className="px-3 py-2 text-xs">
+                      {r.expected_receive_date ? (() => {
+                        const today = new Date().toISOString().slice(0, 10);
+                        const isLate = (r.status === "OPEN" || r.status === "PARTIAL") && r.expected_receive_date < today;
+                        const daysLate = isLate
+                          ? Math.floor((Date.now() - new Date(r.expected_receive_date).getTime()) / 86400000)
+                          : 0;
+                        return (
+                          <>
+                            <span className={isLate ? "text-danger-fg font-medium" : "text-fg-muted"}>
+                              {fmtDate(r.expected_receive_date)}
+                            </span>
+                            {isLate && (
+                              <div className="text-3xs text-danger-fg/80">
+                                Late by {daysLate} day{daysLate === 1 ? "" : "s"}
+                              </div>
+                            )}
+                          </>
+                        );
+                      })() : <span className="text-fg-faint">—</span>}
                     </td>
                     <td className="px-3 py-2 text-right font-mono text-xs text-fg">
                       {fmtMoney(r.total_net, r.currency)}
