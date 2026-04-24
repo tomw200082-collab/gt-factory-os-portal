@@ -38,6 +38,7 @@ interface PurchaseOrderRow {
   po_id: string;
   po_number: string;
   supplier_id: string;
+  supplier_name: string | null;
   status: string;
   order_date: string;
   expected_receive_date: string | null;

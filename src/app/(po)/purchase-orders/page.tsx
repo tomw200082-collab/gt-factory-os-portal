@@ -33,6 +33,7 @@ interface PurchaseOrderRow {
   po_id: string;
   po_number: string;
   supplier_id: string;
+  supplier_name: string | null;
   status: string;
   order_date: string;
   expected_receive_date: string | null;
@@ -144,6 +145,7 @@ export default function PurchaseOrdersListPage() {
       (r) =>
         r.po_number.toLowerCase().includes(qLower) ||
         r.supplier_id.toLowerCase().includes(qLower) ||
+        (r.supplier_name ?? "").toLowerCase().includes(qLower) ||
         (r.notes ?? "").toLowerCase().includes(qLower),
     );
   }, [rows, query]);
@@ -288,8 +290,10 @@ export default function PurchaseOrdersListPage() {
                         {r.po_number}
                       </Link>
                     </td>
-                    <td className="px-3 py-2 font-mono text-xs text-fg-muted">
-                      {r.supplier_id}
+                    <td className="px-3 py-2 text-xs text-fg-muted">
+                      {r.supplier_name ?? (
+                        <span className="font-mono">{r.supplier_id}</span>
+                      )}
                     </td>
                     <td className="px-3 py-2">
                       <POStatusBadge status={r.status} />
