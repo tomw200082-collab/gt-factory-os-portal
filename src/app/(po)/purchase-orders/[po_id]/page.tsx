@@ -15,7 +15,7 @@
 //   - history              LIVE — GET /api/purchase-orders/:po_id/history
 // ---------------------------------------------------------------------------
 
-import { use, useState } from "react";
+import { use, useState, useCallback } from "react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
@@ -564,6 +564,61 @@ export default function PurchaseOrderDetailPage({
     },
   });
 
+  // --- Line edit state -------------------------------------------------------
+  const [lineEditingId, setLineEditingId] = useState<string | null>(null);
+  const [lineEditNotes, setLineEditNotes] = useState("");
+  const [lineEditExpected, setLineEditExpected] = useState("");
+  const [lineEditError, setLineEditError] = useState<string | null>(null);
+
+  const canEditLines =
+    session.role === "planner" || session.role === "admin";
+
+  const openLineEdit = useCallback(
+    (line: PurchaseOrderLineRow) => {
+      setLineEditingId(line.po_line_id);
+      setLineEditNotes(line.notes ?? "");
+      setLineEditExpected(
+        line.expected_receive_date
+          ? (line.expected_receive_date as string).slice(0, 10)
+          : "",
+      );
+      setLineEditError(null);
+    },
+    [],
+  );
+
+  const lineUpdateMut = useMutation({
+    mutationFn: async (poLineId: string) => {
+      const body: Record<string, string | null> = {};
+      body.notes = lineEditNotes.trim() || null;
+      body.expected_receive_date = lineEditExpected.trim() || null;
+      const res = await fetch(
+        `/api/purchase-order-lines/${encodeURIComponent(poLineId)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(body),
+        },
+      );
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(
+          (errBody as { error?: string }).error ?? `Update failed (HTTP ${res.status})`,
+        );
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["purchase-order-lines", po_id] });
+      void queryClient.invalidateQueries({ queryKey: ["purchase-orders", "history", po_id] });
+      setLineEditingId(null);
+      setLineEditError(null);
+    },
+    onError: (err: unknown) => {
+      setLineEditError((err as Error).message ?? "Update failed. Try again.");
+    },
+  });
+
   // --- Header meta ----------------------------------------------------------
   const headerMeta = po ? (
     <>
@@ -629,6 +684,7 @@ export default function PurchaseOrderDetailPage({
                 <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Line total</th>
                 <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Status</th>
                 <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Expected</th>
+                {canEditLines && <th className="px-2 py-2" />}
               </tr>
             </thead>
             <tbody>
@@ -636,7 +692,12 @@ export default function PurchaseOrderDetailPage({
                 const displayName =
                   line.component_name ?? line.item_name ?? line.component_id ?? line.item_id ?? "—";
                 const subId = line.component_id ?? line.item_id;
+                const isLineEditing = lineEditingId === line.po_line_id;
+                const isLineEditable =
+                  canEditLines &&
+                  (line.line_status === "OPEN" || line.line_status === "PARTIAL");
                 return (
+                  <>
                   <tr
                     key={line.po_line_id}
                     className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
@@ -648,6 +709,9 @@ export default function PurchaseOrderDetailPage({
                       <div className="font-medium text-sm text-fg">{displayName}</div>
                       {subId && subId !== displayName ? (
                         <div className="font-mono text-3xs text-fg-faint">{subId}</div>
+                      ) : null}
+                      {line.notes ? (
+                        <div className="mt-0.5 text-3xs text-fg-faint italic">{line.notes}</div>
                       ) : null}
                     </td>
                     <td className="px-3 py-2 text-right font-mono text-xs tabular-nums text-fg">
@@ -689,7 +753,87 @@ export default function PurchaseOrderDetailPage({
                     <td className="px-3 py-2 text-xs text-fg-muted">
                       {fmtDate(line.expected_receive_date)}
                     </td>
+                    {canEditLines && (
+                      <td className="px-2 py-2 text-right">
+                        {isLineEditable && !isLineEditing && (
+                          <button
+                            type="button"
+                            className="text-3xs text-fg-faint hover:text-accent transition-colors"
+                            onClick={() => openLineEdit(line)}
+                          >
+                            edit
+                          </button>
+                        )}
+                        {isLineEditing && (
+                          <button
+                            type="button"
+                            className="text-3xs text-fg-faint hover:text-fg"
+                            onClick={() => { setLineEditingId(null); setLineEditError(null); }}
+                          >
+                            ✕
+                          </button>
+                        )}
+                      </td>
+                    )}
                   </tr>
+                  {isLineEditing && (
+                    <tr
+                      key={`${line.po_line_id}-edit`}
+                      className="bg-bg-subtle/60 border-b border-border/40"
+                      data-testid="po-line-edit-row"
+                    >
+                      <td colSpan={canEditLines ? 11 : 10} className="px-3 py-3">
+                        <div className="flex flex-wrap items-end gap-3">
+                          <div className="flex flex-col gap-1">
+                            <label className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                              Expected date
+                            </label>
+                            <input
+                              type="date"
+                              className="input input-sm w-36"
+                              value={lineEditExpected}
+                              onChange={(e) => setLineEditExpected(e.target.value)}
+                            />
+                          </div>
+                          <div className="flex flex-col gap-1 flex-1 min-w-[14rem]">
+                            <label className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                              Notes
+                            </label>
+                            <input
+                              type="text"
+                              className="input input-sm w-full"
+                              value={lineEditNotes}
+                              onChange={(e) => setLineEditNotes(e.target.value)}
+                              placeholder="Line note…"
+                              maxLength={2000}
+                            />
+                          </div>
+                          <div className="flex items-center gap-2">
+                            {lineEditError && (
+                              <span className="text-xs text-danger-fg">{lineEditError}</span>
+                            )}
+                            <button
+                              type="button"
+                              className="btn btn-sm"
+                              onClick={() => lineUpdateMut.mutate(line.po_line_id)}
+                              disabled={lineUpdateMut.isPending}
+                            >
+                              {lineUpdateMut.isPending ? "Saving…" : "Save"}
+                            </button>
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => { setLineEditingId(null); setLineEditError(null); }}
+                              disabled={lineUpdateMut.isPending}
+                            >
+                              Cancel
+                            </button>
+                          </div>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                  </>
                 );
               })}
             </tbody>
