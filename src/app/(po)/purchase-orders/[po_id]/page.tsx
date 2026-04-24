@@ -264,9 +264,11 @@ function GrStatusBadge({ status }: { status: string }): JSX.Element {
 function AttachedGrCard({
   gr,
   currency,
+  linesByLineId,
 }: {
   gr: GoodsReceiptSummaryRow;
   currency: string;
+  linesByLineId: Map<string, PurchaseOrderLineRow>;
 }): JSX.Element {
   return (
     <div
@@ -294,17 +296,23 @@ function AttachedGrCard({
             </tr>
           </thead>
           <tbody>
-            {gr.lines.map((line) => (
-              <tr key={line.line_id} className="border-b border-border/20 last:border-b-0 hover:bg-bg-subtle/30">
-                <td className="px-4 py-2 font-mono text-xs text-fg">{line.item_id}</td>
-                <td className="px-4 py-2 text-right font-mono text-xs tabular-nums text-fg">{fmtQty(line.quantity)}</td>
-                <td className="px-4 py-2 text-xs text-fg-muted">{line.unit}</td>
-                <td className="px-4 py-2 text-xs text-fg-muted">{line.item_type}</td>
-                <td className="px-4 py-2 font-mono text-3xs text-fg-faint">
-                  {line.po_line_id ? line.po_line_id.slice(0, 8) + "…" : "—"}
-                </td>
-              </tr>
-            ))}
+            {gr.lines.map((line) => {
+              const poLine = line.po_line_id ? linesByLineId.get(line.po_line_id) : null;
+              const poLineLabel = poLine
+                ? `Line ${poLine.line_number}`
+                : line.po_line_id
+                  ? line.po_line_id.slice(0, 8) + "…"
+                  : "—";
+              return (
+                <tr key={line.line_id} className="border-b border-border/20 last:border-b-0 hover:bg-bg-subtle/30">
+                  <td className="px-4 py-2 font-mono text-xs text-fg">{line.item_id}</td>
+                  <td className="px-4 py-2 text-right font-mono text-xs tabular-nums text-fg">{fmtQty(line.quantity)}</td>
+                  <td className="px-4 py-2 text-xs text-fg-muted">{line.unit}</td>
+                  <td className="px-4 py-2 text-xs text-fg-muted">{line.item_type}</td>
+                  <td className="px-4 py-2 text-xs text-fg-muted">{poLineLabel}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}
@@ -1094,10 +1102,18 @@ export default function PurchaseOrderDetailPage({
           <DetailTabEmpty message="No goods receipts have been recorded against this purchase order." />
         );
       }
+      const linesByLineId = new Map<string, PurchaseOrderLineRow>(
+        (linesQuery.data?.rows ?? []).map((l) => [l.po_line_id, l]),
+      );
       return (
         <div className="space-y-4 py-2" data-testid="attached-grs-list">
           {grs.map((gr) => (
-            <AttachedGrCard key={gr.submission_id} gr={gr} currency={po?.currency ?? "ILS"} />
+            <AttachedGrCard
+              key={gr.submission_id}
+              gr={gr}
+              currency={po?.currency ?? "ILS"}
+              linesByLineId={linesByLineId}
+            />
           ))}
         </div>
       );
