@@ -250,6 +250,7 @@ export default function ProductionActualPage() {
         const snap = body as ProductionActualOpenResponse;
         setSnapshot(snap);
         setOutputUom(snap.output_uom_default);
+        setPreviewExpanded(snap.bom_lines.length > 0);
         setPhase("entering");
       } else {
         const detail = body ? JSON.stringify(body) : `HTTP ${res.status}`;
@@ -314,12 +315,16 @@ export default function ProductionActualPage() {
         (body as { status?: unknown }).status === "posted"
       ) {
         const committed = body as ProductionActualCommitted;
+        const scrapNote =
+          Number(committed.scrap_qty) > 0
+            ? ` · scrap ${committed.scrap_qty} ${committed.output_uom}`
+            : "";
         setDone({
           kind: "success",
           message: committed.idempotent_replay
             ? "Production already posted (idempotent replay)."
-            : "Production posted — output, scrap, and consumption recorded.",
-          detail: `submission_id=${committed.submission_id} · consumption_rows=${committed.consumption.length}`,
+            : `Posted ${committed.output_qty} ${committed.output_uom} of ${snapshot.item_name}${scrapNote}. ${committed.consumption.length} component consumption rows recorded.`,
+          detail: `submission_id=${committed.submission_id}`,
         });
         // Refresh the recent-runs history so the new submission appears immediately.
         void queryClient.invalidateQueries({
@@ -604,7 +609,7 @@ export default function ProductionActualPage() {
               className="btn btn-primary"
               disabled={!selectedItemId}
             >
-              Open production snapshot
+              Continue to entry
             </button>
           </div>
         </form>
@@ -821,9 +826,6 @@ export default function ProductionActualPage() {
                       Scrap
                     </th>
                     <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      UoM
-                    </th>
-                    <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                       BOM version
                     </th>
                     <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
@@ -844,18 +846,12 @@ export default function ProductionActualPage() {
                         <div className="font-medium text-fg">
                           {r.item_name}
                         </div>
-                        <div className="font-mono text-3xs text-fg-muted">
-                          {r.item_id}
-                        </div>
                       </td>
                       <td className="px-3 py-2 text-right font-mono text-fg">
-                        {r.output_qty}
+                        {r.output_qty} {r.output_uom}
                       </td>
                       <td className="px-3 py-2 text-right font-mono text-fg-muted">
-                        {r.scrap_qty}
-                      </td>
-                      <td className="px-3 py-2 text-fg-muted">
-                        {r.output_uom}
+                        {r.scrap_qty} {r.output_uom}
                       </td>
                       <td className="px-3 py-2 font-mono text-fg-muted">
                         {r.bom_version_label}
