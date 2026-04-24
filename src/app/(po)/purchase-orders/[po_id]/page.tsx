@@ -337,11 +337,27 @@ function actionTone(action: string): "success" | "warning" | "neutral" | "info" 
   return "info";
 }
 
+function fmtDiffValue(v: unknown): string {
+  if (v === null || v === undefined) return "—";
+  if (typeof v === "string") return v || "—";
+  return String(v);
+}
+
 function HistoryEventRow({ event }: { event: ChangeLogHistoryRow }): JSX.Element {
   const label = ACTION_LABELS[event.action] ?? event.action;
   const isLineEvent = event.entity_table === "purchase_order_lines";
   const changedFields = Array.isArray(event.changed_fields) ? event.changed_fields : [];
-  const hasValues = event.old_values !== null || event.new_values !== null;
+  const oldVals = event.old_values as Record<string, unknown> | null;
+  const newVals = event.new_values as Record<string, unknown> | null;
+
+  // Determine which fields to display in diff table:
+  // If changedFields lists specific fields, use those; otherwise use keys of new_values.
+  const diffFields: string[] =
+    changedFields.length > 0
+      ? changedFields
+      : newVals
+      ? Object.keys(newVals)
+      : [];
 
   return (
     <div
@@ -361,29 +377,39 @@ function HistoryEventRow({ event }: { event: ChangeLogHistoryRow }): JSX.Element
           )}
           <span className="text-xs text-fg-muted ml-auto">{fmtDateTime(event.created_at)}</span>
         </div>
-        {changedFields.length > 0 && (
-          <div className="mt-1 flex flex-wrap gap-1">
-            {changedFields.map((f) => (
-              <span key={f} className="inline-block bg-bg-subtle border border-border/50 rounded px-1.5 py-0.5 text-3xs font-mono text-fg-muted">
-                {f}
-              </span>
-            ))}
-          </div>
-        )}
-        {hasValues && (
-          <div className="mt-1.5 grid grid-cols-2 gap-2 text-3xs font-mono text-fg-faint">
-            {event.old_values !== null && (
-              <div>
-                <span className="text-fg-subtle">before: </span>
-                {JSON.stringify(event.old_values)}
-              </div>
-            )}
-            {event.new_values !== null && (
-              <div>
-                <span className="text-fg-subtle">after: </span>
-                {JSON.stringify(event.new_values)}
-              </div>
-            )}
+        {diffFields.length > 0 && (
+          <div className="mt-2 rounded border border-border/40 overflow-hidden">
+            <table className="w-full border-collapse">
+              <tbody>
+                {diffFields.map((field) => {
+                  const oldVal = oldVals?.[field];
+                  const newVal = newVals?.[field];
+                  const isUpdate = oldVals !== null && newVals !== null;
+                  return (
+                    <tr key={field} className="border-b border-border/20 last:border-b-0">
+                      <td className="px-2 py-1 text-3xs font-mono text-fg-subtle bg-bg-subtle/40 whitespace-nowrap w-px">
+                        {field}
+                      </td>
+                      {isUpdate ? (
+                        <>
+                          <td className="px-2 py-1 text-3xs font-mono text-fg-muted line-through opacity-60 max-w-[10rem] truncate">
+                            {fmtDiffValue(oldVal)}
+                          </td>
+                          <td className="px-2 py-1 text-3xs text-fg-faint">→</td>
+                          <td className="px-2 py-1 text-3xs font-mono text-fg max-w-[10rem] truncate">
+                            {fmtDiffValue(newVal)}
+                          </td>
+                        </>
+                      ) : (
+                        <td className="px-2 py-1 text-3xs font-mono text-fg max-w-xs truncate" colSpan={3}>
+                          {fmtDiffValue(newVal ?? oldVal)}
+                        </td>
+                      )}
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
       </div>
