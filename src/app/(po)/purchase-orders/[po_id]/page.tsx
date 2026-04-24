@@ -1,30 +1,18 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// Purchase Orders · Detail — Tranche D (plan §F).
+// Purchase Orders · Detail — PO corridor Tranche 3 (lines + detail endpoints).
 // Canonical URL /purchase-orders/[po_id].
 //
 // Header: po_number, supplier link, status badge (OPEN|PARTIAL|RECEIVED|
 // CANCELLED), order_date, expected_receive_date, total_net.
 //
-// 4 tabs:
-//   - lines                PENDING — upstream exposes no per-PO lines endpoint
-//                                    (/api/v1/queries/purchase-order-lines
-//                                    not authored yet); tab renders a
-//                                    visible pending-placeholder with a
-//                                    concrete list of missing endpoints.
-//   - source-recommendation LIVE   — deep-link to /planning/runs/[run_id]
-//                                    when po.source_run_id is set; else empty.
+// Tabs:
+//   - lines                LIVE — GET /api/purchase-order-lines?po_id=X
+//   - overview             LIVE — GET /api/purchase-orders/:po_id
+//   - source-recommendation LIVE — deep-link to /planning/runs/[run_id]
 //   - attached-grs         PENDING — no GR list endpoint upstream yet.
 //   - history              PENDING — no per-PO change_log endpoint exposed.
-//
-// PO header data IS retrievable by filtering the /api/purchase-orders list
-// client-side — this is the same pattern Tranche C uses where upstream only
-// exposes list endpoints. The overview header is therefore LIVE.
-//
-// Linkage card: supplier, source recommendation run, attached GRs (pending).
-//
-// View-only (Tranche D boundary).
 // ---------------------------------------------------------------------------
 
 import { use } from "react";
@@ -43,7 +31,7 @@ import {
 } from "@/components/patterns/DetailPage";
 import { Badge } from "@/components/badges/StatusBadge";
 
-// --- Types (mirror of upstream purchase-orders schemas) ------------------
+// --- Types (mirrors of upstream schemas) ------------------------------------
 
 interface PurchaseOrderRow {
   po_id: string;
@@ -65,8 +53,37 @@ interface PurchaseOrderRow {
   updated_at: string;
 }
 
-interface PurchaseOrdersListResponse {
-  rows: PurchaseOrderRow[];
+interface PurchaseOrderDetailResponse {
+  row: PurchaseOrderRow;
+}
+
+interface PurchaseOrderLineRow {
+  po_line_id: string;
+  po_id: string;
+  line_number: number;
+  component_id: string | null;
+  component_name: string | null;
+  item_id: string | null;
+  item_name: string | null;
+  ordered_qty: string;
+  uom: string;
+  pack_conversion_snapshot: string;
+  unit_price_net: string;
+  line_total_net: string;
+  received_qty: string;
+  open_qty: string;
+  line_status: string;
+  expected_receive_date: string | null;
+  actual_first_receipt_at: string | null;
+  actual_last_receipt_at: string | null;
+  source_recommendation_id: string | null;
+  notes: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
+interface PurchaseOrderLinesListResponse {
+  rows: PurchaseOrderLineRow[];
   count: number;
 }
 
@@ -82,15 +99,39 @@ interface SuppliersListResponse {
   count: number;
 }
 
-// --- helpers -------------------------------------------------------------
+// --- helpers ----------------------------------------------------------------
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url, { headers: { Accept: "application/json" } });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`GET ${url} failed (HTTP ${res.status}): ${body}`);
+    throw new Error(`HTTP ${res.status}: ${body || res.statusText}`);
   }
   return (await res.json()) as T;
+}
+
+function fmtMoney(value: string | null | undefined, currency: string): string {
+  if (value === null || value === undefined) return "—";
+  const n = Number(value);
+  if (isNaN(n)) return value;
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency",
+      currency,
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2,
+    }).format(n);
+  } catch {
+    return `${value} ${currency}`;
+  }
+}
+
+function fmtQty(value: string | null | undefined): string {
+  if (value === null || value === undefined) return "—";
+  const n = Number(value);
+  if (isNaN(n)) return value;
+  // Strip trailing zeros while keeping up to 4 decimal places for display
+  return n.toLocaleString(undefined, { maximumFractionDigits: 4 });
 }
 
 function fmtDate(iso: string | null | undefined): string {
@@ -131,6 +172,14 @@ function POStatusBadge({ status }: { status: string }): JSX.Element {
   return <Badge tone="neutral">{status}</Badge>;
 }
 
+function LineStatusBadge({ status }: { status: string }): JSX.Element {
+  if (status === "OPEN") return <Badge tone="info" dotted>Open</Badge>;
+  if (status === "PARTIAL") return <Badge tone="warning" dotted>Partial</Badge>;
+  if (status === "CLOSED") return <Badge tone="success" variant="solid">Closed</Badge>;
+  if (status === "CANCELLED") return <Badge tone="neutral" dotted>Cancelled</Badge>;
+  return <Badge tone="neutral">{status}</Badge>;
+}
+
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -142,24 +191,39 @@ export default function PurchaseOrderDetailPage({
 }): JSX.Element {
   const { po_id } = use(params);
 
-  // PO row via list + client-side filter (upstream has no GET-by-id).
-  const poQuery = useQuery<PurchaseOrdersListResponse>({
+  // PO header via GET-by-id endpoint.
+  const poQuery = useQuery<PurchaseOrderDetailResponse>({
     queryKey: ["purchase-orders", "detail", po_id],
-    queryFn: () => fetchJson("/api/purchase-orders?limit=1000"),
+    queryFn: () =>
+      fetchJson(`/api/purchase-orders/${encodeURIComponent(po_id)}`),
+    staleTime: 60_000,
+    retry: false,
   });
-  const po = poQuery.data?.rows.find((r) => r.po_id === po_id);
+  const po = poQuery.data?.row;
 
-  // Supplier row for header + linkage (same list-filter pattern).
+  // PO lines via new lines endpoint.
+  const linesQuery = useQuery<PurchaseOrderLinesListResponse>({
+    queryKey: ["purchase-order-lines", po_id],
+    queryFn: () =>
+      fetchJson(
+        `/api/purchase-order-lines?po_id=${encodeURIComponent(po_id)}`,
+      ),
+    enabled: Boolean(po_id),
+    staleTime: 60_000,
+  });
+
+  // Supplier row for header + linkage.
   const suppliersQuery = useQuery<SuppliersListResponse>({
     queryKey: ["purchase-orders", "detail", po_id, "supplier"],
     queryFn: () => fetchJson("/api/suppliers?limit=1000"),
     enabled: Boolean(po?.supplier_id),
+    staleTime: 5 * 60_000,
   });
   const supplier = po?.supplier_id
     ? suppliersQuery.data?.rows.find((s) => s.supplier_id === po.supplier_id)
     : undefined;
 
-  // --- Header meta ---------------------------------------------------------
+  // --- Header meta ----------------------------------------------------------
   const headerMeta = po ? (
     <>
       <POStatusBadge status={po.status} />
@@ -182,108 +246,160 @@ export default function PurchaseOrderDetailPage({
     </>
   ) : null;
 
-  // --- Tabs ----------------------------------------------------------------
-
-  // Overview-as-default-first-tab. Per dispatch, "lines" is the first named
-  // tab, but because no lines endpoint exists upstream, we surface it as
-  // pending and let the tab strip start at `overview` instead so users
-  // landing on the page see real data immediately. The tab order is still
-  // lines first to honor the dispatch ordering.
+  // --- Lines tab -----------------------------------------------------------
   const linesTab: TabDescriptor = {
     key: "lines",
     label: "Lines",
     content: (() => {
-      if (poQuery.isLoading) return <DetailTabLoading />;
-      if (poQuery.isError) {
-        return <DetailTabError message={(poQuery.error as Error).message} />;
-      }
-      if (!po) {
+      if (linesQuery.isLoading) return <DetailTabLoading />;
+      if (linesQuery.isError) {
         return (
-          <DetailTabEmpty
-            message={`Purchase order ${po_id} not found in the list.`}
-          />
+          <DetailTabError message="Could not load PO lines. Check your connection and try refreshing." />
+        );
+      }
+      const lineRows = linesQuery.data?.rows ?? [];
+      if (lineRows.length === 0) {
+        return (
+          <DetailTabEmpty message="No lines found for this purchase order." />
         );
       }
       return (
-        <PendingTabPlaceholder
-          reason={
-            "PO lines require an upstream GET endpoint (e.g. /api/v1/queries/purchase-orders/:po_id or /api/v1/queries/purchase-order-lines?po_id=<id>) that is not yet authored. " +
-            "Header-level PO data is available in the Overview tab."
-          }
-        />
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-sm" data-testid="po-lines-table">
+            <thead>
+              <tr className="border-b border-border/70 bg-bg-subtle/60">
+                <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">#</th>
+                <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Item / Component</th>
+                <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Ordered</th>
+                <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Received</th>
+                <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Open</th>
+                <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">UoM</th>
+                <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Unit price</th>
+                <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Line total</th>
+                <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Status</th>
+                <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Expected</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lineRows.map((line) => {
+                const displayName =
+                  line.component_name ?? line.item_name ?? line.component_id ?? line.item_id ?? "—";
+                const subId = line.component_id ?? line.item_id;
+                return (
+                  <tr
+                    key={line.po_line_id}
+                    className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
+                    data-testid="po-line-row"
+                    data-line-status={line.line_status}
+                  >
+                    <td className="px-3 py-2 text-xs text-fg-muted tabular-nums">{line.line_number}</td>
+                    <td className="px-3 py-2">
+                      <div className="font-medium text-sm text-fg">{displayName}</div>
+                      {subId && subId !== displayName ? (
+                        <div className="font-mono text-3xs text-fg-faint">{subId}</div>
+                      ) : null}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono text-xs tabular-nums text-fg">
+                      {fmtQty(line.ordered_qty)}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono text-xs tabular-nums text-fg">
+                      {fmtQty(line.received_qty)}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono text-xs tabular-nums">
+                      <span
+                        className={
+                          Number(line.open_qty) > 0
+                            ? "text-warning-fg font-semibold"
+                            : "text-fg-muted"
+                        }
+                      >
+                        {fmtQty(line.open_qty)}
+                      </span>
+                    </td>
+                    <td className="px-3 py-2 text-xs text-fg-muted">{line.uom}</td>
+                    <td className="px-3 py-2 text-right font-mono text-xs tabular-nums text-fg-muted">
+                      {line.unit_price_net === "0" || line.unit_price_net === "0.0000"
+                        ? <span className="text-fg-faint">—</span>
+                        : fmtMoney(line.unit_price_net, po?.currency ?? "ILS")}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono text-xs tabular-nums text-fg-muted">
+                      {line.line_total_net === "0" || line.line_total_net === "0.0000"
+                        ? <span className="text-fg-faint">—</span>
+                        : fmtMoney(line.line_total_net, po?.currency ?? "ILS")}
+                    </td>
+                    <td className="px-3 py-2">
+                      <LineStatusBadge status={line.line_status} />
+                    </td>
+                    <td className="px-3 py-2 text-xs text-fg-muted">
+                      {fmtDate(line.expected_receive_date)}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
       );
     })(),
   };
 
+  // --- Overview tab ---------------------------------------------------------
   const overviewTab: TabDescriptor = {
     key: "overview",
     label: "Overview",
     content: (() => {
       if (poQuery.isLoading) return <DetailTabLoading />;
       if (poQuery.isError) {
-        return <DetailTabError message={(poQuery.error as Error).message} />;
+        return <DetailTabError message="Could not load purchase order. Check your connection and try refreshing." />;
       }
       if (!po) {
         return (
           <DetailTabEmpty
-            message={`Purchase order ${po_id} not found in the list.`}
+            message={`Purchase order ${po_id} not found.`}
           />
         );
       }
       const rows: FieldRow[] = [
-        { label: "po_id", value: po.po_id, mono: true },
-        { label: "po_number", value: po.po_number, mono: true },
+        { label: "PO Number", value: po.po_number, mono: true },
         {
-          label: "supplier_id",
+          label: "Supplier",
           value: (
             <Link
               href={`/admin/masters/suppliers/${encodeURIComponent(po.supplier_id)}`}
               className="font-mono text-accent hover:underline"
             >
-              {po.supplier_id}
+              {supplier ? (supplier.supplier_name_short ?? supplier.supplier_name_official) : po.supplier_id}
             </Link>
           ),
-          mono: true,
         },
-        { label: "status", value: <POStatusBadge status={po.status} /> },
-        { label: "order_date", value: fmtDate(po.order_date) },
+        { label: "Status", value: <POStatusBadge status={po.status} /> },
+        { label: "Order date", value: fmtDate(po.order_date) },
+        { label: "Expected receipt", value: fmtDate(po.expected_receive_date) },
+        { label: "Total (net)", value: fmtMoney(po.total_net, po.currency) },
+        { label: "Total (gross)", value: po.total_gross ? fmtMoney(po.total_gross, po.currency) : "—" },
+        { label: "Notes", value: po.notes },
+        { label: "Site", value: po.site_id, mono: true },
         {
-          label: "expected_receive_date",
-          value: fmtDate(po.expected_receive_date),
-        },
-        { label: "currency", value: po.currency, mono: true },
-        { label: "total_net", value: po.total_net, mono: true },
-        { label: "total_gross", value: po.total_gross, mono: true },
-        { label: "notes", value: po.notes },
-        { label: "site_id", value: po.site_id, mono: true },
-        {
-          label: "source_run_id",
+          label: "Source planning run",
           value: po.source_run_id ? (
             <Link
               href={`/planning/runs/${encodeURIComponent(po.source_run_id)}`}
               className="font-mono text-accent hover:underline"
             >
-              {po.source_run_id}
+              View run →
             </Link>
-          ) : null,
-          mono: true,
+          ) : "—",
         },
-        {
-          label: "source_recommendation_id",
-          value: po.source_recommendation_id,
-          mono: true,
-        },
-        {
-          label: "created_by",
-          value: `${po.created_by_snapshot} (${po.created_by_user_id})`,
-        },
-        { label: "created_at", value: fmtDateTime(po.created_at) },
-        { label: "updated_at", value: fmtDateTime(po.updated_at) },
+        { label: "Created by", value: po.created_by_snapshot },
+        { label: "Created", value: fmtDateTime(po.created_at) },
+        { label: "Last updated", value: fmtDateTime(po.updated_at) },
+        { label: "Internal ID", value: po.po_id, mono: true },
       ];
       return <DetailFieldGrid rows={rows} />;
     })(),
   };
 
+  // --- Source recommendation tab -------------------------------------------
   const sourceRecommendationTab: TabDescriptor = {
     key: "source-recommendation",
     label: "Source recommendation",
@@ -321,22 +437,24 @@ export default function PurchaseOrderDetailPage({
     })(),
   };
 
+  // --- Attached GRs tab (pending) ------------------------------------------
   const attachedGrsTab: TabDescriptor = {
     key: "attached-grs",
     label: "Attached GRs",
     content: (
       <PendingTabPlaceholder
-        reason="Goods-receipts attached to this PO require an upstream list endpoint (/api/v1/queries/goods-receipts?po_id=<id>) that is not yet exposed. The GR table does exist and the stock_ledger.related_po_line_id column wires the link, but no list-by-PO projection is available at the API layer."
+        reason="Goods receipts linked to this PO will appear here in a future release."
       />
     ),
   };
 
+  // --- History tab (pending) -----------------------------------------------
   const historyTab: TabDescriptor = {
     key: "history",
     label: "History",
     content: (
       <PendingTabPlaceholder
-        reason="Per-PO change-log is not yet exposed as an API surface. The change_log table receives PO_CREATE / PO_LINE_CREATE / POL_STATUS_CHANGE / PO_STATUS_CHANGE / PLANNING_REC_CONVERTED_TO_PO rows but there is no read endpoint keyed by PO id in this release."
+        reason="Change history for this PO will appear here in a future release."
       />
     ),
   };
@@ -349,7 +467,7 @@ export default function PurchaseOrderDetailPage({
     historyTab,
   ];
 
-  // --- Linkage card --------------------------------------------------------
+  // --- Linkage card ---------------------------------------------------------
   const linkages: LinkageGroup[] = [];
 
   if (po?.supplier_id) {
@@ -385,8 +503,7 @@ export default function PurchaseOrderDetailPage({
   linkages.push({
     label: "Attached goods receipts",
     items: [],
-    emptyText:
-      "Pending /api/goods-receipts?po_id=<id> endpoint (Tranche I scope).",
+    emptyText: "Goods receipts linked to this PO will appear here in a future release.",
   });
 
   return (
