@@ -58,6 +58,20 @@ interface PurchaseOrdersListResponse {
 type POStatus = "OPEN" | "PARTIAL" | "RECEIVED" | "CANCELLED";
 const STATUS_OPTIONS: POStatus[] = ["OPEN", "PARTIAL", "RECEIVED", "CANCELLED"];
 
+function fmtMoney(value: string | null | undefined, currency: string): string {
+  if (!value) return "—";
+  const n = Number(value);
+  if (isNaN(n)) return value;
+  try {
+    return new Intl.NumberFormat(undefined, {
+      style: "currency", currency,
+      minimumFractionDigits: 2, maximumFractionDigits: 2,
+    }).format(n);
+  } catch {
+    return `${value} ${currency}`;
+  }
+}
+
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url, { headers: { Accept: "application/json" } });
   if (!res.ok) {
@@ -305,8 +319,7 @@ export default function PurchaseOrdersListPage() {
                       {fmtDate(r.expected_receive_date)}
                     </td>
                     <td className="px-3 py-2 text-right font-mono text-xs text-fg">
-                      {r.total_net}{" "}
-                      <span className="text-fg-faint">{r.currency}</span>
+                      {fmtMoney(r.total_net, r.currency)}
                     </td>
                     <td className="px-3 py-2 text-xs">
                       {r.source_recommendation_id ? (

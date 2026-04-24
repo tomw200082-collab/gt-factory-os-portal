@@ -89,17 +89,6 @@ interface PurchaseOrderLinesListResponse {
   count: number;
 }
 
-interface SupplierRow {
-  supplier_id: string;
-  supplier_name_official: string;
-  supplier_name_short: string | null;
-  status: string;
-}
-
-interface SuppliersListResponse {
-  rows: SupplierRow[];
-  count: number;
-}
 
 interface ChangeLogHistoryRow {
   change_log_id: string;
@@ -434,16 +423,8 @@ export default function PurchaseOrderDetailPage({
     staleTime: 60_000,
   });
 
-  // Supplier row for header + linkage.
-  const suppliersQuery = useQuery<SuppliersListResponse>({
-    queryKey: ["purchase-orders", "detail", po_id, "supplier"],
-    queryFn: () => fetchJson("/api/suppliers?limit=1000"),
-    enabled: Boolean(po?.supplier_id),
-    staleTime: 5 * 60_000,
-  });
-  const supplier = po?.supplier_id
-    ? suppliersQuery.data?.rows.find((s) => s.supplier_id === po.supplier_id)
-    : undefined;
+  // Supplier display name — available directly from po.supplier_name (API JOIN).
+  const supplierLabel = po?.supplier_name ?? po?.supplier_id;
 
   // PO audit history.
   const historyQuery = useQuery<PurchaseOrderHistoryResponse>({
@@ -868,7 +849,7 @@ export default function PurchaseOrderDetailPage({
               href={`/admin/masters/suppliers/${encodeURIComponent(po.supplier_id)}`}
               className="font-mono text-accent hover:underline"
             >
-              {supplier ? (supplier.supplier_name_short ?? supplier.supplier_name_official) : po.supplier_id}
+              {supplierLabel}
             </Link>
           ),
         },
@@ -1066,9 +1047,7 @@ export default function PurchaseOrderDetailPage({
         {
           label: po.supplier_id,
           href: `/admin/masters/suppliers/${encodeURIComponent(po.supplier_id)}`,
-          subtitle: supplier
-            ? supplier.supplier_name_short ?? supplier.supplier_name_official
-            : undefined,
+          subtitle: po.supplier_name ?? undefined,
         },
       ],
     });
@@ -1106,9 +1085,7 @@ export default function PurchaseOrderDetailPage({
         eyebrow: "Purchase orders",
         title: po ? `PO ${po.po_number}` : po_id,
         description: po
-          ? supplier
-            ? `${supplier.supplier_name_short ?? supplier.supplier_name_official} · ${po.supplier_id}`
-            : `Supplier ${po.supplier_id}`
+          ? `${supplierLabel} · ${po.supplier_id}`
           : "Loading purchase order…",
         meta: headerMeta,
         actions: (
