@@ -17,8 +17,9 @@
 //     read-only per plan §D.2 + §A.2 (admin CRUD UIs post-launch).
 // ---------------------------------------------------------------------------
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import Link from "next/link";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
@@ -60,7 +61,7 @@ async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url, { headers: { Accept: "application/json" } });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`GET ${url} failed (HTTP ${res.status}): ${body}`);
+    throw new Error("Failed to load purchase orders. Check your connection and try refreshing.");
   }
   return (await res.json()) as T;
 }
@@ -104,8 +105,24 @@ function POStatusBadge({ status }: { status: string }): JSX.Element {
 }
 
 export default function PurchaseOrdersListPage() {
-  const [statusFilter, setStatusFilter] = useState<POStatus | null>(null);
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const initialStatus = searchParams.get("status");
+  const [statusFilter, setStatusFilter] = useState<POStatus | null>(
+    STATUS_OPTIONS.includes(initialStatus as POStatus) ? (initialStatus as POStatus) : null,
+  );
   const [query, setQuery] = useState("");
+
+  const applyStatusFilter = useCallback((s: POStatus | null) => {
+    setStatusFilter(s);
+    const params = new URLSearchParams(searchParams.toString());
+    if (s) {
+      params.set("status", s);
+    } else {
+      params.delete("status");
+    }
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }, [router, searchParams]);
 
   const posQuery = useQuery<PurchaseOrdersListResponse>({
     queryKey: ["planner", "purchase-orders", statusFilter ?? "all"],
@@ -166,7 +183,7 @@ export default function PurchaseOrdersListPage() {
                 data-testid={`po-list-filter-status-${s}`}
                 aria-pressed={active}
                 onClick={() =>
-                  setStatusFilter((cur) => (cur === s ? null : s))
+                  applyStatusFilter(statusFilter === s ? null : s)
                 }
                 className={cn(
                   "inline-flex items-center gap-1.5 rounded-sm border px-2 py-1 text-3xs font-semibold uppercase tracking-sops transition-colors duration-150",
@@ -183,7 +200,7 @@ export default function PurchaseOrdersListPage() {
             type="button"
             className="btn btn-sm"
             data-testid="po-list-filter-clear"
-            onClick={() => setStatusFilter(null)}
+            onClick={() => applyStatusFilter(null)}
           >
             All
           </button>
@@ -202,7 +219,7 @@ export default function PurchaseOrdersListPage() {
             className="p-5 text-sm text-danger-fg"
             data-testid="po-list-error"
           >
-            {(posQuery.error as Error).message}
+            Failed to load purchase orders. Check your connection and try refreshing.
           </div>
         ) : filtered.length === 0 ? (
           <div className="p-5">
@@ -257,10 +274,11 @@ export default function PurchaseOrdersListPage() {
                 {filtered.map((r) => (
                   <tr
                     key={r.po_id}
-                    className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
+                    className="cursor-pointer border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
                     data-testid="po-list-row"
                     data-po-id={r.po_id}
                     data-status={r.status}
+                    onClick={() => router.push(`/purchase-orders/${encodeURIComponent(r.po_id)}`)}
                   >
                     <td className="px-3 py-2 font-mono text-xs text-fg">
                       <Link
