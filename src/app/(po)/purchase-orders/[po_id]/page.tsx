@@ -578,6 +578,35 @@ export default function PurchaseOrderDetailPage({
   const [lineEditExpected, setLineEditExpected] = useState("");
   const [lineEditError, setLineEditError] = useState<string | null>(null);
 
+  // --- Line cancel state ----------------------------------------------------
+  const [lineCancelConfirmId, setLineCancelConfirmId] = useState<string | null>(null);
+  const [lineCancelError, setLineCancelError] = useState<string | null>(null);
+
+  const lineCancelMut = useMutation({
+    mutationFn: async (poLineId: string) => {
+      const res = await fetch(
+        `/api/purchase-order-lines/${encodeURIComponent(poLineId)}/cancel`,
+        { method: "POST" },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => ({}));
+        throw new Error((body as { error?: string }).error ?? `Cancel failed (HTTP ${res.status})`);
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["purchase-order-lines", po_id] });
+      void queryClient.invalidateQueries({ queryKey: ["purchase-orders", "history", po_id] });
+      void queryClient.invalidateQueries({ queryKey: ["purchase-orders", "detail", po_id] });
+      setLineCancelConfirmId(null);
+      setLineCancelError(null);
+    },
+    onError: (err: unknown) => {
+      setLineCancelError((err as Error).message ?? "Cancel failed. Try again.");
+      setLineCancelConfirmId(null);
+    },
+  });
+
   const canEditLines =
     session.role === "planner" || session.role === "admin";
 
@@ -683,6 +712,11 @@ export default function PurchaseOrderDetailPage({
             Open lines (no receipts) can be cancelled individually.
           </div>
         )}
+        {lineCancelError && (
+          <div className="rounded-md border border-danger/40 bg-danger/5 px-4 py-2 text-xs text-danger-fg">
+            {lineCancelError}
+          </div>
+        )}
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm" data-testid="po-lines-table">
             <thead>
@@ -706,9 +740,12 @@ export default function PurchaseOrderDetailPage({
                   line.component_name ?? line.item_name ?? line.component_id ?? line.item_id ?? "—";
                 const subId = line.component_id ?? line.item_id;
                 const isLineEditing = lineEditingId === line.po_line_id;
+                const isLineCancelConfirming = lineCancelConfirmId === line.po_line_id;
                 const isLineEditable =
                   canEditLines &&
                   (line.line_status === "OPEN" || line.line_status === "PARTIAL");
+                const isLineCancellable =
+                  canEditLines && line.line_status === "OPEN";
                 return (
                   <Fragment key={line.po_line_id}>
                   <tr
@@ -767,14 +804,46 @@ export default function PurchaseOrderDetailPage({
                     </td>
                     {canEditLines && (
                       <td className="px-2 py-2 text-right">
-                        {isLineEditable && !isLineEditing && (
-                          <button
-                            type="button"
-                            className="text-3xs text-fg-faint hover:text-accent transition-colors"
-                            onClick={() => openLineEdit(line)}
-                          >
-                            edit
-                          </button>
+                        {isLineEditable && !isLineEditing && !isLineCancelConfirming && (
+                          <div className="flex items-center gap-2 justify-end">
+                            <button
+                              type="button"
+                              className="text-3xs text-fg-faint hover:text-accent transition-colors"
+                              onClick={() => openLineEdit(line)}
+                            >
+                              edit
+                            </button>
+                            {isLineCancellable && (
+                              <button
+                                type="button"
+                                className="text-3xs text-fg-faint hover:text-danger-fg transition-colors"
+                                onClick={() => { setLineCancelConfirmId(line.po_line_id); setLineCancelError(null); }}
+                              >
+                                cancel
+                              </button>
+                            )}
+                          </div>
+                        )}
+                        {isLineCancelConfirming && (
+                          <div className="flex items-center gap-1 justify-end">
+                            <span className="text-3xs text-fg-muted">Cancel line?</span>
+                            <button
+                              type="button"
+                              className="text-3xs text-danger-fg font-semibold hover:underline"
+                              onClick={() => lineCancelMut.mutate(line.po_line_id)}
+                              disabled={lineCancelMut.isPending}
+                            >
+                              {lineCancelMut.isPending ? "…" : "Yes"}
+                            </button>
+                            <button
+                              type="button"
+                              className="text-3xs text-fg-faint hover:text-fg"
+                              onClick={() => { setLineCancelConfirmId(null); setLineCancelError(null); }}
+                              disabled={lineCancelMut.isPending}
+                            >
+                              No
+                            </button>
+                          </div>
                         )}
                         {isLineEditing && (
                           <button
