@@ -1118,11 +1118,11 @@ function LatestForecastBlock({
         label="Version"
         value={
           <span
-            className="font-mono text-sm"
+            className="text-sm"
             data-testid="dashboard-forecast-version-id"
             title={d.version_id}
           >
-            {d.version_id.slice(0, 8)}…
+            {d.horizon_start_at ? fmtDateShort(d.horizon_start_at) : "Active"}
           </span>
         }
         tone="neutral"

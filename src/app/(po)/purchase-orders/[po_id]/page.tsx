@@ -1263,10 +1263,10 @@ export default function PurchaseOrderDetailPage({
     });
   }
 
-  const grItems = (grsQuery.data?.rows ?? []).map((gr) => ({
-    label: `GR ${gr.submission_id.slice(0, 8)}…`,
+  const grItems = (grsQuery.data?.rows ?? []).map((gr, i) => ({
+    label: `Goods receipt ${i + 1} — ${fmtDate(gr.event_at)}`,
     href: `/ops/receipts`,
-    subtitle: `${gr.status} · ${fmtDate(gr.event_at)}`,
+    subtitle: gr.status,
   }));
   linkages.push({
     label: "Attached goods receipts",

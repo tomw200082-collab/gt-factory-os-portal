@@ -313,7 +313,7 @@ function BomHeadListRow({
               className="font-mono text-xs font-medium text-success-fg hover:underline"
               onClick={(e) => e.stopPropagation()}
             >
-              {activeVersionLabel ?? head.active_version_id.slice(0, 8)}
+              {activeVersionLabel ?? "Active"}
             </Link>
           )
         ) : (

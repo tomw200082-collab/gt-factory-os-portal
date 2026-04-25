@@ -662,7 +662,7 @@ function BomSection({
           href={`/admin/masters/boms/${encodeURIComponent(headId)}/${encodeURIComponent(head.active_version_id)}`}
           className="font-mono text-success-fg hover:underline"
         >
-          {activeVersion?.version_label ?? head.active_version_id.slice(0, 8) + "…"}
+          {activeVersion?.version_label ?? "Active version"}
         </Link>
       ) : (
         <Badge tone="warning" dotted>None</Badge>

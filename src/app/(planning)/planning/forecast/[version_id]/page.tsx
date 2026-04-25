@@ -488,7 +488,7 @@ export default function ForecastVersionDetailPage() {
     <>
       <WorkflowHeader
         eyebrow="Planner workspace"
-        title={`Forecast ${version.version_id.slice(0, 8)}`}
+        title={`Forecast — horizon starts ${fmtHorizonStart(version.horizon_start_at)}`}
         description={`Horizon starts ${fmtHorizonStart(version.horizon_start_at)} · ${version.horizon_weeks} weeks · ${version.cadence} · site ${version.site_id}`}
         meta={
           <>
