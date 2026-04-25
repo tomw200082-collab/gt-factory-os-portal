@@ -290,6 +290,210 @@ describe("BomDraftEditorPage — Add line drawer", () => {
     ).toBeTruthy();
   });
 
+  it("clicking Publish fetches preview and opens variant A when clean", async () => {
+    fetchMock.mockImplementation((url: string) => {
+      if (url === "/api/boms/versions/BV-DRAFT/publish-preview") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              blocking_issues: [],
+              warnings: [],
+              can_publish_clean: true,
+              can_publish_with_override: true,
+            }),
+            { status: 200 },
+          ),
+        );
+      }
+      if (url.includes("/api/boms/heads")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              rows: [
+                {
+                  bom_head_id: "BH-1",
+                  item_id: "ITEM-1",
+                  item_name: "Lemon Cocktail",
+                  bom_kind: "BASE",
+                },
+              ],
+            }),
+            { status: 200 },
+          ),
+        );
+      }
+      if (url.includes("/api/boms/versions?bom_head_id=BH-1")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              rows: [
+                { bom_version_id: "BV-DRAFT", version_label: "v4", status: "DRAFT" },
+              ],
+            }),
+            { status: 200 },
+          ),
+        );
+      }
+      if (url.includes("/api/boms/lines?bom_version_id=BV-DRAFT")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              rows: [
+                {
+                  bom_line_id: "L1",
+                  component_id: "C-1",
+                  qty: "1.0",
+                  updated_at: "2026-04-20T00:00:00Z",
+                },
+              ],
+            }),
+            { status: 200 },
+          ),
+        );
+      }
+      if (url.includes("/api/supplier-items?component_id=")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              rows: [
+                {
+                  supplier_item_id: "SI-1",
+                  supplier_id: "SUP-1",
+                  supplier_name: "ACME",
+                  component_id: "C-1",
+                  component_name: "Sugar",
+                  component_status: "ACTIVE",
+                  is_primary: true,
+                  std_cost_per_inv_uom: "2.5",
+                  updated_at: "2026-04-20T00:00:00Z",
+                },
+              ],
+            }),
+            { status: 200 },
+          ),
+        );
+      }
+      return Promise.resolve(new Response("not mocked", { status: 500 }));
+    });
+    render(<BomDraftEditorPage bomHeadId="BH-1" versionId="BV-DRAFT" />, {
+      wrapper: wrap(),
+    });
+    await screen.findByText(/Lemon Cocktail/);
+    fireEvent.click(screen.getByRole("button", { name: /^Publish/ }));
+    await screen.findByRole("dialog", { name: /Confirm publish/ });
+  });
+
+  it("on confirm, POSTs publish and navigates to product page", async () => {
+    const navigate = vi.fn();
+    fetchMock.mockImplementation((url: string, init?: RequestInit) => {
+      if (url === "/api/boms/versions/BV-DRAFT/publish-preview") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              blocking_issues: [],
+              warnings: [],
+              can_publish_clean: true,
+              can_publish_with_override: true,
+            }),
+            { status: 200 },
+          ),
+        );
+      }
+      if (
+        url === "/api/boms/versions/BV-DRAFT/publish" &&
+        init?.method === "POST"
+      ) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ ok: true }), { status: 200 }),
+        );
+      }
+      if (url.includes("/api/boms/heads")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              rows: [
+                {
+                  bom_head_id: "BH-1",
+                  item_id: "ITEM-1",
+                  item_name: "Lemon Cocktail",
+                  bom_kind: "BASE",
+                },
+              ],
+            }),
+            { status: 200 },
+          ),
+        );
+      }
+      if (url.includes("/api/boms/versions?bom_head_id=BH-1")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              rows: [
+                { bom_version_id: "BV-DRAFT", version_label: "v4", status: "DRAFT" },
+              ],
+            }),
+            { status: 200 },
+          ),
+        );
+      }
+      if (url.includes("/api/boms/lines?bom_version_id=BV-DRAFT")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              rows: [
+                {
+                  bom_line_id: "L1",
+                  component_id: "C-1",
+                  qty: "1.0",
+                  updated_at: "2026-04-20T00:00:00Z",
+                },
+              ],
+            }),
+            { status: 200 },
+          ),
+        );
+      }
+      if (url.includes("/api/supplier-items?component_id=")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              rows: [
+                {
+                  supplier_item_id: "SI-1",
+                  supplier_id: "SUP-1",
+                  supplier_name: "ACME",
+                  component_id: "C-1",
+                  component_name: "Sugar",
+                  component_status: "ACTIVE",
+                  is_primary: true,
+                  std_cost_per_inv_uom: "2.5",
+                  updated_at: "2026-04-20T00:00:00Z",
+                },
+              ],
+            }),
+            { status: 200 },
+          ),
+        );
+      }
+      return Promise.resolve(new Response("not mocked", { status: 500 }));
+    });
+    render(
+      <BomDraftEditorPage
+        bomHeadId="BH-1"
+        versionId="BV-DRAFT"
+        onNavigate={navigate}
+      />,
+      { wrapper: wrap() },
+    );
+    await screen.findByText(/Lemon Cocktail/);
+    fireEvent.click(screen.getByRole("button", { name: /^Publish/ }));
+    await screen.findByRole("dialog", { name: /Confirm publish/ });
+    fireEvent.click(screen.getByRole("button", { name: /^Publish$/ }));
+    await waitFor(() =>
+      expect(navigate).toHaveBeenCalledWith("/admin/masters/items/ITEM-1"),
+    );
+  });
+
   it("submitting the drawer POSTs to /api/boms/versions/:id/lines", async () => {
     mockEditorApi({ draftLines: [] });
     // Override POST handler — keep the GET mocks above intact.

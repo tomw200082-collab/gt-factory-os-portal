@@ -10,7 +10,8 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useMutation, useQuery } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import type { BomLineRow as BomLineDataRow } from "@/components/admin/recipe-health/useTrackData";
 import { useComponentReadinessMap } from "@/components/admin/recipe-health/useComponentReadinessMap";
 import { ReadinessPanel } from "@/components/admin/recipe-health/ReadinessPanel";
@@ -18,10 +19,16 @@ import { QuickFixDrawer } from "@/components/admin/recipe-health/QuickFixDrawer"
 import { BomLineRow } from "./BomLineRow";
 import { BomLineAddDrawer } from "./BomLineAddDrawer";
 import { BomLineDiff } from "./BomLineDiff";
+import {
+  PublishConfirmModal,
+  type PublishPreview,
+} from "./PublishConfirmModal";
 
 interface BomDraftEditorPageProps {
   bomHeadId: string;
   versionId: string;
+  /** Injectable navigator for tests. Defaults to next/navigation router.push. */
+  onNavigate?: (href: string) => void;
 }
 
 interface VersionRow {
@@ -43,7 +50,10 @@ interface HeadRow {
 export function BomDraftEditorPage({
   bomHeadId,
   versionId,
+  onNavigate,
 }: BomDraftEditorPageProps): JSX.Element {
+  const router = useRouter();
+  const navigate = onNavigate ?? ((href: string) => router.push(href));
   const versionListQuery = useQuery({
     queryKey: ["boms", "versions", bomHeadId],
     queryFn: async (): Promise<VersionRow[]> => {
@@ -106,6 +116,53 @@ export function BomDraftEditorPage({
 
   const [addOpen, setAddOpen] = useState(false);
   const [fixComponentId, setFixComponentId] = useState<string | null>(null);
+  const [previewOpen, setPreviewOpen] = useState(false);
+
+  const previewQuery = useQuery({
+    queryKey: ["boms", "publish-preview", versionId],
+    queryFn: async (): Promise<PublishPreview> => {
+      const res = await fetch(
+        `/api/boms/versions/${encodeURIComponent(versionId)}/publish-preview`,
+      );
+      if (!res.ok) throw new Error(`preview: ${res.status}`);
+      return (await res.json()) as PublishPreview;
+    },
+    enabled: previewOpen,
+  });
+
+  function publishKey(): string {
+    if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+      return crypto.randomUUID();
+    }
+    return `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}`;
+  }
+
+  const publishMutation = useMutation({
+    mutationFn: async (args: { confirmOverride: boolean }) => {
+      const res = await fetch(
+        `/api/boms/versions/${encodeURIComponent(versionId)}/publish`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            if_match_updated_at: version?.updated_at,
+            idempotency_key: publishKey(),
+            confirm_override: args.confirmOverride,
+          }),
+        },
+      );
+      if (!res.ok) throw new Error(`publish: ${res.status}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      const itemId = headQuery.data?.item_id;
+      if (itemId) {
+        navigate(`/admin/masters/items/${itemId}`);
+      } else {
+        navigate(`/admin/masters/boms/${bomHeadId}`);
+      }
+    },
+  });
 
   if (!version || !headQuery.data || !lines) {
     return <div className="p-4">טוען…</div>;
@@ -115,6 +172,16 @@ export function BomDraftEditorPage({
   const trackLabelEn = head.bom_kind === "BASE" ? "base formula" : "pack BOM";
   const editable = version.status === "DRAFT";
   const itemName = head.item_name ?? head.item_id ?? bomHeadId;
+
+  // UI-only warnings (supplier/price gaps) projected from the readiness map.
+  // Backend hard-blockers come from the publish-preview response.
+  const uiWarnings: string[] = [];
+  for (const c of readiness.map.values()) {
+    if (c.primary_supplier_id === null)
+      uiWarnings.push(`${c.component_name}: ללא ספק ראשי`);
+    if (c.active_price_value === null)
+      uiWarnings.push(`${c.component_name}: ללא מחיר פעיל`);
+  }
 
   return (
     <div className="flex flex-col">
@@ -134,6 +201,7 @@ export function BomDraftEditorPage({
           </button>
           <button
             type="button"
+            onClick={() => setPreviewOpen(true)}
             className="rounded border bg-blue-600 px-3 py-1 text-white"
           >
             Publish →
@@ -221,6 +289,17 @@ export function BomDraftEditorPage({
             componentId={fixComponentId}
             open
             onClose={() => setFixComponentId(null)}
+          />
+        )}
+        {previewOpen && previewQuery.data && (
+          <PublishConfirmModal
+            preview={previewQuery.data}
+            uiWarnings={uiWarnings}
+            nextVersionLabel={version.version_label}
+            onCancel={() => setPreviewOpen(false)}
+            onConfirm={(confirmOverride) =>
+              publishMutation.mutate({ confirmOverride })
+            }
           />
         )}
       </main>
