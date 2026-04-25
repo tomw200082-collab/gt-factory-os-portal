@@ -421,7 +421,7 @@ export default function AdminItemDetailPage({
       // anti-pattern; a proper aggregate endpoint belongs to a later tranche).
       return (
         <PendingTabPlaceholder
-          reason="Supplier-items for MANUFACTURED / REPACK items are resolved per-BOM-component. A dedicated aggregate endpoint is a later-tranche concern; for now, open each component from the BOM tab to see its supplier-items."
+          reason="Supplier coverage for manufactured items is per component. Open each component from the BOM tab to see its supplier items."
         />
       );
     })(),
@@ -432,7 +432,7 @@ export default function AdminItemDetailPage({
     label: "Anchors",
     content: (
       <PendingTabPlaceholder
-        reason="No anchors-by-item endpoint is exposed upstream yet. Surfacing balance anchors on the item detail is a later-tranche concern."
+        reason="Stock anchors for individual items are not yet available here. Check the stock movement log for balance history."
       />
     ),
   };
@@ -442,7 +442,7 @@ export default function AdminItemDetailPage({
     label: "Policy",
     content: (
       <PendingTabPlaceholder
-        reason="Planning-policy is currently exposed as a global KV list (14 rows). Per-item policy overrides require a dedicated endpoint that is not yet authored upstream."
+        reason="Per-item planning policy overrides are not yet available. Global planning policy is managed in Admin → Planning policy."
       />
     ),
   };

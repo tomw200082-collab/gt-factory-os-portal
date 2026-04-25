@@ -765,7 +765,7 @@ export default function AdminComponentDetailPage({
 
       <SectionCard eyebrow="BOM usage" title="Used in BOM versions">
         <p className="text-sm text-fg-muted">
-          BOM reverse-lookup is not yet available here. Open the BOM editor on a specific item to see where this component is used.
+          BOM usage lookup is not yet available here. To see which products use this component, open the product&apos;s BOM in the admin area.
         </p>
       </SectionCard>
 

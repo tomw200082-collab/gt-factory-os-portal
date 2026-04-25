@@ -270,7 +270,7 @@ export default function AdminComponentDetailPage({
     label: "Used in BOMs",
     content: (
       <PendingTabPlaceholder
-        reason="Cross-reference from component to BOM versions that cite it requires an aggregate endpoint (bom_lines are only queryable with a required bom_version_id filter upstream). This is a later-tranche concern."
+        reason="BOM usage lookup is not yet available here. To see which products use this component, open the product BOM in the admin area."
       />
     ),
   };

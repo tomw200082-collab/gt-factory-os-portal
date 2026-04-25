@@ -291,7 +291,6 @@ function AttachedGrCard({
     >
       <div className="flex items-center gap-3 px-4 py-3 bg-bg-subtle/40 border-b border-border/40">
         <GrStatusBadge status={gr.status} />
-        <span className="font-mono text-xs text-fg-muted">{gr.submission_id.slice(0, 8)}…</span>
         <span className="text-xs text-fg-muted">received {fmtDate(gr.event_at)}</span>
         {gr.posted_at && (
           <span className="text-xs text-fg-faint ml-auto">posted {fmtDate(gr.posted_at)}</span>
@@ -394,7 +393,7 @@ function HistoryEventRow({ event }: { event: ChangeLogHistoryRow }): JSX.Element
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
           <span className="text-sm font-medium text-fg">{event.actor_snapshot}</span>
           {isLineEvent && (
-            <span className="text-3xs font-mono text-fg-faint">line {event.entity_id.slice(0, 8)}…</span>
+            <span className="text-3xs text-fg-faint">line item</span>
           )}
           <span className="text-xs text-fg-muted ml-auto">{fmtDateTime(event.created_at)}</span>
         </div>
