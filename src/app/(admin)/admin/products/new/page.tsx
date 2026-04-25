@@ -119,6 +119,7 @@ interface SupplierRow {
 
 interface ItemRow {
   item_id: string;
+  sku: string | null;
   item_name: string;
   supply_method: string;
   status: string;
@@ -688,7 +689,7 @@ function Step5Suppliers({
       .map((i) => ({
         id: i.item_id,
         label: i.item_name,
-        sublabel: i.item_id,
+        sublabel: i.sku ?? i.item_id,
       }));
   }, [itemsQuery.data]);
 

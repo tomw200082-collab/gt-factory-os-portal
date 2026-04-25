@@ -133,6 +133,7 @@ interface ComponentRow {
 
 interface ItemRow {
   item_id: string;
+  sku: string | null;
   item_name: string | null;
   supply_method: string;
 }
@@ -417,7 +418,7 @@ export default function AdminSupplierDetailPage({
     .map((i) => ({
       id: i.item_id,
       label: i.item_name ?? i.item_id,
-      sublabel: i.item_id,
+      sublabel: i.sku ?? i.item_id,
     }));
   const relatedExceptions =
     exceptionsQuery.data?.rows.filter(

@@ -42,6 +42,7 @@ import { SectionCard } from "@/components/workflow/SectionCard";
 
 interface ItemRow {
   item_id: string;
+  sku: string | null;
   item_name: string;
   family: string | null;
   pack_size: string | null;
@@ -286,6 +287,7 @@ export default function AdminItemDetailPage({
         );
       }
       const rows: FieldRow[] = [
+        { label: "SKU", value: row.sku ?? "—", mono: true },
         { label: "Item code", value: row.item_id, mono: true },
         { label: "Name", value: row.item_name },
         { label: "Family", value: row.family },
