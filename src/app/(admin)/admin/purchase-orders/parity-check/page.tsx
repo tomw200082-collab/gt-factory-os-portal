@@ -122,7 +122,7 @@ export default function PoParityCheckPage(): JSX.Element {
       <WorkflowHeader
         eyebrow="Admin · Purchase Orders"
         title="PO parity check"
-        description="Verifies that every non-DRAFT purchase_orders.status matches the status derived from its lines. Drift indicates a rollup trigger failure."
+        description="Verifies that each purchase order's status matches what its receipt lines indicate. Any mismatch requires investigation."
         meta={
           result ? (
             <>
