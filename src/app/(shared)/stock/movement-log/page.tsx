@@ -69,7 +69,7 @@ function buildQuery(filters: Filters, offset: number): string {
 async function fetchLedger(filters: Filters, offset: number): Promise<LedgerResponse> {
   const qs = buildQuery(filters, offset);
   const res = await fetch(`/api/stock/ledger?${qs}`);
-  if (!res.ok) throw new Error(`Ledger fetch failed: ${res.status}`);
+  if (!res.ok) throw new Error("Could not load movement log. Check your connection and try refreshing.");
   const data = await res.json();
   if (Array.isArray(data)) return { rows: data, total: data.length };
   return { rows: data.rows ?? [], total: data.total ?? (data.rows ?? []).length };
@@ -139,7 +139,7 @@ export default function MovementLogPage() {
       <SectionCard eyebrow="Filter" title="Search Movements">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-600">
+            <label className="mb-1 block text-xs font-medium text-fg-muted">
               Item ID
             </label>
             <input
@@ -147,18 +147,18 @@ export default function MovementLogPage() {
               value={filters.item_id}
               onChange={(e) => handleFieldChange("item_id", e.target.value)}
               placeholder="e.g. SKU-001"
-              className="w-full rounded border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+              className="w-full rounded border border-border px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40"
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-600">
+            <label className="mb-1 block text-xs font-medium text-fg-muted">
               Item Type
             </label>
             <select
               value={filters.item_type}
               onChange={(e) => handleFieldChange("item_type", e.target.value)}
-              className="w-full rounded border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+              className="w-full rounded border border-border px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40"
             >
               <option value="">All</option>
               {ITEM_TYPES.map((t) => (
@@ -168,13 +168,13 @@ export default function MovementLogPage() {
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-600">
+            <label className="mb-1 block text-xs font-medium text-fg-muted">
               Movement Type
             </label>
             <select
               value={filters.movement_type}
               onChange={(e) => handleFieldChange("movement_type", e.target.value)}
-              className="w-full rounded border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+              className="w-full rounded border border-border px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40"
             >
               <option value="">All</option>
               {MOVEMENT_TYPES.map((t) => (
@@ -184,26 +184,26 @@ export default function MovementLogPage() {
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-600">
+            <label className="mb-1 block text-xs font-medium text-fg-muted">
               From Date
             </label>
             <input
               type="date"
               value={filters.from_date}
               onChange={(e) => handleFieldChange("from_date", e.target.value)}
-              className="w-full rounded border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+              className="w-full rounded border border-border px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40"
             />
           </div>
 
           <div>
-            <label className="mb-1 block text-xs font-medium text-gray-600">
+            <label className="mb-1 block text-xs font-medium text-fg-muted">
               To Date
             </label>
             <input
               type="date"
               value={filters.to_date}
               onChange={(e) => handleFieldChange("to_date", e.target.value)}
-              className="w-full rounded border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+              className="w-full rounded border border-border px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40"
             />
           </div>
         </div>
@@ -211,13 +211,13 @@ export default function MovementLogPage() {
         <div className="mt-4 flex gap-2">
           <button
             onClick={applyFilters}
-            className="rounded bg-gray-900 px-4 py-1.5 text-sm font-medium text-white hover:bg-gray-700"
+            className="btn btn-primary btn-sm"
           >
             Apply
           </button>
           <button
             onClick={clearFilters}
-            className="rounded border border-gray-300 px-4 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="btn btn-sm"
           >
             Clear
           </button>
@@ -226,15 +226,15 @@ export default function MovementLogPage() {
 
       <SectionCard eyebrow="Results" title="Ledger Entries">
         {isLoading && (
-          <p className="py-8 text-center text-sm text-gray-500">Loading…</p>
+          <p className="py-8 text-center text-sm text-fg-muted">Loading…</p>
         )}
         {error && (
-          <p className="py-8 text-center text-sm text-red-600">
-            Failed to load ledger data. Check API connectivity.
-          </p>
+          <div className="rounded-md border border-danger/40 bg-danger-softer px-4 py-3 text-sm text-danger-fg">
+            Could not load movement log. Check your connection and try refreshing.
+          </div>
         )}
         {!isLoading && !error && rows.length === 0 && (
-          <p className="py-8 text-center text-sm text-gray-500">
+          <p className="py-8 text-center text-sm text-fg-muted">
             No movements found for the selected filters.
           </p>
         )}
@@ -243,7 +243,7 @@ export default function MovementLogPage() {
             <div className="overflow-x-auto">
               <table className="min-w-full text-sm">
                 <thead>
-                  <tr className="border-b border-gray-200 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  <tr className="border-b border-border/60 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     <th className="py-2 pr-4">Event At</th>
                     <th className="py-2 pr-4">Type</th>
                     <th className="py-2 pr-4">Item</th>
@@ -253,49 +253,51 @@ export default function MovementLogPage() {
                     <th className="py-2">Status</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-border/40">
                   {rows.map((row) => (
-                    <tr key={row.movement_id} className="hover:bg-gray-50">
-                      <td className="py-2 pr-4 text-gray-600 whitespace-nowrap">
+                    <tr key={row.movement_id} className="hover:bg-bg-subtle/30">
+                      <td className="whitespace-nowrap py-2 pr-4 text-fg-muted">
                         {formatDate(row.event_at)}
                       </td>
-                      <td className="py-2 pr-4 font-mono text-xs text-gray-700">
+                      <td className="py-2 pr-4 font-mono text-xs text-fg">
                         {row.movement_type}
                       </td>
                       <td className="py-2 pr-4">
-                        <span className="font-mono text-xs text-gray-700">{row.item_id}</span>
-                        <span className="ml-1 text-xs text-gray-400">({row.item_type})</span>
+                        <span className="font-mono text-xs text-fg">{row.item_id}</span>
+                        <span className="ml-1 text-xs text-fg-subtle">({row.item_type})</span>
                       </td>
                       <td className="py-2 pr-4 text-right">
                         <QtyDeltaCell value={row.qty_delta} />
                       </td>
-                      <td className="py-2 pr-4 text-gray-600">{row.uom}</td>
-                      <td className="py-2 pr-4 text-gray-600">
+                      <td className="py-2 pr-4 text-fg-muted">{row.uom}</td>
+                      <td className="py-2 pr-4 text-fg-muted">
                         {row.reported_by_snapshot ?? "—"}
                       </td>
-                      <td className="py-2 text-gray-600">{row.post_status}</td>
+                      <td className="py-2 text-fg-muted">{row.post_status}</td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
 
-            <div className="flex items-center justify-between border-t border-gray-100 pt-3">
-              <span className="text-xs text-gray-500">
+            <div className="flex items-center justify-between border-t border-border/40 pt-3">
+              <span className="text-xs text-fg-muted">
                 Page {currentPage} of {totalPages} · {total} total
               </span>
               <div className="flex gap-2">
                 <button
+                  type="button"
                   disabled={offset === 0}
                   onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
-                  className="rounded border border-gray-300 px-3 py-1 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="btn btn-sm disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Prev
                 </button>
                 <button
+                  type="button"
                   disabled={offset + PAGE_SIZE >= total}
                   onClick={() => setOffset(offset + PAGE_SIZE)}
-                  className="rounded border border-gray-300 px-3 py-1 text-sm text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-40"
+                  className="btn btn-sm disabled:cursor-not-allowed disabled:opacity-40"
                 >
                   Next
                 </button>

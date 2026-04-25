@@ -37,14 +37,14 @@ type TabType = "FG" | "RM_PKG";
 
 async function fetchStock(itemType: TabType): Promise<StockRow[]> {
   const res = await fetch(`/api/stock?item_type=${itemType}`);
-  if (!res.ok) throw new Error(`Stock fetch failed: ${res.status}`);
+  if (!res.ok) throw new Error("Could not load stock data. Check your connection and try refreshing.");
   const data = await res.json();
   return Array.isArray(data) ? data : (data.rows ?? []);
 }
 
 async function fetchStockValue(): Promise<StockValueResponse> {
   const res = await fetch("/api/stock/value");
-  if (!res.ok) throw new Error(`Stock value fetch failed: ${res.status}`);
+  if (!res.ok) throw new Error("Could not load inventory value. Check your connection and try refreshing.");
   return res.json() as Promise<StockValueResponse>;
 }
 
@@ -71,7 +71,7 @@ function OnHandCell({ value }: { value: string }) {
   const isNeg = num < 0;
   const display = isNaN(num) ? value : num.toFixed(2);
   return (
-    <span className={isNeg ? "text-red-600 font-medium" : undefined}>
+    <span className={isNeg ? "font-medium text-danger-fg" : undefined}>
       {display}
     </span>
   );
@@ -100,7 +100,7 @@ function StockTable({
 
   if (filtered.length === 0) {
     return (
-      <p className="py-8 text-center text-sm text-gray-500">
+      <p className="py-8 text-center text-sm text-fg-muted">
         No items match your search.
       </p>
     );
@@ -110,8 +110,8 @@ function StockTable({
     <div className="overflow-x-auto">
       <table className="min-w-full text-sm">
         <thead>
-          <tr className="border-b border-gray-200 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-            <th className="py-2 pr-4">Item ID</th>
+          <tr className="border-b border-border/60 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+            <th className="py-2 pr-4">Item</th>
             <th className="py-2 pr-4">Name</th>
             <th className="py-2 pr-4 text-right" title="Calculated from posted ledger events — excludes pending movements">On Hand</th>
             <th className="py-2 pr-4">UOM</th>
@@ -120,30 +120,30 @@ function StockTable({
             <th className="py-2">Last Movement</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-100">
+        <tbody className="divide-y divide-border/40">
           {filtered.map((row) => {
             const vKey = `${row.item_type}:${row.item_id}`;
             const v = valueMap?.get(vKey) ?? null;
             return (
-              <tr key={`${row.item_type}-${row.item_id}`} className="hover:bg-gray-50">
-                <td className="py-2 pr-4 font-mono text-xs text-gray-700">
-                  <Link href={`/admin/masters/items/${encodeURIComponent(row.item_id)}`} className="hover:underline hover:text-blue-600">{row.item_id}</Link>
+              <tr key={`${row.item_type}-${row.item_id}`} className="hover:bg-bg-subtle/30">
+                <td className="py-2 pr-4 font-mono text-xs text-fg-muted">
+                  <Link href={`/admin/masters/items/${encodeURIComponent(row.item_id)}`} className="hover:text-accent hover:underline">{row.item_id}</Link>
                 </td>
-                <td className="py-2 pr-4 text-gray-900">{row.display_name ?? "—"}</td>
+                <td className="py-2 pr-4 text-fg">{row.display_name ?? "—"}</td>
                 <td className="py-2 pr-4 text-right">
                   <OnHandCell value={row.calculated_on_hand} />
                 </td>
-                <td className="py-2 pr-4 text-gray-600">{row.base_uom ?? "—"}</td>
-                <td className="py-2 pr-4 text-right text-gray-600">
+                <td className="py-2 pr-4 text-fg-muted">{row.base_uom ?? "—"}</td>
+                <td className="py-2 pr-4 text-right text-fg-muted">
                   {v && v.unit_cost !== null
                     ? fmtIls(v.unit_cost)
                     : (() => {
                         if (row.item_type === "FG" && v?.supply_method === "MANUFACTURED") {
-                          return <span className="text-xs text-gray-400 italic">Computed (Phase 2)</span>;
+                          return <span className="text-xs italic text-fg-subtle">Rolled-up cost pending</span>;
                         }
                         if (v !== null) {
                           return (
-                            <Link href={`/admin/masters/items/${encodeURIComponent(row.item_id)}`} className="text-xs text-amber-600 hover:underline" title="Set cost in item master">
+                            <Link href={`/admin/masters/items/${encodeURIComponent(row.item_id)}`} className="text-xs text-warning-fg hover:underline" title="Set cost in item master">
                               Cost not set
                             </Link>
                           );
@@ -151,20 +151,20 @@ function StockTable({
                         return <span>—</span>;
                       })()}
                 </td>
-                <td className="py-2 pr-4 text-right font-medium text-gray-800">
+                <td className="py-2 pr-4 text-right font-medium text-fg">
                   {v && v.total_value !== null
                     ? fmtIls(v.total_value)
                     : (() => {
                         if (row.item_type === "FG" && v?.supply_method === "MANUFACTURED") {
-                          return <span className="text-xs text-gray-400 italic">Computed (Phase 2)</span>;
+                          return <span className="text-xs italic text-fg-subtle">Pending</span>;
                         }
                         if (v !== null) {
-                          return <span className="text-xs text-amber-600">—</span>;
+                          return <span className="text-xs text-warning-fg">—</span>;
                         }
                         return <span>—</span>;
                       })()}
                 </td>
-                <td className="py-2 text-gray-500">{formatDate(row.last_event_at)}</td>
+                <td className="py-2 text-fg-muted">{formatDate(row.last_event_at)}</td>
               </tr>
             );
           })}
@@ -222,31 +222,31 @@ export default function InventoryPage() {
       />
 
       {valueData && (
-        <div className="flex items-center gap-3 rounded-lg border border-gray-200 bg-gray-50 px-4 py-3">
+        <div className="flex items-center gap-3 rounded-lg border border-border/60 bg-bg-subtle/40 px-4 py-3">
           <div>
-            <span className="text-xs font-medium uppercase tracking-wide text-gray-500">
+            <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
               Total inventory value
             </span>
-            <div className="mt-0.5 text-xl font-semibold text-gray-900">
+            <div className="mt-0.5 text-xl font-semibold text-fg-strong">
               {fmtIls(valueData.total_value_ils)}
             </div>
-            <div className="mt-0.5 text-xs text-gray-500">
-              RM &amp; packaging + purchased finished goods. Manufactured FG value computed separately.
+            <div className="mt-0.5 text-xs text-fg-muted">
+              RM &amp; packaging + purchased finished goods. Manufactured FG cost rolled up separately.
             </div>
             {valueData.as_of ? (
-              <div className="mt-0.5 text-xs text-gray-400">
+              <div className="mt-0.5 text-xs text-fg-subtle">
                 As of {new Date(valueData.as_of).toLocaleString(undefined, { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
               </div>
             ) : null}
           </div>
-          <div className="ml-6 border-l border-gray-200 pl-6 text-sm text-gray-500">
+          <div className="ml-6 border-l border-border/60 pl-6 text-sm text-fg-muted">
             {valueData.items_with_cost} items with cost ·{" "}
             {valueData.items_without_cost > 0 ? (
-              <span className="text-amber-600">
+              <span className="text-warning-fg">
                 {valueData.items_without_cost} missing cost data
               </span>
             ) : (
-              <span className="text-green-600">all items have cost data</span>
+              <span className="text-success-fg">all items have cost data</span>
             )}
           </div>
         </div>
@@ -255,26 +255,20 @@ export default function InventoryPage() {
       <SectionCard eyebrow="View" title="Current Stock">
         <div className="space-y-4">
           <div className="flex items-center gap-2">
-            <button
-              onClick={() => { setTab("FG"); setSearch(""); }}
-              className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${
-                tab === "FG"
-                  ? "bg-gray-900 text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              Finished Goods
-            </button>
-            <button
-              onClick={() => { setTab("RM_PKG"); setSearch(""); }}
-              className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${
-                tab === "RM_PKG"
-                  ? "bg-gray-900 text-white"
-                  : "bg-gray-100 text-gray-700 hover:bg-gray-200"
-              }`}
-            >
-              Raw Materials & Packaging
-            </button>
+            {(["FG", "RM_PKG"] as const).map((t) => (
+              <button
+                key={t}
+                type="button"
+                onClick={() => { setTab(t); setSearch(""); }}
+                className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${
+                  tab === t
+                    ? "bg-fg text-bg"
+                    : "bg-bg-raised text-fg-muted hover:bg-bg-subtle hover:text-fg"
+                }`}
+              >
+                {t === "FG" ? "Finished Goods" : "Raw Materials & Packaging"}
+              </button>
+            ))}
           </div>
 
           <input
@@ -282,16 +276,16 @@ export default function InventoryPage() {
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Search by item ID or name…"
-            className="w-full max-w-sm rounded border border-gray-300 px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-gray-900"
+            className="w-full max-w-sm rounded border border-border px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40"
           />
 
           {isLoading && (
-            <p className="py-8 text-center text-sm text-gray-500">Loading…</p>
+            <p className="py-8 text-center text-sm text-fg-muted">Loading…</p>
           )}
           {error && (
-            <p className="py-8 text-center text-sm text-red-600">
-              Failed to load stock data. Check API connectivity.
-            </p>
+            <div className="rounded-md border border-danger/40 bg-danger-softer px-4 py-3 text-sm text-danger-fg">
+              Could not load stock data. Check your connection and try refreshing.
+            </div>
           )}
           {!isLoading && !error && (
             <StockTable rows={rows} search={search} valueMap={valueMap} />

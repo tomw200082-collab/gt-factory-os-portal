@@ -212,7 +212,7 @@ function ShopifySyncStatusCard() {
               <span className="text-success-fg font-mono tabular-nums">
                 {data.ok_count ?? 0} synced
               </span>
-              <span className="text-amber-700 font-mono tabular-nums">
+              <span className="text-warning-fg font-mono tabular-nums">
                 {data.unmapped_count ?? 0} unmapped
               </span>
               <span

@@ -295,7 +295,7 @@ function CostEditCell({
           ✕
         </button>
         {mutation.isError ? (
-          <span className="text-xs text-red-600" title={(mutation.error as Error).message}>
+          <span className="text-xs text-danger-fg" title={(mutation.error as Error).message}>
             Error
           </span>
         ) : null}
@@ -311,7 +311,7 @@ function CostEditCell({
         <span className="text-fg-faint">—</span>
       )}
       {saved ? (
-        <span className="text-xs text-green-600">Saved</span>
+        <span className="text-xs text-success-fg">Saved</span>
       ) : null}
       <button
         onClick={() => { setEditing(true); setSaved(false); setInputValue(currentCost ?? ""); }}
