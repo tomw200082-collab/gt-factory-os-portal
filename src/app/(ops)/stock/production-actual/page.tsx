@@ -322,9 +322,9 @@ export default function ProductionActualPage() {
         setDone({
           kind: "success",
           message: committed.idempotent_replay
-            ? "Production already posted (idempotent replay)."
-            : `Posted ${committed.output_qty} ${committed.output_uom} of ${snapshot.item_name}${scrapNote}. ${committed.consumption.length} component consumption rows recorded.`,
-          detail: `submission_id=${committed.submission_id}`,
+            ? "Production already recorded."
+            : `Posted ${committed.output_qty} ${committed.output_uom} of ${snapshot.item_name}${scrapNote}. ${committed.consumption.length} component${committed.consumption.length !== 1 ? "s" : ""} consumed.`,
+          detail: `ref: ${committed.submission_id}`,
         });
         // Refresh the recent-runs history so the new submission appears immediately.
         void queryClient.invalidateQueries({
@@ -496,7 +496,7 @@ export default function ProductionActualPage() {
       <WorkflowHeader
         eyebrow="Operator form"
         title="Production Actual"
-        description="Report produced output + scrap. Standard consumption is computed server-side from the pinned BOM version. No manual per-component consumption in v1."
+        description="Report produced output and scrap. Component consumption is calculated automatically from the active BOM."
       />
 
       {!canSubmit ? (
