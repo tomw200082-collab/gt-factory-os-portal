@@ -114,3 +114,95 @@ export function computeLinePipState(
     isHardBlock: false,
   };
 }
+
+export interface ComputeTrackHealthInput {
+  hasActiveVersion: boolean;
+  pips: LinePipState[];
+  trackLabel: string; // for human-facing blocker messages
+}
+
+export function computeTrackHealth(
+  input: ComputeTrackHealthInput,
+): TrackHealth {
+  const blockers: string[] = [];
+  const warnings: string[] = [];
+
+  if (!input.hasActiveVersion) {
+    blockers.push(`אין גרסה פעילה ל-${input.trackLabel}`);
+  } else if (input.pips.length === 0) {
+    blockers.push(`${input.trackLabel} ריק (0 שורות)`);
+  }
+
+  // Count per-category. Strong-stale-price collapses into the stale-price
+  // bucket for the track-level summary; the line-level pip already
+  // distinguishes the two.
+  let invalidQtyCount = 0;
+  let inactiveComponentCount = 0;
+  let missingSupplierCount = 0;
+  let noActivePriceCount = 0;
+  let stalePriceCount = 0;
+
+  for (const p of input.pips) {
+    for (const b of p.blockerCategories) {
+      if (b === "invalid-qty") invalidQtyCount++;
+      else if (b === "inactive-component") inactiveComponentCount++;
+    }
+    for (const w of p.warningCategories) {
+      if (w === "missing-supplier") missingSupplierCount++;
+      else if (w === "no-active-price") noActivePriceCount++;
+      else if (w === "stale-price" || w === "strong-stale-price") {
+        stalePriceCount++;
+      }
+    }
+  }
+
+  if (invalidQtyCount > 0) {
+    blockers.push(
+      invalidQtyCount === 1
+        ? "שורה אחת עם כמות לא תקינה"
+        : `${invalidQtyCount} שורות עם כמות לא תקינה`,
+    );
+  }
+  if (inactiveComponentCount > 0) {
+    blockers.push(
+      inactiveComponentCount === 1
+        ? "חומר אחד מסומן כלא פעיל"
+        : `${inactiveComponentCount} חומרים מסומנים כלא פעילים`,
+    );
+  }
+
+  if (missingSupplierCount > 0) {
+    warnings.push(
+      missingSupplierCount === 1
+        ? "חומר אחד חסר ספק ראשי"
+        : `${missingSupplierCount} חומרים חסרי ספק ראשי`,
+    );
+  }
+  if (noActivePriceCount > 0) {
+    warnings.push(
+      noActivePriceCount === 1
+        ? "חומר אחד ללא מחיר פעיל"
+        : `${noActivePriceCount} חומרים ללא מחיר פעיל`,
+    );
+  }
+  if (stalePriceCount > 0) {
+    warnings.push(
+      stalePriceCount === 1
+        ? "חומר אחד עם מחיר ישן"
+        : `${stalePriceCount} חומרים עם מחיר ישן`,
+    );
+  }
+
+  let color: TrackHealth["color"];
+  if (blockers.length > 0) color = "red";
+  else if (warnings.length > 0) color = "yellow";
+  else color = "green";
+
+  return {
+    color,
+    hasActiveVersion: input.hasActiveVersion,
+    lineCount: input.pips.length,
+    warnings,
+    blockers,
+  };
+}
