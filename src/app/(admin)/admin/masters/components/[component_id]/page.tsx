@@ -25,6 +25,7 @@ import { InlineEditCell } from "@/components/tables/InlineEditCell";
 import { QuickCreateSupplierItem } from "@/components/admin/quick-create/QuickCreateSupplierItem";
 import { MasterSummaryCard, type CompletenessItem } from "@/components/admin/MasterSummaryCard";
 import { ClassWEditDrawer } from "@/components/admin/ClassWEditDrawer";
+import { UsedInRecipes } from "@/components/admin/UsedInRecipes";
 import type { EntityOption } from "@/components/fields/EntityPickerPlus";
 import { AdminMutationError, patchEntity, postStatus } from "@/lib/admin/mutations";
 import { useSession } from "@/lib/auth/session-provider";
@@ -508,11 +509,7 @@ export default function AdminComponentDetailPage({
   const usedInRecipesTab: TabDescriptor = {
     key: "used-in-recipes",
     label: "Used in recipes",
-    content: (
-      <div className="p-4">
-        <UsedInRecipesPlaceholder />
-      </div>
-    ),
+    content: <UsedInRecipes component_id={component_id} />,
   };
 
   const supplierItemsTab: TabDescriptor = {
@@ -772,18 +769,6 @@ export default function AdminComponentDetailPage({
         />
       ) : null}
     </>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// UsedInRecipesPlaceholder — replaced by <UsedInRecipes> in T3
-// ---------------------------------------------------------------------------
-
-function UsedInRecipesPlaceholder() {
-  return (
-    <p className="text-sm text-fg-muted">
-      Loading recipe usage… (T3 will replace this with live data)
-    </p>
   );
 }
 
