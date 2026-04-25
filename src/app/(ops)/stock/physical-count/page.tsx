@@ -282,10 +282,10 @@ export default function PhysicalCountPage() {
         setDone({
           kind: "success",
           message: body.idempotent_replay
-            ? "Count already posted (idempotent replay)."
-            : "Count posted — new anchor applied.",
-          itemSummary: `${itemLabel} · counted: ${qtyNum} ${unit} · delta: ${body.computed_delta ?? "?"}`,
-          detail: `submission_id=${body.submission_id}`,
+            ? "Count already recorded."
+            : "Count posted successfully.",
+          itemSummary: `${itemLabel} · counted: ${qtyNum} ${unit} · adjustment: ${body.computed_delta ?? "?"}`,
+          detail: `ref: ${body.submission_id}`,
         });
         resetFlow();
       } else if (body && body.status === "pending") {
@@ -297,8 +297,8 @@ export default function PhysicalCountPage() {
           kind: "pending",
           message:
             "Count variance exceeds threshold — held for planner approval.",
-          itemSummary: `${itemLabel} · counted: ${qtyNum} ${unit} · delta: ${body.computed_delta ?? "?"}`,
-          detail: `submission_id=${sid}`,
+          itemSummary: `${itemLabel} · counted: ${qtyNum} ${unit} · adjustment: ${body.computed_delta ?? "?"}`,
+          detail: `ref: ${sid}`,
           href: sid
             ? `/inbox/approvals/physical-count/${encodeURIComponent(sid)}`
             : undefined,
@@ -370,7 +370,7 @@ export default function PhysicalCountPage() {
       <WorkflowHeader
         eyebrow="Operator form"
         title="Physical Count"
-        description="Blind count — the expected quantity is never shown on this screen. Delta is computed server-side at submit."
+        description="Blind count — enter what you actually see. Expected quantities are hidden to keep the count unbiased."
       />
 
       {done ? (
