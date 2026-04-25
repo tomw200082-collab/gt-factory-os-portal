@@ -289,7 +289,7 @@ export default function DashboardPage() {
       },
       {
         queryKey: QK_JOBS_HEALTH,
-        queryFn: () => fetchJobsHealth24h(),
+        queryFn: ({ signal }: { signal: AbortSignal }) => fetchJobsHealth24h(signal),
         staleTime: DASHBOARD_STALE_TIME_MS,
       },
       {
@@ -1058,7 +1058,7 @@ function JobsHealth24hBlock({
           tone="neutral"
           sub={
             <span className="text-fg-muted">
-              Break-glass / precondition skips — not a failure.
+              Not counted as failures.
             </span>
           }
         />
