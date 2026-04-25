@@ -72,10 +72,35 @@ function groupHasActivePath(group: NavGroup, pathname: string | null): boolean {
   );
 }
 
+export function SideNavSkeleton() {
+  return (
+    <nav className="flex flex-col gap-4 animate-pulse">
+      {[4, 2, 7, 5, 1].map((count, gi) => (
+        <div key={gi}>
+          <div className="mb-2 flex items-center gap-2 px-2">
+            <div className="h-2 w-12 rounded bg-bg-subtle" />
+            <div className="h-px flex-1 bg-border/40" />
+          </div>
+          <div className="flex flex-col gap-px">
+            {Array.from({ length: count }).map((_, i) => (
+              <div key={i} className="flex items-center gap-2.5 rounded-sm px-2.5 py-1.5">
+                <div className="h-4 w-4 shrink-0 rounded bg-bg-subtle" />
+                <div className="h-2.5 flex-1 rounded bg-bg-subtle" style={{ width: `${55 + (i * 13) % 35}%` }} />
+              </div>
+            ))}
+          </div>
+        </div>
+      ))}
+    </nav>
+  );
+}
+
 export function SideNav({ onNavigate }: { onNavigate?: () => void } = {}) {
-  const { session } = useSession();
+  const { session, isLoading } = useSession();
   const pathname = usePathname();
   const queryClient = useQueryClient();
+
+  if (isLoading) return <SideNavSkeleton />;
 
   // Track which collapsible groups are expanded. Starts from defaultCollapsed
   // only — SSR-safe (no window access). Auto-expand for active path happens
