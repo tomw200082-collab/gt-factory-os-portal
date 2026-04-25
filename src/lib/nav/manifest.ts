@@ -77,6 +77,10 @@ export interface NavItem {
 export interface NavGroup {
   title: string;
   items: NavItem[];
+  // When true the group header is a toggle. defaultCollapsed sets the initial
+  // state; the sidebar auto-expands if the active path is within the group.
+  collapsible?: boolean;
+  defaultCollapsed?: boolean;
 }
 
 export const NAV_MANIFEST: NavGroup[] = [
@@ -214,6 +218,8 @@ export const NAV_MANIFEST: NavGroup[] = [
   },
   {
     title: "Admin",
+    collapsible: true,
+    defaultCollapsed: true,
     items: [
       // NOTE: admin surfaces require admin:execute to MATCH the
       // (admin)/layout.tsx gate. If the layout ever drops to admin:read

@@ -21,14 +21,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Lock, LogOut } from "lucide-react";
+import { ChevronDown, Lock, LogOut } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useState, useCallback } from "react";
 import { useSession } from "@/lib/auth/session-provider";
 import { authorizeCapability } from "@/lib/auth/authorize";
 import {
   NAV_MANIFEST,
   type NavItem,
   type NavItemBadge,
+  type NavGroup,
 } from "@/lib/nav/manifest";
 import type { Role } from "@/lib/contracts/enums";
 import { cn } from "@/lib/cn";
@@ -63,10 +65,53 @@ function readBadgeCount(
   return 0;
 }
 
+function groupHasActivePath(group: NavGroup, pathname: string | null): boolean {
+  if (!pathname) return false;
+  return group.items.some(
+    (i) => pathname === i.href || pathname.startsWith(i.href + "/"),
+  );
+}
+
 export function SideNav({ onNavigate }: { onNavigate?: () => void } = {}) {
   const { session } = useSession();
   const pathname = usePathname();
   const queryClient = useQueryClient();
+
+  // Track which collapsible groups are expanded. Initially: expanded if the
+  // group is not defaultCollapsed OR the active path is inside the group.
+  const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => {
+    const set = new Set<string>();
+    for (const group of NAV_MANIFEST) {
+      if (!group.collapsible) continue;
+      const hasActive = groupHasActivePath(group, window?.location?.pathname ?? "");
+      if (!group.defaultCollapsed || hasActive) {
+        set.add(group.title);
+      }
+    }
+    return set;
+  });
+
+  const toggleGroup = useCallback((title: string) => {
+    setExpandedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(title)) {
+        next.delete(title);
+      } else {
+        next.add(title);
+      }
+      return next;
+    });
+  }, []);
+
+  // Auto-expand a collapsible group when navigation lands inside it.
+  // This runs on every pathname change.
+  const activeGroupTitle = NAV_MANIFEST.find(
+    (g) => g.collapsible && groupHasActivePath(g, pathname),
+  )?.title;
+
+  if (activeGroupTitle && !expandedGroups.has(activeGroupTitle)) {
+    setExpandedGroups((prev) => new Set([...prev, activeGroupTitle]));
+  }
 
   return (
     <nav className="flex flex-col gap-6">
@@ -82,14 +127,40 @@ export function SideNav({ onNavigate }: { onNavigate?: () => void } = {}) {
 
         if (entries.length === 0) return null;
 
+        const isCollapsible = !!group.collapsible;
+        const isExpanded = !isCollapsible || expandedGroups.has(group.title);
+
         return (
           <div key={group.title}>
-            <div className="mb-2 flex items-center gap-2 px-2">
-              <div className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                {group.title}
+            {isCollapsible ? (
+              <button
+                type="button"
+                onClick={() => toggleGroup(group.title)}
+                className="mb-2 flex w-full items-center gap-2 px-2 text-left"
+                aria-expanded={isExpanded}
+              >
+                <div className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  {group.title}
+                </div>
+                <div className="h-px flex-1 bg-border/50" />
+                <ChevronDown
+                  className={cn(
+                    "h-3 w-3 shrink-0 text-fg-faint transition-transform duration-150",
+                    isExpanded ? "rotate-0" : "-rotate-90",
+                  )}
+                  strokeWidth={2}
+                  aria-hidden
+                />
+              </button>
+            ) : (
+              <div className="mb-2 flex items-center gap-2 px-2">
+                <div className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  {group.title}
+                </div>
+                <div className="h-px flex-1 bg-border/50" />
               </div>
-              <div className="h-px flex-1 bg-border/50" />
-            </div>
+            )}
+            {isExpanded && (
             <ul className="flex flex-col gap-px">
               {entries.map(({ item, subdued }) => {
                 const active =
@@ -189,6 +260,7 @@ export function SideNav({ onNavigate }: { onNavigate?: () => void } = {}) {
                 );
               })}
             </ul>
+            )}
           </div>
         );
       })}
