@@ -155,17 +155,17 @@ Opens a focused drawer over the editor — not a navigation. Three guided action
 
 **Atomicity contract (binds Actions A and C):**
 
-**Order is forced by the database, not chosen by the UI.** The Postgres `supplier_items` table has a partial unique index `uniq_supplier_items_component_primary` that rejects the second `is_primary = true` row for a given component **at statement-execution time, not at transaction commit**. This means:
+**The backend already handles atomicity.** The existing portal pattern (`promotePrimaryMutation` in `src/app/(admin)/admin/supplier-items/page.tsx` and `src/app/(admin)/admin/masters/components/[component_id]/page.tsx`) issues a single `PATCH /api/supplier-items/:id { is_primary: true }` with `if_match_updated_at`. The backend transactionally demotes the previous primary and promotes the new candidate. The UI does NOT implement demote-then-promote on the client.
 
-1. **The required order is: demote old primary FIRST, then promote new primary SECOND.** Reverse order is impossible — the partial unique index rejects the promote step before the demote step ever runs. This matches the existing portal pattern in `SupplierItemEditPanel.makePrimary` and is verified by `tests/unit/admin/supplier-items-primary-flip.test.ts` (cases A20/A21).
-2. Implementation MUST also re-read the new candidate row's `audit.version` (or `updated_at` for if-match-updated-at) AFTER the demote and BEFORE the promote, in case the row was touched concurrently.
-3. The end state guarantee is "exactly one primary per component once the operation completes." There IS a momentary window after step 1 succeeds and before step 2 succeeds where the component has zero primaries — this is unavoidable given the DB invariant. The UI's job is to drive that window to zero duration in the happy path, and to never leave it in that state if step 2 fails.
-4. **Partial-failure handling (step 1 succeeded, step 2 failed):** the drawer must NOT close. It surfaces an inline error: "הספק הקודם הורד אבל הספק החדש לא הוגדר עדיין. בחר פעולה:" with two buttons:
-   - `[Retry promote]` — re-attempts step 2 with a fresh `audit.version` read
-   - `[Restore old primary]` — re-promotes the old supplier_item (re-reads its version first, then sets `is_primary: true`); useful when the user wants to abandon the swap rather than retry
-   The readiness panel meanwhile reflects the zero-primaries state — the component shows 🟡 "no primary supplier" until resolved.
-5. The 409 STALE_ROW path (concurrent edit) returns the user to the drawer's first step with a refresh-and-retry message; partial saves up to that point are kept (e.g., if step 1 demoted successfully and a third party then changed step 2's target, the demote is not rolled back; the UI guides the user to choose again).
-6. The Action A "set existing as primary" flow follows the identical contract — it is just a special case of the swap where step 0 is "the user-selected target replaces the current primary."
+The DB-level invariant is enforced by partial unique index `uniq_supplier_items_component_primary` (one `is_primary = true` per `component_id`); the regression test `tests/unit/admin/supplier-items-primary-flip.test.ts` documents the demote-first-then-promote sequence the application would have to follow if the backend atomicity ever regressed. This corridor's UI does not need to implement that fallback — but it does need to fail loudly if the backend pattern changes (i.e. a 409 from the unique index would surface to the user as a clear error rather than a silent inconsistency).
+
+UI behaviour for Actions A and C:
+1. **Single PATCH per swap.** Send `is_primary: true` with the new candidate's current `updated_at` as `if_match_updated_at`. Reuse the existing `promotePrimaryMutation` shape verbatim.
+2. **Action C step 2 (the side-by-side confirm) just gates the user; the actual server call is one PATCH.** The "side-by-side" affordance exists for the user's confidence, not for an extra mutation.
+3. **409 STALE_ROW** → drawer stays open with an inline message: "הספק עודכן ע"י משתמש אחר. רענן ובחר שוב." with `[Refresh]` button that re-fetches the supplier_items list and resets the drawer to step 1.
+4. **409 from partial unique index** (means backend atomicity regressed) → red error banner: "Database invariant violation — please reload and retry. If this persists, contact admin." This is a defense-in-depth surfacing; expected to never fire under normal backend behaviour.
+5. **Other errors (network, 500)** → drawer stays open, generic retry message. No partial state to recover from since there was only one mutation.
+6. **Action A** is the identical single-PATCH pattern; only the UX entry differs (radio-list of existing supplier_items vs. the swap's two-step gate).
 
 **Active price update (any of the above flows):** if the primary supplier_item has missing/stale `std_cost_per_inv_uom`, an inline edit cell on the primary row in the drawer lets the admin update it. PATCH `supplier_items/:id { std_cost_per_inv_uom }` reuses the existing mutation. `updated_at` becomes the new "price age" anchor.
 
