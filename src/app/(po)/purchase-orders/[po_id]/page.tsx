@@ -297,7 +297,7 @@ function AttachedGrCard({
         )}
       </div>
       {gr.lines.length > 0 && (
-        <table className="w-full text-sm border-collapse">
+        <div className="overflow-x-auto"><table className="w-full text-sm border-collapse">
           <thead>
             <tr className="border-b border-border/30">
               <th className="px-4 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Item</th>
@@ -326,7 +326,7 @@ function AttachedGrCard({
               );
             })}
           </tbody>
-        </table>
+        </table></div>
       )}
       {gr.gr_notes && (
         <div className="px-4 py-2 text-xs text-fg-muted border-t border-border/30">
