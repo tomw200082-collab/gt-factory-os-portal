@@ -125,7 +125,7 @@ function MagicLinkLogin() {
         {envError && (
           <div
             role="alert"
-            className="mt-4 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800"
+            className="mt-4 rounded border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg"
           >
             Configuration error: {envError}
           </div>
@@ -134,7 +134,7 @@ function MagicLinkLogin() {
         {urlError && (
           <div
             role="alert"
-            className="mt-4 rounded border border-red-300 bg-red-50 p-3 text-sm text-red-800"
+            className="mt-4 rounded border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg"
           >
             Sign-in failed: {urlError}
             {urlErrorDetail ? ` — ${urlErrorDetail}` : ""}
@@ -144,7 +144,7 @@ function MagicLinkLogin() {
         {status === "sent" ? (
           <div
             role="status"
-            className="mt-4 rounded border border-green-300 bg-green-50 p-3 text-sm text-green-800"
+            className="mt-4 rounded border border-success/40 bg-success-subtle p-3 text-sm text-success-fg"
           >
             Check your email ({email}) for a sign-in link. It may take a minute
             to arrive.
@@ -169,7 +169,7 @@ function MagicLinkLogin() {
             {status === "error" && error && (
               <div
                 role="alert"
-                className="rounded border border-red-300 bg-red-50 p-3 text-xs text-red-800"
+                className="rounded border border-danger/40 bg-danger-softer p-3 text-xs text-danger-fg"
               >
                 {error}
               </div>
