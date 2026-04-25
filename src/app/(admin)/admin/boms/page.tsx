@@ -243,7 +243,12 @@ function BomHeadRow({
       </td>
       <td className="px-3 py-2">
         {activeId ? (
-          <span className="text-3xs text-fg-muted">Active</span>
+          <Link
+            href={`/admin/boms/${encodeURIComponent(head.bom_head_id)}/versions/${encodeURIComponent(activeId)}`}
+            className="text-3xs text-accent hover:underline"
+          >
+            Active →
+          </Link>
         ) : (
           <Badge tone="warning" dotted>
             <AlertTriangle className="mr-1 inline h-3 w-3" /> No active

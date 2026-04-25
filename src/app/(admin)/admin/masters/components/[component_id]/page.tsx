@@ -3,25 +3,12 @@
 // ---------------------------------------------------------------------------
 // Admin · Masters · Components · Detail — Tranche D (plan §F).
 // Canonical URL /admin/masters/components/[component_id].
-//
-// 5 tabs:
-//   - overview          LIVE    — component row fields via list + client-filter
-//   - used-in-boms      PENDING — no versions-filtered-by-component endpoint
-//                                 exposed upstream; BOM lines require a
-//                                 bom_version_id filter, so a cross-reference
-//                                 aggregate is deferred.
-//   - supplier-items    LIVE    — /api/supplier-items?component_id=<id>
-//   - primary-supplier  LIVE    — derived from supplier-items is_primary
-//   - exceptions        LIVE    — /api/exceptions client-filtered
-//
-// Linkage card: primary supplier, all supplier-items, related exceptions.
-//
-// View-only (Tranche D boundary).
 // ---------------------------------------------------------------------------
 
-import { use } from "react";
+import { use, useState, useMemo } from "react";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Plus } from "lucide-react";
 import {
   DetailPage,
   DetailFieldGrid,
@@ -35,6 +22,11 @@ import {
 } from "@/components/patterns/DetailPage";
 import { Badge } from "@/components/badges/StatusBadge";
 import { SectionCard } from "@/components/workflow/SectionCard";
+import { InlineEditCell } from "@/components/tables/InlineEditCell";
+import { QuickCreateSupplierItem } from "@/components/admin/quick-create/QuickCreateSupplierItem";
+import type { EntityOption } from "@/components/fields/EntityPickerPlus";
+import { AdminMutationError, patchEntity } from "@/lib/admin/mutations";
+import { useSession } from "@/lib/auth/session-provider";
 
 // --- Types ---------------------------------------------------------------
 
@@ -77,7 +69,9 @@ interface SupplierItemRow {
   pack_conversion: string;
   lead_time_days: number | null;
   moq: string | null;
+  std_cost_per_inv_uom: string | null;
   approval_status: string | null;
+  updated_at: string;
 }
 
 interface SupplierItemsListResponse {
@@ -151,6 +145,12 @@ export default function AdminComponentDetailPage({
   params: Promise<{ component_id: string }>;
 }): JSX.Element {
   const { component_id } = use(params);
+  const { session } = useSession();
+  const isAdmin = session.role === "admin";
+  const queryClient = useQueryClient();
+
+  const [showAddSupplier, setShowAddSupplier] = useState(false);
+  const [editBanner, setEditBanner] = useState<{ kind: "success" | "error"; message: string } | null>(null);
 
   const componentQuery = useQuery<ComponentsListResponse>({
     queryKey: ["admin", "masters", "component", component_id],
@@ -160,12 +160,20 @@ export default function AdminComponentDetailPage({
     (r) => r.component_id === component_id,
   );
 
+  const siQueryKey = ["admin", "masters", "component", component_id, "supplier-items"] as const;
+
   const supplierItemsQuery = useQuery<SupplierItemsListResponse>({
-    queryKey: ["admin", "masters", "component", component_id, "supplier-items"],
+    queryKey: siQueryKey,
     queryFn: () =>
       fetchJson(
         `/api/supplier-items?component_id=${encodeURIComponent(component_id)}&limit=1000`,
       ),
+  });
+
+  const suppliersQuery = useQuery<{ rows: { supplier_id: string; supplier_name_official: string }[]; count: number }>({
+    queryKey: ["admin", "suppliers", "all"],
+    queryFn: () => fetchJson("/api/suppliers?limit=1000"),
+    enabled: isAdmin,
   });
 
   const exceptionsQuery = useQuery<ExceptionsListResponse>({
@@ -180,6 +188,61 @@ export default function AdminComponentDetailPage({
   const primarySi =
     supplierItemsQuery.data?.rows.filter((si) => si.is_primary) ?? [];
   const allSi = supplierItemsQuery.data?.rows ?? [];
+
+  const supplierOptions: EntityOption[] = useMemo(
+    () =>
+      (suppliersQuery.data?.rows ?? []).map((s) => ({
+        id: s.supplier_id,
+        label: s.supplier_name_official,
+        sublabel: s.supplier_id,
+      })),
+    [suppliersQuery.data],
+  );
+
+  const fieldMutation = useMutation({
+    mutationFn: async (args: {
+      supplier_item_id: string;
+      field: "lead_time_days" | "moq" | "pack_conversion" | "std_cost_per_inv_uom";
+      value: string | number;
+      updated_at: string;
+    }) =>
+      patchEntity({
+        url: `/api/supplier-items/${encodeURIComponent(args.supplier_item_id)}`,
+        fields: { [args.field]: args.value },
+        ifMatchUpdatedAt: args.updated_at,
+      }),
+    onSuccess: () => {
+      setEditBanner({ kind: "success", message: "Saved." });
+      void queryClient.invalidateQueries({ queryKey: siQueryKey });
+    },
+    onError: (err: Error) => {
+      const msg =
+        err instanceof AdminMutationError
+          ? `${err.status}${err.code ? ` ${err.code}` : ""}: ${err.message}`
+          : err.message;
+      setEditBanner({ kind: "error", message: `Update failed: ${msg}` });
+    },
+  });
+
+  const promotePrimaryMutation = useMutation({
+    mutationFn: async (args: { supplier_item_id: string; updated_at: string }) =>
+      patchEntity({
+        url: `/api/supplier-items/${encodeURIComponent(args.supplier_item_id)}`,
+        fields: { is_primary: true },
+        ifMatchUpdatedAt: args.updated_at,
+      }),
+    onSuccess: () => {
+      setEditBanner({ kind: "success", message: "Promoted to primary." });
+      void queryClient.invalidateQueries({ queryKey: siQueryKey });
+    },
+    onError: (err: Error) => {
+      const msg =
+        err instanceof AdminMutationError
+          ? `${err.status}${err.code ? ` ${err.code}` : ""}: ${err.message}`
+          : err.message;
+      setEditBanner({ kind: "error", message: `Promote failed: ${msg}` });
+    },
+  });
 
   const headerMeta = row ? (
     <>
@@ -278,8 +341,7 @@ export default function AdminComponentDetailPage({
   const supplierItemsTab: TabDescriptor = {
     key: "supplier-items",
     label: "Supplier items",
-    badge:
-      allSi.length > 0 ? `${allSi.length}` : undefined,
+    badge: allSi.length > 0 ? `${allSi.length}` : undefined,
     content: (() => {
       if (supplierItemsQuery.isLoading) return <DetailTabLoading />;
       if (supplierItemsQuery.isError) {
@@ -289,12 +351,52 @@ export default function AdminComponentDetailPage({
           />
         );
       }
-      if (allSi.length === 0) {
-        return (
-          <DetailTabEmpty message="No supplier-items mapped to this component." />
-        );
-      }
-      return <SupplierItemsTable rows={allSi} />;
+      return (
+        <div className="space-y-3">
+          {isAdmin ? (
+            <div className="flex items-center justify-between px-1 pt-1">
+              {editBanner ? (
+                <div
+                  className={
+                    editBanner.kind === "success"
+                      ? "text-xs text-success-fg"
+                      : "text-xs text-danger-fg"
+                  }
+                >
+                  {editBanner.message}
+                </div>
+              ) : (
+                <div />
+              )}
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm inline-flex items-center gap-1.5"
+                onClick={() => setShowAddSupplier(true)}
+              >
+                <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+                Add supplier
+              </button>
+            </div>
+          ) : null}
+          {allSi.length === 0 ? (
+            <DetailTabEmpty message="No supplier-items mapped to this component." />
+          ) : (
+            <SupplierItemsTable
+              rows={allSi}
+              isAdmin={isAdmin}
+              onFieldSave={async (id, field, value, updated_at) => {
+                setEditBanner(null);
+                await fieldMutation.mutateAsync({ supplier_item_id: id, field, value, updated_at });
+              }}
+              onPromotePrimary={(id, updated_at) => {
+                setEditBanner(null);
+                if (!window.confirm("Promote this supplier to primary? Existing primary will be demoted.")) return;
+                promotePrimaryMutation.mutate({ supplier_item_id: id, updated_at });
+              }}
+            />
+          )}
+        </div>
+      );
     })(),
   };
 
@@ -315,7 +417,7 @@ export default function AdminComponentDetailPage({
           <DetailTabEmpty message="No supplier-item is flagged primary for this component." />
         );
       }
-      return <SupplierItemsTable rows={primarySi} />;
+      return <SupplierItemsTable rows={primarySi} isAdmin={false} onFieldSave={async () => {}} onPromotePrimary={() => {}} />;
     })(),
   };
 
@@ -422,21 +524,37 @@ export default function AdminComponentDetailPage({
   });
 
   return (
-    <DetailPage
-      header={{
-        eyebrow: "Admin · Components",
-        title: row ? row.component_name : component_id,
-        description: row ? `Component ${row.component_id}` : "Loading component…",
-        meta: headerMeta,
-        actions: (
-          <Link href="/admin/components" className="btn btn-ghost btn-sm">
-            Back to components
-          </Link>
-        ),
-      }}
-      tabs={tabs}
-      linkages={linkages}
-    />
+    <>
+      <DetailPage
+        header={{
+          eyebrow: "Admin · Components",
+          title: row ? row.component_name : component_id,
+          description: row ? `Component ${row.component_id}` : "Loading component…",
+          meta: headerMeta,
+          actions: (
+            <Link href="/admin/components" className="btn btn-ghost btn-sm">
+              Back to components
+            </Link>
+          ),
+        }}
+        tabs={tabs}
+        linkages={linkages}
+      />
+      {isAdmin ? (
+        <QuickCreateSupplierItem
+          open={showAddSupplier}
+          onClose={() => setShowAddSupplier(false)}
+          onCreated={() => {
+            setEditBanner({ kind: "success", message: "Supplier-item added." });
+            void queryClient.invalidateQueries({ queryKey: siQueryKey });
+          }}
+          suppliers={supplierOptions}
+          components={[]}
+          items={[]}
+          defaultComponentId={component_id}
+        />
+      ) : null}
+    </>
   );
 }
 
@@ -447,8 +565,14 @@ export default function AdminComponentDetailPage({
 
 function SupplierItemsTable({
   rows,
+  isAdmin,
+  onFieldSave,
+  onPromotePrimary,
 }: {
   rows: SupplierItemRow[];
+  isAdmin: boolean;
+  onFieldSave: (id: string, field: "lead_time_days" | "moq" | "std_cost_per_inv_uom", value: string | number, updated_at: string) => Promise<void>;
+  onPromotePrimary: (id: string, updated_at: string) => void;
 }): JSX.Element {
   return (
     <SectionCard density="compact" contentClassName="p-0">
@@ -462,9 +586,6 @@ function SupplierItemsTable({
               Relationship
             </th>
             <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              Primary
-            </th>
-            <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
               Order UoM
             </th>
             <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
@@ -473,8 +594,11 @@ function SupplierItemsTable({
             <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
               MOQ
             </th>
+            <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+              Std cost
+            </th>
             <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              Approval
+              Primary
             </th>
           </tr>
         </thead>
@@ -495,25 +619,62 @@ function SupplierItemsTable({
               <td className="px-3 py-2 text-fg-muted">
                 {r.relationship ?? "—"}
               </td>
+              <td className="px-3 py-2 text-fg-muted">{r.order_uom ?? "—"}</td>
+              <td className="px-3 py-2 text-right font-mono text-xs text-fg-muted">
+                {isAdmin ? (
+                  <InlineEditCell
+                    value={r.lead_time_days ?? ""}
+                    type="number"
+                    inputMode="numeric"
+                    ifMatchUpdatedAt={r.updated_at}
+                    onSave={(v) => onFieldSave(r.supplier_item_id, "lead_time_days", v, r.updated_at)}
+                    ariaLabel={`Edit lead_time_days for ${r.supplier_id}`}
+                  />
+                ) : (
+                  r.lead_time_days ?? "—"
+                )}
+              </td>
+              <td className="px-3 py-2 text-right font-mono text-xs text-fg-muted">
+                {isAdmin ? (
+                  <InlineEditCell
+                    value={r.moq ?? ""}
+                    type="number"
+                    inputMode="decimal"
+                    ifMatchUpdatedAt={r.updated_at}
+                    onSave={(v) => onFieldSave(r.supplier_item_id, "moq", v, r.updated_at)}
+                    ariaLabel={`Edit moq for ${r.supplier_id}`}
+                  />
+                ) : (
+                  r.moq ?? "—"
+                )}
+              </td>
+              <td className="px-3 py-2 text-right font-mono text-xs text-fg-muted">
+                {isAdmin ? (
+                  <InlineEditCell
+                    value={r.std_cost_per_inv_uom ?? ""}
+                    type="number"
+                    inputMode="decimal"
+                    ifMatchUpdatedAt={r.updated_at}
+                    onSave={(v) => onFieldSave(r.supplier_item_id, "std_cost_per_inv_uom", v, r.updated_at)}
+                    ariaLabel={`Edit cost for ${r.supplier_id}`}
+                  />
+                ) : (
+                  r.std_cost_per_inv_uom ?? "—"
+                )}
+              </td>
               <td className="px-3 py-2">
                 {r.is_primary ? (
                   <Badge tone="success" dotted>
-                    primary
+                    Primary
                   </Badge>
-                ) : (
-                  <span className="text-fg-faint">—</span>
-                )}
-              </td>
-              <td className="px-3 py-2 text-fg-muted">{r.order_uom ?? "—"}</td>
-              <td className="px-3 py-2 text-right font-mono text-xs text-fg-muted">
-                {r.lead_time_days ?? "—"}
-              </td>
-              <td className="px-3 py-2 text-right font-mono text-xs text-fg-muted">
-                {r.moq ?? "—"}
-              </td>
-              <td className="px-3 py-2">
-                {r.approval_status ? (
-                  <Badge tone="neutral">{r.approval_status}</Badge>
+                ) : isAdmin ? (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => onPromotePrimary(r.supplier_item_id, r.updated_at)}
+                  >
+                    Promote
+                  </button>
                 ) : (
                   <span className="text-fg-faint">—</span>
                 )}

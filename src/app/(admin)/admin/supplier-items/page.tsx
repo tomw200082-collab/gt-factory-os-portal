@@ -66,6 +66,7 @@ interface SupplierItemRow {
   pack_conversion: string;
   lead_time_days: number | null;
   moq: string | null;
+  std_cost_per_inv_uom: string | null;
   payment_terms: string | null;
   safety_days: number;
   approval_status: string | null;
@@ -138,12 +139,24 @@ export default function AdminSupplierItemsPage(): JSX.Element {
     enabled: !!supplierId,
   });
 
+  // Name-lookup maps for display
+  const componentsMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const c of componentsQuery.data?.rows ?? []) map.set(c.component_id, c.component_name);
+    return map;
+  }, [componentsQuery.data]);
+  const itemsMap = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const i of itemsQuery.data?.rows ?? []) map.set(i.item_id, i.item_name);
+    return map;
+  }, [itemsQuery.data]);
+
   // Single-row field update used by InlineEditCell.
   const fieldMutation = useMutation({
     mutationFn: async (args: {
       supplier_item_id: string;
-      field: "lead_time_days" | "moq" | "pack_conversion";
-      value: string | number;
+      field: "lead_time_days" | "moq" | "pack_conversion" | "std_cost_per_inv_uom";
+      value: string | number | null;
       updated_at: string;
     }) =>
       patchEntity({
@@ -198,12 +211,19 @@ export default function AdminSupplierItemsPage(): JSX.Element {
   const filtered = useMemo(() => {
     if (!query) return rows;
     const qLower = query.toLowerCase();
-    return rows.filter(
-      (r) =>
+    return rows.filter((r) => {
+      const name = r.component_id
+        ? (componentsMap.get(r.component_id) ?? "")
+        : r.item_id
+          ? (itemsMap.get(r.item_id) ?? "")
+          : "";
+      return (
         (r.component_id ?? "").toLowerCase().includes(qLower) ||
-        (r.item_id ?? "").toLowerCase().includes(qLower),
-    );
-  }, [rows, query]);
+        (r.item_id ?? "").toLowerCase().includes(qLower) ||
+        name.toLowerCase().includes(qLower)
+      );
+    });
+  }, [rows, query, componentsMap, itemsMap]);
 
   // Options maps for the QuickCreateSupplierItem drawer.
   const supplierOptions: EntityOption[] = useMemo(
@@ -361,6 +381,9 @@ export default function AdminSupplierItemsPage(): JSX.Element {
                   <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     MOQ
                   </th>
+                  <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    Std cost
+                  </th>
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Readiness
                   </th>
@@ -375,8 +398,35 @@ export default function AdminSupplierItemsPage(): JSX.Element {
                     key={r.supplier_item_id}
                     className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
                   >
-                    <td className="px-3 py-2 font-mono text-xs text-fg">
-                      {r.component_id ?? r.item_id ?? "—"}
+                    <td className="px-3 py-2 text-xs text-fg">
+                      {(() => {
+                        const id = r.component_id ?? r.item_id;
+                        const name = r.component_id
+                          ? componentsMap.get(r.component_id)
+                          : r.item_id
+                            ? itemsMap.get(r.item_id)
+                            : undefined;
+                        const href = r.component_id
+                          ? `/admin/masters/components/${encodeURIComponent(r.component_id)}`
+                          : r.item_id
+                            ? `/admin/masters/items/${encodeURIComponent(r.item_id)}`
+                            : null;
+                        if (!id) return <span className="text-fg-faint">—</span>;
+                        return (
+                          <>
+                            {href ? (
+                              <a href={href} className="font-medium text-fg hover:text-accent">
+                                {name ?? id}
+                              </a>
+                            ) : (
+                              <span className="font-medium">{name ?? id}</span>
+                            )}
+                            {name ? (
+                              <div className="font-mono text-3xs text-fg-subtle">{id}</div>
+                            ) : null}
+                          </>
+                        );
+                      })()}
                     </td>
                     <td className="px-3 py-2 text-xs text-fg-muted">
                       {r.relationship ?? "—"}
@@ -451,6 +501,29 @@ export default function AdminSupplierItemsPage(): JSX.Element {
                         />
                       ) : (
                         (r.moq ?? "—")
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono text-xs tabular-nums text-fg-muted">
+                      {isAdmin ? (
+                        <InlineEditCell
+                          value={r.std_cost_per_inv_uom ?? ""}
+                          type="number"
+                          inputMode="decimal"
+                          ifMatchUpdatedAt={r.updated_at}
+                          onSave={async (newValue) => {
+                            await fieldMutation.mutateAsync({
+                              supplier_item_id: r.supplier_item_id,
+                              field: "std_cost_per_inv_uom",
+                              value: newValue,
+                              updated_at: r.updated_at,
+                            });
+                          }}
+                          ariaLabel={`Edit cost for ${
+                            r.component_id ?? r.item_id ?? r.supplier_item_id
+                          }`}
+                        />
+                      ) : (
+                        (r.std_cost_per_inv_uom ?? "—")
                       )}
                     </td>
                     <td className="px-3 py-2">
