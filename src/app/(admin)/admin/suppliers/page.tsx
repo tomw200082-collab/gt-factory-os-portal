@@ -191,7 +191,7 @@ export default function AdminSuppliersPage(): JSX.Element {
                 className="input flex-1"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search suppliers…"
+                placeholder="חיפוש ספק"
                 dir="auto"
               />
               {query ? (
@@ -200,7 +200,7 @@ export default function AdminSuppliersPage(): JSX.Element {
                   className="btn btn-ghost btn-sm shrink-0"
                   onClick={() => setQuery("")}
                 >
-                  Clear
+                  נקה חיפוש
                 </button>
               ) : null}
             </div>
@@ -235,7 +235,7 @@ export default function AdminSuppliersPage(): JSX.Element {
           </div>
         ) : filtered.length === 0 ? (
           <div className="p-5 text-sm text-fg-muted">
-            {query ? "No suppliers match your search." : "No suppliers match filters."}
+            {query ? "לא נמצאו ספקים" : "No suppliers match filters."}
           </div>
         ) : (
           <div className="overflow-x-auto">
