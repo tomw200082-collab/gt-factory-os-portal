@@ -28,6 +28,7 @@ import {
   Inbox,
   Layers,
   LayoutDashboard,
+  LineChart,
   Link2,
   ListChecks,
   Network,
@@ -164,7 +165,7 @@ export const NAV_MANIFEST: NavGroup[] = [
       },
       {
         href: "/stock/submissions",
-        label: "My Submissions",
+        label: "My History",
         icon: Clock,
         min_role: "viewer",
         required_capability: "stock:execute",
@@ -174,6 +175,13 @@ export const NAV_MANIFEST: NavGroup[] = [
   {
     title: "Planning",
     items: [
+      {
+        href: "/planning",
+        label: "Planning Overview",
+        icon: LineChart,
+        min_role: "viewer",
+        required_capability: "planning:read",
+      },
       {
         href: "/planning/forecast",
         label: "Forecast",
