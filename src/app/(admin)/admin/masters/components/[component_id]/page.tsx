@@ -281,26 +281,26 @@ export default function AdminComponentDetailPage({
         );
       }
       const rows: FieldRow[] = [
-        { label: "component_id", value: row.component_id, mono: true },
-        { label: "component_name", value: row.component_name },
-        { label: "component_class", value: row.component_class },
-        { label: "component_group", value: row.component_group },
-        { label: "status", value: <ComponentStatusBadge status={row.status} /> },
-        { label: "inventory_uom", value: row.inventory_uom, mono: true },
-        { label: "purchase_uom", value: row.purchase_uom, mono: true },
-        { label: "bom_uom", value: row.bom_uom, mono: true },
+        { label: "Code", value: row.component_id, mono: true },
+        { label: "Name", value: row.component_name },
+        { label: "Category", value: row.component_class },
+        { label: "Group", value: row.component_group },
+        { label: "Status", value: <ComponentStatusBadge status={row.status} /> },
+        { label: "Stock unit", value: row.inventory_uom, mono: true },
+        { label: "Purchase unit", value: row.purchase_uom, mono: true },
+        { label: "BOM unit", value: row.bom_uom, mono: true },
         {
-          label: "purchase_to_inv_factor",
+          label: "Purchase → stock factor",
           value: row.purchase_to_inv_factor,
           mono: true,
         },
         {
-          label: "planning_policy_code",
+          label: "Planning policy",
           value: row.planning_policy_code,
           mono: true,
         },
         {
-          label: "primary_supplier_id",
+          label: "Primary supplier",
           value: row.primary_supplier_id ? (
             <Link
               href={`/admin/masters/suppliers/${encodeURIComponent(row.primary_supplier_id)}`}
@@ -311,18 +311,18 @@ export default function AdminComponentDetailPage({
           ) : null,
           mono: true,
         },
-        { label: "lead_time_days", value: row.lead_time_days ?? null },
-        { label: "moq_purchase_uom", value: row.moq_purchase_uom, mono: true },
+        { label: "Lead time (days)", value: row.lead_time_days ?? null },
+        { label: "Min. order qty (purchase unit)", value: row.moq_purchase_uom, mono: true },
         {
-          label: "order_multiple_purchase_uom",
+          label: "Order multiple (purchase unit)",
           value: row.order_multiple_purchase_uom,
           mono: true,
         },
-        { label: "criticality", value: row.criticality },
-        { label: "planned_flag", value: row.planned_flag ? "true" : "false" },
-        { label: "site_id", value: row.site_id, mono: true },
-        { label: "created_at", value: fmtDateTime(row.created_at) },
-        { label: "updated_at", value: fmtDateTime(row.updated_at) },
+        { label: "Criticality", value: row.criticality },
+        { label: "Included in planning", value: row.planned_flag ? "Yes" : "No" },
+        { label: "Site", value: row.site_id, mono: true },
+        { label: "Created", value: fmtDateTime(row.created_at) },
+        { label: "Last updated", value: fmtDateTime(row.updated_at) },
       ];
       return <DetailFieldGrid rows={rows} />;
     })(),
