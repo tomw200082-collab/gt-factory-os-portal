@@ -25,6 +25,15 @@ import {
 } from "@/lib/admin/mutations";
 import { useSession } from "@/lib/auth/session-provider";
 
+const SUPPLY_METHOD_LABELS: Record<string, string> = {
+  MANUFACTURED: "Manufactured",
+  REPACK: "Repack",
+  BOUGHT_FINISHED: "Purchased finished",
+};
+function fmtSupplyMethod(s: string): string {
+  return SUPPLY_METHOD_LABELS[s] ?? s;
+}
+
 interface ReadinessPayload {
   is_ready: boolean;
   readiness_summary?: string;
@@ -328,7 +337,7 @@ export default function AdminItemsPage(): JSX.Element {
                       {r.family ?? "—"}
                     </td>
                     <td className="px-3 py-2 text-xs font-mono text-fg-muted">
-                      {r.supply_method}
+                      {r.supply_method ? fmtSupplyMethod(r.supply_method) : "—"}
                     </td>
                     <td className="px-3 py-2 text-xs text-fg-muted">
                       {r.sales_uom ?? "—"}

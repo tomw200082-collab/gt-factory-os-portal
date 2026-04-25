@@ -158,6 +158,15 @@ async function fetchJson<T>(url: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+const SUPPLY_METHOD_LABELS: Record<string, string> = {
+  MANUFACTURED: "Manufactured",
+  REPACK: "Repack",
+  BOUGHT_FINISHED: "Purchased finished",
+};
+function fmtSupplyMethod(s: string): string {
+  return SUPPLY_METHOD_LABELS[s] ?? s;
+}
+
 function StatusBadge({ status }: { status: string }): JSX.Element {
   if (status === "ACTIVE") return <Badge tone="success" dotted>Active</Badge>;
   if (status === "PENDING") return <Badge tone="warning" dotted>Pending</Badge>;
@@ -474,7 +483,7 @@ export default function AdminProduct360Page({ params }: PageProps): JSX.Element 
               {item.item_id}
             </Badge>
             <Badge tone="info" dotted>
-              {item.supply_method}
+              {fmtSupplyMethod(item.supply_method)}
             </Badge>
             {item.family ? (
               <Badge tone="neutral" dotted>
@@ -752,7 +761,7 @@ function OverviewTab({
               item.product_group ?? "—"
             )}
           </Field>
-          <Field label="Supply method">{item.supply_method}</Field>
+          <Field label="Supply method">{fmtSupplyMethod(item.supply_method)}</Field>
           <Field label="Item type">{item.item_type ?? "—"}</Field>
         </div>
       </SectionCard>

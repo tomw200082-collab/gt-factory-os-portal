@@ -143,6 +143,15 @@ const REQUIRED_POLICY_KEYS = [
 // Helpers
 // ---------------------------------------------------------------------------
 
+const SUPPLY_METHOD_LABELS: Record<string, string> = {
+  MANUFACTURED: "Manufactured",
+  REPACK: "Repack",
+  BOUGHT_FINISHED: "Purchased finished",
+};
+function fmtSupplyMethod(s: string): string {
+  return SUPPLY_METHOD_LABELS[s] ?? s;
+}
+
 function randomIdempotencyKey(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID();
@@ -399,7 +408,7 @@ function Step3BomSetup({
     >
       <div className="space-y-3 text-sm text-fg">
         <p>
-          Your new item (<strong>{state.supply_method}</strong>) needs a BOM
+          Your new item (<strong>{fmtSupplyMethod(state.supply_method ?? "")}</strong>) needs a BOM
           (bill of materials) to become planning-ready. On publish, we will:
         </p>
         <ul className="list-disc space-y-1 pl-5 text-fg-muted">
