@@ -503,24 +503,11 @@ export default function AdminSkuAliasesPage(): JSX.Element {
       {!backendLive ? (
         <SectionCard
           tone="warning"
-          title="W1 E1-backend endpoints not yet live"
+          title="Alias approval not yet available"
           density="compact"
         >
           <p className="text-xs text-fg-muted">
-            The page cannot fetch existing alias rows or submit approvals until
-            the upstream endpoints{" "}
-            <code className="rounded bg-bg-subtle px-1 font-mono">
-              GET /api/v1/queries/integration-sku-map
-            </code>{" "}
-            and{" "}
-            <code className="rounded bg-bg-subtle px-1 font-mono">
-              POST /api/v1/mutations/integration-sku-map/approve
-            </code>{" "}
-            are deployed. The unmapped-SKU view below is sourced from{" "}
-            <code className="rounded bg-bg-subtle px-1 font-mono">
-              /api/exceptions
-            </code>{" "}
-            (already live) and renders even in this pending state.
+            The approved-alias list and approval submission are not yet live. The unmapped SKU view below is available and you can review exceptions, but approvals cannot be submitted yet.
           </p>
         </SectionCard>
       ) : null}
@@ -764,12 +751,7 @@ export default function AdminSkuAliasesPage(): JSX.Element {
           </div>
         ) : approvedQuery.isError ? (
           <div className="p-5 text-sm text-fg-muted">
-            Approved-alias list not available yet. W1 E1-backend endpoint{" "}
-            <code className="rounded bg-bg-subtle px-1 font-mono">
-              GET /api/v1/queries/integration-sku-map
-            </code>{" "}
-            is pending. The left pane + approval flow will activate as soon as
-            that endpoint lands.
+            Approved aliases are not yet available. The alias list will appear here once the backend endpoint is live.
           </div>
         ) : approvedRows.length === 0 ? (
           <div className="p-5 text-sm text-fg-muted">
