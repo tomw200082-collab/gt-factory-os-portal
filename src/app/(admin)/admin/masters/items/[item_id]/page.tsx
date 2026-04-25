@@ -286,16 +286,16 @@ export default function AdminItemDetailPage({
         );
       }
       const rows: FieldRow[] = [
-        { label: "item_id", value: row.item_id, mono: true },
-        { label: "item_name", value: row.item_name },
-        { label: "family", value: row.family },
-        { label: "product_group", value: row.product_group },
-        { label: "supply_method", value: row.supply_method, mono: true },
-        { label: "item_type", value: row.item_type },
-        { label: "status", value: <ItemStatusBadge status={row.status} /> },
-        { label: "pack_size", value: row.pack_size },
-        { label: "sales_uom", value: row.sales_uom },
-        { label: "case_pack", value: row.case_pack ?? null },
+        { label: "Item code", value: row.item_id, mono: true },
+        { label: "Name", value: row.item_name },
+        { label: "Family", value: row.family },
+        { label: "Product group", value: row.product_group },
+        { label: "Supply method", value: fmtSupplyMethod(row.supply_method) },
+        { label: "Item type", value: row.item_type },
+        { label: "Status", value: <ItemStatusBadge status={row.status} /> },
+        { label: "Pack size", value: row.pack_size },
+        { label: "Sales unit", value: row.sales_uom },
+        { label: "Case pack", value: row.case_pack ?? null },
         {
           label: "Pack BOM",
           value: row.primary_bom_head_id ? (
@@ -324,9 +324,9 @@ export default function AdminItemDetailPage({
           ) : null,
           mono: true,
         },
-        { label: "site_id", value: row.site_id, mono: true },
-        { label: "created_at", value: fmtDateTime(row.created_at) },
-        { label: "updated_at", value: fmtDateTime(row.updated_at) },
+        { label: "Site", value: row.site_id, mono: true },
+        { label: "Created", value: fmtDateTime(row.created_at) },
+        { label: "Last updated", value: fmtDateTime(row.updated_at) },
       ];
       return <DetailFieldGrid rows={rows} />;
     })(),
@@ -345,7 +345,19 @@ export default function AdminItemDetailPage({
       const hasPack = Boolean(row.primary_bom_head_id);
       const hasBase = Boolean(row.base_bom_head_id);
       if (!hasPack && !hasBase) {
-        return <DetailTabEmpty message="No BOM heads linked to this item." />;
+        return (
+          <div className="space-y-3 p-4">
+            <p className="text-sm text-fg-muted">
+              No recipe linked to this item. A {row.supply_method === "MANUFACTURED" ? "manufactured" : "repack"} item needs an active BOM before it can be planned or produced.
+            </p>
+            <Link
+              href="/admin/masters/boms"
+              className="btn-primary inline-flex items-center gap-1.5"
+            >
+              Go to BOMs →
+            </Link>
+          </div>
+        );
       }
       if (
         bomHeadQuery.isLoading ||
@@ -411,7 +423,7 @@ export default function AdminItemDetailPage({
         const rows = itemSupplierItemsQuery.data?.rows ?? [];
         if (rows.length === 0) {
           return (
-            <DetailTabEmpty message="No supplier-items mapped to this BOUGHT_FINISHED item." />
+            <DetailTabEmpty message="No supplier linked to this purchased product. Use Admin → Supplier Items to add one." />
           );
         }
         return <SupplierItemsTable rows={rows} />;
