@@ -35,7 +35,6 @@ import {
   CalendarClock,
   CheckCircle2,
   CircleDashed,
-  Info,
   ShieldAlert,
   Signal as SignalIcon,
 } from "lucide-react";
