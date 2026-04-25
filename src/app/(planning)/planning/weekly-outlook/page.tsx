@@ -146,8 +146,6 @@ export default function WeeklyOutlookPage() {
             {data.planning_horizon_start_at ?? "?"} ×{" "}
             {data.planning_horizon_weeks ?? "?"} weeks
           </span>
-          {" · "}
-          <span className="font-mono text-3xs">{data.run_id.slice(0, 8)}…</span>
         </div>
       ) : null}
 

@@ -288,9 +288,6 @@ export default function ForecastListPage() {
                       <StatusBadge status={v.status} />
                       <span className="chip">{v.cadence}</span>
                       <span className="chip">{v.site_id}</span>
-                      <span className="font-mono text-3xs uppercase tracking-sops text-fg-subtle">
-                        {v.version_id.slice(0, 8)}
-                      </span>
                     </div>
                     <div
                       className="mt-1.5 text-base font-semibold tracking-tightish text-fg-strong"

@@ -370,9 +370,6 @@ export default function PlanningRunsListPage() {
               <div className="text-xs font-medium text-fg">
                 {latestForecast.cadence ?? "forecast"} · {latestForecast.horizon_weeks}w horizon
               </div>
-              <div className="mt-0.5 font-mono text-3xs text-fg-muted">
-                {latestForecast.version_id.slice(0, 8)}…
-              </div>
               <div className="mt-0.5 text-3xs text-fg-muted">
                 Published {fmtDate(latestForecast.published_at)}
               </div>
@@ -585,9 +582,6 @@ export default function PlanningRunsListPage() {
                     <div className="flex flex-wrap items-center gap-2">
                       <RunStatusBadge status={r.status} />
                       <span className="chip">{r.trigger_source}</span>
-                      <span className="font-mono text-3xs uppercase tracking-sops text-fg-subtle">
-                        {r.run_id.slice(0, 8)}
-                      </span>
                     </div>
                     <div className="mt-1.5 text-base font-semibold tracking-tightish text-fg-strong">
                       Executed {fmtDate(r.executed_at)}

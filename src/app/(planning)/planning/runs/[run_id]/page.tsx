@@ -648,8 +648,8 @@ export default function PlanningRunDetailPage() {
       </div>
       <WorkflowHeader
         eyebrow="Planner workspace"
-        title={`Run ${detail.run_id.slice(0, 8)}`}
-        description={`Horizon ${fmtDate(detail.planning_horizon_start_at)} · ${detail.planning_horizon_weeks} weeks · triggered ${detail.trigger_source}`}
+        title={`Planning run — ${fmtDate(detail.executed_at)}`}
+        description={`Horizon starts ${fmtDate(detail.planning_horizon_start_at)} · ${detail.planning_horizon_weeks} weeks · triggered ${detail.trigger_source}`}
         meta={
           <>
             <RunStatusBadge status={detail.status} />

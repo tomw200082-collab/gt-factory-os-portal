@@ -326,7 +326,7 @@ export default function PlanningLandingPage() {
           runsQuery.isLoading
             ? "Loading…"
             : latestRun
-              ? `Run ${latestRun.run_id.slice(0, 8)} — ${
+              ? `Latest run — ${
                   latestRun.status === "completed" ? "Completed"
                   : latestRun.status === "failed" ? "Failed"
                   : latestRun.status === "running" ? "Running"
