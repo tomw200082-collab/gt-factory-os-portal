@@ -148,10 +148,12 @@ export function InlineEditCell({
         }}
         className={cn(
           "group inline-flex items-center gap-1 rounded-sm px-1 py-0.5",
-          disabled ? "cursor-not-allowed text-fg-faint" : "cursor-pointer hover:bg-bg-subtle",
+          disabled
+            ? "cursor-not-allowed text-fg-faint"
+            : "cursor-pointer border-b border-dashed border-accent/40 hover:border-accent hover:bg-accent/5",
           error && "text-danger-fg",
         )}
-        title={error ?? undefined}
+        title={error ? error : disabled ? undefined : "Click to edit"}
       >
         <span className="truncate">
           {format ? format(value) : String(value)}
@@ -164,7 +166,7 @@ export function InlineEditCell({
           />
         ) : disabled ? null : (
           <Pencil
-            className="h-3 w-3 text-fg-faint opacity-0 transition-opacity duration-150 group-hover:opacity-100"
+            className="h-3 w-3 text-accent/60 opacity-60 transition-opacity duration-150 group-hover:opacity-100"
             strokeWidth={2}
           />
         )}
