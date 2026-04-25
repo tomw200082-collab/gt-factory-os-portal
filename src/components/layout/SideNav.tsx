@@ -328,18 +328,7 @@ export function SideNav({ onNavigate }: { onNavigate?: () => void } = {}) {
 // ---------------------------------------------------------------------------
 
 import type { DevShimSession } from "@/lib/auth/fake-auth";
-
-function getInitials(name: string, email: string): string {
-  const clean = name.split(" (")[0].trim();
-  if (clean) {
-    const parts = clean.split(/\s+/);
-    if (parts.length >= 2) {
-      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-    }
-    return clean.slice(0, 2).toUpperCase();
-  }
-  return email.slice(0, 2).toUpperCase();
-}
+import { getUserInitials } from "@/lib/user-initials";
 
 const ROLE_LABELS: Record<string, string> = {
   admin: "Admin",
@@ -349,7 +338,7 @@ const ROLE_LABELS: Record<string, string> = {
 };
 
 function UserCard({ session }: { session: DevShimSession }) {
-  const initials = getInitials(session.display_name, session.email);
+  const initials = getUserInitials(session.display_name, session.email);
   const displayName = session.display_name.split(" (")[0] || session.email;
   const roleLabel = ROLE_LABELS[session.role] ?? session.role;
 

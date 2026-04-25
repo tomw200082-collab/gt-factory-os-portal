@@ -7,6 +7,7 @@ import { useReviewMode } from "@/lib/review-mode/store";
 import type { Role } from "@/lib/contracts/enums";
 import { MobileNav } from "./MobileNav";
 import { cn } from "@/lib/cn";
+import { getUserInitials } from "@/lib/user-initials";
 
 const ROLE_OPTIONS: Role[] = ["operator", "planner", "admin", "viewer"];
 
@@ -124,22 +125,12 @@ interface UserIndicatorProps {
   session: { display_name: string; email: string; role: string };
 }
 
-function getInitials(name: string, email: string): string {
-  const clean = name.split(" (")[0].trim();
-  if (clean) {
-    const parts = clean.split(/\s+/);
-    if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
-    return clean.slice(0, 2).toUpperCase();
-  }
-  return email.slice(0, 2).toUpperCase();
-}
-
 function UserIndicator({ session }: UserIndicatorProps) {
   const { isLoading } = useSession();
   if (isLoading) {
     return <div className="h-8 w-8 rounded-full bg-bg-subtle animate-pulse" />;
   }
-  const initials = getInitials(session.display_name, session.email);
+  const initials = getUserInitials(session.display_name, session.email);
   const displayName = session.display_name.split(" (")[0] || session.email;
   return (
     <div className="flex items-center gap-2">
