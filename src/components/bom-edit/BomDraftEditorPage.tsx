@@ -13,6 +13,7 @@ import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import type { BomLineRow as BomLineDataRow } from "@/components/admin/recipe-health/useTrackData";
 import { useComponentReadinessMap } from "@/components/admin/recipe-health/useComponentReadinessMap";
+import { ReadinessPanel } from "@/components/admin/recipe-health/ReadinessPanel";
 import { BomLineRow } from "./BomLineRow";
 import { BomLineAddDrawer } from "./BomLineAddDrawer";
 import { BomLineDiff } from "./BomLineDiff";
@@ -103,6 +104,7 @@ export function BomDraftEditorPage({
   const readiness = useComponentReadinessMap(componentIds);
 
   const [addOpen, setAddOpen] = useState(false);
+  const [fixComponentId, setFixComponentId] = useState<string | null>(null);
 
   if (!version || !headQuery.data || !lines) {
     return <div className="p-4">טוען…</div>;
@@ -143,55 +145,94 @@ export function BomDraftEditorPage({
         </div>
       )}
       <main className="p-3">
-        {activeVersion && activeVersion.bom_version_id !== versionId && (
-          <BomLineDiff
-            draftLines={lines}
-            activeLines={activeLinesQuery.data ?? []}
-            activeVersionLabel={activeVersion.version_label}
-          />
-        )}
-        {editable && (
-          <button
-            type="button"
-            onClick={() => setAddOpen(true)}
-            className="mb-2 rounded border px-3 py-1"
-          >
-            + Add component
-          </button>
-        )}
-        {lines.length === 0 ? (
-          <div className="rounded border border-dashed p-6 text-center text-gray-500">
-            אין שורות. הוסף רכיב ראשון.
+        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_auto]">
+          <div>
+            {activeVersion && activeVersion.bom_version_id !== versionId && (
+              <BomLineDiff
+                draftLines={lines}
+                activeLines={activeLinesQuery.data ?? []}
+                activeVersionLabel={activeVersion.version_label}
+              />
+            )}
+            {editable && (
+              <button
+                type="button"
+                onClick={() => setAddOpen(true)}
+                className="mb-2 rounded border px-3 py-1"
+              >
+                + Add component
+              </button>
+            )}
+            {lines.length === 0 ? (
+              <div className="rounded border border-dashed p-6 text-center text-gray-500">
+                אין שורות. הוסף רכיב ראשון.
+              </div>
+            ) : (
+              <table className="w-full text-sm">
+                <thead>
+                  <tr className="text-left">
+                    <th className="px-2 py-1">Component</th>
+                    <th className="px-2 py-1">Qty</th>
+                    <th className="px-2 py-1">UOM</th>
+                    <th className="px-2 py-1">Readiness</th>
+                    <th className="px-2 py-1"></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {lines.map((line) => (
+                    <BomLineRow
+                      key={line.bom_line_id}
+                      line={line}
+                      versionId={versionId}
+                      readiness={readiness.map.get(line.component_id) ?? null}
+                      editable={editable}
+                      onOpenQuickFix={(cid) => setFixComponentId(cid)}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            )}
           </div>
-        ) : (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left">
-                <th className="px-2 py-1">Component</th>
-                <th className="px-2 py-1">Qty</th>
-                <th className="px-2 py-1">UOM</th>
-                <th className="px-2 py-1">Readiness</th>
-                <th className="px-2 py-1"></th>
-              </tr>
-            </thead>
-            <tbody>
-              {lines.map((line) => (
-                <BomLineRow
-                  key={line.bom_line_id}
-                  line={line}
-                  versionId={versionId}
-                  readiness={readiness.map.get(line.component_id) ?? null}
-                  editable={editable}
-                />
-              ))}
-            </tbody>
-          </table>
-        )}
+          <div className="hidden lg:block">
+            <ReadinessPanel
+              readinessMap={readiness.map}
+              nowMs={Date.now()}
+              onFix={setFixComponentId}
+            />
+          </div>
+        </div>
+        {/* Mobile-only bottom drawer with the same readiness data. */}
+        <div className="lg:hidden">
+          <ReadinessPanel
+            readinessMap={readiness.map}
+            nowMs={Date.now()}
+            onFix={setFixComponentId}
+            mobileMode
+          />
+        </div>
         <BomLineAddDrawer
           versionId={versionId}
           open={addOpen}
           onClose={() => setAddOpen(false)}
         />
+        {fixComponentId && (
+          <div
+            role="dialog"
+            data-testid={`quick-fix-stub-${fixComponentId}`}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          >
+            <div className="rounded-md bg-white p-4 shadow-lg">
+              <p>{fixComponentId}</p>
+              <button
+                type="button"
+                onClick={() => setFixComponentId(null)}
+                className="mt-2 rounded border px-3 py-1"
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        )}
       </main>
     </div>
   );

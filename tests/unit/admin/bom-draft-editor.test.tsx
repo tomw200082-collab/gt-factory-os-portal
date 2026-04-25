@@ -230,6 +230,65 @@ describe("BomDraftEditorPage — Add line drawer", () => {
     ).toBeTruthy();
   });
 
+  it("renders the panel with one row per unique component_id in the draft", async () => {
+    mockEditorApi({
+      draftLines: [
+        { bom_line_id: "L1", component_id: "C-1", qty: "1.0" },
+        { bom_line_id: "L2", component_id: "C-2", qty: "2.0" },
+        { bom_line_id: "L3", component_id: "C-1", qty: "0.5" },
+      ],
+      perComponent: {
+        "C-1": [
+          {
+            supplier_item_id: "SI-1",
+            supplier_id: "SUP-1",
+            supplier_name: "ACME",
+            component_id: "C-1",
+            component_name: "Sugar",
+            component_status: "ACTIVE",
+            is_primary: true,
+            std_cost_per_inv_uom: "2.5",
+            updated_at: "2026-04-20T00:00:00Z",
+          },
+        ],
+        "C-2": [
+          {
+            supplier_item_id: "SI-2",
+            supplier_id: "SUP-2",
+            supplier_name: "PackCo",
+            component_id: "C-2",
+            component_name: "Bottle",
+            component_status: "ACTIVE",
+            is_primary: true,
+            std_cost_per_inv_uom: "0.50",
+            updated_at: "2026-04-20T00:00:00Z",
+          },
+        ],
+      },
+    });
+    render(<BomDraftEditorPage bomHeadId="BH-1" versionId="BV-DRAFT" />, {
+      wrapper: wrap(),
+    });
+    await waitFor(() =>
+      expect(screen.getAllByText("Sugar").length).toBeGreaterThanOrEqual(2),
+    );
+    expect(screen.getAllByText("Bottle").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("clicking [Fix] on a panel row sets the active fix component_id state (visible via stub)", async () => {
+    mockEditorApi({
+      draftLines: [{ bom_line_id: "L1", component_id: "C-1", qty: "1.0" }],
+      perComponent: { "C-1": [] },
+    });
+    render(<BomDraftEditorPage bomHeadId="BH-1" versionId="BV-DRAFT" />, {
+      wrapper: wrap(),
+    });
+    const fixBtns = await screen.findAllByRole("button", { name: /Fix/ });
+    fireEvent.click(fixBtns[0]);
+    const stub = await screen.findByTestId(/quick-fix-stub-/);
+    expect(stub.textContent ?? "").toContain("C-1");
+  });
+
   it("submitting the drawer POSTs to /api/boms/versions/:id/lines", async () => {
     mockEditorApi({ draftLines: [] });
     // Override POST handler — keep the GET mocks above intact.
