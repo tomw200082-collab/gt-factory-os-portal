@@ -49,7 +49,7 @@ The Recipe-Health card top-line state is computed client-side. It is the only su
 
 | State | Conditions (ALL must hold for green) |
 |---|---|
-| 🟢 מוכן לייצור | (1) base BOM has an active version with ≥1 line; (2) pack BOM has an active version with ≥1 line; (3) all line quantities valid (>0) and components ACTIVE; (4) every referenced raw/pack item has a primary supplier; (5) every referenced raw/pack item has an active price within policy threshold |
+| 🟢 מוכן לייצור | (1) base BOM has an active version with ≥1 line; (2) pack BOM has an active version with ≥1 line; (3) all line quantities valid (>0) and components ACTIVE; (4) every referenced raw/pack item has a primary supplier; (5) every referenced raw/pack item has **an active price record** AND that price's age ≤ `PRICE_AGE_WARN_DAYS` |
 | 🟡 מוכן עם אזהרות / Production-ready with warnings | base + pack BOMs both have active versions with ≥1 line AND all quantities valid AND components active, but at least one supplier/price warning present (missing primary, stale price, missing active price). Publish IS permitted. Readiness color stays yellow. |
 | 🔴 לא ניתן לפרסם / Cannot publish | Any of: missing BOM head, BOM with no active version, active version with 0 lines, invalid quantity, INACTIVE component referenced, hard-blocker from backend preflight |
 
@@ -102,7 +102,11 @@ Lines table (one row per BOM line):
 - Component name — read-only, EntityPicker only when adding a new line
 - Quantity — InlineEditCell, type=number, inputMode=decimal, validates >0
 - UOM — read-only mirror of `components.bom_uom`
-- Per-line readiness pip — 🟢/🟡/🔴 + tooltip ("missing supplier", "price stale 145d", "no active price")
+- Per-line readiness pip + tooltip. Color rules:
+  - 🔴 = INACTIVE component referenced, OR quantity ≤ 0 (these are the only line-level hard-blocks; both prevent publish)
+  - 🟡 = missing primary supplier OR no active price record OR price age > `PRICE_AGE_WARN_DAYS`
+  - 🟢 = no warnings or blocks for this line
+  Pip is the operator's primary affordance for which lines to click [Fix] on.
 - Quick-fix button per line when 🟡/🔴 (opens drawer in §6.5)
 - 🗑 delete row → `DELETE /api/boms/versions/:id/lines/:line_id`
 
@@ -132,7 +136,7 @@ Opens a focused drawer over the editor — not a navigation. Three guided action
 
 **Action A — Set existing supplier as primary** (shown when component has ≥1 supplier_item but none flagged primary, or admin wants to switch among existing links):
 - Lists all `supplier_items` for this component as radio rows (supplier name, lead time, MOQ, std cost)
-- Save → PATCH `supplier_items/:id { is_primary: true }` (existing endpoint; backend handles demoting old primary atomically; if backend doesn't, UI calls a second PATCH to demote — to be confirmed during implementation)
+- Save → PATCH `supplier_items/:id { is_primary: true }`. Atomicity behavior: if the backend demotes the previous primary atomically, one PATCH suffices. If not, the UI runs a sequential PATCH to demote the old primary (see "atomicity contract" below — applies to both Actions A and C).
 - After save: re-query readiness panel, drawer closes
 
 **Action B — Add new sourcing link** (shown when component has 0 supplier_items, OR as second option when admin wants a brand-new supplier on top of existing links):
@@ -146,8 +150,17 @@ Opens a focused drawer over the editor — not a navigation. Three guided action
   - **Current primary:** {supplier_name} · cost {x} · lead {y}d · MOQ {z}
   - **New primary:** {supplier_name} · cost {x} · lead {y}d · MOQ {z}
   - One required confirm checkbox: "אני מאשר להחליף את הספק הראשי ולהוריד את הקודם"
-- Save: backend does both PATCHes atomically if supported; otherwise UI runs them sequentially and surfaces partial-failure errors verbatim. Implementation will confirm endpoint behavior and document the actual approach in the implementation plan — this spec does not assume.
+- Save: see "atomicity contract" below.
 - After save: readiness panel re-queries
+
+**Atomicity contract (binds Actions A and C):**
+
+The implementation plan will determine, by reading the upstream Fastify mutation, whether `PATCH /api/supplier-items/:id { is_primary: true }` already demotes the previous primary in the same transaction. Either way, the UI is bound to these guarantees:
+
+1. The user-visible end state must always be "exactly one primary supplier_item per component" — never zero, never two.
+2. If sequential PATCHes are required, the order is: **promote new** first, **then demote old**. This way a partial failure (network drop after step 1) leaves two primaries — recoverable, surfaced as 🟡 warning, no data lost. The reverse order could leave zero primaries, which would silently downgrade green readiness with no replacement queued — explicitly disallowed.
+3. Partial failure surfacing: if step 2 fails after step 1 succeeds, the drawer must NOT close. It shows an inline error: "הספק החדש הוגדר כראשי, אבל הקודם עדיין מסומן כראשי. נסה שוב או דווח." with a `[Retry demote]` button. The readiness panel reflects the dual-primary state until resolved.
+4. The 409 STALE_ROW path (concurrent edit) returns the user to the drawer's first step with a refresh-and-retry message; no partial save is allowed to persist.
 
 **Active price update (any of the above flows):** if the primary supplier_item has missing/stale `std_cost_per_inv_uom`, an inline edit cell on the primary row in the drawer lets the admin update it. PATCH `supplier_items/:id { std_cost_per_inv_uom }` reuses the existing mutation. `updated_at` becomes the new "price age" anchor.
 
@@ -206,7 +219,9 @@ export const RECIPE_READINESS_POLICY = {
 } as const;
 ```
 
-All three readiness checks and tooltip strings reference these constants by name. Future change = single-file edit. The chosen defaults (90 / 180) are placeholders — Tom confirmed no factory-current threshold exists; these are explicitly default policy, not a decision baked into the system shape.
+All readiness checks and tooltip strings reference these constants by name. Future change = single-file edit; no rebuild of the corridor logic.
+
+These ARE the policy values for v1 (Tom-approved 2026-04-25). Exposing them as named constants is the mechanism for future revision; it is not a hedge that the values are tentative. The corridor uses `PRICE_AGE_WARN_DAYS = 90` and `PRICE_AGE_STRONG_WARN_DAYS = 180` as the v1 thresholds.
 
 When/if a policy table appears in the database, this constant module becomes a `useRecipeReadinessPolicy()` hook that reads from a server source. Today: client-side constants.
 
@@ -240,6 +255,8 @@ Edit page (version_id)
 
 All endpoints already exist. **No backend work in this corridor.**
 
+**Round-trip note:** the per-component `GET /api/supplier-items?component_id=<id>` is N round-trips for a recipe with N unique components. Implementation will use TanStack Query `useQueries` with parallelization + deduplication; no batched endpoint exists today. If a recipe has >25 unique components and this becomes a perceptible delay, the implementation plan will add a `?component_ids=…` batched query as a follow-up — out of scope for v1.
+
 ## 9. Hard-block vs warning canonical table
 
 | Condition | Where enforced | UI behavior |
@@ -249,7 +266,6 @@ All endpoints already exist. **No backend work in this corridor.**
 | Stale row / version not DRAFT | Backend | 🔴 Modal C "Refresh page", auto-reload |
 | Component INACTIVE referenced | UI-only client check | 🔴 Publish disabled (would also fail downstream backend joins), inline error on line |
 | Quantity ≤ 0 | UI-only client check | 🔴 Inline error on row, Save blocked |
-| Duplicate component | UI-only client check | 🟡 Warn, allow publish |
 | Component missing primary supplier | UI-only client check | 🟡 Warn, allow publish, [Fix] in panel |
 | Component has no active price | UI-only client check | 🟡 Warn, allow publish, [Fix] in panel |
 | Active price age > `PRICE_AGE_WARN_DAYS` | UI-only client check | 🟡 Warn, allow publish |
@@ -271,7 +287,7 @@ All endpoints already exist. **No backend work in this corridor.**
 | `PublishConfirmModal` | new | Three variants A/B/C from §6.6 |
 | `VersionHistorySection` | new | Re-skin of existing list under product |
 | `RECIPE_READINESS_POLICY` constant | new | Single-source thresholds (§7) |
-| `MasterSummaryCard` | extended | Conditional: render `RecipeHealthCard` for MANUFACTURED items |
+| `MasterSummaryCard` | extended | For MANUFACTURED items: render `RecipeHealthCard` instead of the generic summary. **BOUGHT_FINISHED and REPACK paths are untouched** — they keep the existing summary card unchanged. |
 | `InlineEditCell` | unchanged | Already used on lines table cells |
 | `EntityPickerPlus` | unchanged | Reused in Add-line drawer |
 | `QuickCreateSupplierItem` | unchanged | Reused inside QuickFixDrawer action B |
@@ -282,13 +298,17 @@ These are NOT decision points for the spec — they are flagged for the implemen
 
 1. **`is_primary` swap atomicity** — does `PATCH /api/supplier-items/:id { is_primary: true }` automatically demote the previous primary, or does the UI need two PATCHes? Implementation plan will confirm by reading the upstream Fastify mutation; spec's swap flow handles either case (sequential UI fallback documented in §6.5C).
 
-2. **One DRAFT per head** — backend behavior when creating a second DRAFT while one already exists. Should be confirmed; Tom's flow assumes "if DRAFT exists, navigate to it" so we never hit this. Implementation plan will add a guard query.
+2. **DRAFT-already-exists fallback message** — §6.2 commits to a UX guard ("if DRAFT exists, navigate to it") so the UI never attempts to create a duplicate DRAFT. This risk note is narrower: confirm what error code/shape the backend returns if our guard misses (concurrent click, race), so the page renders a sensible "already exists, opening it" fallback instead of a generic error.
 
 3. **Price freshness data source** — design uses `supplier_items.updated_at` as the proxy for "price age". If a real `price_history.last_seen_at` is or becomes available, the freshness-check function should switch to that without other code changing.
 
 4. **DRAFT line edit stale-row collision** — two admins editing the same DRAFT. Existing `if_match_updated_at` mechanism on PATCH handles this; UI surfaces 409 STALE_ROW with a refresh button.
 
-5. **Component INACTIVE check** — design treats this as a UI hard-block. If the backend already rejects publishing a version with INACTIVE components, this is defense-in-depth. If not, the UI is the only line of defense. Implementation plan will check.
+5. **Component INACTIVE check — backend coverage** — UI behavior is locked (§9: 🔴 publish disabled regardless). This note is informational only: the implementation plan should record whether the backend also rejects publishing a version with INACTIVE component lines, since that affects whether the UI block is the sole guard or defense-in-depth. UI behavior does not change either way.
+
+6. **Stale / abandoned DRAFT cleanup — out of scope for v1.** §6.7 surfaces DRAFT entries with `[Resume editing →]`. There is no automatic expiry and no `[Discard draft]` UI in this corridor. If DRAFTs accumulate (e.g., abandoned multi-month-old drafts cluttering the version list), a later corridor can add a discard action. Flagged here so the question doesn't get lost.
+
+7. **Hebrew label decision needs project-contract acknowledgement.** The durable contract (`CLAUDE.md`) states "English-first UI with plain, accessible English labels. Hebrew appears only in data values." This spec uses Hebrew labels for the Recipe-Health card and key user-facing modal copy ("מתכון ייצור", "מוכן לייצור עם אזהרות", "אני מאשר את האזהרות הללו" …) because Tom wrote the UX target in Hebrew on 2026-04-25. The two are reconcilable — these are operator-facing affordances on an admin master surface — but the deviation is intentional and should be acknowledged in `CLAUDE.md` or in a project memo when implementation lands. This corridor's spec uses Tom's Hebrew labels verbatim.
 
 ## 12. Acceptance criteria
 
@@ -299,9 +319,10 @@ A reasonable QA pass on the corridor must demonstrate:
 3. Swap-primary flow: admin selects a different existing supplier_item, confirmation step shows old vs new, save commits both changes, panel reflects new primary.
 4. Publish modal correctly distinguishes A (clean), B (warnings + override checkbox), C (hard-block), based on `publish-preview` response.
 5. After publishing with supplier warnings present, Health card top-line is **yellow** ("מתכון פורסם עם אזהרות רכש/מחיר"), not green. (Critical.)
-6. Mobile (375px): all flows complete without horizontal scroll, drawers are full-screen sheets, sticky controls remain reachable.
-7. Existing read-only BOM detail pages and view tabs are unaffected.
-8. Non-admin roles see the Recipe-Health card (read-only) but no edit/publish buttons.
+6. After publishing with all readiness checks satisfied (every condition in §5 green), Health card top-line is **green**. (Critical — counterpart to #5.)
+7. Mobile (375px): all flows complete without horizontal scroll, drawers are full-screen sheets, sticky controls remain reachable.
+8. Existing read-only BOM detail pages and view tabs are unaffected.
+9. Non-admin roles see the Recipe-Health card (read-only) but no edit/publish buttons.
 
 ## 13. References
 
