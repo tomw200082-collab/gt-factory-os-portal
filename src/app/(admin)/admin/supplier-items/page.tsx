@@ -159,7 +159,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
   const fieldMutation = useMutation({
     mutationFn: async (args: {
       supplier_item_id: string;
-      field: "lead_time_days" | "moq" | "pack_conversion" | "std_cost_per_inv_uom";
+      field: "lead_time_days" | "moq" | "pack_conversion" | "std_cost_per_inv_uom" | "order_uom";
       value: string | number | null;
       updated_at: string;
     }) =>
@@ -208,6 +208,41 @@ export default function AdminSupplierItemsPage(): JSX.Element {
           ? `${err.status}${err.code ? ` ${err.code}` : ""}: ${err.message}`
           : err.message;
       setBanner({ kind: "error", message: `Promote-primary failed: ${msg}` });
+    },
+  });
+
+  const approvalStatusMutation = useMutation({
+    mutationFn: async (args: {
+      supplier_item_id: string;
+      approval_status: string;
+      updated_at: string;
+    }) => {
+      const res = await fetch(
+        `/api/supplier-items/${encodeURIComponent(args.supplier_item_id)}/status`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json" },
+          body: JSON.stringify({
+            approval_status: args.approval_status,
+            if_match_updated_at: args.updated_at,
+            idempotency_key: crypto.randomUUID(),
+          }),
+        },
+      );
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        const msg = body && typeof body === "object" && "message" in body
+          ? String((body as { message?: unknown }).message)
+          : "Could not save changes. Check your connection and try again.";
+        throw new Error(msg);
+      }
+    },
+    onSuccess: () => {
+      setBanner({ kind: "success", message: "Saved." });
+      void queryClient.invalidateQueries({ queryKey: ["admin", "supplier-items"] });
+    },
+    onError: (err: Error) => {
+      setBanner({ kind: "error", message: `Status update failed: ${err.message}` });
     },
   });
 
@@ -396,6 +431,9 @@ export default function AdminSupplierItemsPage(): JSX.Element {
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Order UoM
                   </th>
+                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    Approval
+                  </th>
                   <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Pack conversion
                   </th>
@@ -459,7 +497,48 @@ export default function AdminSupplierItemsPage(): JSX.Element {
                       {r.relationship ?? "—"}
                     </td>
                     <td className="px-3 py-2 text-xs text-fg-muted">
-                      {r.order_uom ?? "—"}
+                      {isAdmin ? (
+                        <InlineEditCell
+                          value={r.order_uom ?? ""}
+                          type="text"
+                          ifMatchUpdatedAt={r.updated_at}
+                          onSave={async (newValue) => {
+                            await fieldMutation.mutateAsync({
+                              supplier_item_id: r.supplier_item_id,
+                              field: "order_uom",
+                              value: newValue === "" ? null : newValue,
+                              updated_at: r.updated_at,
+                            });
+                          }}
+                          ariaLabel={`Edit order UoM for ${r.component_id ?? r.item_id ?? r.supplier_item_id}`}
+                        />
+                      ) : (
+                        r.order_uom ?? "—"
+                      )}
+                    </td>
+                    <td className="px-3 py-2 text-xs text-fg-muted">
+                      {isAdmin ? (
+                        <select
+                          className="rounded border border-border bg-background px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                          value={r.approval_status ?? ""}
+                          onChange={(e) => {
+                            const val = e.target.value;
+                            if (!val) return;
+                            approvalStatusMutation.mutate({
+                              supplier_item_id: r.supplier_item_id,
+                              approval_status: val,
+                              updated_at: r.updated_at,
+                            });
+                          }}
+                        >
+                          <option value="">— set —</option>
+                          <option value="approved">approved</option>
+                          <option value="pending">pending</option>
+                          <option value="rejected">rejected</option>
+                        </select>
+                      ) : (
+                        r.approval_status ?? "—"
+                      )}
                     </td>
                     <td className="px-3 py-2 text-right font-mono text-xs tabular-nums text-fg-muted" title="Pack conversion: units per order pack. Affects stock math.">
                       {isAdmin ? (
