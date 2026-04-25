@@ -19,6 +19,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   Activity,
   AlertCircle,
+  Archive,
   ArrowLeftRight,
   Building2,
   CalendarDays,
@@ -328,6 +329,13 @@ export const NAV_MANIFEST: NavGroup[] = [
         href: "/admin/masters/health",
         label: "Master Data Health",
         icon: AlertCircle,
+        min_role: "admin",
+        required_capability: "admin:execute",
+      },
+      {
+        href: "/admin/masters/archive",
+        label: "Archive",
+        icon: Archive,
         min_role: "admin",
         required_capability: "admin:execute",
       },
