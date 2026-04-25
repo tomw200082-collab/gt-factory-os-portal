@@ -329,19 +329,19 @@ export default function DashboardPage() {
   // -------------------------------------------------------------------------
   // Render — header + greeting + 7 signal blocks + quick-actions launcher.
   // -------------------------------------------------------------------------
-  const email = session.email || "";
+  const displayName = session.display_name.split(" (")[0] || session.email || "";
   const greeting = sessionLoading
-    ? "Loading session…"
-    : email
-      ? `Welcome, ${email}`
-      : "Welcome";
+    ? "Dashboard"
+    : displayName
+      ? `Welcome, ${displayName}`
+      : "Dashboard";
 
   return (
     <>
       <WorkflowHeader
         eyebrow="GT Factory OS"
         title={greeting}
-        description="Control tower for live operational signals. Some panels show ‘not yet available’ while their data sources are being connected."
+        description="Live operational signals. Click any tile to go to the relevant page."
         meta={
           <>
             <Badge tone={roleBadgeTone(session.role)} dotted>
@@ -360,9 +360,8 @@ export default function DashboardPage() {
       {/* Block 1 — Top-row stat strip                                   */}
       {/* -------------------------------------------------------------- */}
       <SectionCard
-        eyebrow="Above the fold"
-        title="Critical operational signals"
-        description="Live counts and states that need eyes first. Click any tile to jump to the relevant surface."
+        eyebrow="Status"
+        title="Right now"
       >
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
           <InboxTotalCard summary={inboxSummary} />
@@ -376,9 +375,9 @@ export default function DashboardPage() {
       {/* Block 2 — Stock truth + parity check                          */}
       {/* -------------------------------------------------------------- */}
       <SectionCard
-        eyebrow="Stock truth"
-        title="Rebuild verifier + parity"
-        description="Parity between the stock ledger and the projected current-balance read model. Zero drift is the only acceptable state."
+        eyebrow="Stock"
+        title="Stock parity"
+        description="Projection vs. ledger rebuild. Zero drift means stock counts can be trusted."
         className="mt-6"
       >
         <div className="space-y-4">
@@ -392,8 +391,8 @@ export default function DashboardPage() {
       {/* -------------------------------------------------------------- */}
       <SectionCard
         eyebrow="Integrations"
-        title="Per-producer freshness"
-        description="LionWheel, Shopify, Green Invoice, forecast-publication, heartbeat. A producer going stale emits its own exception."
+        title="Data freshness"
+        description="How recently each external data source was successfully synced."
         className="mt-6"
       >
         <IntegrationFreshnessBlock signal={freshnessQ.data} now={now} />
@@ -403,9 +402,8 @@ export default function DashboardPage() {
       {/* Block 4 — Jobs 24h health                                      */}
       {/* -------------------------------------------------------------- */}
       <SectionCard
-        eyebrow="Jobs"
+        eyebrow="Scheduled jobs"
         title="Last 24 hours"
-        description="Successes, failures, and skipped runs (break-glass / preconditions)."
         className="mt-6"
       >
         <JobsHealth24hBlock signal={jobsHealthQ.data} />
@@ -416,8 +414,8 @@ export default function DashboardPage() {
       {/* -------------------------------------------------------------- */}
       <SectionCard
         eyebrow="Forecast"
-        title="Latest published version"
-        description="Cadence, horizon, and publish age. Planning runs consume the active published forecast."
+        title="Active forecast"
+        description="The published forecast used by the planning engine."
         className="mt-6"
       >
         <LatestForecastBlock signal={forecastQ.data} now={now} />
@@ -427,9 +425,9 @@ export default function DashboardPage() {
       {/* Block 6 — RUNTIME_READY registry                               */}
       {/* -------------------------------------------------------------- */}
       <SectionCard
-        eyebrow="Authorization"
-        title="Form readiness"
-        description="Which operational forms have been cleared for use? Each form is enabled only after its backend has been verified end-to-end."
+        eyebrow="Forms"
+        title="Operational forms"
+        description="Which forms are active and ready to use."
         className="mt-6"
       >
         <RuntimeReadyBlock signal={runtimeReadyQ.data} now={now} />
@@ -440,8 +438,7 @@ export default function DashboardPage() {
       {/* -------------------------------------------------------------- */}
       <SectionCard
         eyebrow="Quick actions"
-        title="What you can do from here"
-        description="Filtered by your role via the capability lattice. Admin sees all actions; planner sees planning + inbox; operator sees stock + inbox + dashboard; viewer sees dashboard + inbox + read views."
+        title="Common tasks"
         className="mt-6"
       >
         {quickActions.length === 0 ? (
