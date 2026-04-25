@@ -128,7 +128,7 @@ interface UserIndicatorProps {
 function UserIndicator({ session }: UserIndicatorProps) {
   const { isLoading } = useSession();
   if (isLoading) {
-    return <div className="h-8 w-8 rounded-full bg-bg-subtle animate-pulse" />;
+    return <div className="h-8 w-8 rounded-full bg-bg-subtle animate-pulse" aria-label="Loading user" />;
   }
   const initials = getUserInitials(session.display_name, session.email);
   const displayName = session.display_name.split(" (")[0] || session.email;

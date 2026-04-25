@@ -74,8 +74,14 @@ function groupHasActivePath(group: NavGroup, pathname: string | null): boolean {
 
 export function SideNavSkeleton() {
   return (
-    <nav className="flex flex-col gap-4 animate-pulse">
-      {[4, 2, 7, 5, 1].map((count, gi) => (
+    <nav
+      aria-label="Primary navigation"
+      aria-busy="true"
+      aria-live="polite"
+      className="flex flex-col gap-4 animate-pulse"
+    >
+      {/* Counts mirror actual nav structure: Overview, Inbox, Stock, Planning, POs */}
+      {[1, 1, 7, 5, 1].map((count, gi) => (
         <div key={gi}>
           <div className="mb-2 flex items-center gap-2 px-2">
             <div className="h-2 w-12 rounded bg-bg-subtle" />
