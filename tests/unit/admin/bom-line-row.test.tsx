@@ -40,8 +40,10 @@ afterEach(() => {
 
 const baseLine = {
   bom_line_id: "L1",
-  component_id: "C-1",
-  qty: "1.0",
+  final_component_id: "C-1",
+  final_component_name: "Sugar",
+  final_component_qty: "1.0",
+  component_uom: "KG",
   updated_at: "2026-04-20T12:00:00Z",
 };
 const baseReadiness = {
@@ -90,7 +92,7 @@ describe("BomLineRow", () => {
   it("shows red pip when qty is 0", () => {
     render(
       <BomLineRow
-        line={{ ...baseLine, qty: "0" }}
+        line={{ ...baseLine, final_component_qty: "0" }}
         versionId="BV-1"
         readiness={baseReadiness}
         editable

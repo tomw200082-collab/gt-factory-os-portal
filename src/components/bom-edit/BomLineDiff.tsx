@@ -22,16 +22,20 @@ export function computeBomDiff(
   draft: BomLineDataRow[],
   active: BomLineDataRow[],
 ): DiffResult {
-  const draftByComp = new Map(draft.map((l) => [l.component_id, l]));
-  const activeByComp = new Map(active.map((l) => [l.component_id, l]));
+  const draftByComp = new Map(draft.map((l) => [l.final_component_id, l]));
+  const activeByComp = new Map(active.map((l) => [l.final_component_id, l]));
   const added: BomLineDataRow[] = [];
   const removed: BomLineDataRow[] = [];
   const changed: ChangedLine[] = [];
   for (const [c, d] of draftByComp) {
     const a = activeByComp.get(c);
     if (!a) added.push(d);
-    else if (a.qty !== d.qty)
-      changed.push({ component_id: c, oldQty: a.qty, newQty: d.qty });
+    else if (a.final_component_qty !== d.final_component_qty)
+      changed.push({
+        component_id: c,
+        oldQty: a.final_component_qty,
+        newQty: d.final_component_qty,
+      });
   }
   for (const [c, a] of activeByComp) {
     if (!draftByComp.has(c)) removed.push(a);
@@ -65,12 +69,14 @@ export function BomLineDiff({
         <div className="mt-2 text-sm">
           {diff.added.map((l) => (
             <div key={l.bom_line_id} className="text-green-700">
-              + {l.component_id} ({l.qty})
+              + {l.final_component_name || l.final_component_id} (
+              {l.final_component_qty})
             </div>
           ))}
           {diff.removed.map((l) => (
             <div key={l.bom_line_id} className="text-red-700">
-              − {l.component_id} ({l.qty})
+              − {l.final_component_name || l.final_component_id} (
+              {l.final_component_qty})
             </div>
           ))}
           {diff.changed.map((c) => (

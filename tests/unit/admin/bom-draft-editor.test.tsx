@@ -38,10 +38,22 @@ afterEach(() => {
   cleanup();
 });
 
+// IMPORTANT — fixture field names mirror the upstream Fastify response
+// shape verbatim (final_component_id / final_component_qty etc). Earlier
+// drafts used `component_id` / `qty`; that masked a real read-side bug.
+// Do not rename these without re-checking the live API.
+interface MockLineFixture {
+  bom_line_id: string;
+  final_component_id: string;
+  final_component_qty: string;
+  final_component_name?: string;
+  component_uom?: string | null;
+}
+
 interface MockEditorApiArgs {
   versionStatus?: "DRAFT" | "ACTIVE" | "SUPERSEDED";
-  draftLines: Array<{ bom_line_id: string; component_id: string; qty: string }>;
-  activeLines?: Array<{ bom_line_id: string; component_id: string; qty: string }>;
+  draftLines: MockLineFixture[];
+  activeLines?: MockLineFixture[];
   perComponent?: Record<string, Array<Record<string, unknown>>>;
 }
 
@@ -59,9 +71,11 @@ function mockEditorApi({
             rows: [
               {
                 bom_head_id: "BH-1",
-                item_id: "ITEM-1",
-                item_name: "Lemon Cocktail",
+                parent_ref_id: "ITEM-1",
+                parent_name: "Lemon Cocktail",
                 bom_kind: "BASE",
+                active_version_id: "BV-ACTIVE",
+                status: "ACTIVE",
               },
             ],
           }),
@@ -74,8 +88,18 @@ function mockEditorApi({
         new Response(
           JSON.stringify({
             rows: [
-              { bom_version_id: "BV-ACTIVE", version_label: "v3", status: "ACTIVE" },
-              { bom_version_id: "BV-DRAFT", version_label: "v4", status: versionStatus },
+              {
+                bom_version_id: "BV-ACTIVE",
+                version_label: "v3",
+                status: "ACTIVE",
+                updated_at: "2026-04-10T00:00:00Z",
+              },
+              {
+                bom_version_id: "BV-DRAFT",
+                version_label: "v4",
+                status: versionStatus,
+                updated_at: "2026-04-20T00:00:00Z",
+              },
             ],
           }),
           { status: 200 },
@@ -87,6 +111,8 @@ function mockEditorApi({
         new Response(
           JSON.stringify({
             rows: draftLines.map((l) => ({
+              final_component_name: l.final_component_id,
+              component_uom: "KG",
               ...l,
               updated_at: "2026-04-20T00:00:00Z",
             })),
@@ -100,6 +126,8 @@ function mockEditorApi({
         new Response(
           JSON.stringify({
             rows: activeLines.map((l) => ({
+              final_component_name: l.final_component_id,
+              component_uom: "KG",
               ...l,
               updated_at: "2026-04-20T00:00:00Z",
             })),
@@ -154,8 +182,8 @@ describe("BomDraftEditorPage skeleton", () => {
   it("renders one row per draft line", async () => {
     mockEditorApi({
       draftLines: [
-        { bom_line_id: "L1", component_id: "C-1", qty: "1.0" },
-        { bom_line_id: "L2", component_id: "C-2", qty: "0.5" },
+        { bom_line_id: "L1", final_component_id: "C-1", final_component_qty: "1.0" },
+        { bom_line_id: "L2", final_component_id: "C-2", final_component_qty: "0.5" },
       ],
       perComponent: {
         "C-1": [
@@ -197,7 +225,7 @@ describe("BomDraftEditorPage skeleton", () => {
   it("shows a 'this version is not editable' banner when the version status is not DRAFT", async () => {
     mockEditorApi({
       versionStatus: "ACTIVE",
-      draftLines: [{ bom_line_id: "L1", component_id: "C-1", qty: "1" }],
+      draftLines: [{ bom_line_id: "L1", final_component_id: "C-1", final_component_qty: "1" }],
       perComponent: { "C-1": [] },
     });
     render(<BomDraftEditorPage bomHeadId="BH-1" versionId="BV-DRAFT" />, {
@@ -233,9 +261,9 @@ describe("BomDraftEditorPage — Add line drawer", () => {
   it("renders the panel with one row per unique component_id in the draft", async () => {
     mockEditorApi({
       draftLines: [
-        { bom_line_id: "L1", component_id: "C-1", qty: "1.0" },
-        { bom_line_id: "L2", component_id: "C-2", qty: "2.0" },
-        { bom_line_id: "L3", component_id: "C-1", qty: "0.5" },
+        { bom_line_id: "L1", final_component_id: "C-1", final_component_qty: "1.0" },
+        { bom_line_id: "L2", final_component_id: "C-2", final_component_qty: "2.0" },
+        { bom_line_id: "L3", final_component_id: "C-1", final_component_qty: "0.5" },
       ],
       perComponent: {
         "C-1": [
@@ -277,7 +305,7 @@ describe("BomDraftEditorPage — Add line drawer", () => {
 
   it("clicking [Fix] on a panel row opens the real QuickFixDrawer", async () => {
     mockEditorApi({
-      draftLines: [{ bom_line_id: "L1", component_id: "C-1", qty: "1.0" }],
+      draftLines: [{ bom_line_id: "L1", final_component_id: "C-1", final_component_qty: "1.0" }],
       perComponent: { "C-1": [] },
     });
     render(<BomDraftEditorPage bomHeadId="BH-1" versionId="BV-DRAFT" />, {
@@ -312,9 +340,11 @@ describe("BomDraftEditorPage — Add line drawer", () => {
               rows: [
                 {
                   bom_head_id: "BH-1",
-                  item_id: "ITEM-1",
-                  item_name: "Lemon Cocktail",
+                  parent_ref_id: "ITEM-1",
+                  parent_name: "Lemon Cocktail",
                   bom_kind: "BASE",
+                  active_version_id: "BV-DRAFT",
+                  status: "ACTIVE",
                 },
               ],
             }),
@@ -341,8 +371,8 @@ describe("BomDraftEditorPage — Add line drawer", () => {
               rows: [
                 {
                   bom_line_id: "L1",
-                  component_id: "C-1",
-                  qty: "1.0",
+                  final_component_id: "C-1",
+                  final_component_qty: "1.0",
                   updated_at: "2026-04-20T00:00:00Z",
                 },
               ],
@@ -414,9 +444,11 @@ describe("BomDraftEditorPage — Add line drawer", () => {
               rows: [
                 {
                   bom_head_id: "BH-1",
-                  item_id: "ITEM-1",
-                  item_name: "Lemon Cocktail",
+                  parent_ref_id: "ITEM-1",
+                  parent_name: "Lemon Cocktail",
                   bom_kind: "BASE",
+                  active_version_id: "BV-DRAFT",
+                  status: "ACTIVE",
                 },
               ],
             }),
@@ -443,8 +475,8 @@ describe("BomDraftEditorPage — Add line drawer", () => {
               rows: [
                 {
                   bom_line_id: "L1",
-                  component_id: "C-1",
-                  qty: "1.0",
+                  final_component_id: "C-1",
+                  final_component_qty: "1.0",
                   updated_at: "2026-04-20T00:00:00Z",
                 },
               ],
@@ -507,8 +539,8 @@ describe("BomDraftEditorPage — Add line drawer", () => {
           new Response(
             JSON.stringify({
               bom_line_id: "L-NEW",
-              component_id: "C-99",
-              qty: "3.5",
+              final_component_id: "C-99",
+              final_component_qty: "3.5",
               updated_at: "2026-04-25T00:00:00Z",
             }),
             { status: 200 },

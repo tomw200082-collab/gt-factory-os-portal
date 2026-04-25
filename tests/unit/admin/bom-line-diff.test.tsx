@@ -6,31 +6,37 @@ import { BomLineDiff, computeBomDiff } from "@/components/bom-edit/BomLineDiff";
 
 afterEach(() => cleanup());
 
+function line(
+  bom_line_id: string,
+  final_component_id: string,
+  final_component_qty: string,
+  final_component_name = final_component_id,
+) {
+  return {
+    bom_line_id,
+    final_component_id,
+    final_component_name,
+    final_component_qty,
+    component_uom: "KG",
+    updated_at: "",
+  };
+}
+
 describe("computeBomDiff", () => {
   it("classifies added, removed, changed", () => {
     const r = computeBomDiff(
-      [
-        { bom_line_id: "L1", component_id: "C-1", qty: "1.0", updated_at: "" },
-        { bom_line_id: "L2", component_id: "C-2", qty: "2.0", updated_at: "" },
-        { bom_line_id: "L3", component_id: "C-3", qty: "3.0", updated_at: "" },
-      ],
-      [
-        { bom_line_id: "L1", component_id: "C-1", qty: "1.0", updated_at: "" },
-        { bom_line_id: "Lx", component_id: "C-2", qty: "1.0", updated_at: "" },
-        { bom_line_id: "L4", component_id: "C-4", qty: "4.0", updated_at: "" },
-      ],
+      [line("L1", "C-1", "1.0"), line("L2", "C-2", "2.0"), line("L3", "C-3", "3.0")],
+      [line("L1", "C-1", "1.0"), line("Lx", "C-2", "1.0"), line("L4", "C-4", "4.0")],
     );
-    expect(r.added.map((l) => l.component_id)).toEqual(["C-3"]);
-    expect(r.removed.map((l) => l.component_id)).toEqual(["C-4"]);
+    expect(r.added.map((l) => l.final_component_id)).toEqual(["C-3"]);
+    expect(r.removed.map((l) => l.final_component_id)).toEqual(["C-4"]);
     expect(r.changed.map((c) => c.component_id)).toEqual(["C-2"]);
     expect(r.changed[0].oldQty).toBe("1.0");
     expect(r.changed[0].newQty).toBe("2.0");
   });
 
   it("returns empty arrays when draft and active are identical", () => {
-    const lines = [
-      { bom_line_id: "L1", component_id: "C-1", qty: "1.0", updated_at: "" },
-    ];
+    const lines = [line("L1", "C-1", "1.0")];
     const r = computeBomDiff(lines, lines);
     expect(r.added).toEqual([]);
     expect(r.removed).toEqual([]);
@@ -42,12 +48,8 @@ describe("BomLineDiff component", () => {
   it("renders a collapsed summary by default and expands on click", () => {
     render(
       <BomLineDiff
-        draftLines={[
-          { bom_line_id: "L1", component_id: "C-1", qty: "2.0", updated_at: "" },
-        ]}
-        activeLines={[
-          { bom_line_id: "L1", component_id: "C-1", qty: "1.0", updated_at: "" },
-        ]}
+        draftLines={[line("L1", "C-1", "2.0")]}
+        activeLines={[line("L1", "C-1", "1.0")]}
         activeVersionLabel="v3"
       />,
     );

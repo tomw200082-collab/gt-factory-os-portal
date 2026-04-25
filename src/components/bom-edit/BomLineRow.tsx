@@ -42,7 +42,7 @@ export function BomLineRow({
 
   const pip: LinePipState = readiness
     ? computeLinePipState({
-        qty: line.qty,
+        qty: line.final_component_qty,
         component: readiness,
         nowMs: Date.now(),
       })
@@ -101,14 +101,16 @@ export function BomLineRow({
   return (
     <tr data-testid={`bom-line-row-${line.bom_line_id}`}>
       <td className="px-2 py-1">
-        {readiness?.component_name ?? line.component_id}
+        {readiness?.component_name ??
+          line.final_component_name ??
+          line.final_component_id}
       </td>
       <td className="px-2 py-1">
         {editable ? (
           editing ? (
             <input
               role="textbox"
-              defaultValue={line.qty}
+              defaultValue={line.final_component_qty}
               onBlur={(e) => patch.mutate(e.currentTarget.value)}
               autoFocus
               className="rounded border px-1"
@@ -121,15 +123,15 @@ export function BomLineRow({
               onClick={() => setEditing(true)}
               className="rounded px-1 hover:bg-gray-100"
             >
-              {line.qty}
+              {line.final_component_qty}
             </button>
           )
         ) : (
-          <span>{line.qty}</span>
+          <span>{line.final_component_qty}</span>
         )}
         {error && <div className="text-xs text-red-600">{error}</div>}
       </td>
-      <td className="px-2 py-1 text-gray-500">—</td>
+      <td className="px-2 py-1 text-gray-500">{line.component_uom ?? "—"}</td>
       <td className="px-2 py-1">
         <span
           aria-label={`readiness-pip-${pip.color}`}

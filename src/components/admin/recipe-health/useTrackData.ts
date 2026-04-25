@@ -1,13 +1,25 @@
 // useTrackData — given a bom_head_id, fetches the head's versions and the
 // ACTIVE version's lines (if any). Identifies ACTIVE + DRAFT versions for
 // downstream readiness logic.
+//
+// Field names mirror the upstream Fastify response shape verbatim:
+//   bom_lines.final_component_id    — id of the component on this line
+//   bom_lines.final_component_name  — denormalized name (display only)
+//   bom_lines.final_component_qty   — quantity per batch (string, decimal)
+//   bom_lines.component_uom         — UOM string
+// Earlier drafts of this hook used `qty`/`component_id`, which silently
+// produced `undefined` on every line and made every BOM card render red
+// "quantity invalid" against real data. Do not rename without verifying
+// the upstream `/api/v1/queries/boms/lines` response shape first.
 
 import { useQuery } from "@tanstack/react-query";
 
 export interface BomLineRow {
   bom_line_id: string;
-  component_id: string;
-  qty: string;
+  final_component_id: string;
+  final_component_name: string;
+  final_component_qty: string;
+  component_uom: string | null;
   updated_at: string;
 }
 

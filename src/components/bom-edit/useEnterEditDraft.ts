@@ -4,8 +4,12 @@
 //     the existing DRAFT.
 //   - Else if activeVersionId is set, POST a new DRAFT cloned from active.
 //   - Else POST an empty DRAFT.
+//
+// On success, the hook invalidates the versions list cache for this head
+// so the editor page (which finds the new DRAFT in that list) doesn't
+// race against stale cache and stick on a "version not found" loader.
 
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 
 interface EnterEditInput {
   bomHeadId: string;
@@ -21,14 +25,23 @@ function randomIdempotencyKey(): string {
 }
 
 export function useEnterEditDraft() {
+  const qc = useQueryClient();
   const m = useMutation({
-    mutationFn: async (input: EnterEditInput): Promise<string> => {
-      if (input.existingDraftId) return input.existingDraftId;
+    mutationFn: async (
+      input: EnterEditInput,
+    ): Promise<{ versionId: string; bomHeadId: string }> => {
+      if (input.existingDraftId) {
+        return {
+          versionId: input.existingDraftId,
+          bomHeadId: input.bomHeadId,
+        };
+      }
       const body: Record<string, string> = {
         head_id: input.bomHeadId,
         idempotency_key: randomIdempotencyKey(),
       };
-      if (input.activeVersionId) body.clone_from_version_id = input.activeVersionId;
+      if (input.activeVersionId)
+        body.clone_from_version_id = input.activeVersionId;
       const res = await fetch("/api/boms/versions", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -36,8 +49,25 @@ export function useEnterEditDraft() {
       });
       if (!res.ok) throw new Error(`createDraft: ${res.status}`);
       const json = await res.json();
-      return json.bom_version_id as string;
+      return {
+        versionId: json.bom_version_id as string,
+        bomHeadId: input.bomHeadId,
+      };
+    },
+    onSuccess: ({ bomHeadId }) => {
+      // The editor will read /api/boms/versions?bom_head_id=<head> and find
+      // the new DRAFT by id. Invalidate so it refetches instead of using
+      // the cached pre-clone list.
+      void qc.invalidateQueries({ queryKey: ["boms", "versions", bomHeadId] });
     },
   });
-  return { enterEdit: m.mutateAsync, isPending: m.isPending };
+
+  // Backwards-compatible enter() that returns just the versionId, since
+  // existing call sites only need that.
+  async function enterEdit(input: EnterEditInput): Promise<string> {
+    const r = await m.mutateAsync(input);
+    return r.versionId;
+  }
+
+  return { enterEdit, isPending: m.isPending };
 }

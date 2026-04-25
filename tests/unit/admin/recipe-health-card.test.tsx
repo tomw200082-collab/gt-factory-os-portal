@@ -119,8 +119,8 @@ afterEach(() => {
 });
 
 interface MockApiArgs {
-  baseLines: Array<{ bom_line_id: string; component_id: string; qty: string }>;
-  packLines: Array<{ bom_line_id: string; component_id: string; qty: string }>;
+  baseLines: Array<{ bom_line_id: string; final_component_id: string; final_component_qty: string }>;
+  packLines: Array<{ bom_line_id: string; final_component_id: string; final_component_qty: string }>;
   perComponent: Record<string, Array<Record<string, unknown>>>;
 }
 
@@ -215,8 +215,8 @@ const SI_C2: Record<string, unknown> = {
 describe("RecipeHealthCard — MANUFACTURED full data", () => {
   it("renders top-line green and both tracks visible when everything is healthy", async () => {
     mockApi({
-      baseLines: [{ bom_line_id: "L1", component_id: "C-1", qty: "1.0" }],
-      packLines: [{ bom_line_id: "L2", component_id: "C-2", qty: "1.0" }],
+      baseLines: [{ bom_line_id: "L1", final_component_id: "C-1", final_component_qty: "1.0" }],
+      packLines: [{ bom_line_id: "L2", final_component_id: "C-2", final_component_qty: "1.0" }],
       perComponent: { "C-1": [SI_C1], "C-2": [SI_C2] },
     });
     render(
@@ -239,8 +239,8 @@ describe("RecipeHealthCard — MANUFACTURED full data", () => {
 describe("RecipeHealthCard — yellow when supplier missing", () => {
   it("shows yellow top-line and surfaces the missing-supplier warning", async () => {
     mockApi({
-      baseLines: [{ bom_line_id: "L1", component_id: "C-1", qty: "1.0" }],
-      packLines: [{ bom_line_id: "L2", component_id: "C-2", qty: "1.0" }],
+      baseLines: [{ bom_line_id: "L1", final_component_id: "C-1", final_component_qty: "1.0" }],
+      packLines: [{ bom_line_id: "L2", final_component_id: "C-2", final_component_qty: "1.0" }],
       perComponent: { "C-1": [], "C-2": [SI_C2] },
     });
     render(
@@ -293,8 +293,8 @@ describe("RecipeHealthCard — red when pack BOM is empty", () => {
               rows: [
                 {
                   bom_line_id: "L1",
-                  component_id: "C-1",
-                  qty: "1.0",
+                  final_component_id: "C-1",
+                  final_component_qty: "1.0",
                   updated_at: "2026-04-20T00:00:00Z",
                 },
               ],
@@ -334,8 +334,8 @@ describe("RecipeHealthCard — red when pack BOM is empty", () => {
 describe("RecipeHealthCard — admin gating", () => {
   it("renders [Edit recipe →] buttons when isAdmin is true", async () => {
     mockApi({
-      baseLines: [{ bom_line_id: "L1", component_id: "C-1", qty: "1.0" }],
-      packLines: [{ bom_line_id: "L2", component_id: "C-2", qty: "1.0" }],
+      baseLines: [{ bom_line_id: "L1", final_component_id: "C-1", final_component_qty: "1.0" }],
+      packLines: [{ bom_line_id: "L2", final_component_id: "C-2", final_component_qty: "1.0" }],
       perComponent: { "C-1": [SI_C1], "C-2": [SI_C2] },
     });
     render(
@@ -355,8 +355,8 @@ describe("RecipeHealthCard — admin gating", () => {
 
   it("hides edit buttons when isAdmin is false", async () => {
     mockApi({
-      baseLines: [{ bom_line_id: "L1", component_id: "C-1", qty: "1.0" }],
-      packLines: [{ bom_line_id: "L2", component_id: "C-2", qty: "1.0" }],
+      baseLines: [{ bom_line_id: "L1", final_component_id: "C-1", final_component_qty: "1.0" }],
+      packLines: [{ bom_line_id: "L2", final_component_id: "C-2", final_component_qty: "1.0" }],
       perComponent: { "C-1": [SI_C1], "C-2": [SI_C2] },
     });
     render(
@@ -378,8 +378,8 @@ describe("RecipeHealthCard — admin gating", () => {
 describe("RecipeHealthCard — mobile stacking class", () => {
   it("uses Tailwind sm:grid-cols-2 (default flex-col stack on <640px)", async () => {
     mockApi({
-      baseLines: [{ bom_line_id: "L1", component_id: "C-1", qty: "1.0" }],
-      packLines: [{ bom_line_id: "L2", component_id: "C-2", qty: "1.0" }],
+      baseLines: [{ bom_line_id: "L1", final_component_id: "C-1", final_component_qty: "1.0" }],
+      packLines: [{ bom_line_id: "L2", final_component_id: "C-2", final_component_qty: "1.0" }],
       perComponent: { "C-1": [SI_C1], "C-2": [SI_C2] },
     });
     const { container } = render(
@@ -447,8 +447,8 @@ describe("RecipeHealthCard — Edit recipe button confirmations", () => {
               rows: [
                 {
                   bom_line_id: "L1",
-                  component_id: "C-1",
-                  qty: "1.0",
+                  final_component_id: "C-1",
+                  final_component_qty: "1.0",
                   updated_at: "2026-04-20T00:00:00Z",
                 },
               ],

@@ -42,7 +42,7 @@ function pipsForLines(
   nowMs: number,
 ): LinePipState[] {
   return lines.map((line) => {
-    const comp = readinessMap.get(line.component_id);
+    const comp = readinessMap.get(line.final_component_id);
     if (!comp) {
       return {
         color: "yellow",
@@ -53,7 +53,7 @@ function pipsForLines(
       };
     }
     return computeLinePipState({
-      qty: line.qty,
+      qty: line.final_component_qty,
       component: comp,
       nowMs,
     });
@@ -84,8 +84,8 @@ export function RecipeHealthCard({
 
   const componentIds = useMemo(() => {
     const ids = new Set<string>();
-    baseTrack.lines.forEach((l) => ids.add(l.component_id));
-    packTrack.lines.forEach((l) => ids.add(l.component_id));
+    baseTrack.lines.forEach((l) => ids.add(l.final_component_id));
+    packTrack.lines.forEach((l) => ids.add(l.final_component_id));
     return Array.from(ids);
   }, [baseTrack.lines, packTrack.lines]);
 

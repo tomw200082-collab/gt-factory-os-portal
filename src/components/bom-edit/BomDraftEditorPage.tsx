@@ -39,12 +39,19 @@ interface VersionRow {
   updated_at: string;
 }
 
+// Mirrors the upstream `bom_head` row shape from /api/v1/queries/boms/heads.
+// The item id is `parent_ref_id` and the item name is `parent_name` — the
+// table is parented to whatever owns the BOM (an item for v1; the schema
+// keeps it generic). Earlier drafts of this page assumed `item_id` /
+// `item_name`, which were never populated, so the post-publish redirect
+// silently fell through to the head detail page.
 interface HeadRow {
   bom_head_id: string;
   bom_kind: string;
-  // item_name may not be on the upstream head response — guarded as optional.
-  item_name?: string | null;
-  item_id?: string | null;
+  parent_ref_id: string | null;
+  parent_name: string | null;
+  active_version_id: string | null;
+  status: string;
 }
 
 export function BomDraftEditorPage({
@@ -109,7 +116,8 @@ export function BomDraftEditorPage({
 
   const lines = linesQuery.data;
   const componentIds = useMemo(
-    () => Array.from(new Set((lines ?? []).map((l) => l.component_id))),
+    () =>
+      Array.from(new Set((lines ?? []).map((l) => l.final_component_id))),
     [lines],
   );
   const readiness = useComponentReadinessMap(componentIds);
@@ -155,7 +163,7 @@ export function BomDraftEditorPage({
       return res.json();
     },
     onSuccess: () => {
-      const itemId = headQuery.data?.item_id;
+      const itemId = headQuery.data?.parent_ref_id;
       if (itemId) {
         navigate(`/admin/masters/items/${itemId}`);
       } else {
@@ -164,14 +172,79 @@ export function BomDraftEditorPage({
     },
   });
 
-  if (!version || !headQuery.data || !lines) {
-    return <div className="p-4">טוען…</div>;
+  // Loading / error / not-found gates — distinct from each other so the
+  // page doesn't get stuck on an indistinguishable spinner. A version that
+  // resolves to null means "list returned but the id wasn't in it" — this
+  // happens routinely when the user just cloned a DRAFT and the navigation
+  // raced ahead of the cache invalidation, OR when an old URL lingers.
+  // Either way the user needs to know.
+  const anyLoading =
+    versionListQuery.isLoading || headQuery.isLoading || linesQuery.isLoading;
+  if (anyLoading) {
+    return <div className="p-6 text-sm text-gray-600">טוען מתכון…</div>;
+  }
+  const errMsg =
+    versionListQuery.error?.message ||
+    headQuery.error?.message ||
+    linesQuery.error?.message ||
+    null;
+  if (errMsg) {
+    return (
+      <div className="p-6">
+        <div className="rounded border border-red-300 bg-red-50 p-4">
+          <p className="font-semibold text-red-900">שגיאת טעינת מתכון</p>
+          <p className="mt-1 text-sm text-red-800">{errMsg}</p>
+          <button
+            type="button"
+            onClick={() => {
+              void versionListQuery.refetch();
+              void headQuery.refetch();
+              void linesQuery.refetch();
+            }}
+            className="mt-3 rounded border px-3 py-1 text-sm"
+          >
+            נסה שוב
+          </button>
+        </div>
+      </div>
+    );
+  }
+  if (!version) {
+    return (
+      <div className="p-6">
+        <div className="rounded border border-yellow-300 bg-yellow-50 p-4 text-sm text-yellow-900">
+          <p className="font-semibold">הגרסה לא נמצאה ברשימת הגרסאות.</p>
+          <p className="mt-1">
+            ייתכן שהטיוטה נוצרה זה עתה — רענן את העמוד. אם המצב נמשך, חזור
+            לעמוד המוצר ובחר &quot;Edit recipe&quot; שוב.
+          </p>
+          <button
+            type="button"
+            onClick={() => versionListQuery.refetch()}
+            className="mt-3 rounded border px-3 py-1"
+          >
+            רענן
+          </button>
+        </div>
+      </div>
+    );
+  }
+  if (!headQuery.data) {
+    return (
+      <div className="p-6 text-sm text-gray-700">
+        לא נמצא מתכון פעיל לראש BOM זה.
+      </div>
+    );
+  }
+  if (!lines) {
+    // linesQuery had no error but no data either — treat as transient.
+    return <div className="p-6 text-sm text-gray-600">טוען שורות מתכון…</div>;
   }
 
   const head = headQuery.data;
   const trackLabelEn = head.bom_kind === "BASE" ? "base formula" : "pack BOM";
   const editable = version.status === "DRAFT";
-  const itemName = head.item_name ?? head.item_id ?? bomHeadId;
+  const itemName = head.parent_name ?? head.parent_ref_id ?? bomHeadId;
 
   // UI-only warnings (supplier/price gaps) projected from the readiness map.
   // Backend hard-blockers come from the publish-preview response.
@@ -253,7 +326,9 @@ export function BomDraftEditorPage({
                       key={line.bom_line_id}
                       line={line}
                       versionId={versionId}
-                      readiness={readiness.map.get(line.component_id) ?? null}
+                      readiness={
+                        readiness.map.get(line.final_component_id) ?? null
+                      }
                       editable={editable}
                       onOpenQuickFix={(cid) => setFixComponentId(cid)}
                     />
