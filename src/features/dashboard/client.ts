@@ -78,7 +78,7 @@ export function summarizeInbox(rows: InboxRow[] | undefined): Signal<InboxSummar
     return {
       state: "unavailable",
       reason:
-        "Inbox cache cold — visit /inbox once to populate the live count.",
+        "Open the Inbox to see your current items.",
     };
   }
   const summary: InboxSummary = {
@@ -223,7 +223,7 @@ export async function fetchBreakGlassState(
  */
 export async function fetchStockTruth(): Promise<Signal<StockTruthSummary>> {
   return pending<StockTruthSummary>(
-    "Detailed stock truth stats not yet available. Stock parity check is live on the dedicated tile below.",
+    "Detailed stock statistics are not yet available.",
   );
 }
 
@@ -240,7 +240,7 @@ export async function fetchIntegrationFreshness(): Promise<
   Signal<IntegrationFreshnessSummary>
 > {
   return pending<IntegrationFreshnessSummary>(
-    "Integration freshness data is not yet available in this view. Check the Jobs page for job run history.",
+    "Sync freshness data is not yet available.",
   );
 }
 
@@ -381,7 +381,7 @@ export async function fetchRuntimeReadyRegistry(): Promise<
   Signal<RuntimeReadyRegistrySummary>
 > {
   return pending<RuntimeReadyRegistrySummary>(
-    "Form authorization data is not yet available via the portal API. Contact your admin to verify which forms are cleared for use.",
+    "Form status data is not yet available.",
   );
 }
 
