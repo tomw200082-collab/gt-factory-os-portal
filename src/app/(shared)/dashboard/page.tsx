@@ -377,7 +377,7 @@ export default function DashboardPage() {
       <SectionCard
         eyebrow="Stock"
         title="Stock parity"
-        description="Projection vs. ledger rebuild. Zero drift means stock counts can be trusted."
+        description="Compares the live stock projection against the transaction history. Zero drift means counts can be trusted."
         className="mt-6"
       >
         <div className="space-y-4">
@@ -824,19 +824,18 @@ function ParityCheckBlock({
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
       <StatPill
-        label="Rebuild / parity"
+        label="Stock integrity"
         value={parityLabel}
         tone={parityTone}
         sub={
           d.parity_ok ? (
             <span className="text-success-fg">
-              0 drift rows — projection matches ledger rebuild.
+              Stock counts match the transaction history exactly.
             </span>
           ) : (
             <span className="text-danger-fg">
               {d.drift_count.toLocaleString()} row
-              {d.drift_count !== 1 ? "s" : ""} of drift — investigate before
-              trusting stock.
+              {d.drift_count !== 1 ? "s" : ""} of drift — do not rely on stock counts until resolved.
             </span>
           )
         }
@@ -1029,7 +1028,7 @@ function JobsHealth24hBlock({
       }>
     | undefined;
 }) {
-  if (!signal) return <span className="text-fg-muted text-sm">Loading.</span>;
+  if (!signal) return <div className="h-20 animate-pulse rounded border border-border/40 bg-bg-subtle" />;
   if (signal.state === "pending_tranche_i") {
     return <PendingBadge note={signal.note} />;
   }
@@ -1099,7 +1098,7 @@ function LatestForecastBlock({
     | undefined;
   now: Date;
 }) {
-  if (!signal) return <span className="text-fg-muted text-sm">Loading.</span>;
+  if (!signal) return <div className="h-20 animate-pulse rounded border border-border/40 bg-bg-subtle" />;
   if (signal.state === "pending_tranche_i") {
     return <PendingBadge note={signal.note} />;
   }
