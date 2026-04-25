@@ -567,7 +567,7 @@ export default function PlanningRunDetailPage() {
       setToast({
         kind: "success",
         message: result.idempotent_replay
-          ? `Already converted to PO ${poLabel} (idempotent replay).`
+          ? `Already converted to PO ${poLabel}.`
           : `Converted to PO ${poLabel}.`,
         href: `/purchase-orders/${encodeURIComponent(result.po_id)}`,
         hrefLabel: `Open PO ${poLabel}`,
