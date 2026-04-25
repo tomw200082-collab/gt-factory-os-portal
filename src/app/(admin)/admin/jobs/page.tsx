@@ -13,13 +13,23 @@ interface JobRow {
   failed_count_24h: number;
 }
 
-const STATUS_COLORS: Record<string, string> = {
-  succeeded: "text-green-700",
-  failed: "text-red-700 font-semibold",
-  running: "text-blue-700",
-  aborted: "text-amber-700",
-  skipped: "text-muted-foreground",
-};
+function statusClass(s: string | null): string {
+  if (s === "succeeded") return "text-success-fg";
+  if (s === "failed") return "font-semibold text-danger-fg";
+  if (s === "running") return "text-info-fg";
+  if (s === "aborted") return "text-warning-fg";
+  return "text-fg-muted";
+}
+
+function fmtTs(iso: string | null): string {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleString(undefined, {
+      month: "short", day: "2-digit",
+      hour: "2-digit", minute: "2-digit",
+    });
+  } catch { return iso; }
+}
 
 export default function AdminJobsPage() {
   const { data, isLoading, error, refetch } = useQuery<{ rows: JobRow[] }>({
@@ -27,7 +37,7 @@ export default function AdminJobsPage() {
     queryFn: async () => {
       const res = await fetch("/api/admin/jobs");
       if (!res.ok) throw new Error("Failed to load jobs");
-      return res.json();
+      return res.json() as Promise<{ rows: JobRow[] }>;
     },
     refetchInterval: 60_000,
   });
@@ -35,49 +45,103 @@ export default function AdminJobsPage() {
   return (
     <>
       <WorkflowHeader
-        eyebrow="Admin"
+        eyebrow="Admin · jobs"
         title="Jobs Monitor"
-        description="Last run status for all scheduled jobs. Refreshes every 60s."
+        description="Last run status for all scheduled jobs. Auto-refreshes every 60 seconds."
       />
-      <SectionCard eyebrow="Scheduled jobs" title="Job Status">
-        <div className="flex justify-end mb-2">
-          <button onClick={() => refetch()} className="text-sm text-muted-foreground underline">Refresh now</button>
-        </div>
-        {isLoading && <p className="text-sm text-muted-foreground">Loading…</p>}
-        {error && <p className="text-sm text-destructive">Error loading jobs.</p>}
-        {data && data.rows.length === 0 && <p className="text-sm text-muted-foreground">No job runs recorded yet.</p>}
-        {data && data.rows.length > 0 && (
-          <table className="w-full text-sm">
-            <thead>
-              <tr className="border-b text-left text-muted-foreground">
-                <th className="pb-2 pr-4 font-medium">Job</th>
-                <th className="pb-2 pr-4 font-medium">Last Status</th>
-                <th className="pb-2 pr-4 font-medium">Last Run</th>
-                <th className="pb-2 pr-4 font-medium">Ended</th>
-                <th className="pb-2 pr-4 font-medium">24h Runs</th>
-                <th className="pb-2 font-medium">24h Failures</th>
-              </tr>
-            </thead>
-            <tbody>
-              {data.rows.map((r) => (
-                <tr key={r.job_name} className="border-b last:border-0">
-                  <td className="py-2 pr-4 font-mono text-xs">{r.job_name}</td>
-                  <td className={`py-2 pr-4 text-xs ${STATUS_COLORS[r.last_status ?? ""] ?? ""}`}>{r.last_status ?? "—"}</td>
-                  <td className="py-2 pr-4 text-xs text-muted-foreground">{r.last_started_at ? new Date(r.last_started_at).toLocaleString() : "—"}</td>
-                  <td className="py-2 pr-4 text-xs text-muted-foreground">{r.last_ended_at ? new Date(r.last_ended_at).toLocaleString() : "—"}</td>
-                  <td className="py-2 pr-4 text-xs">{r.run_count_24h}</td>
-                  <td className={`py-2 text-xs ${Number(r.failed_count_24h) > 0 ? "text-red-700 font-semibold" : ""}`}>{r.failed_count_24h}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+      <SectionCard
+        eyebrow="Scheduled jobs"
+        title="All jobs"
+        contentClassName="p-0"
+        actions={
+          <button
+            type="button"
+            onClick={() => void refetch()}
+            className="btn btn-ghost btn-sm"
+          >
+            Refresh now
+          </button>
+        }
+      >
+        {isLoading && (
+          <div className="p-5 text-sm text-fg-muted">Loading…</div>
         )}
-        {data?.rows.some(r => r.last_error) && (
-          <div className="mt-3 space-y-1">
-            <p className="text-xs font-medium text-muted-foreground">Last errors:</p>
-            {data.rows.filter(r => r.last_error).map(r => (
-              <p key={r.job_name} className="text-xs text-destructive"><span className="font-mono">{r.job_name}:</span> {r.last_error}</p>
-            ))}
+        {error && (
+          <div className="p-5 text-sm text-danger-fg">
+            {(error as Error).message}
+          </div>
+        )}
+        {data && data.rows.length === 0 && (
+          <div className="p-5 text-sm text-fg-muted">No job runs recorded yet.</div>
+        )}
+        {data && data.rows.length > 0 && (
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-border/70 bg-bg-subtle/60">
+                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    Job
+                  </th>
+                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    Last status
+                  </th>
+                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    Last started
+                  </th>
+                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    Last ended
+                  </th>
+                  <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    24h runs
+                  </th>
+                  <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    24h failures
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {data.rows.map((r) => (
+                  <tr
+                    key={r.job_name}
+                    className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
+                  >
+                    <td className="px-3 py-2 font-mono text-xs text-fg">
+                      {r.job_name}
+                    </td>
+                    <td className={`px-3 py-2 text-xs ${statusClass(r.last_status)}`}>
+                      {r.last_status ?? "—"}
+                    </td>
+                    <td className="px-3 py-2 text-xs text-fg-muted">
+                      {fmtTs(r.last_started_at)}
+                    </td>
+                    <td className="px-3 py-2 text-xs text-fg-muted">
+                      {fmtTs(r.last_ended_at)}
+                    </td>
+                    <td className="px-3 py-2 text-right text-xs tabular-nums text-fg-muted">
+                      {r.run_count_24h}
+                    </td>
+                    <td className={`px-3 py-2 text-right text-xs tabular-nums ${Number(r.failed_count_24h) > 0 ? "font-semibold text-danger-fg" : "text-fg-muted"}`}>
+                      {r.failed_count_24h}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+            {data.rows.some((r) => r.last_error) && (
+              <div className="border-t border-border/40 p-4 space-y-2">
+                <div className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Last error per job
+                </div>
+                {data.rows
+                  .filter((r) => r.last_error)
+                  .map((r) => (
+                    <div key={r.job_name} className="text-xs">
+                      <span className="font-mono text-fg">{r.job_name}:</span>{" "}
+                      <span className="text-danger-fg">{r.last_error}</span>
+                    </div>
+                  ))}
+              </div>
+            )}
           </div>
         )}
       </SectionCard>
