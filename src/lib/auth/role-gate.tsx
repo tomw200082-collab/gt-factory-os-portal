@@ -18,6 +18,15 @@ import { authorizeCapability, type CapabilityRequirement } from "./authorize";
 import type { Role } from "@/lib/contracts/enums";
 import type { ReactNode } from "react";
 
+const CAPABILITY_LABELS: Partial<Record<CapabilityRequirement, string>> = {
+  "viewer:read": "Viewer access",
+  "stock:execute": "Operator (stock) access",
+  "planning:read": "Planner read access",
+  "planning:execute": "Planner access",
+  "admin:execute": "Admin access",
+  "admin:override": "Admin override access",
+};
+
 type RoleGateProps =
   | {
       allow: Role[];
@@ -31,31 +40,35 @@ type RoleGateProps =
     };
 
 export function RoleGate(props: RoleGateProps) {
-  const { session } = useSession();
+  const { session, isLoading } = useSession();
+
+  // While session loads, render nothing — shell chrome shows its own skeleton.
+  if (isLoading) return null;
 
   let granted: boolean;
-  let blockedDescription: string;
+  let blockedLabel: string;
 
   if ("minimum" in props && props.minimum !== undefined) {
     granted = authorizeCapability(session.role, props.minimum);
-    blockedDescription = `Requires capability: ${props.minimum}.`;
+    blockedLabel = CAPABILITY_LABELS[props.minimum] ?? props.minimum;
   } else if ("allow" in props && props.allow !== undefined) {
     granted = props.allow.includes(session.role);
-    blockedDescription = `This surface is restricted to: ${props.allow.join(", ")}.`;
+    blockedLabel = props.allow.join(", ");
   } else {
     // Neither supplied — fail closed.
     granted = false;
-    blockedDescription = "RoleGate misconfigured: neither allow nor minimum supplied.";
+    blockedLabel = "this section";
   }
 
   if (!granted) {
     return (
       <div className="card mx-auto mt-8 max-w-lg p-6 text-center">
-        <div className="text-sm font-semibold text-fg">Not available for your role</div>
+        <div className="text-sm font-semibold text-fg">Access restricted</div>
         <div className="mt-2 text-xs text-fg-muted">
-          {blockedDescription}
+          {blockedLabel} is required to view this page.
           <br />
-          Current role: <span className="font-mono text-fg">{session.role}</span>.
+          Your current role is <span className="font-mono text-fg">{session.role}</span>.
+          Contact your administrator to request access.
         </div>
       </div>
     );
