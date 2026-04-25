@@ -308,7 +308,7 @@ export default function PhysicalCountPage() {
         const detail = body ? JSON.stringify(body) : `HTTP ${res.status}`;
         setDone({
           kind: "error",
-          message: `Submit failed (HTTP ${res.status}).`,
+          message: "Could not submit. Check your connection and try again.",
           detail,
         });
         setPhase("counting");

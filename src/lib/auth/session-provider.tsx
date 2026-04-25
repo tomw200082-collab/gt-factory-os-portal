@@ -63,7 +63,7 @@ async function fetchRealSession(): Promise<DevShimSession> {
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`GET /api/me failed (HTTP ${res.status}): ${body}`);
+    throw new Error("Could not load your session. Check your connection and try refreshing.");
   }
   const data = (await res.json()) as {
     user_id: string;

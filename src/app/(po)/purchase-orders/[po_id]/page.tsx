@@ -313,7 +313,7 @@ function AttachedGrCard({
               const poLineLabel = poLine
                 ? `Line ${poLine.line_number}`
                 : line.po_line_id
-                  ? line.po_line_id.slice(0, 8) + "…"
+                  ? "Line item"
                   : "—";
               return (
                 <tr key={line.line_id} className="border-b border-border/20 last:border-b-0 hover:bg-bg-subtle/30">
@@ -520,7 +520,7 @@ export default function PurchaseOrderDetailPage({
         const body = await res.json().catch(() => ({}));
         throw new Error(
           (body as { error?: string }).error ??
-          `Cancel failed (HTTP ${res.status})`,
+          "Could not cancel. Check your connection and try again.",
         );
       }
       return res.json();
@@ -585,7 +585,7 @@ export default function PurchaseOrderDetailPage({
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}));
         throw new Error(
-          (errBody as { error?: string }).error ?? `Update failed (HTTP ${res.status})`,
+          (errBody as { error?: string }).error ?? "Could not save changes. Check your connection and try again.",
         );
       }
       return res.json();
@@ -619,7 +619,7 @@ export default function PurchaseOrderDetailPage({
       );
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
-        throw new Error((body as { error?: string }).error ?? `Cancel failed (HTTP ${res.status})`);
+        throw new Error((body as { error?: string }).error ?? "Could not cancel. Check your connection and try again.");
       }
       return res.json();
     },
@@ -669,7 +669,7 @@ export default function PurchaseOrderDetailPage({
       if (!res.ok) {
         const errBody = await res.json().catch(() => ({}));
         throw new Error(
-          (errBody as { error?: string }).error ?? `Update failed (HTTP ${res.status})`,
+          (errBody as { error?: string }).error ?? "Could not save changes. Check your connection and try again.",
         );
       }
       return res.json();

@@ -84,7 +84,7 @@ export default function AdminSkuMapPage(): JSX.Element {
       const body = await res.json().catch(() => null);
       if (!res.ok) {
         throw new Error(
-          `approve failed (HTTP ${res.status}): ${body ? JSON.stringify(body) : "<no body>"}`,
+          (body as { error?: string } | null)?.error ?? "Could not approve mapping. Check your connection and try again.",
         );
       }
       return body;

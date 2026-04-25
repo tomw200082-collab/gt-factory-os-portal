@@ -104,7 +104,7 @@ export default function PoParityCheckPage(): JSX.Element {
       if (!res.ok) {
         const body = await res.json().catch(() => ({}));
         throw new Error(
-          (body as { error?: string }).error ?? `Check failed (HTTP ${res.status})`,
+          (body as { error?: string }).error ?? "Parity check failed. Check your connection and try again.",
         );
       }
       setResult(await res.json() as ParityCheckResponse);

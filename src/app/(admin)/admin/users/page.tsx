@@ -55,7 +55,7 @@ async function patchUser(
     if (res.status === 409 && data?.reason_code === "CANNOT_SELF_DEMOTE") {
       throw new Error("You cannot change your own admin role.");
     }
-    throw new Error(data?.error ?? `Request failed (HTTP ${res.status})`);
+    throw new Error(data?.error ?? "Could not update user. Check your connection and try again.");
   }
   return data as AppUser;
 }

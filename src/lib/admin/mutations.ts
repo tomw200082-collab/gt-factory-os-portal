@@ -96,8 +96,8 @@ async function parseOrThrow<TResponse>(
       : undefined;
   const message =
     body && typeof body === "object" && "message" in body
-      ? String((body as { message?: unknown }).message ?? `HTTP ${res.status}`)
-      : `${kind} failed (HTTP ${res.status})`;
+      ? String((body as { message?: unknown }).message ?? "Could not save changes. Check your connection and try again.")
+      : "Could not save changes. Check your connection and try again.";
   throw new AdminMutationError(res.status, message, code || undefined, body);
 }
 

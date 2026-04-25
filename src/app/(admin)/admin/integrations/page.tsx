@@ -123,7 +123,7 @@ function ShopifySyncStatusCard() {
       const res = await fetch("/api/shopify/sync-status");
       if (!res.ok) {
         const body = await res.text().catch(() => "");
-        throw new Error(`sync-status failed (HTTP ${res.status}): ${body}`);
+        throw new Error("Could not load sync status. Check your connection and try refreshing.");
       }
       return (await res.json()) as ShopifySyncStatus;
     },

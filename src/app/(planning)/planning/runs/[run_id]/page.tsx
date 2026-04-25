@@ -563,14 +563,14 @@ export default function PlanningRunDetailPage() {
   const convertMutation = useMutation({
     mutationFn: (id: string) => convertRecToPO(session, id),
     onSuccess: (result) => {
-      const poLabel = result.po_number ?? result.po_id.slice(0, 8);
+      const poLabel = result.po_number ?? "PO";
       setToast({
         kind: "success",
         message: result.idempotent_replay
-          ? `Already converted to PO ${poLabel}.`
-          : `Converted to PO ${poLabel}.`,
+          ? `Already converted to ${poLabel}.`
+          : `Converted to ${poLabel}.`,
         href: `/purchase-orders/${encodeURIComponent(result.po_id)}`,
-        hrefLabel: `Open PO ${poLabel}`,
+        hrefLabel: `Open ${poLabel}`,
       });
       void queryClient.invalidateQueries({
         queryKey: ["planning", "run", runId, "recs"],
@@ -713,25 +713,31 @@ export default function PlanningRunDetailPage() {
               <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                 Triggered by
               </dt>
-              <dd className="font-mono text-xs text-fg">
-                {detail.actor_user_id.slice(0, 8)}…
+              <dd className="text-xs text-fg capitalize">
+                {detail.trigger_source}
               </dd>
             </div>
             <div>
               <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                 Demand — forecast version
               </dt>
-              <dd className="font-mono text-xs text-fg">
-                {detail.demand_snapshot_forecast_version_id?.slice(0, 8) ?? "—"}
+              <dd className="text-xs text-fg">
+                {detail.demand_snapshot_forecast_version_id ? (
+                  <Link
+                    href={`/planning/forecast/${encodeURIComponent(detail.demand_snapshot_forecast_version_id)}`}
+                    className="text-accent underline underline-offset-2 hover:text-accent/80"
+                  >
+                    View forecast
+                  </Link>
+                ) : "—"}
               </dd>
             </div>
             <div>
               <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                 Demand — orders snapshot
               </dt>
-              <dd className="font-mono text-xs text-fg">
-                {detail.demand_snapshot_orders_snapshot_run_id?.slice(0, 8) ??
-                  "—"}
+              <dd className="text-xs text-fg">
+                {detail.demand_snapshot_orders_snapshot_run_id ? "Linked" : "—"}
               </dd>
             </div>
             <div>
@@ -1035,7 +1041,7 @@ export default function PlanningRunDetailPage() {
                         <td className="px-3 py-2.5 text-xs text-fg-muted">
                           {activeTab === "purchase"
                             ? r.supplier_name ?? r.supplier_id ?? "—"
-                            : r.bom_version_id?.slice(0, 8) ?? "—"}
+                            : r.bom_version_id ? "BOM linked" : "—"}
                         </td>
                         <td className="px-3 py-2.5 text-xs text-fg-muted">
                           {fmtPeriodBucket(r.target_period_bucket_key)}
@@ -1125,7 +1131,7 @@ export default function PlanningRunDetailPage() {
                                 data-testid="planning-run-rec-converted-ref"
                                 title={r.converted_to_po_id}
                               >
-                                PO {r.converted_to_po_id.slice(0, 8)}…
+                                View PO
                               </Link>
                             ) : (
                               <span className="text-3xs text-fg-subtle">

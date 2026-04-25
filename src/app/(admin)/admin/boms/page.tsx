@@ -242,9 +242,7 @@ function BomHeadRow({
       </td>
       <td className="px-3 py-2">
         {activeId ? (
-          <span className="font-mono text-3xs text-fg-muted">
-            {activeId.slice(0, 8)}…
-          </span>
+          <span className="text-3xs text-fg-muted">Active</span>
         ) : (
           <Badge tone="warning" dotted>
             <AlertTriangle className="mr-1 inline h-3 w-3" /> No active

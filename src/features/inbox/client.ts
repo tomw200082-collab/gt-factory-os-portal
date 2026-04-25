@@ -562,11 +562,9 @@ export function applyInboxView(
 // ---------------------------------------------------------------------------
 function buildFetchError(
   label: string,
-  res: Exclude<Result<unknown>, { ok: true }>,
+  _res: Exclude<Result<unknown>, { ok: true }>,
 ): Error {
-  const reason = res.reason_code ? ` ${res.reason_code}` : "";
-  const detail = res.detail ? ` — ${res.detail}` : "";
   return new Error(
-    `${label} fetch failed (HTTP ${res.status}${reason})${detail}`,
+    `Could not load ${label}. Check your connection and try refreshing.`,
   );
 }

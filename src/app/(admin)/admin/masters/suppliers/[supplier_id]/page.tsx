@@ -216,7 +216,7 @@ async function patchSupplierItemCost(
   );
   if (!res.ok) {
     const text = await res.text().catch(() => "");
-    throw new Error(`PATCH failed (HTTP ${res.status}): ${text}`);
+    throw new Error("Could not save changes. Check your connection and try again.");
   }
 }
 

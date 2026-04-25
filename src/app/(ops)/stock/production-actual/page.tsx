@@ -427,7 +427,7 @@ export default function ProductionActualPage() {
       const detail = body ? JSON.stringify(body) : `HTTP ${res.status}`;
       setDone({
         kind: "error",
-        message: `Submit failed (HTTP ${res.status}).`,
+        message: "Could not submit. Check your connection and try again.",
         detail,
       });
       setPhase("entering");
@@ -634,10 +634,6 @@ export default function ProductionActualPage() {
                   <span className="text-fg-subtle">Pinned BOM:</span>{" "}
                   <span className="font-mono text-fg">
                     {snapshot.bom_version_label}
-                  </span>{" "}
-                  <span className="text-fg-subtle">· version_id</span>{" "}
-                  <span className="font-mono text-fg-muted">
-                    {snapshot.bom_version_id_pinned.slice(0, 8)}…
                   </span>
                 </div>
                 <div className="mt-1">

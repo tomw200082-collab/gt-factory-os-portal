@@ -591,7 +591,7 @@ export default function PlanningRunsListPage() {
                         horizon {fmtDate(r.planning_horizon_start_at)} ·{" "}
                         {r.planning_horizon_weeks}w
                       </span>
-                      <span>by {r.actor_user_id.slice(0, 8)}</span>
+                      <span>{r.trigger_source === "scheduled" ? "Scheduled" : "Manual"}</span>
                     </div>
                     <div className="mt-2 flex flex-wrap gap-2">
                       <Badge tone="neutral">

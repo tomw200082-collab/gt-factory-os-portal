@@ -271,7 +271,7 @@ export default function MovementLogPage() {
                       </td>
                       <td className="py-2 pr-4 text-gray-600">{row.uom}</td>
                       <td className="py-2 pr-4 text-gray-600">
-                        {row.reported_by_snapshot ?? (row.reported_by_user_id ? row.reported_by_user_id.slice(0, 8) + "…" : "—")}
+                        {row.reported_by_snapshot ?? "—"}
                       </td>
                       <td className="py-2 text-gray-600">{row.post_status}</td>
                     </tr>
