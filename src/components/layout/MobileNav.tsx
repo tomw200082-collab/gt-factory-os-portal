@@ -28,7 +28,7 @@
 //     at a visually-hidden title inside the panel.
 // ---------------------------------------------------------------------------
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Menu, X } from "lucide-react";
 import { SideNav } from "./SideNav";
 import { useSession } from "@/lib/auth/session-provider";
@@ -37,6 +37,7 @@ import { cn } from "@/lib/cn";
 export function MobileNav() {
   const [open, setOpen] = useState(false);
   const { session } = useSession();
+  const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   // Close on viewport >= md.
   useEffect(() => {
@@ -67,6 +68,13 @@ export function MobileNav() {
     return () => {
       document.body.style.overflow = prev;
     };
+  }, [open]);
+
+  // Move focus to close button when drawer opens (a11y).
+  useEffect(() => {
+    if (open) {
+      closeButtonRef.current?.focus();
+    }
   }, [open]);
 
   const displayName = session.display_name.split(" (")[0] || session.email;
@@ -108,6 +116,7 @@ export function MobileNav() {
           "fixed inset-y-0 left-0 z-50 flex w-[min(288px,85vw)] flex-col border-r border-border/70 bg-bg shadow-raised transition-transform duration-200 ease-out md:hidden",
           open ? "translate-x-0" : "-translate-x-full",
         )}
+        style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
       >
         <h2 id="mobile-nav-title" className="sr-only">
           Portal navigation
@@ -151,6 +160,7 @@ export function MobileNav() {
 
           {/* Close button */}
           <button
+            ref={closeButtonRef}
             type="button"
             className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-fg-muted hover:bg-bg-subtle hover:text-fg"
             aria-label="Close navigation"
