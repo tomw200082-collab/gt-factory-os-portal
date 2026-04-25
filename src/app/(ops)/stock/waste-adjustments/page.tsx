@@ -257,10 +257,10 @@ export default function WasteAdjustmentPage() {
         setDone({
           kind: "success",
           message: body.idempotent_replay
-            ? "Adjustment already posted (idempotent replay)."
-            : "Adjustment posted.",
+            ? "Adjustment already recorded."
+            : "Adjustment posted successfully.",
           itemSummary: `${row.label} · ${direction === "loss" ? "−" : "+"}${qtyNum} ${unit} · ${String(reasonCode).replace(/_/g, " ")}`,
-          detail: `submission_id=${body.submission_id}`,
+          detail: `ref: ${body.submission_id}`,
         });
         setQuantity("");
         setNotes("");
@@ -271,7 +271,7 @@ export default function WasteAdjustmentPage() {
           kind: "pending",
           message: "Adjustment submitted — held for planner approval.",
           itemSummary: `${row.label} · ${direction === "loss" ? "−" : "+"}${qtyNum} ${unit} · ${String(reasonCode).replace(/_/g, " ")}`,
-          detail: `submission_id=${sid}`,
+          detail: `ref: ${sid}`,
           href: sid
             ? `/inbox/approvals/waste/${encodeURIComponent(sid)}`
             : undefined,

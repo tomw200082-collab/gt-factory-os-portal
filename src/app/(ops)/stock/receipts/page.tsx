@@ -404,10 +404,10 @@ export default function GoodsReceiptPage() {
         setDone({
           kind: "success",
           message: committed.idempotent_replay
-            ? "Receipt already posted (idempotent replay)."
-            : "Receipt posted.",
+            ? "Receipt already recorded."
+            : "Receipt posted successfully.",
           itemSummary,
-          detail: `submission_id=${committed.submission_id} · lines=${committed.lines.length}`,
+          detail: `ref: ${committed.submission_id} · ${committed.lines.length} line${committed.lines.length !== 1 ? "s" : ""}`,
         });
         // Reset form for a fresh submission
         setLines([emptyLine()]);
