@@ -21,7 +21,7 @@ describe("computeRecipeHealthState", () => {
       pack: track({}),
     });
     expect(r.color).toBe("green");
-    expect(r.label).toBe("מוכן לייצור");
+    expect(r.label).toBe("Production-ready");
     expect(r.publishPermitted).toBe(true);
   });
 
@@ -31,7 +31,7 @@ describe("computeRecipeHealthState", () => {
       pack: track({ color: "yellow", warnings: ["1 אזהרה"] }),
     });
     expect(r.color).toBe("yellow");
-    expect(r.label).toBe("מוכן לייצור עם אזהרות");
+    expect(r.label).toBe("Production-ready with warnings");
     expect(r.publishPermitted).toBe(true);
     expect(r.warnings.length).toBeGreaterThan(0);
   });
@@ -42,7 +42,7 @@ describe("computeRecipeHealthState", () => {
       pack: track({ color: "red", blockers: ["ריק"], lineCount: 0 }),
     });
     expect(r.color).toBe("red");
-    expect(r.label).toBe("לא ניתן לפרסם");
+    expect(r.label).toBe("Cannot publish");
     expect(r.publishPermitted).toBe(false);
   });
 

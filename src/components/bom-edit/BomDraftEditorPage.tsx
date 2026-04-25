@@ -64,10 +64,14 @@ export function BomDraftEditorPage({
   const versionListQuery = useQuery({
     queryKey: ["boms", "versions", bomHeadId],
     queryFn: async (): Promise<VersionRow[]> => {
-      const res = await fetch(
-        `/api/boms/versions?bom_head_id=${encodeURIComponent(bomHeadId)}`,
-      );
-      if (!res.ok) throw new Error(`versions: ${res.status}`);
+      const url = `/api/boms/versions?bom_head_id=${encodeURIComponent(bomHeadId)}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        throw new Error(
+          `versions list — HTTP ${res.status} from ${url}\n${body.slice(0, 400)}`,
+        );
+      }
       const body = await res.json();
       return (body.rows ?? []) as VersionRow[];
     },
@@ -79,42 +83,65 @@ export function BomDraftEditorPage({
   const headQuery = useQuery({
     queryKey: ["boms", "head", bomHeadId],
     queryFn: async (): Promise<HeadRow | null> => {
-      const res = await fetch(
-        `/api/boms/heads?bom_head_id=${encodeURIComponent(bomHeadId)}`,
-      );
-      if (!res.ok) throw new Error(`head: ${res.status}`);
+      const url = `/api/boms/heads?bom_head_id=${encodeURIComponent(bomHeadId)}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        throw new Error(
+          `head — HTTP ${res.status} from ${url}\n${body.slice(0, 400)}`,
+        );
+      }
       const body = await res.json();
       const rows = (body.rows ?? []) as HeadRow[];
       return rows.find((h) => h.bom_head_id === bomHeadId) ?? rows[0] ?? null;
     },
   });
 
+  // Lines query is intentionally TOLERANT — a failure here must not block
+  // editing the version metadata (header) or the supplier readiness panel.
+  // We surface the upstream error in a banner instead of stalling the page.
   const linesQuery = useQuery({
     queryKey: ["boms", "lines", versionId],
-    queryFn: async (): Promise<BomLineDataRow[]> => {
-      const res = await fetch(
-        `/api/boms/lines?bom_version_id=${encodeURIComponent(versionId)}`,
-      );
-      if (!res.ok) throw new Error(`lines: ${res.status}`);
+    queryFn: async (): Promise<{
+      rows: BomLineDataRow[];
+      warning: string | null;
+    }> => {
+      const url = `/api/boms/lines?bom_version_id=${encodeURIComponent(versionId)}&limit=500`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        // Tolerant: return empty rows + warning so the editor still renders.
+        return {
+          rows: [],
+          warning: `Could not load BOM lines — HTTP ${res.status}. Upstream said: ${text.slice(0, 300) || "(no body)"}`,
+        };
+      }
       const body = await res.json();
-      return (body.rows ?? []) as BomLineDataRow[];
+      return {
+        rows: (body.rows ?? []) as BomLineDataRow[],
+        warning: null,
+      };
     },
   });
 
   const activeLinesQuery = useQuery({
     queryKey: ["boms", "lines", activeVersion?.bom_version_id ?? null],
     queryFn: async (): Promise<BomLineDataRow[]> => {
-      const res = await fetch(
-        `/api/boms/lines?bom_version_id=${encodeURIComponent(activeVersion!.bom_version_id)}`,
-      );
-      if (!res.ok) throw new Error(`active lines: ${res.status}`);
+      const url = `/api/boms/lines?bom_version_id=${encodeURIComponent(activeVersion!.bom_version_id)}&limit=500`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        // Soft fail: diff vs active is a nice-to-have, not a blocker.
+        return [];
+      }
       const body = await res.json();
       return (body.rows ?? []) as BomLineDataRow[];
     },
-    enabled: activeVersion !== null && activeVersion.bom_version_id !== versionId,
+    enabled:
+      activeVersion !== null && activeVersion.bom_version_id !== versionId,
   });
 
-  const lines = linesQuery.data;
+  const lines = linesQuery.data?.rows;
+  const linesWarning = linesQuery.data?.warning ?? null;
   const componentIds = useMemo(
     () =>
       Array.from(new Set((lines ?? []).map((l) => l.final_component_id))),
@@ -172,58 +199,65 @@ export function BomDraftEditorPage({
     },
   });
 
-  // Loading / error / not-found gates — distinct from each other so the
-  // page doesn't get stuck on an indistinguishable spinner. A version that
-  // resolves to null means "list returned but the id wasn't in it" — this
-  // happens routinely when the user just cloned a DRAFT and the navigation
-  // raced ahead of the cache invalidation, OR when an old URL lingers.
-  // Either way the user needs to know.
+  // Distinct page states — loading / error / version-not-in-list /
+  // missing-head — never collapsed into one indistinguishable spinner.
   const anyLoading =
     versionListQuery.isLoading || headQuery.isLoading || linesQuery.isLoading;
   if (anyLoading) {
-    return <div className="p-6 text-sm text-gray-600">טוען מתכון…</div>;
+    return (
+      <div className="mx-auto max-w-5xl p-8">
+        <div className="rounded-md border border-border bg-bg-raised p-6 text-sm text-fg-muted">
+          Loading recipe…
+        </div>
+      </div>
+    );
   }
   const errMsg =
-    versionListQuery.error?.message ||
-    headQuery.error?.message ||
-    linesQuery.error?.message ||
-    null;
+    versionListQuery.error?.message || headQuery.error?.message || null;
   if (errMsg) {
     return (
-      <div className="p-6">
-        <div className="rounded border border-red-300 bg-red-50 p-4">
-          <p className="font-semibold text-red-900">שגיאת טעינת מתכון</p>
-          <p className="mt-1 text-sm text-red-800">{errMsg}</p>
-          <button
-            type="button"
-            onClick={() => {
-              void versionListQuery.refetch();
-              void headQuery.refetch();
-              void linesQuery.refetch();
-            }}
-            className="mt-3 rounded border px-3 py-1 text-sm"
-          >
-            נסה שוב
-          </button>
+      <div className="mx-auto max-w-5xl p-8">
+        <div className="rounded-md border border-danger-border bg-danger-soft p-5">
+          <p className="text-sm font-semibold text-danger-fg">
+            Could not load recipe
+          </p>
+          <pre className="mt-2 whitespace-pre-wrap break-words font-mono text-xs text-danger-fg/90">
+            {errMsg}
+          </pre>
+          <div className="mt-4 flex gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                void versionListQuery.refetch();
+                void headQuery.refetch();
+                void linesQuery.refetch();
+              }}
+              className="rounded-sm border border-border bg-bg-raised px-3 py-1.5 text-sm text-fg hover:bg-bg-subtle"
+            >
+              Retry
+            </button>
+          </div>
         </div>
       </div>
     );
   }
   if (!version) {
     return (
-      <div className="p-6">
-        <div className="rounded border border-yellow-300 bg-yellow-50 p-4 text-sm text-yellow-900">
-          <p className="font-semibold">הגרסה לא נמצאה ברשימת הגרסאות.</p>
-          <p className="mt-1">
-            ייתכן שהטיוטה נוצרה זה עתה — רענן את העמוד. אם המצב נמשך, חזור
-            לעמוד המוצר ובחר &quot;Edit recipe&quot; שוב.
+      <div className="mx-auto max-w-5xl p-8">
+        <div className="rounded-md border border-warning-border bg-warning-soft p-5 text-sm">
+          <p className="font-semibold text-warning-fg">
+            Version not found in list
+          </p>
+          <p className="mt-1 text-warning-fg/90">
+            The draft may have just been created. Refresh to retry, or
+            return to the product page and click <em>Edit recipe</em> again.
           </p>
           <button
             type="button"
             onClick={() => versionListQuery.refetch()}
-            className="mt-3 rounded border px-3 py-1"
+            className="mt-3 rounded-sm border border-border bg-bg-raised px-3 py-1.5 text-fg hover:bg-bg-subtle"
           >
-            רענן
+            Refresh
           </button>
         </div>
       </div>
@@ -231,97 +265,143 @@ export function BomDraftEditorPage({
   }
   if (!headQuery.data) {
     return (
-      <div className="p-6 text-sm text-gray-700">
-        לא נמצא מתכון פעיל לראש BOM זה.
+      <div className="mx-auto max-w-5xl p-8 text-sm text-fg-muted">
+        BOM head not found.
       </div>
     );
   }
-  if (!lines) {
-    // linesQuery had no error but no data either — treat as transient.
-    return <div className="p-6 text-sm text-gray-600">טוען שורות מתכון…</div>;
-  }
 
   const head = headQuery.data;
-  const trackLabelEn = head.bom_kind === "BASE" ? "base formula" : "pack BOM";
+  const trackLabel = head.bom_kind === "BASE" ? "Base formula" : "Pack BOM";
   const editable = version.status === "DRAFT";
   const itemName = head.parent_name ?? head.parent_ref_id ?? bomHeadId;
+  const safeLines = lines ?? [];
 
   // UI-only warnings (supplier/price gaps) projected from the readiness map.
   // Backend hard-blockers come from the publish-preview response.
   const uiWarnings: string[] = [];
   for (const c of readiness.map.values()) {
     if (c.primary_supplier_id === null)
-      uiWarnings.push(`${c.component_name}: ללא ספק ראשי`);
+      uiWarnings.push(`${c.component_name}: no primary supplier`);
     if (c.active_price_value === null)
-      uiWarnings.push(`${c.component_name}: ללא מחיר פעיל`);
+      uiWarnings.push(`${c.component_name}: no active price`);
   }
 
+  const STATUS_PILL_CLASS: Record<VersionRow["status"], string> = {
+    DRAFT: "bg-warning-soft text-warning-fg border-warning-border",
+    ACTIVE: "bg-success-soft text-success-fg border-success-border",
+    SUPERSEDED: "bg-bg-subtle text-fg-muted border-border",
+  };
+
   return (
-    <div className="flex flex-col">
-      <header className="sticky top-0 z-10 flex flex-wrap items-center gap-3 border-b bg-white p-3">
-        <h1 className="text-lg font-semibold">
-          Editing {version.version_label} DRAFT for {itemName} — {trackLabelEn}
-        </h1>
-        <span className="rounded bg-yellow-200 px-2 py-0.5 text-xs">
-          {version.status}
-        </span>
-        <div className="ml-auto flex gap-2">
-          <button type="button" className="rounded border px-3 py-1">
-            Cancel
-          </button>
-          <button type="button" className="rounded border px-3 py-1">
-            Save
-          </button>
-          <button
-            type="button"
-            onClick={() => setPreviewOpen(true)}
-            className="rounded border bg-blue-600 px-3 py-1 text-white"
+    <div className="flex min-h-screen flex-col bg-bg">
+      <header className="sticky top-0 z-10 border-b border-border bg-bg-raised/95 px-6 py-3 backdrop-blur">
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3">
+          <div className="min-w-0 flex-1">
+            <div className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+              {trackLabel} · Version {version.version_label}
+            </div>
+            <h1 className="truncate text-base font-semibold text-fg-strong">
+              {itemName}
+            </h1>
+          </div>
+          <span
+            className={`rounded-sm border px-2 py-0.5 text-3xs font-semibold uppercase tracking-sops ${STATUS_PILL_CLASS[version.status]}`}
           >
-            Publish →
-          </button>
+            {version.status}
+          </span>
+          <div className="ml-auto flex gap-2">
+            <button
+              type="button"
+              onClick={() => navigate(`/admin/masters/items/${head.parent_ref_id ?? ""}`)}
+              className="rounded-sm border border-border bg-bg-raised px-3 py-1.5 text-sm text-fg hover:bg-bg-subtle"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={!editable}
+              onClick={() => setPreviewOpen(true)}
+              className="rounded-sm border border-accent-border bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Publish
+            </button>
+          </div>
         </div>
       </header>
+
       {!editable && (
-        <div className="bg-red-100 p-2 text-red-900">
-          לא ניתן לערוך גרסה במצב {version.status}
+        <div className="border-b border-warning-border bg-warning-soft px-6 py-2 text-sm text-warning-fg">
+          This version is {version.status} — read-only. Only DRAFT versions can be edited.
         </div>
       )}
-      <main className="p-3">
-        <div className="grid grid-cols-1 gap-3 lg:grid-cols-[1fr_auto]">
-          <div>
+      {linesWarning && (
+        <div className="border-b border-danger-border bg-danger-soft px-6 py-2 text-sm">
+          <span className="font-semibold text-danger-fg">Lines unavailable. </span>
+          <span className="text-danger-fg/90">{linesWarning}</span>
+        </div>
+      )}
+
+      <main className="mx-auto w-full max-w-7xl flex-1 px-6 py-6">
+        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
+          <section className="rounded-md border border-border bg-bg-raised">
+            <div className="flex items-center justify-between border-b border-border px-4 py-3">
+              <h2 className="text-sm font-semibold text-fg-strong">
+                Components
+              </h2>
+              {editable && (
+                <button
+                  type="button"
+                  onClick={() => setAddOpen(true)}
+                  className="rounded-sm border border-border bg-bg px-2.5 py-1 text-xs text-fg hover:bg-bg-subtle"
+                >
+                  + Add component
+                </button>
+              )}
+            </div>
             {activeVersion && activeVersion.bom_version_id !== versionId && (
-              <BomLineDiff
-                draftLines={lines}
-                activeLines={activeLinesQuery.data ?? []}
-                activeVersionLabel={activeVersion.version_label}
-              />
+              <div className="border-b border-border px-4 py-3">
+                <BomLineDiff
+                  draftLines={safeLines}
+                  activeLines={activeLinesQuery.data ?? []}
+                  activeVersionLabel={activeVersion.version_label}
+                />
+              </div>
             )}
-            {editable && (
-              <button
-                type="button"
-                onClick={() => setAddOpen(true)}
-                className="mb-2 rounded border px-3 py-1"
-              >
-                + Add component
-              </button>
-            )}
-            {lines.length === 0 ? (
-              <div className="rounded border border-dashed p-6 text-center text-gray-500">
-                אין שורות. הוסף רכיב ראשון.
+            {safeLines.length === 0 ? (
+              <div className="px-4 py-12 text-center">
+                <p className="text-sm text-fg-muted">
+                  {linesWarning
+                    ? "Lines could not be loaded. See banner above."
+                    : "No components on this version yet."}
+                </p>
+                {editable && !linesWarning && (
+                  <button
+                    type="button"
+                    onClick={() => setAddOpen(true)}
+                    className="mt-3 rounded-sm border border-accent-border bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:bg-accent-hover"
+                  >
+                    Add the first component
+                  </button>
+                )}
               </div>
             ) : (
-              <table className="w-full text-sm">
+              <table className="w-full border-collapse text-sm">
                 <thead>
-                  <tr className="text-left">
-                    <th className="px-2 py-1">Component</th>
-                    <th className="px-2 py-1">Qty</th>
-                    <th className="px-2 py-1">UOM</th>
-                    <th className="px-2 py-1">Readiness</th>
-                    <th className="px-2 py-1"></th>
+                  <tr className="border-b border-border bg-bg-subtle/60 text-3xs uppercase tracking-sops text-fg-subtle">
+                    <th className="px-4 py-2 text-left font-semibold">
+                      Component
+                    </th>
+                    <th className="px-2 py-2 text-left font-semibold">Qty</th>
+                    <th className="px-2 py-2 text-left font-semibold">UOM</th>
+                    <th className="px-2 py-2 text-left font-semibold">
+                      Readiness
+                    </th>
+                    <th className="px-2 py-2"></th>
                   </tr>
                 </thead>
                 <tbody>
-                  {lines.map((line) => (
+                  {safeLines.map((line) => (
                     <BomLineRow
                       key={line.bom_line_id}
                       line={line}
@@ -336,14 +416,14 @@ export function BomDraftEditorPage({
                 </tbody>
               </table>
             )}
-          </div>
-          <div className="hidden lg:block">
+          </section>
+          <aside className="hidden lg:block">
             <ReadinessPanel
               readinessMap={readiness.map}
               nowMs={Date.now()}
               onFix={setFixComponentId}
             />
-          </div>
+          </aside>
         </div>
         {/* Mobile-only bottom drawer with the same readiness data. */}
         <div className="lg:hidden">

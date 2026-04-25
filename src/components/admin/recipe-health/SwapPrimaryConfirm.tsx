@@ -21,6 +21,51 @@ interface SwapPrimaryConfirmProps {
   onBack: () => void;
 }
 
+function SummaryCard({
+  title,
+  tone,
+  s,
+}: {
+  title: string;
+  tone: "current" | "new";
+  s: SupplierItemSummary;
+}): JSX.Element {
+  const surface =
+    tone === "current"
+      ? "border-border bg-bg-subtle"
+      : "border-accent-border bg-accent-softer";
+  return (
+    <div className={`rounded-sm border ${surface} p-3`}>
+      <div className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+        {title}
+      </div>
+      <div className="mt-1 text-sm font-medium text-fg-strong">
+        {s.supplier_name}
+      </div>
+      <dl className="mt-2 space-y-0.5 text-xs">
+        <div className="flex justify-between">
+          <dt className="text-fg-muted">Cost</dt>
+          <dd className="font-mono tabular-nums text-fg">
+            {s.std_cost_per_inv_uom ?? "—"}
+          </dd>
+        </div>
+        <div className="flex justify-between">
+          <dt className="text-fg-muted">Lead time</dt>
+          <dd className="font-mono tabular-nums text-fg">
+            {s.lead_time_days ?? "—"}d
+          </dd>
+        </div>
+        <div className="flex justify-between">
+          <dt className="text-fg-muted">MOQ</dt>
+          <dd className="font-mono tabular-nums text-fg">
+            {s.moq ?? "—"}
+          </dd>
+        </div>
+      </dl>
+    </div>
+  );
+}
+
 export function SwapPrimaryConfirm({
   currentPrimary,
   newPrimary,
@@ -29,40 +74,40 @@ export function SwapPrimaryConfirm({
 }: SwapPrimaryConfirmProps): JSX.Element {
   const [agreed, setAgreed] = useState(false);
   return (
-    <div className="space-y-3">
-      <div className="grid grid-cols-2 gap-3 text-sm">
-        <div className="rounded border p-2">
-          <div className="font-semibold">Current primary</div>
-          <div>{currentPrimary.supplier_name}</div>
-          <div>cost {currentPrimary.std_cost_per_inv_uom ?? "—"}</div>
-          <div>lead {currentPrimary.lead_time_days ?? "—"}d</div>
-          <div>MOQ {currentPrimary.moq ?? "—"}</div>
-        </div>
-        <div className="rounded border p-2">
-          <div className="font-semibold">New primary</div>
-          <div>{newPrimary.supplier_name}</div>
-          <div>cost {newPrimary.std_cost_per_inv_uom ?? "—"}</div>
-          <div>lead {newPrimary.lead_time_days ?? "—"}d</div>
-          <div>MOQ {newPrimary.moq ?? "—"}</div>
-        </div>
+    <div className="space-y-4">
+      <p className="text-sm text-fg">
+        Replace the current primary supplier. The previous primary will be
+        demoted in the same operation.
+      </p>
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+        <SummaryCard title="Current primary" tone="current" s={currentPrimary} />
+        <SummaryCard title="New primary" tone="new" s={newPrimary} />
       </div>
-      <label className="flex items-center gap-2 text-sm">
+      <label className="flex items-start gap-2 text-sm">
         <input
           type="checkbox"
           checked={agreed}
           onChange={(e) => setAgreed(e.target.checked)}
+          className="mt-0.5 h-4 w-4 border-border text-accent focus:ring-accent-ring"
         />
-        אני מאשר להחליף את הספק הראשי ולהוריד את הקודם
+        <span className="text-fg">
+          I confirm — set the new supplier as primary and demote the previous
+          primary.
+        </span>
       </label>
-      <div className="flex gap-2">
-        <button type="button" onClick={onBack} className="rounded border px-3 py-1">
+      <div className="flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onBack}
+          className="rounded-sm border border-border bg-bg-raised px-3 py-1.5 text-sm text-fg hover:bg-bg-subtle"
+        >
           Back
         </button>
         <button
           type="button"
           disabled={!agreed}
           onClick={onConfirm}
-          className="rounded bg-blue-600 px-3 py-1 text-white disabled:opacity-50"
+          className="rounded-sm border border-accent-border bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
         >
           Confirm swap
         </button>

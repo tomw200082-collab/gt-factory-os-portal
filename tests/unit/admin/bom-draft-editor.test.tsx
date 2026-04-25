@@ -176,7 +176,7 @@ describe("BomDraftEditorPage skeleton", () => {
     render(<BomDraftEditorPage bomHeadId="BH-1" versionId="BV-DRAFT" />, {
       wrapper: wrap(),
     });
-    await screen.findByText(/אין שורות/);
+    await screen.findByText(/No components/);
   });
 
   it("renders one row per draft line", async () => {
@@ -231,7 +231,7 @@ describe("BomDraftEditorPage skeleton", () => {
     render(<BomDraftEditorPage bomHeadId="BH-1" versionId="BV-DRAFT" />, {
       wrapper: wrap(),
     });
-    await screen.findByText(/לא ניתן לערוך/);
+    await screen.findByText(/read-only/);
   });
 });
 
@@ -241,7 +241,7 @@ describe("BomDraftEditorPage — Add line drawer", () => {
     render(<BomDraftEditorPage bomHeadId="BH-1" versionId="BV-DRAFT" />, {
       wrapper: wrap(),
     });
-    await screen.findByText(/אין שורות/);
+    await screen.findByText(/No components/);
     expect(screen.getByRole("button", { name: /Add component/i })).toBeTruthy();
   });
 

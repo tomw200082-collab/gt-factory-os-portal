@@ -109,7 +109,7 @@ describe("PublishConfirmModal — variant B (override)", () => {
         onConfirm={vi.fn()}
       />,
     );
-    expect(screen.getByText(/אני מאשר את האזהרות הללו/)).toBeTruthy();
+    expect(screen.getByText(/I acknowledge these warnings/)).toBeTruthy();
   });
 });
 

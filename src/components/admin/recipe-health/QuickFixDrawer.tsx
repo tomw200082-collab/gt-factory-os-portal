@@ -69,10 +69,14 @@ export function QuickFixDrawer({
   const rowsQuery = useQuery({
     queryKey: ["supplier-items", "by-component", componentId],
     queryFn: async (): Promise<SupplierItemRow[]> => {
-      const res = await fetch(
-        `/api/supplier-items?component_id=${encodeURIComponent(componentId)}`,
-      );
-      if (!res.ok) throw new Error(`supplier-items: ${res.status}`);
+      const url = `/api/supplier-items?component_id=${encodeURIComponent(componentId)}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(
+          `supplier-items — HTTP ${res.status}\n${text.slice(0, 200)}`,
+        );
+      }
       const body = await res.json();
       return (body.rows ?? []) as SupplierItemRow[];
     },
@@ -189,13 +193,18 @@ export function QuickFixDrawer({
     <div
       role="dialog"
       aria-label="Quick fix"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      className="fixed inset-0 z-50 flex items-center justify-center bg-fg/40 p-4"
     >
-      <div className="w-full max-w-md overflow-auto rounded-md bg-white p-4 shadow-lg max-h-[90vh]">
-        <h3 className="mb-2 font-semibold">תיקון רכיב</h3>
+      <div className="max-h-[90vh] w-full max-w-md overflow-auto rounded-md border border-border bg-bg-raised p-5 shadow-lg">
+        <h3 className="mb-1 text-base font-semibold text-fg-strong">
+          Fix supplier &amp; price
+        </h3>
+        <p className="mb-4 text-xs text-fg-muted">
+          Resolve missing primary supplier or stale price for this component.
+        </p>
         {errorKind === "stale" && (
-          <div className="mb-2 rounded bg-yellow-100 p-2 text-sm">
-            הספק עודכן ע&quot;י משתמש אחר. רענן ובחר שוב.
+          <div className="mb-3 rounded-sm border border-warning-border bg-warning-soft p-2 text-xs text-warning-fg">
+            This row was updated by another user. Refresh and choose again.
             <button
               type="button"
               className="ml-2 underline"
@@ -211,42 +220,54 @@ export function QuickFixDrawer({
           </div>
         )}
         {errorKind === "unique" && (
-          <div className="mb-2 rounded bg-red-100 p-2 text-sm">
+          <div className="mb-3 rounded-sm border border-danger-border bg-danger-soft p-2 text-xs text-danger-fg">
             Database invariant violation — please reload and retry. If this
             persists, contact admin.
           </div>
         )}
         {errorKind === "other" && (
-          <div className="mb-2 rounded bg-red-100 p-2 text-sm">
-            שגיאה. נסה שוב.
+          <div className="mb-3 rounded-sm border border-danger-border bg-danger-soft p-2 text-xs text-danger-fg">
+            Something went wrong. Please try again.
           </div>
         )}
 
         {mode === "list" && (
           <>
             {rows.length === 0 ? (
-              <p className="text-sm text-gray-600">אין סורסינג זמין לרכיב זה.</p>
+              <p className="text-sm text-fg-muted">
+                No sourcing links exist for this component yet.
+              </p>
             ) : (
-              <ul className="space-y-1">
+              <ul className="divide-y divide-border rounded-sm border border-border">
                 {rows.map((r) => {
                   const isStalePrice =
                     r.is_primary &&
-                    (r.std_cost_per_inv_uom === null || r.std_cost_per_inv_uom === "");
+                    (r.std_cost_per_inv_uom === null ||
+                      r.std_cost_per_inv_uom === "");
                   return (
-                    <li key={r.supplier_item_id} className="border-b py-1">
-                      <label className="flex items-center gap-2 text-sm">
+                    <li key={r.supplier_item_id} className="px-3 py-2">
+                      <label className="flex items-start gap-2 text-sm">
                         <input
                           type="radio"
                           name="primary-candidate"
                           checked={selectedId === r.supplier_item_id}
                           onChange={() => setSelectedId(r.supplier_item_id)}
                           aria-label={r.supplier_name}
+                          className="mt-0.5 h-4 w-4 border-border text-accent focus:ring-accent-ring"
                         />
-                        <span>
-                          {r.supplier_name}
-                          {r.is_primary && " (primary)"} · cost{" "}
-                          {r.std_cost_per_inv_uom ?? "—"} · lead{" "}
-                          {r.lead_time_days ?? "—"}d · MOQ {r.moq ?? "—"}
+                        <span className="flex-1">
+                          <span className="block font-medium text-fg">
+                            {r.supplier_name}
+                            {r.is_primary && (
+                              <span className="ml-2 rounded-sm bg-success-soft px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-sops text-success-fg">
+                                Primary
+                              </span>
+                            )}
+                          </span>
+                          <span className="mt-0.5 block text-3xs text-fg-muted">
+                            Cost {r.std_cost_per_inv_uom ?? "—"} · Lead{" "}
+                            {r.lead_time_days ?? "—"}d · MOQ {r.moq ?? "—"}
+                          </span>
                         </span>
                       </label>
                       {isStalePrice &&
@@ -257,21 +278,21 @@ export function QuickFixDrawer({
                               setEditingPriceRowId(r.supplier_item_id);
                               setNewPrice("");
                             }}
-                            className="ml-6 mt-1 text-xs text-blue-700 underline"
+                            className="ml-6 mt-2 text-xs font-medium text-accent hover:underline"
                           >
                             Update price
                           </button>
                         )}
                       {editingPriceRowId === r.supplier_item_id && (
-                        <div className="ml-6 mt-1 flex items-center gap-1">
-                          <label className="text-xs">
-                            new price
+                        <div className="ml-6 mt-2 flex items-center gap-1.5">
+                          <label className="text-xs text-fg-muted">
+                            New price
                             <input
                               aria-label="new price"
                               value={newPrice}
                               onChange={(e) => setNewPrice(e.target.value)}
                               inputMode="decimal"
-                              className="ml-1 w-20 rounded border px-1"
+                              className="ml-1.5 w-24 rounded-sm border border-border bg-bg px-1.5 py-0.5 font-mono tabular-nums text-xs focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent-ring"
                             />
                           </label>
                           <button
@@ -279,7 +300,7 @@ export function QuickFixDrawer({
                             onClick={() =>
                               updatePrice.mutate({ row: r, price: newPrice })
                             }
-                            className="rounded bg-blue-600 px-2 py-0.5 text-xs text-white"
+                            className="rounded-sm border border-accent-border bg-accent px-2 py-0.5 text-xs font-medium text-accent-fg hover:bg-accent-hover"
                           >
                             Save price
                           </button>
@@ -289,7 +310,7 @@ export function QuickFixDrawer({
                               setEditingPriceRowId(null);
                               setNewPrice("");
                             }}
-                            className="rounded border px-2 py-0.5 text-xs"
+                            className="rounded-sm border border-border px-2 py-0.5 text-xs text-fg hover:bg-bg-subtle"
                           >
                             Cancel
                           </button>
@@ -300,18 +321,18 @@ export function QuickFixDrawer({
                 })}
               </ul>
             )}
-            <div className="mt-3 flex flex-wrap gap-2">
+            <div className="mt-4 flex flex-wrap justify-end gap-2">
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded border px-3 py-1"
+                className="rounded-sm border border-border bg-bg-raised px-3 py-1.5 text-sm text-fg hover:bg-bg-subtle"
               >
                 Cancel
               </button>
               <button
                 type="button"
                 onClick={() => setMode("add")}
-                className="rounded border px-3 py-1"
+                className="rounded-sm border border-border bg-bg-raised px-3 py-1.5 text-sm text-fg hover:bg-bg-subtle"
               >
                 + Add new supplier
               </button>
@@ -319,7 +340,7 @@ export function QuickFixDrawer({
                 <button
                   type="button"
                   onClick={() => setMode("swap-confirm")}
-                  className="rounded border px-3 py-1"
+                  className="rounded-sm border border-border bg-bg-raised px-3 py-1.5 text-sm text-fg hover:bg-bg-subtle"
                 >
                   Swap primary
                 </button>
@@ -334,9 +355,9 @@ export function QuickFixDrawer({
                 onClick={() => {
                   if (selected) promote.mutate(selected);
                 }}
-                className="rounded bg-blue-600 px-3 py-1 text-white disabled:opacity-50"
+                className="rounded-sm border border-accent-border bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
               >
-                Save
+                {promote.isPending ? "Saving…" : "Save"}
               </button>
             </div>
           </>
@@ -344,32 +365,41 @@ export function QuickFixDrawer({
 
         {mode === "add" && (
           <form
-            className="space-y-2"
+            className="space-y-3"
             onSubmit={(e) => {
               e.preventDefault();
               addLink.mutate();
             }}
           >
-            {rows.length === 0 && (
-              <p className="text-sm text-gray-600">אין סורסינג זמין לרכיב זה.</p>
-            )}
             <div className="block text-sm">
-              <label htmlFor="qfd-b-supplier_id">supplier_id</label>
+              <label
+                htmlFor="qfd-b-supplier_id"
+                className="block text-fg-strong"
+              >
+                Supplier ID
+              </label>
               <input
                 id="qfd-b-supplier_id"
                 value={bSupplierId}
                 onChange={(e) => setBSupplierId(e.target.value)}
-                className="mt-1 block w-full rounded border px-2 py-1"
+                className="mt-1 block w-full rounded-sm border border-border bg-bg px-2.5 py-1.5 font-mono text-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent-ring"
+                placeholder="e.g. SUP-ACME"
               />
             </div>
             <div className="block text-sm">
-              <label htmlFor="qfd-b-std_cost">std_cost</label>
+              <label
+                htmlFor="qfd-b-std_cost"
+                className="block text-fg-strong"
+              >
+                Standard cost (per inventory UOM)
+              </label>
               <input
                 id="qfd-b-std_cost"
                 value={bStdCost}
                 onChange={(e) => setBStdCost(e.target.value)}
                 inputMode="decimal"
-                className="mt-1 block w-full rounded border px-2 py-1"
+                className="mt-1 block w-full rounded-sm border border-border bg-bg px-2.5 py-1.5 font-mono tabular-nums text-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent-ring"
+                placeholder="0.00"
               />
             </div>
             <div className="flex items-center gap-2 text-sm">
@@ -378,15 +408,18 @@ export function QuickFixDrawer({
                 type="checkbox"
                 checked={bSetPrimary}
                 onChange={(e) => setBSetPrimary(e.target.checked)}
+                className="h-4 w-4 rounded-sm border-border text-accent focus:ring-accent-ring"
               />
-              <label htmlFor="qfd-b-set-primary">Set as primary</label>
+              <label htmlFor="qfd-b-set-primary" className="text-fg">
+                Set as primary supplier for this component
+              </label>
             </div>
-            <div className="flex gap-2">
+            <div className="mt-4 flex justify-end gap-2">
               {rows.length > 0 && (
                 <button
                   type="button"
                   onClick={() => setMode("list")}
-                  className="rounded border px-3 py-1"
+                  className="rounded-sm border border-border bg-bg-raised px-3 py-1.5 text-sm text-fg hover:bg-bg-subtle"
                 >
                   Back
                 </button>
@@ -394,16 +427,16 @@ export function QuickFixDrawer({
               <button
                 type="button"
                 onClick={onClose}
-                className="rounded border px-3 py-1"
+                className="rounded-sm border border-border bg-bg-raised px-3 py-1.5 text-sm text-fg hover:bg-bg-subtle"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                disabled={addLink.isPending}
-                className="rounded bg-blue-600 px-3 py-1 text-white"
+                disabled={addLink.isPending || !bSupplierId}
+                className="rounded-sm border border-accent-border bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
               >
-                Add link
+                {addLink.isPending ? "Adding…" : "Add sourcing link"}
               </button>
             </div>
           </form>

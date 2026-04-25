@@ -29,12 +29,30 @@ interface PublishConfirmModalProps {
   onConfirm: (confirmOverride: boolean) => void;
 }
 
-const HEBREW_BLOCKER: Record<string, string> = {
-  EMPTY_VERSION: "מתכון ריק",
-  PLANNING_RUN_IN_FLIGHT: "ריצת תכנון פעילה — להמתין לסיום",
-  VERSION_NOT_DRAFT: "הגרסה אינה טיוטה",
-  STALE_ROW: "השורה התעדכנה — רענן",
+const BLOCKER_COPY: Record<string, string> = {
+  EMPTY_VERSION: "Version has no components",
+  PLANNING_RUN_IN_FLIGHT: "A planning run is currently active — wait for it to finish",
+  VERSION_NOT_DRAFT: "Version is no longer a DRAFT",
+  STALE_ROW: "Version was updated by another user — refresh and retry",
 };
+
+const Shell = ({
+  ariaLabel,
+  children,
+}: {
+  ariaLabel: string;
+  children: React.ReactNode;
+}) => (
+  <div
+    role="dialog"
+    aria-label={ariaLabel}
+    className="fixed inset-0 z-50 flex items-center justify-center bg-fg/40 p-4"
+  >
+    <div className="w-full max-w-md rounded-md border border-border bg-bg-raised p-5 shadow-lg">
+      {children}
+    </div>
+  </div>
+);
 
 export function PublishConfirmModal({
   preview,
@@ -48,29 +66,38 @@ export function PublishConfirmModal({
   // Variant C: hard-block.
   if (!preview.can_publish_with_override) {
     return (
-      <div
-        role="dialog"
-        aria-label="Publish blocked"
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      >
-        <div className="rounded-md bg-white p-4 shadow-lg max-w-md">
-          <h3 className="font-semibold">לא ניתן לפרסם</h3>
-          <ul className="mt-2 text-sm">
-            {preview.blocking_issues.map((b) => (
-              <li key={b}>🔴 {HEBREW_BLOCKER[b] ?? b}</li>
-            ))}
-          </ul>
-          <div className="mt-3 flex justify-end">
-            <button
-              type="button"
-              onClick={onCancel}
-              className="rounded border px-3 py-1"
+      <Shell ariaLabel="Publish blocked">
+        <h3 className="text-base font-semibold text-danger-fg">
+          Cannot publish
+        </h3>
+        <p className="mt-1 text-xs text-fg-muted">
+          The backend rejected this version. Resolve the issues below and try
+          again.
+        </p>
+        <ul className="mt-3 space-y-1 text-sm">
+          {preview.blocking_issues.map((b) => (
+            <li
+              key={b}
+              className="flex items-start gap-1.5 rounded-sm border border-danger-border bg-danger-soft px-2.5 py-1.5 text-danger-fg"
             >
-              Close
-            </button>
-          </div>
+              <span
+                aria-hidden
+                className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-danger"
+              />
+              <span>{BLOCKER_COPY[b] ?? b}</span>
+            </li>
+          ))}
+        </ul>
+        <div className="mt-4 flex justify-end">
+          <button
+            type="button"
+            onClick={onCancel}
+            className="rounded-sm border border-border bg-bg-raised px-3 py-1.5 text-sm text-fg hover:bg-bg-subtle"
+          >
+            Close
+          </button>
         </div>
-      </div>
+      </Shell>
     );
   }
 
@@ -81,80 +108,97 @@ export function PublishConfirmModal({
     uiWarnings.length === 0
   ) {
     return (
-      <div
-        role="dialog"
-        aria-label="Confirm publish"
-        className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-      >
-        <div className="rounded-md bg-white p-4 shadow-lg max-w-md">
-          <p>
-            פרסם {nextVersionLabel}? הגרסה הקודמת תועבר ל-SUPERSEDED. ייצורים
-            היסטוריים נשמרים על הגרסה הישנה.
-          </p>
-          <div className="mt-3 flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={onCancel}
-              className="rounded border px-3 py-1"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={() => onConfirm(false)}
-              className="rounded bg-blue-600 px-3 py-1 text-white"
-            >
-              Publish
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Variant B: warnings present, override-able.
-  return (
-    <div
-      role="dialog"
-      aria-label="Confirm publish with warnings"
-      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-    >
-      <div className="rounded-md bg-white p-4 shadow-lg max-w-md">
-        <h3 className="font-semibold">פרסום עם אזהרות</h3>
-        <ul className="mt-2 text-sm">
-          {preview.warnings.map((w) => (
-            <li key={w}>⚠ {w}</li>
-          ))}
-          {uiWarnings.map((w) => (
-            <li key={`ui-${w}`}>⚠ {w}</li>
-          ))}
-        </ul>
-        <label className="mt-2 flex items-center gap-2 text-sm">
-          <input
-            type="checkbox"
-            checked={agreed}
-            onChange={(e) => setAgreed(e.target.checked)}
-          />
-          אני מאשר את האזהרות הללו
-        </label>
-        <div className="mt-3 flex justify-end gap-2">
+      <Shell ariaLabel="Confirm publish">
+        <h3 className="text-base font-semibold text-fg-strong">
+          Publish version {nextVersionLabel}?
+        </h3>
+        <p className="mt-2 text-sm text-fg">
+          The previous version will be moved to <strong>SUPERSEDED</strong>.
+          Historical production records remain pinned to the old version.
+        </p>
+        <div className="mt-5 flex justify-end gap-2">
           <button
             type="button"
             onClick={onCancel}
-            className="rounded border px-3 py-1"
+            className="rounded-sm border border-border bg-bg-raised px-3 py-1.5 text-sm text-fg hover:bg-bg-subtle"
           >
             Cancel
           </button>
           <button
             type="button"
-            disabled={!agreed}
-            onClick={() => onConfirm(true)}
-            className="rounded bg-blue-600 px-3 py-1 text-white disabled:opacity-50"
+            onClick={() => onConfirm(false)}
+            className="rounded-sm border border-accent-border bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:bg-accent-hover"
           >
-            Publish anyway
+            Publish
           </button>
         </div>
+      </Shell>
+    );
+  }
+
+  // Variant B: warnings present, override-able.
+  return (
+    <Shell ariaLabel="Confirm publish with warnings">
+      <h3 className="text-base font-semibold text-warning-fg">
+        Publish with warnings
+      </h3>
+      <p className="mt-2 text-sm text-fg">
+        The version can be published, but supplier and price readiness has
+        unresolved warnings. The product card will stay <strong>yellow</strong>{" "}
+        until they are fixed.
+      </p>
+      <ul className="mt-3 max-h-48 space-y-1 overflow-auto text-sm">
+        {preview.warnings.map((w) => (
+          <li
+            key={w}
+            className="flex items-start gap-1.5 rounded-sm border border-warning-border bg-warning-soft px-2.5 py-1.5 text-warning-fg"
+          >
+            <span
+              aria-hidden
+              className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
+            />
+            <span>{w}</span>
+          </li>
+        ))}
+        {uiWarnings.map((w) => (
+          <li
+            key={`ui-${w}`}
+            className="flex items-start gap-1.5 rounded-sm border border-warning-border bg-warning-soft px-2.5 py-1.5 text-warning-fg"
+          >
+            <span
+              aria-hidden
+              className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
+            />
+            <span>{w}</span>
+          </li>
+        ))}
+      </ul>
+      <label className="mt-4 flex items-start gap-2 text-sm">
+        <input
+          type="checkbox"
+          checked={agreed}
+          onChange={(e) => setAgreed(e.target.checked)}
+          className="mt-0.5 h-4 w-4 border-border text-accent focus:ring-accent-ring"
+        />
+        <span className="text-fg">I acknowledge these warnings.</span>
+      </label>
+      <div className="mt-4 flex justify-end gap-2">
+        <button
+          type="button"
+          onClick={onCancel}
+          className="rounded-sm border border-border bg-bg-raised px-3 py-1.5 text-sm text-fg hover:bg-bg-subtle"
+        >
+          Cancel
+        </button>
+        <button
+          type="button"
+          disabled={!agreed}
+          onClick={() => onConfirm(true)}
+          className="rounded-sm border border-accent-border bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
+        >
+          Publish anyway
+        </button>
       </div>
-    </div>
+    </Shell>
   );
 }

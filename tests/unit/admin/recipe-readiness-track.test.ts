@@ -38,7 +38,7 @@ describe("computeTrackHealth — red conditions (cannot publish)", () => {
       trackLabel: "base formula",
     });
     expect(r.color).toBe("red");
-    expect(r.blockers.some((s) => s.includes("ריק"))).toBe(true);
+    expect(r.blockers.some((s) => s.includes("empty"))).toBe(true);
   });
 
   it("red when any line is red (qty<=0 or INACTIVE)", () => {
@@ -86,17 +86,17 @@ describe("computeTrackHealth — yellow / green", () => {
     expect(r.color).toBe("yellow");
     // Two distinct category summaries — supplier and price are separate buckets
     const joined = r.warnings.join(" | ");
-    expect(joined).toContain("2 חומרים חסרי ספק ראשי");
-    expect(joined).toMatch(/חומר אחד עם מחיר ישן/);
+    expect(joined).toContain("2 components with no primary supplier");
+    expect(joined).toMatch(/1 component with stale price/);
   });
 
-  it("warnings use Hebrew singular vs plural correctly", () => {
+  it("warnings use singular vs plural correctly", () => {
     const oneMissing = computeTrackHealth({
       hasActiveVersion: true,
       pips: [pip("yellow", { warn: ["missing-supplier"] }), pip("green")],
       trackLabel: "base formula",
     });
-    expect(oneMissing.warnings.some((s) => s.includes("חומר אחד חסר ספק ראשי"))).toBe(true);
+    expect(oneMissing.warnings.some((s) => s.includes("1 component with no primary supplier"))).toBe(true);
 
     const fiveMissing = computeTrackHealth({
       hasActiveVersion: true,
@@ -109,7 +109,7 @@ describe("computeTrackHealth — yellow / green", () => {
       ],
       trackLabel: "base formula",
     });
-    expect(fiveMissing.warnings.some((s) => s.includes("5 חומרים חסרי ספק ראשי"))).toBe(true);
+    expect(fiveMissing.warnings.some((s) => s.includes("5 components with no primary supplier"))).toBe(true);
   });
 
   it("strong-stale-price counts toward stale-price summary (not a separate one)", () => {
@@ -122,7 +122,7 @@ describe("computeTrackHealth — yellow / green", () => {
       trackLabel: "base formula",
     });
     // Two yellow lines, both about price, summarized together
-    expect(r.warnings.some((s) => /2 חומרים עם מחיר ישן/.test(s))).toBe(true);
+    expect(r.warnings.some((s) => /2 components with stale prices/.test(s))).toBe(true);
   });
 
   it("lineCount mirrors pips.length", () => {

@@ -56,7 +56,7 @@ describe("ReadinessPanel", () => {
         onFix={onFix}
       />,
     );
-    expect(screen.getByText(/אין ספק/)).toBeTruthy();
+    expect(screen.getByText(/no primary supplier/i)).toBeTruthy();
     fireEvent.click(screen.getByRole("button", { name: /Fix/ }));
     expect(onFix).toHaveBeenCalledWith("C-1");
   });
@@ -76,7 +76,7 @@ describe("ReadinessPanel", () => {
         onFix={vi.fn()}
       />,
     );
-    expect(screen.getByText(/אין מחיר/)).toBeTruthy();
+    expect(screen.getByText(/No active price/)).toBeTruthy();
   });
 
   it("shows price age in days when present", () => {
@@ -112,7 +112,7 @@ describe("ReadinessPanel", () => {
     render(
       <ReadinessPanel readinessMap={new Map()} nowMs={NOW} onFix={vi.fn()} />,
     );
-    expect(screen.getByText(/אין רכיבים/)).toBeTruthy();
+    expect(screen.getByText(/No components/)).toBeTruthy();
   });
 
   it("warningCount equals number of yellow rows for the badge", () => {

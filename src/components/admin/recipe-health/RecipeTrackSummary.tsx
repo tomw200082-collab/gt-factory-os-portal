@@ -9,10 +9,25 @@ interface RecipeTrackSummaryProps {
   health: TrackHealth;
 }
 
-const COLOR_CLASS: Record<TrackHealth["color"], string> = {
-  green: "border-green-500 bg-green-50",
-  yellow: "border-yellow-500 bg-yellow-50",
-  red: "border-red-500 bg-red-50",
+const TRACK_TONE: Record<
+  TrackHealth["color"],
+  { container: string; pill: string; label: string }
+> = {
+  green: {
+    container: "border-success-border bg-success-soft",
+    pill: "bg-success text-success-soft",
+    label: "Ready",
+  },
+  yellow: {
+    container: "border-warning-border bg-warning-soft",
+    pill: "bg-warning text-warning-soft",
+    label: "Warnings",
+  },
+  red: {
+    container: "border-danger-border bg-danger-soft",
+    pill: "bg-danger text-danger-soft",
+    label: "Blocked",
+  },
 };
 
 export function RecipeTrackSummary({
@@ -20,28 +35,42 @@ export function RecipeTrackSummary({
   activeVersionLabel,
   health,
 }: RecipeTrackSummaryProps): JSX.Element {
+  const tone = TRACK_TONE[health.color];
   return (
     <div
       data-track-color={health.color}
-      className={`rounded-md border-l-4 p-3 ${COLOR_CLASS[health.color]}`}
+      className={`rounded-md border ${tone.container} p-4`}
     >
-      <div className="font-semibold">{trackLabel}</div>
-      <div className="text-sm text-gray-600">
+      <div className="flex items-center justify-between gap-2">
+        <h3 className="text-sm font-semibold text-fg-strong">{trackLabel}</h3>
+        <span
+          className={`rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-sops ${tone.pill}`}
+        >
+          {tone.label}
+        </span>
+      </div>
+      <div className="mt-1 text-xs text-fg-muted">
         {health.hasActiveVersion && activeVersionLabel
-          ? `Active: ${activeVersionLabel} · ${health.lineCount} lines`
-          : "אין גרסה פעילה"}
+          ? `Active: ${activeVersionLabel} · ${health.lineCount} ${health.lineCount === 1 ? "component" : "components"}`
+          : "No active version"}
       </div>
       {health.blockers.length > 0 && (
-        <ul className="mt-2 text-sm text-red-700">
+        <ul className="mt-3 space-y-1 text-xs text-danger-fg">
           {health.blockers.map((b) => (
-            <li key={b}>🔴 {b}</li>
+            <li key={b} className="flex gap-1.5">
+              <span aria-hidden className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-danger" />
+              <span>{b}</span>
+            </li>
           ))}
         </ul>
       )}
       {health.warnings.length > 0 && (
-        <ul className="mt-2 text-sm text-yellow-800">
+        <ul className="mt-3 space-y-1 text-xs text-warning-fg">
           {health.warnings.map((w) => (
-            <li key={w}>⚠ {w}</li>
+            <li key={w} className="flex gap-1.5">
+              <span aria-hidden className="mt-0.5 h-1.5 w-1.5 shrink-0 rounded-full bg-warning" />
+              <span>{w}</span>
+            </li>
           ))}
         </ul>
       )}

@@ -32,7 +32,7 @@ describe("computeLinePipState — red (hard block)", () => {
     const r = computeLinePipState({ qty: "0", component: comp(), nowMs: NOW });
     expect(r.color).toBe("red");
     expect(r.isHardBlock).toBe(true);
-    expect(r.reasons.some((s) => s.includes("כמות"))).toBe(true);
+    expect(r.reasons.some((s) => s.includes("Quantity"))).toBe(true);
   });
 
   it("returns red when qty is negative", () => {
@@ -52,7 +52,7 @@ describe("computeLinePipState — red (hard block)", () => {
       nowMs: NOW,
     });
     expect(r.color).toBe("red");
-    expect(r.reasons.some((s) => s.includes("לא פעיל"))).toBe(true);
+    expect(r.reasons.some((s) => s.includes("inactive"))).toBe(true);
   });
 
   it("red trumps yellow when both INACTIVE and missing supplier", () => {
@@ -68,7 +68,7 @@ describe("computeLinePipState — red (hard block)", () => {
     // Yellow categories MUST NOT co-mingle with red. Red short-circuits.
     expect(r.warningCategories).toEqual([]);
     expect(r.blockerCategories).toContain("inactive-component");
-    expect(r.reasons.some((s) => s.includes("ספק"))).toBe(false);
+    expect(r.reasons.some((s) => s.includes("supplier"))).toBe(false);
   });
 });
 
@@ -81,7 +81,7 @@ describe("computeLinePipState — yellow (warning, not hard block)", () => {
     });
     expect(r.color).toBe("yellow");
     expect(r.isHardBlock).toBe(false);
-    expect(r.reasons.some((s) => s.includes("ספק"))).toBe(true);
+    expect(r.reasons.some((s) => s.includes("supplier"))).toBe(true);
   });
 
   it("returns yellow when no active price record", () => {
@@ -91,7 +91,7 @@ describe("computeLinePipState — yellow (warning, not hard block)", () => {
       nowMs: NOW,
     });
     expect(r.color).toBe("yellow");
-    expect(r.reasons.some((s) => s.includes("מחיר"))).toBe(true);
+    expect(r.reasons.some((s) => s.includes("price"))).toBe(true);
   });
 
   it("returns yellow when active price age exceeds PRICE_AGE_WARN_DAYS", () => {
@@ -101,7 +101,7 @@ describe("computeLinePipState — yellow (warning, not hard block)", () => {
       nowMs: NOW,
     });
     expect(r.color).toBe("yellow");
-    expect(r.reasons.some((s) => /\d+ ימים/.test(s))).toBe(true);
+    expect(r.reasons.some((s) => /\d+ days/.test(s))).toBe(true);
   });
 
   it("collects multiple reasons in yellow state", () => {
@@ -139,7 +139,7 @@ describe("computeLinePipState — yellow (warning, not hard block)", () => {
     expect(r180.color).toBe("yellow");
     expect(r180.warningCategories).toContain("stale-price");
     expect(r180.warningCategories).not.toContain("strong-stale-price");
-    expect(r180.reasons.some((s) => /^מחיר ישן \(/.test(s))).toBe(true);
+    expect(r180.reasons.some((s) => /^Price is stale \(/.test(s))).toBe(true);
 
     const r181 = computeLinePipState({
       qty: "1",
@@ -149,6 +149,6 @@ describe("computeLinePipState — yellow (warning, not hard block)", () => {
     expect(r181.color).toBe("yellow");
     expect(r181.warningCategories).toContain("strong-stale-price");
     expect(r181.warningCategories).not.toContain("stale-price");
-    expect(r181.reasons.some((s) => s.startsWith("מחיר ישן מאוד"))).toBe(true);
+    expect(r181.reasons.some((s) => s.startsWith("Price is very stale"))).toBe(true);
   });
 });

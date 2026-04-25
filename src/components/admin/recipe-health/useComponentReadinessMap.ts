@@ -40,6 +40,7 @@ export interface ComponentReadinessMapResult {
   map: Map<string, ComponentReadiness>;
   isReady: boolean;
   isError: boolean;
+  errorMessage: string | null;
 }
 
 export function useComponentReadinessMap(
@@ -50,10 +51,14 @@ export function useComponentReadinessMap(
     queries: unique.map((id) => ({
       queryKey: ["supplier-items", "by-component", id],
       queryFn: async (): Promise<SupplierItemRow[]> => {
-        const res = await fetch(
-          `/api/supplier-items?component_id=${encodeURIComponent(id)}`,
-        );
-        if (!res.ok) throw new Error(`supplier-items ${id}: ${res.status}`);
+        const url = `/api/supplier-items?component_id=${encodeURIComponent(id)}`;
+        const res = await fetch(url);
+        if (!res.ok) {
+          const body = await res.text().catch(() => "");
+          throw new Error(
+            `supplier-items ${id} — HTTP ${res.status}\n${body.slice(0, 200)}`,
+          );
+        }
         const body = await res.json();
         return (body.rows ?? []) as SupplierItemRow[];
       },
@@ -61,8 +66,7 @@ export function useComponentReadinessMap(
     })),
   });
 
-  const isReady =
-    unique.length === 0 || results.every((r) => r.isSuccess);
+  const isReady = unique.length === 0 || results.every((r) => r.isSuccess);
   const map = new Map<string, ComponentReadiness>();
   if (isReady && unique.length > 0) {
     unique.forEach((id, idx) => {
@@ -70,5 +74,12 @@ export function useComponentReadinessMap(
       map.set(id, rowsToReadiness(id, rows));
     });
   }
-  return { map, isReady, isError: results.some((r) => r.isError) };
+  const firstError = results.find((r) => r.isError);
+  return {
+    map,
+    isReady,
+    isError: results.some((r) => r.isError),
+    errorMessage:
+      (firstError?.error as Error | undefined)?.message ?? null,
+  };
 }

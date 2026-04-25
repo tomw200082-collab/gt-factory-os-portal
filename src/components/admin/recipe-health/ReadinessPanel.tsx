@@ -6,6 +6,7 @@
 "use client";
 
 import { useState } from "react";
+import { AlertTriangle, X } from "lucide-react";
 import { formatPriceAge, priceAgeDays } from "@/lib/admin/recipe-readiness";
 import { RECIPE_READINESS_POLICY } from "@/lib/policy/recipe-readiness";
 import type { ComponentReadiness } from "@/lib/admin/recipe-readiness.types";
@@ -27,6 +28,26 @@ function rowNeedsFix(c: ComponentReadiness, nowMs: number): boolean {
   return false;
 }
 
+function StatusDot({
+  ok,
+  label,
+}: {
+  ok: boolean;
+  label: string;
+}): JSX.Element {
+  return (
+    <span
+      className={`inline-flex items-center gap-1 ${ok ? "text-success-fg" : "text-warning-fg"}`}
+    >
+      <span
+        aria-hidden
+        className={`inline-block h-1.5 w-1.5 rounded-full ${ok ? "bg-success" : "bg-warning"}`}
+      />
+      {label}
+    </span>
+  );
+}
+
 function RowsList({
   rows,
   nowMs,
@@ -37,29 +58,48 @@ function RowsList({
   onFix: (componentId: string) => void;
 }): JSX.Element {
   return (
-    <ul className="mt-2 space-y-2 text-sm">
+    <ul className="divide-y divide-border">
       {rows.map((r) => {
-        const supplierCell = r.primary_supplier_name ?? "🟡 אין ספק";
-        const priceCell =
-          r.active_price_value === null
-            ? "🟡 אין מחיר"
-            : formatPriceAge(r.active_price_updated_at, nowMs);
+        const supplierOk = r.primary_supplier_id !== null;
+        const priceOk =
+          r.active_price_value !== null &&
+          (priceAgeDays(r.active_price_updated_at, nowMs) ?? 0) <=
+            RECIPE_READINESS_POLICY.PRICE_AGE_WARN_DAYS;
         const needsFix = rowNeedsFix(r, nowMs);
         return (
-          <li key={r.component_id} className="border-b py-1">
-            <div className="font-medium">{r.component_name}</div>
-            <div className="text-gray-700">
-              {supplierCell} · {priceCell}
+          <li key={r.component_id} className="px-4 py-3">
+            <div className="flex items-baseline justify-between gap-2">
+              <span className="text-sm font-medium text-fg">
+                {r.component_name}
+              </span>
+              {needsFix && (
+                <button
+                  type="button"
+                  onClick={() => onFix(r.component_id)}
+                  className="rounded-sm border border-border bg-bg-raised px-2 py-0.5 text-3xs font-medium text-fg hover:border-accent hover:bg-accent-softer hover:text-accent"
+                >
+                  Fix
+                </button>
+              )}
             </div>
-            {needsFix && (
-              <button
-                type="button"
-                onClick={() => onFix(r.component_id)}
-                className="mt-1 text-xs text-blue-700 underline"
-              >
-                Fix
-              </button>
-            )}
+            <div className="mt-1 flex flex-wrap gap-x-3 gap-y-1 text-xs">
+              <StatusDot
+                ok={supplierOk}
+                label={
+                  supplierOk
+                    ? r.primary_supplier_name ?? "Primary supplier set"
+                    : "No primary supplier"
+                }
+              />
+              <StatusDot
+                ok={priceOk}
+                label={
+                  r.active_price_value === null
+                    ? "No active price"
+                    : `Price · ${formatPriceAge(r.active_price_updated_at, nowMs)}`
+                }
+              />
+            </div>
           </li>
         );
       })}
@@ -84,44 +124,57 @@ export function ReadinessPanel({
         <button
           type="button"
           onClick={() => setOpenSheet(true)}
-          className="fixed bottom-3 left-1/2 z-40 -translate-x-1/2 rounded-full bg-yellow-500 px-4 py-2 text-white shadow"
+          className="fixed bottom-4 left-1/2 z-40 inline-flex -translate-x-1/2 items-center gap-1.5 rounded-full border border-warning-border bg-warning px-4 py-2 text-sm font-medium text-warning-soft shadow-md"
         >
-          ⚠ {warningCount} {warningCount === 1 ? "warning" : "warnings"}
+          <AlertTriangle className="h-3.5 w-3.5" strokeWidth={2} />
+          {warningCount} {warningCount === 1 ? "warning" : "warnings"}
         </button>
         {openSheet && (
-          <div className="fixed inset-x-0 bottom-0 z-50 max-h-[70vh] overflow-auto rounded-t-lg bg-white p-3 shadow-xl">
-            <button
-              type="button"
-              onClick={() => setOpenSheet(false)}
-              className="float-left"
-              aria-label="Close"
-            >
-              ✕
-            </button>
-            <h3 className="font-semibold">Readiness</h3>
-            <RowsList rows={rows} nowMs={nowMs} onFix={onFix} />
+          <div className="fixed inset-0 z-50 flex flex-col justify-end bg-fg/40">
+            <div className="max-h-[80vh] overflow-auto rounded-t-lg border-t border-border bg-bg-raised shadow-xl">
+              <header className="flex items-center justify-between border-b border-border px-4 py-3">
+                <h3 className="text-sm font-semibold text-fg-strong">
+                  Supplier &amp; price readiness
+                </h3>
+                <button
+                  type="button"
+                  onClick={() => setOpenSheet(false)}
+                  aria-label="Close"
+                  className="rounded-sm p-1 text-fg-muted hover:bg-bg-subtle"
+                >
+                  <X className="h-4 w-4" strokeWidth={2} />
+                </button>
+              </header>
+              <RowsList rows={rows} nowMs={nowMs} onFix={onFix} />
+            </div>
           </div>
         )}
       </>
     );
   }
 
-  if (rows.length === 0) {
-    return (
-      <aside className="w-full p-3 lg:w-72">
-        <h3 className="font-semibold">Readiness</h3>
-        <p className="text-sm text-gray-500">אין רכיבים</p>
-      </aside>
-    );
-  }
-
   return (
     <aside
-      className="w-full p-3 lg:w-72"
       data-warning-count={warningCount}
+      className="sticky top-20 max-h-[calc(100vh-6rem)] overflow-auto rounded-md border border-border bg-bg-raised shadow-sm"
     >
-      <h3 className="font-semibold">Readiness ({warningCount} ⚠)</h3>
-      <RowsList rows={rows} nowMs={nowMs} onFix={onFix} />
+      <header className="border-b border-border px-4 py-3">
+        <h3 className="text-sm font-semibold text-fg-strong">
+          Supplier &amp; price readiness
+        </h3>
+        <p className="mt-0.5 text-3xs text-fg-muted">
+          {warningCount === 0
+            ? "All components clean"
+            : `${warningCount} ${warningCount === 1 ? "warning" : "warnings"}`}
+        </p>
+      </header>
+      {rows.length === 0 ? (
+        <p className="px-4 py-6 text-sm text-fg-muted">
+          No components on this version.
+        </p>
+      ) : (
+        <RowsList rows={rows} nowMs={nowMs} onFix={onFix} />
+      )}
     </aside>
   );
 }

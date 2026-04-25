@@ -123,7 +123,7 @@ describe("VersionHistorySection", () => {
       { wrapper: wrap() },
     );
     fireEvent.click(screen.getByText(/היסטוריית גרסאות/));
-    await screen.findByRole("link", { name: /Resume editing/ });
+    await screen.findByRole("link", { name: /Resume draft|Edit recipe/ });
   });
 
   it("hides Resume button when isAdmin=false", async () => {
@@ -161,6 +161,6 @@ describe("VersionHistorySection", () => {
     );
     fireEvent.click(screen.getByText(/היסטוריית גרסאות/));
     await screen.findByText("v4");
-    expect(screen.queryByRole("link", { name: /Resume editing/ })).toBeNull();
+    expect(screen.queryByRole("link", { name: /Resume draft|Edit recipe/ })).toBeNull();
   });
 });

@@ -5,6 +5,7 @@
 
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { Pencil, Trash2 } from "lucide-react";
 import type { BomLineRow as BomLineDataRow } from "@/components/admin/recipe-health/useTrackData";
 import type {
   ComponentReadiness,
@@ -18,14 +19,29 @@ interface BomLineRowProps {
   versionId: string;
   readiness: ComponentReadiness | null;
   editable: boolean;
-  /** Optional: opens the QuickFixDrawer for this line (Chunk 5). */
+  /** Optional: opens the QuickFixDrawer for this line. */
   onOpenQuickFix?: (componentId: string) => void;
 }
 
-const PIP_CLASS: Record<LinePipState["color"], string> = {
-  green: "text-green-600",
-  yellow: "text-yellow-600",
-  red: "text-red-600",
+const PIP_TONE: Record<
+  LinePipState["color"],
+  { dot: string; chip: string; label: string }
+> = {
+  green: {
+    dot: "bg-success",
+    chip: "bg-success-soft text-success-fg",
+    label: "Ready",
+  },
+  yellow: {
+    dot: "bg-warning",
+    chip: "bg-warning-soft text-warning-fg",
+    label: "Warning",
+  },
+  red: {
+    dot: "bg-danger",
+    chip: "bg-danger-soft text-danger-fg",
+    label: "Blocked",
+  },
 };
 
 export function BomLineRow({
@@ -48,11 +64,12 @@ export function BomLineRow({
       })
     : {
         color: "yellow",
-        reasons: ["טוען…"],
+        reasons: ["Loading…"],
         warningCategories: ["missing-supplier"],
         blockerCategories: [],
         isHardBlock: false,
       };
+  const tone = PIP_TONE[pip.color];
 
   const patch = useMutation({
     mutationFn: async (qty: string) =>
@@ -68,7 +85,7 @@ export function BomLineRow({
     },
     onError: (e: Error) => {
       if (e instanceof AdminMutationError && e.code === "STALE_ROW") {
-        setError("STALE_ROW — רענן את הדף ונסה שוב");
+        setError("Row was updated by another user — refresh the page");
       } else {
         setError(e.message);
       }
@@ -92,20 +109,29 @@ export function BomLineRow({
           body: JSON.stringify({ idempotency_key: randomKey() }),
         },
       );
-      if (!res.ok) throw new Error(`delete: ${res.status}`);
+      if (!res.ok) throw new Error(`Delete failed: HTTP ${res.status}`);
     },
     onSuccess: () =>
       qc.invalidateQueries({ queryKey: ["boms", "lines", versionId] }),
   });
 
+  const componentDisplay =
+    readiness?.component_name ??
+    line.final_component_name ??
+    line.final_component_id;
+
   return (
-    <tr data-testid={`bom-line-row-${line.bom_line_id}`}>
-      <td className="px-2 py-1">
-        {readiness?.component_name ??
-          line.final_component_name ??
-          line.final_component_id}
+    <tr
+      data-testid={`bom-line-row-${line.bom_line_id}`}
+      className="border-b border-border last:border-b-0 hover:bg-bg-subtle/40"
+    >
+      <td className="px-4 py-2.5">
+        <div className="text-sm font-medium text-fg">{componentDisplay}</div>
+        <div className="font-mono text-3xs text-fg-subtle">
+          {line.final_component_id}
+        </div>
       </td>
-      <td className="px-2 py-1">
+      <td className="px-2 py-2.5">
         {editable ? (
           editing ? (
             <input
@@ -113,7 +139,7 @@ export function BomLineRow({
               defaultValue={line.final_component_qty}
               onBlur={(e) => patch.mutate(e.currentTarget.value)}
               autoFocus
-              className="rounded border px-1"
+              className="w-24 rounded-sm border border-accent bg-bg-raised px-2 py-1 text-sm font-mono tabular-nums text-fg shadow-sm focus:outline-none focus:ring-1 focus:ring-accent-ring"
               inputMode="decimal"
             />
           ) : (
@@ -121,65 +147,83 @@ export function BomLineRow({
               type="button"
               aria-label={`qty-edit-${line.bom_line_id}`}
               onClick={() => setEditing(true)}
-              className="rounded px-1 hover:bg-gray-100"
+              className="group inline-flex items-center gap-1.5 rounded-sm border border-dashed border-accent/40 px-1.5 py-0.5 font-mono tabular-nums text-sm text-fg hover:border-accent hover:bg-accent-softer"
             >
               {line.final_component_qty}
+              <Pencil
+                className="h-3 w-3 text-accent/60 group-hover:text-accent"
+                strokeWidth={2}
+              />
             </button>
           )
         ) : (
-          <span>{line.final_component_qty}</span>
-        )}
-        {error && <div className="text-xs text-red-600">{error}</div>}
-      </td>
-      <td className="px-2 py-1 text-gray-500">{line.component_uom ?? "—"}</td>
-      <td className="px-2 py-1">
-        <span
-          aria-label={`readiness-pip-${pip.color}`}
-          className={PIP_CLASS[pip.color]}
-        >
-          {pip.color === "green" ? "🟢" : pip.color === "yellow" ? "🟡" : "🔴"}
-        </span>
-        {pip.reasons.length > 0 && (
-          <span className="ml-1 text-xs text-gray-600">
-            {pip.reasons.join(", ")}
+          <span className="font-mono tabular-nums text-sm text-fg">
+            {line.final_component_qty}
           </span>
         )}
-        {editable &&
-          pip.color !== "green" &&
-          onOpenQuickFix &&
-          readiness && (
-            <button
-              type="button"
-              onClick={() => onOpenQuickFix(readiness.component_id)}
-              className="ml-2 rounded border px-2 py-0.5 text-xs"
-            >
-              Fix
-            </button>
-          )}
+        {error && (
+          <div className="mt-1 text-3xs text-danger-fg">{error}</div>
+        )}
       </td>
-      <td className="px-2 py-1">
+      <td className="px-2 py-2.5 text-xs text-fg-muted">
+        {line.component_uom ?? "—"}
+      </td>
+      <td className="px-2 py-2.5">
+        <div className="flex items-center gap-2">
+          <span
+            aria-label={`readiness-pip-${pip.color}`}
+            className={`inline-flex items-center gap-1.5 rounded-sm px-2 py-0.5 text-3xs font-semibold uppercase tracking-sops ${tone.chip}`}
+            title={pip.reasons.join(" · ")}
+          >
+            <span
+              aria-hidden
+              className={`h-1.5 w-1.5 rounded-full ${tone.dot}`}
+            />
+            {tone.label}
+          </span>
+          {pip.reasons.length > 0 && (
+            <span className="truncate text-3xs text-fg-muted">
+              {pip.reasons[0]}
+            </span>
+          )}
+          {editable &&
+            pip.color !== "green" &&
+            onOpenQuickFix &&
+            readiness && (
+              <button
+                type="button"
+                onClick={() => onOpenQuickFix(readiness.component_id)}
+                className="ml-auto rounded-sm border border-border bg-bg-raised px-2 py-0.5 text-3xs font-medium text-fg hover:border-accent hover:bg-accent-softer hover:text-accent"
+              >
+                Fix
+              </button>
+            )}
+        </div>
+      </td>
+      <td className="px-2 py-2.5 text-right">
         {editable && !confirmDelete && (
           <button
             type="button"
             onClick={() => setConfirmDelete(true)}
-            className="rounded border px-2 py-0.5 text-xs"
+            aria-label={`delete-${line.bom_line_id}`}
+            className="rounded-sm p-1 text-fg-muted hover:bg-danger-soft hover:text-danger-fg"
           >
-            🗑 Delete
+            <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
           </button>
         )}
         {editable && confirmDelete && (
-          <span className="flex gap-1">
+          <span className="flex items-center justify-end gap-1">
             <button
               type="button"
               onClick={() => del.mutate()}
-              className="rounded bg-red-600 px-2 py-0.5 text-xs text-white"
+              className="rounded-sm bg-danger px-2 py-0.5 text-3xs font-medium text-danger-soft hover:bg-danger/90"
             >
-              Confirm
+              Delete
             </button>
             <button
               type="button"
               onClick={() => setConfirmDelete(false)}
-              className="rounded border px-2 py-0.5 text-xs"
+              className="rounded-sm border border-border bg-bg-raised px-2 py-0.5 text-3xs text-fg hover:bg-bg-subtle"
             >
               Cancel
             </button>

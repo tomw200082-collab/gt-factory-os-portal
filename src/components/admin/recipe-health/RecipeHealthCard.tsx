@@ -1,12 +1,13 @@
 // Recipe-Health card — top of /admin/masters/items/[item_id] for
-// MANUFACTURED items. Composes the pure readiness layer with two TanStack
-// Query data hooks. Read-only display; the Edit-recipe buttons run the
-// clone-or-resume flow before navigating to the editor route.
+// MANUFACTURED items. Composes the pure readiness layer with two
+// TanStack Query data hooks. Read-only display; the Edit-recipe buttons
+// run the clone-or-resume flow before navigating to the editor route.
 
 "use client";
 
 import { useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
+import { ArrowRight, Pencil } from "lucide-react";
 import {
   computeLinePipState,
   computeRecipeHealthState,
@@ -30,10 +31,25 @@ interface RecipeHealthCardProps {
   onNavigate?: (href: string) => void;
 }
 
-const TOP_COLOR_CLASS: Record<"green" | "yellow" | "red", string> = {
-  green: "bg-green-100 text-green-900",
-  yellow: "bg-yellow-100 text-yellow-900",
-  red: "bg-red-100 text-red-900",
+const TOP_TONE: Record<
+  "green" | "yellow" | "red",
+  { surface: string; label: string; chip: string }
+> = {
+  green: {
+    surface: "border-success-border bg-success-soft",
+    label: "text-success-fg",
+    chip: "bg-success text-success-soft",
+  },
+  yellow: {
+    surface: "border-warning-border bg-warning-soft",
+    label: "text-warning-fg",
+    chip: "bg-warning text-warning-soft",
+  },
+  red: {
+    surface: "border-danger-border bg-danger-soft",
+    label: "text-danger-fg",
+    chip: "bg-danger text-danger-soft",
+  },
 };
 
 function pipsForLines(
@@ -46,7 +62,7 @@ function pipsForLines(
     if (!comp) {
       return {
         color: "yellow",
-        reasons: ["טוען…"],
+        reasons: ["Loading…"],
         warningCategories: ["missing-supplier"],
         blockerCategories: [],
         isHardBlock: false,
@@ -91,22 +107,43 @@ export function RecipeHealthCard({
 
   const readiness = useComponentReadinessMap(componentIds);
 
+  if (baseTrack.isError || packTrack.isError || readiness.isError) {
+    return (
+      <section className="rounded-md border border-danger-border bg-danger-soft p-5">
+        <p className="text-sm font-semibold text-danger-fg">
+          Could not load production recipe
+        </p>
+        <p className="mt-1 text-xs text-danger-fg/90">
+          {baseTrack.errorMessage ||
+            packTrack.errorMessage ||
+            readiness.errorMessage ||
+            "Unknown error"}
+        </p>
+      </section>
+    );
+  }
+
   if (!baseTrack.isReady || !packTrack.isReady || !readiness.isReady) {
-    return <div className="rounded-md border p-4">טוען…</div>;
+    return (
+      <section className="rounded-md border border-border bg-bg-raised p-5 text-sm text-fg-muted">
+        Loading production recipe…
+      </section>
+    );
   }
 
   const nowMs = Date.now();
   const baseHealth = computeTrackHealth({
     hasActiveVersion: baseTrack.activeVersionId !== null,
     pips: pipsForLines(baseTrack.lines, readiness.map, nowMs),
-    trackLabel: "בסיס המוצר",
+    trackLabel: "Base formula",
   });
   const packHealth = computeTrackHealth({
     hasActiveVersion: packTrack.activeVersionId !== null,
     pips: pipsForLines(packTrack.lines, readiness.map, nowMs),
-    trackLabel: "אריזת המוצר",
+    trackLabel: "Pack BOM",
   });
   const top = computeRecipeHealthState({ base: baseHealth, pack: packHealth });
+  const tone = TOP_TONE[top.color];
 
   async function handleEdit(
     bomHeadId: string,
@@ -139,85 +176,137 @@ export function RecipeHealthCard({
     navigate(`/admin/masters/boms/${bomHeadId}/${targetId}/edit`);
   }
 
+  function EditButton({
+    bomHeadId,
+    activeVersionId,
+    draftId,
+  }: {
+    bomHeadId: string;
+    activeVersionId: string | null;
+    draftId: string | null;
+  }) {
+    return (
+      <button
+        type="button"
+        onClick={() => handleEdit(bomHeadId, activeVersionId, draftId)}
+        disabled={enter.isPending}
+        className="mt-3 inline-flex items-center gap-1.5 rounded-sm border border-border bg-bg-raised px-3 py-1.5 text-xs font-medium text-fg shadow-sm transition-colors hover:border-accent hover:bg-accent-softer hover:text-accent disabled:cursor-not-allowed disabled:opacity-40"
+      >
+        <Pencil className="h-3 w-3" strokeWidth={2} />
+        {draftId ? "Resume draft" : "Edit recipe"}
+        <ArrowRight className="h-3 w-3" strokeWidth={2} />
+      </button>
+    );
+  }
+
   return (
-    <section className="rounded-lg border p-4">
-      <h2 className="mb-3 text-lg font-bold">מתכון ייצור · {itemName}</h2>
-      <div data-tracks-grid className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+    <section className="rounded-md border border-border bg-bg-raised p-5 shadow-sm">
+      <header className="mb-4 flex flex-wrap items-baseline justify-between gap-2">
+        <div>
+          <p className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+            Production recipe
+          </p>
+          <h2 className="text-base font-semibold text-fg-strong">{itemName}</h2>
+        </div>
+        <span
+          className={`rounded-sm px-2 py-1 text-xs font-medium ${tone.chip}`}
+        >
+          {top.label}
+        </span>
+      </header>
+
+      <div
+        data-tracks-grid
+        className="grid grid-cols-1 gap-3 sm:grid-cols-2"
+      >
         <div>
           <RecipeTrackSummary
-            trackLabel="בסיס המוצר"
+            trackLabel="Base formula"
             activeVersionLabel={baseTrack.activeVersionLabel}
             health={baseHealth}
           />
           {isAdmin && baseBomHeadId && (
-            <button
-              type="button"
-              onClick={() =>
-                handleEdit(
-                  baseBomHeadId,
-                  baseTrack.activeVersionId,
-                  baseTrack.draftVersionId,
-                )
-              }
-              className="mt-2 inline-block text-sm text-blue-700 underline"
-            >
-              Edit recipe →
-            </button>
+            <EditButton
+              bomHeadId={baseBomHeadId}
+              activeVersionId={baseTrack.activeVersionId}
+              draftId={baseTrack.draftVersionId}
+            />
           )}
         </div>
         <div>
           <RecipeTrackSummary
-            trackLabel="אריזת המוצר"
+            trackLabel="Pack BOM"
             activeVersionLabel={packTrack.activeVersionLabel}
             health={packHealth}
           />
           {isAdmin && packBomHeadId && (
-            <button
-              type="button"
-              onClick={() =>
-                handleEdit(
-                  packBomHeadId,
-                  packTrack.activeVersionId,
-                  packTrack.draftVersionId,
-                )
-              }
-              className="mt-2 inline-block text-sm text-blue-700 underline"
-            >
-              Edit recipe →
-            </button>
+            <EditButton
+              bomHeadId={packBomHeadId}
+              activeVersionId={packTrack.activeVersionId}
+              draftId={packTrack.draftVersionId}
+            />
           )}
         </div>
       </div>
+
       <div
-        className={`mt-4 rounded p-3 font-semibold ${TOP_COLOR_CLASS[top.color]}`}
+        className={`mt-5 rounded-sm border ${tone.surface} px-4 py-3`}
       >
-        {top.color === "green" ? "🟢 " : top.color === "yellow" ? "🟡 " : "🔴 "}
-        {top.label}
+        <p className={`text-sm font-semibold ${tone.label}`}>{top.label}</p>
+        {(top.blockers.length > 0 || top.warnings.length > 0) && (
+          <ul className="mt-2 space-y-1 text-xs">
+            {top.blockers.map((b) => (
+              <li
+                key={`b-${b}`}
+                className="flex items-start gap-1.5 text-danger-fg"
+              >
+                <span
+                  aria-hidden
+                  className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-danger"
+                />
+                <span>{b}</span>
+              </li>
+            ))}
+            {top.warnings.map((w) => (
+              <li
+                key={`w-${w}`}
+                className="flex items-start gap-1.5 text-warning-fg"
+              >
+                <span
+                  aria-hidden
+                  className="mt-1 h-1.5 w-1.5 shrink-0 rounded-full bg-warning"
+                />
+                <span>{w}</span>
+              </li>
+            ))}
+          </ul>
+        )}
       </div>
 
       {confirmTrack && (
         <div
           role="dialog"
           aria-modal="true"
-          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+          aria-label="Confirm recipe edit"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-fg/40 p-4"
         >
-          <div className="rounded-md bg-white p-4 shadow-lg max-w-md">
-            <p className="mb-3">
+          <div className="max-w-md rounded-md border border-border bg-bg-raised p-5 shadow-lg">
+            <p className="text-sm text-fg">
               {confirmTrack.reason === "draft-exists"
-                ? "יש כבר טיוטה. להמשיך לערוך אותה?"
-                : "אין מתכון פעיל. ליצור מתכון ראשון?"}
+                ? "A draft already exists for this track. Continue editing it?"
+                : "This track has no active recipe yet. Create the first version?"}
             </p>
-            <div className="mt-3 flex justify-end gap-2">
+            <div className="mt-4 flex justify-end gap-2">
               <button
                 type="button"
-                className="rounded border px-3 py-1"
+                className="rounded-sm border border-border bg-bg-raised px-3 py-1.5 text-sm text-fg hover:bg-bg-subtle"
                 onClick={() => setConfirmTrack(null)}
               >
-                ביטול
+                Cancel
               </button>
               <button
                 type="button"
-                className="rounded bg-blue-600 px-3 py-1 text-white"
+                className="rounded-sm border border-accent-border bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:bg-accent-hover"
                 onClick={async () => {
                   const ct = confirmTrack;
                   setConfirmTrack(null);
@@ -231,7 +320,9 @@ export function RecipeHealthCard({
                   );
                 }}
               >
-                {confirmTrack.reason === "draft-exists" ? "להמשיך" : "ליצור"}
+                {confirmTrack.reason === "draft-exists"
+                  ? "Open draft"
+                  : "Create"}
               </button>
             </div>
           </div>

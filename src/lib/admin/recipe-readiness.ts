@@ -35,10 +35,10 @@ export function formatPriceAge(
   nowMs: number,
 ): string {
   const days = priceAgeDays(updatedAtIso, nowMs);
-  if (days === null) return "אין מחיר פעיל";
-  if (days === 0) return "0 ימים";
-  if (days === 1) return "יום 1";
-  return `${days} ימים`;
+  if (days === null) return "No active price";
+  if (days === 0) return "today";
+  if (days === 1) return "1 day ago";
+  return `${days} days ago`;
 }
 
 export interface ComputeLinePipStateInput {
@@ -56,11 +56,13 @@ export function computeLinePipState(
 
   const qtyNum = Number(input.qty);
   if (!Number.isFinite(qtyNum) || qtyNum <= 0) {
-    reasons.push("כמות חייבת להיות חיובית");
+    reasons.push("Quantity must be positive");
     blockerCategories.push("invalid-qty");
   }
   if (input.component.component_status === "INACTIVE") {
-    reasons.push(`החומר ${input.component.component_name} מסומן כלא פעיל`);
+    reasons.push(
+      `Component ${input.component.component_name} is marked inactive`,
+    );
     blockerCategories.push("inactive-component");
   }
   if (blockerCategories.length > 0) {
@@ -74,11 +76,11 @@ export function computeLinePipState(
   }
 
   if (input.component.primary_supplier_id === null) {
-    reasons.push("אין ספק ראשי");
+    reasons.push("No primary supplier");
     warningCategories.push("missing-supplier");
   }
   if (input.component.active_price_value === null) {
-    reasons.push("אין מחיר פעיל");
+    reasons.push("No active price");
     warningCategories.push("no-active-price");
   } else {
     const days = priceAgeDays(
@@ -88,10 +90,10 @@ export function computeLinePipState(
     if (days !== null && days > RECIPE_READINESS_POLICY.PRICE_AGE_WARN_DAYS) {
       const strong = days > RECIPE_READINESS_POLICY.PRICE_AGE_STRONG_WARN_DAYS;
       if (strong) {
-        reasons.push(`מחיר ישן מאוד (${days} ימים)`);
+        reasons.push(`Price is very stale (${days} days)`);
         warningCategories.push("strong-stale-price");
       } else {
-        reasons.push(`מחיר ישן (${days} ימים)`);
+        reasons.push(`Price is stale (${days} days)`);
         warningCategories.push("stale-price");
       }
     }
@@ -121,6 +123,10 @@ export interface ComputeTrackHealthInput {
   trackLabel: string; // for human-facing blocker messages
 }
 
+function plural(count: number, singular: string, plural: string): string {
+  return count === 1 ? `1 ${singular}` : `${count} ${plural}`;
+}
+
 export function computeTrackHealth(
   input: ComputeTrackHealthInput,
 ): TrackHealth {
@@ -128,14 +134,11 @@ export function computeTrackHealth(
   const warnings: string[] = [];
 
   if (!input.hasActiveVersion) {
-    blockers.push(`אין גרסה פעילה ל-${input.trackLabel}`);
+    blockers.push(`No active version for ${input.trackLabel}`);
   } else if (input.pips.length === 0) {
-    blockers.push(`${input.trackLabel} ריק (0 שורות)`);
+    blockers.push(`${input.trackLabel} is empty (0 components)`);
   }
 
-  // Count per-category. Strong-stale-price collapses into the stale-price
-  // bucket for the track-level summary; the line-level pip already
-  // distinguishes the two.
   let invalidQtyCount = 0;
   let inactiveComponentCount = 0;
   let missingSupplierCount = 0;
@@ -158,38 +161,48 @@ export function computeTrackHealth(
 
   if (invalidQtyCount > 0) {
     blockers.push(
-      invalidQtyCount === 1
-        ? "שורה אחת עם כמות לא תקינה"
-        : `${invalidQtyCount} שורות עם כמות לא תקינה`,
+      plural(
+        invalidQtyCount,
+        "row with invalid quantity",
+        "rows with invalid quantity",
+      ),
     );
   }
   if (inactiveComponentCount > 0) {
     blockers.push(
-      inactiveComponentCount === 1
-        ? "חומר אחד מסומן כלא פעיל"
-        : `${inactiveComponentCount} חומרים מסומנים כלא פעילים`,
+      plural(
+        inactiveComponentCount,
+        "inactive component referenced",
+        "inactive components referenced",
+      ),
     );
   }
 
   if (missingSupplierCount > 0) {
     warnings.push(
-      missingSupplierCount === 1
-        ? "חומר אחד חסר ספק ראשי"
-        : `${missingSupplierCount} חומרים חסרי ספק ראשי`,
+      plural(
+        missingSupplierCount,
+        "component with no primary supplier",
+        "components with no primary supplier",
+      ),
     );
   }
   if (noActivePriceCount > 0) {
     warnings.push(
-      noActivePriceCount === 1
-        ? "חומר אחד ללא מחיר פעיל"
-        : `${noActivePriceCount} חומרים ללא מחיר פעיל`,
+      plural(
+        noActivePriceCount,
+        "component with no active price",
+        "components with no active price",
+      ),
     );
   }
   if (stalePriceCount > 0) {
     warnings.push(
-      stalePriceCount === 1
-        ? "חומר אחד עם מחיר ישן"
-        : `${stalePriceCount} חומרים עם מחיר ישן`,
+      plural(
+        stalePriceCount,
+        "component with stale price",
+        "components with stale prices",
+      ),
     );
   }
 
@@ -213,9 +226,9 @@ export interface ComputeRecipeHealthInput {
 }
 
 const LABEL_BY_COLOR: Record<RecipeHealthState["color"], string> = {
-  green: "מוכן לייצור",
-  yellow: "מוכן לייצור עם אזהרות",
-  red: "לא ניתן לפרסם",
+  green: "Production-ready",
+  yellow: "Production-ready with warnings",
+  red: "Cannot publish",
 };
 
 export function computeRecipeHealthState(

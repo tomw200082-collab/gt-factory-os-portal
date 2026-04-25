@@ -56,39 +56,84 @@ export function BomLineDiff({
 }: BomLineDiffProps): JSX.Element {
   const [open, setOpen] = useState(false);
   const diff = computeBomDiff(draftLines, activeLines);
+  const totalChanges = diff.added.length + diff.removed.length + diff.changed.length;
   return (
-    <section className="my-3">
+    <section>
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="text-sm text-blue-700 underline"
+        className="inline-flex items-center gap-1.5 text-xs font-medium text-accent hover:underline"
       >
-        {open ? "▼" : "▶"} Changes from {activeVersionLabel ?? "v?"}
+        <span aria-hidden>{open ? "▾" : "▸"}</span>
+        Changes from {activeVersionLabel ?? "active version"}
+        {totalChanges > 0 && (
+          <span className="rounded-sm bg-accent-soft px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-sops text-accent">
+            {totalChanges}
+          </span>
+        )}
       </button>
       {open && (
-        <div className="mt-2 text-sm">
+        <div className="mt-2 space-y-1 text-xs">
           {diff.added.map((l) => (
-            <div key={l.bom_line_id} className="text-green-700">
-              + {l.final_component_name || l.final_component_id} (
-              {l.final_component_qty})
+            <div
+              key={l.bom_line_id}
+              className="flex items-center gap-1.5 text-success-fg"
+            >
+              <span
+                className="rounded-sm bg-success-soft px-1.5 py-0.5 font-mono text-3xs font-semibold"
+                aria-hidden
+              >
+                +
+              </span>
+              <span>
+                {l.final_component_name || l.final_component_id} ·{" "}
+                <span className="font-mono tabular-nums">
+                  {l.final_component_qty}
+                </span>
+              </span>
             </div>
           ))}
           {diff.removed.map((l) => (
-            <div key={l.bom_line_id} className="text-red-700">
-              − {l.final_component_name || l.final_component_id} (
-              {l.final_component_qty})
+            <div
+              key={l.bom_line_id}
+              className="flex items-center gap-1.5 text-danger-fg"
+            >
+              <span
+                className="rounded-sm bg-danger-soft px-1.5 py-0.5 font-mono text-3xs font-semibold"
+                aria-hidden
+              >
+                −
+              </span>
+              <span>
+                {l.final_component_name || l.final_component_id} ·{" "}
+                <span className="font-mono tabular-nums">
+                  {l.final_component_qty}
+                </span>
+              </span>
             </div>
           ))}
           {diff.changed.map((c) => (
-            <div key={c.component_id} className="text-yellow-800">
-              ~ {c.component_id} ({c.oldQty} → {c.newQty})
+            <div
+              key={c.component_id}
+              className="flex items-center gap-1.5 text-warning-fg"
+            >
+              <span
+                className="rounded-sm bg-warning-soft px-1.5 py-0.5 font-mono text-3xs font-semibold"
+                aria-hidden
+              >
+                Δ
+              </span>
+              <span>
+                {c.component_id} ·{" "}
+                <span className="font-mono tabular-nums">
+                  {c.oldQty} → {c.newQty}
+                </span>
+              </span>
             </div>
           ))}
-          {diff.added.length === 0 &&
-            diff.removed.length === 0 &&
-            diff.changed.length === 0 && (
-              <div className="text-gray-500">אין שינויים</div>
-            )}
+          {totalChanges === 0 && (
+            <div className="text-fg-muted">No changes from active version</div>
+          )}
         </div>
       )}
     </section>

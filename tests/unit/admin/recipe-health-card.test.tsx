@@ -32,12 +32,12 @@ describe("RecipeTrackSummary", () => {
   it("renders the track label and version metadata when active version exists", () => {
     render(
       <RecipeTrackSummary
-        trackLabel="בסיס המוצר"
+        trackLabel="Base formula"
         activeVersionLabel="v3"
         health={track({ lineCount: 12 })}
       />,
     );
-    expect(screen.getByText("בסיס המוצר")).toBeTruthy();
+    expect(screen.getByText("Base formula")).toBeTruthy();
     expect(screen.getByText(/v3/)).toBeTruthy();
     expect(screen.getByText(/12/)).toBeTruthy();
   });
@@ -45,7 +45,7 @@ describe("RecipeTrackSummary", () => {
   it("renders 'אין גרסה פעילה' when hasActiveVersion is false", () => {
     render(
       <RecipeTrackSummary
-        trackLabel="בסיס המוצר"
+        trackLabel="Base formula"
         activeVersionLabel={null}
         health={track({
           color: "red",
@@ -62,7 +62,7 @@ describe("RecipeTrackSummary", () => {
   it("renders warnings list when track is yellow", () => {
     render(
       <RecipeTrackSummary
-        trackLabel="אריזת המוצר"
+        trackLabel="Pack BOM"
         activeVersionLabel="v2"
         health={track({
           color: "yellow",
@@ -78,7 +78,7 @@ describe("RecipeTrackSummary", () => {
   it("renders blockers list when track is red", () => {
     render(
       <RecipeTrackSummary
-        trackLabel="אריזת המוצר"
+        trackLabel="Pack BOM"
         activeVersionLabel="v2"
         health={track({ color: "red", blockers: ["אריזת המוצר ריק (0 שורות)"] })}
       />,
@@ -89,7 +89,7 @@ describe("RecipeTrackSummary", () => {
   it("applies a color-keyed data attribute so visual tests can target it", () => {
     const { container } = render(
       <RecipeTrackSummary
-        trackLabel="בסיס המוצר"
+        trackLabel="Base formula"
         activeVersionLabel="v3"
         health={track({ color: "yellow", warnings: ["w1"] })}
       />,
@@ -229,10 +229,10 @@ describe("RecipeHealthCard — MANUFACTURED full data", () => {
       { wrapper: wrapQuery() },
     );
     await waitFor(() =>
-      expect(screen.queryByText(/מוכן לייצור$/)).not.toBeNull(),
+      expect(screen.queryByText(/Production-ready$/)).not.toBeNull(),
     );
-    expect(screen.getByText("בסיס המוצר")).toBeTruthy();
-    expect(screen.getByText("אריזת המוצר")).toBeTruthy();
+    expect(screen.getByText("Base formula")).toBeTruthy();
+    expect(screen.getByText("Pack BOM")).toBeTruthy();
   });
 });
 
@@ -253,9 +253,9 @@ describe("RecipeHealthCard — yellow when supplier missing", () => {
       { wrapper: wrapQuery() },
     );
     await waitFor(() =>
-      expect(screen.queryByText(/מוכן לייצור עם אזהרות/)).not.toBeNull(),
+      expect(screen.queryByText(/Production-ready with warnings/)).not.toBeNull(),
     );
-    expect(screen.getByText(/חסר.*ספק|חומר.*ספק/)).toBeTruthy();
+    expect(screen.getByText(/no primary supplier|primary supplier/)).toBeTruthy();
   });
 });
 
@@ -325,9 +325,9 @@ describe("RecipeHealthCard — red when pack BOM is empty", () => {
       { wrapper: wrapQuery() },
     );
     await waitFor(() =>
-      expect(screen.queryByText(/לא ניתן לפרסם/)).not.toBeNull(),
+      expect(screen.queryByText(/Cannot publish/)).not.toBeNull(),
     );
-    expect(screen.getByText(/ריק/)).toBeTruthy();
+    expect(screen.getByText(/empty/)).toBeTruthy();
   });
 });
 
@@ -348,7 +348,7 @@ describe("RecipeHealthCard — admin gating", () => {
       { wrapper: wrapQuery() },
     );
     await waitFor(() =>
-      expect(screen.queryByText(/מוכן לייצור$/)).not.toBeNull(),
+      expect(screen.queryByText(/Production-ready$/)).not.toBeNull(),
     );
     expect(screen.getAllByRole("button", { name: /Edit recipe/ })).toHaveLength(2);
   });
@@ -369,7 +369,7 @@ describe("RecipeHealthCard — admin gating", () => {
       { wrapper: wrapQuery() },
     );
     await waitFor(() =>
-      expect(screen.queryByText(/מוכן לייצור$/)).not.toBeNull(),
+      expect(screen.queryByText(/Production-ready$/)).not.toBeNull(),
     );
     expect(screen.queryByRole("button", { name: /Edit recipe/ })).toBeNull();
   });
@@ -392,7 +392,7 @@ describe("RecipeHealthCard — mobile stacking class", () => {
       { wrapper: wrapQuery() },
     );
     await waitFor(() =>
-      expect(screen.queryByText(/מוכן לייצור$/)).not.toBeNull(),
+      expect(screen.queryByText(/Production-ready$/)).not.toBeNull(),
     );
     const grid = container.querySelector("[data-tracks-grid]");
     expect(grid).not.toBeNull();

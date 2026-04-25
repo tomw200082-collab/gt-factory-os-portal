@@ -158,9 +158,9 @@ describe("Recipe-Health card vs literal upstream response shape", () => {
     // If the data hook reads the wrong field name, every line falls to
     // qty=undefined → Number.isFinite(NaN) = false → red pip → red top.
     await waitFor(() =>
-      expect(screen.queryByText(/מוכן לייצור$/)).not.toBeNull(),
+      expect(screen.queryAllByText(/Production-ready$/).length).toBeGreaterThan(0),
     );
-    expect(screen.queryByText(/לא ניתן לפרסם/)).toBeNull();
+    expect(screen.queryByText(/Cannot publish/)).toBeNull();
   });
 
   it("does NOT show false-red 'quantity invalid' when qty is a positive decimal string", async () => {
@@ -223,10 +223,10 @@ describe("Recipe-Health card vs literal upstream response shape", () => {
     );
 
     await waitFor(() =>
-      expect(screen.queryByText(/מוכן לייצור$/)).not.toBeNull(),
+      expect(screen.queryAllByText(/Production-ready$/).length).toBeGreaterThan(0),
     );
     // The specific reason string from the qty-invalid path must be absent.
-    expect(screen.queryByText(/כמות חייבת להיות חיובית/)).toBeNull();
-    expect(screen.queryByText(/שורות עם כמות לא תקינה/)).toBeNull();
+    expect(screen.queryByText(/Quantity must be positive/)).toBeNull();
+    expect(screen.queryByText(/rows with invalid quantity/)).toBeNull();
   });
 });

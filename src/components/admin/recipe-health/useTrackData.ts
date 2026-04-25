@@ -36,16 +36,21 @@ export interface TrackData {
   lines: BomLineRow[];
   isReady: boolean;
   isError: boolean;
+  errorMessage: string | null;
 }
 
 export function useTrackData(bomHeadId: string | null): TrackData {
   const versionsQuery = useQuery({
     queryKey: ["boms", "versions", bomHeadId],
     queryFn: async () => {
-      const res = await fetch(
-        `/api/boms/versions?bom_head_id=${encodeURIComponent(bomHeadId!)}`,
-      );
-      if (!res.ok) throw new Error(`versions: ${res.status}`);
+      const url = `/api/boms/versions?bom_head_id=${encodeURIComponent(bomHeadId!)}`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(
+          `versions — HTTP ${res.status} from ${url}\n${text.slice(0, 200)}`,
+        );
+      }
       const body = await res.json();
       return (body.rows ?? []) as BomVersionRow[];
     },
@@ -57,13 +62,20 @@ export function useTrackData(bomHeadId: string | null): TrackData {
   const active = versions.find((v) => v.status === "ACTIVE") ?? null;
   const draft = versions.find((v) => v.status === "DRAFT") ?? null;
 
+  // Tolerant: a lines failure leaves activeVersionLabel intact and surfaces
+  // an error message at the track level. The card still renders the rest
+  // of its panel rather than collapsing into a blank loader.
   const linesQuery = useQuery({
     queryKey: ["boms", "lines", active?.bom_version_id ?? null],
     queryFn: async () => {
-      const res = await fetch(
-        `/api/boms/lines?bom_version_id=${encodeURIComponent(active!.bom_version_id)}`,
-      );
-      if (!res.ok) throw new Error(`lines: ${res.status}`);
+      const url = `/api/boms/lines?bom_version_id=${encodeURIComponent(active!.bom_version_id)}&limit=500`;
+      const res = await fetch(url);
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        throw new Error(
+          `lines — HTTP ${res.status} from ${url}\n${text.slice(0, 200)}`,
+        );
+      }
       const body = await res.json();
       return (body.rows ?? []) as BomLineRow[];
     },
@@ -79,12 +91,17 @@ export function useTrackData(bomHeadId: string | null): TrackData {
       lines: [],
       isReady: true,
       isError: false,
+      errorMessage: null,
     };
   }
 
   const isReady =
     versionsQuery.isSuccess && (active === null || linesQuery.isSuccess);
   const isError = versionsQuery.isError || linesQuery.isError;
+  const errorMessage =
+    (versionsQuery.error as Error | null)?.message ??
+    (linesQuery.error as Error | null)?.message ??
+    null;
 
   return {
     activeVersionId: active?.bom_version_id ?? null,
@@ -96,5 +113,6 @@ export function useTrackData(bomHeadId: string | null): TrackData {
         : [],
     isReady,
     isError,
+    errorMessage,
   };
 }
