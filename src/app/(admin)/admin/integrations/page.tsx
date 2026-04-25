@@ -159,11 +159,7 @@ function ShopifySyncStatusCard() {
           Failed to load sync status:{" "}
           {error instanceof Error ? error.message : String(error)}
           <div className="mt-1 text-xs text-fg-muted">
-            The backend endpoint{" "}
-            <code className="rounded bg-bg-subtle px-1 font-mono text-xs">
-              GET /api/v1/queries/shopify/sync-status
-            </code>{" "}
-            may not yet be deployed (W1 is building this in parallel).
+            The sync status endpoint may not yet be available. Contact your administrator if this persists.
           </div>
         </div>
       )}

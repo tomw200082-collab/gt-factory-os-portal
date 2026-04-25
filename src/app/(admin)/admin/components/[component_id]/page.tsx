@@ -766,10 +766,7 @@ export default function AdminComponentDetailPage({
 
       <SectionCard eyebrow="BOM usage" title="Used in BOM versions">
         <p className="text-sm text-fg-muted">
-          Reverse-lookup (bom_lines filtered by final_component_id) is not yet
-          exposed as its own endpoint. Open the BOM editor on a specific item
-          to see where this component appears. Slice 6 will surface reverse
-          usage here directly.
+          BOM reverse-lookup is not yet available here. Open the BOM editor on a specific item to see where this component is used.
         </p>
       </SectionCard>
 
