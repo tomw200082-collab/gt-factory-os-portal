@@ -387,16 +387,18 @@ export default function DashboardPage() {
       </SectionCard>
 
       {/* -------------------------------------------------------------- */}
-      {/* Block 3 — Integration freshness                                */}
+      {/* Block 3 — Integration freshness (hidden when pending)           */}
       {/* -------------------------------------------------------------- */}
-      <SectionCard
-        eyebrow="Integrations"
-        title="Data freshness"
-        description="How recently each external data source was successfully synced."
-        className="mt-6"
-      >
-        <IntegrationFreshnessBlock signal={freshnessQ.data} now={now} />
-      </SectionCard>
+      {freshnessQ.data && freshnessQ.data.state !== "pending_tranche_i" ? (
+        <SectionCard
+          eyebrow="Integrations"
+          title="Data freshness"
+          description="How recently each external data source was successfully synced."
+          className="mt-6"
+        >
+          <IntegrationFreshnessBlock signal={freshnessQ.data} now={now} />
+        </SectionCard>
+      ) : null}
 
       {/* -------------------------------------------------------------- */}
       {/* Block 4 — Jobs 24h health                                      */}
@@ -422,16 +424,18 @@ export default function DashboardPage() {
       </SectionCard>
 
       {/* -------------------------------------------------------------- */}
-      {/* Block 6 — RUNTIME_READY registry                               */}
+      {/* Block 6 — RUNTIME_READY registry (hidden when pending)          */}
       {/* -------------------------------------------------------------- */}
-      <SectionCard
-        eyebrow="Forms"
-        title="Operational forms"
-        description="Which forms are active and ready to use."
-        className="mt-6"
-      >
-        <RuntimeReadyBlock signal={runtimeReadyQ.data} now={now} />
-      </SectionCard>
+      {runtimeReadyQ.data && runtimeReadyQ.data.state !== "pending_tranche_i" ? (
+        <SectionCard
+          eyebrow="Forms"
+          title="Operational forms"
+          description="Which forms are active and ready to use."
+          className="mt-6"
+        >
+          <RuntimeReadyBlock signal={runtimeReadyQ.data} now={now} />
+        </SectionCard>
+      ) : null}
 
       {/* -------------------------------------------------------------- */}
       {/* Block 7 — Role-adapted quick-action launcher                   */}
@@ -878,10 +882,8 @@ function StockTruthBlock({
     | undefined;
   now: Date;
 }) {
-  if (!signal) return <span className="text-fg-muted text-sm">Loading.</span>;
-  if (signal.state === "pending_tranche_i") {
-    return <PendingBadge note={signal.note} />;
-  }
+  if (!signal) return null;
+  if (signal.state === "pending_tranche_i") return null;
   if (signal.state === "unavailable") {
     return <UnavailableBadge reason={signal.reason} />;
   }
@@ -962,10 +964,8 @@ function IntegrationFreshnessBlock({
     | undefined;
   now: Date;
 }) {
-  if (!signal) return <span className="text-fg-muted text-sm">Loading.</span>;
-  if (signal.state === "pending_tranche_i") {
-    return <PendingBadge note={signal.note} />;
-  }
+  if (!signal) return null;
+  if (signal.state === "pending_tranche_i") return null;
   if (signal.state === "unavailable") {
     return <UnavailableBadge reason={signal.reason} />;
   }
