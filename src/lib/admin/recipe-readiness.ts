@@ -9,7 +9,9 @@
 import { RECIPE_READINESS_POLICY } from "@/lib/policy/recipe-readiness";
 import type {
   ComponentReadiness,
+  LineBlockerCategory,
   LinePipState,
+  LineWarningCategory,
   RecipeHealthState,
   TrackHealth,
 } from "./recipe-readiness.types";
@@ -37,4 +39,78 @@ export function formatPriceAge(
   if (days === 0) return "0 ימים";
   if (days === 1) return "יום 1";
   return `${days} ימים`;
+}
+
+export interface ComputeLinePipStateInput {
+  qty: string | number;
+  component: ComponentReadiness;
+  nowMs: number;
+}
+
+export function computeLinePipState(
+  input: ComputeLinePipStateInput,
+): LinePipState {
+  const reasons: string[] = [];
+  const blockerCategories: LineBlockerCategory[] = [];
+  const warningCategories: LineWarningCategory[] = [];
+
+  const qtyNum = Number(input.qty);
+  if (!Number.isFinite(qtyNum) || qtyNum <= 0) {
+    reasons.push("כמות חייבת להיות חיובית");
+    blockerCategories.push("invalid-qty");
+  }
+  if (input.component.component_status === "INACTIVE") {
+    reasons.push(`החומר ${input.component.component_name} מסומן כלא פעיל`);
+    blockerCategories.push("inactive-component");
+  }
+  if (blockerCategories.length > 0) {
+    return {
+      color: "red",
+      reasons,
+      warningCategories: [],
+      blockerCategories,
+      isHardBlock: true,
+    };
+  }
+
+  if (input.component.primary_supplier_id === null) {
+    reasons.push("אין ספק ראשי");
+    warningCategories.push("missing-supplier");
+  }
+  if (input.component.active_price_value === null) {
+    reasons.push("אין מחיר פעיל");
+    warningCategories.push("no-active-price");
+  } else {
+    const days = priceAgeDays(
+      input.component.active_price_updated_at,
+      input.nowMs,
+    );
+    if (days !== null && days > RECIPE_READINESS_POLICY.PRICE_AGE_WARN_DAYS) {
+      const strong = days > RECIPE_READINESS_POLICY.PRICE_AGE_STRONG_WARN_DAYS;
+      if (strong) {
+        reasons.push(`מחיר ישן מאוד (${days} ימים)`);
+        warningCategories.push("strong-stale-price");
+      } else {
+        reasons.push(`מחיר ישן (${days} ימים)`);
+        warningCategories.push("stale-price");
+      }
+    }
+  }
+  if (warningCategories.length > 0) {
+    return {
+      color: "yellow",
+      reasons,
+      warningCategories,
+      blockerCategories: [],
+      isHardBlock: false,
+    };
+  }
+
+  return {
+    color: "green",
+    reasons: [],
+    warningCategories: [],
+    blockerCategories: [],
+    isHardBlock: false,
+  };
 }
