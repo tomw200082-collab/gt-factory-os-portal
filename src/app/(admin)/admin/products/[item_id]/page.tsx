@@ -913,8 +913,7 @@ function BomTab({
     return (
       <SectionCard title="BOM" tone="warning">
         <p className="text-sm text-warning-fg">
-          No BOM head found for this item. Create one via the BOM editor
-          (Slice 6).
+          No BOM head found for this item. Use the BOM editor to create one.
         </p>
       </SectionCard>
     );
@@ -1064,8 +1063,7 @@ function ComponentsTab({
     return (
       <SectionCard title="No active BOM version" tone="warning">
         <p className="text-sm text-warning-fg">
-          No active BOM version — components list is empty. Publish a version
-          in the BOM editor (Slice 6).
+          No active BOM version — components list is empty. Publish a version in the BOM editor.
         </p>
       </SectionCard>
     );
@@ -1409,10 +1407,7 @@ function HistoryTab(): JSX.Element {
   return (
     <SectionCard title="History" tone="info">
       <p className="text-sm text-fg-muted">
-        Change log history surface requires a change_log list endpoint
-        scoped by item_id. Not in Slice 5 scope; deferred to post-launch
-        dispatch. The change_log table does persist every admin mutation
-        audit trail — it just is not yet queryable from the UI.
+        Change history for this item is not yet available in the portal. All admin mutations are audited and stored; the history view will appear here when the endpoint is live.
       </p>
     </SectionCard>
   );
