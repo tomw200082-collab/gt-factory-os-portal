@@ -120,7 +120,9 @@ export default function AdminSuppliersPage(): JSX.Element {
       (r) =>
         r.supplier_id.toLowerCase().includes(qLower) ||
         r.supplier_name_official.toLowerCase().includes(qLower) ||
-        (r.supplier_name_short ?? "").toLowerCase().includes(qLower),
+        (r.supplier_name_short ?? "").toLowerCase().includes(qLower) ||
+        (r.primary_contact_name ?? "").toLowerCase().includes(qLower) ||
+        (r.primary_contact_phone ?? "").toLowerCase().includes(qLower),
     );
   }, [rows, query]);
 
@@ -180,17 +182,29 @@ export default function AdminSuppliersPage(): JSX.Element {
 
       <SectionCard title="Filters" density="compact">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-          <label className="block sm:col-span-3">
+          <div className="block sm:col-span-3">
             <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              Search (id / name)
+              Search
             </span>
-            <input
-              className="input"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="filter client-side…"
-            />
-          </label>
+            <div className="flex gap-2">
+              <input
+                className="input flex-1"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search suppliers…"
+                dir="auto"
+              />
+              {query ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm shrink-0"
+                  onClick={() => setQuery("")}
+                >
+                  Clear
+                </button>
+              ) : null}
+            </div>
+          </div>
           <label className="block">
             <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
               Status
@@ -221,7 +235,7 @@ export default function AdminSuppliersPage(): JSX.Element {
           </div>
         ) : filtered.length === 0 ? (
           <div className="p-5 text-sm text-fg-muted">
-            No suppliers match filters.
+            {query ? "No suppliers match your search." : "No suppliers match filters."}
           </div>
         ) : (
           <div className="overflow-x-auto">

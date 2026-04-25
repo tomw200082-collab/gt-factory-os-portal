@@ -191,17 +191,29 @@ export default function AdminComponentsPage(): JSX.Element {
 
       <SectionCard title="Filters" density="compact">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-          <label className="block sm:col-span-3">
+          <div className="block sm:col-span-3">
             <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              Search (id / name / class)
+              Search
             </span>
-            <input
-              className="input"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder="filter client-side…"
-            />
-          </label>
+            <div className="flex gap-2">
+              <input
+                className="input flex-1"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+                placeholder="Search components…"
+                dir="auto"
+              />
+              {query ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm shrink-0"
+                  onClick={() => setQuery("")}
+                >
+                  Clear
+                </button>
+              ) : null}
+            </div>
+          </div>
           <label className="block">
             <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
               Status
