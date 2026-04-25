@@ -12,9 +12,11 @@
 //     created_at.
 //   - Status filter bar (OPEN | PARTIAL | RECEIVED | CANCELLED | all).
 //   - Sort: created_at desc (server returns in that order).
-//   - No edit actions. No "Convert to PO" button here — that lives on
-//     /runs/[run_id] rec detail (C1 commit 2ec7899). v1 strictly
-//     read-only per plan §D.2 + §A.2 (admin CRUD UIs post-launch).
+//   - No standalone PO-creation route in v1. POs are created from
+//     approved planning recommendations via /planning/runs.
+//     "New PO (from recommendation)" button routes to /planning/runs.
+//     (CLAUDE.md §"PO workflow": no autonomous ordering; human approval
+//     before PO creation via planning engine only.)
 // ---------------------------------------------------------------------------
 
 import { useMemo, useState, useCallback } from "react";
@@ -209,7 +211,7 @@ export default function PurchaseOrdersListPage() {
       <WorkflowHeader
         eyebrow="Planner workspace · read-only"
         title="Purchase orders"
-        description="Live read of private_core.purchase_orders. POs are created from the Convert-to-PO action on an approved recommendation (see a run detail). This view is read-only in v1; admin CRUD UIs ship post-launch."
+        description="Live read of private_core.purchase_orders. POs are created from the Convert-to-PO action on an approved planning recommendation."
         meta={
           <>
             <Badge tone="info" dotted>
@@ -218,6 +220,16 @@ export default function PurchaseOrdersListPage() {
             <Badge tone="neutral" dotted>
               live API
             </Badge>
+            {/* v1 PO workflow: recommendations-first — no standalone creation form.
+                This link routes planners to the surface where approved recs
+                are converted to POs. CLAUDE.md §"PO workflow" locked. */}
+            <Link
+              href="/planning/runs"
+              className="inline-flex items-center gap-1.5 rounded-md border border-accent/40 bg-accent-soft px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent-soft/80 transition-colors"
+              data-testid="po-list-new-from-recommendation"
+            >
+              New PO (from recommendation)
+            </Link>
           </>
         }
       />
