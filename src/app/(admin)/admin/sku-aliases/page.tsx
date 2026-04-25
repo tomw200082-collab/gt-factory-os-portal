@@ -742,7 +742,7 @@ export default function AdminSkuAliasesPage(): JSX.Element {
       <SectionCard
         eyebrow="Audit"
         title={`Already approved (${approvedCount})`}
-        description="Read-only in v1. Rejecting or editing an existing alias is not in the v1 admin surface; use a migration or SQL if absolutely required."
+        description="Approved aliases are read-only. Contact your system administrator to reject or modify an existing alias."
         contentClassName="p-0"
       >
         {approvedQuery.isLoading ? (

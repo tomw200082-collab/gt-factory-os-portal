@@ -327,8 +327,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
       >
         {!supplierId ? (
           <div className="p-5 text-sm text-fg-muted">
-            No supplier chosen. The upstream endpoint requires a
-            supplier/component/item filter — v1 uses the supplier pivot.
+            Select a supplier above to see their items.
           </div>
         ) : supplierItemsQuery.isLoading ? (
           <div className="p-5 text-sm text-fg-muted">Loading…</div>

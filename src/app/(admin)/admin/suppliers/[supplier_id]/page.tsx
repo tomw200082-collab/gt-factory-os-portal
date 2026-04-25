@@ -298,7 +298,7 @@ export default function AdminSupplierDetailPage({
       <WorkflowHeader
         eyebrow={`Admin · suppliers · ${supplier.supplier_id}`}
         title={supplier.supplier_name_official}
-        description="Supplier master detail: inline-edit scalars + supplier-items catalog. No supplier-level readiness view in v1."
+        description="Supplier detail — contact info, payment terms, and the items this supplier provides."
         meta={
           <>
             <StatusBadge status={supplier.status} />
