@@ -14,6 +14,7 @@ import { useQuery } from "@tanstack/react-query";
 import type { BomLineRow as BomLineDataRow } from "@/components/admin/recipe-health/useTrackData";
 import { useComponentReadinessMap } from "@/components/admin/recipe-health/useComponentReadinessMap";
 import { ReadinessPanel } from "@/components/admin/recipe-health/ReadinessPanel";
+import { QuickFixDrawer } from "@/components/admin/recipe-health/QuickFixDrawer";
 import { BomLineRow } from "./BomLineRow";
 import { BomLineAddDrawer } from "./BomLineAddDrawer";
 import { BomLineDiff } from "./BomLineDiff";
@@ -216,22 +217,11 @@ export function BomDraftEditorPage({
           onClose={() => setAddOpen(false)}
         />
         {fixComponentId && (
-          <div
-            role="dialog"
-            data-testid={`quick-fix-stub-${fixComponentId}`}
-            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
-          >
-            <div className="rounded-md bg-white p-4 shadow-lg">
-              <p>{fixComponentId}</p>
-              <button
-                type="button"
-                onClick={() => setFixComponentId(null)}
-                className="mt-2 rounded border px-3 py-1"
-              >
-                Close
-              </button>
-            </div>
-          </div>
+          <QuickFixDrawer
+            componentId={fixComponentId}
+            open
+            onClose={() => setFixComponentId(null)}
+          />
         )}
       </main>
     </div>

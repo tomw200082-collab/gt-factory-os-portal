@@ -275,7 +275,7 @@ describe("BomDraftEditorPage — Add line drawer", () => {
     expect(screen.getAllByText("Bottle").length).toBeGreaterThanOrEqual(2);
   });
 
-  it("clicking [Fix] on a panel row sets the active fix component_id state (visible via stub)", async () => {
+  it("clicking [Fix] on a panel row opens the real QuickFixDrawer", async () => {
     mockEditorApi({
       draftLines: [{ bom_line_id: "L1", component_id: "C-1", qty: "1.0" }],
       perComponent: { "C-1": [] },
@@ -285,8 +285,9 @@ describe("BomDraftEditorPage — Add line drawer", () => {
     });
     const fixBtns = await screen.findAllByRole("button", { name: /Fix/ });
     fireEvent.click(fixBtns[0]);
-    const stub = await screen.findByTestId(/quick-fix-stub-/);
-    expect(stub.textContent ?? "").toContain("C-1");
+    expect(
+      await screen.findByRole("dialog", { name: /Quick fix/ }),
+    ).toBeTruthy();
   });
 
   it("submitting the drawer POSTs to /api/boms/versions/:id/lines", async () => {
