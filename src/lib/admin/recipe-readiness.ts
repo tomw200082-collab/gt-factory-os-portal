@@ -206,3 +206,34 @@ export function computeTrackHealth(
     blockers,
   };
 }
+
+export interface ComputeRecipeHealthInput {
+  base: TrackHealth;
+  pack: TrackHealth;
+}
+
+const LABEL_BY_COLOR: Record<RecipeHealthState["color"], string> = {
+  green: "מוכן לייצור",
+  yellow: "מוכן לייצור עם אזהרות",
+  red: "לא ניתן לפרסם",
+};
+
+export function computeRecipeHealthState(
+  input: ComputeRecipeHealthInput,
+): RecipeHealthState {
+  const blockers = [...input.base.blockers, ...input.pack.blockers];
+  const warnings = [...input.base.warnings, ...input.pack.warnings];
+
+  let color: RecipeHealthState["color"];
+  if (blockers.length > 0) color = "red";
+  else if (warnings.length > 0) color = "yellow";
+  else color = "green";
+
+  return {
+    color,
+    label: LABEL_BY_COLOR[color],
+    blockers,
+    warnings,
+    publishPermitted: color !== "red",
+  };
+}
