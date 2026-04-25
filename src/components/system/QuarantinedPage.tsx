@@ -64,7 +64,7 @@ export function QuarantinedPage({ title, description }: QuarantinedPageProps) {
                 className="flex items-baseline justify-between gap-4 hover:underline"
               >
                 <span className="font-medium">{m.label}</span>
-                <span className="text-sm text-muted-foreground">{m.blurb}</span>
+                <span className="text-sm text-fg-muted">{m.blurb}</span>
               </Link>
             </li>
           ))}
