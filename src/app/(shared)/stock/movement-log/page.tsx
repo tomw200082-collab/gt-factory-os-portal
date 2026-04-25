@@ -91,7 +91,7 @@ function QtyDeltaCell({ value }: { value: string }) {
   const isPos = num >= 0;
   const display = isNaN(num) ? value : `${isPos ? "+" : ""}${num.toFixed(3)}`;
   return (
-    <span className={isPos ? "text-green-700 font-medium" : "text-red-600 font-medium"}>
+    <span className={isPos ? "font-medium text-success-fg" : "font-medium text-danger-fg"}>
       {display}
     </span>
   );
