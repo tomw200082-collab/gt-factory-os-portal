@@ -20,11 +20,14 @@ import type { ReactNode } from "react";
 
 const CAPABILITY_LABELS: Partial<Record<CapabilityRequirement, string>> = {
   "viewer:read": "Viewer access",
+  "stock:read": "Stock read access",
   "stock:execute": "Operator (stock) access",
   "planning:read": "Planner read access",
   "planning:execute": "Planner access",
+  "planning:execute+override": "Planner override access",
+  "admin:read": "Admin read access",
   "admin:execute": "Admin access",
-  "admin:override": "Admin override access",
+  "admin:execute+override": "Admin override access",
 };
 
 type RoleGateProps =
