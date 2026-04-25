@@ -141,7 +141,7 @@ export default function AdminPlanningPolicyPage(): JSX.Element {
             className="input"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="filter client-side…"
+            placeholder="Search by key or description…"
           />
         </label>
       </SectionCard>

@@ -309,7 +309,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
               className="input"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="client-side…"
+              placeholder="Search items…"
               disabled={!supplierId}
             />
           </label>
