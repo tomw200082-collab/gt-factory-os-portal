@@ -21,7 +21,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Lock } from "lucide-react";
+import { Lock, LogOut } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSession } from "@/lib/auth/session-provider";
 import { authorizeCapability } from "@/lib/auth/authorize";
@@ -193,20 +193,70 @@ export function SideNav({ onNavigate }: { onNavigate?: () => void } = {}) {
         );
       })}
 
-      <div className="mt-4 rounded-md border border-border/60 bg-bg-subtle/60 p-3">
-        <div className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-          You are
+      <UserCard session={session} />
+    </nav>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// UserCard — identity footer rendered at the bottom of the sidebar.
+// Shows the signed-in user's avatar (initials), display name, email, and role.
+// Sign-out routes to /auth/signout which Supabase auth wires up when live.
+// ---------------------------------------------------------------------------
+
+import type { DevShimSession } from "@/lib/auth/fake-auth";
+
+function getInitials(name: string, email: string): string {
+  const clean = name.split(" (")[0].trim();
+  if (clean) {
+    const parts = clean.split(/\s+/);
+    if (parts.length >= 2) {
+      return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    }
+    return clean.slice(0, 2).toUpperCase();
+  }
+  return email.slice(0, 2).toUpperCase();
+}
+
+const ROLE_LABELS: Record<string, string> = {
+  admin: "Admin",
+  planner: "Planner",
+  operator: "Operator",
+  viewer: "Viewer",
+};
+
+function UserCard({ session }: { session: DevShimSession }) {
+  const initials = getInitials(session.display_name, session.email);
+  const displayName = session.display_name.split(" (")[0] || session.email;
+  const roleLabel = ROLE_LABELS[session.role] ?? session.role;
+
+  return (
+    <div className="mt-4 rounded-md border border-border/60 bg-bg-subtle/60 p-3">
+      <div className="flex items-center gap-2.5">
+        <div
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/15 text-[0.6875rem] font-bold text-accent"
+          aria-hidden
+        >
+          {initials}
         </div>
-        <div className="mt-1 flex items-center gap-1.5">
-          <span className="dot bg-warning" />
-          <span className="text-sm font-medium text-fg-strong">
-            {session.display_name.split(" (")[0] || session.email}
-          </span>
-        </div>
-        <div className="mt-0.5 font-mono text-3xs uppercase tracking-sops text-fg-muted">
-          role · {session.role}
+        <div className="min-w-0 flex-1">
+          <div className="truncate text-[0.8125rem] font-semibold text-fg-strong">
+            {displayName}
+          </div>
+          <div className="mt-0.5 truncate font-mono text-3xs uppercase tracking-sops text-fg-muted">
+            {roleLabel}
+          </div>
         </div>
       </div>
-    </nav>
+      <div className="mt-2.5 border-t border-border/50 pt-2">
+        <Link
+          href="/auth/signout"
+          className="flex items-center gap-1.5 text-3xs font-medium text-fg-muted transition-colors hover:text-fg"
+        >
+          <LogOut className="h-3 w-3" strokeWidth={2} aria-hidden />
+          Sign out
+        </Link>
+      </div>
+    </div>
   );
 }
