@@ -14,7 +14,12 @@ export function AppShellChrome({ children }: { children: ReactNode }) {
             <SideNav />
           </div>
         </aside>
-        <main className="min-w-0 flex-1 pb-16">{children}</main>
+        <main
+          className="min-w-0 flex-1"
+          style={{ paddingBottom: "max(4rem, env(safe-area-inset-bottom, 0px))" }}
+        >
+          {children}
+        </main>
       </div>
     </div>
   );
