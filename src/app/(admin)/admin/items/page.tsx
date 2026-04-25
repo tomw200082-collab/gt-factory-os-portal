@@ -153,7 +153,7 @@ export default function AdminItemsPage(): JSX.Element {
       <WorkflowHeader
         eyebrow="Admin · items"
         title="Items"
-        description="Finished-goods and bought-finished master data. Readiness pills + status toggle + inline create. Detail page on row click."
+        description="Finished goods and bought-finished item master. Click a row for details or use + New Item to add an item."
         meta={
           <>
             <Badge tone="info" dotted>

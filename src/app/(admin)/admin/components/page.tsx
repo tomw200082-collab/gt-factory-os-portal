@@ -152,7 +152,7 @@ export default function AdminComponentsPage(): JSX.Element {
       <WorkflowHeader
         eyebrow="Admin · components"
         title="Components"
-        description="Raw-material and packaging master data. + New drawer, status toggle. Detail page + per-component readiness on the detail view."
+        description="Raw material and packaging component master. Click a row for details including supplier coverage and BOM usage."
         meta={
           <>
             <Badge tone="info" dotted>

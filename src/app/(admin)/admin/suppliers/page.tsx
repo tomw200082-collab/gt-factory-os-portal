@@ -143,7 +143,7 @@ export default function AdminSuppliersPage(): JSX.Element {
       <WorkflowHeader
         eyebrow="Admin · suppliers"
         title="Suppliers"
-        description="Supplier master. + New drawer, status toggle. Per-supplier catalog + readiness on the detail page."
+        description="Supplier master. Click a row to see the per-supplier catalog and item coverage."
         meta={
           <>
             <Badge tone="info" dotted>
