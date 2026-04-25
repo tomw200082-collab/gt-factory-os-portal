@@ -185,7 +185,7 @@ async function postJson<T>(url: string, body: unknown): Promise<T> {
   if (!res.ok) {
     throw new AdminMutationError(
       res.status,
-      (json as { message?: string })?.message ?? `HTTP ${res.status}`,
+      (json as { message?: string })?.message ?? "Could not save. Check your connection and try again.",
       (json as { code?: string })?.code,
       json,
     );
@@ -206,7 +206,7 @@ async function deleteJson<T>(url: string, body: unknown): Promise<T> {
   if (!res.ok) {
     throw new AdminMutationError(
       res.status,
-      (json as { message?: string })?.message ?? `HTTP ${res.status}`,
+      (json as { message?: string })?.message ?? "Could not save. Check your connection and try again.",
       (json as { code?: string })?.code,
       json,
     );
@@ -500,7 +500,7 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
       if (!res.ok) {
         throw new AdminMutationError(
           res.status,
-          (json as { message?: string })?.message ?? `HTTP ${res.status}`,
+          (json as { message?: string })?.message ?? "Could not save. Check your connection and try again.",
           (json as { code?: string })?.code,
           json,
         );

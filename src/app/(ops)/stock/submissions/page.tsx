@@ -92,7 +92,7 @@ export default function MySubmissionsPage() {
     queryKey: ["submissions", "recent"],
     queryFn: async () => {
       const res = await fetch("/api/submissions/recent");
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) throw new Error("Could not load submissions. Check your connection and try refreshing.");
       return res.json() as Promise<RecentResponse>;
     },
     staleTime: 30 * 1000,

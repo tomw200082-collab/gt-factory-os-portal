@@ -91,7 +91,7 @@ export async function quickCreatePost<TId extends string | number = string>(
     status: res.status,
     message:
       (body as { message?: string } | null)?.message ??
-      `Request failed with HTTP ${res.status}.`,
+      "Could not save. Check your connection and try again.",
   };
 }
 

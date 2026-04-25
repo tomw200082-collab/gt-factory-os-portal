@@ -305,7 +305,7 @@ async function cancelOnce(
             : undefined,
       };
     }
-    return { kind: "network", message: `HTTP ${res.status}` };
+    return { kind: "network", message: "Could not submit. Check your connection and try again." };
   } catch (err) {
     return {
       kind: "network",

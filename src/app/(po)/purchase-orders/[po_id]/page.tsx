@@ -155,7 +155,7 @@ async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url, { headers: { Accept: "application/json" } });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`HTTP ${res.status}: ${body || res.statusText}`);
+    throw new Error("Could not load data. Check your connection and try refreshing.");
   }
   return (await res.json()) as T;
 }
