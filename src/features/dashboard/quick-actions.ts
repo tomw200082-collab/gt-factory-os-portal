@@ -20,15 +20,14 @@ import {
   ClipboardCheck,
   Cog,
   Factory,
+  GitBranch,
   Inbox as InboxIcon,
-  LayoutDashboard,
   LineChart,
   ListChecks,
-  Network,
+  MinusCircle,
   Package,
   PackageOpen,
   ShoppingCart,
-  Sliders,
 } from "lucide-react";
 
 import type { CapabilityRequirement } from "@/lib/auth/authorize";
@@ -54,14 +53,6 @@ export const QUICK_ACTIONS: readonly QuickAction[] = [
     required: "viewer:read",
     category: "triage",
   },
-  {
-    href: "/dashboard",
-    label: "Dashboard",
-    blurb: "Control tower — live operational signals.",
-    icon: LayoutDashboard,
-    required: "viewer:read",
-    category: "overview",
-  },
   // Stock — operator + admin execute; planner + viewer see read-only links
   // would not land here (category filters to stock:execute).
   {
@@ -76,7 +67,7 @@ export const QUICK_ACTIONS: readonly QuickAction[] = [
     href: "/stock/waste-adjustments",
     label: "Waste / Adjustment",
     blurb: "Record loss or positive adjustments (with approval for large).",
-    icon: Sliders,
+    icon: MinusCircle,
     required: "stock:execute",
     category: "stock",
   },
@@ -117,7 +108,7 @@ export const QUICK_ACTIONS: readonly QuickAction[] = [
     href: "/planning/boms",
     label: "BOM Simulation",
     blurb: "Simulate production quantities and check material coverage.",
-    icon: Network,
+    icon: GitBranch,
     required: "planning:read",
     category: "planning",
   },
@@ -150,7 +141,7 @@ export const QUICK_ACTIONS: readonly QuickAction[] = [
     href: "/admin/masters/boms",
     label: "BOMs",
     blurb: "BOM heads + versions + line structure.",
-    icon: Network,
+    icon: GitBranch,
     required: "admin:execute",
     category: "admin",
   },
