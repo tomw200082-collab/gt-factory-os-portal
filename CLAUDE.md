@@ -2,6 +2,10 @@
 
 > Thin pointer. Do not inline prose. Authority is distributed across the files below.
 
+## UI language exception (Recipe-Readiness corridor, 2026-04-25)
+
+The durable contract states "English-first UI with plain, accessible English labels; Hebrew appears only in data values." The Recipe-Health surface (`/admin/masters/items/[item_id]` for MANUFACTURED items, plus the BOM draft editor at `/admin/masters/boms/[bom_head_id]/[version_id]/edit` and the quick-fix drawer) uses Hebrew operator labels (e.g., "מתכון ייצור", "מוכן לייצור עם אזהרות", "אני מאשר את האזהרות הללו") per Tom's UX target. This is an explicit, scoped deviation from English-first, not a general policy change.
+
 ## Read these, in order, at the start of any portal session
 1. `docs/portal-os/registry.md` — index of all OS artifacts (≤1 line per entry).
 2. `docs/portal-os/scorecard.md` — current readiness, last updated.
