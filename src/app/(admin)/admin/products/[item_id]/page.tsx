@@ -667,7 +667,7 @@ function OverviewTab({
 
       <SectionCard eyebrow="Overview" title="Item fields">
         <div className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
-          <Field label="item_name">
+          <Field label="Name">
             {isAdmin ? (
               <InlineEditCell
                 value={item.item_name}
@@ -681,7 +681,7 @@ function OverviewTab({
               item.item_name
             )}
           </Field>
-          <Field label="family">
+          <Field label="Family">
             {isAdmin ? (
               <InlineEditCell
                 value={item.family ?? ""}
@@ -695,7 +695,7 @@ function OverviewTab({
               item.family ?? "—"
             )}
           </Field>
-          <Field label="sales_uom">
+          <Field label="Sales UOM">
             {isAdmin ? (
               <InlineEditCell
                 value={item.sales_uom ?? ""}
@@ -709,7 +709,7 @@ function OverviewTab({
               item.sales_uom ?? "—"
             )}
           </Field>
-          <Field label="pack_size">
+          <Field label="Pack size">
             {isAdmin ? (
               <InlineEditCell
                 value={item.pack_size ?? ""}
@@ -723,7 +723,7 @@ function OverviewTab({
               item.pack_size ?? "—"
             )}
           </Field>
-          <Field label="case_pack">
+          <Field label="Case pack">
             {isAdmin ? (
               <InlineEditCell
                 value={item.case_pack ?? ""}
@@ -738,7 +738,7 @@ function OverviewTab({
               item.case_pack ?? "—"
             )}
           </Field>
-          <Field label="product_group">
+          <Field label="Product group">
             {isAdmin ? (
               <InlineEditCell
                 value={item.product_group ?? ""}
@@ -752,8 +752,8 @@ function OverviewTab({
               item.product_group ?? "—"
             )}
           </Field>
-          <Field label="supply_method">{item.supply_method}</Field>
-          <Field label="item_type">{item.item_type ?? "—"}</Field>
+          <Field label="Supply method">{item.supply_method}</Field>
+          <Field label="Item type">{item.item_type ?? "—"}</Field>
         </div>
       </SectionCard>
     </>
@@ -926,13 +926,13 @@ function BomTab({
     <>
       <SectionCard eyebrow="BOM head" title={head.bom_head_id}>
         <div className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
-          <Field label="bom_kind">{head.bom_kind}</Field>
-          <Field label="display_family">{head.display_family ?? "—"}</Field>
-          <Field label="final_bom_output_qty">
+          <Field label="Type">{head.bom_kind}</Field>
+          <Field label="Family">{head.display_family ?? "—"}</Field>
+          <Field label="Base output">
             {head.final_bom_output_qty} {head.final_bom_output_uom ?? ""}
           </Field>
-          <Field label="status">{head.status}</Field>
-          <Field label="active_version_id">
+          <Field label="Status">{head.status}</Field>
+          <Field label="Active version ID">
             <span className="font-mono text-xs">
               {head.active_version_id ?? "— (none active)"}
             </span>
@@ -944,24 +944,31 @@ function BomTab({
         eyebrow="BOM versions"
         title={`${versions.length} versions`}
         actions={
-          // Slice 6: BOM editor is live. Link points at the active version
-          // when one exists; otherwise at the head page so admin can create
-          // a new draft. The head page also exposes the full version list.
-          head.active_version_id ? (
-            <Link
-              href={`/admin/boms/${encodeURIComponent(head.bom_head_id)}/versions/${encodeURIComponent(head.active_version_id)}`}
-              className="btn btn-ghost btn-sm"
-            >
-              Open in BOM editor
-            </Link>
-          ) : (
-            <Link
-              href={`/admin/boms/${encodeURIComponent(head.bom_head_id)}`}
-              className="btn btn-ghost btn-sm"
-            >
-              Open BOM head
-            </Link>
-          )
+          <div className="flex items-center gap-2">
+            {head.active_version_id ? (
+              <Link
+                href="/planning/boms"
+                className="btn btn-ghost btn-sm"
+              >
+                Simulate production
+              </Link>
+            ) : null}
+            {head.active_version_id ? (
+              <Link
+                href={`/admin/boms/${encodeURIComponent(head.bom_head_id)}/versions/${encodeURIComponent(head.active_version_id)}`}
+                className="btn btn-ghost btn-sm"
+              >
+                Open in BOM editor
+              </Link>
+            ) : (
+              <Link
+                href={`/admin/boms/${encodeURIComponent(head.bom_head_id)}`}
+                className="btn btn-ghost btn-sm"
+              >
+                Open BOM head
+              </Link>
+            )}
+          </div>
         }
         contentClassName="p-0"
       >
@@ -1027,7 +1034,12 @@ function BomTab({
             </table>
             {activeVersion ? (
               <div className="border-t border-border/70 bg-bg-subtle/30 p-3 text-3xs text-fg-muted">
-                Active version: <span className="font-mono">{activeVersion.bom_version_id}</span>
+                Active: v{activeVersion.version_label}
+                {activeVersion.activated_at ? (
+                  <span className="ml-2 text-fg-subtle">
+                    · activated {new Date(activeVersion.activated_at).toLocaleDateString(undefined, { month: "short", day: "2-digit", year: "numeric" })}
+                  </span>
+                ) : null}
               </div>
             ) : null}
           </div>

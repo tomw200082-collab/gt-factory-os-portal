@@ -441,7 +441,7 @@ export default function AdminComponentDetailPage({
 
       <SectionCard eyebrow="Overview" title="Component fields">
         <div className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
-          <Field label="component_name">
+          <Field label="Name">
             {isAdmin ? (
               <InlineEditCell
                 value={component.component_name}
@@ -459,7 +459,7 @@ export default function AdminComponentDetailPage({
               component.component_name
             )}
           </Field>
-          <Field label="component_class">
+          <Field label="Class">
             {isAdmin ? (
               <InlineEditCell
                 value={component.component_class ?? ""}
@@ -477,7 +477,7 @@ export default function AdminComponentDetailPage({
               component.component_class ?? "—"
             )}
           </Field>
-          <Field label="inventory_uom">
+          <Field label="Inventory UOM">
             {isAdmin ? (
               <InlineEditCell
                 value={component.inventory_uom ?? ""}
@@ -495,7 +495,7 @@ export default function AdminComponentDetailPage({
               component.inventory_uom ?? "—"
             )}
           </Field>
-          <Field label="purchase_uom">
+          <Field label="Purchase UOM">
             {isAdmin ? (
               <InlineEditCell
                 value={component.purchase_uom ?? ""}
@@ -513,7 +513,7 @@ export default function AdminComponentDetailPage({
               component.purchase_uom ?? "—"
             )}
           </Field>
-          <Field label="bom_uom">
+          <Field label="BOM UOM">
             {isAdmin ? (
               <InlineEditCell
                 value={component.bom_uom ?? ""}
@@ -531,7 +531,7 @@ export default function AdminComponentDetailPage({
               component.bom_uom ?? "—"
             )}
           </Field>
-          <Field label="lead_time_days">
+          <Field label="Lead time (days)">
             {isAdmin ? (
               <InlineEditCell
                 value={component.lead_time_days ?? ""}
@@ -550,7 +550,7 @@ export default function AdminComponentDetailPage({
               component.lead_time_days ?? "—"
             )}
           </Field>
-          <Field label="moq_purchase_uom">
+          <Field label="Min order qty">
             {isAdmin ? (
               <InlineEditCell
                 value={component.moq_purchase_uom ?? ""}
@@ -569,7 +569,7 @@ export default function AdminComponentDetailPage({
               component.moq_purchase_uom ?? "—"
             )}
           </Field>
-          <Field label="criticality">
+          <Field label="Criticality">
             {isAdmin ? (
               <InlineEditCell
                 value={component.criticality ?? ""}
@@ -587,7 +587,7 @@ export default function AdminComponentDetailPage({
               component.criticality ?? "—"
             )}
           </Field>
-          <Field label="planning_policy_code">
+          <Field label="Planning policy">
             {isAdmin ? (
               <InlineEditCell
                 value={component.planning_policy_code ?? ""}
