@@ -569,7 +569,7 @@ export default function GoodsReceiptPage() {
               <input
                 type="search"
                 className="input flex-1"
-                placeholder="Search by name or SKU…"
+                placeholder="חיפוש לפי שם מוצר / SKU"
                 value={lineSearch}
                 onChange={(e) => setLineSearch(e.target.value)}
                 aria-label="Search items and components"
@@ -580,7 +580,7 @@ export default function GoodsReceiptPage() {
                   className="btn btn-ghost btn-sm shrink-0"
                   onClick={() => setLineSearch("")}
                 >
-                  Clear
+                  נקה חיפוש
                 </button>
               ) : null}
             </div>
@@ -606,7 +606,7 @@ export default function GoodsReceiptPage() {
                     <option value="">— item or component —</option>
                     <optgroup label="Finished Goods (items)">
                       {filteredReceivable.filter((r) => r.kind === "item").length === 0 ? (
-                        <option value="" disabled>No items match your search.</option>
+                        <option value="" disabled>לא נמצאו פריטים</option>
                       ) : (
                         filteredReceivable
                           .filter((r) => r.kind === "item")
@@ -622,7 +622,7 @@ export default function GoodsReceiptPage() {
                     </optgroup>
                     <optgroup label="Raw materials (components)">
                       {filteredReceivable.filter((r) => r.kind === "component").length === 0 ? (
-                        <option value="" disabled>No items match your search.</option>
+                        <option value="" disabled>לא נמצאו פריטים</option>
                       ) : (
                         filteredReceivable
                           .filter((r) => r.kind === "component")
