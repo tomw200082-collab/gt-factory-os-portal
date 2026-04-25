@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 // ---------------------------------------------------------------------------
 // KpiTiles — live dashboard counts.
@@ -30,8 +30,7 @@ async function fetchCount(url: string): Promise<number> {
     cache: "no-store",
   });
   if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`GET ${url} failed (HTTP ${res.status}): ${body}`);
+    throw new Error(`Could not load data (HTTP ${res.status}). Check your connection and try refreshing.`);
   }
   const data = (await res.json()) as ListEnvelope;
   // Prefer explicit `count`; fall back to rows.length; fall back to 0.

@@ -71,8 +71,7 @@ type ListEnvelope<T> = { rows: T[]; count: number };
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url, { headers: { Accept: "application/json" } });
   if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`GET ${url} failed (HTTP ${res.status}): ${body}`);
+    throw new Error(`Could not load data (HTTP ${res.status}). Check your connection and try refreshing.`);
   }
   return (await res.json()) as T;
 }
@@ -283,12 +282,12 @@ export default function AdminBomHeadDetailPage({
       >
         {activeVersion ? (
           <div className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
-            <Field label="bom_version_id">
+            <Field label="Version ID">
               <span className="font-mono text-xs">
                 {activeVersion.bom_version_id}
               </span>
             </Field>
-            <Field label="activated_at">
+            <Field label="Activated">
               {activeVersion.activated_at
                 ? new Date(activeVersion.activated_at).toLocaleString()
                 : "—"}

@@ -160,8 +160,7 @@ type ListEnvelope<T> = { rows: T[]; count: number };
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url, { headers: { Accept: "application/json" } });
   if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`GET ${url} failed (HTTP ${res.status}): ${body}`);
+    throw new Error(`Could not load data (HTTP ${res.status}). Check your connection and try refreshing.`);
   }
   return (await res.json()) as T;
 }
@@ -752,7 +751,7 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
             href={`/admin/boms/${encodeURIComponent(head_id)}`}
             className="font-semibold underline decoration-info/60 underline-offset-2"
           >
-            {head.bom_head_id} head page
+            version history page
           </Link>
           .
         </div>
@@ -812,7 +811,7 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
           </div>
           <div className="flex items-center gap-2">
             <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              Rate column
+              Unit rate
             </span>
             <span className="rounded bg-bg-subtle px-2 py-0.5 text-xs font-medium text-fg-muted">
               qty per 1 {head.final_bom_output_uom ?? "unit"} of output
@@ -1078,25 +1077,14 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
                 </div>
                 <ul className="list-disc pl-5 text-xs">
                   {(preview.blocking_issues ?? []).map((code) => (
-                    <li key={code}>
-                      <span className="font-mono">{code}</span>
-                      {code === "EMPTY_VERSION" ? (
-                        <span className="text-fg-muted">
-                          {" "}
-                          — add at least one line before publishing.
-                        </span>
-                      ) : code === "PLANNING_RUN_IN_FLIGHT" ? (
-                        <span className="text-fg-muted">
-                          {" "}
-                          — a planning run referencing this BOM head is
-                          currently running. Wait for it to complete.
-                        </span>
-                      ) : code === "VERSION_NOT_DRAFT" ? (
-                        <span className="text-fg-muted">
-                          {" "}
-                          — this version is no longer DRAFT; refresh the page.
-                        </span>
-                      ) : null}
+                    <li key={code} className="text-fg-muted">
+                      {code === "EMPTY_VERSION"
+                        ? "Add at least one line before publishing."
+                        : code === "PLANNING_RUN_IN_FLIGHT"
+                          ? "A planning run referencing this BOM is currently running. Wait for it to complete."
+                          : code === "VERSION_NOT_DRAFT"
+                            ? "This version is no longer a draft — refresh the page."
+                            : code}
                     </li>
                   ))}
                 </ul>
@@ -1132,20 +1120,12 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
                   <AlertTriangle className="h-4 w-4" strokeWidth={2} />
                   Warnings
                 </div>
-                <ul className="list-disc pl-5 text-xs">
+                <ul className="list-disc pl-5 text-xs text-fg-muted">
                   {(preview.warnings ?? []).map((w) => (
                     <li key={w}>
-                      <span className="font-mono">{w}</span>
-                      {w === "UNPOSTED_PRODUCTION_ACTUALS" ? (
-                        <span className="text-fg-muted">
-                          {" "}
-                          — there are{" "}
-                          {(preview.unposted_production_actuals ?? []).length}{" "}
-                          unposted production actual(s) pinned to the current
-                          active version. Publishing will not affect them, but
-                          confirm this is intentional.
-                        </span>
-                      ) : null}
+                      {w === "UNPOSTED_PRODUCTION_ACTUALS"
+                        ? `There ${(preview.unposted_production_actuals ?? []).length === 1 ? "is" : "are"} ${(preview.unposted_production_actuals ?? []).length} unposted production ${(preview.unposted_production_actuals ?? []).length === 1 ? "entry" : "entries"} pinned to the current active version. Publishing will not affect them, but confirm this is intentional.`
+                        : w}
                     </li>
                   ))}
                 </ul>

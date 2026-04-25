@@ -373,7 +373,7 @@ export default function PlanningBomsPage(): JSX.Element {
               </ul>
               <div className="flex items-center justify-between border-t border-border/40 px-4 py-2">
                 <span className="text-3xs text-fg-subtle">
-                  From planning run {latestRun.run_id.slice(0, 8)} · starts {fmtDate(latestRun.planning_horizon_start_at)} · {latestRun.planning_horizon_weeks}w
+                  Latest planning run · horizon starts {fmtDate(latestRun.planning_horizon_start_at)} · {latestRun.planning_horizon_weeks} weeks
                 </span>
                 <Link
                   href={`/planning/runs/${encodeURIComponent(latestRun.run_id)}`}
@@ -396,8 +396,7 @@ export default function PlanningBomsPage(): JSX.Element {
           contentClassName="p-4 space-y-3"
         >
           <p className="text-xs text-fg-muted">
-            Search by item name, BOM ID, or base mix name. Only BOMs with an
-            active version can be simulated.
+            Search by item name. Only BOMs with an active version can be simulated.
           </p>
           <div className="relative max-w-md">
             <Search

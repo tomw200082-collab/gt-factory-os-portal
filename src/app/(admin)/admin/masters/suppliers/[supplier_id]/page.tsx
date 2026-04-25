@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 // ---------------------------------------------------------------------------
 // Admin · Masters · Suppliers · Detail — Tranche D (plan §F).
@@ -129,8 +129,7 @@ interface ExceptionsListResponse {
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url, { headers: { Accept: "application/json" } });
   if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`GET ${url} failed (HTTP ${res.status}): ${body}`);
+    throw new Error(`Could not load data (HTTP ${res.status}). Check your connection and try refreshing.`);
   }
   return (await res.json()) as T;
 }

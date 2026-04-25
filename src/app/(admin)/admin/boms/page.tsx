@@ -69,8 +69,7 @@ type ListEnvelope<T> = { rows: T[]; count: number };
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url, { headers: { Accept: "application/json" } });
   if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(`GET ${url} failed (HTTP ${res.status}): ${body}`);
+    throw new Error(`Could not load data (HTTP ${res.status}). Check your connection and try refreshing.`);
   }
   return (await res.json()) as T;
 }
@@ -137,7 +136,7 @@ export default function AdminBomsListPage(): JSX.Element {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Filter by head id, item id, or item name…"
+            placeholder="Search by item name or BOM…"
             className="input h-9 w-full pl-9"
           />
         </div>
