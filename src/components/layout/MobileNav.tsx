@@ -31,10 +31,12 @@
 import { useEffect, useState } from "react";
 import { Menu, X } from "lucide-react";
 import { SideNav } from "./SideNav";
+import { useSession } from "@/lib/auth/session-provider";
 import { cn } from "@/lib/cn";
 
 export function MobileNav() {
   const [open, setOpen] = useState(false);
+  const { session } = useSession();
 
   // Close on viewport >= md.
   useEffect(() => {
@@ -67,6 +69,8 @@ export function MobileNav() {
     };
   }, [open]);
 
+  const displayName = session.display_name.split(" (")[0] || session.email;
+
   return (
     <div className="md:hidden">
       <button
@@ -84,10 +88,10 @@ export function MobileNav() {
         )}
       </button>
 
-      {/* Backdrop */}
+      {/* Backdrop — z-[45] sits above sticky TopBar (z-40) to fully darken it */}
       <div
         className={cn(
-          "fixed inset-0 z-40 bg-black/40 backdrop-blur-sm transition-opacity duration-200 md:hidden",
+          "fixed inset-0 z-[45] bg-black/50 backdrop-blur-sm transition-opacity duration-200 md:hidden",
           open ? "pointer-events-auto opacity-100" : "pointer-events-none opacity-0",
         )}
         aria-hidden
@@ -108,17 +112,55 @@ export function MobileNav() {
         <h2 id="mobile-nav-title" className="sr-only">
           Portal navigation
         </h2>
-        <div className="flex h-16 shrink-0 items-center justify-between border-b border-border/70 px-4">
-          <span className="text-sm font-semibold text-fg-strong">Menu</span>
+
+        {/* Drawer header — brand + user context */}
+        <div className="flex h-16 shrink-0 items-center gap-3 border-b border-border/70 px-4">
+          {/* Brand mark */}
+          <div
+            className="flex h-7 w-7 shrink-0 items-center justify-center overflow-hidden rounded bg-accent text-accent-fg shadow-raised"
+            aria-hidden
+          >
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 20 20"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+            >
+              <path
+                d="M3 4.5V15.5M3 4.5L10 1L17 4.5M3 4.5L10 8L17 4.5M17 4.5V15.5M10 8V19M3 15.5L10 19L17 15.5"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </div>
+
+          {/* Brand + user */}
+          <div className="min-w-0 flex-1">
+            <div className="text-[0.8125rem] font-semibold leading-none text-fg-strong">
+              GT Factory OS
+            </div>
+            {displayName ? (
+              <div className="mt-0.5 truncate text-3xs text-fg-muted">
+                {displayName}
+              </div>
+            ) : null}
+          </div>
+
+          {/* Close button */}
           <button
             type="button"
-            className="inline-flex h-9 w-9 items-center justify-center rounded-md text-fg-muted hover:bg-bg-subtle hover:text-fg"
+            className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-md text-fg-muted hover:bg-bg-subtle hover:text-fg"
             aria-label="Close navigation"
             onClick={() => setOpen(false)}
           >
             <X className="h-4 w-4" strokeWidth={2} aria-hidden />
           </button>
         </div>
+
+        {/* Nav content */}
         <div className="min-h-0 flex-1 overflow-y-auto p-4">
           <SideNav onNavigate={() => setOpen(false)} />
         </div>
