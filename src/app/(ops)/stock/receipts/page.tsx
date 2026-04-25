@@ -255,6 +255,18 @@ export default function GoodsReceiptPage() {
   const [lines, setLines] = useState<LineDraft[]>([emptyLine()]);
   const [phase, setPhase] = useState<SubmitPhase>("idle");
   const [done, setDone] = useState<DoneState | null>(null);
+  // Line-search state — affects only the option list rendered in each line's
+  // item/component select. NEVER touches `lines` state or the submit payload.
+  const [lineSearch, setLineSearch] = useState<string>("");
+
+  // Client-side filter for the line item/component picker.
+  // Filters only the VISIBLE option list — never changes `lines` state.
+  // Case-insensitive match against display label (which includes name + id).
+  const filteredReceivable = useMemo(() => {
+    const q = lineSearch.trim().toLowerCase();
+    if (!q) return receivable;
+    return receivable.filter((r) => r.label.toLowerCase().includes(q));
+  }, [receivable, lineSearch]);
   // Tranche 013: optional PO reference. When set, all receipt lines
   // submit with envelope.po_id = poId; per-line po_line_id is picked
   // from the selected PO's lines[].
@@ -551,6 +563,27 @@ export default function GoodsReceiptPage() {
             title="Lines"
             description="At least one line is required. Quantities must be positive."
           >
+            {/* Line search — filters the item/component picker only.
+                Does NOT affect lines state or the submit payload. */}
+            <div className="mb-3 flex items-center gap-2">
+              <input
+                type="search"
+                className="input flex-1"
+                placeholder="Search by name or SKU…"
+                value={lineSearch}
+                onChange={(e) => setLineSearch(e.target.value)}
+                aria-label="Search items and components"
+              />
+              {lineSearch ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm shrink-0"
+                  onClick={() => setLineSearch("")}
+                >
+                  Clear
+                </button>
+              ) : null}
+            </div>
             <div className="space-y-3">
               {lines.map((line, idx) => (
                 <div
@@ -572,28 +605,36 @@ export default function GoodsReceiptPage() {
                   >
                     <option value="">— item or component —</option>
                     <optgroup label="Finished Goods (items)">
-                      {receivable
-                        .filter((r) => r.kind === "item")
-                        .map((r) => (
-                          <option
-                            key={`${r.kind}:${r.id}`}
-                            value={`${r.kind}:${r.id}`}
-                          >
-                            {r.label}
-                          </option>
-                        ))}
+                      {filteredReceivable.filter((r) => r.kind === "item").length === 0 ? (
+                        <option value="" disabled>No items match your search.</option>
+                      ) : (
+                        filteredReceivable
+                          .filter((r) => r.kind === "item")
+                          .map((r) => (
+                            <option
+                              key={`${r.kind}:${r.id}`}
+                              value={`${r.kind}:${r.id}`}
+                            >
+                              {r.label}
+                            </option>
+                          ))
+                      )}
                     </optgroup>
                     <optgroup label="Raw materials (components)">
-                      {receivable
-                        .filter((r) => r.kind === "component")
-                        .map((r) => (
-                          <option
-                            key={`${r.kind}:${r.id}`}
-                            value={`${r.kind}:${r.id}`}
-                          >
-                            {r.label}
-                          </option>
-                        ))}
+                      {filteredReceivable.filter((r) => r.kind === "component").length === 0 ? (
+                        <option value="" disabled>No items match your search.</option>
+                      ) : (
+                        filteredReceivable
+                          .filter((r) => r.kind === "component")
+                          .map((r) => (
+                            <option
+                              key={`${r.kind}:${r.id}`}
+                              value={`${r.kind}:${r.id}`}
+                            >
+                              {r.label}
+                            </option>
+                          ))
+                      )}
                     </optgroup>
                   </select>
                   <input
