@@ -26,6 +26,8 @@
 //   - Button exposes aria-label.
 //   - Panel has role="dialog", aria-modal="true", aria-labelledby pointing
 //     at a visually-hidden title inside the panel.
+//   - Focus trap: Tab/Shift+Tab cycles within the panel while open. Focus
+//     is moved to the close button on open and returns to the hamburger on close.
 // ---------------------------------------------------------------------------
 
 import { useEffect, useRef, useState } from "react";
@@ -36,8 +38,11 @@ import { cn } from "@/lib/cn";
 
 export function MobileNav() {
   const [open, setOpen] = useState(false);
+  const wasOpenRef = useRef(false);
   const { session, isLoading } = useSession();
+  const hamburgerRef = useRef<HTMLButtonElement>(null);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const panelRef = useRef<HTMLElement>(null);
 
   // Close on viewport >= md.
   useEffect(() => {
@@ -50,14 +55,33 @@ export function MobileNav() {
     return () => mq.removeEventListener("change", handler);
   }, []);
 
-  // Close on Escape.
+  // Close on Escape + focus trap while open.
   useEffect(() => {
     if (!open) return;
-    const handler = (e: KeyboardEvent) => {
-      if (e.key === "Escape") setOpen(false);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === "Escape") {
+        setOpen(false);
+        return;
+      }
+      if (e.key !== "Tab" || !panelRef.current) return;
+      const focusable = Array.from(
+        panelRef.current.querySelectorAll<HTMLElement>(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      ).filter((el) => !el.closest("[aria-hidden]"));
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
-    window.addEventListener("keydown", handler);
-    return () => window.removeEventListener("keydown", handler);
+    window.addEventListener("keydown", handleKeyDown);
+    return () => window.removeEventListener("keydown", handleKeyDown);
   }, [open]);
 
   // Lock body scroll while open.
@@ -70,10 +94,14 @@ export function MobileNav() {
     };
   }, [open]);
 
-  // Move focus to close button when drawer opens (a11y).
+  // Focus management: close button on open, hamburger on close.
+  // wasOpenRef guards against autofocusing the hamburger on initial mount.
   useEffect(() => {
     if (open) {
+      wasOpenRef.current = true;
       closeButtonRef.current?.focus();
+    } else if (wasOpenRef.current) {
+      hamburgerRef.current?.focus();
     }
   }, [open]);
 
@@ -82,6 +110,7 @@ export function MobileNav() {
   return (
     <div className="md:hidden">
       <button
+        ref={hamburgerRef}
         type="button"
         className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-border/70 bg-bg text-fg hover:bg-bg-subtle"
         aria-label={open ? "Close navigation" : "Open navigation"}
@@ -108,6 +137,7 @@ export function MobileNav() {
 
       {/* Slide-in panel */}
       <aside
+        ref={panelRef}
         id="mobile-nav-panel"
         role="dialog"
         aria-modal="true"
