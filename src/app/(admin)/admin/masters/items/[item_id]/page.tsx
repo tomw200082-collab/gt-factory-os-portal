@@ -40,6 +40,7 @@ import { SectionCard } from "@/components/workflow/SectionCard";
 import { InlineEditCell } from "@/components/tables/InlineEditCell";
 import { MasterSummaryCard, type CompletenessItem } from "@/components/admin/MasterSummaryCard";
 import { RecipeHealthCard } from "@/components/admin/recipe-health/RecipeHealthCard";
+import { VersionHistorySection } from "@/components/admin/recipe-health/VersionHistorySection";
 import { ClassWEditDrawer } from "@/components/admin/ClassWEditDrawer";
 import { AdminMutationError, patchEntity, postStatus } from "@/lib/admin/mutations";
 import { useSession } from "@/lib/auth/session-provider";
@@ -722,12 +723,19 @@ export default function AdminItemDetailPage({
     <>
       {row ? (
         row.supply_method === "MANUFACTURED" ? (
-          <RecipeHealthCard
-            itemName={row.item_name ?? row.item_id}
-            baseBomHeadId={row.base_bom_head_id ?? null}
-            packBomHeadId={row.primary_bom_head_id ?? null}
-            isAdmin={isAdmin}
-          />
+          <>
+            <RecipeHealthCard
+              itemName={row.item_name ?? row.item_id}
+              baseBomHeadId={row.base_bom_head_id ?? null}
+              packBomHeadId={row.primary_bom_head_id ?? null}
+              isAdmin={isAdmin}
+            />
+            <VersionHistorySection
+              baseBomHeadId={row.base_bom_head_id ?? null}
+              packBomHeadId={row.primary_bom_head_id ?? null}
+              isAdmin={isAdmin}
+            />
+          </>
         ) : (
           <MasterSummaryCard
             name={row.item_name}
