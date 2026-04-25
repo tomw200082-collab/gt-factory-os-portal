@@ -2655,12 +2655,19 @@ interface HeadRow {
 }
 
 export function BomDraftEditorPage({ bomHeadId, versionId }: BomDraftEditorPageProps) {
+  // No single-version-detail endpoint exists. Use the list endpoint with
+  // bom_head_id filter and find by version id client-side. Mirrors the
+  // existing read-only version detail page pattern.
   const versionQuery = useQuery({
-    queryKey: ["boms", "version-detail", versionId],
-    queryFn: async (): Promise<VersionRow> => {
-      const res = await fetch(`/api/boms/versions/${encodeURIComponent(versionId)}`);
-      if (!res.ok) throw new Error(`version: ${res.status}`);
-      return res.json();
+    queryKey: ["boms", "version-detail", bomHeadId, versionId],
+    queryFn: async (): Promise<VersionRow | null> => {
+      const res = await fetch(
+        `/api/boms/versions?bom_head_id=${encodeURIComponent(bomHeadId)}`,
+      );
+      if (!res.ok) throw new Error(`versions: ${res.status}`);
+      const body = await res.json();
+      const rows: VersionRow[] = body.rows ?? [];
+      return rows.find((v) => v.bom_version_id === versionId) ?? null;
     },
   });
   const headQuery = useQuery({
@@ -2926,6 +2933,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import type { BomLineRow as BomLineDataRow } from "@/components/admin/recipe-health/useTrackData";
 import type { ComponentReadiness, LinePipState } from "@/lib/admin/recipe-readiness.types";
 import { computeLinePipState } from "@/lib/admin/recipe-readiness";
+import { AdminMutationError, patchEntity } from "@/lib/admin/mutations";
 
 interface BomLineRowProps {
   line: BomLineDataRow;
@@ -2950,34 +2958,51 @@ export function BomLineRow({ line, versionId, readiness, editable }: BomLineRowP
     ? computeLinePipState({ qty: line.qty, component: readiness, nowMs: Date.now() })
     : { color: "yellow", reasons: ["טוען…"], warningCategories: ["missing-supplier"], blockerCategories: [], isHardBlock: false };
 
+  // Backend Zod schema (per route comment in
+  // src/app/api/boms/versions/[version_id]/lines/[line_id]/route.ts):
+  //   { final_component_id?, final_component_qty?, if_match_updated_at,
+  //     idempotency_key }
+  // Use patchEntity helper which auto-injects if_match_updated_at +
+  // idempotency_key. AdminMutationError surfaces 409 STALE_ROW directly.
   const patch = useMutation({
-    mutationFn: async (qty: string) => {
-      const res = await fetch(`/api/boms/versions/${versionId}/lines/${line.bom_line_id}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ qty, if_match_updated_at: line.updated_at }),
-      });
-      if (res.status === 409) {
-        const body = await res.json().catch(() => ({}));
-        throw new Error(body.error ?? "STALE_ROW");
-      }
-      if (!res.ok) throw new Error(`patch: ${res.status}`);
-      return res.json();
-    },
+    mutationFn: async (qty: string) =>
+      patchEntity({
+        url: `/api/boms/versions/${encodeURIComponent(versionId)}/lines/${encodeURIComponent(line.bom_line_id)}`,
+        fields: { final_component_qty: qty },
+        ifMatchUpdatedAt: line.updated_at,
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["boms", "lines", versionId] });
       setEditing(false);
       setError(null);
     },
-    onError: (e: Error) => setError(e.message.includes("STALE") ? "STALE_ROW — רענן את הדף" : e.message),
+    onError: (e: Error) => {
+      if (e instanceof AdminMutationError && e.code === "STALE_ROW") {
+        setError("STALE_ROW — רענן את הדף");
+      } else {
+        setError(e.message);
+      }
+    },
   });
 
+  // DELETE upstream requires { idempotency_key } body — proxied with
+  // forwardBody=true (per route file). Backend returns 200 on success.
   const del = useMutation({
     mutationFn: async () => {
-      const res = await fetch(`/api/boms/versions/${versionId}/lines/${line.bom_line_id}`, {
-        method: "DELETE",
-      });
-      if (!res.ok && res.status !== 204) throw new Error(`delete: ${res.status}`);
+      const res = await fetch(
+        `/api/boms/versions/${encodeURIComponent(versionId)}/lines/${encodeURIComponent(line.bom_line_id)}`,
+        {
+          method: "DELETE",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            idempotency_key:
+              typeof crypto !== "undefined" && "randomUUID" in crypto
+                ? crypto.randomUUID()
+                : `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}`,
+          }),
+        },
+      );
+      if (!res.ok) throw new Error(`delete: ${res.status}`);
     },
     onSuccess: () => qc.invalidateQueries({ queryKey: ["boms", "lines", versionId] }),
   });
@@ -3115,13 +3140,27 @@ export function BomLineAddDrawer({ versionId, open, onClose }: BomLineAddDrawerP
   const [qty, setQty] = useState("");
   const [error, setError] = useState<string | null>(null);
 
+  // Backend Zod schema (per
+  // src/app/api/boms/versions/[version_id]/lines/route.ts comment):
+  //   { final_component_id, final_component_qty, idempotency_key }
   const post = useMutation({
     mutationFn: async () => {
-      const res = await fetch(`/api/boms/versions/${versionId}/lines`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ component_id: componentId, qty }),
-      });
+      const idempotency_key =
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}`;
+      const res = await fetch(
+        `/api/boms/versions/${encodeURIComponent(versionId)}/lines`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            final_component_id: componentId,
+            final_component_qty: qty,
+            idempotency_key,
+          }),
+        },
+      );
       if (!res.ok) throw new Error(`post: ${res.status}`);
       return res.json();
     },
@@ -4079,6 +4118,7 @@ Expected: FAIL — module not found.
 "use client";
 import { useState } from "react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { AdminMutationError, patchEntity } from "@/lib/admin/mutations";
 
 interface SupplierItemRow {
   supplier_item_id: string;
@@ -4118,38 +4158,32 @@ export function QuickFixDrawer({ componentId, open, onClose }: QuickFixDrawerPro
     enabled: open,
   });
 
+  // Reuse the existing portal pattern for primary promotion: a single
+  // PATCH { is_primary: true } with if-match-updated-at; the backend
+  // handles atomic demote-then-promote. patchEntity auto-injects
+  // idempotency_key. AdminMutationError carries `code` (e.g. "STALE_ROW").
+  // A 409 from the partial unique index surfaces as a non-STALE_ROW 409;
+  // we map it to "unique" defense-in-depth state per spec §6.5.
   const promote = useMutation({
-    mutationFn: async (row: SupplierItemRow) => {
-      const res = await fetch(`/api/supplier-items/${encodeURIComponent(row.supplier_item_id)}`, {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ is_primary: true, if_match_updated_at: row.updated_at }),
-      });
-      if (res.status === 409) {
-        const body = await res.json().catch(() => ({}));
-        if (body.error === "STALE_ROW") {
-          const e = new Error("STALE_ROW");
-          (e as Error & { kind?: ErrorKind }).kind = "stale";
-          throw e;
-        }
-        const e = new Error("UNIQUE");
-        (e as Error & { kind?: ErrorKind }).kind = "unique";
-        throw e;
-      }
-      if (!res.ok) {
-        const e = new Error(`patch: ${res.status}`);
-        (e as Error & { kind?: ErrorKind }).kind = "other";
-        throw e;
-      }
-      return res.json();
-    },
+    mutationFn: async (row: SupplierItemRow) =>
+      patchEntity({
+        url: `/api/supplier-items/${encodeURIComponent(row.supplier_item_id)}`,
+        fields: { is_primary: true },
+        ifMatchUpdatedAt: row.updated_at,
+      }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["supplier-items", "by-component", componentId] });
       setErrorKind(null);
       onClose();
     },
     onError: (e: Error) => {
-      setErrorKind(((e as Error & { kind?: ErrorKind }).kind ?? "other") as ErrorKind);
+      if (e instanceof AdminMutationError) {
+        if (e.code === "STALE_ROW") setErrorKind("stale");
+        else if (e.status === 409) setErrorKind("unique");
+        else setErrorKind("other");
+      } else {
+        setErrorKind("other");
+      }
     },
   });
 
@@ -4520,7 +4554,17 @@ Expected: FAIL — Update price button missing.
 
 - [ ] **Step 3: Modify `QuickFixDrawer.tsx`**
 
-Add an inline `[Update price]` button on each row marked `is_primary && (std_cost_per_inv_uom === null || price-is-stale)`. Clicking opens a small inline form with one number input + Save / Cancel. On save, PATCH the row with `{ std_cost_per_inv_uom, if_match_updated_at }`.
+Add an inline `[Update price]` button on each row marked `is_primary && (std_cost_per_inv_uom === null || price-is-stale)`. Clicking opens a small inline form with one number input + Save / Cancel. On save, **use `patchEntity` from `@/lib/admin/mutations`** (not raw `fetch`) — `patchEntity` auto-injects both `if_match_updated_at` and `idempotency_key`:
+
+```ts
+patchEntity({
+  url: `/api/supplier-items/${encodeURIComponent(row.supplier_item_id)}`,
+  fields: { std_cost_per_inv_uom: newPrice },
+  ifMatchUpdatedAt: row.updated_at,
+})
+```
+
+The test in Step 1 (`PATCHes std_cost_per_inv_uom only (without is_primary), with if_match_updated_at`) inspects the request body for `std_cost_per_inv_uom` and `if_match_updated_at`; it does not assert on `idempotency_key` presence, so the helper's auto-inject does not affect the test.
 
 - [ ] **Step 4: Run to confirm pass**
 
@@ -4686,7 +4730,10 @@ interface PublishConfirmModalProps {
   uiWarnings: string[];
   nextVersionLabel: string;
   onCancel: () => void;
-  onConfirm: () => void;
+  // confirmOverride is forwarded to the publish POST as `confirm_override`.
+  // Variant A (clean) calls with false; Variant B (warnings) calls with true.
+  // Variant C never calls (no Publish button rendered).
+  onConfirm: (confirmOverride: boolean) => void;
 }
 
 const HEBREW_BLOCKER: Record<string, string> = {
@@ -4724,7 +4771,7 @@ export function PublishConfirmModal({ preview, uiWarnings, nextVersionLabel, onC
           <p>פרסם {nextVersionLabel}? הגרסה הקודמת תועבר ל-SUPERSEDED. ייצורים היסטוריים נשמרים על הגרסה הישנה.</p>
           <div className="mt-2 flex gap-2">
             <button onClick={onCancel}>Cancel</button>
-            <button onClick={onConfirm}>Publish</button>
+            <button onClick={() => onConfirm(false)}>Publish</button>
           </div>
         </div>
       </div>
@@ -4746,7 +4793,7 @@ export function PublishConfirmModal({ preview, uiWarnings, nextVersionLabel, onC
         </label>
         <div className="mt-2 flex gap-2">
           <button onClick={onCancel}>Cancel</button>
-          <button disabled={!agreed} onClick={onConfirm}>Publish anyway</button>
+          <button disabled={!agreed} onClick={() => onConfirm(true)}>Publish anyway</button>
         </div>
       </div>
     </div>
@@ -5007,9 +5054,28 @@ const previewQuery = useQuery({
   },
   enabled: previewOpen,
 });
+// Publish body per src/app/api/boms/versions/[version_id]/publish/route.ts:
+//   { if_match_updated_at, idempotency_key, confirm_override?: boolean }
+// `confirm_override` is required when can_publish_clean === false but
+// can_publish_with_override === true (Variant B per spec §6.6).
 const publishMutation = useMutation({
-  mutationFn: async () => {
-    const res = await fetch(`/api/boms/versions/${encodeURIComponent(versionId)}/publish`, { method: "POST" });
+  mutationFn: async (args: { confirmOverride: boolean }) => {
+    const idempotency_key =
+      typeof crypto !== "undefined" && "randomUUID" in crypto
+        ? crypto.randomUUID()
+        : `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}`;
+    const res = await fetch(
+      `/api/boms/versions/${encodeURIComponent(versionId)}/publish`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          if_match_updated_at: version.updated_at,
+          idempotency_key,
+          confirm_override: args.confirmOverride,
+        }),
+      },
+    );
     if (!res.ok) throw new Error(`publish: ${res.status}`);
     return res.json();
   },
@@ -5033,7 +5099,7 @@ const uiWarnings = useMemo(() => {
     uiWarnings={uiWarnings}
     nextVersionLabel={version.version_label}
     onCancel={() => setPreviewOpen(false)}
-    onConfirm={() => publishMutation.mutate()}
+    onConfirm={(confirmOverride) => publishMutation.mutate({ confirmOverride })}
   />
 )}
 ```
