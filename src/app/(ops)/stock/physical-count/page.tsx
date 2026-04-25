@@ -16,7 +16,7 @@
 // ---------------------------------------------------------------------------
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
@@ -152,6 +152,31 @@ export default function PhysicalCountPage() {
     for (const r of countable) m.set(`${r.kind}:${r.id}`, r);
     return m;
   }, [countable]);
+
+  // ---------------------------------------------------------------------------
+  // Client-side search state — PURELY for display filtering.
+  //
+  // searchQuery never mutates countable, selKey, or any form-submission state.
+  // filteredCountable is a computed read of countable; it never replaces the
+  // underlying array, so selKey (which drives submission) is always stable.
+  //
+  // Invariant: if an operator enters "5" in the count field for item A, then
+  // types a search term that hides item A from the selector, then clears the
+  // search, item A reappears with "5" intact because countedQty is stored in
+  // its own state variable keyed independently of the search state.
+  // ---------------------------------------------------------------------------
+  const [searchQuery, setSearchQuery] = useState<string>("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
+
+  const filteredCountable = useMemo<CountableRow[]>(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q) return countable;
+    return countable.filter(
+      (r) =>
+        r.label.toLowerCase().includes(q) ||
+        r.id.toLowerCase().includes(q),
+    );
+  }, [countable, searchQuery]);
 
   const [selKey, setSelKey] = useState<string>("");
   const [itemTypeOverride, setItemTypeOverride] = useState<
@@ -397,6 +422,58 @@ export default function PhysicalCountPage() {
             title="Step 1 — choose what to count"
             description="Opens a snapshot that freezes the expected quantity on the server. The expected quantity is never displayed."
           >
+            {/* ------------------------------------------------------------------
+                Search / filter — client-side only. No API calls.
+                Filtering changes render visibility only. selKey is stored in
+                separate state and is NEVER cleared or mutated by searchQuery.
+                countedQty is stored separately from any search state, so
+                values entered in the count field persist across search
+                interactions (see invariant comment in state declarations above).
+                ------------------------------------------------------------------ */}
+            <div className="mb-3 space-y-1">
+              <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                חיפוש מוצר
+              </span>
+              <div className="flex min-w-0 items-center gap-2">
+                <input
+                  ref={searchInputRef}
+                  type="search"
+                  className="input min-w-0 flex-1"
+                  placeholder="חיפוש מוצר"
+                  value={searchQuery}
+                  onChange={(e) => setSearchQuery(e.target.value)}
+                  autoComplete="off"
+                  aria-label="Search items and components"
+                  data-testid="physical-count-search"
+                />
+                {searchQuery ? (
+                  <button
+                    type="button"
+                    className="btn shrink-0 whitespace-nowrap text-xs"
+                    onClick={() => {
+                      setSearchQuery("");
+                      searchInputRef.current?.focus();
+                    }}
+                    aria-label="Clear search"
+                    data-testid="physical-count-search-clear"
+                  >
+                    נקה חיפוש
+                  </button>
+                ) : null}
+              </div>
+              {searchQuery.trim() ? (
+                <p
+                  className="text-xs text-fg-muted"
+                  aria-live="polite"
+                  data-testid="physical-count-search-result-count"
+                >
+                  {filteredCountable.length > 0
+                    ? `${filteredCountable.length} פריט${filteredCountable.length === 1 ? "" : "ים"}`
+                    : "לא נמצאו פריטים לחיפוש הזה"}
+                </p>
+              ) : null}
+            </div>
+
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="block sm:col-span-2">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
@@ -412,30 +489,38 @@ export default function PhysicalCountPage() {
                   required
                 >
                   <option value="">— select —</option>
-                  <optgroup label="Finished Goods (items)">
-                    {countable
-                      .filter((r) => r.kind === "item")
-                      .map((r) => (
-                        <option
-                          key={`${r.kind}:${r.id}`}
-                          value={`${r.kind}:${r.id}`}
-                        >
-                          {r.label}
-                        </option>
-                      ))}
-                  </optgroup>
-                  <optgroup label="Raw materials (components)">
-                    {countable
-                      .filter((r) => r.kind === "component")
-                      .map((r) => (
-                        <option
-                          key={`${r.kind}:${r.id}`}
-                          value={`${r.kind}:${r.id}`}
-                        >
-                          {r.label}
-                        </option>
-                      ))}
-                  </optgroup>
+                  {filteredCountable.length === 0 && searchQuery.trim() ? (
+                    <option value="" disabled>
+                      לא נמצאו פריטים לחיפוש הזה
+                    </option>
+                  ) : (
+                    <>
+                      <optgroup label="Finished Goods (items)">
+                        {filteredCountable
+                          .filter((r) => r.kind === "item")
+                          .map((r) => (
+                            <option
+                              key={`${r.kind}:${r.id}`}
+                              value={`${r.kind}:${r.id}`}
+                            >
+                              {r.label}
+                            </option>
+                          ))}
+                      </optgroup>
+                      <optgroup label="Raw materials (components)">
+                        {filteredCountable
+                          .filter((r) => r.kind === "component")
+                          .map((r) => (
+                            <option
+                              key={`${r.kind}:${r.id}`}
+                              value={`${r.kind}:${r.id}`}
+                            >
+                              {r.label}
+                            </option>
+                          ))}
+                      </optgroup>
+                    </>
+                  )}
                 </select>
               </label>
               <label className="block">
