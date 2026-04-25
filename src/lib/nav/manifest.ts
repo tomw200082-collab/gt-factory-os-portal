@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Navigation manifest — typed, capability-aware. Substrate for Tranche A.
+// Navigation manifest — typed, capability-aware.
 //
 // This file is the SINGLE SOURCE OF TRUTH for the sidebar shape. The sidebar
 // consumes this manifest; it does NOT hand-curate role arrays. Items without
@@ -11,14 +11,16 @@
 // group parentheses. The CI guard `scripts/check-no-persona-in-urls.mjs`
 // enforces this.
 //
-// Grouping follows plan §B.1 layout:
-//   Overview | Inbox | Stock | Planning | Purchase Orders | Admin | System
+// Grouping:
+//   Overview | Inbox | Stock | Planning | Purchase Orders | Admin
 // ---------------------------------------------------------------------------
 
 import type { LucideIcon } from "lucide-react";
 import {
   Activity,
+  ArrowLeftRight,
   Building2,
+  CalendarDays,
   ClipboardCheck,
   Clock,
   Cog,
@@ -26,7 +28,6 @@ import {
   Inbox,
   Layers,
   LayoutDashboard,
-  LineChart,
   Link2,
   ListChecks,
   Network,
@@ -37,6 +38,7 @@ import {
   ShoppingCart,
   Sliders,
   Tags,
+  TrendingUp,
   Users,
 } from "lucide-react";
 
@@ -109,9 +111,6 @@ export const NAV_MANIFEST: NavGroup[] = [
           countSelector: "length",
         },
       },
-      // Exceptions entry removed in Tranche B — the /exceptions route now
-      // redirects to /inbox?view=exceptions (see src/app/(planner)/
-      // exceptions/page.tsx). Triage lives inside the unified inbox.
     ],
   },
   {
@@ -172,22 +171,15 @@ export const NAV_MANIFEST: NavGroup[] = [
     title: "Planning",
     items: [
       {
-        href: "/planning",
-        label: "Planning",
-        icon: LineChart,
-        min_role: "viewer",
-        required_capability: "planning:read",
-      },
-      {
         href: "/planning/forecast",
         label: "Forecast",
-        icon: LineChart,
+        icon: TrendingUp,
         min_role: "viewer",
         required_capability: "planning:read",
       },
       {
         href: "/planning/runs",
-        label: "Planning Runs",
+        label: "Run History",
         icon: ListChecks,
         min_role: "viewer",
         required_capability: "planning:read",
@@ -201,8 +193,8 @@ export const NAV_MANIFEST: NavGroup[] = [
       },
       {
         href: "/planning/weekly-outlook",
-        label: "Weekly Inventory Outlook",
-        icon: Activity,
+        label: "Weekly Outlook",
+        icon: CalendarDays,
         min_role: "viewer",
         required_capability: "planning:read",
       },
@@ -242,10 +234,6 @@ export const NAV_MANIFEST: NavGroup[] = [
         required_capability: "admin:execute",
       },
       {
-        // Tranche E lands /admin/masters/boms as the view-only BOM browser.
-        // Legacy /admin/boms editor remains available for direct linking but
-        // is no longer surfaced in the sidebar (editing is owned by the
-        // separate BOM-deep-logic window per plan §G).
         href: "/admin/masters/boms",
         label: "BOMs",
         icon: Network,
@@ -261,23 +249,18 @@ export const NAV_MANIFEST: NavGroup[] = [
       },
       {
         href: "/admin/supplier-items",
-        label: "Supplier items",
+        label: "Supplier Items",
         icon: Link2,
         min_role: "viewer",
         required_capability: "admin:execute",
       },
       {
         href: "/admin/planning-policy",
-        label: "Planning policy",
+        label: "Planning Policy",
         icon: Sliders,
         min_role: "viewer",
         required_capability: "admin:execute",
       },
-    ],
-  },
-  {
-    title: "System",
-    items: [
       {
         href: "/admin/users",
         label: "Users",
@@ -312,12 +295,10 @@ export const NAV_MANIFEST: NavGroup[] = [
       {
         href: "/admin/sku-map",
         label: "SKU Mappings",
-        icon: Tags,
+        icon: ArrowLeftRight,
         min_role: "admin",
         required_capability: "admin:execute",
       },
-      // /admin/signals is a plan §B.1 target URL; its page is a Tranche G
-      // deliverable. Omitted from nav until that surface lands.
     ],
   },
 ];
