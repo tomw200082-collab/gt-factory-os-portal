@@ -252,22 +252,22 @@ export default function AdminComponentsPage(): JSX.Element {
               <thead>
                 <tr className="border-b border-border/70 bg-bg-subtle/60">
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    Component ID
+                    Code
                   </th>
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Name
                   </th>
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    Class
+                    Category
                   </th>
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    Inv UoM
+                    Stock unit
                   </th>
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Primary supplier
                   </th>
                   <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    Lead days
+                    Lead time
                   </th>
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Readiness
@@ -310,8 +310,17 @@ export default function AdminComponentsPage(): JSX.Element {
                     <td className="px-3 py-2 text-xs text-fg-muted">
                       {r.inventory_uom ?? "—"}
                     </td>
-                    <td className="px-3 py-2 font-mono text-xs text-fg-muted">
-                      {r.primary_supplier_id ?? "—"}
+                    <td className="px-3 py-2 text-xs">
+                      {r.primary_supplier_id ? (
+                        <Link
+                          href={`/admin/masters/suppliers/${encodeURIComponent(r.primary_supplier_id)}`}
+                          className="font-mono text-fg-muted hover:text-accent"
+                        >
+                          {r.primary_supplier_id}
+                        </Link>
+                      ) : (
+                        <Badge tone="warning" dotted>No supplier</Badge>
+                      )}
                     </td>
                     <td className="px-3 py-2 text-right text-xs tabular-nums text-fg-muted">
                       {r.lead_time_days ?? "—"}
@@ -350,8 +359,9 @@ export default function AdminComponentsPage(): JSX.Element {
         onCreated={(newId) => {
           setBanner({
             kind: "success",
-            message: `Created component ${newId}. Open the detail page to edit.`,
+            message: `Created ${newId}. Open the detail page to add a supplier and set pricing.`,
           });
+          setShowCreate(false);
           void queryClient.invalidateQueries({ queryKey: ["admin", "components"] });
         }}
       />
