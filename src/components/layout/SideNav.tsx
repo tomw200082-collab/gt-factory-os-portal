@@ -160,7 +160,7 @@ export function SideNav({ onNavigate }: { onNavigate?: () => void } = {}) {
   }, [pathname]);
 
   return (
-    <nav className="flex flex-col gap-4">
+    <nav aria-label="Primary navigation" className="flex flex-col gap-4">
       {NAV_MANIFEST.map((group) => {
         const entries: SideNavEntry[] = group.items
           .filter((i) => meetsMinRole(session.role, i.min_role))
@@ -184,6 +184,7 @@ export function SideNav({ onNavigate }: { onNavigate?: () => void } = {}) {
                 onClick={() => toggleGroup(group.title)}
                 className="mb-2 flex w-full items-center gap-2 px-2 text-left"
                 aria-expanded={isExpanded}
+                aria-label={`${group.title} navigation section`}
               >
                 <div className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   {group.title}
@@ -264,7 +265,7 @@ export function SideNav({ onNavigate }: { onNavigate?: () => void } = {}) {
                             : "border-border/70 bg-bg-subtle text-fg-strong",
                         )}
                         data-testid={`sidenav-badge-${item.href}`}
-                        aria-label={`${badgeCount} pending`}
+                        aria-label={`${badgeCount} pending in ${item.label}`}
                       >
                         {badgeCount > 99 ? "99+" : badgeCount}
                       </span>
@@ -297,6 +298,7 @@ export function SideNav({ onNavigate }: { onNavigate?: () => void } = {}) {
                       <Link
                         href={item.href}
                         onClick={onNavigate}
+                        aria-current={active ? "page" : undefined}
                         className={cn(
                           "group relative flex items-center gap-2.5 rounded-sm px-2.5 py-1.5 text-sm text-fg transition-colors duration-150 ease-out-quart",
                           active
