@@ -8,9 +8,11 @@
 | Item | ✅ `/admin/items` | ✅ Path B `/admin/masters/items/[id]` | ⚠️ QuickCreateItem (minimal fields) | ✅ name/family/group/type/pack/sales uom/case pack | ✅ archive/restore drawer | ✅ BOM tab LIVE + MasterSummaryCard | ✅ BOM completeness (MANUFACTURED) + supplier completeness (BOUGHT_FINISHED) | ✅ ClassWEditDrawer | ✅ ClassWEditDrawer | ✅ `grid-cols-1 sm:grid-cols-2` | ✅ invalidates query + reload | ✅ |
 | Supplier | ✅ `/admin/suppliers` | ✅ Path B `/admin/masters/suppliers/[id]` | ✅ QuickCreateSupplier | ✅ short name/type/contact/phone/payment terms/lead time/MOQ | ✅ archive/restore drawer | ✅ QuickCreateSupplierItem + MasterSummaryCard | ✅ contact/sourcing links/cost completeness | ✅ ClassWEditDrawer | ✅ ClassWEditDrawer | ✅ `grid-cols-1 sm:grid-cols-2` | ✅ invalidates query + reload | ✅ |
 | Supplier-item | ✅ `/admin/supplier-items` (renamed "Sourcing links") | ❌ No dedicated detail | ✅ QuickCreateSupplierItem | ✅ lead time/MOQ/std cost/pack conversion | ✅ title tooltips + archive via ClassWEditDrawer | N/A | N/A | ✅ ClassWEditDrawer (INACTIVE status) | ❌ No restore UX yet | ✅ table layout | ✅ | ✅ |
-| BOM head | ✅ `/admin/masters/boms` | ⚠️ Partial | 🔒 Slice B | 🔒 Slice B | 🔒 Slice B | 🔒 Slice B | N/A | 🔒 Slice B | 🔒 Slice B | ⚠️ | ⚠️ | ✅ |
-| BOM version | (via head) | (via head) | 🔒 Slice B | 🔒 Slice B | 🔒 Slice B | 🔒 Slice B | N/A | 🔒 Slice B | 🔒 Slice B | ⚠️ | ⚠️ | ✅ |
-| BOM lines | (via version) | (via version) | 🔒 Slice B | 🔒 Slice B | 🔒 Slice B | 🔒 Slice B | N/A | 🔒 Slice B | 🔒 Slice B | — | — | — |
+| BOM head | ✅ `/admin/masters/boms` | ⚠️ Partial | ✅ via product → Edit recipe | ✅ DRAFT clone-and-edit | ✅ DRAFT clone-and-edit | ✅ Recipe-Health card | N/A | ✅ via DRAFT lifecycle | ✅ via DRAFT lifecycle | ✅ stacked + sticky bottom drawer | ✅ | ✅ |
+| BOM version | (via head) | ✅ `/admin/masters/boms/[head]/[version]/edit` (DRAFT only) | ✅ POST /api/boms/versions (clone or empty) | ✅ DRAFT line CRUD | ✅ DRAFT line CRUD | ✅ ReadinessPanel + Publish modal | N/A | ✅ via SUPERSEDE on publish | ✅ via Resume editing → | ✅ stacked + sticky bottom drawer | ✅ | ✅ |
+| BOM lines | (via version) | (via version) | ✅ + Add component drawer | ✅ qty inline edit | ✅ qty inline edit | ✅ per-line pip + Quick-fix drawer | N/A | ✅ DELETE on DRAFT | ✅ via Resume editing → | ✅ stacked card layout | ✅ | ✅ |
+
+> **Recipe-Readiness corridor (2026-04-25):** Recipe editing lives at `/admin/masters/boms/[bom_head_id]/[version_id]/edit` (DRAFT versions only). Entry is via the Recipe-Health card on the product page (`/admin/masters/items/[item_id]` for MANUFACTURED items). The read-only BOM head and version detail pages remain unchanged.
 
 ## Dual-tree resolution decision
 
