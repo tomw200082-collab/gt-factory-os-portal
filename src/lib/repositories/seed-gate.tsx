@@ -31,7 +31,7 @@ export function SeedGate({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!ready) return <LoadingState title="Initializing local store…" />;
+  if (!ready) return <LoadingState title="Loading…" />;
 
   return <>{children}</>;
 }
