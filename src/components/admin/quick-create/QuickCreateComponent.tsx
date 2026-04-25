@@ -1,16 +1,8 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// <QuickCreateComponent> — AMMC v1 Slice 3.
-//
-// Minimum-field Quick-Create drawer for a new components row. Fields:
-//   - component_id    (text, required)
-//   - component_name  (text, required)
-//   - component_class (text, required — free-text in v1; enum constraint is
-//                      a Slice 2 backend concern)
-//   - inventory_uom   (text, required)
-//
-// Posts to /api/components (Slice 4 will wire the proxy).
+// <QuickCreateComponent> — AMMC v1 Slice 3 / corridor 7 label hardening.
+// Fields use product-first labels (not DB column names).
 // ---------------------------------------------------------------------------
 
 import { useState } from "react";
@@ -25,23 +17,23 @@ const QuickCreateComponentSchema = z.object({
   component_id: z
     .string()
     .trim()
-    .min(1, "component_id is required")
-    .max(64, "component_id too long"),
+    .min(1, "Code is required")
+    .max(64, "Code too long"),
   component_name: z
     .string()
     .trim()
-    .min(1, "component_name is required")
-    .max(256, "component_name too long"),
+    .min(1, "Name is required")
+    .max(256, "Name too long"),
   component_class: z
     .string()
     .trim()
-    .min(1, "component_class is required")
-    .max(64, "component_class too long"),
+    .min(1, "Category is required")
+    .max(64, "Category too long"),
   inventory_uom: z
     .string()
     .trim()
-    .min(1, "inventory_uom is required")
-    .max(32, "inventory_uom too long"),
+    .min(1, "Stock unit is required")
+    .max(32, "Stock unit too long"),
 });
 
 export type QuickCreateComponentValues = z.infer<
@@ -107,8 +99,8 @@ export function QuickCreateComponent({
       onClose={() => {
         if (!submitting) onClose();
       }}
-      title="New component"
-      description="Minimum fields to create a components row. Supplier mapping + BOM linkage are separate flows."
+      title="Add raw material / packaging"
+      description="Enter the minimum details to create the record. Open the detail page afterwards to add a supplier and set pricing."
       width="md"
     >
       {banner?.kind === "endpoint_pending" ? (
@@ -125,7 +117,7 @@ export function QuickCreateComponent({
       <form className="space-y-4" onSubmit={onSubmit}>
         <label className="block">
           <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-            component_id
+            Code <span className="normal-case font-normal text-fg-faint">(internal ID, e.g. RM-SUGAR)</span>
           </span>
           <input
             className="input"
@@ -141,7 +133,7 @@ export function QuickCreateComponent({
 
         <label className="block">
           <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-            component_name
+            Name
           </span>
           <input
             className="input"
@@ -157,13 +149,15 @@ export function QuickCreateComponent({
 
         <label className="block">
           <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-            component_class
+            Category
           </span>
-          <input
-            className="input"
-            placeholder="e.g. RAW_MATERIAL / PACKAGING"
-            {...form.register("component_class")}
-          />
+          <select className="input" {...form.register("component_class")}>
+            <option value="">— select —</option>
+            <option value="RAW_MATERIAL">Raw material</option>
+            <option value="PACKAGING">Packaging</option>
+            <option value="SEMI_FINISHED">Semi-finished</option>
+            <option value="OTHER">Other</option>
+          </select>
           {form.formState.errors.component_class ? (
             <span className="mt-1 block text-xs text-danger-fg">
               {form.formState.errors.component_class.message}
@@ -173,11 +167,11 @@ export function QuickCreateComponent({
 
         <label className="block">
           <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-            inventory_uom
+            Stock unit of measure
           </span>
           <input
             className="input"
-            placeholder="e.g. KG / L / UNIT"
+            placeholder="e.g. KG, L, UNIT"
             {...form.register("inventory_uom")}
           />
           {form.formState.errors.inventory_uom ? (
@@ -186,6 +180,10 @@ export function QuickCreateComponent({
             </span>
           ) : null}
         </label>
+
+        <div className="rounded-md border border-info/30 bg-info-softer px-3 py-2 text-xs text-fg-muted">
+          After saving, open the component detail page to assign a supplier and set pricing.
+        </div>
 
         <div className="flex items-center justify-end gap-2 border-t border-border/70 pt-4">
           <button
@@ -197,7 +195,7 @@ export function QuickCreateComponent({
             Cancel
           </button>
           <button type="submit" className="btn-primary" disabled={submitting}>
-            {submitting ? "Saving…" : "Save & select"}
+            {submitting ? "Saving…" : "Save component"}
           </button>
         </div>
       </form>

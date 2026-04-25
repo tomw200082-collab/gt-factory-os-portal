@@ -38,6 +38,8 @@ import {
 } from "@/components/patterns/DetailPage";
 import { Badge } from "@/components/badges/StatusBadge";
 import { SectionCard } from "@/components/workflow/SectionCard";
+import { QuickCreateSupplierItem } from "@/components/admin/quick-create/QuickCreateSupplierItem";
+import { type EntityOption } from "@/components/fields/EntityPickerPlus";
 
 // --- Types ---------------------------------------------------------------
 
@@ -123,6 +125,20 @@ interface ExceptionsListResponse {
   rows: ExceptionRow[];
   count: number;
 }
+
+interface ComponentRow {
+  component_id: string;
+  component_name: string | null;
+}
+
+interface ItemRow {
+  item_id: string;
+  item_name: string | null;
+  supply_method: string;
+}
+
+interface ComponentsListResponse { rows: ComponentRow[]; count: number; }
+interface ItemsListResponse { rows: ItemRow[]; count: number; }
 
 // --- helpers -------------------------------------------------------------
 
@@ -333,6 +349,7 @@ export default function AdminSupplierDetailPage({
   params: Promise<{ supplier_id: string }>;
 }): JSX.Element {
   const { supplier_id } = use(params);
+  const queryClient = useQueryClient();
 
   const supplierQuery = useQuery<SuppliersListResponse>({
     queryKey: ["admin", "masters", "supplier", supplier_id],
@@ -370,6 +387,38 @@ export default function AdminSupplierDetailPage({
     queryKey: ["admin", "masters", "supplier", supplier_id, "exceptions"],
     queryFn: () => fetchJson("/api/exceptions?status=open,acknowledged&limit=1000"),
   });
+
+  const componentsQuery = useQuery<ComponentsListResponse>({
+    queryKey: ["admin", "components", "all"],
+    queryFn: () => fetchJson("/api/components?limit=1000"),
+  });
+
+  const itemsQuery = useQuery<ItemsListResponse>({
+    queryKey: ["admin", "items", "all"],
+    queryFn: () => fetchJson("/api/items?limit=1000"),
+  });
+
+  const [showAddSourcing, setShowAddSourcing] = useState(false);
+
+  const supplierOptions: EntityOption[] = supplierQuery.data?.rows.map((s) => ({
+    id: s.supplier_id,
+    label: s.supplier_name_short ?? s.supplier_name_official,
+    sublabel: s.supplier_id,
+  })) ?? [];
+
+  const componentOptions: EntityOption[] = componentsQuery.data?.rows.map((c) => ({
+    id: c.component_id,
+    label: c.component_name ?? c.component_id,
+    sublabel: c.component_id,
+  })) ?? [];
+
+  const itemOptions: EntityOption[] = (itemsQuery.data?.rows ?? [])
+    .filter((i) => i.supply_method === "BOUGHT_FINISHED")
+    .map((i) => ({
+      id: i.item_id,
+      label: i.item_name ?? i.item_id,
+      sublabel: i.item_id,
+    }));
   const relatedExceptions =
     exceptionsQuery.data?.rows.filter(
       (e) =>
@@ -416,29 +465,29 @@ export default function AdminSupplierDetailPage({
         );
       }
       const rows: FieldRow[] = [
-        { label: "supplier_id", value: row.supplier_id, mono: true },
-        { label: "supplier_name_official", value: row.supplier_name_official },
-        { label: "supplier_name_short", value: row.supplier_name_short },
-        { label: "status", value: <SupplierStatusBadge status={row.status} /> },
-        { label: "supplier_type", value: row.supplier_type, mono: true },
-        { label: "primary_contact_name", value: row.primary_contact_name },
-        { label: "primary_contact_phone", value: row.primary_contact_phone },
-        { label: "currency", value: row.currency, mono: true },
-        { label: "payment_terms", value: row.payment_terms },
+        { label: "Supplier code", value: row.supplier_id, mono: true },
+        { label: "Official name", value: row.supplier_name_official },
+        { label: "Short name", value: row.supplier_name_short },
+        { label: "Status", value: <SupplierStatusBadge status={row.status} /> },
+        { label: "Supplier type", value: row.supplier_type, mono: true },
+        { label: "Primary contact", value: row.primary_contact_name },
+        { label: "Phone", value: row.primary_contact_phone },
+        { label: "Currency", value: row.currency, mono: true },
+        { label: "Payment terms", value: row.payment_terms },
         {
-          label: "default_lead_time_days",
+          label: "Default lead time (days)",
           value: row.default_lead_time_days ?? null,
         },
-        { label: "default_moq", value: row.default_moq, mono: true },
-        { label: "approval_status", value: row.approval_status },
+        { label: "Default min. order qty", value: row.default_moq, mono: true },
+        { label: "Approval status", value: row.approval_status },
         {
-          label: "green_invoice_supplier_id",
+          label: "Green Invoice supplier ID",
           value: row.green_invoice_supplier_id,
           mono: true,
         },
-        { label: "site_id", value: row.site_id, mono: true },
-        { label: "created_at", value: fmtDateTime(row.created_at) },
-        { label: "updated_at", value: fmtDateTime(row.updated_at) },
+        { label: "Site", value: row.site_id, mono: true },
+        { label: "Created", value: fmtDateTime(row.created_at) },
+        { label: "Last updated", value: fmtDateTime(row.updated_at) },
       ];
       return <DetailFieldGrid rows={rows} />;
     })(),
@@ -446,7 +495,7 @@ export default function AdminSupplierDetailPage({
 
   const supplierItemsTab: TabDescriptor = {
     key: "supplier-items",
-    label: "Supplier items",
+    label: "Items supplied",
     badge: allSi.length > 0 ? `${allSi.length}` : undefined,
     content: (() => {
       if (supplierItemsQuery.isLoading) return <DetailTabLoading />;
@@ -457,12 +506,28 @@ export default function AdminSupplierDetailPage({
           />
         );
       }
+      const addButton = (
+        <div className="flex justify-end px-4 pt-3 pb-2">
+          <button
+            type="button"
+            className="btn-primary btn-sm"
+            onClick={() => setShowAddSourcing(true)}
+          >
+            + Add sourcing link
+          </button>
+        </div>
+      );
       if (allSi.length === 0) {
         return (
-          <DetailTabEmpty message="No supplier-items mapped to this supplier." />
+          <div>
+            {addButton}
+            <DetailTabEmpty message="No items linked to this supplier yet. Use 'Add sourcing link' to connect raw materials or products." />
+          </div>
         );
       }
       return (
+        <div>
+          {addButton}
         <SectionCard density="compact" contentClassName="p-0">
           <table className="w-full border-collapse text-xs">
             <thead>
@@ -559,6 +624,7 @@ export default function AdminSupplierDetailPage({
             </tbody>
           </table>
         </SectionCard>
+        </div>
       );
     })(),
   };
@@ -753,22 +819,36 @@ export default function AdminSupplierDetailPage({
   });
 
   return (
-    <DetailPage
-      header={{
-        eyebrow: "Admin · Suppliers",
-        title: row
-          ? row.supplier_name_short ?? row.supplier_name_official
-          : supplier_id,
-        description: row ? `Supplier ${row.supplier_id}` : "Loading supplier…",
-        meta: headerMeta,
-        actions: (
-          <Link href="/admin/suppliers" className="btn btn-ghost btn-sm">
-            Back to suppliers
-          </Link>
-        ),
-      }}
-      tabs={tabs}
-      linkages={linkages}
-    />
+    <>
+      <DetailPage
+        header={{
+          eyebrow: "Admin · Suppliers",
+          title: row
+            ? row.supplier_name_short ?? row.supplier_name_official
+            : supplier_id,
+          description: row ? `Supplier ${row.supplier_id}` : "Loading supplier…",
+          meta: headerMeta,
+          actions: (
+            <Link href="/admin/suppliers" className="btn btn-ghost btn-sm">
+              Back to suppliers
+            </Link>
+          ),
+        }}
+        tabs={tabs}
+        linkages={linkages}
+      />
+      <QuickCreateSupplierItem
+        open={showAddSourcing}
+        onClose={() => setShowAddSourcing(false)}
+        onCreated={() => {
+          setShowAddSourcing(false);
+          void queryClient.invalidateQueries({ queryKey: supplierItemsQueryKey as unknown as string[] });
+        }}
+        suppliers={supplierOptions}
+        components={componentOptions}
+        items={itemOptions}
+        defaultSupplierId={supplier_id}
+      />
+    </>
   );
 }

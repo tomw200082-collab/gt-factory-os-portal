@@ -1,25 +1,8 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// <QuickCreateSupplierItem> — AMMC v1 Slice 3.
-//
-// Minimum-field Quick-Create drawer for a new supplier_items row. Demonstrates
-// the drawer-stack pattern: the supplier picker hosts a `+ New supplier` row
-// that pushes a nested <QuickCreateSupplier> drawer on top.
-//
-// Fields:
-//   - supplier_id       (EntityPickerPlus, required)
-//   - component_id XOR item_id (one or the other, required)
-//   - price             (number, >= 0)
-//   - lead_time_days    (integer, >= 0)
-//   - moq               (number, >= 0)
-//   - pack_conversion   (number, > 0)
-//   - is_primary        (boolean, default false)
-//
-// Accepts `options` props rather than fetching its own lists — this keeps
-// the Quick-Create self-contained and makes testing trivial. In Slice 4,
-// callers (entity detail pages) will pass options already loaded via their
-// own TanStack Query hooks.
+// <QuickCreateSupplierItem> — AMMC v1 Slice 3 / corridor 7 label hardening.
+// Fields use product-first labels (not DB column names).
 // ---------------------------------------------------------------------------
 
 import { useState } from "react";
@@ -35,23 +18,23 @@ import { quickCreatePost, QK } from "./shared";
 // Polymorphic XOR: exactly one of component_id / item_id must be set.
 const QuickCreateSupplierItemSchema = z
   .object({
-    supplier_id: z.string().trim().min(1, "supplier_id is required"),
+    supplier_id: z.string().trim().min(1, "Supplier is required"),
     component_id: z.string().trim().optional(),
     item_id: z.string().trim().optional(),
-    price: z.coerce.number().nonnegative("price must be >= 0"),
+    price: z.coerce.number().nonnegative("Unit price must be 0 or more"),
     lead_time_days: z.coerce
       .number()
-      .int("lead_time_days must be an integer")
-      .nonnegative("lead_time_days must be >= 0"),
-    moq: z.coerce.number().nonnegative("moq must be >= 0"),
-    pack_conversion: z.coerce.number().positive("pack_conversion must be > 0"),
+      .int("Lead time must be a whole number of days")
+      .nonnegative("Lead time must be 0 or more"),
+    moq: z.coerce.number().nonnegative("Min. order quantity must be 0 or more"),
+    pack_conversion: z.coerce.number().positive("Pack conversion must be greater than 0"),
     is_primary: z.boolean(),
   })
   .refine(
     (v) =>
       (v.component_id && !v.item_id) || (!v.component_id && v.item_id),
     {
-      message: "Exactly one of component_id or item_id must be set",
+      message: "Select either a raw material or a purchased product",
       path: ["component_id"],
     },
   );
@@ -73,6 +56,8 @@ export interface QuickCreateSupplierItemProps {
   /** Optional prefill — e.g. opened from a component's detail page. */
   defaultComponentId?: string;
   defaultItemId?: string;
+  /** Optional prefill — e.g. opened from a supplier's detail page. */
+  defaultSupplierId?: string;
 }
 
 export function QuickCreateSupplierItem({
@@ -84,6 +69,7 @@ export function QuickCreateSupplierItem({
   items,
   defaultComponentId,
   defaultItemId,
+  defaultSupplierId,
 }: QuickCreateSupplierItemProps): JSX.Element {
   const queryClient = useQueryClient();
   const [banner, setBanner] = useState<
@@ -97,9 +83,6 @@ export function QuickCreateSupplierItem({
   const [supplierDrawerOpen, setSupplierDrawerOpen] = useState(false);
 
   // Local suppliers list — augmented when a nested QuickCreateSupplier completes.
-  // (Real Slice 4 implementation will rely on TanStack invalidation; this local
-  // augment just makes the new row pickable immediately without waiting for the
-  // parent list to refetch.)
   const [localSuppliers, setLocalSuppliers] = useState<EntityOption[]>(suppliers);
 
   // Target-type toggle — component vs item (BOUGHT_FINISHED).
@@ -110,7 +93,7 @@ export function QuickCreateSupplierItem({
   const form = useForm<QuickCreateSupplierItemValues>({
     resolver: zodResolver(QuickCreateSupplierItemSchema),
     defaultValues: {
-      supplier_id: "",
+      supplier_id: defaultSupplierId ?? "",
       component_id: defaultComponentId ?? "",
       item_id: defaultItemId ?? "",
       price: 0,
@@ -163,8 +146,8 @@ export function QuickCreateSupplierItem({
         onClose={() => {
           if (!submitting) onClose();
         }}
-        title="New supplier-item"
-        description="Link a supplier to a component or a BOUGHT_FINISHED item, with commercial data."
+        title="Add sourcing link"
+        description="Connect a supplier to a raw material or purchased product, and enter the commercial terms."
         width="lg"
       >
         {banner?.kind === "endpoint_pending" ? (
@@ -181,7 +164,7 @@ export function QuickCreateSupplierItem({
         <form className="space-y-4" onSubmit={onSubmit}>
           <div>
             <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              supplier_id
+              Supplier
             </span>
             <Controller
               control={form.control}
@@ -191,7 +174,7 @@ export function QuickCreateSupplierItem({
                   value={field.value}
                   onChange={(opt) => field.onChange(opt?.id ?? "")}
                   options={localSuppliers}
-                  placeholder="Pick a supplier"
+                  placeholder="Search suppliers…"
                   entityName="supplier"
                   onCreateNew={() => setSupplierDrawerOpen(true)}
                   errored={!!fieldState.error}
@@ -207,7 +190,7 @@ export function QuickCreateSupplierItem({
 
           <div>
             <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              target type
+              What does this supplier provide?
             </span>
             <div className="flex gap-2">
               <button
@@ -222,7 +205,7 @@ export function QuickCreateSupplierItem({
                   form.setValue("item_id", "");
                 }}
               >
-                Component
+                Raw material / packaging
               </button>
               <button
                 type="button"
@@ -232,7 +215,7 @@ export function QuickCreateSupplierItem({
                   form.setValue("component_id", "");
                 }}
               >
-                Item (BOUGHT_FINISHED)
+                Purchased finished product
               </button>
             </div>
           </div>
@@ -240,7 +223,7 @@ export function QuickCreateSupplierItem({
           {targetType === "component" ? (
             <div>
               <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                component_id
+                Raw material / component
               </span>
               <Controller
                 control={form.control}
@@ -250,7 +233,7 @@ export function QuickCreateSupplierItem({
                     value={field.value ?? ""}
                     onChange={(opt) => field.onChange(opt?.id ?? "")}
                     options={components}
-                    placeholder="Pick a component"
+                    placeholder="Search raw materials…"
                     errored={!!fieldState.error}
                   />
                 )}
@@ -264,7 +247,7 @@ export function QuickCreateSupplierItem({
           ) : (
             <div>
               <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                item_id
+                Product (purchased finished)
               </span>
               <Controller
                 control={form.control}
@@ -274,7 +257,7 @@ export function QuickCreateSupplierItem({
                     value={field.value ?? ""}
                     onChange={(opt) => field.onChange(opt?.id ?? "")}
                     options={items}
-                    placeholder="Pick a BOUGHT_FINISHED item"
+                    placeholder="Search products…"
                     errored={!!fieldState.error}
                   />
                 )}
@@ -290,13 +273,14 @@ export function QuickCreateSupplierItem({
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
               <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                price
+                Unit price (ILS)
               </span>
               <input
                 type="number"
                 step="0.0001"
                 min="0"
                 className="input"
+                placeholder="0.00"
                 {...form.register("price")}
               />
               {form.formState.errors.price ? (
@@ -308,13 +292,14 @@ export function QuickCreateSupplierItem({
 
             <label className="block">
               <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                lead_time_days
+                Lead time (days)
               </span>
               <input
                 type="number"
                 step="1"
                 min="0"
                 className="input"
+                placeholder="0"
                 {...form.register("lead_time_days")}
               />
               {form.formState.errors.lead_time_days ? (
@@ -326,13 +311,14 @@ export function QuickCreateSupplierItem({
 
             <label className="block">
               <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                moq
+                Min. order quantity
               </span>
               <input
                 type="number"
                 step="0.0001"
                 min="0"
                 className="input"
+                placeholder="0"
                 {...form.register("moq")}
               />
               {form.formState.errors.moq ? (
@@ -344,13 +330,14 @@ export function QuickCreateSupplierItem({
 
             <label className="block">
               <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                pack_conversion
+                Pack conversion
               </span>
               <input
                 type="number"
                 step="0.0001"
-                min="0"
+                min="0.0001"
                 className="input"
+                placeholder="1"
                 {...form.register("pack_conversion")}
               />
               {form.formState.errors.pack_conversion ? (
@@ -363,7 +350,7 @@ export function QuickCreateSupplierItem({
 
           <label className="flex items-center gap-2 text-sm">
             <input type="checkbox" {...form.register("is_primary")} />
-            <span>Mark as primary supplier for this target</span>
+            <span>Set as primary supplier for this item</span>
           </label>
 
           <div className="flex items-center justify-end gap-2 border-t border-border/70 pt-4">
@@ -376,7 +363,7 @@ export function QuickCreateSupplierItem({
               Cancel
             </button>
             <button type="submit" className="btn-primary" disabled={submitting}>
-              {submitting ? "Saving…" : "Save & select"}
+              {submitting ? "Saving…" : "Save sourcing link"}
             </button>
           </div>
         </form>
@@ -387,8 +374,6 @@ export function QuickCreateSupplierItem({
         open={supplierDrawerOpen}
         onClose={() => setSupplierDrawerOpen(false)}
         onCreated={(newId) => {
-          // Locally augment the suppliers list so the new row is pickable
-          // immediately, and auto-select it.
           setLocalSuppliers((prev) =>
             prev.some((s) => s.id === newId)
               ? prev

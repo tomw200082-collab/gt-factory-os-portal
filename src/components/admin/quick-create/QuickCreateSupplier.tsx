@@ -1,14 +1,8 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// <QuickCreateSupplier> — AMMC v1 Slice 3.
-//
-// Minimum-field Quick-Create drawer for a new suppliers row. Fields:
-//   - supplier_id              (text, required)
-//   - supplier_name_official   (text, required)
-//   - status                   (enum: ACTIVE | INACTIVE, default ACTIVE)
-//
-// Posts to /api/suppliers (Slice 4 will wire the proxy).
+// <QuickCreateSupplier> — AMMC v1 Slice 3 / corridor 7 label hardening.
+// Fields use product-first labels (not DB column names).
 // ---------------------------------------------------------------------------
 
 import { useState } from "react";
@@ -25,13 +19,13 @@ const QuickCreateSupplierSchema = z.object({
   supplier_id: z
     .string()
     .trim()
-    .min(1, "supplier_id is required")
-    .max(64, "supplier_id too long"),
+    .min(1, "Supplier code is required")
+    .max(64, "Supplier code too long"),
   supplier_name_official: z
     .string()
     .trim()
-    .min(1, "supplier_name_official is required")
-    .max(256, "supplier_name_official too long"),
+    .min(1, "Official name is required")
+    .max(256, "Official name too long"),
   status: z.enum(SUPPLIER_STATUS),
 });
 
@@ -97,8 +91,8 @@ export function QuickCreateSupplier({
       onClose={() => {
         if (!submitting) onClose();
       }}
-      title="New supplier"
-      description="Minimum fields to create a suppliers row. Contacts + payment terms can be filled in afterwards."
+      title="Add supplier"
+      description="Enter the minimum details to create the supplier record. Contact details and payment terms can be added afterwards."
       width="md"
     >
       {banner?.kind === "endpoint_pending" ? (
@@ -115,11 +109,11 @@ export function QuickCreateSupplier({
       <form className="space-y-4" onSubmit={onSubmit}>
         <label className="block">
           <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-            supplier_id
+            Supplier code <span className="normal-case font-normal text-fg-faint">(internal ID, e.g. SUP-BAREKET)</span>
           </span>
           <input
             className="input"
-            placeholder="e.g. SUP-ACME"
+            placeholder="e.g. SUP-BAREKET"
             {...form.register("supplier_id")}
           />
           {form.formState.errors.supplier_id ? (
@@ -131,7 +125,7 @@ export function QuickCreateSupplier({
 
         <label className="block">
           <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-            supplier_name_official
+            Official name
           </span>
           <input
             className="input"
@@ -147,14 +141,11 @@ export function QuickCreateSupplier({
 
         <label className="block">
           <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-            status
+            Status
           </span>
           <select className="input" {...form.register("status")}>
-            {SUPPLIER_STATUS.map((s) => (
-              <option key={s} value={s}>
-                {s}
-              </option>
-            ))}
+            <option value="ACTIVE">Active</option>
+            <option value="INACTIVE">Inactive</option>
           </select>
         </label>
 
@@ -168,7 +159,7 @@ export function QuickCreateSupplier({
             Cancel
           </button>
           <button type="submit" className="btn-primary" disabled={submitting}>
-            {submitting ? "Saving…" : "Save & select"}
+            {submitting ? "Saving…" : "Save supplier"}
           </button>
         </div>
       </form>
