@@ -403,7 +403,7 @@ export default function AdminSkuAliasesPage(): JSX.Element {
         source_channel: row.source_channel,
         external_sku: row.external_sku,
         item_id: itemId,
-        notes: notes[row.external_sku]?.trim() || null,
+        notes: notes[row.external_sku]?.trim() ?? "",
       });
     }
     if (payload.length === 0) {
