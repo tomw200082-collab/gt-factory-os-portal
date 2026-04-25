@@ -35,6 +35,18 @@ const MOVEMENT_TYPES = [
   "production_scrap",
 ] as const;
 
+const MOVEMENT_TYPE_LABELS: Record<string, string> = {
+  GR_POSTED: "Goods Receipt",
+  WASTE_POSTED: "Waste / Adjustment",
+  production_output: "Production Output",
+  production_consumption: "Production Consumption",
+  production_scrap: "Production Scrap",
+};
+
+function fmtMovementType(raw: string): string {
+  return MOVEMENT_TYPE_LABELS[raw] ?? raw;
+}
+
 const ITEM_TYPES = ["FG", "RM", "PKG"] as const;
 
 interface Filters {
@@ -178,7 +190,7 @@ export default function MovementLogPage() {
             >
               <option value="">All</option>
               {MOVEMENT_TYPES.map((t) => (
-                <option key={t} value={t}>{t}</option>
+                <option key={t} value={t}>{fmtMovementType(t)}</option>
               ))}
             </select>
           </div>
@@ -259,8 +271,8 @@ export default function MovementLogPage() {
                       <td className="whitespace-nowrap py-2 pr-4 text-fg-muted">
                         {formatDate(row.event_at)}
                       </td>
-                      <td className="py-2 pr-4 font-mono text-xs text-fg">
-                        {row.movement_type}
+                      <td className="py-2 pr-4 text-xs text-fg">
+                        {fmtMovementType(row.movement_type)}
                       </td>
                       <td className="py-2 pr-4">
                         <span className="font-mono text-xs text-fg">{row.item_id}</span>

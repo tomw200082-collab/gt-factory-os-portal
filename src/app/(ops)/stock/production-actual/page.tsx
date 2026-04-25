@@ -627,7 +627,7 @@ export default function ProductionActualPage() {
                   </span>{" "}
                   <span className="text-fg-muted">({snapshot.item_id})</span>
                   <span className="ml-2 rounded-sm border border-info/40 bg-info-soft px-1.5 py-0.5 text-3xs text-info-fg">
-                    {snapshot.supply_method}
+                    {snapshot.supply_method === "MANUFACTURED" ? "Manufactured" : snapshot.supply_method === "REPACK" ? "Repack" : snapshot.supply_method}
                   </span>
                 </div>
                 <div className="mt-1">
