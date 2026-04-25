@@ -432,14 +432,14 @@ export default function PhysicalCountPage() {
                 ------------------------------------------------------------------ */}
             <div className="mb-3 space-y-1">
               <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                חיפוש מוצר
+                Search
               </span>
               <div className="flex min-w-0 items-center gap-2">
                 <input
                   ref={searchInputRef}
                   type="search"
                   className="input min-w-0 flex-1"
-                  placeholder="חיפוש מוצר"
+                  placeholder="Search items…"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   autoComplete="off"
@@ -457,7 +457,7 @@ export default function PhysicalCountPage() {
                     aria-label="Clear search"
                     data-testid="physical-count-search-clear"
                   >
-                    נקה חיפוש
+                    Clear
                   </button>
                 ) : null}
               </div>
@@ -468,8 +468,8 @@ export default function PhysicalCountPage() {
                   data-testid="physical-count-search-result-count"
                 >
                   {filteredCountable.length > 0
-                    ? `${filteredCountable.length} פריט${filteredCountable.length === 1 ? "" : "ים"}`
-                    : "לא נמצאו פריטים לחיפוש הזה"}
+                    ? `${filteredCountable.length} item${filteredCountable.length === 1 ? "" : "s"}`
+                    : "No items match your search."}
                 </p>
               ) : null}
             </div>
@@ -491,7 +491,7 @@ export default function PhysicalCountPage() {
                   <option value="">— select —</option>
                   {filteredCountable.length === 0 && searchQuery.trim() ? (
                     <option value="" disabled>
-                      לא נמצאו פריטים לחיפוש הזה
+                      No items match your search.
                     </option>
                   ) : (
                     <>
