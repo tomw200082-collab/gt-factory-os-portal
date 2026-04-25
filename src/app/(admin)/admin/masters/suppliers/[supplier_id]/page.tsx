@@ -23,7 +23,7 @@
 // Linkage card: components sourced (via supplier-items), recent POs, GI mapping.
 // ---------------------------------------------------------------------------
 
-import { use, useState, useCallback } from "react";
+import { use, useState, useCallback, useMemo } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
 import {
@@ -38,8 +38,13 @@ import {
 } from "@/components/patterns/DetailPage";
 import { Badge } from "@/components/badges/StatusBadge";
 import { SectionCard } from "@/components/workflow/SectionCard";
+import { InlineEditCell } from "@/components/tables/InlineEditCell";
+import { MasterSummaryCard, type CompletenessItem } from "@/components/admin/MasterSummaryCard";
+import { ClassWEditDrawer } from "@/components/admin/ClassWEditDrawer";
 import { QuickCreateSupplierItem } from "@/components/admin/quick-create/QuickCreateSupplierItem";
 import { type EntityOption } from "@/components/fields/EntityPickerPlus";
+import { AdminMutationError, patchEntity, postStatus } from "@/lib/admin/mutations";
+import { useSession } from "@/lib/auth/session-provider";
 
 // --- Types ---------------------------------------------------------------
 
@@ -400,6 +405,37 @@ export default function AdminSupplierDetailPage({
   });
 
   const [showAddSourcing, setShowAddSourcing] = useState(false);
+  const [showStatusDrawer, setShowStatusDrawer] = useState(false);
+  const [drawerStatusTarget, setDrawerStatusTarget] = useState<string>("");
+
+  const { session } = useSession();
+  const isAdmin = session.role === "admin";
+
+  const supplierFieldMutation = useMutation({
+    mutationFn: async (args: { field: string; value: unknown; updated_at: string }) =>
+      patchEntity({
+        url: `/api/suppliers/${encodeURIComponent(supplier_id)}`,
+        fields: { [args.field]: args.value },
+        ifMatchUpdatedAt: args.updated_at,
+      }),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["admin", "masters", "supplier", supplier_id] });
+    },
+  });
+
+  const statusMutation = useMutation({
+    mutationFn: (args: { newStatus: string; updated_at: string }) =>
+      postStatus({
+        url: `/api/suppliers/${encodeURIComponent(supplier_id)}/status`,
+        status: args.newStatus,
+        ifMatchUpdatedAt: args.updated_at,
+      }),
+    onSuccess: () => {
+      setShowStatusDrawer(false);
+      void queryClient.invalidateQueries({ queryKey: ["admin", "masters", "supplier", supplier_id] });
+      void queryClient.invalidateQueries({ queryKey: ["admin", "suppliers"] });
+    },
+  });
 
   const supplierOptions: EntityOption[] = supplierQuery.data?.rows.map((s) => ({
     id: s.supplier_id,
@@ -430,6 +466,18 @@ export default function AdminSupplierDetailPage({
 
   const allSi = supplierItemsQuery.data?.rows ?? [];
   const allPos = purchaseOrdersQuery.data?.rows ?? [];
+
+  const completenessItems = useMemo((): CompletenessItem[] => {
+    if (!row) return [];
+    const hasContact = !!(row.primary_contact_name || row.primary_contact_phone);
+    const hasSourcingLinks = allSi.length > 0;
+    const hasCost = allSi.some((si) => si.std_cost_per_inv_uom && parseFloat(si.std_cost_per_inv_uom) > 0);
+    return [
+      { label: "Contact info", status: hasContact ? "ok" : "warn", detail: hasContact ? undefined : "No contact name or phone set" },
+      { label: "Sourcing links", status: hasSourcingLinks ? "ok" : "warn", detail: hasSourcingLinks ? `${allSi.length} link(s)` : "No components or items linked" },
+      { label: "Standard cost on any link", status: hasCost ? "ok" : "warn", detail: hasCost ? undefined : "No cost set on any sourcing link" },
+    ];
+  }, [row, allSi]);
 
   const headerMeta = row ? (
     <>
@@ -465,32 +513,140 @@ export default function AdminSupplierDetailPage({
           />
         );
       }
-      const rows: FieldRow[] = [
-        { label: "Supplier code", value: row.supplier_id, mono: true },
-        { label: "Official name", value: row.supplier_name_official },
-        { label: "Short name", value: row.supplier_name_short },
-        { label: "Status", value: <SupplierStatusBadge status={row.status} /> },
-        { label: "Supplier type", value: row.supplier_type, mono: true },
-        { label: "Primary contact", value: row.primary_contact_name },
-        { label: "Phone", value: row.primary_contact_phone },
-        { label: "Currency", value: row.currency, mono: true },
-        { label: "Payment terms", value: row.payment_terms },
-        {
-          label: "Default lead time (days)",
-          value: row.default_lead_time_days ?? null,
-        },
-        { label: "Default min. order qty", value: row.default_moq, mono: true },
-        { label: "Approval status", value: row.approval_status },
-        {
-          label: "Green Invoice supplier ID",
-          value: row.green_invoice_supplier_id,
-          mono: true,
-        },
+      const classLFields: FieldRow[] = [
+        { label: "Supplier code (locked)", value: row.supplier_id, mono: true },
+        { label: "Official name (locked)", value: row.supplier_name_official },
+        { label: "Currency (locked)", value: row.currency ?? "—", mono: true },
+        { label: "Green Invoice ID (locked)", value: row.green_invoice_supplier_id ?? "—", mono: true },
+        { label: "Approval status", value: row.approval_status ?? "—" },
         { label: "Site", value: row.site_id, mono: true },
         { label: "Created", value: fmtDateTime(row.created_at) },
         { label: "Last updated", value: fmtDateTime(row.updated_at) },
       ];
-      return <DetailFieldGrid rows={rows} />;
+      return (
+        <div className="space-y-4 p-1">
+          <SectionCard title="Details" density="compact">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Short name</span>
+                {isAdmin ? (
+                  <InlineEditCell
+                    value={row.supplier_name_short ?? ""}
+                    onSave={(val) =>
+                      supplierFieldMutation.mutateAsync({ field: "supplier_name_short", value: (val as string) || null, updated_at: row.updated_at }) as Promise<void>
+                    }
+                    ariaLabel="Edit short name"
+                  />
+                ) : (
+                  <span className="text-fg-strong font-medium">{row.supplier_name_short ?? "—"}</span>
+                )}
+              </div>
+              <div>
+                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Type</span>
+                {isAdmin ? (
+                  <InlineEditCell
+                    value={row.supplier_type ?? ""}
+                    onSave={(val) =>
+                      supplierFieldMutation.mutateAsync({ field: "supplier_type", value: (val as string) || null, updated_at: row.updated_at }) as Promise<void>
+                    }
+                    ariaLabel="Edit supplier type"
+                  />
+                ) : (
+                  <span className="text-fg">{row.supplier_type ?? "—"}</span>
+                )}
+              </div>
+              <div>
+                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Primary contact</span>
+                {isAdmin ? (
+                  <InlineEditCell
+                    value={row.primary_contact_name ?? ""}
+                    onSave={(val) =>
+                      supplierFieldMutation.mutateAsync({ field: "primary_contact_name", value: (val as string) || null, updated_at: row.updated_at }) as Promise<void>
+                    }
+                    ariaLabel="Edit primary contact"
+                  />
+                ) : (
+                  <span className="text-fg">{row.primary_contact_name ?? "—"}</span>
+                )}
+              </div>
+              <div>
+                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Phone</span>
+                {isAdmin ? (
+                  <InlineEditCell
+                    value={row.primary_contact_phone ?? ""}
+                    onSave={(val) =>
+                      supplierFieldMutation.mutateAsync({ field: "primary_contact_phone", value: (val as string) || null, updated_at: row.updated_at }) as Promise<void>
+                    }
+                    ariaLabel="Edit phone"
+                  />
+                ) : (
+                  <span className="text-fg">{row.primary_contact_phone ?? "—"}</span>
+                )}
+              </div>
+              <div>
+                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Payment terms</span>
+                {isAdmin ? (
+                  <InlineEditCell
+                    value={row.payment_terms ?? ""}
+                    onSave={(val) =>
+                      supplierFieldMutation.mutateAsync({ field: "payment_terms", value: (val as string) || null, updated_at: row.updated_at }) as Promise<void>
+                    }
+                    ariaLabel="Edit payment terms"
+                  />
+                ) : (
+                  <span className="text-fg">{row.payment_terms ?? "—"}</span>
+                )}
+              </div>
+              <div>
+                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Default lead time (days)</span>
+                {isAdmin ? (
+                  <InlineEditCell
+                    value={row.default_lead_time_days !== null ? String(row.default_lead_time_days) : ""}
+                    onSave={(val) =>
+                      supplierFieldMutation.mutateAsync({ field: "default_lead_time_days", value: val ? Number(val) : null, updated_at: row.updated_at }) as Promise<void>
+                    }
+                    ariaLabel="Edit default lead time"
+                  />
+                ) : (
+                  <span className="text-fg">{row.default_lead_time_days ?? "—"}</span>
+                )}
+              </div>
+              <div>
+                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Default min. order qty</span>
+                {isAdmin ? (
+                  <InlineEditCell
+                    value={row.default_moq ?? ""}
+                    onSave={(val) =>
+                      supplierFieldMutation.mutateAsync({ field: "default_moq", value: (val as string) || null, updated_at: row.updated_at }) as Promise<void>
+                    }
+                    ariaLabel="Edit default MOQ"
+                  />
+                ) : (
+                  <span className="text-fg">{row.default_moq ?? "—"}</span>
+                )}
+              </div>
+            </div>
+          </SectionCard>
+
+          <details className="group rounded-md border border-border/50 bg-bg-subtle">
+            <summary className="cursor-pointer select-none px-3 py-2 text-xs text-fg-muted group-open:border-b group-open:border-border/50">
+              Technical details (locked fields)
+            </summary>
+            <div className="px-3 py-2">
+              <p className="mb-2 text-xs text-fg-subtle">These fields require a migration or integration update to change safely.</p>
+              <DetailFieldGrid rows={classLFields} />
+            </div>
+          </details>
+
+          {supplierFieldMutation.isError ? (
+            <p className="text-xs text-danger-fg">
+              {supplierFieldMutation.error instanceof AdminMutationError
+                ? supplierFieldMutation.error.message
+                : "Save failed. Please try again."}
+            </p>
+          ) : null}
+        </div>
+      );
     })(),
   };
 
@@ -821,6 +977,53 @@ export default function AdminSupplierDetailPage({
 
   return (
     <>
+      {row ? (
+        <MasterSummaryCard
+          name={row.supplier_name_short ?? row.supplier_name_official}
+          code={row.supplier_id}
+          entityType="Supplier"
+          status={row.status}
+          completeness={completenessItems}
+          actions={
+            isAdmin ? (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => {
+                  setDrawerStatusTarget(row.status === "INACTIVE" ? "ACTIVE" : "INACTIVE");
+                  setShowStatusDrawer(true);
+                }}
+              >
+                {row.status === "INACTIVE" ? "Restore" : "Archive"}
+              </button>
+            ) : undefined
+          }
+        />
+      ) : null}
+
+      <ClassWEditDrawer
+        open={showStatusDrawer}
+        onClose={() => setShowStatusDrawer(false)}
+        title={drawerStatusTarget === "INACTIVE" ? "Archive supplier" : "Restore supplier"}
+        warning={
+          drawerStatusTarget === "INACTIVE"
+            ? "Archiving this supplier hides it from sourcing workflows and purchase order creation. Existing POs and sourcing links are not deleted."
+            : "Restoring this supplier makes it available again for sourcing and purchase order creation."
+        }
+        onSave={async () => {
+          if (!row) return;
+          await statusMutation.mutateAsync({ newStatus: drawerStatusTarget, updated_at: row.updated_at });
+        }}
+        isSaving={statusMutation.isPending}
+        error={statusMutation.isError ? (statusMutation.error as Error).message : null}
+      >
+        <p className="text-sm text-fg-muted">
+          {drawerStatusTarget === "INACTIVE"
+            ? "This will set the supplier status to Archived."
+            : "This will set the supplier status to Active."}
+        </p>
+      </ClassWEditDrawer>
+
       <DetailPage
         header={{
           eyebrow: "Admin · Suppliers",
