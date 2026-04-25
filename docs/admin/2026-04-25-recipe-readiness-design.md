@@ -155,12 +155,17 @@ Opens a focused drawer over the editor — not a navigation. Three guided action
 
 **Atomicity contract (binds Actions A and C):**
 
-The implementation plan will determine, by reading the upstream Fastify mutation, whether `PATCH /api/supplier-items/:id { is_primary: true }` already demotes the previous primary in the same transaction. Either way, the UI is bound to these guarantees:
+**Order is forced by the database, not chosen by the UI.** The Postgres `supplier_items` table has a partial unique index `uniq_supplier_items_component_primary` that rejects the second `is_primary = true` row for a given component **at statement-execution time, not at transaction commit**. This means:
 
-1. The user-visible end state must always be "exactly one primary supplier_item per component" — never zero, never two.
-2. If sequential PATCHes are required, the order is: **promote new** first, **then demote old**. This way a partial failure (network drop after step 1) leaves two primaries — recoverable, surfaced as 🟡 warning, no data lost. The reverse order could leave zero primaries, which would silently downgrade green readiness with no replacement queued — explicitly disallowed.
-3. Partial failure surfacing: if step 2 fails after step 1 succeeds, the drawer must NOT close. It shows an inline error: "הספק החדש הוגדר כראשי, אבל הקודם עדיין מסומן כראשי. נסה שוב או דווח." with a `[Retry demote]` button. The readiness panel reflects the dual-primary state until resolved.
-4. The 409 STALE_ROW path (concurrent edit) returns the user to the drawer's first step with a refresh-and-retry message; no partial save is allowed to persist.
+1. **The required order is: demote old primary FIRST, then promote new primary SECOND.** Reverse order is impossible — the partial unique index rejects the promote step before the demote step ever runs. This matches the existing portal pattern in `SupplierItemEditPanel.makePrimary` and is verified by `tests/unit/admin/supplier-items-primary-flip.test.ts` (cases A20/A21).
+2. Implementation MUST also re-read the new candidate row's `audit.version` (or `updated_at` for if-match-updated-at) AFTER the demote and BEFORE the promote, in case the row was touched concurrently.
+3. The end state guarantee is "exactly one primary per component once the operation completes." There IS a momentary window after step 1 succeeds and before step 2 succeeds where the component has zero primaries — this is unavoidable given the DB invariant. The UI's job is to drive that window to zero duration in the happy path, and to never leave it in that state if step 2 fails.
+4. **Partial-failure handling (step 1 succeeded, step 2 failed):** the drawer must NOT close. It surfaces an inline error: "הספק הקודם הורד אבל הספק החדש לא הוגדר עדיין. בחר פעולה:" with two buttons:
+   - `[Retry promote]` — re-attempts step 2 with a fresh `audit.version` read
+   - `[Restore old primary]` — re-promotes the old supplier_item (re-reads its version first, then sets `is_primary: true`); useful when the user wants to abandon the swap rather than retry
+   The readiness panel meanwhile reflects the zero-primaries state — the component shows 🟡 "no primary supplier" until resolved.
+5. The 409 STALE_ROW path (concurrent edit) returns the user to the drawer's first step with a refresh-and-retry message; partial saves up to that point are kept (e.g., if step 1 demoted successfully and a third party then changed step 2's target, the demote is not rolled back; the UI guides the user to choose again).
+6. The Action A "set existing as primary" flow follows the identical contract — it is just a special case of the swap where step 0 is "the user-selected target replaces the current primary."
 
 **Active price update (any of the above flows):** if the primary supplier_item has missing/stale `std_cost_per_inv_uom`, an inline edit cell on the primary row in the drawer lets the admin update it. PATCH `supplier_items/:id { std_cost_per_inv_uom }` reuses the existing mutation. `updated_at` becomes the new "price age" anchor.
 
