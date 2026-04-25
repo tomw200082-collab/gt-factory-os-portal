@@ -97,6 +97,7 @@ interface ProductionActualCommitted {
 interface ItemRow {
   item_id: string;
   item_name: string;
+  sku: string | null;
   status: string;
   supply_method: string;
   sales_uom: string | null;
@@ -572,7 +573,7 @@ export default function ProductionActualPage() {
                       .filter((r) => r.supply_method === "MANUFACTURED")
                       .map((r) => (
                         <option key={r.item_id} value={r.item_id}>
-                          {r.item_name} · {r.item_id}
+                          {r.item_name} · {r.sku ?? r.item_id}
                         </option>
                       ))}
                   </optgroup>
@@ -581,7 +582,7 @@ export default function ProductionActualPage() {
                       .filter((r) => r.supply_method === "REPACK")
                       .map((r) => (
                         <option key={r.item_id} value={r.item_id}>
-                          {r.item_name} · {r.item_id}
+                          {r.item_name} · {r.sku ?? r.item_id}
                         </option>
                       ))}
                   </optgroup>

@@ -35,6 +35,7 @@ interface ReadinessPayload {
 interface ItemRow {
   item_id: string;
   item_name: string;
+  sku: string | null;
   family: string | null;
   pack_size: string | null;
   sales_uom: string | null;
@@ -132,6 +133,7 @@ export default function AdminItemsPage(): JSX.Element {
       (r) =>
         r.item_id.toLowerCase().includes(qLower) ||
         r.item_name.toLowerCase().includes(qLower) ||
+        (r.sku ?? "").toLowerCase().includes(qLower) ||
         (r.family ?? "").toLowerCase().includes(qLower),
     );
   }, [rows, query]);
@@ -276,7 +278,7 @@ export default function AdminItemsPage(): JSX.Element {
               <thead>
                 <tr className="border-b border-border/70 bg-bg-subtle/60">
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    Code
+                    SKU
                   </th>
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Name
@@ -314,7 +316,7 @@ export default function AdminItemsPage(): JSX.Element {
                         href={`/admin/masters/items/${encodeURIComponent(r.item_id)}`}
                         className="hover:text-accent"
                       >
-                        {r.item_id}
+                        {r.sku ?? r.item_id}
                       </Link>
                     </td>
                     <td className="px-3 py-2 text-fg-strong">

@@ -56,6 +56,7 @@ interface PhysicalCountSubmit {
 interface ItemRow {
   item_id: string;
   item_name: string;
+  sku: string | null;
   status: string;
   sales_uom: string | null;
 }
@@ -133,7 +134,7 @@ export default function PhysicalCountPage() {
         kind: "item",
         item_type: "FG",
         id: i.item_id,
-        label: `${i.item_name} · ${i.item_id}`,
+        label: `${i.item_name} · ${i.sku ?? i.item_id}`,
         default_uom: toUom(i.sales_uom),
       })),
       ...components.map<CountableRow>((c) => ({
