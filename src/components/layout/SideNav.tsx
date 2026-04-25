@@ -142,6 +142,11 @@ export function SideNav({ onNavigate }: { onNavigate?: () => void } = {}) {
                 <div className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   {group.title}
                 </div>
+                {!isExpanded && (
+                  <span className="inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-bg-subtle px-1 text-[0.625rem] font-semibold tabular-nums text-fg-muted ring-1 ring-border/60">
+                    {entries.length}
+                  </span>
+                )}
                 <div className="h-px flex-1 bg-border/50" />
                 <ChevronDown
                   className={cn(

@@ -160,8 +160,8 @@ export function MobileNav() {
           </button>
         </div>
 
-        {/* Nav content */}
-        <div className="min-h-0 flex-1 overflow-y-auto p-4">
+        {/* Nav content — pb-safe ensures content clears the iPhone home indicator */}
+        <div className="min-h-0 flex-1 overflow-y-auto p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
           <SideNav onNavigate={() => setOpen(false)} />
         </div>
       </aside>
