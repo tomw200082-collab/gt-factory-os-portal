@@ -322,7 +322,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
           </label>
           <label className="block">
             <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              Filter (component / item id)
+              Search by name or code
             </span>
             <input
               className="input"
@@ -373,16 +373,16 @@ export default function AdminSupplierItemsPage(): JSX.Element {
                     Order UoM
                   </th>
                   <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    Pack conv
+                    Pack conversion
                   </th>
                   <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    Lead days
+                    Lead time (days)
                   </th>
                   <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    MOQ
+                    Min. order qty
                   </th>
                   <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    Std cost
+                    Std cost (ILS)
                   </th>
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Readiness
