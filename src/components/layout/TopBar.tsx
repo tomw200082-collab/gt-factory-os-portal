@@ -1,10 +1,12 @@
 "use client";
 
-import { ChevronDown, Eye } from "lucide-react";
+import { ChevronDown, Eye, LogOut } from "lucide-react";
+import Link from "next/link";
 import { useSession } from "@/lib/auth/session-provider";
 import { useReviewMode } from "@/lib/review-mode/store";
 import type { Role } from "@/lib/contracts/enums";
 import { MobileNav } from "./MobileNav";
+import { cn } from "@/lib/cn";
 
 const ROLE_OPTIONS: Role[] = ["operator", "planner", "admin", "viewer"];
 
@@ -108,10 +110,61 @@ export function TopBar() {
                 </div>
               </div>
             </>
-          ) : null}
+          ) : (
+            /* Production: compact user indicator with sign-out */
+            <UserIndicator session={session} />
+          )}
         </div>
       </div>
     </header>
+  );
+}
+
+interface UserIndicatorProps {
+  session: { display_name: string; email: string; role: string };
+}
+
+function getInitials(name: string, email: string): string {
+  const clean = name.split(" (")[0].trim();
+  if (clean) {
+    const parts = clean.split(/\s+/);
+    if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+    return clean.slice(0, 2).toUpperCase();
+  }
+  return email.slice(0, 2).toUpperCase();
+}
+
+function UserIndicator({ session }: UserIndicatorProps) {
+  const { isLoading } = useSession();
+  if (isLoading) {
+    return <div className="h-8 w-8 rounded-full bg-bg-subtle animate-pulse" />;
+  }
+  const initials = getInitials(session.display_name, session.email);
+  const displayName = session.display_name.split(" (")[0] || session.email;
+  return (
+    <div className="flex items-center gap-2">
+      <div className="hidden flex-col items-end leading-none sm:flex">
+        <span className="text-[0.75rem] font-medium text-fg-strong">{displayName}</span>
+        <span className="mt-0.5 font-mono text-3xs uppercase tracking-sops text-fg-muted">{session.role}</span>
+      </div>
+      <div
+        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/15 text-[0.6875rem] font-bold text-accent"
+        title={displayName}
+        aria-label={`Signed in as ${displayName}`}
+      >
+        {initials}
+      </div>
+      <Link
+        href="/auth/signout"
+        className={cn(
+          "hidden h-8 w-8 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-bg-subtle hover:text-fg sm:flex",
+        )}
+        title="Sign out"
+        aria-label="Sign out"
+      >
+        <LogOut className="h-3.5 w-3.5" strokeWidth={1.75} />
+      </Link>
+    </div>
   );
 }
 
