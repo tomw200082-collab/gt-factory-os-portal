@@ -32,9 +32,11 @@ import { InlineEditCell } from "@/components/tables/InlineEditCell";
 import { ReadinessPill } from "@/components/readiness/ReadinessPill";
 import { QuickCreateSupplierItem } from "@/components/admin/quick-create/QuickCreateSupplierItem";
 import type { EntityOption } from "@/components/fields/EntityPickerPlus";
+import { ClassWEditDrawer } from "@/components/admin/ClassWEditDrawer";
 import {
   AdminMutationError,
   patchEntity,
+  postStatus,
 } from "@/lib/admin/mutations";
 import { useSession } from "@/lib/auth/session-provider";
 
@@ -119,6 +121,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
     | { kind: "success" | "error"; message: string }
     | null
   >(null);
+  const [archivingRow, setArchivingRow] = useState<SupplierItemRow | null>(null);
 
   const sortedSuppliers = useMemo(
     () =>
@@ -208,6 +211,26 @@ export default function AdminSupplierItemsPage(): JSX.Element {
     },
   });
 
+  const archiveMutation = useMutation({
+    mutationFn: (args: { supplier_item_id: string; updated_at: string }) =>
+      postStatus({
+        url: `/api/supplier-items/${encodeURIComponent(args.supplier_item_id)}/status`,
+        status: "INACTIVE",
+        ifMatchUpdatedAt: args.updated_at,
+      }),
+    onSuccess: () => {
+      setArchivingRow(null);
+      setBanner({ kind: "success", message: "Sourcing link archived." });
+      void queryClient.invalidateQueries({ queryKey: ["admin", "supplier-items"] });
+    },
+    onError: (err: Error) => {
+      const msg = err instanceof AdminMutationError
+        ? `${err.status}${err.code ? ` ${err.code}` : ""}: ${err.message}`
+        : err.message;
+      setBanner({ kind: "error", message: `Archive failed: ${msg}` });
+    },
+  });
+
   const rows = supplierItemsQuery.data?.rows ?? [];
   const filtered = useMemo(() => {
     if (!query) return rows;
@@ -258,8 +281,8 @@ export default function AdminSupplierItemsPage(): JSX.Element {
   return (
     <>
       <WorkflowHeader
-        eyebrow="Admin · supplier-items"
-        title="Supplier items"
+        eyebrow="Admin · Masters"
+        title="Sourcing links"
         description="Map suppliers to the components and items they supply. Set lead times, MOQ, and pack sizes. Mark the primary supplier per item."
         meta={
           <>
@@ -391,6 +414,9 @@ export default function AdminSupplierItemsPage(): JSX.Element {
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Primary
                   </th>
+                  {isAdmin ? (
+                    <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle" />
+                  ) : null}
                 </tr>
               </thead>
               <tbody>
@@ -435,7 +461,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
                     <td className="px-3 py-2 text-xs text-fg-muted">
                       {r.order_uom ?? "—"}
                     </td>
-                    <td className="px-3 py-2 text-right font-mono text-xs tabular-nums text-fg-muted">
+                    <td className="px-3 py-2 text-right font-mono text-xs tabular-nums text-fg-muted" title="Pack conversion: units per order pack. Affects stock math.">
                       {isAdmin ? (
                         <InlineEditCell
                           value={r.pack_conversion}
@@ -450,15 +476,13 @@ export default function AdminSupplierItemsPage(): JSX.Element {
                               updated_at: r.updated_at,
                             });
                           }}
-                          ariaLabel={`Edit pack_conversion for ${
-                            r.component_id ?? r.item_id ?? r.supplier_item_id
-                          }`}
+                          ariaLabel={`Edit pack conversion for ${r.component_id ?? r.item_id ?? r.supplier_item_id}`}
                         />
                       ) : (
                         r.pack_conversion
                       )}
                     </td>
-                    <td className="px-3 py-2 text-right text-xs tabular-nums text-fg-muted">
+                    <td className="px-3 py-2 text-right text-xs tabular-nums text-fg-muted" title="Lead time affects planning recommendations — change with care.">
                       {isAdmin ? (
                         <InlineEditCell
                           value={r.lead_time_days ?? ""}
@@ -473,15 +497,13 @@ export default function AdminSupplierItemsPage(): JSX.Element {
                               updated_at: r.updated_at,
                             });
                           }}
-                          ariaLabel={`Edit lead_time_days for ${
-                            r.component_id ?? r.item_id ?? r.supplier_item_id
-                          }`}
+                          ariaLabel={`Edit lead time for ${r.component_id ?? r.item_id ?? r.supplier_item_id}`}
                         />
                       ) : (
                         (r.lead_time_days ?? "—")
                       )}
                     </td>
-                    <td className="px-3 py-2 text-right font-mono text-xs tabular-nums text-fg-muted">
+                    <td className="px-3 py-2 text-right font-mono text-xs tabular-nums text-fg-muted" title="Min. order qty affects planning recommendations — change with care.">
                       {isAdmin ? (
                         <InlineEditCell
                           value={r.moq ?? ""}
@@ -496,15 +518,13 @@ export default function AdminSupplierItemsPage(): JSX.Element {
                               updated_at: r.updated_at,
                             });
                           }}
-                          ariaLabel={`Edit moq for ${
-                            r.component_id ?? r.item_id ?? r.supplier_item_id
-                          }`}
+                          ariaLabel={`Edit MOQ for ${r.component_id ?? r.item_id ?? r.supplier_item_id}`}
                         />
                       ) : (
                         (r.moq ?? "—")
                       )}
                     </td>
-                    <td className="px-3 py-2 text-right font-mono text-xs tabular-nums text-fg-muted">
+                    <td className="px-3 py-2 text-right font-mono text-xs tabular-nums text-fg-muted" title="Standard cost — affects BOM costing rollups. Change with care.">
                       {isAdmin ? (
                         <InlineEditCell
                           value={r.std_cost_per_inv_uom ?? ""}
@@ -519,9 +539,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
                               updated_at: r.updated_at,
                             });
                           }}
-                          ariaLabel={`Edit cost for ${
-                            r.component_id ?? r.item_id ?? r.supplier_item_id
-                          }`}
+                          ariaLabel={`Edit standard cost for ${r.component_id ?? r.item_id ?? r.supplier_item_id}`}
                         />
                       ) : (
                         (r.std_cost_per_inv_uom ?? "—")
@@ -561,6 +579,17 @@ export default function AdminSupplierItemsPage(): JSX.Element {
                         <span className="text-3xs text-fg-subtle">—</span>
                       )}
                     </td>
+                    {isAdmin ? (
+                      <td className="px-3 py-2">
+                        <button
+                          type="button"
+                          className="btn btn-ghost btn-sm text-fg-subtle hover:text-danger-fg"
+                          onClick={() => setArchivingRow(r)}
+                        >
+                          Archive
+                        </button>
+                      </td>
+                    ) : null}
                   </tr>
                 ))}
               </tbody>
@@ -576,7 +605,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
           onCreated={() => {
             setBanner({
               kind: "success",
-              message: "Created supplier-item. List refreshing…",
+              message: "Created sourcing link. List refreshing…",
             });
             void queryClient.invalidateQueries({
               queryKey: ["admin", "supplier-items"],
@@ -587,6 +616,28 @@ export default function AdminSupplierItemsPage(): JSX.Element {
           items={itemOptions}
         />
       ) : null}
+
+      <ClassWEditDrawer
+        open={archivingRow !== null}
+        onClose={() => setArchivingRow(null)}
+        title="Archive sourcing link"
+        warning="Archiving this link removes it from planning and ordering workflows. If it is the primary link, planning will lose cost and lead time data for this component."
+        onSave={async () => {
+          if (!archivingRow) return;
+          await archiveMutation.mutateAsync({
+            supplier_item_id: archivingRow.supplier_item_id,
+            updated_at: archivingRow.updated_at,
+          });
+        }}
+        isSaving={archiveMutation.isPending}
+        error={archiveMutation.isError ? (archiveMutation.error as Error).message : null}
+      >
+        <p className="text-sm text-fg-muted">
+          {archivingRow
+            ? `Sourcing link: ${archivingRow.supplier_id} → ${archivingRow.component_id ?? archivingRow.item_id ?? archivingRow.supplier_item_id}`
+            : null}
+        </p>
+      </ClassWEditDrawer>
     </>
   );
 }
