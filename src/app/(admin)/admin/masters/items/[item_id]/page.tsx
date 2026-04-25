@@ -39,6 +39,7 @@ import { Badge } from "@/components/badges/StatusBadge";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { InlineEditCell } from "@/components/tables/InlineEditCell";
 import { MasterSummaryCard, type CompletenessItem } from "@/components/admin/MasterSummaryCard";
+import { RecipeHealthCard } from "@/components/admin/recipe-health/RecipeHealthCard";
 import { ClassWEditDrawer } from "@/components/admin/ClassWEditDrawer";
 import { AdminMutationError, patchEntity, postStatus } from "@/lib/admin/mutations";
 import { useSession } from "@/lib/auth/session-provider";
@@ -720,27 +721,36 @@ export default function AdminItemDetailPage({
   return (
     <>
       {row ? (
-        <MasterSummaryCard
-          name={row.item_name}
-          code={row.item_id}
-          entityType={fmtSupplyMethod(row.supply_method)}
-          status={row.status}
-          completeness={completenessItems}
-          actions={
-            isAdmin ? (
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                onClick={() => {
-                  setDrawerStatusTarget(row.status === "INACTIVE" ? "ACTIVE" : "INACTIVE");
-                  setShowStatusDrawer(true);
-                }}
-              >
-                {row.status === "INACTIVE" ? "Restore" : "Archive"}
-              </button>
-            ) : undefined
-          }
-        />
+        row.supply_method === "MANUFACTURED" ? (
+          <RecipeHealthCard
+            itemName={row.item_name ?? row.item_id}
+            baseBomHeadId={row.base_bom_head_id ?? null}
+            packBomHeadId={row.primary_bom_head_id ?? null}
+            isAdmin={isAdmin}
+          />
+        ) : (
+          <MasterSummaryCard
+            name={row.item_name}
+            code={row.item_id}
+            entityType={fmtSupplyMethod(row.supply_method)}
+            status={row.status}
+            completeness={completenessItems}
+            actions={
+              isAdmin ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => {
+                    setDrawerStatusTarget(row.status === "INACTIVE" ? "ACTIVE" : "INACTIVE");
+                    setShowStatusDrawer(true);
+                  }}
+                >
+                  {row.status === "INACTIVE" ? "Restore" : "Archive"}
+                </button>
+              ) : undefined
+            }
+          />
+        )
       ) : null}
 
       <ClassWEditDrawer
