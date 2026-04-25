@@ -114,7 +114,7 @@ export function SideNav({ onNavigate }: { onNavigate?: () => void } = {}) {
   }
 
   return (
-    <nav className="flex flex-col gap-6">
+    <nav className="flex flex-col gap-4">
       {NAV_MANIFEST.map((group) => {
         const entries: SideNavEntry[] = group.items
           .filter((i) => meetsMinRole(session.role, i.min_role))
