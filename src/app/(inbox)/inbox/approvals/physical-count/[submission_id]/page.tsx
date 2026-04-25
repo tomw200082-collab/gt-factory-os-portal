@@ -75,7 +75,7 @@ async function callApprove(
     if (res.status === 409 && body && typeof body === "object" && "reason_code" in body) {
       return { kind: "conflict", body: body as PhysicalCountConflictResponse };
     }
-    return { kind: "network", message: `HTTP ${res.status}` };
+    return { kind: "network", message: "Could not complete the action. Check your connection and try again." };
   } catch (err) {
     return { kind: "network", message: err instanceof Error ? err.message : String(err) };
   }
@@ -102,7 +102,7 @@ async function callReject(
     if (res.status === 409 && body && typeof body === "object" && "reason_code" in body) {
       return { kind: "conflict", body: body as PhysicalCountConflictResponse };
     }
-    return { kind: "network", message: `HTTP ${res.status}` };
+    return { kind: "network", message: "Could not complete the action. Check your connection and try again." };
   } catch (err) {
     return { kind: "network", message: err instanceof Error ? err.message : String(err) };
   }
@@ -139,7 +139,7 @@ export default function PhysicalCountReviewPage() {
       const res = await fetch(`/api/physical-count/${encodeURIComponent(submissionId)}`, {
         headers: { Accept: "application/json" },
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) throw new Error("Could not load submission details.");
       return (await res.json()) as PhysicalCountDetail;
     },
     enabled: !!submissionId,
@@ -183,7 +183,7 @@ export default function PhysicalCountReviewPage() {
     return (
       <SuccessState
         title="Action refused"
-        description={`${outcome.body.reason_code}: ${outcome.body.detail}`}
+        description={outcome.body.detail || "This submission cannot be actioned in its current state. Refresh the page and try again."}
         tone="warning"
       />
     );

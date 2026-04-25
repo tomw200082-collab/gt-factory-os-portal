@@ -121,7 +121,7 @@ async function fetchRuns(
   });
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`Planning runs list failed (HTTP ${res.status}): ${body}`);
+    throw new Error("Failed to load planning runs. Check your connection and try refreshing.");
   }
   return (await res.json()) as ListResponse;
 }
@@ -161,9 +161,12 @@ async function triggerRun(
     throw err;
   }
   if (!res.ok) {
-    const err = new Error(
-      `Trigger planning run failed (HTTP ${res.status}): ${text}`,
-    );
+    let detail = "";
+    try {
+      const parsed = body as { detail?: string };
+      detail = parsed.detail ?? "";
+    } catch { /* ignore */ }
+    const err = new Error(detail || "Could not trigger planning run. Try again.");
     (err as Error & { status?: number }).status = res.status;
     throw err;
   }
@@ -252,7 +255,7 @@ export default function PlanningRunsListPage() {
     queryKey: ["forecast", "versions", "published"],
     queryFn: async () => {
       const res = await fetch("/api/forecasts/versions?status=published");
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) throw new Error("Request failed");
       return res.json() as Promise<{ rows: ForecastContextRow[] }>;
     },
     staleTime: 2 * 60 * 1000,
@@ -262,7 +265,7 @@ export default function PlanningRunsListPage() {
     queryKey: ["admin", "jobs"],
     queryFn: async () => {
       const res = await fetch("/api/admin/jobs");
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) throw new Error("Request failed");
       return res.json() as Promise<{ rows: JobContextRow[] }>;
     },
     staleTime: 5 * 60 * 1000,
@@ -272,7 +275,7 @@ export default function PlanningRunsListPage() {
     queryKey: ["planning", "demand-coverage"],
     queryFn: async () => {
       const res = await fetch("/api/planning/demand-coverage");
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) throw new Error("Request failed");
       return res.json() as Promise<DemandCoverageRow>;
     },
     staleTime: 3 * 60 * 1000,
@@ -288,6 +291,7 @@ export default function PlanningRunsListPage() {
   const query = useQuery<ListResponse>({
     queryKey: ["planning", "runs", statusFilter ?? "all", session.role],
     queryFn: () => fetchRuns(session, statusFilter),
+    staleTime: 60_000,
   });
 
   const triggerMutation = useMutation({
@@ -304,7 +308,8 @@ export default function PlanningRunsListPage() {
         setTriggerError(null);
       } else {
         setBreakGlass(false);
-        setTriggerError(err.message);
+        console.error("[PlanningRuns] trigger error:", err);
+        setTriggerError("Could not trigger planning run. Check your connection and try again. If the problem persists, contact your admin.");
       }
     },
   });
@@ -382,8 +387,10 @@ export default function PlanningRunsListPage() {
           </div>
           {jobsQuery.isLoading ? (
             <div className="text-xs text-fg-muted">Loading…</div>
+          ) : jobsQuery.isError ? (
+            <div className="text-xs text-danger-fg">Could not load sync status.</div>
           ) : !lionwheelJob ? (
-            <div className="text-xs text-fg-muted">No sync data</div>
+            <div className="text-xs text-fg-muted">No sync job found — LionWheel integration may not be configured.</div>
           ) : (
             <>
               <div
@@ -415,9 +422,9 @@ export default function PlanningRunsListPage() {
         <div
           className={cn(
             "rounded-md border px-4 py-3",
-            demandCoverageQuery.isLoading
+            demandCoverageQuery.isLoading || !coverage || coverage.total_lines === 0
               ? "border-border/60 bg-bg-raised"
-              : coverage?.is_partial
+              : coverage.is_partial
                 ? "border-warning/30 bg-warning-softer"
                 : "border-success/30 bg-success-softer",
           )}
@@ -425,9 +432,9 @@ export default function PlanningRunsListPage() {
           <div
             className={cn(
               "mb-1.5 text-3xs font-semibold uppercase tracking-sops",
-              demandCoverageQuery.isLoading
+              demandCoverageQuery.isLoading || !coverage || coverage.total_lines === 0
                 ? "text-fg-subtle"
-                : coverage?.is_partial
+                : coverage.is_partial
                   ? "text-warning-fg"
                   : "text-success-fg",
             )}
@@ -436,8 +443,10 @@ export default function PlanningRunsListPage() {
           </div>
           {demandCoverageQuery.isLoading ? (
             <div className="text-xs text-fg-muted">Loading…</div>
+          ) : demandCoverageQuery.isError ? (
+            <div className="text-xs text-danger-fg">Could not load demand coverage.</div>
           ) : !coverage ? (
-            <div className="text-xs text-fg-muted">Coverage data unavailable</div>
+            <div className="text-xs text-fg-muted">No coverage data — run a planning cycle to compute.</div>
           ) : (
             <>
               <div className="text-xs font-medium text-fg">
@@ -445,7 +454,11 @@ export default function PlanningRunsListPage() {
                 {" · "}
                 {coverage.resolved_distinct_skus} SKUs
               </div>
-              {coverage.bundle_lines > 0 || coverage.unresolved_lines > 0 ? (
+              {coverage.total_lines === 0 ? (
+                <div className="mt-0.5 text-3xs text-fg-muted">
+                  No order lines — LionWheel sync may be pending
+                </div>
+              ) : coverage.bundle_lines > 0 || coverage.unresolved_lines > 0 ? (
                 <div className="mt-0.5 text-3xs text-fg-muted">
                   {[
                     coverage.bundle_lines > 0
@@ -537,7 +550,7 @@ export default function PlanningRunsListPage() {
             className="p-5 text-xs text-danger-fg"
             data-testid="planning-runs-list-error"
           >
-            {(query.error as Error).message}
+            Failed to load planning runs. Check your connection and try refreshing.
           </div>
         ) : rows.length === 0 ? (
           <div className="p-5">
@@ -581,10 +594,10 @@ export default function PlanningRunsListPage() {
                     </div>
                     <div className="mt-1 flex flex-wrap gap-4 text-xs text-fg-muted">
                       <span>
-                        horizon {r.planning_horizon_start_at} ·{" "}
-                        {r.planning_horizon_weeks} weeks
+                        horizon {fmtDate(r.planning_horizon_start_at)} ·{" "}
+                        {r.planning_horizon_weeks}w
                       </span>
-                      <span>actor {r.actor_user_id.slice(0, 8)}</span>
+                      <span>by {r.actor_user_id.slice(0, 8)}</span>
                     </div>
                     <div className="mt-2 flex flex-wrap gap-2">
                       <Badge tone="neutral">

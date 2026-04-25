@@ -19,7 +19,7 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { Plus } from "lucide-react";
+import { Plus, Zap } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
@@ -77,10 +77,7 @@ async function fetchVersions(
     headers: sessionHeaders(session),
   });
   if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error(
-      `Forecast versions list failed (HTTP ${res.status}): ${body}`,
-    );
+    throw new Error("Failed to load forecast versions. Check your connection and try refreshing.");
   }
   return (await res.json()) as ListResponse;
 }
@@ -129,6 +126,19 @@ function fmtDate(iso: string | null): string {
   }
 }
 
+function fmtHorizonStart(iso: string | null): string {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
 export default function ForecastListPage() {
   const { session } = useSession();
   const [statusFilter, setStatusFilter] = useState<ForecastStatus | null>(null);
@@ -137,9 +147,13 @@ export default function ForecastListPage() {
   const query = useQuery<ListResponse>({
     queryKey: ["forecasts", "versions", statusFilter ?? "all", session.role],
     queryFn: () => fetchVersions(session, statusFilter),
+    staleTime: 60_000,
   });
 
   const versions = query.data?.versions ?? [];
+  const activePublished = statusFilter === null
+    ? versions.find((v) => v.status === "published")
+    : null;
 
   return (
     <>
@@ -148,9 +162,11 @@ export default function ForecastListPage() {
         title="Forecast"
         description="Versioned demand forecast. Author a draft, save lines, and publish to make it the active forecast. All writes are audited; all publishes are atomic."
         meta={
-          <Badge tone="neutral" dotted>
-            {versions.length} version{versions.length === 1 ? "" : "s"}
-          </Badge>
+          query.data ? (
+            <Badge tone="neutral" dotted>
+              {versions.length}{statusFilter ? ` ${statusFilter}` : ""} version{versions.length === 1 ? "" : "s"}
+            </Badge>
+          ) : null
         }
         actions={
           canAuthor ? (
@@ -204,18 +220,46 @@ export default function ForecastListPage() {
           </button>
         </div>
 
+        {activePublished ? (
+          <div className="flex items-start gap-3 border-b border-border/60 bg-success-subtle/40 px-5 py-3">
+            <Zap className="mt-0.5 h-3.5 w-3.5 shrink-0 text-success-fg" />
+            <div className="min-w-0 flex-1 text-xs text-fg">
+              <span className="font-semibold text-success-fg">Active forecast</span>
+              {" — "}
+              horizon starts {fmtHorizonStart(activePublished.horizon_start_at)}, {activePublished.horizon_weeks} weeks ·{" "}
+              published by {activePublished.published_by_snapshot ?? "—"} at {fmtDate(activePublished.published_at)}
+              {" · "}
+              <Link
+                href={`/planning/forecast/${encodeURIComponent(activePublished.version_id)}`}
+                className="font-medium text-success-fg underline underline-offset-2 hover:text-success-fg/80"
+              >
+                View
+              </Link>
+              {" · "}
+              <Link
+                href="/planning/runs"
+                className="font-medium text-fg-muted underline underline-offset-2 hover:text-fg"
+              >
+                Go to planning runs →
+              </Link>
+            </div>
+          </div>
+        ) : null}
+
         {query.isLoading ? (
           <div className="p-5 text-xs text-fg-muted">Loading…</div>
         ) : query.isError ? (
           <div className="p-5 text-xs text-danger-fg" data-testid="forecast-list-error">
-            {(query.error as Error).message}
+            Failed to load forecast versions. Check your connection or try refreshing.
           </div>
         ) : versions.length === 0 ? (
           <div className="p-5">
             <EmptyState
-              title="No forecast versions in this view."
+              title={statusFilter ? `No ${statusFilter} forecast versions.` : "No forecast versions yet."}
               description={
-                canAuthor
+                statusFilter
+                  ? "Try clearing the filter to see all versions."
+                  : canAuthor
                   ? "Start by creating a new draft."
                   : "No published forecasts to review yet."
               }
@@ -252,7 +296,7 @@ export default function ForecastListPage() {
                       className="mt-1.5 text-base font-semibold tracking-tightish text-fg-strong"
                       data-testid="forecast-version-title"
                     >
-                      Horizon starts {v.horizon_start_at} · {v.horizon_weeks}{" "}
+                      Horizon starts {fmtHorizonStart(v.horizon_start_at)} · {v.horizon_weeks}{" "}
                       weeks
                     </div>
                     <div className="mt-1 flex flex-wrap gap-4 text-xs text-fg-muted">

@@ -91,13 +91,15 @@ export function BomSimulator({
         const json = await res.json();
         if (!res.ok) {
           const e = json as SimulateError;
-          setError(`${e.reason_code}: ${e.detail}`);
+          setError(e.detail ?? "Could not run BOM simulation. Try again or refresh.");
+          console.error("BomSimulator API error", json);
         } else {
           setResult(json as SimulateResponse);
           onSimulated?.(String(qty));
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Request failed");
+        setError("Could not reach the server. Check your connection and try again.");
+        console.error("BomSimulator fetch error", err);
       } finally {
         setLoading(false);
       }
@@ -236,7 +238,7 @@ export function BomSimulator({
                     <SimTh>#</SimTh>
                     <SimTh>Component</SimTh>
                     <SimTh align="right">
-                      BOM qty (per {baseOutputQty} {outputUom ?? ""})
+                      BOM qty (per {baseOutputQty} {outputUom ?? "units"})
                     </SimTh>
                     <SimTh align="right">Required qty</SimTh>
                     <SimTh>Unit</SimTh>
@@ -286,6 +288,8 @@ export function BomSimulator({
             </div>
           )}
         </div>
+      ) : loading && !result ? (
+        <p className="text-xs text-fg-muted">Calculating…</p>
       ) : !loading && !error ? (
         <p className="text-xs text-fg-muted">
           Enter a production quantity and click Simulate to see exploded

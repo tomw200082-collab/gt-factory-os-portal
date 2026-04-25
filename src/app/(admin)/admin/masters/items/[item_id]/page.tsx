@@ -6,8 +6,8 @@
 //
 // Composes <DetailPage /> (the Tranche A→D primitive) with 6 tabs:
 //   - overview          LIVE   — item row fields via list + client-filter
-//   - bom               LIVE*  — bom_head via /api/boms/heads?item_id=
-//                                (MANUFACTURED/REPACK); BOUGHT_FINISHED → "No BOM"
+//   - bom               LIVE*  — unified view of pack BOM (primary_bom_head_id)
+//                                and base formula BOM (base_bom_head_id)
 //   - supplier-items    LIVE*  — supplier-items via ?item_id= (BOUGHT_FINISHED)
 //                                or PENDING note for MANUFACTURED (component fan-out
 //                                is a Tranche I aggregation concern, not invented)
@@ -15,7 +15,7 @@
 //   - policy            PENDING— planning-policy endpoint is global, not per-item
 //   - exceptions        LIVE   — /api/exceptions client-filtered by related_entity_id
 //
-// Linkage card: active BOM head, primary supplier-item(s), exceptions count.
+// Linkage card: pack BOM, base formula BOM, primary supplier-item(s), exceptions.
 //
 // View-only. Inline edit is Tranche F (approval queue coupled).
 // ---------------------------------------------------------------------------
@@ -189,19 +189,26 @@ export default function AdminItemDetailPage({
 
   const row = itemQuery.data?.rows.find((r) => r.item_id === item_id);
 
-  // --- Data: BOM head (if primary_bom_head_id) -----------------------------
+  // --- Data: BOM heads (shared query for both pack and base) ---------------
+  // Enabled whenever either BOM head ID is present so both can be derived
+  // from a single /api/boms/heads?limit=1000 call.
   const bomHeadQuery = useQuery<BomHeadsListResponse>({
     queryKey: ["admin", "masters", "item", item_id, "bom-head"],
     queryFn: () => fetchJson("/api/boms/heads?limit=1000"),
-    enabled: Boolean(row?.primary_bom_head_id),
+    enabled: Boolean(row?.primary_bom_head_id || row?.base_bom_head_id),
   });
   const bomHead = row?.primary_bom_head_id
     ? bomHeadQuery.data?.rows.find(
         (h) => h.bom_head_id === row.primary_bom_head_id,
       )
     : undefined;
+  const baseBomHead = row?.base_bom_head_id
+    ? bomHeadQuery.data?.rows.find(
+        (h) => h.bom_head_id === row.base_bom_head_id,
+      )
+    : undefined;
 
-  // --- Data: BOM versions (under primary head) -----------------------------
+  // --- Data: BOM versions (pack head) --------------------------------------
   const bomVersionsQuery = useQuery<BomVersionsListResponse>({
     queryKey: ["admin", "masters", "item", item_id, "bom-versions"],
     queryFn: () =>
@@ -211,6 +218,18 @@ export default function AdminItemDetailPage({
         )}&limit=1000`,
       ),
     enabled: Boolean(row?.primary_bom_head_id),
+  });
+
+  // --- Data: BOM versions (base formula head) ------------------------------
+  const baseBomVersionsQuery = useQuery<BomVersionsListResponse>({
+    queryKey: ["admin", "masters", "item", item_id, "base-bom-versions"],
+    queryFn: () =>
+      fetchJson(
+        `/api/boms/versions?bom_head_id=${encodeURIComponent(
+          row!.base_bom_head_id!,
+        )}&limit=1000`,
+      ),
+    enabled: Boolean(row?.base_bom_head_id),
   });
 
   // --- Data: supplier-items (item-level, BOUGHT_FINISHED only) -------------
@@ -278,7 +297,7 @@ export default function AdminItemDetailPage({
         { label: "sales_uom", value: row.sales_uom },
         { label: "case_pack", value: row.case_pack ?? null },
         {
-          label: "primary_bom_head_id",
+          label: "Pack BOM",
           value: row.primary_bom_head_id ? (
             <Link
               href={`/admin/masters/boms/${encodeURIComponent(
@@ -292,8 +311,17 @@ export default function AdminItemDetailPage({
           mono: true,
         },
         {
-          label: "base_bom_head_id",
-          value: row.base_bom_head_id,
+          label: "Base formula BOM",
+          value: row.base_bom_head_id ? (
+            <Link
+              href={`/admin/masters/boms/${encodeURIComponent(
+                row.base_bom_head_id,
+              )}`}
+              className="font-mono text-accent hover:underline"
+            >
+              {row.base_bom_head_id}
+            </Link>
+          ) : null,
           mono: true,
         },
         { label: "site_id", value: row.site_id, mono: true },
@@ -314,86 +342,53 @@ export default function AdminItemDetailPage({
           <DetailTabEmpty message="BOUGHT_FINISHED items are resold as-is and have no BOM." />
         );
       }
-      if (!row.primary_bom_head_id) {
-        return (
-          <DetailTabEmpty message="No primary BOM head linked to this item." />
-        );
+      const hasPack = Boolean(row.primary_bom_head_id);
+      const hasBase = Boolean(row.base_bom_head_id);
+      if (!hasPack && !hasBase) {
+        return <DetailTabEmpty message="No BOM heads linked to this item." />;
       }
-      if (bomHeadQuery.isLoading || bomVersionsQuery.isLoading) {
+      if (
+        bomHeadQuery.isLoading ||
+        (hasPack && bomVersionsQuery.isLoading) ||
+        (hasBase && baseBomVersionsQuery.isLoading)
+      ) {
         return <DetailTabLoading />;
       }
       if (bomHeadQuery.isError) {
         return (
-          <DetailTabError
-            message={(bomHeadQuery.error as Error).message}
-          />
+          <DetailTabError message={(bomHeadQuery.error as Error).message} />
         );
       }
-      if (!bomHead) {
-        return (
-          <DetailTabEmpty
-            message={`BOM head ${row.primary_bom_head_id} not found in heads list.`}
-          />
-        );
-      }
-      const versions = bomVersionsQuery.data?.rows ?? [];
       return (
-        <div className="space-y-3">
-          <DetailFieldGrid
-            rows={[
-              { label: "bom_head_id", value: bomHead.bom_head_id, mono: true },
-              { label: "bom_kind", value: bomHead.bom_kind, mono: true },
-              { label: "display_family", value: bomHead.display_family },
-              { label: "pack_size", value: bomHead.pack_size },
-              {
-                label: "final_bom_output",
-                value: `${bomHead.final_bom_output_qty} ${bomHead.final_bom_output_uom}`,
-                mono: true,
-              },
-              {
-                label: "active_version_id",
-                value: bomHead.active_version_id,
-                mono: true,
-              },
-              { label: "status", value: bomHead.status },
-            ]}
-          />
-          <SectionCard
-            eyebrow="Versions"
-            title={`${versions.length} version${versions.length === 1 ? "" : "s"}`}
-            density="compact"
-            contentClassName="p-0"
-          >
-            {versions.length === 0 ? (
-              <div className="p-3 text-xs text-fg-muted">No versions.</div>
-            ) : (
-              <ul className="divide-y divide-border/40">
-                {versions.map((v) => (
-                  <li
-                    key={v.bom_version_id}
-                    className="flex items-center justify-between gap-3 px-3 py-2 text-xs"
-                  >
-                    <Link
-                      href={`/admin/masters/boms/${encodeURIComponent(
-                        v.bom_head_id,
-                      )}/${encodeURIComponent(v.bom_version_id)}`}
-                      className="font-mono text-fg hover:text-accent"
-                    >
-                      {v.version_label}
-                    </Link>
-                    <div className="flex items-center gap-2">
-                      <Badge tone="neutral" dotted>
-                        {v.status}
-                      </Badge>
-                      <span className="text-fg-faint">
-                        {fmtDateTime(v.activated_at ?? v.created_at)}
-                      </span>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </SectionCard>
+        <div className="space-y-4">
+          {hasPack && (
+            <BomSection
+              sectionLabel="Pack structure"
+              sectionDescription="How this product is packaged and assembled."
+              headId={row.primary_bom_head_id!}
+              head={bomHead ?? null}
+              versions={bomVersionsQuery.data?.rows ?? []}
+              versionsLoading={bomVersionsQuery.isLoading}
+            />
+          )}
+
+          {hasPack && hasBase && (
+            <div className="rounded-md border border-info/30 bg-info-softer px-3 py-2 text-xs text-fg-muted">
+              The pack structure uses the base formula as a component.
+              Changes to the base formula affect all products that reference it.
+            </div>
+          )}
+
+          {hasBase && (
+            <BomSection
+              sectionLabel="Base formula"
+              sectionDescription="The recipe or formula this product is built from."
+              headId={row.base_bom_head_id!}
+              head={baseBomHead ?? null}
+              versions={baseBomVersionsQuery.data?.rows ?? []}
+              versionsLoading={baseBomVersionsQuery.isLoading}
+            />
+          )}
         </div>
       );
     })(),
@@ -522,7 +517,7 @@ export default function AdminItemDetailPage({
 
   if (row?.primary_bom_head_id) {
     linkages.push({
-      label: "Active BOM",
+      label: "Pack BOM",
       items: [
         {
           label: row.primary_bom_head_id,
@@ -531,6 +526,23 @@ export default function AdminItemDetailPage({
           )}`,
           subtitle: bomHead
             ? `${bomHead.bom_kind} · ${bomHead.status}`
+            : undefined,
+        },
+      ],
+    });
+  }
+
+  if (row?.base_bom_head_id) {
+    linkages.push({
+      label: "Base formula BOM",
+      items: [
+        {
+          label: row.base_bom_head_id,
+          href: `/admin/masters/boms/${encodeURIComponent(
+            row.base_bom_head_id,
+          )}`,
+          subtitle: baseBomHead
+            ? `${baseBomHead.bom_kind} · ${baseBomHead.status}`
             : undefined,
         },
       ],
@@ -581,6 +593,136 @@ export default function AdminItemDetailPage({
       tabs={tabs}
       linkages={linkages}
     />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// BomSection — renders one BOM (pack or base) within the unified BOM tab.
+// Shared by both primary_bom_head_id and base_bom_head_id paths.
+// ---------------------------------------------------------------------------
+
+function BomSection({
+  sectionLabel,
+  sectionDescription,
+  headId,
+  head,
+  versions,
+  versionsLoading,
+}: {
+  sectionLabel: string;
+  sectionDescription: string;
+  headId: string;
+  head: BomHeadRow | null;
+  versions: BomVersionRow[];
+  versionsLoading: boolean;
+}): JSX.Element {
+  if (!head) {
+    return (
+      <SectionCard
+        eyebrow={sectionLabel}
+        title={headId}
+        density="compact"
+        contentClassName="p-3"
+      >
+        <p className="text-xs text-warning-fg">
+          BOM head {headId} not found in the heads list.
+        </p>
+      </SectionCard>
+    );
+  }
+
+  const activeVersion = head.active_version_id
+    ? versions.find((v) => v.bom_version_id === head.active_version_id)
+    : undefined;
+
+  const fields: FieldRow[] = [
+    {
+      label: "BOM ID",
+      value: (
+        <Link
+          href={`/admin/masters/boms/${encodeURIComponent(headId)}`}
+          className="font-mono text-accent hover:underline"
+        >
+          {headId}
+        </Link>
+      ),
+      mono: true,
+    },
+    { label: "Type", value: head.bom_kind, mono: true },
+    { label: "Display family", value: head.display_family },
+    { label: "Pack size", value: head.pack_size },
+    {
+      label: "Output quantity",
+      value: `${head.final_bom_output_qty} ${head.final_bom_output_uom}`,
+      mono: true,
+    },
+    {
+      label: "Active version",
+      value: head.active_version_id ? (
+        <Link
+          href={`/admin/masters/boms/${encodeURIComponent(headId)}/${encodeURIComponent(head.active_version_id)}`}
+          className="font-mono text-success-fg hover:underline"
+        >
+          {activeVersion?.version_label ?? head.active_version_id.slice(0, 8) + "…"}
+        </Link>
+      ) : (
+        <Badge tone="warning" dotted>None</Badge>
+      ),
+    },
+    { label: "Status", value: head.status },
+  ];
+
+  return (
+    <SectionCard
+      eyebrow={sectionLabel}
+      title={sectionDescription}
+      density="compact"
+      contentClassName="space-y-3 p-3"
+    >
+      <DetailFieldGrid rows={fields} />
+      <SectionCard
+        eyebrow="Versions"
+        title={
+          versionsLoading
+            ? "Loading…"
+            : `${versions.length} version${versions.length === 1 ? "" : "s"}`
+        }
+        density="compact"
+        contentClassName="p-0"
+      >
+        {versionsLoading ? (
+          <div className="p-3 text-xs text-fg-muted">Loading versions…</div>
+        ) : versions.length === 0 ? (
+          <div className="p-3 text-xs text-fg-muted">No versions.</div>
+        ) : (
+          <ul className="divide-y divide-border/40">
+            {versions.map((v) => (
+              <li
+                key={v.bom_version_id}
+                className="flex items-center justify-between gap-3 px-3 py-2 text-xs"
+              >
+                <Link
+                  href={`/admin/masters/boms/${encodeURIComponent(
+                    v.bom_head_id,
+                  )}/${encodeURIComponent(v.bom_version_id)}`}
+                  className="font-mono text-fg hover:text-accent"
+                >
+                  {v.version_label}
+                </Link>
+                <div className="flex items-center gap-2">
+                  <Badge tone="neutral" dotted>
+                    {v.status}
+                  </Badge>
+                  <span className="text-fg-faint">
+                    {fmtDateTime(v.activated_at ?? v.created_at)}
+                  </span>
+                </div>
+              </li>
+            ))}
+          </ul>
+        )}
+      </SectionCard>
+    </SectionCard>
   );
 }
 

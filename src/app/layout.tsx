@@ -5,7 +5,6 @@ import { Public_Sans, IBM_Plex_Mono } from "next/font/google";
 import { SessionProvider } from "@/lib/auth/session-provider";
 import { ReviewModeProvider } from "@/lib/review-mode/store";
 import { QueryProvider } from "@/lib/query/query-provider";
-import { AppShellChrome } from "@/components/layout/AppShellChrome";
 import { ReviewModePanel } from "@/components/review/ReviewModePanel";
 
 const publicSans = Public_Sans({
@@ -43,6 +42,11 @@ export const viewport: Viewport = {
   ],
 };
 
+// DEV_SHIM_ENABLED is a build-time constant. ReviewModePanel is only rendered
+// in dev-shim mode since it is a dev/staging-only affordance.
+const DEV_SHIM_ENABLED =
+  process.env.NEXT_PUBLIC_ENABLE_DEV_SHIM_AUTH === "true";
+
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en" className={`${publicSans.variable} ${plexMono.variable}`}>
@@ -50,8 +54,8 @@ export default function RootLayout({ children }: { children: ReactNode }) {
         <QueryProvider>
           <SessionProvider>
             <ReviewModeProvider>
-              <AppShellChrome>{children}</AppShellChrome>
-              <ReviewModePanel />
+              {children}
+              {DEV_SHIM_ENABLED ? <ReviewModePanel /> : null}
             </ReviewModeProvider>
           </SessionProvider>
         </QueryProvider>

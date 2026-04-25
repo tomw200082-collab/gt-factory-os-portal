@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
@@ -112,7 +113,7 @@ function StockTable({
           <tr className="border-b border-gray-200 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
             <th className="py-2 pr-4">Item ID</th>
             <th className="py-2 pr-4">Name</th>
-            <th className="py-2 pr-4 text-right">On Hand</th>
+            <th className="py-2 pr-4 text-right" title="Calculated from posted ledger events — excludes pending movements">On Hand</th>
             <th className="py-2 pr-4">UOM</th>
             <th className="py-2 pr-4 text-right">Unit Cost</th>
             <th className="py-2 pr-4 text-right">Value (ILS)</th>
@@ -125,7 +126,9 @@ function StockTable({
             const v = valueMap?.get(vKey) ?? null;
             return (
               <tr key={`${row.item_type}-${row.item_id}`} className="hover:bg-gray-50">
-                <td className="py-2 pr-4 font-mono text-xs text-gray-700">{row.item_id}</td>
+                <td className="py-2 pr-4 font-mono text-xs text-gray-700">
+                  <Link href={`/admin/masters/items/${encodeURIComponent(row.item_id)}`} className="hover:underline hover:text-blue-600">{row.item_id}</Link>
+                </td>
                 <td className="py-2 pr-4 text-gray-900">{row.display_name ?? "—"}</td>
                 <td className="py-2 pr-4 text-right">
                   <OnHandCell value={row.calculated_on_hand} />
@@ -139,7 +142,11 @@ function StockTable({
                           return <span className="text-xs text-gray-400 italic">Computed (Phase 2)</span>;
                         }
                         if (v !== null) {
-                          return <span className="text-xs text-amber-600">Cost not set</span>;
+                          return (
+                            <Link href={`/admin/masters/items/${encodeURIComponent(row.item_id)}`} className="text-xs text-amber-600 hover:underline" title="Set cost in item master">
+                              Cost not set
+                            </Link>
+                          );
                         }
                         return <span>—</span>;
                       })()}
@@ -152,7 +159,7 @@ function StockTable({
                           return <span className="text-xs text-gray-400 italic">Computed (Phase 2)</span>;
                         }
                         if (v !== null) {
-                          return <span className="text-xs text-amber-600">Cost not set</span>;
+                          return <span className="text-xs text-amber-600">—</span>;
                         }
                         return <span>—</span>;
                       })()}
@@ -211,7 +218,7 @@ export default function InventoryPage() {
       <WorkflowHeader
         eyebrow="Stock"
         title="Inventory"
-        description="Live on-hand balances with standard-cost inventory value. Red values indicate negative stock requiring investigation."
+        description="Calculated stock balances derived from the ledger. Includes only posted events — pending events do not affect these numbers. Red values indicate negative stock requiring investigation."
       />
 
       {valueData && (
@@ -226,6 +233,11 @@ export default function InventoryPage() {
             <div className="mt-0.5 text-xs text-gray-500">
               RM &amp; packaging + purchased finished goods. Manufactured FG value computed separately.
             </div>
+            {valueData.as_of ? (
+              <div className="mt-0.5 text-xs text-gray-400">
+                As of {new Date(valueData.as_of).toLocaleString(undefined, { month: "short", day: "2-digit", hour: "2-digit", minute: "2-digit" })}
+              </div>
+            ) : null}
           </div>
           <div className="ml-6 border-l border-gray-200 pl-6 text-sm text-gray-500">
             {valueData.items_with_cost} items with cost ·{" "}

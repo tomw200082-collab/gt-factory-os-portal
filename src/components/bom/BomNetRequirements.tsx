@@ -23,6 +23,7 @@ import {
   RefreshCw,
   Copy,
   Check,
+  UserX,
 } from "lucide-react";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
@@ -129,12 +130,21 @@ function CoverageBadge({ status }: { status: CoverageStatus }): JSX.Element {
   );
 }
 
+interface DemandContext {
+  source: string;
+  required_qty: string;
+  uom: string | null;
+  shortage_date: string | null;
+  feasibility_label: string | null;
+}
+
 interface BomNetRequirementsProps {
   headId: string;
   baseOutputQty: string;
   outputUom: string | null;
   hasActiveVersion: boolean;
   suggestedQty?: string;
+  demandContext?: DemandContext;
 }
 
 export function BomNetRequirements({
@@ -143,6 +153,7 @@ export function BomNetRequirements({
   outputUom,
   hasActiveVersion,
   suggestedQty,
+  demandContext,
 }: BomNetRequirementsProps): JSX.Element {
   const [targetQty, setTargetQty] = useState<string>(baseOutputQty);
   const [result, setResult] = useState<NetRequirementsResponse | null>(null);
@@ -159,14 +170,15 @@ export function BomNetRequirements({
         const res = await fetch(url, { headers: { Accept: "application/json" } });
         const json = await res.json();
         if (!res.ok) {
-          setError(
-            `${(json as { reason_code?: string }).reason_code ?? "ERROR"}: ${(json as { detail?: string }).detail ?? JSON.stringify(json)}`,
-          );
+          const detail = (json as { detail?: string }).detail;
+          setError(detail ?? "Could not run availability check. Try again or refresh.");
+          console.error("BomNetRequirements API error", json);
         } else {
           setResult(json as NetRequirementsResponse);
         }
       } catch (err) {
-        setError(err instanceof Error ? err.message : "Request failed");
+        setError("Could not reach the server. Check your connection and try again.");
+        console.error("BomNetRequirements fetch error", err);
       } finally {
         setLoading(false);
       }
@@ -200,8 +212,8 @@ export function BomNetRequirements({
   if (!hasActiveVersion) {
     return (
       <SectionCard
-        eyebrow="Purchase assistant"
-        title="Net requirements"
+        eyebrow="Net requirements"
+        title="Component availability check"
         tone="warning"
         contentClassName="px-4 py-3"
       >
@@ -214,14 +226,32 @@ export function BomNetRequirements({
 
   return (
     <SectionCard
-      eyebrow="Purchase assistant"
-      title="Net requirements"
+      eyebrow="Net requirements"
+      title="Component availability check"
       contentClassName="p-4 space-y-4"
     >
       <p className="text-xs text-fg-muted">
-        Subtracts current on-hand stock from gross component requirements.
-        Shows what is covered and what needs to be purchased.
+        Compares gross component requirements against current on-hand stock balances.
+        Does not account for supplier lead times, stock committed to other production runs, or orders not yet received.
       </p>
+
+      {/* Demand context — shown when check was triggered from a planning run recommendation */}
+      {demandContext ? (
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border border-info/30 bg-info-softer/50 px-3 py-2 text-xs">
+          <span className="font-medium text-fg">{demandContext.source}</span>
+          <span className="text-fg-muted">
+            Quantity needed: <span className="font-mono font-semibold text-fg">{demandContext.required_qty}{demandContext.uom ? ` ${demandContext.uom}` : ""}</span>
+          </span>
+          {demandContext.shortage_date ? (
+            <span className="text-warning-fg">
+              Shortage by {new Date(demandContext.shortage_date).toLocaleDateString(undefined, { month: "short", day: "2-digit" })}
+            </span>
+          ) : null}
+          {demandContext.feasibility_label ? (
+            <span className="text-danger-fg font-medium">{demandContext.feasibility_label}</span>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* Input row */}
       <div className="flex flex-wrap items-end gap-3">
@@ -313,30 +343,113 @@ export function BomNetRequirements({
             )}
           </div>
 
-          {/* All-covered confirmation */}
+          {/* All-covered confirmation — explicitly scoped, not a production-ready declaration */}
           {result.lines_not_covered === 0 &&
             result.lines_partial === 0 &&
             result.lines_no_stock_data === 0 &&
             result.total_lines > 0 ? (
-            <div className="flex items-center gap-2 rounded-md border border-success/40 bg-success-softer px-3 py-2 text-xs text-success-fg">
-              <CheckCircle2 className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
-              All materials covered — ready to produce.
+            <div className="rounded-md border border-success/40 bg-success-softer px-3 py-2 text-xs">
+              <div className="flex items-center gap-2 text-success-fg">
+                <CheckCircle2 className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+                <span className="font-semibold">On-hand stock covers all components for this quantity.</span>
+              </div>
+              <div className="mt-1 pl-[22px] text-fg-muted">
+                Confirm supplier lead times and check that this stock is not committed to other production runs before scheduling.
+              </div>
+              <div className="mt-2 pl-[22px]">
+                <Link
+                  href="/planning/runs"
+                  className="text-3xs text-success-fg hover:underline font-medium"
+                >
+                  Review production recommendations in planning runs →
+                </Link>
+              </div>
             </div>
           ) : null}
 
+          {/* Max-producible estimate when shortages exist */}
+          {(result.lines_not_covered > 0 || result.lines_partial > 0) ? (() => {
+            const limitingLines = result.lines.filter(
+              (l) => l.coverage_status === "partial" || l.coverage_status === "not_covered",
+            );
+            let minFactor = Infinity;
+            for (const l of limitingLines) {
+              const avail = parseFloat(l.available_qty);
+              const req = parseFloat(l.gross_required_qty);
+              if (isNaN(avail) || isNaN(req) || req <= 0) continue;
+              minFactor = Math.min(minFactor, avail / req);
+            }
+            const maxProducible = isFinite(minFactor)
+              ? parseFloat((minFactor * result.target_qty).toFixed(4))
+              : null;
+            const hasNoDataLines = result.lines_no_stock_data > 0;
+            if (maxProducible === null) return null;
+            const isZero = maxProducible <= 0;
+            return (
+              <div className={`rounded-md border px-3 py-2 text-xs ${isZero ? "border-danger/30 bg-danger-softer/40" : "border-warning/30 bg-warning-softer/40"}`}>
+                {isZero ? (
+                  <div className="flex items-center gap-2 text-danger-fg font-medium">
+                    <AlertTriangle className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+                    Cannot produce any with current on-hand stock.
+                  </div>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="font-medium text-fg">Max producible now:</span>
+                    <span className="font-mono font-semibold tabular-nums text-fg">
+                      {maxProducible} {result.output_uom ?? "units"}
+                    </span>
+                    <span className="text-fg-muted">
+                      ({((minFactor) * 100).toFixed(0)}% of {result.target_qty} {result.output_uom ?? "units"})
+                    </span>
+                  </div>
+                )}
+                {hasNoDataLines ? (
+                  <div className="mt-0.5 text-3xs text-warning-fg">
+                    Estimate excludes {result.lines_no_stock_data} component{result.lines_no_stock_data === 1 ? "" : "s"} with no stock data — actual maximum may be lower.
+                  </div>
+                ) : null}
+              </div>
+            );
+          })() : null}
+
+          {/* No-supplier-mapped notice for shortage lines — shown before the PO shortcut */}
+          {(() => {
+            const unmapped = result.lines.filter(
+              (l) =>
+                (l.coverage_status === "not_covered" || l.coverage_status === "partial") &&
+                !l.supplier_id,
+            );
+            if (unmapped.length === 0) return null;
+            return (
+              <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning-softer/60 px-3 py-2 text-xs text-warning-fg">
+                <UserX className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+                <span>
+                  {unmapped.length} short component{unmapped.length === 1 ? "" : "s"} ha{unmapped.length === 1 ? "s" : "ve"} no supplier mapped —
+                  {" "}update the item master before you can raise a purchase order for{" "}
+                  {unmapped.map((l) => l.component_name).join(", ")}.
+                </span>
+              </div>
+            );
+          })()}
+
           {/* Purchase Orders shortcut when shortages exist */}
           {(result.lines_not_covered > 0 || result.lines_partial > 0) ? (
-            <div className="flex items-center justify-between rounded-md border border-border/50 bg-bg-subtle/50 px-3 py-2">
-              <span className="text-xs text-fg-muted">
-                Need to purchase missing materials?
-              </span>
-              <Link
-                href="/purchase-orders"
-                className="btn-secondary inline-flex items-center gap-1.5 text-xs"
-              >
-                <ShoppingCart className="h-3.5 w-3.5" strokeWidth={2} />
-                Purchase Orders
-              </Link>
+            <div className="rounded-md border border-border/50 bg-bg-subtle/50 px-3 py-2 space-y-1.5">
+              <div className="flex items-center justify-between">
+                <span className="text-xs text-fg-muted">
+                  Need to purchase missing materials?
+                </span>
+                <Link
+                  href="/purchase-orders?status=OPEN"
+                  className="btn-secondary inline-flex items-center gap-1.5 text-xs"
+                >
+                  <ShoppingCart className="h-3.5 w-3.5" strokeWidth={2} />
+                  Open purchase orders
+                </Link>
+              </div>
+              <p className="text-3xs text-fg-subtle">
+                This check counts on-hand stock only. Open POs, in-transit receipts, and stock committed to other runs are not included — review open orders and planning recommendations before deciding whether to purchase.
+              </p>
             </div>
           ) : null}
 
@@ -357,20 +470,25 @@ export function BomNetRequirements({
             </div>
           ) : null}
 
-          {/* Caveats */}
+          {/* Scope and freshness notes — what this check includes and excludes */}
           <div className="flex items-start gap-2 rounded-md border border-info/30 bg-info-softer/50 px-3 py-2 text-xs text-info-fg">
             <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={2} />
-            <div className="space-y-0.5">
-              <div>{result.availability_note}</div>
+            <div className="space-y-1">
+              <div className="font-medium">{result.availability_note}</div>
+              {result.open_po_qty_note ? (
+                <div>{result.open_po_qty_note}</div>
+              ) : null}
               {result.balances_as_of ? (
                 <div className="text-fg-muted">
-                  Stock data as of:{" "}
+                  Balances as of:{" "}
                   <span className="font-mono">
-                    {new Date(result.balances_as_of).toLocaleString()}
+                    {new Date(result.balances_as_of).toLocaleString(undefined, {
+                      month: "short", day: "2-digit",
+                      hour: "2-digit", minute: "2-digit",
+                    })}
                   </span>
                 </div>
               ) : null}
-              <div>{result.open_po_qty_note}</div>
             </div>
           </div>
 
@@ -384,15 +502,16 @@ export function BomNetRequirements({
                   const shortLines = result.lines.filter(
                     (l) => l.coverage_status === "not_covered" || l.coverage_status === "partial",
                   );
-                  const header = `Shortage list — ${result.item_name ?? result.bom_head_id} (v${result.version_label}) — ${result.target_qty} ${result.output_uom ?? "units"}`;
+                  const ts = new Date().toLocaleString();
+                  const header = `Shortage list — ${result.item_name ?? result.bom_head_id} (v${result.version_label}) — ${result.target_qty} ${result.output_uom ?? "units"} — ${ts}`;
                   const rows = shortLines.map((l) => {
                     const shortage = parseFloat(l.net_shortage_qty) > 0
-                      ? `short ${formatQty(l.net_shortage_qty)} ${l.component_uom ?? ""}`
+                      ? `short ${formatQty(l.net_shortage_qty)} ${l.component_uom ?? ""}`.trim()
                       : "partial";
                     const supplier = l.supplier_short
                       ? `— ${l.supplier_short}${l.supplier_phone ? ` ${l.supplier_phone}` : ""}`
-                      : "";
-                    return `  • ${l.component_name}: need ${formatQty(l.gross_required_qty)} ${l.component_uom ?? ""}, have ${formatQty(l.available_qty)} ${l.component_uom ?? ""}, ${shortage} ${supplier}`;
+                      : "— NO SUPPLIER MAPPED";
+                    return `  • ${l.component_name}: need ${formatQty(l.gross_required_qty)} ${l.component_uom ?? ""}, have ${formatQty(l.available_qty)} ${l.component_uom ?? ""}, ${shortage} ${supplier}`.trim();
                   });
                   const text = [header, "", ...rows].join("\n");
                   void navigator.clipboard.writeText(text).then(() => {
@@ -423,8 +542,8 @@ export function BomNetRequirements({
                   <tr className="border-b border-border/70 bg-bg-subtle/60">
                     <Th>#</Th>
                     <Th>Component</Th>
-                    <Th align="right">Required</Th>
-                    <Th align="right">On-hand</Th>
+                    <Th align="right">Gross required</Th>
+                    <Th align="right">On hand</Th>
                     <Th align="right">Net shortage</Th>
                     <Th>Unit</Th>
                     <Th>Coverage</Th>
@@ -482,7 +601,7 @@ function NetRequirementsRow({ line }: { line: NetLine }): JSX.Element {
           <div className="truncate font-medium text-fg" title={line.component_name}>
             {line.component_name}
           </div>
-          <div className="truncate text-3xs font-mono text-fg-subtle">
+          <div className="truncate text-3xs font-mono text-fg-subtle" title={line.component_id}>
             {line.component_id}
           </div>
         </div>
@@ -512,6 +631,15 @@ function NetRequirementsRow({ line }: { line: NetLine }): JSX.Element {
                 {line.component_uom}
               </span>
             ) : null}
+            {line.coverage_status === "partial" ? (
+              <div className="font-sans text-3xs font-normal text-warning-fg">
+                {parseFloat(line.coverage_pct).toFixed(0)}% covered
+              </div>
+            ) : line.coverage_status === "not_covered" ? (
+              <div className="font-sans text-3xs font-normal text-danger-fg/70">
+                0% covered
+              </div>
+            ) : null}
           </>
         ) : "—"}
       </td>
@@ -534,6 +662,14 @@ function NetRequirementsRow({ line }: { line: NetLine }): JSX.Element {
                 {line.supplier_phone}
               </a>
             ) : null}
+          </div>
+        ) : isShort ? (
+          <div
+            className="flex items-center gap-1 text-xs text-warning-fg"
+            title="No supplier mapped for this component — update item master before purchasing"
+          >
+            <UserX className="h-3 w-3 shrink-0" strokeWidth={2} />
+            <span>Not mapped</span>
           </div>
         ) : (
           <span className="text-xs text-fg-muted">—</span>

@@ -71,7 +71,7 @@ async function callApprove(
       return { kind: "approved", body: body as WasteApprovalSuccessResponse };
     }
     if (res.status === 409) return { kind: "conflict", body: body as WasteConflictResponse };
-    return { kind: "network", message: `HTTP ${res.status}` };
+    return { kind: "network", message: "Could not complete the action. Check your connection and try again." };
   } catch (err) {
     return { kind: "network", message: err instanceof Error ? err.message : String(err) };
   }
@@ -96,7 +96,7 @@ async function callReject(
       return { kind: "rejected", body: body as WasteRejectionSuccessResponse };
     }
     if (res.status === 409) return { kind: "conflict", body: body as WasteConflictResponse };
-    return { kind: "network", message: `HTTP ${res.status}` };
+    return { kind: "network", message: "Could not complete the action. Check your connection and try again." };
   } catch (err) {
     return { kind: "network", message: err instanceof Error ? err.message : String(err) };
   }
@@ -126,7 +126,7 @@ export default function WasteReviewPage() {
       const res = await fetch(`/api/waste-adjustments/${encodeURIComponent(submissionId)}`, {
         headers: { Accept: "application/json" },
       });
-      if (!res.ok) throw new Error(`HTTP ${res.status}`);
+      if (!res.ok) throw new Error("Could not load submission details.");
       return (await res.json()) as WasteAdjustmentDetail;
     },
     enabled: !!submissionId,
@@ -170,7 +170,7 @@ export default function WasteReviewPage() {
     return (
       <SuccessState
         title="Action refused"
-        description={`${outcome.body.reason_code}: ${outcome.body.detail}`}
+        description={outcome.body.detail || "This submission cannot be actioned in its current state. Refresh the page and try again."}
         tone="warning"
       />
     );

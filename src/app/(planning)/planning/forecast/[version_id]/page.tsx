@@ -25,7 +25,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { CheckCircle2, ChevronLeft, Save } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronLeft, Save } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
@@ -77,7 +77,7 @@ interface ItemRow {
 
 async function fetchJsonSilent<T>(url: string): Promise<T> {
   const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) throw new Error(`GET ${url} HTTP ${res.status}`);
+  if (!res.ok) throw new Error("Request failed");
   return (await res.json()) as T;
 }
 
@@ -183,7 +183,7 @@ async function fetchVersion(
   );
   if (!res.ok) {
     const body = await res.text().catch(() => "");
-    throw new Error(`Fetch version failed (HTTP ${res.status}): ${body}`);
+    throw new Error("Could not load this forecast version. Check your connection and try refreshing.");
   }
   return (await res.json()) as GetVersionResponse;
 }
@@ -208,19 +208,12 @@ async function postSaveLines(
   });
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
-    let reason = "";
+    let detail = "";
     try {
-      const parsed = JSON.parse(txt) as {
-        reason_code?: string;
-        detail?: string;
-      };
-      reason = parsed.reason_code
-        ? `${parsed.reason_code}${parsed.detail ? `: ${parsed.detail}` : ""}`
-        : txt;
-    } catch {
-      reason = txt;
-    }
-    throw new Error(`Save failed (HTTP ${res.status}): ${reason}`);
+      const parsed = JSON.parse(txt) as { detail?: string };
+      detail = parsed.detail ?? "";
+    } catch { /* ignore */ }
+    throw new Error(detail || "Save failed. Check your connection and try again.");
   }
 }
 
@@ -238,19 +231,12 @@ async function postPublish(
   });
   if (!res.ok) {
     const txt = await res.text().catch(() => "");
-    let reason = "";
+    let detail = "";
     try {
-      const parsed = JSON.parse(txt) as {
-        reason_code?: string;
-        detail?: string;
-      };
-      reason = parsed.reason_code
-        ? `${parsed.reason_code}${parsed.detail ? `: ${parsed.detail}` : ""}`
-        : txt;
-    } catch {
-      reason = txt;
-    }
-    throw new Error(`Publish failed (HTTP ${res.status}): ${reason}`);
+      const parsed = JSON.parse(txt) as { detail?: string };
+      detail = parsed.detail ?? "";
+    } catch { /* ignore */ }
+    throw new Error(detail || "Publish failed. Check your connection and try again.");
   }
 }
 
@@ -298,6 +284,33 @@ function fmtDate(iso: string | null): string {
   }
 }
 
+function fmtHorizonStart(iso: string): string {
+  try {
+    return new Date(iso + "T00:00:00Z").toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function fmtBucket(
+  key: string,
+  cadence: "monthly" | "weekly" | "daily",
+): string {
+  try {
+    const d = new Date(key + "T00:00:00Z");
+    if (cadence === "monthly") {
+      return d.toLocaleDateString(undefined, { month: "short", year: "2-digit", timeZone: "UTC" });
+    }
+    return d.toLocaleDateString(undefined, { month: "short", day: "2-digit", timeZone: "UTC" });
+  } catch {
+    return key;
+  }
+}
+
 export default function ForecastVersionDetailPage() {
   const params = useParams<{ version_id: string }>();
   const router = useRouter();
@@ -307,7 +320,8 @@ export default function ForecastVersionDetailPage() {
   const versionId = params.version_id;
 
   const [localCells, setLocalCells] = useState<Record<string, string>>({});
-  const [actionMessage, setActionMessage] = useState<string | null>(null);
+  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const [addedItemIds, setAddedItemIds] = useState<Set<string>>(new Set());
   const [addItemInput, setAddItemInput] = useState<string>("");
 
@@ -315,6 +329,7 @@ export default function ForecastVersionDetailPage() {
     queryKey: ["forecast", "version", versionId, session.role],
     queryFn: () => fetchVersion(session, versionId),
     enabled: Boolean(versionId),
+    staleTime: 60_000,
   });
 
   const data = query.data;
@@ -412,7 +427,8 @@ export default function ForecastVersionDetailPage() {
       }>,
     ) => postSaveLines(session, versionId, payload),
     onSuccess: () => {
-      setActionMessage("Saved.");
+      setActionSuccess("Lines saved.");
+      setActionError(null);
       setLocalCells({});
       setAddedItemIds(new Set());
       queryClient.invalidateQueries({
@@ -420,21 +436,24 @@ export default function ForecastVersionDetailPage() {
       });
     },
     onError: (err: unknown) => {
-      setActionMessage(err instanceof Error ? err.message : String(err));
+      setActionError(err instanceof Error ? err.message : String(err));
+      setActionSuccess(null);
     },
   });
 
   const publishMut = useMutation({
     mutationFn: () => postPublish(session, versionId),
     onSuccess: () => {
-      setActionMessage("Published.");
+      setActionSuccess("Published successfully. This forecast is now active.");
+      setActionError(null);
       queryClient.invalidateQueries({
         queryKey: ["forecast", "version", versionId],
       });
       queryClient.invalidateQueries({ queryKey: ["forecasts", "versions"] });
     },
     onError: (err: unknown) => {
-      setActionMessage(err instanceof Error ? err.message : String(err));
+      setActionError(err instanceof Error ? err.message : String(err));
+      setActionSuccess(null);
     },
   });
 
@@ -458,9 +477,7 @@ export default function ForecastVersionDetailPage() {
             className="text-xs text-danger-fg"
             data-testid="forecast-detail-error"
           >
-            {query.error instanceof Error
-              ? query.error.message
-              : "Failed to load version."}
+            Could not load this forecast version. Check your connection and try refreshing, or go back to the forecast list.
           </div>
         </SectionCard>
       </>
@@ -472,7 +489,7 @@ export default function ForecastVersionDetailPage() {
       <WorkflowHeader
         eyebrow="Planner workspace"
         title={`Forecast ${version.version_id.slice(0, 8)}`}
-        description={`Horizon ${version.horizon_start_at} · ${version.horizon_weeks} weeks · cadence ${version.cadence} · site ${version.site_id}`}
+        description={`Horizon starts ${fmtHorizonStart(version.horizon_start_at)} · ${version.horizon_weeks} weeks · ${version.cadence} · site ${version.site_id}`}
         meta={
           <>
             <StatusBadge status={version.status} />
@@ -502,7 +519,8 @@ export default function ForecastVersionDetailPage() {
                 disabled={dirtyEntries.length === 0 || saveMut.isPending}
                 data-testid="forecast-detail-save"
                 onClick={() => {
-                  setActionMessage(null);
+                  setActionSuccess(null);
+                  setActionError(null);
                   saveMut.mutate(dirtyEntries);
                 }}
               >
@@ -521,7 +539,16 @@ export default function ForecastVersionDetailPage() {
                 data-testid="forecast-detail-publish"
                 disabled={publishMut.isPending}
                 onClick={() => {
-                  setActionMessage(null);
+                  setActionSuccess(null);
+                  if (dirtyEntries.length > 0) {
+                    setActionError("You have unsaved changes. Save them before publishing.");
+                    return;
+                  }
+                  if (items.length === 0) {
+                    setActionError("This forecast has no lines. Add at least one item before publishing.");
+                    return;
+                  }
+                  setActionError(null);
                   publishMut.mutate();
                 }}
               >
@@ -533,12 +560,23 @@ export default function ForecastVersionDetailPage() {
         }
       />
 
-      {actionMessage ? (
+      {actionSuccess ? (
         <div
-          className="mb-3 rounded border border-border/60 bg-bg-subtle/40 px-4 py-2 text-xs text-fg-muted"
-          data-testid="forecast-action-message"
+          className="mb-3 flex items-center gap-2 rounded border border-success/30 bg-success-subtle/40 px-4 py-2 text-xs text-success-fg"
+          data-testid="forecast-action-success"
         >
-          {actionMessage}
+          <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+          {actionSuccess}
+        </div>
+      ) : null}
+
+      {actionError ? (
+        <div
+          className="mb-3 flex items-center gap-2 rounded border border-danger/30 bg-danger-subtle/40 px-4 py-2 text-xs text-danger-fg"
+          data-testid="forecast-action-error"
+        >
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          {actionError}
         </div>
       ) : null}
 
@@ -547,8 +585,7 @@ export default function ForecastVersionDetailPage() {
           className="mb-3 rounded border border-info/30 bg-info-softer px-4 py-2 text-xs text-info-fg"
           data-testid="forecast-published-notice"
         >
-          This version is published and read-only. To change it, revise it into
-          a new draft (deferred to a future release).
+          This version is published and read-only. To update demand, create a new forecast draft.
         </div>
       ) : null}
 
@@ -596,9 +633,10 @@ export default function ForecastVersionDetailPage() {
                         data-testid="forecast-lines-bucket-header"
                         data-bucket={b}
                         data-frozen={frozen ? "1" : "0"}
+                        title={frozen ? `${b} — frozen (within ${FREEZE_HORIZON_WEEKS}w window)` : b}
                       >
-                        {b}
-                        {frozen ? <span className="ml-1">·freeze</span> : null}
+                        {fmtBucket(b, version.cadence)}
+                        {frozen ? <div className="mt-0.5 text-3xs font-normal normal-case tracking-normal opacity-60">freeze</div> : null}
                       </th>
                     );
                   })}

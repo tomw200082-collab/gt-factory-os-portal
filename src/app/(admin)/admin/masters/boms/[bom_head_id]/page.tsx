@@ -295,7 +295,7 @@ export default function AdminMastersBomHeadDetailPage({
     badge:
       versionsSorted.length > 0 ? `${versionsSorted.length}` : undefined,
     content: (() => {
-      if (!head) return <DetailTabEmpty message="BOM head not loaded yet." />;
+      if (!head) return <DetailTabLoading />;
       if (versionsQuery.isLoading) return <DetailTabLoading />;
       if (versionsQuery.isError) {
         return (
@@ -482,9 +482,11 @@ export default function AdminMastersBomHeadDetailPage({
       header={{
         eyebrow: "Admin · Masters · BOMs",
         title: item?.item_name ?? head?.parent_name ?? head?.parent_ref_id ?? bom_head_id,
-        description: head?.active_version_id
-          ? "Review BOM versions and component lines. Use the active version to simulate production quantities and check material coverage."
-          : "No active version — publish a draft version to enable simulation.",
+        description: head
+          ? head.active_version_id
+            ? "Review BOM versions and component lines. Use the active version to simulate production quantities and check material coverage."
+            : "No active version — publish a draft version to enable simulation."
+          : "Review BOM versions and component lines.",
         meta: (
           <>
             {headerMeta}

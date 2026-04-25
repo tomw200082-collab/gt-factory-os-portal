@@ -33,6 +33,7 @@ import {
   ArrowRight,
   BadgeCheck,
   CalendarClock,
+  CheckCircle2,
   CircleDashed,
   Info,
   ShieldAlert,
@@ -88,6 +89,15 @@ const HEALTH_STALE_TIME_MS = 60_000;
 // ---------------------------------------------------------------------------
 // Helpers.
 // ---------------------------------------------------------------------------
+function fmtDateShort(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleDateString(undefined, {
+      month: "short", day: "2-digit", year: "numeric",
+    });
+  } catch { return iso; }
+}
+
 function ageHumanized(iso: string | null | undefined, now: Date): string {
   if (!iso) return "—";
   const ts = new Date(iso).getTime();
@@ -133,7 +143,7 @@ function PendingBadge({ note }: { note: string }) {
         strokeWidth={2}
       />
       <div className="min-w-0">
-        <div className="font-semibold text-fg-muted">Pending Tranche I</div>
+        <div className="font-semibold text-fg-muted">Not yet available</div>
         <div className="mt-0.5 leading-relaxed">{note}</div>
       </div>
     </div>
@@ -331,7 +341,7 @@ export default function DashboardPage() {
       <WorkflowHeader
         eyebrow="GT Factory OS"
         title={greeting}
-        description="Control tower for live operational signals. Panels with a ‘pending Tranche I’ badge render honest placeholders until their backend endpoint is authored."
+        description="Control tower for live operational signals. Some panels show ‘not yet available’ while their data sources are being connected."
         meta={
           <>
             <Badge tone={roleBadgeTone(session.role)} dotted>
@@ -418,8 +428,8 @@ export default function DashboardPage() {
       {/* -------------------------------------------------------------- */}
       <SectionCard
         eyebrow="Authorization"
-        title="RUNTIME_READY signals"
-        description="Which operational forms have backend closure? Authoritative source is the harness file .claude/state/runtime_ready.json."
+        title="Form readiness"
+        description="Which operational forms have been cleared for use? Each form is enabled only after its backend has been verified end-to-end."
         className="mt-6"
       >
         <RuntimeReadyBlock signal={runtimeReadyQ.data} now={now} />
@@ -509,7 +519,7 @@ function InboxTotalCard({
     );
   }
   const s = summary.data;
-  const tone = s.critical > 0 ? "danger" : s.warning > 0 ? "warning" : "success";
+  const tone = s.critical > 0 ? "danger" : s.warning > 0 ? "warning" : s.total === 0 ? "success" : "neutral";
   return (
     <StatPill
       label="Inbox"
@@ -651,11 +661,18 @@ function LatestPlanningRunCard({
       : d.status === "failed"
         ? "danger"
         : "info";
+  const statusLabel =
+    d.status === "completed" ? "Completed"
+    : d.status === "failed" ? "Failed"
+    : d.status === "running" ? "Running"
+    : d.status === "draft" ? "Queued"
+    : d.status === "superseded" ? "Superseded"
+    : d.status;
   // DR-11 — exceptions_count from summary projection.
   const sub = (
     <div className="flex flex-wrap items-center gap-1.5">
       <Badge tone={tone} variant="soft">
-        {d.status}
+        {statusLabel}
       </Badge>
       <span className="text-fg-muted">{ageHumanized(d.executed_at, now)}</span>
       {typeof d.exceptions_count === "number" ? (
@@ -663,11 +680,11 @@ function LatestPlanningRunCard({
           tone={d.exceptions_count > 0 ? "warning" : "neutral"}
           variant="outline"
         >
-          {d.exceptions_count} exc
+          {d.exceptions_count} {d.exceptions_count === 1 ? "exception" : "exceptions"}
         </Badge>
       ) : (
         <Badge tone="neutral" variant="outline">
-          — exc
+          — exceptions
         </Badge>
       )}
     </div>
@@ -675,7 +692,7 @@ function LatestPlanningRunCard({
   return (
     <StatPill
       label="Latest planning run"
-      value={d.status}
+      value={statusLabel}
       tone={tone}
       href={`/planning/runs/${encodeURIComponent(d.run_id)}`}
       icon={<ListChecksIcon />}
@@ -829,7 +846,18 @@ function ParityCheckBlock({
         value={ageHumanized(d.checked_at, now)}
         tone="neutral"
         sub={
-          <span className="font-mono text-fg-muted">{d.checked_at}</span>
+          <span className="font-mono text-fg-muted">
+            {(() => {
+              try {
+                return new Date(d.checked_at).toLocaleString(undefined, {
+                  month: "short", day: "2-digit",
+                  hour: "2-digit", minute: "2-digit",
+                });
+              } catch {
+                return d.checked_at;
+              }
+            })()}
+          </span>
         }
         testid="dashboard-stat-parity-checked-at"
       />
@@ -866,20 +894,20 @@ function StockTruthBlock({
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
       <StatPill
-        label="Rebuild verifier drift"
+        label="Stock parity drift"
         value={drift === null ? "—" : drift.toLocaleString()}
         tone={driftTone}
         sub={
           drift === 0 ? (
             <span className="text-success-fg">
-              Projection = rebuild from ledger.
+              Live projection matches ledger rebuild exactly.
             </span>
           ) : drift && drift > 0 ? (
             <span className="text-danger-fg">
-              {drift} rows of drift — investigate before trusting.
+              {drift} row{drift === 1 ? "" : "s"} of drift — review before trusting stock.
             </span>
           ) : (
-            <span className="text-fg-muted">Not yet exposed.</span>
+            <span className="text-fg-muted">Not yet available.</span>
           )
         }
       />
@@ -961,11 +989,17 @@ function IntegrationFreshnessBlock({
               : r.state === "critical" || r.state === "never_ran"
                 ? "danger"
                 : "neutral";
+        const stateLabel =
+          r.state === "fresh" ? "Fresh"
+          : r.state === "warning" ? "Stale"
+          : r.state === "critical" ? "Critical"
+          : r.state === "never_ran" ? "Never ran"
+          : r.state;
         return (
           <StatPill
             key={r.producer}
             label={r.producer}
-            value={r.state}
+            value={stateLabel}
             tone={tone}
             icon={<CalendarClock className="h-3 w-3" strokeWidth={2} />}
             sub={
@@ -1089,10 +1123,11 @@ function LatestForecastBlock({
         label="Version"
         value={
           <span
-            className="break-all font-mono text-sm"
+            className="font-mono text-sm"
             data-testid="dashboard-forecast-version-id"
+            title={d.version_id}
           >
-            {d.version_id}
+            {d.version_id.slice(0, 8)}…
           </span>
         }
         tone="neutral"
@@ -1109,8 +1144,8 @@ function LatestForecastBlock({
         tone="neutral"
         sub={
           d.horizon_start_at ? (
-            <span className="font-mono text-fg-muted">
-              starting {d.horizon_start_at}
+            <span className="text-fg-muted">
+              starting {fmtDateShort(d.horizon_start_at)}
             </span>
           ) : null
         }
@@ -1118,10 +1153,10 @@ function LatestForecastBlock({
       <StatPill
         label="Published"
         value={ageHumanized(d.published_at, now)}
-        tone="success"
+        tone="neutral"
         sub={
           d.published_at ? (
-            <span className="font-mono text-fg-muted">{d.published_at}</span>
+            <span className="text-fg-muted">{fmtDateShort(d.published_at)}</span>
           ) : null
         }
       />
@@ -1145,43 +1180,38 @@ function RuntimeReadyBlock({
 }) {
   if (!signal) return <span className="text-fg-muted text-sm">Loading.</span>;
   if (signal.state === "pending_tranche_i") {
-    return (
-      <div className="space-y-3">
-        <PendingBadge note={signal.note} />
-        <div className="flex items-start gap-2 rounded border border-info/40 bg-info-softer px-3 py-2 text-xs text-info-fg">
-          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={2} />
-          <div>
-            The harness file drives W2 Mode-B authorization and is read by the
-            governor, not the portal. A future aggregate endpoint will surface
-            it here.
-          </div>
-        </div>
-      </div>
-    );
+    return <PendingBadge note={signal.note} />;
   }
   if (signal.state === "unavailable") {
     return <UnavailableBadge reason={signal.reason} />;
   }
   const rows = signal.data.rows;
   if (rows.length === 0) {
-    return <div className="text-sm text-fg-muted">Registry is empty.</div>;
+    return <div className="text-sm text-fg-muted">No forms cleared for use yet.</div>;
   }
   return (
     <ul className="divide-y divide-border/60 rounded border border-border/60">
-      {rows.map((r) => (
-        <li
-          key={r.signal_name}
-          className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
-        >
-          <span className="font-mono">{r.signal_name}</span>
-          <span
-            className="text-xs text-fg-muted"
-            title={r.emitted_at}
+      {rows.map((r) => {
+        const label = r.signal_name
+          .replace(/^RUNTIME_READY\(/, "")
+          .replace(/\)$/, "")
+          .replace(/([A-Z])/g, " $1")
+          .trim();
+        return (
+          <li
+            key={r.signal_name}
+            className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
           >
-            {ageHumanized(r.emitted_at, now)}
-          </span>
-        </li>
-      ))}
+            <div className="flex items-center gap-2">
+              <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success-fg" strokeWidth={2} />
+              <span className="font-medium text-fg">{label}</span>
+            </div>
+            <span className="text-xs text-fg-muted" title={r.emitted_at}>
+              cleared {ageHumanized(r.emitted_at, now)}
+            </span>
+          </li>
+        );
+      })}
     </ul>
   );
 }

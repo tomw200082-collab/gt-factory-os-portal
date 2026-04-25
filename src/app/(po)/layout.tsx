@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { RoleGate } from "@/lib/auth/role-gate";
 import { SeedGate } from "@/lib/repositories/seed-gate";
+import { AppShellChrome } from "@/components/layout/AppShellChrome";
 import { AppPageShell } from "@/components/layout/AppPageShell";
 
 // Purchase orders — read-visible to any authenticated role. Create and
@@ -11,10 +12,12 @@ export default function PurchaseOrdersLayout({
   children: ReactNode;
 }) {
   return (
-    <RoleGate minimum="viewer:read">
-      <SeedGate>
-        <AppPageShell>{children}</AppPageShell>
-      </SeedGate>
-    </RoleGate>
+    <AppShellChrome>
+      <RoleGate minimum="viewer:read">
+        <SeedGate>
+          <AppPageShell>{children}</AppPageShell>
+        </SeedGate>
+      </RoleGate>
+    </AppShellChrome>
   );
 }

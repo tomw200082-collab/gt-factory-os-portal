@@ -177,7 +177,20 @@ export default function AdminMastersBomsListPage(): JSX.Element {
             {(headsQuery.error as Error).message}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="p-5 text-sm text-fg-muted">No BOM heads match.</div>
+          <div className="flex flex-col items-start gap-2 p-5">
+            <p className="text-sm text-fg-muted">
+              No BOMs match. Try a different name or change the version status filter.
+            </p>
+            {(query || statusFilter !== "all") && (
+              <button
+                type="button"
+                className="text-xs text-accent hover:underline"
+                onClick={() => { setQuery(""); setStatusFilter("all"); }}
+              >
+                Clear filters
+              </button>
+            )}
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
@@ -242,8 +255,10 @@ function BomHeadListRow({
 
   return (
     <tr
-      className="cursor-pointer border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
+      className="cursor-pointer border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+      tabIndex={0}
       onClick={() => router.push(bomHref)}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") router.push(bomHref); }}
     >
       {/* BOM / Item — whole row clicks to BOM head; item external-links separately */}
       <td className="px-3 py-2">
@@ -263,6 +278,9 @@ function BomHeadListRow({
         <div className="text-3xs font-mono text-fg-subtle">
           {head.bom_head_id}
         </div>
+        {head.display_family ? (
+          <div className="text-3xs text-fg-faint">{head.display_family}</div>
+        ) : null}
       </td>
       {/* Output — what this BOM produces */}
       <td className="px-3 py-2 text-right font-mono text-xs tabular-nums text-fg-muted">

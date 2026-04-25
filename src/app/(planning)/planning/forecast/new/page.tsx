@@ -14,7 +14,8 @@
 // ---------------------------------------------------------------------------
 
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
@@ -50,6 +51,25 @@ function todayIsoDate(): string {
   return `${y}-${m}-${day}`;
 }
 
+function horizonPreview(horizonStart: string, horizonWeeks: number): string {
+  if (!horizonStart) return "";
+  try {
+    const start = new Date(horizonStart + "T00:00:00Z");
+    const endMs = start.getTime() + horizonWeeks * 7 * 24 * 60 * 60 * 1000;
+    const end = new Date(endMs);
+    const months: string[] = [];
+    let d = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
+    while (d.getTime() < endMs && months.length < 24) {
+      months.push(d.toLocaleDateString(undefined, { month: "short", year: "numeric", timeZone: "UTC" }));
+      d = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1));
+    }
+    void end;
+    return months.join(" · ");
+  } catch {
+    return "";
+  }
+}
+
 function sessionHeaders(_session: Session): HeadersInit {
   return {
     "Content-Type": "application/json",
@@ -69,17 +89,12 @@ async function postOpenDraft(
     const txt = await res.text().catch(() => "");
     let reason = "";
     try {
-      const parsed = JSON.parse(txt) as {
-        reason_code?: string;
-        detail?: string;
-      };
-      reason = parsed.reason_code
-        ? `${parsed.reason_code}${parsed.detail ? `: ${parsed.detail}` : ""}`
-        : txt;
+      const parsed = JSON.parse(txt) as { detail?: string };
+      reason = parsed.detail ?? "";
     } catch {
-      reason = txt;
+      reason = "";
     }
-    throw new Error(`Open draft failed (HTTP ${res.status}): ${reason}`);
+    throw new Error(reason || "Could not open draft. Check your connection and try again.");
   }
   return (await res.json()) as OpenDraftResponse;
 }
@@ -94,6 +109,8 @@ export default function NewForecastDraftPage() {
   const [notes, setNotes] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const preview = useMemo(() => horizonPreview(horizonStart, 8), [horizonStart]);
+
   const openMut = useMutation({
     mutationFn: (body: OpenDraftRequest) => postOpenDraft(session, body),
     onSuccess: (resp) => {
@@ -106,7 +123,8 @@ export default function NewForecastDraftPage() {
       router.push(`/planning/forecast/${encodeURIComponent(resp.version.version_id)}`);
     },
     onError: (err: unknown) => {
-      setErrorMessage(err instanceof Error ? err.message : String(err));
+      console.error("[ForecastNew] open-draft error:", err);
+      setErrorMessage("Could not open draft. Check your connection or try again. If the problem persists, contact your admin.");
     },
   });
 
@@ -172,7 +190,7 @@ export default function NewForecastDraftPage() {
                 data-testid="forecast-new-site"
               />
               <p className="mt-1 text-3xs text-fg-subtle">
-                v1 is single-site.
+                Single-site operation.
               </p>
             </div>
             <div>
@@ -185,22 +203,19 @@ export default function NewForecastDraftPage() {
               <input
                 id="forecast-new-cadence"
                 type="text"
-                value="monthly"
+                value="Monthly"
                 disabled
                 readOnly
                 className="input h-9 w-full"
                 data-testid="forecast-new-cadence"
               />
-              <p className="mt-1 text-3xs text-fg-subtle">
-                Weekly and daily reserved for future releases.
-              </p>
             </div>
             <div>
               <label
                 htmlFor="forecast-new-horizon-start"
                 className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle"
               >
-                Horizon start (ISO week will be normalized server-side)
+                Horizon start date
               </label>
               <input
                 id="forecast-new-horizon-start"
@@ -211,6 +226,11 @@ export default function NewForecastDraftPage() {
                 data-testid="forecast-new-horizon-start"
                 required
               />
+              {preview ? (
+                <p className="mt-1 text-3xs text-fg-subtle">
+                  Covers: {preview}
+                </p>
+              ) : null}
             </div>
             <div>
               <label
@@ -267,11 +287,18 @@ export default function NewForecastDraftPage() {
             <button
               type="button"
               className="btn btn-sm"
-              onClick={() => history.back()}
+              onClick={() => router.back()}
               data-testid="forecast-new-cancel"
             >
               Cancel
             </button>
+            <Link
+              href="/planning/forecast"
+              className="btn btn-sm"
+              data-testid="forecast-new-back-link"
+            >
+              Forecast list
+            </Link>
           </div>
         </form>
       </SectionCard>

@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { RoleGate } from "@/lib/auth/role-gate";
 import { SeedGate } from "@/lib/repositories/seed-gate";
+import { AppShellChrome } from "@/components/layout/AppShellChrome";
 import { AppPageShell } from "@/components/layout/AppPageShell";
 
 // Planning read capability — admin + planner + viewer pass. Viewer is
@@ -8,10 +9,12 @@ import { AppPageShell } from "@/components/layout/AppPageShell";
 // server-side on planning:execute.
 export default function PlanningLayout({ children }: { children: ReactNode }) {
   return (
-    <RoleGate minimum="planning:read">
-      <SeedGate>
-        <AppPageShell>{children}</AppPageShell>
-      </SeedGate>
-    </RoleGate>
+    <AppShellChrome>
+      <RoleGate minimum="planning:read">
+        <SeedGate>
+          <AppPageShell>{children}</AppPageShell>
+        </SeedGate>
+      </RoleGate>
+    </AppShellChrome>
   );
 }

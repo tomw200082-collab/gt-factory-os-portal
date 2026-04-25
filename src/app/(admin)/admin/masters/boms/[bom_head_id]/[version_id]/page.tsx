@@ -503,20 +503,22 @@ export default function AdminMastersBomVersionDetailPage({
     <div className="space-y-6">
       <DetailPage
         header={{
-          eyebrow: `Admin · Masters · BOMs · ${bom_head_id}`,
+          eyebrow: `Admin · Masters · BOMs · ${item?.item_name ?? bom_head_id}`,
           title,
-          description: isActive
-            ? "Active version — component lines and quantities below. Use the simulator to check material coverage."
-            : statusLower === "draft"
-              ? "Draft version — component lines are editable in the BOM editor. Simulation requires an active version."
-              : "Historic version — read-only audit record of a superseded formula.",
+          description: !version
+            ? "Review component lines and quantities for this BOM version."
+            : isActive
+              ? "Active version — component lines and quantities below. Use the simulator to check material coverage."
+              : statusLower === "draft"
+                ? "Draft version — component lines are editable in the BOM editor. Simulation requires an active version."
+                : "Historic version — read-only audit record of a superseded formula.",
           meta: headerMeta,
           actions: (
             <Link
               href={`/admin/masters/boms/${encodeURIComponent(bom_head_id)}`}
               className="btn-secondary inline-flex items-center gap-1 text-xs"
             >
-              ← {bom_head_id}
+              ← {item?.item_name ?? bom_head_id}
             </Link>
           ),
         }}
@@ -554,8 +556,10 @@ function LineRow({ line }: { line: BomLineRow }): JSX.Element {
   const componentHref = `/admin/masters/components/${encodeURIComponent(line.final_component_id)}`;
   return (
     <tr
-      className="cursor-pointer border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
+      className="cursor-pointer border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+      tabIndex={0}
       onClick={() => router.push(componentHref)}
+      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") router.push(componentHref); }}
     >
       <td className="px-3 py-2 text-xs tabular-nums text-fg-muted">
         {line.line_no}
@@ -679,7 +683,7 @@ function CompareDiff({
           ) : null}
           {changed.length > 0 ? (
             <DiffSection
-              label="Changed qty_per"
+              label="Quantity changed"
               tone="warning"
               rows={changed.map(({ thisLine, targetLine }) => ({
                 component_id: thisLine.final_component_id,
