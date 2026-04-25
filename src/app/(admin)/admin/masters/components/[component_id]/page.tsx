@@ -1,7 +1,7 @@
-﻿"use client";
+"use client";
 
 // ---------------------------------------------------------------------------
-// Admin · Masters · Components · Detail — Tranche D (plan §F).
+// Admin · Masters · Components · Detail — corridor: admin-master-editing-foundation
 // Canonical URL /admin/masters/components/[component_id].
 // ---------------------------------------------------------------------------
 
@@ -15,7 +15,6 @@ import {
   DetailTabEmpty,
   DetailTabError,
   DetailTabLoading,
-  PendingTabPlaceholder,
   type LinkageGroup,
   type TabDescriptor,
   type FieldRow,
@@ -24,8 +23,10 @@ import { Badge } from "@/components/badges/StatusBadge";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { InlineEditCell } from "@/components/tables/InlineEditCell";
 import { QuickCreateSupplierItem } from "@/components/admin/quick-create/QuickCreateSupplierItem";
+import { MasterSummaryCard, type CompletenessItem } from "@/components/admin/MasterSummaryCard";
+import { ClassWEditDrawer } from "@/components/admin/ClassWEditDrawer";
 import type { EntityOption } from "@/components/fields/EntityPickerPlus";
-import { AdminMutationError, patchEntity } from "@/lib/admin/mutations";
+import { AdminMutationError, patchEntity, postStatus } from "@/lib/admin/mutations";
 import { useSession } from "@/lib/auth/session-provider";
 
 // --- Types ---------------------------------------------------------------
@@ -151,6 +152,8 @@ export default function AdminComponentDetailPage({
 
   const [showAddSupplier, setShowAddSupplier] = useState(false);
   const [editBanner, setEditBanner] = useState<{ kind: "success" | "error"; message: string } | null>(null);
+  const [showStatusDrawer, setShowStatusDrawer] = useState(false);
+  const [drawerStatusTarget, setDrawerStatusTarget] = useState<string>("");
 
   const componentQuery = useQuery<ComponentsListResponse>({
     queryKey: ["admin", "masters", "component", component_id],
@@ -185,8 +188,7 @@ export default function AdminComponentDetailPage({
       (e) => e.related_entity_id === component_id,
     ) ?? [];
 
-  const primarySi =
-    supplierItemsQuery.data?.rows.filter((si) => si.is_primary) ?? [];
+  const primarySi = supplierItemsQuery.data?.rows.filter((si) => si.is_primary) ?? [];
   const allSi = supplierItemsQuery.data?.rows ?? [];
 
   const supplierOptions: EntityOption[] = useMemo(
@@ -199,6 +201,7 @@ export default function AdminComponentDetailPage({
     [suppliersQuery.data],
   );
 
+  // Supplier-item field mutation (lead/MOQ/cost)
   const fieldMutation = useMutation({
     mutationFn: async (args: {
       supplier_item_id: string;
@@ -244,13 +247,79 @@ export default function AdminComponentDetailPage({
     },
   });
 
+  // Component field mutation — PATCHes the component's own scalar fields
+  const componentFieldMutation = useMutation({
+    mutationFn: async (args: { field: string; value: unknown; updated_at: string }) =>
+      patchEntity({
+        url: `/api/components/${encodeURIComponent(component_id)}`,
+        fields: { [args.field]: args.value },
+        ifMatchUpdatedAt: args.updated_at,
+      }),
+    onSuccess: () => {
+      setEditBanner({ kind: "success", message: "Saved." });
+      void queryClient.invalidateQueries({
+        queryKey: ["admin", "masters", "component", component_id],
+      });
+    },
+    onError: (err: Error) => {
+      const msg =
+        err instanceof AdminMutationError
+          ? `${err.status}${err.code ? ` ${err.code}` : ""}: ${err.message}`
+          : err.message;
+      setEditBanner({ kind: "error", message: `Update failed: ${msg}` });
+    },
+  });
+
+  // Status mutation — archive / restore
+  const statusMutation = useMutation({
+    mutationFn: (args: { newStatus: string; updated_at: string }) =>
+      postStatus({
+        url: `/api/components/${encodeURIComponent(component_id)}/status`,
+        status: args.newStatus,
+        ifMatchUpdatedAt: args.updated_at,
+      }),
+    onSuccess: () => {
+      setShowStatusDrawer(false);
+      void queryClient.invalidateQueries({
+        queryKey: ["admin", "masters", "component", component_id],
+      });
+      void queryClient.invalidateQueries({ queryKey: ["admin", "components"] });
+    },
+    onError: (err: Error) => {
+      const msg =
+        err instanceof AdminMutationError
+          ? `${err.status}${err.code ? ` ${err.code}` : ""}: ${err.message}`
+          : err.message;
+      setEditBanner({ kind: "error", message: `Status update failed: ${msg}` });
+    },
+  });
+
+  // Completeness items for summary card
+  const completenessItems = useMemo((): CompletenessItem[] => {
+    if (!row) return [];
+    const primarySiItem = allSi.find((si) => si.is_primary);
+    const hasCost = allSi.some(
+      (si) => si.std_cost_per_inv_uom && parseFloat(si.std_cost_per_inv_uom) > 0,
+    );
+    return [
+      {
+        label: "Primary supplier",
+        status: primarySiItem ? "ok" : "error",
+        detail: primarySiItem ? primarySiItem.supplier_id : "No primary supplier set",
+      },
+      {
+        label: "Standard cost",
+        status: hasCost ? "ok" : "warn",
+        detail: hasCost ? undefined : "No cost set on any sourcing link",
+      },
+    ];
+  }, [row, allSi]);
+
   const headerMeta = row ? (
     <>
       <ComponentStatusBadge status={row.status} />
       {row.component_class ? (
-        <Badge tone="neutral" dotted>
-          {row.component_class}
-        </Badge>
+        <Badge tone="neutral" dotted>{row.component_class}</Badge>
       ) : null}
       {row.component_group ? (
         <Badge tone="neutral">{row.component_group}</Badge>
@@ -280,75 +349,181 @@ export default function AdminComponentDetailPage({
           />
         );
       }
-      const rows: FieldRow[] = [
-        { label: "Code", value: row.component_id, mono: true },
-        { label: "Name", value: row.component_name },
-        { label: "Category", value: row.component_class },
-        { label: "Group", value: row.component_group },
-        { label: "Status", value: <ComponentStatusBadge status={row.status} /> },
-        { label: "Stock unit", value: row.inventory_uom, mono: true },
-        { label: "Purchase unit", value: row.purchase_uom, mono: true },
-        { label: "BOM unit", value: row.bom_uom, mono: true },
-        {
-          label: "Purchase → stock factor",
-          value: row.purchase_to_inv_factor,
-          mono: true,
-        },
-        {
-          label: "Planning policy",
-          value: row.planning_policy_code,
-          mono: true,
-        },
-        {
-          label: "Primary supplier",
-          value: row.primary_supplier_id ? (
-            <Link
-              href={`/admin/masters/suppliers/${encodeURIComponent(row.primary_supplier_id)}`}
-              className="font-mono text-accent hover:underline"
-            >
-              {row.primary_supplier_id}
-            </Link>
-          ) : null,
-          mono: true,
-        },
-        { label: "Lead time (days)", value: row.lead_time_days ?? null },
-        { label: "Min. order qty (purchase unit)", value: row.moq_purchase_uom, mono: true },
-        {
-          label: "Order multiple (purchase unit)",
-          value: row.order_multiple_purchase_uom,
-          mono: true,
-        },
-        { label: "Criticality", value: row.criticality },
-        { label: "Included in planning", value: row.planned_flag ? "Yes" : "No" },
+
+      const classLFields: FieldRow[] = [
+        { label: "Stock unit (locked)", value: row.inventory_uom ?? "—", mono: true },
+        { label: "Purchase unit (locked)", value: row.purchase_uom ?? "—", mono: true },
+        { label: "BOM unit (locked)", value: row.bom_uom ?? "—", mono: true },
+        { label: "Purchase → stock factor (locked)", value: row.purchase_to_inv_factor, mono: true },
+        { label: "Component ID (locked)", value: row.component_id, mono: true },
         { label: "Site", value: row.site_id, mono: true },
         { label: "Created", value: fmtDateTime(row.created_at) },
         { label: "Last updated", value: fmtDateTime(row.updated_at) },
       ];
-      return <DetailFieldGrid rows={rows} />;
+
+      return (
+        <div className="space-y-4 p-1">
+          <SectionCard title="Details" density="compact">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div>
+                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Name
+                </span>
+                {isAdmin ? (
+                  <InlineEditCell
+                    value={row.component_name}
+                    onSave={(val) =>
+                      componentFieldMutation.mutateAsync({
+                        field: "component_name",
+                        value: val,
+                        updated_at: row.updated_at,
+                      }) as Promise<void>
+                    }
+                    ariaLabel="Edit component name"
+                  />
+                ) : (
+                  <span className="text-fg-strong font-medium">{row.component_name}</span>
+                )}
+              </div>
+              <div>
+                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Category
+                </span>
+                {isAdmin ? (
+                  <InlineEditCell
+                    value={row.component_class ?? ""}
+                    onSave={(val) =>
+                      componentFieldMutation.mutateAsync({
+                        field: "component_class",
+                        value: (val as string) || null,
+                        updated_at: row.updated_at,
+                      }) as Promise<void>
+                    }
+                    ariaLabel="Edit category"
+                  />
+                ) : (
+                  <span className="text-fg">{row.component_class ?? "—"}</span>
+                )}
+              </div>
+              <div>
+                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Group
+                </span>
+                {isAdmin ? (
+                  <InlineEditCell
+                    value={row.component_group ?? ""}
+                    onSave={(val) =>
+                      componentFieldMutation.mutateAsync({
+                        field: "component_group",
+                        value: (val as string) || null,
+                        updated_at: row.updated_at,
+                      }) as Promise<void>
+                    }
+                    ariaLabel="Edit group"
+                  />
+                ) : (
+                  <span className="text-fg">{row.component_group ?? "—"}</span>
+                )}
+              </div>
+              <div>
+                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Criticality
+                </span>
+                {isAdmin ? (
+                  <InlineEditCell
+                    value={row.criticality ?? ""}
+                    onSave={(val) =>
+                      componentFieldMutation.mutateAsync({
+                        field: "criticality",
+                        value: (val as string) || null,
+                        updated_at: row.updated_at,
+                      }) as Promise<void>
+                    }
+                    ariaLabel="Edit criticality"
+                  />
+                ) : (
+                  <span className="text-fg">{row.criticality ?? "—"}</span>
+                )}
+              </div>
+              <div>
+                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Primary supplier
+                </span>
+                {row.primary_supplier_id ? (
+                  <Link
+                    href={`/admin/masters/suppliers/${encodeURIComponent(row.primary_supplier_id)}`}
+                    className="font-mono text-xs text-accent hover:underline"
+                  >
+                    {row.primary_supplier_id}
+                  </Link>
+                ) : (
+                  <span className="text-fg-muted text-xs">—</span>
+                )}
+              </div>
+              <div>
+                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Included in planning
+                </span>
+                <span className="text-fg">{row.planned_flag ? "Yes" : "No"}</span>
+              </div>
+              <div>
+                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Planning policy
+                </span>
+                <span className="text-fg font-mono text-xs">{row.planning_policy_code ?? "—"}</span>
+              </div>
+              <div>
+                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Lead time (days)
+                </span>
+                <span className="text-fg">{row.lead_time_days ?? "—"}</span>
+              </div>
+              <div>
+                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Min. order qty
+                </span>
+                <span className="text-fg font-mono text-xs">{row.moq_purchase_uom ?? "—"}</span>
+              </div>
+            </div>
+          </SectionCard>
+
+          <details className="group">
+            <summary className="cursor-pointer select-none list-none flex items-center gap-1 text-xs text-fg-muted hover:text-fg">
+              <span className="group-open:rotate-90 inline-block transition-transform">▶</span>
+              Technical details (locked fields)
+            </summary>
+            <div className="mt-2">
+              <DetailFieldGrid rows={classLFields} />
+              <p className="mt-2 px-1 text-xs text-fg-subtle">
+                Stock unit, purchase unit, BOM unit, and conversion factor are locked — all historical balances
+                are denominated in these units. Contact a developer to change them.
+              </p>
+            </div>
+          </details>
+        </div>
+      );
     })(),
   };
 
-  const usedInBomsTab: TabDescriptor = {
-    key: "used-in-boms",
-    label: "Used in BOMs",
+  const usedInRecipesTab: TabDescriptor = {
+    key: "used-in-recipes",
+    label: "Used in recipes",
     content: (
-      <PendingTabPlaceholder
-        reason="BOM usage lookup is not yet available here. To see which products use this component, open the product BOM in the admin area."
-      />
+      <div className="p-4">
+        <UsedInRecipesPlaceholder />
+      </div>
     ),
   };
 
   const supplierItemsTab: TabDescriptor = {
     key: "supplier-items",
-    label: "Supplier items",
+    label: "Items supplied",
     badge: allSi.length > 0 ? `${allSi.length}` : undefined,
     content: (() => {
       if (supplierItemsQuery.isLoading) return <DetailTabLoading />;
       if (supplierItemsQuery.isError) {
         return (
-          <DetailTabError
-            message={(supplierItemsQuery.error as Error).message}
-          />
+          <DetailTabError message={(supplierItemsQuery.error as Error).message} />
         );
       }
       return (
@@ -379,7 +554,7 @@ export default function AdminComponentDetailPage({
             </div>
           ) : null}
           {allSi.length === 0 ? (
-            <DetailTabEmpty message="No supplier-items mapped to this component." />
+            <DetailTabEmpty message="No sourcing links for this component." />
           ) : (
             <SupplierItemsTable
               rows={allSi}
@@ -407,14 +582,12 @@ export default function AdminComponentDetailPage({
       if (supplierItemsQuery.isLoading) return <DetailTabLoading />;
       if (supplierItemsQuery.isError) {
         return (
-          <DetailTabError
-            message={(supplierItemsQuery.error as Error).message}
-          />
+          <DetailTabError message={(supplierItemsQuery.error as Error).message} />
         );
       }
       if (primarySi.length === 0) {
         return (
-          <DetailTabEmpty message="No supplier-item is flagged primary for this component." />
+          <DetailTabEmpty message="No supplier is flagged primary for this component." />
         );
       }
       return <SupplierItemsTable rows={primarySi} isAdmin={false} onFieldSave={async () => {}} onPromotePrimary={() => {}} />;
@@ -424,15 +597,12 @@ export default function AdminComponentDetailPage({
   const exceptionsTab: TabDescriptor = {
     key: "exceptions",
     label: "Exceptions",
-    badge:
-      relatedExceptions.length > 0 ? `${relatedExceptions.length}` : undefined,
+    badge: relatedExceptions.length > 0 ? `${relatedExceptions.length}` : undefined,
     content: (() => {
       if (exceptionsQuery.isLoading) return <DetailTabLoading />;
       if (exceptionsQuery.isError) {
         return (
-          <DetailTabError
-            message={(exceptionsQuery.error as Error).message}
-          />
+          <DetailTabError message={(exceptionsQuery.error as Error).message} />
         );
       }
       if (relatedExceptions.length === 0) {
@@ -444,10 +614,7 @@ export default function AdminComponentDetailPage({
         <SectionCard density="compact" contentClassName="p-0">
           <ul className="divide-y divide-border/40">
             {relatedExceptions.map((e) => (
-              <li
-                key={e.exception_id}
-                className="flex items-start gap-3 px-4 py-2 text-xs"
-              >
+              <li key={e.exception_id} className="flex items-start gap-3 px-4 py-2 text-xs">
                 <SeverityBadge severity={e.severity} />
                 <div className="min-w-0 flex-1">
                   <div className="truncate font-semibold text-fg">{e.title}</div>
@@ -459,9 +626,7 @@ export default function AdminComponentDetailPage({
                   </div>
                 </div>
                 <Link
-                  href={`/inbox?view=exceptions&exception_id=${encodeURIComponent(
-                    e.exception_id,
-                  )}`}
+                  href={`/inbox?view=exceptions&exception_id=${encodeURIComponent(e.exception_id)}`}
                   className="shrink-0 text-accent hover:underline"
                 >
                   Open
@@ -476,7 +641,7 @@ export default function AdminComponentDetailPage({
 
   const tabs: TabDescriptor[] = [
     overviewTab,
-    usedInBomsTab,
+    usedInRecipesTab,
     supplierItemsTab,
     primarySupplierTab,
     exceptionsTab,
@@ -499,18 +664,16 @@ export default function AdminComponentDetailPage({
   }
 
   linkages.push({
-    label: "All supplier-items",
+    label: "All sourcing links",
     items: allSi.slice(0, 10).map((si) => ({
       label: si.supplier_id,
       href: `/admin/masters/suppliers/${encodeURIComponent(si.supplier_id)}`,
       subtitle: si.relationship ?? undefined,
       badge: si.is_primary ? (
-        <Badge tone="success" dotted>
-          primary
-        </Badge>
+        <Badge tone="success" dotted>primary</Badge>
       ) : undefined,
     })),
-    emptyText: "No supplier-items mapped.",
+    emptyText: "No sourcing links.",
   });
 
   linkages.push({
@@ -520,11 +683,65 @@ export default function AdminComponentDetailPage({
       href: `/inbox?view=exceptions&exception_id=${encodeURIComponent(e.exception_id)}`,
       badge: <SeverityBadge severity={e.severity} />,
     })),
-    emptyText: "No open exceptions for this component.",
+    emptyText: "No open exceptions.",
   });
 
   return (
     <>
+      {/* Summary card */}
+      {row ? (
+        <MasterSummaryCard
+          name={row.component_name}
+          code={row.component_id}
+          entityType="Raw material / Packaging component"
+          status={row.status}
+          completeness={completenessItems}
+          actions={
+            isAdmin ? (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => {
+                  setDrawerStatusTarget(row.status === "ACTIVE" ? "INACTIVE" : "ACTIVE");
+                  setShowStatusDrawer(true);
+                }}
+              >
+                {row.status === "ACTIVE" ? "Archive" : "Restore"}
+              </button>
+            ) : null
+          }
+        />
+      ) : null}
+
+      {/* Archive / restore drawer */}
+      <ClassWEditDrawer
+        open={showStatusDrawer}
+        onClose={() => setShowStatusDrawer(false)}
+        title={
+          drawerStatusTarget === "INACTIVE"
+            ? "Archive this component?"
+            : "Restore this component?"
+        }
+        warning={
+          drawerStatusTarget === "INACTIVE"
+            ? "Archiving hides this raw material from active lists and excludes it from planning. Recipes that reference it still exist but this component won't appear in purchase recommendations."
+            : "Restoring sets this component back to Active. It will reappear in active lists and be included in the next planning run."
+        }
+        onSave={async () => {
+          if (!row) return;
+          await statusMutation.mutateAsync({
+            newStatus: drawerStatusTarget,
+            updated_at: row.updated_at,
+          });
+        }}
+        isSaving={statusMutation.isPending}
+        error={statusMutation.isError ? (statusMutation.error as Error).message : null}
+      >
+        <p className="text-sm text-fg-muted">
+          Current status: <strong>{row?.status}</strong>
+        </p>
+      </ClassWEditDrawer>
+
       <DetailPage
         header={{
           eyebrow: "Admin · Components",
@@ -545,7 +762,7 @@ export default function AdminComponentDetailPage({
           open={showAddSupplier}
           onClose={() => setShowAddSupplier(false)}
           onCreated={() => {
-            setEditBanner({ kind: "success", message: "Supplier-item added." });
+            setEditBanner({ kind: "success", message: "Sourcing link added." });
             void queryClient.invalidateQueries({ queryKey: siQueryKey });
           }}
           suppliers={supplierOptions}
@@ -559,8 +776,19 @@ export default function AdminComponentDetailPage({
 }
 
 // ---------------------------------------------------------------------------
-// SupplierItemsTable — inline helper (duplicated from items detail for
-// column drift independence). Promote to shared component in Tranche F.
+// UsedInRecipesPlaceholder — replaced by <UsedInRecipes> in T3
+// ---------------------------------------------------------------------------
+
+function UsedInRecipesPlaceholder() {
+  return (
+    <p className="text-sm text-fg-muted">
+      Loading recipe usage… (T3 will replace this with live data)
+    </p>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SupplierItemsTable
 // ---------------------------------------------------------------------------
 
 function SupplierItemsTable({
@@ -579,48 +807,26 @@ function SupplierItemsTable({
       <table className="w-full border-collapse text-xs">
         <thead>
           <tr className="border-b border-border/70 bg-bg-subtle/60">
-            <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              Supplier
-            </th>
-            <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              Relationship
-            </th>
-            <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              Order UoM
-            </th>
-            <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              Lead (days)
-            </th>
-            <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              MOQ
-            </th>
-            <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              Std cost
-            </th>
-            <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              Primary
-            </th>
+            <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Supplier</th>
+            <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Relationship</th>
+            <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Order unit</th>
+            <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Lead (days)</th>
+            <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">MOQ</th>
+            <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Std cost</th>
+            <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Primary</th>
           </tr>
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr
-              key={r.supplier_item_id}
-              className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
-            >
+            <tr key={r.supplier_item_id} className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40">
               <td className="px-3 py-2 font-mono text-xs text-fg">
-                <Link
-                  href={`/admin/masters/suppliers/${encodeURIComponent(r.supplier_id)}`}
-                  className="hover:text-accent"
-                >
+                <Link href={`/admin/masters/suppliers/${encodeURIComponent(r.supplier_id)}`} className="hover:text-accent">
                   {r.supplier_id}
                 </Link>
               </td>
-              <td className="px-3 py-2 text-fg-muted">
-                {r.relationship ?? "—"}
-              </td>
+              <td className="px-3 py-2 text-fg-muted">{r.relationship ?? "—"}</td>
               <td className="px-3 py-2 text-fg-muted">{r.order_uom ?? "—"}</td>
-              <td className="px-3 py-2 text-right font-mono text-xs text-fg-muted">
+              <td className="px-3 py-2 text-right font-mono text-xs text-fg-muted" title="Affects planning recommendations.">
                 {isAdmin ? (
                   <InlineEditCell
                     value={r.lead_time_days ?? ""}
@@ -628,13 +834,13 @@ function SupplierItemsTable({
                     inputMode="numeric"
                     ifMatchUpdatedAt={r.updated_at}
                     onSave={(v) => onFieldSave(r.supplier_item_id, "lead_time_days", v, r.updated_at)}
-                    ariaLabel={`Edit lead_time_days for ${r.supplier_id}`}
+                    ariaLabel={`Edit lead time for ${r.supplier_id}`}
                   />
                 ) : (
                   r.lead_time_days ?? "—"
                 )}
               </td>
-              <td className="px-3 py-2 text-right font-mono text-xs text-fg-muted">
+              <td className="px-3 py-2 text-right font-mono text-xs text-fg-muted" title="Affects planning recommendations.">
                 {isAdmin ? (
                   <InlineEditCell
                     value={r.moq ?? ""}
@@ -642,13 +848,13 @@ function SupplierItemsTable({
                     inputMode="decimal"
                     ifMatchUpdatedAt={r.updated_at}
                     onSave={(v) => onFieldSave(r.supplier_item_id, "moq", v, r.updated_at)}
-                    ariaLabel={`Edit moq for ${r.supplier_id}`}
+                    ariaLabel={`Edit MOQ for ${r.supplier_id}`}
                   />
                 ) : (
                   r.moq ?? "—"
                 )}
               </td>
-              <td className="px-3 py-2 text-right font-mono text-xs text-fg-muted">
+              <td className="px-3 py-2 text-right font-mono text-xs text-fg-muted" title="Changing standard cost affects BOM costing rollups.">
                 {isAdmin ? (
                   <InlineEditCell
                     value={r.std_cost_per_inv_uom ?? ""}
@@ -664,9 +870,7 @@ function SupplierItemsTable({
               </td>
               <td className="px-3 py-2">
                 {r.is_primary ? (
-                  <Badge tone="success" dotted>
-                    Primary
-                  </Badge>
+                  <Badge tone="success" dotted>Primary</Badge>
                 ) : isAdmin ? (
                   <button
                     type="button"
