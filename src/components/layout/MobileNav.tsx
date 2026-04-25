@@ -36,7 +36,7 @@ import { cn } from "@/lib/cn";
 
 export function MobileNav() {
   const [open, setOpen] = useState(false);
-  const { session } = useSession();
+  const { session, isLoading } = useSession();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
 
   // Close on viewport >= md.
@@ -77,7 +77,7 @@ export function MobileNav() {
     }
   }, [open]);
 
-  const displayName = session.display_name.split(" (")[0] || session.email;
+  const displayName = isLoading ? null : (session.display_name.split(" (")[0] || session.email || null);
 
   return (
     <div className="md:hidden">

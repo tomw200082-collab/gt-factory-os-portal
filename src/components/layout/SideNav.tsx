@@ -96,11 +96,31 @@ export function SideNavSkeleton() {
 }
 
 export function SideNav({ onNavigate }: { onNavigate?: () => void } = {}) {
-  const { session, isLoading } = useSession();
+  const { session, isLoading, loadError } = useSession();
   const pathname = usePathname();
   const queryClient = useQueryClient();
 
   if (isLoading) return <SideNavSkeleton />;
+
+  if (loadError) {
+    return (
+      <div className="rounded-md border border-warning/50 bg-warning-softer p-3">
+        <div className="text-[0.75rem] font-semibold text-warning-fg">
+          Session unavailable
+        </div>
+        <div className="mt-1 text-3xs text-fg-muted">
+          Could not verify your identity. Navigation is limited.
+        </div>
+        <Link
+          href="/login"
+          onClick={onNavigate}
+          className="mt-2 block text-3xs font-medium text-accent hover:underline"
+        >
+          Sign in again →
+        </Link>
+      </div>
+    );
+  }
 
   // Track which collapsible groups are expanded. Starts from defaultCollapsed
   // only — SSR-safe (no window access). Auto-expand for active path happens
