@@ -24,15 +24,7 @@ import {
   postStatus,
 } from "@/lib/admin/mutations";
 import { useSession } from "@/lib/auth/session-provider";
-
-const SUPPLY_METHOD_LABELS: Record<string, string> = {
-  MANUFACTURED: "Manufactured",
-  REPACK: "Repack",
-  BOUGHT_FINISHED: "Purchased finished",
-};
-function fmtSupplyMethod(s: string): string {
-  return SUPPLY_METHOD_LABELS[s] ?? s;
-}
+import { fmtSupplyMethod } from "@/lib/display";
 
 interface ReadinessPayload {
   is_ready: boolean;

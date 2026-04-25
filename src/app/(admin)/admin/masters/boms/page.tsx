@@ -27,6 +27,7 @@ import { AlertTriangle, ArrowUpRight, Search } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
+import { fmtSupplyMethod } from "@/lib/display";
 
 // --- Types (mirrored from upstream schemas) ------------------------------
 
@@ -294,7 +295,7 @@ function BomHeadListRow({
       <td className="px-3 py-2">
         {item ? (
           <Badge tone="info" dotted>
-            {item.supply_method}
+            {fmtSupplyMethod(item.supply_method)}
           </Badge>
         ) : (
           <Badge tone="neutral" dotted>

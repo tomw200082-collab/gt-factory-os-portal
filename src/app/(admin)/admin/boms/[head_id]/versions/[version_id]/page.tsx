@@ -70,6 +70,7 @@ import { QuickCreateComponent } from "@/components/admin/quick-create/QuickCreat
 import { InlineEditCell } from "@/components/tables/InlineEditCell";
 import { ReadinessCard } from "@/components/readiness/ReadinessCard";
 import { ReadinessPill } from "@/components/readiness/ReadinessPill";
+import { fmtSupplyMethod } from "@/lib/display";
 import {
   AdminMutationError,
   patchEntity,
@@ -708,7 +709,7 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
             </Badge>
             {item ? (
               <Badge tone="info" dotted>
-                {item.supply_method}
+                {fmtSupplyMethod(item.supply_method)}
               </Badge>
             ) : null}
             <ReadinessPill readiness={readinessQuery.data ?? null} />

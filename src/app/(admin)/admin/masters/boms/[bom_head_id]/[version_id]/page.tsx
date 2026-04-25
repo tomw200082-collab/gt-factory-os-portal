@@ -21,6 +21,7 @@
 // ---------------------------------------------------------------------------
 
 import { use, useEffect, useMemo, useState } from "react";
+import { fmtSupplyMethod } from "@/lib/display";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -244,7 +245,7 @@ export default function AdminMastersBomVersionDetailPage({
       </Badge>
       {item ? (
         <Badge tone="info" dotted>
-          {item.supply_method}
+          {fmtSupplyMethod(item.supply_method)}
         </Badge>
       ) : null}
     </>
@@ -461,10 +462,10 @@ export default function AdminMastersBomVersionDetailPage({
         {
           label: item.item_id,
           href: `/admin/masters/items/${encodeURIComponent(item.item_id)}`,
-          subtitle: `${item.item_name} · ${item.supply_method}`,
+          subtitle: `${item.item_name} · ${fmtSupplyMethod(item.supply_method)}`,
           badge: (
             <Badge tone="info" dotted>
-              {item.supply_method}
+              {fmtSupplyMethod(item.supply_method)}
             </Badge>
           ),
         },

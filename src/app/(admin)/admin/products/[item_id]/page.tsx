@@ -46,6 +46,7 @@ import {
   postStatus,
 } from "@/lib/admin/mutations";
 import { useSession } from "@/lib/auth/session-provider";
+import { fmtSupplyMethod } from "@/lib/display";
 import { cn } from "@/lib/cn";
 
 // --- Types ----------------------------------------------------------------
@@ -156,15 +157,6 @@ async function fetchJson<T>(url: string): Promise<T> {
     throw new Error(`Could not load data (HTTP ${res.status}). Check your connection and try refreshing.`);
   }
   return (await res.json()) as T;
-}
-
-const SUPPLY_METHOD_LABELS: Record<string, string> = {
-  MANUFACTURED: "Manufactured",
-  REPACK: "Repack",
-  BOUGHT_FINISHED: "Purchased finished",
-};
-function fmtSupplyMethod(s: string): string {
-  return SUPPLY_METHOD_LABELS[s] ?? s;
 }
 
 function StatusBadge({ status }: { status: string }): JSX.Element {

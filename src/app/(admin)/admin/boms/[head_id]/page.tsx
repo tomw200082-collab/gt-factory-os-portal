@@ -31,6 +31,7 @@ import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
 import { AdminMutationError } from "@/lib/admin/mutations";
 import { useSession } from "@/lib/auth/session-provider";
+import { fmtSupplyMethod } from "@/lib/display";
 
 interface BomHeadRow {
   bom_head_id: string;
@@ -233,7 +234,7 @@ export default function AdminBomHeadDetailPage({
             </Badge>
             {item ? (
               <Badge tone="info" dotted>
-                {item.supply_method}
+                {fmtSupplyMethod(item.supply_method)}
               </Badge>
             ) : null}
             <Badge tone="neutral" dotted>

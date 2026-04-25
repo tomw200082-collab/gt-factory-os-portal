@@ -21,6 +21,7 @@
 // ---------------------------------------------------------------------------
 
 import { use } from "react";
+import { fmtSupplyMethod } from "@/lib/display";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -256,7 +257,7 @@ export default function AdminItemDetailPage({
     <>
       <ItemStatusBadge status={row.status} />
       <Badge tone="neutral" dotted>
-        {row.supply_method}
+        {fmtSupplyMethod(row.supply_method)}
       </Badge>
       {row.family ? <Badge tone="neutral">{row.family}</Badge> : null}
       {row.item_type ? <Badge tone="neutral">{row.item_type}</Badge> : null}

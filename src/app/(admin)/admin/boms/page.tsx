@@ -35,6 +35,7 @@ import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
 import { ReadinessPill } from "@/components/readiness/ReadinessPill";
+import { fmtSupplyMethod } from "@/lib/display";
 
 interface BomHeadRow {
   bom_head_id: string;
@@ -234,7 +235,7 @@ function BomHeadRow({
       <td className="px-3 py-2">
         {item ? (
           <Badge tone="info" dotted>
-            {item.supply_method}
+            {fmtSupplyMethod(item.supply_method)}
           </Badge>
         ) : (
           <span className="text-3xs text-fg-subtle">—</span>

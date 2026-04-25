@@ -54,6 +54,7 @@ import { QuickCreateComponent } from "@/components/admin/quick-create/QuickCreat
 import { QuickCreateSupplierItem } from "@/components/admin/quick-create/QuickCreateSupplierItem";
 import { AdminMutationError } from "@/lib/admin/mutations";
 import { useSession } from "@/lib/auth/session-provider";
+import { fmtSupplyMethod } from "@/lib/display";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -142,15 +143,6 @@ const REQUIRED_POLICY_KEYS = [
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-const SUPPLY_METHOD_LABELS: Record<string, string> = {
-  MANUFACTURED: "Manufactured",
-  REPACK: "Repack",
-  BOUGHT_FINISHED: "Purchased finished",
-};
-function fmtSupplyMethod(s: string): string {
-  return SUPPLY_METHOD_LABELS[s] ?? s;
-}
 
 function randomIdempotencyKey(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
