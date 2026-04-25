@@ -499,7 +499,7 @@ function InboxTotalCard({
         value="—"
         tone="neutral"
         icon={<SignalIcon className="h-3 w-3" strokeWidth={2} />}
-        sub={<UnavailableBadge reason={summary.reason} />}
+        sub={<span className="text-fg-muted">{summary.reason}</span>}
         testid="dashboard-stat-inbox-total"
       />
     );
@@ -510,7 +510,7 @@ function InboxTotalCard({
         label="Inbox"
         value="—"
         tone="neutral"
-        sub={<PendingBadge note={summary.note} />}
+        sub={<span className="text-fg-muted">{summary.note}</span>}
         testid="dashboard-stat-inbox-total"
       />
     );
@@ -554,7 +554,7 @@ function CriticalExceptionsCard({
         value="—"
         tone="neutral"
         icon={<AlertOctagon className="h-3 w-3" strokeWidth={2} />}
-        sub={<UnavailableBadge reason={summary.reason} />}
+        sub={<span className="text-fg-muted">{summary.reason}</span>}
         testid="dashboard-stat-critical-exceptions"
       />
     );
@@ -566,7 +566,7 @@ function CriticalExceptionsCard({
         value="—"
         tone="neutral"
         icon={<AlertOctagon className="h-3 w-3" strokeWidth={2} />}
-        sub={<PendingBadge note={summary.note} />}
+        sub={<span className="text-fg-muted">{summary.note}</span>}
         testid="dashboard-stat-critical-exceptions"
       />
     );
@@ -622,7 +622,7 @@ function LatestPlanningRunCard({
         value="—"
         tone="neutral"
         icon={<ListChecksIcon />}
-        sub={<UnavailableBadge reason={signal.reason} />}
+        sub={<span className="text-fg-muted">{signal.reason}</span>}
         testid="dashboard-stat-latest-planning-run"
       />
     );
@@ -634,7 +634,7 @@ function LatestPlanningRunCard({
         value="—"
         tone="neutral"
         icon={<ListChecksIcon />}
-        sub={<PendingBadge note={signal.note} />}
+        sub={<span className="text-fg-muted">{signal.note}</span>}
         testid="dashboard-stat-latest-planning-run"
       />
     );
@@ -725,7 +725,7 @@ function BreakGlassCard({
         value="—"
         tone="neutral"
         icon={<ShieldAlert className="h-3 w-3" strokeWidth={2} />}
-        sub={<PendingBadge note={signal.note} />}
+        sub={<span className="text-fg-muted">{signal.note}</span>}
         testid="dashboard-stat-break-glass"
       />
     );
@@ -737,7 +737,7 @@ function BreakGlassCard({
         value="—"
         tone="neutral"
         icon={<ShieldAlert className="h-3 w-3" strokeWidth={2} />}
-        sub={<UnavailableBadge reason={signal.reason} />}
+        sub={<span className="text-fg-muted">{signal.reason}</span>}
         testid="dashboard-stat-break-glass"
       />
     );
