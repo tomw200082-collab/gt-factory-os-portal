@@ -157,7 +157,7 @@ export default function AdminSupplierDetailPage({
         ifMatchUpdatedAt: args.updated_at,
       }),
     onSuccess: (_data, vars) => {
-      setBanner({ kind: "success", message: `Updated ${vars.field}.` });
+      setBanner({ kind: "success", message: "Saved." });
       void queryClient.invalidateQueries({ queryKey: ["admin", "suppliers"] });
     },
     onError: (err: Error) => {
@@ -348,7 +348,7 @@ export default function AdminSupplierDetailPage({
 
       <SectionCard eyebrow="Overview" title="Supplier fields">
         <div className="grid grid-cols-1 gap-x-6 gap-y-3 sm:grid-cols-2">
-          <Field label="supplier_name_official">
+          <Field label="Official name">
             {isAdmin ? (
               <InlineEditCell
                 value={supplier.supplier_name_official}
@@ -366,7 +366,7 @@ export default function AdminSupplierDetailPage({
               supplier.supplier_name_official
             )}
           </Field>
-          <Field label="supplier_name_short">
+          <Field label="Short name">
             {isAdmin ? (
               <InlineEditCell
                 value={supplier.supplier_name_short ?? ""}
@@ -384,7 +384,7 @@ export default function AdminSupplierDetailPage({
               supplier.supplier_name_short ?? "—"
             )}
           </Field>
-          <Field label="primary_contact_name">
+          <Field label="Contact name">
             {isAdmin ? (
               <InlineEditCell
                 value={supplier.primary_contact_name ?? ""}
@@ -402,7 +402,7 @@ export default function AdminSupplierDetailPage({
               supplier.primary_contact_name ?? "—"
             )}
           </Field>
-          <Field label="primary_contact_phone">
+          <Field label="Contact phone">
             {isAdmin ? (
               <InlineEditCell
                 value={supplier.primary_contact_phone ?? ""}
@@ -420,7 +420,7 @@ export default function AdminSupplierDetailPage({
               supplier.primary_contact_phone ?? "—"
             )}
           </Field>
-          <Field label="payment_terms">
+          <Field label="Payment terms">
             {isAdmin ? (
               <InlineEditCell
                 value={supplier.payment_terms ?? ""}
@@ -438,7 +438,7 @@ export default function AdminSupplierDetailPage({
               supplier.payment_terms ?? "—"
             )}
           </Field>
-          <Field label="default_lead_time_days">
+          <Field label="Lead time (days)">
             {isAdmin ? (
               <InlineEditCell
                 value={supplier.default_lead_time_days ?? ""}
@@ -457,7 +457,7 @@ export default function AdminSupplierDetailPage({
               supplier.default_lead_time_days ?? "—"
             )}
           </Field>
-          <Field label="default_moq">
+          <Field label="Min order qty">
             {isAdmin ? (
               <InlineEditCell
                 value={supplier.default_moq ?? ""}
@@ -476,7 +476,7 @@ export default function AdminSupplierDetailPage({
               supplier.default_moq ?? "—"
             )}
           </Field>
-          <Field label="currency">
+          <Field label="Currency">
             {isAdmin ? (
               <InlineEditCell
                 value={supplier.currency ?? ""}

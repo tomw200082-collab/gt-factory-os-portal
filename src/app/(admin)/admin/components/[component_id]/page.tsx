@@ -197,7 +197,7 @@ export default function AdminComponentDetailPage({
         ifMatchUpdatedAt: args.updated_at,
       }),
     onSuccess: (_data, vars) => {
-      setBanner({ kind: "success", message: `Updated ${vars.field}.` });
+      setBanner({ kind: "success", message: "Saved." });
       void queryClient.invalidateQueries({ queryKey: ["admin", "components"] });
       void queryClient.invalidateQueries({
         queryKey: ["admin", "components", component_id, "readiness"],

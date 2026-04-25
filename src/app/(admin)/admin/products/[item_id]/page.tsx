@@ -1,4 +1,4 @@
-"use client";
+﻿"use client";
 
 // ---------------------------------------------------------------------------
 // Admin · Product 360 — AMMC v1 Slice 5 (crystalline-drifting-dusk §C.2
@@ -321,7 +321,7 @@ export default function AdminProduct360Page({ params }: PageProps): JSX.Element 
         ifMatchUpdatedAt: args.updated_at,
       }),
     onSuccess: (_data, vars) => {
-      setBanner({ kind: "success", message: `Updated ${vars.field}.` });
+      setBanner({ kind: "success", message: "Saved." });
       void queryClient.invalidateQueries({ queryKey: ["admin", "items"] });
       void queryClient.invalidateQueries({
         queryKey: ["admin", "items", item_id, "readiness"],

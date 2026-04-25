@@ -959,12 +959,12 @@ function Step7Review({
         eyebrow="Step 1"
       >
         <dl className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
-          <Field label="item_id" value={state.item_id ?? "(not set)"} />
-          <Field label="item_name" value={state.item_name ?? "(not set)"} />
-          <Field label="supply_method" value={state.supply_method ?? "(not set)"} />
-          <Field label="family" value={state.family ?? "—"} />
-          <Field label="sales_uom" value={state.sales_uom ?? "(not set)"} />
-          <Field label="case_pack" value={state.case_pack ?? "—"} />
+          <Field label="Item ID" value={state.item_id ?? "(not set)"} />
+          <Field label="Name" value={state.item_name ?? "(not set)"} />
+          <Field label="Supply method" value={state.supply_method ?? "(not set)"} />
+          <Field label="Family" value={state.family ?? "—"} />
+          <Field label="Sales UOM" value={state.sales_uom ?? "(not set)"} />
+          <Field label="Case pack" value={state.case_pack ?? "—"} />
         </dl>
       </SectionCard>
 

@@ -154,7 +154,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
     onSuccess: (_data, vars) => {
       setBanner({
         kind: "success",
-        message: `Updated ${vars.field} on row ${vars.supplier_item_id.slice(0, 8)}…`,
+        message: "Saved.",
       });
       void queryClient.invalidateQueries({
         queryKey: ["admin", "supplier-items"],
