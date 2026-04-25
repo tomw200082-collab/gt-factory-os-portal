@@ -23,7 +23,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronDown, Lock, LogOut } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import { useSession } from "@/lib/auth/session-provider";
 import { authorizeCapability } from "@/lib/auth/authorize";
 import {
@@ -77,16 +77,14 @@ export function SideNav({ onNavigate }: { onNavigate?: () => void } = {}) {
   const pathname = usePathname();
   const queryClient = useQueryClient();
 
-  // Track which collapsible groups are expanded. Initially: expanded if the
-  // group is not defaultCollapsed OR the active path is inside the group.
+  // Track which collapsible groups are expanded. Starts from defaultCollapsed
+  // only — SSR-safe (no window access). Auto-expand for active path happens
+  // in the useEffect below.
   const [expandedGroups, setExpandedGroups] = useState<Set<string>>(() => {
     const set = new Set<string>();
     for (const group of NAV_MANIFEST) {
       if (!group.collapsible) continue;
-      const hasActive = groupHasActivePath(group, window?.location?.pathname ?? "");
-      if (!group.defaultCollapsed || hasActive) {
-        set.add(group.title);
-      }
+      if (!group.defaultCollapsed) set.add(group.title);
     }
     return set;
   });
@@ -103,15 +101,18 @@ export function SideNav({ onNavigate }: { onNavigate?: () => void } = {}) {
     });
   }, []);
 
-  // Auto-expand a collapsible group when navigation lands inside it.
-  // This runs on every pathname change.
-  const activeGroupTitle = NAV_MANIFEST.find(
-    (g) => g.collapsible && groupHasActivePath(g, pathname),
-  )?.title;
-
-  if (activeGroupTitle && !expandedGroups.has(activeGroupTitle)) {
-    setExpandedGroups((prev) => new Set([...prev, activeGroupTitle]));
-  }
+  // Auto-expand a collapsible group when the active path is inside it.
+  // Uses a functional updater so we don't need expandedGroups in the deps.
+  useEffect(() => {
+    const activeGroup = NAV_MANIFEST.find(
+      (g) => g.collapsible && groupHasActivePath(g, pathname),
+    );
+    if (!activeGroup) return;
+    setExpandedGroups((prev) => {
+      if (prev.has(activeGroup.title)) return prev;
+      return new Set([...prev, activeGroup.title]);
+    });
+  }, [pathname]);
 
   return (
     <nav className="flex flex-col gap-4">
