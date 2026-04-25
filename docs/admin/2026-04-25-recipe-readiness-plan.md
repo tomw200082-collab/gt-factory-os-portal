@@ -187,7 +187,7 @@ export interface TrackHealth {
   color: TrackHealthColor;
   hasActiveVersion: boolean;
   lineCount: number;
-  warnings: string[]; // per-category summaries, e.g. ["2 חומרים חסרי ספק ראשי", "1 חומר עם מחיר ישן"]
+  warnings: string[]; // per-category summaries, e.g. ["2 חומרים חסרי ספק ראשי", "חומר אחד עם מחיר ישן"]
   blockers: string[]; // empty unless color is "red"
 }
 
@@ -758,7 +758,7 @@ describe("computeTrackHealth — yellow / green", () => {
     // Two distinct category summaries — supplier and price are separate buckets
     const joined = r.warnings.join(" | ");
     expect(joined).toContain("2 חומרים חסרי ספק ראשי");
-    expect(joined).toMatch(/1 חומר עם מחיר ישן/);
+    expect(joined).toMatch(/חומר אחד עם מחיר ישן/);
   });
 
   it("warnings use Hebrew singular vs plural correctly", () => {
@@ -1177,11 +1177,11 @@ describe("RecipeTrackSummary", () => {
       <RecipeTrackSummary
         trackLabel="אריזת המוצר"
         activeVersionLabel="v2"
-        health={track({ color: "yellow", warnings: ["2 חומרים חסרי ספק ראשי", "1 חומר עם מחיר ישן"] })}
+        health={track({ color: "yellow", warnings: ["2 חומרים חסרי ספק ראשי", "חומר אחד עם מחיר ישן"] })}
       />,
     );
     expect(screen.getByText("2 חומרים חסרי ספק ראשי")).toBeInTheDocument();
-    expect(screen.getByText("1 חומר עם מחיר ישן")).toBeInTheDocument();
+    expect(screen.getByText("חומר אחד עם מחיר ישן")).toBeInTheDocument();
   });
 
   it("renders blockers list when track is red", () => {
@@ -2539,7 +2539,7 @@ function mockEditorApi({
     }
     if (url.includes("/api/boms/heads")) {
       return Promise.resolve(new Response(JSON.stringify({
-        rows: [{ bom_head_id: "BH-1", item_id: "ITEM-1", item_name: "Lemon Cocktail", track: "BASE" }],
+        rows: [{ bom_head_id: "BH-1", item_id: "ITEM-1", item_name: "Lemon Cocktail", bom_kind: "BASE" }],
       }), { status: 200 }));
     }
     if (url.includes("/api/boms/versions?bom_head_id=BH-1")) {
@@ -2641,11 +2641,17 @@ interface VersionRow {
   updated_at: string;
 }
 
+// `bom_kind` is the actual schema discriminator (per
+// src/lib/contracts/enums.ts BOM_KINDS = ["BASE","PACK","REPACK"]).
+// MANUFACTURED items only ever produce BASE or PACK heads; REPACK is for
+// REPACK supply_method items and is out of scope for this corridor.
+import type { BomKind } from "@/lib/contracts/enums";
+
 interface HeadRow {
   bom_head_id: string;
   item_id: string;
   item_name: string;
-  track: "BASE" | "PACK";
+  bom_kind: BomKind;
 }
 
 export function BomDraftEditorPage({ bomHeadId, versionId }: BomDraftEditorPageProps) {
@@ -2688,7 +2694,7 @@ export function BomDraftEditorPage({ bomHeadId, versionId }: BomDraftEditorPageP
   const version = versionQuery.data;
   const head = headQuery.data;
   const lines = linesQuery.data;
-  const trackLabelEn = head.track === "BASE" ? "base formula" : "pack BOM";
+  const trackLabelEn = head.bom_kind === "BASE" ? "base formula" : "pack BOM";
   const editable = version.status === "DRAFT";
 
   return (
@@ -3893,7 +3899,7 @@ describe("BomDraftEditorPage — pip/panel sync", () => {
         return Promise.resolve(new Response(JSON.stringify({ bom_version_id: "BV-DRAFT", bom_head_id: "BH-1", version_label: "v4", status: "DRAFT", updated_at: "2026-04-25T00:00:00Z" }), { status: 200 }));
       }
       if (url.includes("/api/boms/heads")) {
-        return Promise.resolve(new Response(JSON.stringify({ rows: [{ bom_head_id: "BH-1", item_id: "ITEM-1", item_name: "Lemon Cocktail", track: "BASE" }] }), { status: 200 }));
+        return Promise.resolve(new Response(JSON.stringify({ rows: [{ bom_head_id: "BH-1", item_id: "ITEM-1", item_name: "Lemon Cocktail", bom_kind: "BASE" }] }), { status: 200 }));
       }
       if (url.includes("/api/boms/versions?bom_head_id=BH-1")) {
         return Promise.resolve(new Response(JSON.stringify({ rows: [{ bom_version_id: "BV-DRAFT", version_label: "v4", status: "DRAFT" }] }), { status: 200 }));
@@ -4812,7 +4818,7 @@ describe("PublishConfirmModal — variant B (override)", () => {
     render(
       <PublishConfirmModal
         preview={{ blocking_issues: [], warnings: [], can_publish_clean: true, can_publish_with_override: true }}
-        uiWarnings={["1 חומר עם מחיר ישן"]}
+        uiWarnings={["חומר אחד עם מחיר ישן"]}
         nextVersionLabel="v4"
         onCancel={vi.fn()}
         onConfirm={vi.fn()}
@@ -4958,7 +4964,7 @@ describe("BomDraftEditorPage — Publish flow", () => {
         return Promise.resolve(new Response(JSON.stringify({ bom_version_id: "BV-DRAFT", bom_head_id: "BH-1", version_label: "v4", status: "DRAFT", updated_at: "2026-04-25T00:00:00Z" }), { status: 200 }));
       }
       if (url.includes("/api/boms/heads")) {
-        return Promise.resolve(new Response(JSON.stringify({ rows: [{ bom_head_id: "BH-1", item_id: "ITEM-1", item_name: "Lemon Cocktail", track: "BASE" }] }), { status: 200 }));
+        return Promise.resolve(new Response(JSON.stringify({ rows: [{ bom_head_id: "BH-1", item_id: "ITEM-1", item_name: "Lemon Cocktail", bom_kind: "BASE" }] }), { status: 200 }));
       }
       if (url.includes("/api/boms/versions?bom_head_id=BH-1")) {
         return Promise.resolve(new Response(JSON.stringify({ rows: [{ bom_version_id: "BV-DRAFT", version_label: "v4", status: "DRAFT" }] }), { status: 200 }));
