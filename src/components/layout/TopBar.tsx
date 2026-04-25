@@ -35,52 +35,27 @@ export function TopBar() {
               Operations portal
             </div>
           </div>
-          <span
-            className="ml-2 hidden items-center gap-1.5 rounded-sm border border-border/70 bg-bg-subtle px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-sops text-fg-muted sm:inline-flex"
-            title="This is a shell build — no backend yet."
-          >
-            <span className="dot bg-fg-faint" />
-            Shell build
-          </span>
-        </div>
-
-        {/* Global status strip ————————————————————————————————————————— */}
-        <div className="ml-4 hidden items-center gap-3 text-3xs text-fg-muted lg:flex">
-          <span className="flex items-center gap-1.5">
-            <span className="dot bg-success" />
-            Ledger OK
-          </span>
-          <span className="text-fg-faint">·</span>
-          <span className="flex items-center gap-1.5">
-            <span className="dot bg-warning animate-pulse-soft" />
-            Jobs 2 warn
-          </span>
-          <span className="text-fg-faint">·</span>
-          <span className="flex items-center gap-1.5 font-mono">
-            v0.1.0
-          </span>
         </div>
 
         <div className="ml-auto flex items-center gap-2.5">
-          {/* Review mode button ————————————————————————————————————————— */}
-          <button
-            type="button"
-            className="btn btn-ghost gap-1.5"
-            onClick={() => setOpen(true)}
-            title="Open review-mode panel (force any screen state)"
-            aria-label="Open review-mode panel"
-          >
-            <Eye className="h-3.5 w-3.5" strokeWidth={1.75} />
-            <span className="hidden sm:inline">Review</span>
-            {forcedScreenState ? (
-              <span className="ml-0.5 rounded-xs bg-warning-soft px-1 py-px text-3xs font-semibold text-warning-fg">
-                FORCED
-              </span>
-            ) : null}
-          </button>
-
           {DEV_SHIM_ENABLED ? (
             <>
+              {/* Review mode button — dev-shim only; never renders in production */}
+              <button
+                type="button"
+                className="btn btn-ghost gap-1.5"
+                onClick={() => setOpen(true)}
+                title="Open review-mode panel (force any screen state)"
+                aria-label="Open review-mode panel"
+              >
+                <Eye className="h-3.5 w-3.5" strokeWidth={1.75} />
+                <span className="hidden sm:inline">Review</span>
+                {forcedScreenState ? (
+                  <span className="ml-0.5 rounded-xs bg-warning-soft px-1 py-px text-3xs font-semibold text-warning-fg">
+                    FORCED
+                  </span>
+                ) : null}
+              </button>
               <div className="h-6 w-px bg-border/70" aria-hidden />
 
               {/* Fake session pill — dev-shim only; never renders in production ——— */}
