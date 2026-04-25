@@ -475,7 +475,7 @@ export default function PhysicalCountPage() {
             </div>
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <label className="block sm:col-span-2">
+              <label className="block min-w-0 sm:col-span-2">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Item / component *
                 </span>
@@ -523,7 +523,7 @@ export default function PhysicalCountPage() {
                   )}
                 </select>
               </label>
-              <label className="block">
+              <label className="block min-w-0">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Item type override (optional)
                 </span>
@@ -585,7 +585,7 @@ export default function PhysicalCountPage() {
               </div>
             ) : null}
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <label className="block">
+              <label className="block min-w-0">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Event time *
                 </span>
@@ -597,7 +597,7 @@ export default function PhysicalCountPage() {
                   required
                 />
               </label>
-              <label className="block">
+              <label className="block min-w-0">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Counted quantity *
                 </span>
@@ -612,7 +612,7 @@ export default function PhysicalCountPage() {
                   required
                 />
               </label>
-              <label className="block">
+              <label className="block min-w-0">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Unit
                 </span>
@@ -628,7 +628,7 @@ export default function PhysicalCountPage() {
                   ))}
                 </select>
               </label>
-              <label className="block sm:col-span-2">
+              <label className="block min-w-0 sm:col-span-2">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Notes
                 </span>

@@ -6,7 +6,7 @@ import { SideNav } from "./SideNav";
 
 export function AppShellChrome({ children }: { children: ReactNode }) {
   return (
-    <div className="relative isolate flex min-h-screen flex-col">
+    <div className="relative isolate flex min-h-screen flex-col overflow-x-hidden">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-50 focus:rounded focus:bg-accent focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-accent-fg focus:shadow-raised"

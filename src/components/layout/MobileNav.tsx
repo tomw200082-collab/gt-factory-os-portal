@@ -31,6 +31,7 @@
 // ---------------------------------------------------------------------------
 
 import { useEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { Menu, X } from "lucide-react";
 import { SideNav } from "./SideNav";
 import { useSession } from "@/lib/auth/session-provider";
@@ -38,6 +39,16 @@ import { cn } from "@/lib/cn";
 
 export function MobileNav() {
   const [open, setOpen] = useState(false);
+  // Portal-mount guard: createPortal needs a real DOM target. Defer until
+  // mount so SSR doesn't try to portal during render. The drawer + backdrop
+  // are portaled to document.body to escape any ancestor with backdrop-filter
+  // / transform / filter (TopBar uses backdrop-blur-md), which would otherwise
+  // become the containing block for `position: fixed` descendants and trap
+  // the drawer inside the 64px-tall header.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
   const wasOpenRef = useRef(false);
   const { session, isLoading } = useSession();
   const hamburgerRef = useRef<HTMLButtonElement>(null);
@@ -107,24 +118,8 @@ export function MobileNav() {
 
   const displayName = isLoading ? null : (session.display_name.split(" (")[0] || session.email || null);
 
-  return (
-    <div className="md:hidden">
-      <button
-        ref={hamburgerRef}
-        type="button"
-        className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-border/70 bg-bg text-fg hover:bg-bg-subtle"
-        aria-label={open ? "Close navigation" : "Open navigation"}
-        aria-expanded={open}
-        aria-controls="mobile-nav-panel"
-        onClick={() => setOpen((v) => !v)}
-      >
-        {open ? (
-          <X className="h-5 w-5" strokeWidth={2} aria-hidden />
-        ) : (
-          <Menu className="h-5 w-5" strokeWidth={2} aria-hidden />
-        )}
-      </button>
-
+  const drawer = (
+    <>
       {/* Backdrop — z-[45] sits above sticky TopBar (z-40) to fully darken it */}
       <div
         className={cn(
@@ -205,6 +200,28 @@ export function MobileNav() {
           <SideNav onNavigate={() => setOpen(false)} />
         </div>
       </aside>
+    </>
+  );
+
+  return (
+    <div className="md:hidden">
+      <button
+        ref={hamburgerRef}
+        type="button"
+        className="inline-flex h-10 w-10 items-center justify-center rounded-md border border-border/70 bg-bg text-fg hover:bg-bg-subtle"
+        aria-label={open ? "Close navigation" : "Open navigation"}
+        aria-expanded={open}
+        aria-controls="mobile-nav-panel"
+        onClick={() => setOpen((v) => !v)}
+      >
+        {open ? (
+          <X className="h-5 w-5" strokeWidth={2} aria-hidden />
+        ) : (
+          <Menu className="h-5 w-5" strokeWidth={2} aria-hidden />
+        )}
+      </button>
+
+      {mounted ? createPortal(drawer, document.body) : null}
     </div>
   );
 }

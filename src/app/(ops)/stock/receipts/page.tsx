@@ -476,7 +476,7 @@ export default function GoodsReceiptPage() {
         <form onSubmit={handleSubmit} className="space-y-5">
           <SectionCard title="Receipt context">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <label className="block">
+              <label className="block min-w-0">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Event time *
                 </span>
@@ -488,7 +488,7 @@ export default function GoodsReceiptPage() {
                   required
                 />
               </label>
-              <label className="block">
+              <label className="block min-w-0">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Supplier *
                 </span>
@@ -506,7 +506,7 @@ export default function GoodsReceiptPage() {
                   ))}
                 </select>
               </label>
-              <label className="block sm:col-span-2">
+              <label className="block min-w-0 sm:col-span-2">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Reference PO (optional)
                 </span>
@@ -544,7 +544,7 @@ export default function GoodsReceiptPage() {
                   </span>
                 ) : null}
               </label>
-              <label className="block sm:col-span-2">
+              <label className="block min-w-0 sm:col-span-2">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Header notes
                 </span>
@@ -590,90 +590,110 @@ export default function GoodsReceiptPage() {
                   key={idx}
                   className="grid grid-cols-1 gap-3 rounded-md border border-border/60 p-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,2fr)_auto]"
                 >
-                  <select
-                    className="input"
-                    value={line.receivable_key}
-                    onChange={(e) => {
-                      const key = e.target.value;
-                      const row = receivableByKey.get(key);
-                      updateLine(idx, {
-                        receivable_key: key,
-                        unit: row ? row.default_uom : line.unit,
-                      });
-                    }}
-                    required
-                  >
-                    <option value="">— item or component —</option>
-                    <optgroup label="Finished Goods (items)">
-                      {filteredReceivable.filter((r) => r.kind === "item").length === 0 ? (
-                        <option value="" disabled>No items found</option>
-                      ) : (
-                        filteredReceivable
-                          .filter((r) => r.kind === "item")
-                          .map((r) => (
-                            <option
-                              key={`${r.kind}:${r.id}`}
-                              value={`${r.kind}:${r.id}`}
-                            >
-                              {r.label}
-                            </option>
-                          ))
-                      )}
-                    </optgroup>
-                    <optgroup label="Raw materials (components)">
-                      {filteredReceivable.filter((r) => r.kind === "component").length === 0 ? (
-                        <option value="" disabled>No items found</option>
-                      ) : (
-                        filteredReceivable
-                          .filter((r) => r.kind === "component")
-                          .map((r) => (
-                            <option
-                              key={`${r.kind}:${r.id}`}
-                              value={`${r.kind}:${r.id}`}
-                            >
-                              {r.label}
-                            </option>
-                          ))
-                      )}
-                    </optgroup>
-                  </select>
-                  <input
-                    type="number"
-                    inputMode="decimal"
-                    step="any"
-                    min="0"
-                    className="input"
-                    placeholder="Quantity"
-                    value={line.quantity}
-                    onChange={(e) =>
-                      updateLine(idx, { quantity: e.target.value })
-                    }
-                    required
-                  />
-                  <select
-                    className="input"
-                    value={line.unit}
-                    onChange={(e) =>
-                      updateLine(idx, { unit: e.target.value as Uom })
-                    }
-                  >
-                    {UOMS.map((u) => (
-                      <option key={u} value={u}>
-                        {u}
-                      </option>
-                    ))}
-                  </select>
-                  <input
-                    className="input"
-                    placeholder="Line notes (optional)"
-                    value={line.notes}
-                    onChange={(e) =>
-                      updateLine(idx, { notes: e.target.value })
-                    }
-                  />
+                  <label className="block min-w-0">
+                    <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle md:hidden">
+                      Item or component *
+                    </span>
+                    <select
+                      className="input"
+                      value={line.receivable_key}
+                      onChange={(e) => {
+                        const key = e.target.value;
+                        const row = receivableByKey.get(key);
+                        updateLine(idx, {
+                          receivable_key: key,
+                          unit: row ? row.default_uom : line.unit,
+                        });
+                      }}
+                      required
+                    >
+                      <option value="">— item or component —</option>
+                      <optgroup label="Finished Goods (items)">
+                        {filteredReceivable.filter((r) => r.kind === "item").length === 0 ? (
+                          <option value="" disabled>No items found</option>
+                        ) : (
+                          filteredReceivable
+                            .filter((r) => r.kind === "item")
+                            .map((r) => (
+                              <option
+                                key={`${r.kind}:${r.id}`}
+                                value={`${r.kind}:${r.id}`}
+                              >
+                                {r.label}
+                              </option>
+                            ))
+                        )}
+                      </optgroup>
+                      <optgroup label="Raw materials (components)">
+                        {filteredReceivable.filter((r) => r.kind === "component").length === 0 ? (
+                          <option value="" disabled>No items found</option>
+                        ) : (
+                          filteredReceivable
+                            .filter((r) => r.kind === "component")
+                            .map((r) => (
+                              <option
+                                key={`${r.kind}:${r.id}`}
+                                value={`${r.kind}:${r.id}`}
+                              >
+                                {r.label}
+                              </option>
+                            ))
+                        )}
+                      </optgroup>
+                    </select>
+                  </label>
+                  <label className="block min-w-0">
+                    <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle md:hidden">
+                      Quantity *
+                    </span>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="any"
+                      min="0"
+                      className="input"
+                      placeholder="Quantity"
+                      value={line.quantity}
+                      onChange={(e) =>
+                        updateLine(idx, { quantity: e.target.value })
+                      }
+                      required
+                    />
+                  </label>
+                  <label className="block min-w-0">
+                    <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle md:hidden">
+                      Unit
+                    </span>
+                    <select
+                      className="input"
+                      value={line.unit}
+                      onChange={(e) =>
+                        updateLine(idx, { unit: e.target.value as Uom })
+                      }
+                    >
+                      {UOMS.map((u) => (
+                        <option key={u} value={u}>
+                          {u}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="block min-w-0">
+                    <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle md:hidden">
+                      Line notes
+                    </span>
+                    <input
+                      className="input"
+                      placeholder="Line notes (optional)"
+                      value={line.notes}
+                      onChange={(e) =>
+                        updateLine(idx, { notes: e.target.value })
+                      }
+                    />
+                  </label>
                   <button
                     type="button"
-                    className="btn btn-ghost btn-sm"
+                    className="btn btn-ghost btn-sm md:self-end"
                     onClick={() => removeLine(idx)}
                     disabled={lines.length === 1}
                   >

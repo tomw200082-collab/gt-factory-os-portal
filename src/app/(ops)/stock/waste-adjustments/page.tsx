@@ -395,7 +395,7 @@ export default function WasteAdjustmentPage() {
 
           <SectionCard title="Adjustment">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <label className="block">
+              <label className="block min-w-0">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Event time *
                 </span>
@@ -407,7 +407,7 @@ export default function WasteAdjustmentPage() {
                   required
                 />
               </label>
-              <label className="block">
+              <label className="block min-w-0">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Item / component *
                 </span>
@@ -449,7 +449,7 @@ export default function WasteAdjustmentPage() {
                   </optgroup>
                 </select>
               </label>
-              <label className="block">
+              <label className="block min-w-0">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Quantity *
                 </span>
@@ -464,7 +464,7 @@ export default function WasteAdjustmentPage() {
                   required
                 />
               </label>
-              <label className="block">
+              <label className="block min-w-0">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Unit
                 </span>
@@ -480,7 +480,7 @@ export default function WasteAdjustmentPage() {
                   ))}
                 </select>
               </label>
-              <label className="block sm:col-span-2">
+              <label className="block min-w-0 sm:col-span-2">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Reason *
                 </span>
@@ -500,7 +500,7 @@ export default function WasteAdjustmentPage() {
                   ))}
                 </select>
               </label>
-              <label className="block sm:col-span-2">
+              <label className="block min-w-0 sm:col-span-2">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Notes {notesRequired ? "*" : ""}
                 </span>

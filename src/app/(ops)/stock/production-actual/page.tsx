@@ -557,7 +557,7 @@ export default function ProductionActualPage() {
             description="Only manufactured and repackaged items are listed. If the BOM changes after you open the form, the form will ask you to reopen before submitting."
           >
             <div className="grid grid-cols-1 gap-3">
-              <label className="block">
+              <label className="block min-w-0">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Item *
                 </span>
@@ -648,7 +648,7 @@ export default function ProductionActualPage() {
             ) : null}
 
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <label className="block">
+              <label className="block min-w-0">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Event time *
                 </span>
@@ -660,7 +660,7 @@ export default function ProductionActualPage() {
                   required
                 />
               </label>
-              <label className="block">
+              <label className="block min-w-0">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Output UoM *
                 </span>
@@ -671,7 +671,7 @@ export default function ProductionActualPage() {
                   required
                 />
               </label>
-              <label className="block">
+              <label className="block min-w-0">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Output quantity *
                 </span>
@@ -686,7 +686,7 @@ export default function ProductionActualPage() {
                   required
                 />
               </label>
-              <label className="block">
+              <label className="block min-w-0">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Scrap quantity
                 </span>
@@ -700,7 +700,7 @@ export default function ProductionActualPage() {
                   onChange={(e) => setScrapQty(e.target.value)}
                 />
               </label>
-              <label className="block sm:col-span-2">
+              <label className="block min-w-0 sm:col-span-2">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Notes
                 </span>
