@@ -343,7 +343,7 @@ function UserCard({ session }: { session: DevShimSession }) {
   const roleLabel = ROLE_LABELS[session.role] ?? session.role;
 
   return (
-    <div className="mt-4 rounded-md border border-border/60 bg-bg-subtle/60 p-3">
+    <div className="rounded-md border border-border/70 bg-bg-subtle/60 p-3">
       <div className="flex items-center gap-2.5">
         <div
           className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/15 text-[0.6875rem] font-bold text-accent"

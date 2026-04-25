@@ -26,7 +26,7 @@ export function TopBar() {
       className="sticky top-0 z-40 border-b border-border/70 bg-bg/85 backdrop-blur-md"
       style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
     >
-      <div className="mx-auto flex h-16 w-full max-w-[1440px] items-center gap-2 px-4 sm:gap-5 sm:px-8 xl:px-10">
+      <div className="mx-auto flex h-16 w-full max-w-[1440px] items-center gap-2 px-4 sm:gap-4 sm:px-8 xl:px-10">
         {/* Mobile hamburger — renders <md only ———————————————————————————— */}
         <MobileNav />
 
