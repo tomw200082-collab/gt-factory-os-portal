@@ -439,7 +439,7 @@ export default function GoodsReceiptPage() {
       <WorkflowHeader
         eyebrow="Operator form"
         title="Goods Receipt"
-        description="Record physical goods arrival. Partial receipts are valid. Dropdowns render live master data from the API."
+        description="Record physical goods arrival. Partial receipts are supported."
       />
 
       {done ? (

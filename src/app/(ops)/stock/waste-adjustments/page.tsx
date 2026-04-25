@@ -304,7 +304,7 @@ export default function WasteAdjustmentPage() {
       <WorkflowHeader
         eyebrow="Operator form"
         title="Waste / Adjustment"
-        description="Report a stock loss or positive correction. Positive corrections always route to planner approval. Dropdowns render live master data."
+        description="Report a stock loss or positive correction. Positive corrections are held for planner approval before taking effect."
       />
 
       {done ? (

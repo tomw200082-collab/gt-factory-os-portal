@@ -554,7 +554,7 @@ export default function ProductionActualPage() {
         <form onSubmit={handleOpen} className="space-y-5">
           <SectionCard
             title="Step 1 — choose what you produced"
-            description="Only MANUFACTURED and REPACK items are listed. The form pins the active BOM version at open time; if BOM changes before submit, the form will refuse and ask to re-open."
+            description="Only manufactured and repackaged items are listed. If the BOM changes after you open the form, the form will ask you to reopen before submitting."
           >
             <div className="grid grid-cols-1 gap-3">
               <label className="block">
@@ -721,7 +721,7 @@ export default function ProductionActualPage() {
 
           <SectionCard
             title="Expected consumption preview"
-            description="Informational preview computed from BOM × (output + scrap). Server re-explodes authoritatively on submit."
+            description="Estimated component usage based on the BOM and quantities entered. The final consumption is calculated at submit time."
           >
             <button
               type="button"

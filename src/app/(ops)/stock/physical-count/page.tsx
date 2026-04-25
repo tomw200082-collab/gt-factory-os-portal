@@ -420,7 +420,7 @@ export default function PhysicalCountPage() {
         <form onSubmit={handleOpen} className="space-y-5">
           <SectionCard
             title="Step 1 — choose what to count"
-            description="Opens a snapshot that freezes the expected quantity on the server. The expected quantity is never displayed."
+            description="Select the item you are about to count. The expected quantity is not shown to keep the count unbiased."
           >
             {/* ------------------------------------------------------------------
                 Search / filter — client-side only. No API calls.
