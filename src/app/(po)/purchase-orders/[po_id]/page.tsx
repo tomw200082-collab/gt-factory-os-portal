@@ -34,6 +34,9 @@ import { Badge } from "@/components/badges/StatusBadge";
 
 // --- Types (mirrors of upstream schemas) ------------------------------------
 
+// source_type and manual_reason added 2026-04-26 for manual PO creation
+// (CLAUDE.md §"PO workflow" amendment). These fields may be absent on rows
+// created before the migration; render gracefully when undefined.
 interface PurchaseOrderRow {
   po_id: string;
   po_number: string;
@@ -49,6 +52,8 @@ interface PurchaseOrderRow {
   site_id: string;
   source_run_id: string | null;
   source_recommendation_id: string | null;
+  source_type?: "recommendation" | "manual";
+  manual_reason?: string | null;
   created_by_user_id: string;
   created_by_snapshot: string;
   created_at: string;
@@ -1274,6 +1279,20 @@ export default function PurchaseOrderDetailPage({
     emptyText: "No goods receipts recorded for this PO.",
   });
 
+  // --- Manual PO banner (shown only when source_type='manual') ---------------
+  const manualBanner =
+    po?.source_type === "manual" ? (
+      <div
+        className="rounded-md border border-border bg-bg-raised px-4 py-3 text-sm text-fg-muted mb-4"
+        data-testid="po-manual-banner"
+      >
+        <span className="font-medium text-fg">נוצר ידנית</span> — לא מתוך המלצת רכש
+        {po.manual_reason && (
+          <div className="mt-1 text-fg-muted">סיבה: {po.manual_reason}</div>
+        )}
+      </div>
+    ) : null;
+
   return (
     <DetailPage
       header={{
@@ -1325,6 +1344,7 @@ export default function PurchaseOrderDetailPage({
           </div>
         ),
       }}
+      subHeader={manualBanner}
       tabs={tabs}
       linkages={linkages}
     />

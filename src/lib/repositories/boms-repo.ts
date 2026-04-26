@@ -4,6 +4,7 @@ import type {
   BomHeadDto,
   BomLineDto,
   BomVersionDto,
+  ItemDto,
 } from "@/lib/contracts/dto";
 import { bumpAudit, seedAudit } from "@/lib/fixtures/audit";
 import { getDb, STORES } from "./idb";
@@ -64,6 +65,25 @@ export class IdbBomsRepo implements BomsRepo {
     return (
       ((await db.get(STORES.boms, headId)) as BomHeadDto | undefined) ?? null
     );
+  }
+
+  // Convenience helper for the Production Simulation / BOM page UX:
+  // fetch both the PACK and BASE BOM heads referenced by an item in
+  // parallel. Either side may be null when the item does not point at
+  // that head type (e.g. BOUGHT_FINISHED items have neither).
+  async getProductBoms(item: ItemDto): Promise<{
+    pack: BomHeadDto | null;
+    base: BomHeadDto | null;
+  }> {
+    const [pack, base] = await Promise.all([
+      item.primary_bom_head_id
+        ? this.getHead(item.primary_bom_head_id)
+        : Promise.resolve(null),
+      item.base_bom_head_id
+        ? this.getHead(item.base_bom_head_id)
+        : Promise.resolve(null),
+    ]);
+    return { pack: pack ?? null, base: base ?? null };
   }
 
   async createHead(draft: Omit<BomHeadDto, "audit">): Promise<BomHeadDto> {

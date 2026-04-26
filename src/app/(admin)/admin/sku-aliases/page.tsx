@@ -25,7 +25,7 @@
 // Role gate: admin only.
 // ---------------------------------------------------------------------------
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, Suspense } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
@@ -163,7 +163,7 @@ interface NotesState {
   [externalSku: string]: string;
 }
 
-export default function AdminSkuAliasesPage(): JSX.Element {
+function AdminSkuAliasesPageInner(): JSX.Element {
   const { session } = useSession();
   const router = useRouter();
   const searchParams = useSearchParams();
@@ -822,5 +822,13 @@ export default function AdminSkuAliasesPage(): JSX.Element {
         )}
       </SectionCard>
     </>
+  );
+}
+
+export default function AdminSkuAliasesPage(): JSX.Element {
+  return (
+    <Suspense fallback={<div className="p-4 text-xs text-fg-muted">Loading…</div>}>
+      <AdminSkuAliasesPageInner />
+    </Suspense>
   );
 }

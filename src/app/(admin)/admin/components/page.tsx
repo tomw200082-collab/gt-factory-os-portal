@@ -12,20 +12,35 @@
 // (Slice 5). This keeps the slice scope tight without inventing endpoints.
 // ---------------------------------------------------------------------------
 
-import { useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Power } from "lucide-react";
+import { Pencil, Plus, Power, X } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
 import { ReadinessPill } from "@/components/readiness/ReadinessPill";
 import { QuickCreateComponent } from "@/components/admin/quick-create/QuickCreateComponent";
+import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
+import { formatQty } from "@/lib/utils/format-quantity";
 import {
   AdminMutationError,
   postStatus,
 } from "@/lib/admin/mutations";
 import { useSession } from "@/lib/auth/session-provider";
+import {
+  bomsRepo,
+  itemsRepo,
+  suppliersRepo,
+  supplierItemsRepo,
+} from "@/lib/repositories";
+import type {
+  BomLineDto,
+  ItemDto,
+  SupplierDto,
+  SupplierItemDto,
+} from "@/lib/contracts/dto";
 
 interface ComponentRow {
   component_id: string;
@@ -70,13 +85,34 @@ function StatusBadge({ status }: { status: string }): JSX.Element {
   return <Badge tone="neutral" dotted>{status}</Badge>;
 }
 
+interface UsedInRow {
+  headId: string;
+  headName: string;
+  qtyPerUnit: number;
+  uom: string;
+  bomType: string;
+}
+
 export default function AdminComponentsPage(): JSX.Element {
+  return (
+    <Suspense fallback={<div className="p-4 text-fg-muted">Loading…</div>}>
+      <ComponentsPageInner />
+    </Suspense>
+  );
+}
+
+function ComponentsPageInner(): JSX.Element {
   const { session } = useSession();
   const isAdmin = session.role === "admin";
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ACTIVE");
   const [showCreate, setShowCreate] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [showSupplierPicker, setShowSupplierPicker] = useState(false);
+  const [pendingSupplier, setPendingSupplier] = useState<string>("");
   const [banner, setBanner] = useState<
     | { kind: "success" | "error"; message: string }
     | null
@@ -123,6 +159,186 @@ export default function AdminComponentsPage(): JSX.Element {
   });
 
   const rows = componentsQuery.data?.rows ?? [];
+
+  // Pre-select via ?component=<id> on first render after rows load.
+  useEffect(() => {
+    const wanted = searchParams.get("component");
+    if (!wanted) return;
+    if (selectedId) return;
+    if (rows.some((r) => r.component_id === wanted)) {
+      setSelectedId(wanted);
+    }
+  }, [rows, searchParams, selectedId]);
+
+  const selectedComponent = useMemo(
+    () => rows.find((r) => r.component_id === selectedId) ?? null,
+    [rows, selectedId],
+  );
+
+  // Suppliers list (IDB) — used by the picker.
+  const suppliersList = useQuery<SupplierDto[]>({
+    queryKey: ["idb", "suppliers"],
+    queryFn: () => suppliersRepo.list(),
+  });
+
+  // Items list (IDB) — used to resolve product names for "Used in".
+  const itemsList = useQuery<ItemDto[]>({
+    queryKey: ["idb", "items"],
+    queryFn: () => itemsRepo.list(),
+  });
+  const itemsMap = useMemo(
+    () => new Map((itemsList.data ?? []).map((i) => [i.item_id, i])),
+    [itemsList.data],
+  );
+
+  // Primary supplier_item for the selected component (IDB).
+  const primarySupplierItemQuery = useQuery<SupplierItemDto | null>({
+    queryKey: ["idb", "supplier-items", "primary", selectedId],
+    queryFn: async () => {
+      if (!selectedId) return null;
+      const all = await supplierItemsRepo.list();
+      return (
+        all.find(
+          (s) =>
+            s.component_id === selectedId &&
+            s.is_primary === true &&
+            s.audit.active !== false,
+        ) ?? null
+      );
+    },
+    enabled: !!selectedId,
+  });
+
+  const primarySupplier = useMemo(() => {
+    const si = primarySupplierItemQuery.data;
+    if (!si) return null;
+    return (
+      suppliersList.data?.find((s) => s.supplier_id === si.supplier_id) ?? null
+    );
+  }, [primarySupplierItemQuery.data, suppliersList.data]);
+
+  // "Used in" — scan all active BOM heads' active versions for lines whose
+  // final_component_id matches selectedId. Distinct rows per head (a head's
+  // BASE vs PACK lives on separate heads, so two matches naturally surface
+  // as two rows).
+  const usedInQuery = useQuery<UsedInRow[]>({
+    queryKey: ["idb", "used-in", selectedId],
+    queryFn: async () => {
+      if (!selectedId) return [];
+      const heads = await bomsRepo.listHeads();
+      const out: UsedInRow[] = [];
+      for (const head of heads) {
+        if (!head.active_version_id) continue;
+        let lines: BomLineDto[] = [];
+        try {
+          lines = await bomsRepo.listLines(head.active_version_id);
+        } catch {
+          continue;
+        }
+        for (const line of lines) {
+          if (line.final_component_id === selectedId) {
+            const headName =
+              itemsMap.get(head.parent_ref_id ?? "")?.item_name ??
+              head.parent_name ??
+              head.display_family ??
+              "Recipe";
+            out.push({
+              headId: head.bom_head_id,
+              headName,
+              qtyPerUnit: Number(line.final_component_qty ?? 0),
+              uom: line.component_uom ?? "UNIT",
+              bomType: head.bom_kind,
+            });
+          }
+        }
+      }
+      return out;
+    },
+    enabled: !!selectedId && itemsList.isFetched,
+  });
+
+  const supplierAssignMutation = useMutation({
+    mutationFn: async (args: {
+      componentId: string;
+      newSupplierId: string;
+      existing: SupplierItemDto | null;
+    }) => {
+      const draft: Omit<SupplierItemDto, "audit"> = {
+        supplier_item_id:
+          typeof crypto !== "undefined" && "randomUUID" in crypto
+            ? crypto.randomUUID()
+            : `si_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
+        supplier_id: args.newSupplierId,
+        component_id: args.componentId,
+        item_id: null,
+        relationship: null,
+        is_primary: true,
+        order_uom: null,
+        inventory_uom: null,
+        pack_conversion: 1,
+        lead_time_days: null,
+        moq: null,
+        payment_terms: null,
+        safety_days: 0,
+        approval_status: null,
+        source_basis: "portal_admin",
+        notes: null,
+        site_id: "GTE-IL-01",
+      };
+      // Capture stable reference to existing primary BEFORE mutation.
+      const existingId = args.existing?.supplier_item_id;
+      // Create the new supplier_items row first; only on success
+      // soft-deactivate the previous primary so we never leave the
+      // component without an active supplier link.
+      const created = await supplierItemsRepo.create(draft);
+      // Deactivate old primary; if this fails, compensate by deactivating
+      // the newly-created row so we don't end with two primaries.
+      if (existingId) {
+        try {
+          await supplierItemsRepo.setActive(existingId, false);
+        } catch (err) {
+          try {
+            await supplierItemsRepo.setActive(created.supplier_item_id, false);
+          } catch (compensationErr) {
+            // Compensation failed — log and re-throw original error.
+            console.error(
+              "Compensation failed; component now has two primary suppliers",
+              compensationErr,
+            );
+          }
+          throw err;
+        }
+      }
+      return created;
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: ["idb", "supplier-items"],
+      });
+      setShowSupplierPicker(false);
+      setPendingSupplier("");
+      setBanner({
+        kind: "success",
+        message: "Primary supplier updated.",
+      });
+    },
+    onError: (err: Error) => {
+      setBanner({
+        kind: "error",
+        message: `Could not update primary supplier: ${err.message}`,
+      });
+    },
+  });
+
+  const handleSaveSupplier = () => {
+    if (!selectedComponent || !pendingSupplier) return;
+    supplierAssignMutation.mutate({
+      componentId: selectedComponent.component_id,
+      newSupplierId: pendingSupplier,
+      existing: primarySupplierItemQuery.data ?? null,
+    });
+  };
+
   const filtered = useMemo(() => {
     if (!query) return rows;
     const qLower = query.toLowerCase();
@@ -286,23 +502,22 @@ export default function AdminComponentsPage(): JSX.Element {
                 {filtered.map((r) => (
                   <tr
                     key={r.component_id}
-                    className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
+                    className={`cursor-pointer border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40 ${
+                      r.component_id === selectedId
+                        ? "bg-bg-subtle/60"
+                        : ""
+                    }`}
+                    onClick={() => {
+                      setSelectedId(r.component_id);
+                      setIsEditing(false);
+                      setShowSupplierPicker(false);
+                    }}
                   >
                     <td className="px-3 py-2 font-mono text-xs text-fg">
-                      <Link
-                        href={`/admin/masters/components/${encodeURIComponent(r.component_id)}`}
-                        className="hover:text-accent"
-                      >
-                        {r.component_id}
-                      </Link>
+                      {r.component_id}
                     </td>
                     <td className="px-3 py-2 text-fg-strong">
-                      <Link
-                        href={`/admin/masters/components/${encodeURIComponent(r.component_id)}`}
-                        className="hover:text-accent"
-                      >
-                        {r.component_name}
-                      </Link>
+                      {r.component_name}
                     </td>
                     <td className="px-3 py-2 text-xs text-fg-muted">
                       {r.component_class ?? "—"}
@@ -337,7 +552,10 @@ export default function AdminComponentsPage(): JSX.Element {
                           type="button"
                           title={`Toggle status (currently ${r.status})`}
                           className="btn btn-ghost btn-sm inline-flex items-center gap-1"
-                          onClick={() => handleToggleStatus(r)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleStatus(r);
+                          }}
                           disabled={statusMutation.isPending}
                         >
                           <Power className="h-3 w-3" strokeWidth={2} />
@@ -352,6 +570,292 @@ export default function AdminComponentsPage(): JSX.Element {
           </div>
         )}
       </SectionCard>
+
+      {selectedComponent ? (
+        <SectionCard
+          eyebrow="Component detail"
+          title={selectedComponent.component_name}
+          actions={
+            <div className="flex items-center gap-2">
+              {!isEditing ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm inline-flex items-center gap-1"
+                  onClick={() => setIsEditing(true)}
+                  title="Edit component"
+                >
+                  <Pencil className="h-3 w-3" strokeWidth={2} />
+                  Edit
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setIsEditing(false)}
+                    title="Cancel edits"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-primary btn-sm"
+                    onClick={() => {
+                      setIsEditing(false);
+                      setBanner({
+                        kind: "success",
+                        message:
+                          "Edits saved (component fields are read-only in this view; deep edits live on the master detail page).",
+                      });
+                    }}
+                  >
+                    Save
+                  </button>
+                </>
+              )}
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm inline-flex items-center gap-1"
+                onClick={() => {
+                  setSelectedId(null);
+                  setIsEditing(false);
+                  setShowSupplierPicker(false);
+                }}
+                title="Close detail"
+              >
+                <X className="h-3 w-3" strokeWidth={2} />
+                Close
+              </button>
+            </div>
+          }
+        >
+          <div className="space-y-4">
+            <Breadcrumbs
+              items={[
+                { label: "Admin", href: "/admin" },
+                { label: "Components", href: "/admin/components" },
+                { label: selectedComponent.component_name },
+              ]}
+            />
+
+            <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+              <div>
+                <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Code
+                </span>
+                <span className="font-mono text-fg">
+                  {selectedComponent.component_id}
+                </span>
+              </div>
+              <div>
+                <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Category
+                </span>
+                <span className="text-fg">
+                  {selectedComponent.component_class ?? "—"}
+                </span>
+              </div>
+              <div>
+                <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Stock unit
+                </span>
+                <span className="text-fg">
+                  {selectedComponent.inventory_uom ?? "—"}
+                </span>
+              </div>
+              <div>
+                <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Purchase unit
+                </span>
+                <span className="text-fg">
+                  {selectedComponent.purchase_uom ?? "—"}
+                </span>
+              </div>
+              <div>
+                <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Purchase → stock factor
+                </span>
+                <span className="text-fg">
+                  {formatQty(
+                    Number(selectedComponent.purchase_to_inv_factor ?? 1),
+                    "RATIO",
+                  )}
+                </span>
+              </div>
+              <div>
+                <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Lead time (days)
+                </span>
+                <span className="text-fg">
+                  {selectedComponent.lead_time_days != null
+                    ? formatQty(
+                        Number(selectedComponent.lead_time_days),
+                        "UNIT",
+                      )
+                    : "—"}
+                </span>
+              </div>
+              <div>
+                <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  MOQ (purchase UOM)
+                </span>
+                <span className="text-fg">
+                  {selectedComponent.moq_purchase_uom != null
+                    ? formatQty(
+                        Number(selectedComponent.moq_purchase_uom),
+                        selectedComponent.purchase_uom ?? "UNIT",
+                      )
+                    : "—"}
+                </span>
+              </div>
+              <div>
+                <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Order multiple
+                </span>
+                <span className="text-fg">
+                  {selectedComponent.order_multiple_purchase_uom != null
+                    ? formatQty(
+                        Number(selectedComponent.order_multiple_purchase_uom),
+                        selectedComponent.purchase_uom ?? "UNIT",
+                      )
+                    : "—"}
+                </span>
+              </div>
+            </div>
+
+            {/* Primary supplier section */}
+            <div className="border-t border-border pt-4">
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-sm font-medium text-fg-strong">
+                  Primary supplier
+                </span>
+                {!isEditing && !showSupplierPicker ? (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => {
+                      setShowSupplierPicker(true);
+                      setPendingSupplier(
+                        primarySupplierItemQuery.data?.supplier_id ?? "",
+                      );
+                    }}
+                  >
+                    {primarySupplier ? "Change" : "Assign supplier"}
+                  </button>
+                ) : null}
+              </div>
+
+              {primarySupplierItemQuery.isLoading ? (
+                <span className="text-sm text-fg-muted">Loading…</span>
+              ) : primarySupplier ? (
+                <Link
+                  href={`/admin/suppliers?supplier=${encodeURIComponent(
+                    primarySupplier.supplier_id,
+                  )}`}
+                  className="text-sm text-accent hover:underline"
+                >
+                  {primarySupplier.supplier_name_official}
+                </Link>
+              ) : (
+                <span className="text-sm text-fg-muted">
+                  No supplier assigned
+                </span>
+              )}
+
+              {showSupplierPicker ? (
+                <div className="mt-3 space-y-2">
+                  <label className="block">
+                    <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                      Select supplier
+                    </span>
+                    <select
+                      className="input w-full"
+                      value={pendingSupplier}
+                      onChange={(e) => setPendingSupplier(e.target.value)}
+                    >
+                      <option value="">Choose a supplier…</option>
+                      {(suppliersList.data ?? []).map((s) => (
+                        <option key={s.supplier_id} value={s.supplier_id}>
+                          {s.supplier_name_official}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      className="btn-primary btn-sm"
+                      onClick={handleSaveSupplier}
+                      disabled={
+                        !pendingSupplier ||
+                        supplierAssignMutation.isPending
+                      }
+                    >
+                      {supplierAssignMutation.isPending ? "Saving…" : "Save"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => {
+                        setShowSupplierPicker(false);
+                        setPendingSupplier("");
+                      }}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
+            {/* Used in section */}
+            <div className="border-t border-border pt-4">
+              {usedInQuery.isLoading ? (
+                <span className="text-sm text-fg-muted">
+                  Loading recipe usage…
+                </span>
+              ) : (
+                <>
+                  <div className="mb-2 text-sm font-medium text-fg-strong">
+                    Used in {usedInQuery.data?.length ?? 0}{" "}
+                    {(usedInQuery.data?.length ?? 0) === 1
+                      ? "product"
+                      : "products"}
+                  </div>
+                  {(usedInQuery.data?.length ?? 0) === 0 ? (
+                    <p className="text-sm text-fg-muted">
+                      Not used in any active recipe.
+                    </p>
+                  ) : (
+                    <ul className="space-y-1">
+                      {usedInQuery.data!.map((row, idx) => (
+                        <li
+                          key={`${row.headId}-${idx}`}
+                          className="flex items-center justify-between text-sm"
+                        >
+                          <Link
+                            href={`/admin/boms?head=${encodeURIComponent(
+                              row.headId,
+                            )}`}
+                            className="text-accent hover:underline"
+                          >
+                            {row.headName}
+                          </Link>
+                          <span className="ml-2 text-xs text-fg-muted">
+                            {formatQty(row.qtyPerUnit, row.uom)} {row.uom}
+                            {" · "}
+                            <span className="font-mono">{row.bomType}</span>
+                          </span>
+                        </li>
+                      ))}
+                    </ul>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </SectionCard>
+      ) : null}
 
       <QuickCreateComponent
         open={showCreate}

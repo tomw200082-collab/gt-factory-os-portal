@@ -29,7 +29,7 @@
 // referenced by those lines.
 // ---------------------------------------------------------------------------
 
-import { useMemo, useState, useEffect, use } from "react";
+import { useMemo, useState, useEffect, use, Suspense } from "react";
 import Link from "next/link";
 import { notFound, useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -190,7 +190,7 @@ interface PageProps {
   params: Promise<{ item_id: string }>;
 }
 
-export default function AdminProduct360Page({ params }: PageProps): JSX.Element {
+function AdminProduct360PageInner({ params }: PageProps): JSX.Element {
   const { item_id } = use(params);
   const { session } = useSession();
   const isAdmin = session.role === "admin";
@@ -758,6 +758,14 @@ function OverviewTab({
         </div>
       </SectionCard>
     </>
+  );
+}
+
+export default function AdminProduct360Page({ params }: PageProps): JSX.Element {
+  return (
+    <Suspense fallback={<div className="p-4 text-xs text-fg-muted">Loading…</div>}>
+      <AdminProduct360PageInner params={params} />
+    </Suspense>
   );
 }
 

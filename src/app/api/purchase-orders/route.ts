@@ -16,3 +16,20 @@ export async function GET(req: Request): Promise<Response> {
     errorLabel: "purchase-orders list",
   });
 }
+
+// ---------------------------------------------------------------------------
+// POST /api/purchase-orders — proxy to Fastify API
+//   POST /api/v1/mutations/purchase-orders
+//
+// Manual PO creation. Gated to planner/admin at the upstream handler.
+// Body is forwarded as-is; proxyRequest handles session + Bearer JWT.
+// Mirror of api/src/planning/route.ts POST /mutations/purchase-orders.
+// ---------------------------------------------------------------------------
+
+export async function POST(req: Request): Promise<Response> {
+  return proxyRequest(req, {
+    method: "POST",
+    upstreamPath: "/api/v1/mutations/purchase-orders",
+    errorLabel: "purchase-orders create",
+  });
+}

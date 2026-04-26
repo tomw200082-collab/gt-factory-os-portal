@@ -1,25 +1,25 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// Planner · Purchase Orders — read-only live view.
+// Planner · Purchase Orders — read-only live view + manual creation entry.
 //
-// Endgame Phase C2 (crystalline-drifting-dusk §B.C2):
+// Endgame Phase C2 (crystalline-drifting-dusk §B.C2) + 2026-04-26 manual-PO
+// amendment (CLAUDE.md §"PO workflow" updated to permit planner/admin manual
+// creation alongside the recommendation-bridge path):
 //   - Read-only list backed by GET /api/v1/queries/purchase-orders
 //     (via portal proxy at /api/purchase-orders).
 //   - Columns: po_number, supplier_id, status, order_date,
-//     expected_receive_date, total_net, source_recommendation_id
-//     (rendered as "from recommendation" badge when populated),
+//     expected_receive_date, total_net, source (recommendation / manual),
 //     created_at.
 //   - Status filter bar (OPEN | PARTIAL | RECEIVED | CANCELLED | all).
 //   - Sort: created_at desc (server returns in that order).
-//   - No standalone PO-creation route in v1. POs are created from
-//     approved planning recommendations via /planning/runs.
-//     "New PO (from recommendation)" button routes to /planning/runs.
-//     (CLAUDE.md §"PO workflow": no autonomous ordering; human approval
-//     before PO creation via planning engine only.)
+//   - Two PO creation paths (planner/admin only):
+//     1. "מתוך המלצת רכש" → /planning/runs (recommendation-bridge)
+//     2. "הזמנה ידנית" → /purchase-orders/new (manual creation)
+//     Operators and viewers do NOT see the creation dropdown.
 // ---------------------------------------------------------------------------
 
-import { useMemo, useState, useCallback } from "react";
+import { useMemo, useState, useCallback, useRef, useEffect } from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -28,9 +28,12 @@ import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
 import { EmptyState } from "@/components/feedback/states";
 import { cn } from "@/lib/cn";
+import { useCapability } from "@/lib/auth/role-gate";
 
 // Mirror of api/src/purchase-orders/schemas.ts. Keep byte-aligned with
 // upstream; drift is a bug.
+// source_type added 2026-04-26: 'recommendation' | 'manual' | undefined (older
+// rows may not return this field; render gracefully when undefined).
 interface PurchaseOrderRow {
   po_id: string;
   po_number: string;
@@ -46,6 +49,7 @@ interface PurchaseOrderRow {
   site_id: string;
   source_run_id: string | null;
   source_recommendation_id: string | null;
+  source_type?: "recommendation" | "manual";
   created_by_user_id: string;
   created_by_snapshot: string;
   created_at: string;
@@ -122,9 +126,102 @@ function POStatusBadge({ status }: { status: string }): JSX.Element {
   return <Badge tone="neutral">{status}</Badge>;
 }
 
+// Derive a human-readable source label from source_type.
+// source_recommendation_id is used as a fallback for pre-amendment rows that
+// don't yet carry source_type.
+function sourceLabel(row: PurchaseOrderRow): string | null {
+  if (row.source_type === "manual") return "ידני";
+  if (row.source_type === "recommendation") return "המלצת רכש";
+  // Legacy rows: infer from presence of source_recommendation_id.
+  if (row.source_recommendation_id) return "המלצת רכש";
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// New PO dropdown — planner/admin only. Two options:
+//   1. מתוך המלצת רכש → /planning/runs
+//   2. הזמנה ידנית    → /purchase-orders/new
+// ---------------------------------------------------------------------------
+function NewPoDropdown(): JSX.Element | null {
+  const canCreate = useCapability("planning:execute");
+  const [open, setOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
+  const router = useRouter();
+
+  // Close on outside click
+  useEffect(() => {
+    if (!open) return;
+    function handleClick(e: MouseEvent): void {
+      if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClick);
+    return () => document.removeEventListener("mousedown", handleClick);
+  }, [open]);
+
+  if (!canCreate) return null;
+
+  return (
+    <div className="relative" ref={menuRef}>
+      <button
+        type="button"
+        data-testid="po-list-new-po-trigger"
+        onClick={() => setOpen((v) => !v)}
+        className="inline-flex items-center gap-1.5 rounded-md border border-accent/40 bg-accent-soft px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent-soft/80 transition-colors"
+        aria-haspopup="menu"
+        aria-expanded={open}
+      >
+        + הזמנת רכש חדשה
+        <svg
+          className={cn("h-3 w-3 transition-transform", open && "rotate-180")}
+          fill="none"
+          stroke="currentColor"
+          strokeWidth={2}
+          viewBox="0 0 24 24"
+          aria-hidden
+        >
+          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
+        </svg>
+      </button>
+
+      {open && (
+        <div
+          role="menu"
+          className="absolute right-0 top-full z-20 mt-1 min-w-[220px] rounded-md border border-border bg-bg-raised shadow-lg"
+        >
+          <Link
+            href="/planning/runs"
+            role="menuitem"
+            data-testid="po-list-new-from-recommendation"
+            onClick={() => setOpen(false)}
+            className="flex items-center gap-2 px-4 py-2.5 text-sm text-fg hover:bg-bg-subtle/60 transition-colors first:rounded-t-md"
+          >
+            <span className="text-fg-muted text-xs">1.</span>
+            מתוך המלצת רכש
+          </Link>
+          <button
+            type="button"
+            role="menuitem"
+            data-testid="po-list-new-manual"
+            onClick={() => { setOpen(false); router.push("/purchase-orders/new"); }}
+            className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-fg hover:bg-bg-subtle/60 transition-colors last:rounded-b-md text-left"
+          >
+            <span className="text-fg-muted text-xs">2.</span>
+            הזמנה ידנית
+          </button>
+        </div>
+      )}
+    </div>
+  );
+}
+
 export default function PurchaseOrdersListPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  // canCreate is not used directly here — it's checked inside NewPoDropdown.
+  // We read it here so the query is available for the empty-state button.
+  const canCreate = useCapability("planning:execute");
   const initialStatuses = searchParams.getAll("status").filter(
     (s): s is POStatus => STATUS_OPTIONS.includes(s as POStatus),
   );
@@ -209,9 +306,9 @@ export default function PurchaseOrdersListPage() {
   return (
     <>
       <WorkflowHeader
-        eyebrow="Planner workspace · read-only"
-        title="Purchase orders"
-        description="Live read of private_core.purchase_orders. POs are created from the Convert-to-PO action on an approved planning recommendation."
+        eyebrow="הזמנות רכש"
+        title="הזמנות רכש"
+        description="Live read of private_core.purchase_orders. POs are created from an approved recommendation or manually by planners and admins."
         meta={
           <>
             <Badge tone="info" dotted>
@@ -220,16 +317,9 @@ export default function PurchaseOrdersListPage() {
             <Badge tone="neutral" dotted>
               live API
             </Badge>
-            {/* v1 PO workflow: recommendations-first — no standalone creation form.
-                This link routes planners to the surface where approved recs
-                are converted to POs. CLAUDE.md §"PO workflow" locked. */}
-            <Link
-              href="/planning/runs"
-              className="inline-flex items-center gap-1.5 rounded-md border border-accent/40 bg-accent-soft px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent-soft/80 transition-colors"
-              data-testid="po-list-new-from-recommendation"
-            >
-              New PO (from recommendation)
-            </Link>
+            {/* Two PO creation paths (planner/admin only): recommendation-bridge
+                and manual. NewPoDropdown renders null for operator/viewer. */}
+            <NewPoDropdown />
           </>
         }
       />
@@ -351,18 +441,18 @@ export default function PurchaseOrdersListPage() {
           </div>
         ) : filtered.length === 0 ? (
           <div className="p-5">
-            <EmptyState
-              title={
-                rows.length === 0
-                  ? "No purchase orders yet."
-                  : "No POs match the current filter."
-              }
-              description={
-                rows.length === 0
-                  ? "POs are created by clicking Convert to PO on an approved recommendation."
-                  : "Clear the filter or widen the search."
-              }
-            />
+            {rows.length === 0 ? (
+              <EmptyState
+                title="אין הזמנות רכש פתוחות"
+                description="To create a PO from a recommendation, go to planning runs."
+                action={canCreate ? <NewPoDropdown /> : undefined}
+              />
+            ) : (
+              <EmptyState
+                title="No POs match the current filter."
+                description="Clear the filter or widen the search."
+              />
+            )}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -452,13 +542,13 @@ export default function PurchaseOrdersListPage() {
                       {fmtMoney(r.total_net, r.currency)}
                     </td>
                     <td className="px-3 py-2 text-xs">
-                      {r.source_recommendation_id ? (
-                        <Badge tone="info" dotted>
-                          from recommendation
-                        </Badge>
-                      ) : (
-                        <span className="text-fg-faint">—</span>
-                      )}
+                      {(() => {
+                        const lbl = sourceLabel(r);
+                        if (!lbl) return <span className="text-fg-faint">—</span>;
+                        if (lbl === "המלצת רכש") return <Badge tone="info" dotted>המלצת רכש</Badge>;
+                        if (lbl === "ידני") return <Badge tone="warning" dotted>ידני</Badge>;
+                        return <span className="text-fg-faint">{lbl}</span>;
+                      })()}
                     </td>
                     <td className="px-3 py-2 text-xs text-fg-muted">
                       {fmtDateTime(r.created_at)}

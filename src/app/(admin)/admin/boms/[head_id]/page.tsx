@@ -25,13 +25,28 @@ import { useMemo, useState, use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
+import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
+import { Drawer } from "@/components/overlays/Drawer";
 import { AdminMutationError } from "@/lib/admin/mutations";
 import { useSession } from "@/lib/auth/session-provider";
-import { fmtSupplyMethod } from "@/lib/display";
+
+function recipeLabel(bomKind: string): string {
+  if (bomKind === "PACK") return "Pack recipe";
+  if (bomKind === "BASE") return "Liquid recipe";
+  if (bomKind === "REPACK") return "Repack recipe";
+  return "Recipe";
+}
+
+function versionDisplay(v: {
+  display_name?: string | null;
+  version_label?: string | null;
+}, fallbackIndex?: number): string {
+  return v.display_name || v.version_label || (fallbackIndex !== undefined ? `Version ${fallbackIndex}` : "Version");
+}
 
 interface BomHeadRow {
   bom_head_id: string;
@@ -49,6 +64,7 @@ interface BomVersionRow {
   bom_version_id: string;
   bom_head_id: string;
   version_label: string;
+  display_name?: string | null;
   status: string;
   created_at: string;
   activated_at: string | null;
@@ -102,6 +118,10 @@ export default function AdminBomHeadDetailPage({
     | null
   >(null);
 
+  // "Create new draft" form state (optional Version name).
+  const [newDraftDialogOpen, setNewDraftDialogOpen] = useState(false);
+  const [newDraftName, setNewDraftName] = useState("");
+
   const headsQuery = useQuery<ListEnvelope<BomHeadRow>>({
     queryKey: ["admin", "bom_head", "all"],
     queryFn: () => fetchJson("/api/boms/heads?limit=1000"),
@@ -136,12 +156,14 @@ export default function AdminBomHeadDetailPage({
   });
 
   const newDraftMutation = useMutation({
-    mutationFn: async () => {
-      const body = {
+    mutationFn: async (args: { display_name?: string } = {}) => {
+      const trimmed = args.display_name?.trim();
+      const body: Record<string, unknown> = {
         head_id,
         clone_from_version_id: head?.active_version_id ?? null,
         idempotency_key: randomIdempotencyKey(),
       };
+      if (trimmed) body.display_name = trimmed;
       const res = await fetch("/api/boms/versions", {
         method: "POST",
         headers: {
@@ -165,6 +187,8 @@ export default function AdminBomHeadDetailPage({
       void queryClient.invalidateQueries({
         queryKey: ["admin", "bom_version", "by-head", head_id],
       });
+      setNewDraftDialogOpen(false);
+      setNewDraftName("");
       if (data?.bom_version_id) {
         router.push(
           `/admin/boms/${encodeURIComponent(head_id)}/versions/${encodeURIComponent(data.bom_version_id)}`,
@@ -208,35 +232,27 @@ export default function AdminBomHeadDetailPage({
     (v) => v.bom_version_id === head.active_version_id,
   );
 
+  const productName = item?.item_name ?? head.parent_name ?? head.bom_head_id;
+
   return (
     <>
-      <div className="mb-2">
-        <Link
-          href="/admin/boms"
-          className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-sops text-fg-muted hover:text-fg"
-        >
-          <ArrowLeft className="h-3 w-3" strokeWidth={2.5} />
-          BOMs
-        </Link>
-      </div>
+      <Breadcrumbs
+        items={[
+          { label: "Admin", href: "/admin" },
+          { label: "Recipes", href: "/admin/boms" },
+          { label: productName },
+        ]}
+      />
 
       <WorkflowHeader
-        eyebrow={`Admin · BOM · ${head.bom_head_id}`}
-        title={item?.item_name ?? head.parent_name ?? head.parent_ref_id}
-        description="BOM head — version history. Create a new draft to edit lines without disturbing the active version."
+        eyebrow="Admin · Recipes"
+        title={`${productName} — ${recipeLabel(head.bom_kind)}`}
+        description="Version history for this recipe. Create a new draft to edit lines without disturbing the active version."
         meta={
           <>
-            <Badge tone="neutral" dotted>
-              {head.bom_head_id}
-            </Badge>
             <Badge tone="info" dotted>
-              {head.bom_kind}
+              {recipeLabel(head.bom_kind)}
             </Badge>
-            {item ? (
-              <Badge tone="info" dotted>
-                {fmtSupplyMethod(item.supply_method)}
-              </Badge>
-            ) : null}
             <Badge tone="neutral" dotted>
               {head.final_bom_output_qty} {head.final_bom_output_uom ?? ""}
             </Badge>
@@ -249,12 +265,13 @@ export default function AdminBomHeadDetailPage({
               className="btn-primary inline-flex items-center gap-1.5"
               onClick={() => {
                 setBanner(null);
-                newDraftMutation.mutate();
+                setNewDraftName("");
+                setNewDraftDialogOpen(true);
               }}
               disabled={newDraftMutation.isPending}
             >
               <Plus className="h-3.5 w-3.5" strokeWidth={2} />
-              {newDraftMutation.isPending ? "Creating…" : "New draft"}
+              {newDraftMutation.isPending ? "Creating…" : "Create new draft"}
             </button>
           ) : null
         }
@@ -276,18 +293,13 @@ export default function AdminBomHeadDetailPage({
         eyebrow="Active version"
         title={
           activeVersion
-            ? `v ${activeVersion.version_label}`
+            ? versionDisplay(activeVersion)
             : "No active version"
         }
         tone={activeVersion ? "success" : "warning"}
       >
         {activeVersion ? (
           <div className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
-            <Field label="Version ID">
-              <span className="font-mono text-xs">
-                {activeVersion.bom_version_id}
-              </span>
-            </Field>
             <Field label="Activated">
               {activeVersion.activated_at
                 ? new Date(activeVersion.activated_at).toLocaleString()
@@ -324,7 +336,6 @@ export default function AdminBomHeadDetailPage({
                 <tr className="border-b border-border/70 bg-bg-subtle/60">
                   <Th>Version</Th>
                   <Th>Status</Th>
-                  <Th>Version ID</Th>
                   <Th align="right">Lines</Th>
                   <Th>Created</Th>
                   <Th>Activated</Th>
@@ -332,11 +343,12 @@ export default function AdminBomHeadDetailPage({
                 </tr>
               </thead>
               <tbody>
-                {versions.map((v) => (
+                {versions.map((v, idx) => (
                   <BomVersionListRow
                     key={v.bom_version_id}
                     version={v}
                     head={head}
+                    fallbackIndex={versions.length - idx}
                   />
                 ))}
               </tbody>
@@ -344,6 +356,69 @@ export default function AdminBomHeadDetailPage({
           </div>
         )}
       </SectionCard>
+
+      {newDraftDialogOpen ? (
+        <Drawer
+          open={true}
+          onClose={() => {
+            if (newDraftMutation.isPending) return;
+            setNewDraftDialogOpen(false);
+          }}
+          title="Create new draft"
+          description={
+            head.active_version_id
+              ? "A new draft will be created by cloning the current active version. You can give it a recognizable name now or later."
+              : "A new empty draft will be created. You can give it a recognizable name now or later."
+          }
+          width="md"
+        >
+          <div className="space-y-4">
+            <div>
+              <label
+                htmlFor="new-draft-display-name"
+                className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle"
+              >
+                Version name (optional)
+              </label>
+              <input
+                id="new-draft-display-name"
+                type="text"
+                value={newDraftName}
+                onChange={(e) => setNewDraftName(e.target.value)}
+                placeholder="e.g. Initial release, Post supplier change Q2 2026"
+                className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-fg shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                disabled={newDraftMutation.isPending}
+                autoFocus
+              />
+              <p className="mt-1 text-xs text-fg-muted">
+                Helps you and others recognize this version. Leave blank to use
+                the default version number.
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-2 border-t border-border/70 pt-4">
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={newDraftMutation.isPending}
+                onClick={() => setNewDraftDialogOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={newDraftMutation.isPending}
+                onClick={() => {
+                  setBanner(null);
+                  newDraftMutation.mutate({ display_name: newDraftName });
+                }}
+              >
+                {newDraftMutation.isPending ? "Creating…" : "Create draft"}
+              </button>
+            </div>
+          </div>
+        </Drawer>
+      ) : null}
     </>
   );
 }
@@ -351,9 +426,11 @@ export default function AdminBomHeadDetailPage({
 function BomVersionListRow({
   version,
   head,
+  fallbackIndex,
 }: {
   version: BomVersionRow;
   head: BomHeadRow;
+  fallbackIndex: number;
 }): JSX.Element {
   const linesQuery = useQuery<ListEnvelope<BomLineRow>>({
     queryKey: ["admin", "bom_lines", "by-version", version.bom_version_id],
@@ -367,8 +444,8 @@ function BomVersionListRow({
 
   return (
     <tr className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40">
-      <td className="px-3 py-2 font-mono text-xs text-fg">
-        {version.version_label}
+      <td className="px-3 py-2 text-sm font-medium text-fg">
+        {versionDisplay(version, fallbackIndex)}
       </td>
       <td className="px-3 py-2">
         {isActive ? (
@@ -389,9 +466,6 @@ function BomVersionListRow({
           </Badge>
         )}
       </td>
-      <td className="px-3 py-2 text-3xs font-mono text-fg-muted">
-        {version.bom_version_id}
-      </td>
       <td className="px-3 py-2 text-right font-mono text-xs tabular-nums text-fg-muted">
         {linesQuery.isLoading
           ? "…"
@@ -410,7 +484,7 @@ function BomVersionListRow({
           href={`/admin/boms/${encodeURIComponent(head.bom_head_id)}/versions/${encodeURIComponent(version.bom_version_id)}`}
           className="btn btn-ghost btn-sm"
         >
-          {statusLower === "draft" ? "Edit" : "View"}
+          {statusLower === "draft" ? "Edit" : "Open"}
         </Link>
       </td>
     </tr>

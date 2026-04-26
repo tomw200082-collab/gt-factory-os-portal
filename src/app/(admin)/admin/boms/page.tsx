@@ -35,7 +35,15 @@ import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
 import { ReadinessPill } from "@/components/readiness/ReadinessPill";
-import { fmtSupplyMethod } from "@/lib/display";
+import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
+import { formatQty } from "@/lib/utils/format-quantity";
+
+function recipeLabel(bomKind: string): string {
+  if (bomKind === "PACK") return "Pack recipe";
+  if (bomKind === "BASE") return "Liquid recipe";
+  if (bomKind === "REPACK") return "Repack recipe";
+  return "Recipe";
+}
 
 interface BomHeadRow {
   bom_head_id: string;
@@ -111,14 +119,20 @@ export default function AdminBomsListPage(): JSX.Element {
 
   return (
     <>
+      <Breadcrumbs
+        items={[
+          { label: "Admin", href: "/admin" },
+          { label: "Recipes" },
+        ]}
+      />
       <WorkflowHeader
-        eyebrow="Admin · BOMs"
-        title="Bills of materials"
-        description="One BOM head per manufactured / repack item. Click a row to review versions or open the draft editor."
+        eyebrow="Admin · Recipes"
+        title="Recipes"
+        description="One recipe per manufactured or repack product. Click a row to review versions or open the draft editor."
         meta={
           <>
             <Badge tone="neutral" dotted>
-              {headsQuery.data?.count ?? rows.length} heads
+              {headsQuery.data?.count ?? rows.length} recipes
             </Badge>
           </>
         }
@@ -137,33 +151,32 @@ export default function AdminBomsListPage(): JSX.Element {
           <input
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Search by item name or BOM…"
+            placeholder="Search by product name…"
             className="input h-9 w-full pl-9"
           />
         </div>
       </SectionCard>
 
       <SectionCard
-        eyebrow="BOM heads"
+        eyebrow="Recipes"
         title={`${filtered.length} shown`}
         contentClassName="p-0"
       >
         {headsQuery.isLoading || itemsQuery.isLoading ? (
-          <div className="p-5 text-sm text-fg-muted">Loading BOM heads…</div>
+          <div className="p-5 text-sm text-fg-muted">Loading recipes…</div>
         ) : headsQuery.isError ? (
           <div className="p-5 text-sm text-danger-fg">
             {(headsQuery.error as Error).message}
           </div>
         ) : filtered.length === 0 ? (
-          <div className="p-5 text-sm text-fg-muted">No BOM heads match.</div>
+          <div className="p-5 text-sm text-fg-muted">No recipes match.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b border-border/70 bg-bg-subtle/60">
-                  <Th>Item</Th>
-                  <Th>BOM head</Th>
-                  <Th>Supply method</Th>
+                  <Th>Product</Th>
+                  <Th>Recipe type</Th>
                   <Th>Active version</Th>
                   <Th align="right">Lines</Th>
                   <Th>Readiness</Th>
@@ -220,26 +233,11 @@ function BomHeadRow({
         >
           {item?.item_name ?? head.parent_name ?? head.parent_ref_id}
         </Link>
-        <div className="text-3xs font-mono text-fg-subtle">
-          {head.parent_ref_id}
-        </div>
-      </td>
-      <td className="px-3 py-2 text-xs font-mono text-fg-muted">
-        <Link
-          href={`/admin/boms/${encodeURIComponent(head.bom_head_id)}`}
-          className="hover:text-accent"
-        >
-          {head.bom_head_id}
-        </Link>
       </td>
       <td className="px-3 py-2">
-        {item ? (
-          <Badge tone="info" dotted>
-            {fmtSupplyMethod(item.supply_method)}
-          </Badge>
-        ) : (
-          <span className="text-3xs text-fg-subtle">—</span>
-        )}
+        <Badge tone="info" dotted>
+          {recipeLabel(head.bom_kind)}
+        </Badge>
       </td>
       <td className="px-3 py-2">
         {activeId ? (
@@ -260,7 +258,10 @@ function BomHeadRow({
           linesQuery.isLoading ? (
             <span className="text-3xs text-fg-subtle">…</span>
           ) : (
-            (linesQuery.data?.count ?? linesQuery.data?.rows.length ?? 0)
+            formatQty(
+              linesQuery.data?.count ?? linesQuery.data?.rows.length ?? 0,
+              "UNIT",
+            )
           )
         ) : (
           "—"
