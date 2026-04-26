@@ -31,7 +31,7 @@ export interface RecDetailException {
   category: string;
   severity: string;
   detail: string | null;
-  created_at: string;
+  emitted_at: string;
 }
 
 export interface RecommendationDetailResponse {

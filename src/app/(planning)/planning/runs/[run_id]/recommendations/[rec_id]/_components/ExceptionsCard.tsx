@@ -95,7 +95,7 @@ export function ExceptionsCard({ exceptions }: ExceptionsCardProps) {
                 </div>
               ) : null}
               <div className="mt-1 text-3xs text-fg-faint tabular-nums">
-                {fmtDate(exc.created_at)}
+                {fmtDate(exc.emitted_at)}
               </div>
             </li>
           );
