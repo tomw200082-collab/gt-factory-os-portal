@@ -3,112 +3,154 @@
 import { useQuery } from "@tanstack/react-query";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
-import { bomsRepo } from "@/lib/repositories";
-import type {
-  BomHeadDto,
-  BomLineDto,
-  ItemDto,
-} from "@/lib/contracts/dto";
+import type { SimulatableProduct } from "./ProductionSimulatorShell";
 import { SimulationTable, type SimulationLine } from "./SimulationTable";
 
+// ---------------------------------------------------------------------------
+// SimulationResults — calls the live simulate endpoint for the PACK head
+// (with the target output qty) and, if a linked BASE head exists, calls
+// simulate for the BASE head with the total base liters required to produce
+// the target output. Results from both heads are merged into the existing
+// SimulationLine[] shape rendered by SimulationTable.
+//
+// The simulate endpoint returns lines that already include the math against
+// the requested quantity, so this component does not multiply on the
+// client. We rely on the server to apply qty_per_l_output and pack ratios.
+// ---------------------------------------------------------------------------
+
 interface SimulationResultsProps {
-  product: ItemDto;
+  product: SimulatableProduct;
   targetQty: number;
 }
 
-interface ResolvedBom {
-  head: BomHeadDto;
-  lines: BomLineDto[];
+interface SimulatorLine {
+  line_no: number;
+  component_id: string;
+  component_name: string;
+  component_uom: string | null;
+  base_component_qty: string;
+  unit_ratio: string;
+  required_qty: string;
+  formula: string;
+}
+
+interface SimulateResponse {
+  bom_head_id: string;
+  bom_type: string | null;
+  item_name: string | null;
+  active_version_id: string;
+  version_label: string;
+  base_output_qty: string;
+  output_uom: string | null;
+  target_qty: number;
+  math_note: string;
+  lines: SimulatorLine[];
+  warnings: string[];
+}
+
+interface SimulateError {
+  reason_code?: string;
+  detail?: string;
 }
 
 interface SimulationData {
-  pack: ResolvedBom | null;
-  base: ResolvedBom | null;
-  packMissingActiveVersion: boolean;
-  baseMissingActiveVersion: boolean;
+  pack: SimulateResponse | null;
+  base: SimulateResponse | null;
+  warnings: string[];
 }
 
-async function loadSimulationData(item: ItemDto): Promise<SimulationData> {
-  const { pack, base } = await bomsRepo.getProductBoms(item);
-
-  let packResolved: ResolvedBom | null = null;
-  let packMissingActiveVersion = false;
-  if (pack) {
-    if (pack.active_version_id) {
-      const lines = await bomsRepo.listLines(pack.active_version_id);
-      packResolved = { head: pack, lines };
-    } else {
-      packMissingActiveVersion = true;
-    }
+async function fetchSimulate(
+  headId: string,
+  qty: number,
+): Promise<SimulateResponse> {
+  const url = `/api/boms/heads/${encodeURIComponent(headId)}/simulate?qty=${qty}`;
+  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  const json = await res.json().catch(() => null);
+  if (!res.ok) {
+    const e = (json ?? {}) as SimulateError;
+    throw new Error(
+      e.detail ?? `Simulation failed for ${headId} (HTTP ${res.status}).`,
+    );
   }
-
-  let baseResolved: ResolvedBom | null = null;
-  let baseMissingActiveVersion = false;
-  if (base) {
-    if (base.active_version_id) {
-      const lines = await bomsRepo.listLines(base.active_version_id);
-      baseResolved = { head: base, lines };
-    } else {
-      baseMissingActiveVersion = true;
-    }
-  }
-
-  return {
-    pack: packResolved,
-    base: baseResolved,
-    packMissingActiveVersion,
-    baseMissingActiveVersion,
-  };
+  return json as SimulateResponse;
 }
 
-function buildSimulationLines(
-  product: ItemDto,
+async function loadSimulationData(
+  product: SimulatableProduct,
   targetQty: number,
-  data: SimulationData,
-): SimulationLine[] {
+): Promise<SimulationData> {
+  const warnings: string[] = [];
+
+  // 1. Run PACK / REPACK simulation at the requested output qty.
+  const pack = await fetchSimulate(product.packHead.bom_head_id, targetQty);
+
+  // 2. If a linked BASE head exists, compute required base liters and run
+  //    a second simulation against the BASE head. The base BOM is
+  //    typically scaled in liters — we multiply targetQty by the item's
+  //    base_fill_qty_per_unit to get total liters.
+  let base: SimulateResponse | null = null;
+  if (product.baseHead) {
+    const fillPerUnit = product.baseFillQtyPerUnit;
+    if (fillPerUnit && fillPerUnit > 0) {
+      const baseLiters = targetQty * fillPerUnit;
+      try {
+        base = await fetchSimulate(
+          product.baseHead.bom_head_id,
+          baseLiters,
+        );
+      } catch (err) {
+        warnings.push(
+          `BASE simulation failed: ${err instanceof Error ? err.message : "unknown error"}`,
+        );
+      }
+    } else {
+      warnings.push(
+        "BASE BOM is linked but base_fill_qty_per_unit is missing on the item, so BASE component requirements cannot be scaled.",
+      );
+    }
+  }
+
+  return { pack, base, warnings };
+}
+
+function buildSimulationLines(data: SimulationData): SimulationLine[] {
   const out: SimulationLine[] = [];
+  const targetQty = data.pack?.target_qty ?? 0;
 
   if (data.pack) {
     for (const line of data.pack.lines) {
-      if (line.status !== "ACTIVE") continue;
-      const componentId = line.final_component_id ?? "";
-      const componentName =
-        line.final_component_name ?? line.final_component_id ?? "(unnamed)";
-      const uom = line.component_uom ?? "UNIT";
-      const qtyPerUnit = line.final_component_qty ?? 0;
-      const requiredQty = targetQty * qtyPerUnit;
+      const requiredQty = parseFloat(line.required_qty);
+      const qtyPerUnit =
+        targetQty > 0 && Number.isFinite(requiredQty)
+          ? requiredQty / targetQty
+          : parseFloat(line.unit_ratio);
       out.push({
-        id: `pack-${line.line_id}`,
-        componentId,
-        componentName,
+        id: `pack-${data.pack.bom_head_id}-${line.line_no}`,
+        componentId: line.component_id,
+        componentName: line.component_name,
         type: "PACK",
-        qtyPerUnit,
-        requiredQty,
-        uom,
+        qtyPerUnit: Number.isFinite(qtyPerUnit) ? qtyPerUnit : 0,
+        requiredQty: Number.isFinite(requiredQty) ? requiredQty : 0,
+        uom: line.component_uom ?? "UNIT",
       });
     }
   }
 
   if (data.base) {
-    const fillPerUnit = product.base_fill_qty_per_unit ?? 0;
     for (const line of data.base.lines) {
-      if (line.status !== "ACTIVE") continue;
-      const componentId = line.final_component_id ?? "";
-      const componentName =
-        line.final_component_name ?? line.final_component_id ?? "(unnamed)";
-      const uom = line.component_uom ?? "UNIT";
-      const qtyPerL = line.qty_per_l_output ?? 0;
-      // qtyPerUnit = base liters per finished unit × ingredient qty per L of base.
-      const qtyPerUnit = fillPerUnit * qtyPerL;
-      const requiredQty = targetQty * qtyPerUnit;
+      const requiredQty = parseFloat(line.required_qty);
+      const qtyPerUnit =
+        targetQty > 0 && Number.isFinite(requiredQty)
+          ? requiredQty / targetQty
+          : parseFloat(line.unit_ratio);
       out.push({
-        id: `base-${line.line_id}`,
-        componentId,
-        componentName,
+        id: `base-${data.base.bom_head_id}-${line.line_no}`,
+        componentId: line.component_id,
+        componentName: line.component_name,
         type: "BASE",
-        qtyPerUnit,
-        requiredQty,
-        uom,
+        qtyPerUnit: Number.isFinite(qtyPerUnit) ? qtyPerUnit : 0,
+        requiredQty: Number.isFinite(requiredQty) ? requiredQty : 0,
+        uom: line.component_uom ?? "UNIT",
       });
     }
   }
@@ -120,7 +162,6 @@ function buildSimulationLines(
 // StockCoveragePanel — placeholder. The portal sandbox does not yet expose a
 // stock-projection repo (no projection / stock-balance store under
 // src/lib/repositories). Wire-up is deferred until that repo lands.
-// TODO: replace with real coverage once a stock projection repo exists.
 // ---------------------------------------------------------------------------
 function StockCoveragePanel() {
   return (
@@ -139,19 +180,19 @@ export function SimulationResults({
   const dataQuery = useQuery<SimulationData>({
     queryKey: [
       "production-simulation",
-      "boms",
-      product.item_id,
-      product.primary_bom_head_id,
-      product.base_bom_head_id,
+      "simulate",
+      product.packHead.bom_head_id,
+      product.baseHead?.bom_head_id ?? null,
+      targetQty,
     ],
-    queryFn: () => loadSimulationData(product),
-    staleTime: 60_000,
+    queryFn: () => loadSimulationData(product, targetQty),
+    staleTime: 30_000,
   });
 
   if (dataQuery.isLoading) {
     return (
       <SectionCard>
-        <div className="text-xs text-fg-muted">Loading recipe…</div>
+        <div className="text-xs text-fg-muted">Running simulation…</div>
       </SectionCard>
     );
   }
@@ -160,49 +201,32 @@ export function SimulationResults({
     return (
       <SectionCard>
         <div className="text-xs text-danger-fg">
-          Could not load BOM data for this product. Try refreshing.
+          {dataQuery.error instanceof Error
+            ? dataQuery.error.message
+            : "Could not load BOM data for this product. Try refreshing."}
         </div>
       </SectionCard>
     );
   }
 
   const data = dataQuery.data!;
-  const lines = buildSimulationLines(product, targetQty, data);
+  const lines = buildSimulationLines(data);
 
   const hasPack = !!data.pack;
   const hasBase = !!data.base;
-  const baseMissingFill =
-    hasBase &&
-    (product.base_fill_qty_per_unit === null ||
-      product.base_fill_qty_per_unit === 0);
+  const hasLinkedBase = !!product.baseHead;
 
-  const notices: string[] = [];
-  if (!hasPack && !hasBase) {
+  const notices: string[] = [...data.warnings];
+  if (data.pack && data.pack.warnings.length > 0) {
+    notices.push(...data.pack.warnings);
+  }
+  if (data.base && data.base.warnings.length > 0) {
+    notices.push(...data.base.warnings);
+  }
+  if (hasPack && !hasLinkedBase) {
     notices.push(
-      "This product has no active BOM. Check the BOM module to link or activate one.",
+      "PACK-only recipe — no BASE liquid mix is linked to this product.",
     );
-  } else {
-    if (hasPack && !hasBase) {
-      notices.push("PACK-only recipe — no BASE liquid mix is linked.");
-    }
-    if (hasBase && !hasPack) {
-      notices.push("BASE-only recipe — no PACK packaging BOM is linked.");
-    }
-    if (data.packMissingActiveVersion) {
-      notices.push(
-        "PACK BOM is linked but has no active version. Activate a draft to include PACK lines.",
-      );
-    }
-    if (data.baseMissingActiveVersion) {
-      notices.push(
-        "BASE BOM is linked but has no active version. Activate a draft to include BASE lines.",
-      );
-    }
-    if (baseMissingFill) {
-      notices.push(
-        "BASE recipe info incomplete — base_fill_qty_per_unit is missing on this item, so BASE lines cannot be scaled.",
-      );
-    }
   }
 
   return (
@@ -210,7 +234,7 @@ export function SimulationResults({
       <SectionCard
         eyebrow="Results"
         title={`Component requirements for ${targetQty.toLocaleString()} units`}
-        description={`Combined BASE + PACK requirements for ${product.item_name}.`}
+        description={`Combined BASE + PACK requirements for ${product.displayName}.`}
         actions={
           <div className="flex flex-wrap gap-1.5">
             {hasPack ? (
