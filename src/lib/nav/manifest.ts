@@ -210,7 +210,7 @@ export const NAV_MANIFEST: NavGroup[] = [
       },
       {
         href: "/planning/inventory-flow",
-        label: "מלאי יומי",
+        label: "Inventory Flow",
         icon: CalendarDays,
         min_role: "viewer",
         required_capability: "planning:read",
