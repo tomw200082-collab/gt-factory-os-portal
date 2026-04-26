@@ -202,8 +202,8 @@ export const NAV_MANIFEST: NavGroup[] = [
         required_capability: "planning:read",
       },
       {
-        href: "/planning/boms",
-        label: "BOM Simulation",
+        href: "/planning/production-simulation",
+        label: "Production Simulation",
         icon: Network,
         min_role: "viewer",
         required_capability: "planning:read",
