@@ -53,7 +53,6 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
-  ArrowLeft,
   Plus,
   Trash2,
   Replace,
@@ -63,6 +62,7 @@ import {
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
+import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { Drawer } from "@/components/overlays/Drawer";
 import { EntityPickerPlus } from "@/components/fields/EntityPickerPlus";
 import type { EntityOption } from "@/components/fields/EntitySearchSelect";
@@ -70,7 +70,21 @@ import { QuickCreateComponent } from "@/components/admin/quick-create/QuickCreat
 import { InlineEditCell } from "@/components/tables/InlineEditCell";
 import { ReadinessCard } from "@/components/readiness/ReadinessCard";
 import { ReadinessPill } from "@/components/readiness/ReadinessPill";
-import { fmtSupplyMethod } from "@/lib/display";
+import { formatQty } from "@/lib/utils/format-quantity";
+
+function recipeLabel(bomKind: string): string {
+  if (bomKind === "PACK") return "Pack recipe";
+  if (bomKind === "BASE") return "Liquid recipe";
+  if (bomKind === "REPACK") return "Repack recipe";
+  return "Recipe";
+}
+
+function versionDisplay(v: {
+  display_name?: string | null;
+  version_label?: string | null;
+}, fallbackIndex?: number): string {
+  return v.display_name || v.version_label || (fallbackIndex !== undefined ? `Version ${fallbackIndex}` : "Version");
+}
 import {
   AdminMutationError,
   patchEntity,
@@ -96,6 +110,7 @@ interface BomVersionRow {
   bom_version_id: string;
   bom_head_id: string;
   version_label: string;
+  display_name?: string | null;
   status: string;
   created_at: string;
   activated_at: string | null;
@@ -111,6 +126,7 @@ interface BomLineRow {
   final_component_qty: string;
   component_uom: string | null;
   qty_per_l_output: string | null;
+  status?: string;
   updated_at: string;
 }
 
@@ -554,7 +570,7 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
     onSuccess: () => {
       setBanner({
         kind: "success",
-        message: `Published v${version?.version_label ?? ""}. This version is now active.`,
+        message: `Published ${version?.display_name || version?.version_label || "version"}. This version is now active.`,
       });
       setPublishDialogOpen(false);
       setPublishOverrideChecked(false);
@@ -660,6 +676,18 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
   }
 
   const isActive = head.active_version_id === version.bom_version_id;
+
+  // Stable version display name. Sort all versions for this head by created_at
+  // ascending so older versions get smaller numbers (Version 1, Version 2, …).
+  const sortedAsc = (versionsQuery.data?.rows ?? [])
+    .slice()
+    .sort(
+      (a, b) =>
+        new Date(a.created_at).getTime() - new Date(b.created_at).getTime(),
+    );
+  const versionIndex = sortedAsc.findIndex((v) => v.bom_version_id === version.bom_version_id);
+  const versionLabel = versionDisplay(version, versionIndex >= 0 ? versionIndex + 1 : undefined);
+
   const statusTone =
     statusLower === "active" || isActive
       ? "success"
@@ -679,25 +707,27 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
 
   return (
     <>
-      <div className="mb-2">
-        <Link
-          href={`/admin/boms/${encodeURIComponent(head_id)}`}
-          className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-sops text-fg-muted hover:text-fg"
-        >
-          <ArrowLeft className="h-3 w-3" strokeWidth={2.5} />
-          {item?.item_name ?? head.parent_name ?? head.parent_ref_id} · versions
-        </Link>
-      </div>
+      <Breadcrumbs
+        items={[
+          { label: "Admin", href: "/admin" },
+          { label: "Recipes", href: "/admin/boms" },
+          {
+            label: item?.item_name ?? head.parent_name ?? head.bom_head_id,
+            href: `/admin/boms/${encodeURIComponent(head_id)}`,
+          },
+          { label: versionLabel },
+        ]}
+      />
 
       <WorkflowHeader
-        eyebrow={`Admin · BOM · ${item?.item_id ?? head.parent_name ?? head.parent_ref_id} · ${head.bom_head_id}`}
-        title={`BOM v${version.version_label}`}
+        eyebrow="Admin · Recipes"
+        title={`${item?.item_name ?? head.parent_name ?? head.bom_head_id} — ${recipeLabel(head.bom_kind)}`}
         description={
           isDraft
-            ? "Draft version — edit lines freely. Publishing will supersede the current active version."
+            ? `${versionLabel} · draft — edit lines freely. Publishing will supersede the current active version.`
             : isActive
-              ? "This is the active version of the BOM. Read-only here; create a new draft on the head page to edit."
-              : "Superseded version — read-only history record."
+              ? `${versionLabel} · active — read-only. Create a new draft to edit.`
+              : `${versionLabel} · superseded — read-only history record.`
         }
         meta={
           <>
@@ -705,13 +735,11 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
               {statusLabel}
             </Badge>
             <Badge tone="neutral" dotted>
+              {versionLabel}
+            </Badge>
+            <Badge tone="neutral" dotted>
               {lines.length} line{lines.length === 1 ? "" : "s"}
             </Badge>
-            {item ? (
-              <Badge tone="info" dotted>
-                {fmtSupplyMethod(item.supply_method)}
-              </Badge>
-            ) : null}
             <ReadinessPill readiness={readinessQuery.data ?? null} />
           </>
         }
@@ -738,7 +766,7 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
               <Plus className="h-3.5 w-3.5" strokeWidth={2} />
               {newDraftFromThisMutation.isPending
                 ? "Creating…"
-                : "Create draft from this version"}
+                : "Create new draft"}
             </button>
           ) : null
         }
@@ -746,15 +774,21 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
 
       {!isDraft ? (
         <div className="rounded-md border border-info/40 bg-info-softer p-3 text-sm text-info-fg">
-          This version is {isActive ? "active" : "superseded"} — read-only. To
-          edit, create a new draft from the{" "}
-          <Link
-            href={`/admin/boms/${encodeURIComponent(head_id)}`}
-            className="font-semibold underline decoration-info/60 underline-offset-2"
-          >
-            version history page
-          </Link>
-          .
+          This version is {isActive ? "active" : "superseded"} — read-only.{" "}
+          {isActive
+            ? "Use “Create new draft” above to edit."
+            : (
+              <>
+                Open the{" "}
+                <Link
+                  href={`/admin/boms/${encodeURIComponent(head_id)}`}
+                  className="font-semibold underline decoration-info/60 underline-offset-2"
+                >
+                  version history
+                </Link>{" "}
+                to create a new draft.
+              </>
+            )}
         </div>
       ) : null}
 
@@ -1042,19 +1076,10 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
           onClose={() => {
             if (!publishing) setPublishDialogOpen(false);
           }}
-          title={`Publish v${version.version_label}?`}
+          title={`Publish ${versionLabel}?`}
           description={
             preview.can_publish_clean
-              ? `This will supersede v${
-                  activeVersionId &&
-                  (versionsQuery.data?.rows ?? []).find(
-                    (v) => v.bom_version_id === activeVersionId,
-                  )?.version_label
-                    ? (versionsQuery.data?.rows ?? []).find(
-                        (v) => v.bom_version_id === activeVersionId,
-                      )!.version_label
-                    : "the current active version"
-                } and activate this version immediately.`
+              ? "This will supersede the current active version and activate this version immediately."
               : "Review the preflight checks below before publishing."
           }
           width="lg"
@@ -1229,14 +1254,6 @@ function PublishButton({
   );
 }
 
-function formatRate(raw: string | null | undefined): string {
-  if (!raw) return "—";
-  const n = parseFloat(raw);
-  if (isNaN(n)) return "—";
-  // show up to 6 significant digits, strip trailing zeros
-  return n.toPrecision(6).replace(/\.?0+$/, "");
-}
-
 function BomLineEditorRow({
   line,
   component,
@@ -1263,10 +1280,12 @@ function BomLineEditorRow({
       <td className="px-3 py-2">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
-            <div className="font-medium text-fg">{componentName}</div>
-            <div className="text-3xs font-mono text-fg-subtle">
-              {line.final_component_id}
-            </div>
+            <Link
+              href={`/admin/components?component=${encodeURIComponent(line.final_component_id)}`}
+              className="font-medium text-primary hover:underline"
+            >
+              {componentName}
+            </Link>
           </div>
           {editMode ? (
             <button
@@ -1293,12 +1312,12 @@ function BomLineEditorRow({
             }}
           />
         ) : (
-          line.final_component_qty
+          formatQty(parseFloat(line.final_component_qty) || 0, unit ?? "UNIT")
         )}
       </td>
       <td className="px-3 py-2 text-right font-mono text-xs tabular-nums text-fg-subtle"
           title={line.qty_per_l_output ? `${line.qty_per_l_output} per 1 unit of output` : "Rate not yet computed"}>
-        {formatRate(line.qty_per_l_output)}
+        {line.qty_per_l_output ? formatQty(parseFloat(line.qty_per_l_output) || 0, unit ?? "UNIT") : "—"}
       </td>
       <td className="px-3 py-2 text-xs text-fg-muted">{unit}</td>
       <td className="px-3 py-2">

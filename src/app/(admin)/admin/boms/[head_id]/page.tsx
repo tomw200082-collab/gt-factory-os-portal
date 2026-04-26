@@ -25,13 +25,27 @@ import { useMemo, useState, use } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowLeft, Plus } from "lucide-react";
+import { Plus } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
+import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { AdminMutationError } from "@/lib/admin/mutations";
 import { useSession } from "@/lib/auth/session-provider";
-import { fmtSupplyMethod } from "@/lib/display";
+
+function recipeLabel(bomKind: string): string {
+  if (bomKind === "PACK") return "Pack recipe";
+  if (bomKind === "BASE") return "Liquid recipe";
+  if (bomKind === "REPACK") return "Repack recipe";
+  return "Recipe";
+}
+
+function versionDisplay(v: {
+  display_name?: string | null;
+  version_label?: string | null;
+}, fallbackIndex?: number): string {
+  return v.display_name || v.version_label || (fallbackIndex !== undefined ? `Version ${fallbackIndex}` : "Version");
+}
 
 interface BomHeadRow {
   bom_head_id: string;
@@ -49,6 +63,7 @@ interface BomVersionRow {
   bom_version_id: string;
   bom_head_id: string;
   version_label: string;
+  display_name?: string | null;
   status: string;
   created_at: string;
   activated_at: string | null;
@@ -208,35 +223,27 @@ export default function AdminBomHeadDetailPage({
     (v) => v.bom_version_id === head.active_version_id,
   );
 
+  const productName = item?.item_name ?? head.parent_name ?? head.bom_head_id;
+
   return (
     <>
-      <div className="mb-2">
-        <Link
-          href="/admin/boms"
-          className="inline-flex items-center gap-1 text-xs font-semibold uppercase tracking-sops text-fg-muted hover:text-fg"
-        >
-          <ArrowLeft className="h-3 w-3" strokeWidth={2.5} />
-          BOMs
-        </Link>
-      </div>
+      <Breadcrumbs
+        items={[
+          { label: "Admin", href: "/admin" },
+          { label: "Recipes", href: "/admin/boms" },
+          { label: productName },
+        ]}
+      />
 
       <WorkflowHeader
-        eyebrow={`Admin · BOM · ${head.bom_head_id}`}
-        title={item?.item_name ?? head.parent_name ?? head.parent_ref_id}
-        description="BOM head — version history. Create a new draft to edit lines without disturbing the active version."
+        eyebrow="Admin · Recipes"
+        title={`${productName} — ${recipeLabel(head.bom_kind)}`}
+        description="Version history for this recipe. Create a new draft to edit lines without disturbing the active version."
         meta={
           <>
-            <Badge tone="neutral" dotted>
-              {head.bom_head_id}
-            </Badge>
             <Badge tone="info" dotted>
-              {head.bom_kind}
+              {recipeLabel(head.bom_kind)}
             </Badge>
-            {item ? (
-              <Badge tone="info" dotted>
-                {fmtSupplyMethod(item.supply_method)}
-              </Badge>
-            ) : null}
             <Badge tone="neutral" dotted>
               {head.final_bom_output_qty} {head.final_bom_output_uom ?? ""}
             </Badge>
@@ -254,7 +261,7 @@ export default function AdminBomHeadDetailPage({
               disabled={newDraftMutation.isPending}
             >
               <Plus className="h-3.5 w-3.5" strokeWidth={2} />
-              {newDraftMutation.isPending ? "Creating…" : "New draft"}
+              {newDraftMutation.isPending ? "Creating…" : "Create new draft"}
             </button>
           ) : null
         }
@@ -276,18 +283,13 @@ export default function AdminBomHeadDetailPage({
         eyebrow="Active version"
         title={
           activeVersion
-            ? `v ${activeVersion.version_label}`
+            ? versionDisplay(activeVersion)
             : "No active version"
         }
         tone={activeVersion ? "success" : "warning"}
       >
         {activeVersion ? (
           <div className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
-            <Field label="Version ID">
-              <span className="font-mono text-xs">
-                {activeVersion.bom_version_id}
-              </span>
-            </Field>
             <Field label="Activated">
               {activeVersion.activated_at
                 ? new Date(activeVersion.activated_at).toLocaleString()
@@ -324,7 +326,6 @@ export default function AdminBomHeadDetailPage({
                 <tr className="border-b border-border/70 bg-bg-subtle/60">
                   <Th>Version</Th>
                   <Th>Status</Th>
-                  <Th>Version ID</Th>
                   <Th align="right">Lines</Th>
                   <Th>Created</Th>
                   <Th>Activated</Th>
@@ -332,11 +333,12 @@ export default function AdminBomHeadDetailPage({
                 </tr>
               </thead>
               <tbody>
-                {versions.map((v) => (
+                {versions.map((v, idx) => (
                   <BomVersionListRow
                     key={v.bom_version_id}
                     version={v}
                     head={head}
+                    fallbackIndex={versions.length - idx}
                   />
                 ))}
               </tbody>
@@ -351,9 +353,11 @@ export default function AdminBomHeadDetailPage({
 function BomVersionListRow({
   version,
   head,
+  fallbackIndex,
 }: {
   version: BomVersionRow;
   head: BomHeadRow;
+  fallbackIndex: number;
 }): JSX.Element {
   const linesQuery = useQuery<ListEnvelope<BomLineRow>>({
     queryKey: ["admin", "bom_lines", "by-version", version.bom_version_id],
@@ -367,8 +371,8 @@ function BomVersionListRow({
 
   return (
     <tr className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40">
-      <td className="px-3 py-2 font-mono text-xs text-fg">
-        {version.version_label}
+      <td className="px-3 py-2 text-sm font-medium text-fg">
+        {versionDisplay(version, fallbackIndex)}
       </td>
       <td className="px-3 py-2">
         {isActive ? (
@@ -389,9 +393,6 @@ function BomVersionListRow({
           </Badge>
         )}
       </td>
-      <td className="px-3 py-2 text-3xs font-mono text-fg-muted">
-        {version.bom_version_id}
-      </td>
       <td className="px-3 py-2 text-right font-mono text-xs tabular-nums text-fg-muted">
         {linesQuery.isLoading
           ? "…"
@@ -410,7 +411,7 @@ function BomVersionListRow({
           href={`/admin/boms/${encodeURIComponent(head.bom_head_id)}/versions/${encodeURIComponent(version.bom_version_id)}`}
           className="btn btn-ghost btn-sm"
         >
-          {statusLower === "draft" ? "Edit" : "View"}
+          {statusLower === "draft" ? "Edit" : "Open"}
         </Link>
       </td>
     </tr>
