@@ -274,6 +274,13 @@ export interface BomHeadDto {
   review_flag: string | null;
   owner_notes: string | null;
 
+  // Optional discriminator for Production Simulation / BOM page UX —
+  // 'pack' (final pack BOM, referenced by items.primary_bom_head_id) vs
+  // 'base' (base-mix BOM, referenced by items.base_bom_head_id). Optional
+  // because pre-existing fixtures and the locked SQL schema do not yet
+  // carry this column; consumers must tolerate undefined.
+  bom_type?: "pack" | "base";
+
   site_id: string;
   audit: AuditMeta;
 }
@@ -312,6 +319,12 @@ export interface BomVersionDto {
 
   source_basis: string | null;
   notes: string | null;
+
+  // Optional human-friendly label for the Production Simulation / BOM
+  // page UX (e.g. "V3 — 2026-04 cost refresh"). Optional because the
+  // locked SQL schema does not carry this column; consumers must
+  // tolerate undefined and fall back to version_label.
+  display_name?: string;
 
   site_id: string;
 }
