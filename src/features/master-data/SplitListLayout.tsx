@@ -1,4 +1,6 @@
-import type { ReactNode } from "react";
+"use client";
+
+import { useEffect, type ReactNode } from "react";
 import { cn } from "@/lib/cn";
 
 interface SplitListLayoutProps {
@@ -7,6 +9,12 @@ interface SplitListLayoutProps {
   detailPlaceholder?: ReactNode;
   isDetailOpen: boolean;
   className?: string;
+  /**
+   * Optional close callback. When supplied, pressing ESC while the detail
+   * panel is open invokes this callback. Pages that do not pass it keep
+   * their existing behavior unchanged.
+   */
+  onCloseRequested?: () => void;
 }
 
 export function SplitListLayout({
@@ -15,7 +23,17 @@ export function SplitListLayout({
   detailPlaceholder,
   isDetailOpen,
   className,
+  onCloseRequested,
 }: SplitListLayoutProps) {
+  useEffect(() => {
+    if (!isDetailOpen || !onCloseRequested) return;
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape") onCloseRequested();
+    };
+    document.addEventListener("keydown", handler);
+    return () => document.removeEventListener("keydown", handler);
+  }, [isDetailOpen, onCloseRequested]);
+
   return (
     <div
       className={cn(

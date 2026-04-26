@@ -10,15 +10,18 @@
 //   - List query invalidation on every create / status change
 // ---------------------------------------------------------------------------
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Power } from "lucide-react";
+import { Pencil, Plus, Power, ScrollText } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
 import { ReadinessPill } from "@/components/readiness/ReadinessPill";
 import { QuickCreateItem } from "@/components/admin/quick-create/QuickCreateItem";
+import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
+import { formatQty } from "@/lib/utils/format-quantity";
 import {
   AdminMutationError,
   postStatus,
@@ -50,6 +53,8 @@ interface ItemRow {
   created_at: string;
   updated_at: string;
   readiness?: ReadinessPayload | null;
+  base_fill_qty_per_unit?: number | null;
+  shelf_life_days?: number | null;
 }
 
 type ListEnvelope<T> = { rows: T[]; count: number };
@@ -73,10 +78,14 @@ export default function AdminItemsPage(): JSX.Element {
   const { session } = useSession();
   const isAdmin = session.role === "admin";
   const queryClient = useQueryClient();
-  const [query, setQuery] = useState("");
+  const searchParams = useSearchParams();
+  const preselectId = searchParams?.get("item") ?? null;
+  const [query, setQuery] = useState(preselectId ?? "");
   const [statusFilter, setStatusFilter] = useState<string>("ACTIVE");
   const [supplyFilter, setSupplyFilter] = useState<string>("");
   const [showCreate, setShowCreate] = useState(false);
+  const [highlightedId, setHighlightedId] = useState<string | null>(preselectId);
+  const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
   const [banner, setBanner] = useState<
     | { kind: "success" | "error"; message: string }
     | null
@@ -126,6 +135,17 @@ export default function AdminItemsPage(): JSX.Element {
 
   const rows = itemsQuery.data?.rows ?? [];
 
+  useEffect(() => {
+    if (!preselectId || rows.length === 0) return;
+    const el = rowRefs.current.get(preselectId);
+    if (el) {
+      el.scrollIntoView({ behavior: "smooth", block: "center" });
+      setHighlightedId(preselectId);
+      const t = window.setTimeout(() => setHighlightedId(null), 2500);
+      return () => window.clearTimeout(t);
+    }
+  }, [preselectId, rows]);
+
   const filtered = useMemo(() => {
     if (!query) return rows;
     const qLower = query.toLowerCase();
@@ -150,8 +170,19 @@ export default function AdminItemsPage(): JSX.Element {
     });
   };
 
+  const selectedItem = preselectId
+    ? rows.find((r) => r.item_id === preselectId) ?? null
+    : null;
+
   return (
     <>
+      <Breadcrumbs
+        items={[
+          { label: "Admin", href: "/admin" },
+          { label: "Items", href: "/admin/items" },
+          ...(selectedItem ? [{ label: selectedItem.item_name }] : []),
+        ]}
+      />
       <WorkflowHeader
         eyebrow="Admin · items"
         title="Items"
@@ -293,6 +324,12 @@ export default function AdminItemsPage(): JSX.Element {
                     Sales unit
                   </th>
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    Case pack
+                  </th>
+                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    Recipes
+                  </th>
+                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Readiness
                   </th>
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
@@ -309,7 +346,14 @@ export default function AdminItemsPage(): JSX.Element {
                 {filtered.map((r) => (
                   <tr
                     key={r.item_id}
-                    className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
+                    ref={(el) => {
+                      if (el) rowRefs.current.set(r.item_id, el);
+                      else rowRefs.current.delete(r.item_id);
+                    }}
+                    className={
+                      "border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40 " +
+                      (highlightedId === r.item_id ? "bg-accent-softer/60" : "")
+                    }
                   >
                     <td className="px-3 py-2 font-mono text-xs text-fg">
                       <Link
@@ -336,6 +380,40 @@ export default function AdminItemsPage(): JSX.Element {
                     <td className="px-3 py-2 text-xs text-fg-muted">
                       {r.sales_uom ?? "—"}
                     </td>
+                    <td className="px-3 py-2 text-xs text-fg-muted">
+                      {r.case_pack != null && r.sales_uom
+                        ? formatQty(r.case_pack, r.sales_uom)
+                        : r.case_pack != null
+                        ? r.case_pack
+                        : "—"}
+                    </td>
+                    <td className="px-3 py-2">
+                      <div className="flex items-center gap-1.5 text-xs">
+                        {r.primary_bom_head_id ? (
+                          <Link
+                            href={`/admin/boms/${encodeURIComponent(r.primary_bom_head_id)}`}
+                            className="inline-flex items-center gap-1 rounded border border-border/60 px-1.5 py-0.5 text-fg-muted hover:text-accent"
+                            title="Pack recipe"
+                          >
+                            <ScrollText className="h-3 w-3" strokeWidth={2} />
+                            Pack
+                          </Link>
+                        ) : null}
+                        {r.base_bom_head_id ? (
+                          <Link
+                            href={`/admin/boms/${encodeURIComponent(r.base_bom_head_id)}`}
+                            className="inline-flex items-center gap-1 rounded border border-border/60 px-1.5 py-0.5 text-fg-muted hover:text-accent"
+                            title="Liquid recipe"
+                          >
+                            <ScrollText className="h-3 w-3" strokeWidth={2} />
+                            Liquid
+                          </Link>
+                        ) : null}
+                        {!r.primary_bom_head_id && !r.base_bom_head_id ? (
+                          <span className="text-fg-subtle">—</span>
+                        ) : null}
+                      </div>
+                    </td>
                     <td className="px-3 py-2">
                       <ReadinessPill readiness={r.readiness} />
                     </td>
@@ -344,16 +422,26 @@ export default function AdminItemsPage(): JSX.Element {
                     </td>
                     {isAdmin ? (
                       <td className="px-3 py-2 text-right">
-                        <button
-                          type="button"
-                          title={`Toggle status (currently ${r.status})`}
-                          className="btn btn-ghost btn-sm inline-flex items-center gap-1"
-                          onClick={() => handleToggleStatus(r)}
-                          disabled={statusMutation.isPending}
-                        >
-                          <Power className="h-3 w-3" strokeWidth={2} />
-                          {r.status === "ACTIVE" ? "Deactivate" : "Activate"}
-                        </button>
+                        <div className="inline-flex items-center gap-1">
+                          <Link
+                            href={`/admin/masters/items/${encodeURIComponent(r.item_id)}`}
+                            className="btn btn-ghost btn-sm inline-flex items-center gap-1"
+                            title="Edit item"
+                          >
+                            <Pencil className="h-3 w-3" strokeWidth={2} />
+                            Edit
+                          </Link>
+                          <button
+                            type="button"
+                            title={`Toggle status (currently ${r.status})`}
+                            className="btn btn-ghost btn-sm inline-flex items-center gap-1"
+                            onClick={() => handleToggleStatus(r)}
+                            disabled={statusMutation.isPending}
+                          >
+                            <Power className="h-3 w-3" strokeWidth={2} />
+                            {r.status === "ACTIVE" ? "Deactivate" : "Activate"}
+                          </button>
+                        </div>
                       </td>
                     ) : null}
                   </tr>
