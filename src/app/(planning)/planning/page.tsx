@@ -468,9 +468,9 @@ export default function PlanningLandingPage() {
               blurb: "Check material coverage against current stock for a given production quantity.",
             },
             {
-              label: "Weekly Inventory Outlook",
-              href: "/planning/weekly-outlook",
-              blurb: "FG stock projection by week — shortage flags, demand absorbed, PO inbound overlay.",
+              label: "Inventory Flow",
+              href: "/planning/inventory-flow",
+              blurb: "Daily FG projection — at-risk products surface, with 14 days daily detail and 6 weeks weekly outlook.",
             },
             {
               label: "Purchase orders",
