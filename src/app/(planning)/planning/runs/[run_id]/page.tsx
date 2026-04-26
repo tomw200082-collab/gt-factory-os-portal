@@ -996,16 +996,22 @@ export default function PlanningRunDetailPage() {
                         data-rec-status={r.recommendation_status}
                       >
                         <td className="px-3 py-2.5">
-                          <div className="font-medium text-fg-strong">
-                            {activeTab === "purchase"
-                              ? r.component_name ?? r.component_id ?? "—"
-                              : r.item_name ?? r.item_id ?? "—"}
-                          </div>
-                          <div className="font-mono text-3xs uppercase tracking-sops text-fg-subtle">
-                            {activeTab === "purchase"
-                              ? r.component_id ?? ""
-                              : r.item_id ?? ""}
-                          </div>
+                          <Link
+                            href={`/planning/runs/${encodeURIComponent(runId)}/recommendations/${encodeURIComponent(rowKey)}`}
+                            className="group block"
+                            data-testid="planning-run-rec-detail-link"
+                          >
+                            <div className="font-medium text-fg-strong group-hover:text-accent group-hover:underline underline-offset-2">
+                              {activeTab === "purchase"
+                                ? r.component_name ?? r.component_id ?? "—"
+                                : r.item_name ?? r.item_id ?? "—"}
+                            </div>
+                            <div className="font-mono text-3xs uppercase tracking-sops text-fg-subtle">
+                              {activeTab === "purchase"
+                                ? r.component_id ?? ""
+                                : r.item_id ?? ""}
+                            </div>
+                          </Link>
                         </td>
                         <td className="px-3 py-2.5 text-right font-mono tabular-nums text-fg-muted">
                           {r.required_qty}
