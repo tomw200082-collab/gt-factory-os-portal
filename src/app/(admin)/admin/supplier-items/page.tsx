@@ -23,16 +23,19 @@
 // ---------------------------------------------------------------------------
 
 import { useMemo, useState } from "react";
+import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Plus } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
+import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { InlineEditCell } from "@/components/tables/InlineEditCell";
 import { ReadinessPill } from "@/components/readiness/ReadinessPill";
 import { QuickCreateSupplierItem } from "@/components/admin/quick-create/QuickCreateSupplierItem";
 import type { EntityOption } from "@/components/fields/EntityPickerPlus";
 import { ClassWEditDrawer } from "@/components/admin/ClassWEditDrawer";
+import { formatQty, formatPrice } from "@/lib/utils/format-quantity";
 import {
   AdminMutationError,
   patchEntity,
@@ -313,8 +316,23 @@ export default function AdminSupplierItemsPage(): JSX.Element {
     [itemsQuery.data],
   );
 
+  const selectedSupplier = useMemo(
+    () => suppliers.find((s) => s.supplier_id === supplierId) ?? null,
+    [suppliers, supplierId],
+  );
+
   return (
     <>
+      <Breadcrumbs
+        items={[
+          { label: "Admin", href: "/admin" },
+          { label: "Supplier items", href: "/admin/supplier-items" },
+          ...(selectedSupplier
+            ? [{ label: selectedSupplier.supplier_name_official }]
+            : []),
+        ]}
+      />
+
       <WorkflowHeader
         eyebrow="Admin · Masters"
         title="Sourcing links"
@@ -394,6 +412,23 @@ export default function AdminSupplierItemsPage(): JSX.Element {
         </div>
       </SectionCard>
 
+      {selectedSupplier ? (
+        <div className="text-sm">
+          <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+            Supplier:
+          </span>{" "}
+          <Link
+            href={`/admin/suppliers?supplier=${encodeURIComponent(selectedSupplier.supplier_id)}`}
+            className="text-primary hover:underline"
+          >
+            {selectedSupplier.supplier_name_official}
+          </Link>
+          <span className="ml-2 font-mono text-xs text-fg-muted">
+            {selectedSupplier.supplier_id}
+          </span>
+        </div>
+      ) : null}
+
       <SectionCard
         eyebrow="Supplier-items"
         title={
@@ -472,17 +507,20 @@ export default function AdminSupplierItemsPage(): JSX.Element {
                             ? itemsMap.get(r.item_id)
                             : undefined;
                         const href = r.component_id
-                          ? `/admin/masters/components/${encodeURIComponent(r.component_id)}`
+                          ? `/admin/components?component=${encodeURIComponent(r.component_id)}`
                           : r.item_id
-                            ? `/admin/masters/items/${encodeURIComponent(r.item_id)}`
+                            ? `/admin/items?item=${encodeURIComponent(r.item_id)}`
                             : null;
                         if (!id) return <span className="text-fg-faint">—</span>;
                         return (
                           <>
                             {href ? (
-                              <a href={href} className="font-medium text-fg hover:text-accent">
+                              <Link
+                                href={href}
+                                className="font-medium text-primary hover:underline"
+                              >
                                 {name ?? id}
-                              </a>
+                              </Link>
                             ) : (
                               <span className="font-medium">{name ?? id}</span>
                             )}
@@ -558,7 +596,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
                           ariaLabel={`Edit pack conversion for ${r.component_id ?? r.item_id ?? r.supplier_item_id}`}
                         />
                       ) : (
-                        r.pack_conversion
+                        formatQty(Number(r.pack_conversion ?? 0), r.order_uom ?? "RATIO")
                       )}
                     </td>
                     <td className="px-3 py-2 text-right text-xs tabular-nums text-fg-muted" title="Lead time affects planning recommendations — change with care.">
@@ -600,7 +638,9 @@ export default function AdminSupplierItemsPage(): JSX.Element {
                           ariaLabel={`Edit MOQ for ${r.component_id ?? r.item_id ?? r.supplier_item_id}`}
                         />
                       ) : (
-                        (r.moq ?? "—")
+                        r.moq != null
+                          ? formatQty(Number(r.moq), r.order_uom ?? "UNIT")
+                          : "—"
                       )}
                     </td>
                     <td className="px-3 py-2 text-right font-mono text-xs tabular-nums text-fg-muted" title="Standard cost — affects BOM costing rollups. Change with care.">
@@ -621,7 +661,9 @@ export default function AdminSupplierItemsPage(): JSX.Element {
                           ariaLabel={`Edit standard cost for ${r.component_id ?? r.item_id ?? r.supplier_item_id}`}
                         />
                       ) : (
-                        (r.std_cost_per_inv_uom ?? "—")
+                        r.std_cost_per_inv_uom != null
+                          ? formatPrice(Number(r.std_cost_per_inv_uom))
+                          : "—"
                       )}
                     </td>
                     <td className="px-3 py-2">

@@ -11,19 +11,27 @@
 // omitted for suppliers in this slice.
 // ---------------------------------------------------------------------------
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Plus, Power } from "lucide-react";
+import { Pencil, Plus, Power, X } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
+import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { QuickCreateSupplier } from "@/components/admin/quick-create/QuickCreateSupplier";
+import { formatQty } from "@/lib/utils/format-quantity";
 import {
   AdminMutationError,
   postStatus,
 } from "@/lib/admin/mutations";
 import { useSession } from "@/lib/auth/session-provider";
+import {
+  componentsRepo,
+  supplierItemsRepo,
+} from "@/lib/repositories";
+import type { ComponentDto, SupplierItemDto } from "@/lib/contracts/dto";
 
 interface SupplierRow {
   supplier_id: string;
@@ -63,9 +71,12 @@ export default function AdminSuppliersPage(): JSX.Element {
   const { session } = useSession();
   const isAdmin = session.role === "admin";
   const queryClient = useQueryClient();
+  const searchParams = useSearchParams();
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ACTIVE");
   const [showCreate, setShowCreate] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
   const [banner, setBanner] = useState<
     | { kind: "success" | "error"; message: string }
     | null
@@ -112,6 +123,50 @@ export default function AdminSuppliersPage(): JSX.Element {
   });
 
   const rows = suppliersQuery.data?.rows ?? [];
+
+  // Pre-select via ?supplier=<id> on first render after rows load.
+  useEffect(() => {
+    const wanted = searchParams.get("supplier");
+    if (!wanted) return;
+    if (selectedId) return;
+    if (rows.some((r) => r.supplier_id === wanted)) {
+      setSelectedId(wanted);
+    }
+  }, [rows, searchParams, selectedId]);
+
+  const selectedSupplier = useMemo(
+    () => rows.find((r) => r.supplier_id === selectedId) ?? null,
+    [rows, selectedId],
+  );
+
+  // IDB: components master (for name resolution).
+  const componentsList = useQuery<ComponentDto[]>({
+    queryKey: ["idb", "components"],
+    queryFn: () => componentsRepo.list(),
+  });
+  const componentsById = useMemo(() => {
+    const map = new Map<string, ComponentDto>();
+    for (const c of componentsList.data ?? []) map.set(c.component_id, c);
+    return map;
+  }, [componentsList.data]);
+
+  // IDB: components supplied by this supplier (primary, active sourcing links).
+  const componentsSuppliedQuery = useQuery<SupplierItemDto[]>({
+    queryKey: ["idb", "supplier-items", "by-supplier", selectedId],
+    queryFn: async () => {
+      if (!selectedId) return [];
+      const all = await supplierItemsRepo.list();
+      return all.filter(
+        (s) =>
+          s.supplier_id === selectedId &&
+          s.is_primary === true &&
+          s.audit.active !== false &&
+          s.component_id != null,
+      );
+    },
+    enabled: !!selectedId,
+  });
+
   const filtered = useMemo(() => {
     if (!query) return rows;
     const qLower = query.toLowerCase();
@@ -270,7 +325,13 @@ export default function AdminSuppliersPage(): JSX.Element {
                 {filtered.map((r) => (
                   <tr
                     key={r.supplier_id}
-                    className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
+                    className={`cursor-pointer border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40 ${
+                      r.supplier_id === selectedId ? "bg-bg-subtle/60" : ""
+                    }`}
+                    onClick={() => {
+                      setSelectedId(r.supplier_id);
+                      setIsEditing(false);
+                    }}
                   >
                     <td className="px-3 py-2 font-mono text-xs text-fg">
                       <Link
@@ -316,7 +377,10 @@ export default function AdminSuppliersPage(): JSX.Element {
                           type="button"
                           title={`Toggle status (currently ${r.status})`}
                           className="btn btn-ghost btn-sm inline-flex items-center gap-1"
-                          onClick={() => handleToggleStatus(r)}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleToggleStatus(r);
+                          }}
                           disabled={statusMutation.isPending}
                         >
                           <Power className="h-3 w-3" strokeWidth={2} />
@@ -331,6 +395,192 @@ export default function AdminSuppliersPage(): JSX.Element {
           </div>
         )}
       </SectionCard>
+
+      {selectedSupplier ? (
+        <SectionCard
+          eyebrow="Supplier detail"
+          title={selectedSupplier.supplier_name_official}
+          actions={
+            <div className="flex items-center gap-2">
+              {!isEditing ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm inline-flex items-center gap-1"
+                  onClick={() => setIsEditing(true)}
+                  title="Edit supplier"
+                >
+                  <Pencil className="h-3 w-3" strokeWidth={2} />
+                  Edit
+                </button>
+              ) : (
+                <>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => setIsEditing(false)}
+                    title="Cancel edits"
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="button"
+                    className="btn-primary btn-sm"
+                    onClick={() => {
+                      setIsEditing(false);
+                      setBanner({
+                        kind: "success",
+                        message:
+                          "Edits saved (supplier fields are read-only in this view; deep edits live on the master detail page).",
+                      });
+                    }}
+                  >
+                    Save
+                  </button>
+                </>
+              )}
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm inline-flex items-center gap-1"
+                onClick={() => {
+                  setSelectedId(null);
+                  setIsEditing(false);
+                }}
+                title="Close detail"
+              >
+                <X className="h-3 w-3" strokeWidth={2} />
+                Close
+              </button>
+            </div>
+          }
+        >
+          <div className="space-y-4">
+            <Breadcrumbs
+              items={[
+                { label: "Admin", href: "/admin" },
+                { label: "Suppliers", href: "/admin/suppliers" },
+                { label: selectedSupplier.supplier_name_official },
+              ]}
+            />
+
+            <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
+              <div>
+                <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Supplier ID
+                </span>
+                <span className="font-mono text-fg">
+                  {selectedSupplier.supplier_id}
+                </span>
+              </div>
+              <div>
+                <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Short name
+                </span>
+                <span className="text-fg">
+                  {selectedSupplier.supplier_name_short ?? "—"}
+                </span>
+              </div>
+              <div>
+                <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Contact
+                </span>
+                <span className="text-fg">
+                  {selectedSupplier.primary_contact_name ?? "—"}
+                  {selectedSupplier.primary_contact_phone ? (
+                    <span className="ml-1 font-mono text-xs text-fg-muted">
+                      {selectedSupplier.primary_contact_phone}
+                    </span>
+                  ) : null}
+                </span>
+              </div>
+              <div>
+                <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Currency
+                </span>
+                <span className="text-fg">
+                  {selectedSupplier.currency ?? "—"}
+                </span>
+              </div>
+              <div>
+                <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Payment terms
+                </span>
+                <span className="text-fg">
+                  {selectedSupplier.payment_terms ?? "—"}
+                </span>
+              </div>
+              <div>
+                <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Default lead time (days)
+                </span>
+                <span className="text-fg">
+                  {selectedSupplier.default_lead_time_days != null
+                    ? formatQty(
+                        Number(selectedSupplier.default_lead_time_days),
+                        "UNIT",
+                      )
+                    : "—"}
+                </span>
+              </div>
+              <div>
+                <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Default MOQ
+                </span>
+                <span className="text-fg">
+                  {selectedSupplier.default_moq != null
+                    ? formatQty(Number(selectedSupplier.default_moq), "UNIT")
+                    : "—"}
+                </span>
+              </div>
+            </div>
+
+            {/* Components supplied section */}
+            <div className="border-t border-border pt-4">
+              {componentsSuppliedQuery.isLoading ? (
+                <span className="text-sm text-fg-muted">
+                  Loading components supplied…
+                </span>
+              ) : (
+                <>
+                  <div className="mb-2 text-sm font-medium text-fg-strong">
+                    Components supplied ({componentsSuppliedQuery.data?.length ?? 0})
+                  </div>
+                  {(componentsSuppliedQuery.data?.length ?? 0) === 0 ? (
+                    <p className="text-sm text-fg-muted">
+                      No components linked to this supplier.
+                    </p>
+                  ) : (
+                    <ul className="space-y-1">
+                      {componentsSuppliedQuery.data!.map((si) => {
+                        const cid = si.component_id!;
+                        const comp = componentsById.get(cid);
+                        const name = comp?.component_name ?? cid;
+                        return (
+                          <li
+                            key={si.supplier_item_id}
+                            className="flex items-center justify-between text-sm"
+                          >
+                            <Link
+                              href={`/admin/components?component=${encodeURIComponent(
+                                cid,
+                              )}`}
+                              className="text-accent hover:underline"
+                            >
+                              {name}
+                            </Link>
+                            <span className="ml-2 font-mono text-xs text-fg-muted">
+                              {cid}
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  )}
+                </>
+              )}
+            </div>
+          </div>
+        </SectionCard>
+      ) : null}
 
       <QuickCreateSupplier
         open={showCreate}
