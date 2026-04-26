@@ -6,7 +6,12 @@ import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
 import { formatQty } from "@/lib/utils/format-quantity";
 import { cn } from "@/lib/cn";
-import type { SimulatableProduct } from "./ProductionSimulatorShell";
+import type {
+  BaseFillResolution,
+  PackBomLineForFill,
+  SimulatableProduct,
+} from "./ProductionSimulatorShell";
+import { resolveBaseFillQtyPerUnit } from "./ProductionSimulatorShell";
 import { SimulationTable, type SimulationLine } from "./SimulationTable";
 
 // ---------------------------------------------------------------------------
@@ -181,36 +186,79 @@ async function loadSimulationData(
   const warnings: string[] = [];
   const notices: SimulationNotice[] = [];
 
-  // Compute base qty up front so all parallel fetches see the same number.
-  // Source priority: explicit items.base_fill_qty_per_unit, else derived
-  // from pack_size + sales_uom for volume UOMs (see resolveBaseFillQtyPerUnit
-  // in ProductionSimulatorShell). When derived, tell the operator quietly
-  // so they know where the number came from.
+  // Step 1: PACK simulate first. Its `lines[]` is the discovery surface for
+  // the "BASE mix line" — the line whose component_id equals the BASE BOM
+  // head's parent_ref_id. We need that to know how much BASE liquid to
+  // simulate for, so the parallel-fetch shape used previously is replaced
+  // with a sequential PACK → resolve → BASE flow. PACK coverage and the
+  // component class map run in parallel with PACK simulate (they don't
+  // depend on the resolved fill).
+  const [pack, packCoverage, componentClassById] = await Promise.all([
+    fetchSimulate(product.packHead.bom_head_id, targetQty),
+    fetchNetRequirements(product.packHead.bom_head_id, targetQty),
+    fetchComponents(),
+  ]);
+
+  // Step 2: re-resolve base_fill_qty_per_unit using the PACK BOM lines we
+  // just got. This is the most accurate auto-source — it reads the BASE
+  // mix qty directly from the PACK recipe rather than guessing from
+  // pack_size/sales_uom (which fails for `sales_uom = BOTTLE` items).
+  const packBomLines: PackBomLineForFill[] = pack.lines.map((l) => ({
+    component_id: l.component_id,
+    component_uom: l.component_uom,
+    qty_per_unit: parseFloat(l.unit_ratio),
+  }));
+  const resolved: BaseFillResolution = product.baseHead
+    ? resolveBaseFillQtyPerUnit({
+        item: product.item,
+        packBomLines,
+        baseBomParentRefId: product.baseHead.parent_ref_id,
+      })
+    : product.baseFill;
+
+  // Step 3: compute total BASE liters and emit notices/warnings. Same
+  // structure as before, but the new "derived_from_bom" source gets its
+  // own info notice (most accurate) and the legacy "derived_from_pack_size"
+  // keeps the existing notice.
   let baseLiters: number | null = null;
   if (product.baseHead) {
-    const fillPerUnit = product.baseFill.qtyPerUnit;
+    const fillPerUnit = resolved.qtyPerUnit;
     if (fillPerUnit && fillPerUnit > 0) {
       baseLiters = targetQty * fillPerUnit;
-      if (product.baseFill.source === "derived") {
+      if (resolved.source === "derived_from_bom") {
+        notices.push({
+          tone: "info",
+          message: `BASE volume read from PACK recipe (${fillPerUnit} L per unit). Set base_fill_qty_per_unit on the item to override.`,
+        });
+      } else if (resolved.source === "derived_from_pack_size") {
         notices.push({
           tone: "info",
           message: `BASE volume derived from pack size (${fillPerUnit} L per unit). Set base_fill_qty_per_unit on the item to override.`,
         });
       }
     } else {
-      // Distinguish "no pack_size at all" from "pack_size is in a non-volume
-      // UOM like KG/G" so the operator can tell which fix is needed.
+      // Could not resolve. The PACK BOM either has no line consuming the
+      // BASE component (data inconsistency), or the line is in a non-volume
+      // UOM, AND the item has no usable pack_size + L/ML sales_uom either.
       const packSizeNum = product.packSize ? parseFloat(product.packSize) : NaN;
       const hasUsablePackSize = Number.isFinite(packSizeNum) && packSizeNum > 0;
       const uom = product.salesUom?.toUpperCase() ?? null;
       const isVolumeUom = uom === "L" || uom === "ML";
+      const baseRefId = product.baseHead.parent_ref_id;
+      const hasBaseMixLine =
+        baseRefId !== null &&
+        packBomLines.some((l) => l.component_id === baseRefId);
       let reason: string;
-      if (!hasUsablePackSize) {
-        reason = "pack_size is missing on the item";
+      if (!hasBaseMixLine) {
+        reason = `the PACK recipe has no line consuming the BASE component (${baseRefId ?? "unknown"})`;
+      } else if (!hasUsablePackSize) {
+        reason =
+          "the PACK BASE-mix line is in a non-volume UOM and pack_size is missing on the item";
       } else if (!uom) {
-        reason = "sales_uom is missing on the item";
+        reason =
+          "the PACK BASE-mix line is in a non-volume UOM and sales_uom is missing on the item";
       } else if (!isVolumeUom) {
-        reason = `sales_uom is ${uom} (not a liquid volume), so pack_size cannot be used to derive base volume`;
+        reason = `the PACK BASE-mix line is in a non-volume UOM and sales_uom is ${uom} (not a liquid volume)`;
       } else {
         reason = "the item has no usable pack_size or sales_uom";
       }
@@ -220,25 +268,22 @@ async function loadSimulationData(
     }
   }
 
-  const [pack, base, packCoverage, baseCoverage, componentClassById] =
-    await Promise.all([
-      fetchSimulate(product.packHead.bom_head_id, targetQty),
-      product.baseHead && baseLiters !== null
-        ? fetchSimulate(product.baseHead.bom_head_id, baseLiters).catch(
-            (err: unknown) => {
-              warnings.push(
-                `BASE simulation failed: ${err instanceof Error ? err.message : "unknown error"}`,
-              );
-              return null;
-            },
-          )
-        : Promise.resolve(null),
-      fetchNetRequirements(product.packHead.bom_head_id, targetQty),
-      product.baseHead && baseLiters !== null
-        ? fetchNetRequirements(product.baseHead.bom_head_id, baseLiters)
-        : Promise.resolve(null),
-      fetchComponents(),
-    ]);
+  // Step 4: BASE simulate + BASE coverage now that baseLiters is known.
+  const [base, baseCoverage] = await Promise.all([
+    product.baseHead && baseLiters !== null
+      ? fetchSimulate(product.baseHead.bom_head_id, baseLiters).catch(
+          (err: unknown) => {
+            warnings.push(
+              `BASE simulation failed: ${err instanceof Error ? err.message : "unknown error"}`,
+            );
+            return null;
+          },
+        )
+      : Promise.resolve(null),
+    product.baseHead && baseLiters !== null
+      ? fetchNetRequirements(product.baseHead.bom_head_id, baseLiters)
+      : Promise.resolve(null),
+  ]);
 
   return {
     pack,

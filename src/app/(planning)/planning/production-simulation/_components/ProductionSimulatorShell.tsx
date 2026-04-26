@@ -45,17 +45,38 @@ export interface ItemRow {
   base_fill_qty_per_unit: number | string | null;
 }
 
-export type BaseFillSource = "explicit" | "derived" | "unresolved";
+export type BaseFillSource =
+  | "explicit"
+  | "derived_from_bom"
+  | "derived_from_pack_size"
+  | "unresolved";
 
 export interface BaseFillResolution {
   // L of base liquid per finished unit, or null if it cannot be resolved.
   qtyPerUnit: number | null;
   // How the value was determined:
-  //   - "explicit"    → items.base_fill_qty_per_unit was set
-  //   - "derived"     → derived from pack_size + sales_uom (volume UOMs)
-  //   - "unresolved"  → no explicit value and pack_size/sales_uom can't yield
-  //                     liquid volume (e.g. KG/G items, missing pack_size)
+  //   - "explicit"               → items.base_fill_qty_per_unit was set
+  //   - "derived_from_bom"       → read from the PACK BOM line that consumes
+  //                                the BASE component (most accurate auto-source)
+  //   - "derived_from_pack_size" → derived from pack_size + sales_uom for
+  //                                volume UOMs (L, ML); fallback for items
+  //                                whose sales_uom is L/ML
+  //   - "unresolved"             → none of the above could yield a value
   source: BaseFillSource;
+}
+
+/**
+ * Minimal shape of a PACK BOM line used for base-fill derivation. Compatible
+ * with both the simulator's `SimulatorLine` (component_id + component_uom +
+ * unit_ratio) and a raw bom_lines row (final_component_id + component_uom +
+ * final_component_qty), via field aliasing in the caller.
+ */
+export interface PackBomLineForFill {
+  component_id: string;
+  component_uom: string | null;
+  // Qty of this component required per ONE finished unit produced by the
+  // PACK head. For the simulator response this is `unit_ratio` (parsed).
+  qty_per_unit: number;
 }
 
 export interface SimulatableProduct {
@@ -97,36 +118,92 @@ function toFiniteNumber(v: number | string | null | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
+export interface BaseFillContext {
+  item: ItemRow | null;
+  // PACK BOM lines (e.g. from the simulator response, mapped into the
+  // PackBomLineForFill shape). Used to find the line consuming the BASE
+  // component and derive the liquid volume from it.
+  packBomLines?: PackBomLineForFill[];
+  // The BASE BOM head's `parent_ref_id` — i.e. the BASE component_id that
+  // the PACK BOM should be consuming as its liquid input.
+  baseBomParentRefId?: string | null;
+}
+
 /**
  * Determine the base liquid volume (in L) per finished unit.
  * Priority:
  *   1. items.base_fill_qty_per_unit (explicit override) — used as-is
- *   2. derive from pack_size + sales_uom for volume UOMs (L, ML)
- *   3. otherwise → unresolved (caller should warn the operator)
+ *   2. derive from the PACK BOM line that consumes the BASE component
+ *      (most accurate; works regardless of sales_uom being BOTTLE/UNIT/etc.)
+ *   3. derive from pack_size + sales_uom for volume UOMs (L, ML)
+ *   4. otherwise → unresolved (caller should warn the operator)
  *
- * Beverage assumption: for a finished beverage SKU sold by volume, the
- * volume of base liquid required per finished unit equals the pack size.
- * This holds for ENERGY 1L (1 L base / unit), COSMO LYCHEE 0.3L (0.3 L),
- * a 500ml product (0.5 L), etc. KG/G/UNIT pack sizes don't represent
- * liquid volume and so cannot be used to scale BASE consumption.
+ * Why step 2 is preferred: many beverage SKUs are sold as `BOTTLE` (a
+ * piece UOM), so pack_size + sales_uom can't tell us the liquid volume.
+ * The PACK recipe, however, explicitly states how much BASE mix it
+ * consumes per finished unit (e.g. "0.5 L of CALM BASE MIX per bottle").
+ * That recipe value is what actually drives BASE component scaling, so we
+ * read it directly when available.
  */
 export function resolveBaseFillQtyPerUnit(
-  item: ItemRow | null,
+  ctx: ItemRow | BaseFillContext | null,
 ): BaseFillResolution {
-  if (!item) return { qtyPerUnit: null, source: "unresolved" };
+  // Back-compat: callers that still pass a bare ItemRow are treated as
+  // { item } with no PACK context.
+  const context: BaseFillContext =
+    ctx === null
+      ? { item: null }
+      : "item" in ctx || "packBomLines" in ctx || "baseBomParentRefId" in ctx
+        ? (ctx as BaseFillContext)
+        : { item: ctx as ItemRow };
+  const { item, packBomLines, baseBomParentRefId } = context;
 
-  const explicit = toFiniteNumber(item.base_fill_qty_per_unit);
-  if (explicit !== null && explicit > 0) {
-    return { qtyPerUnit: explicit, source: "explicit" };
+  // 1. Explicit override on the item master.
+  if (item) {
+    const explicit = toFiniteNumber(item.base_fill_qty_per_unit);
+    if (explicit !== null && explicit > 0) {
+      return { qtyPerUnit: explicit, source: "explicit" };
+    }
   }
 
-  const packSize = toFiniteNumber(item.pack_size);
-  const uom = item.sales_uom?.toUpperCase() ?? null;
-  if (packSize !== null && packSize > 0 && uom) {
-    if (uom === "L") return { qtyPerUnit: packSize, source: "derived" };
-    if (uom === "ML")
-      return { qtyPerUnit: packSize / 1000, source: "derived" };
-    // KG / G / UNIT / other non-volume UOMs → cannot derive liquid volume.
+  // 2. Derive from the PACK BOM line that consumes the BASE component.
+  if (packBomLines && packBomLines.length > 0 && baseBomParentRefId) {
+    const baseLine = packBomLines.find(
+      (l) => l.component_id === baseBomParentRefId,
+    );
+    if (
+      baseLine &&
+      Number.isFinite(baseLine.qty_per_unit) &&
+      baseLine.qty_per_unit > 0
+    ) {
+      const uom = (baseLine.component_uom ?? "").toUpperCase();
+      if (uom === "L") {
+        return { qtyPerUnit: baseLine.qty_per_unit, source: "derived_from_bom" };
+      }
+      if (uom === "ML") {
+        return {
+          qtyPerUnit: baseLine.qty_per_unit / 1000,
+          source: "derived_from_bom",
+        };
+      }
+      // Non-volume UOM on the BASE-mix line → fall through to pack_size.
+    }
+  }
+
+  // 3. Derive from pack_size + sales_uom (legacy fallback for L/ML SKUs).
+  if (item) {
+    const packSize = toFiniteNumber(item.pack_size);
+    const uom = item.sales_uom?.toUpperCase() ?? null;
+    if (packSize !== null && packSize > 0 && uom) {
+      if (uom === "L")
+        return { qtyPerUnit: packSize, source: "derived_from_pack_size" };
+      if (uom === "ML")
+        return {
+          qtyPerUnit: packSize / 1000,
+          source: "derived_from_pack_size",
+        };
+      // KG / G / UNIT / BOTTLE / other non-volume UOMs → cannot derive.
+    }
   }
 
   return { qtyPerUnit: null, source: "unresolved" };
