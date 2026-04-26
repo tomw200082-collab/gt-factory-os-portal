@@ -30,6 +30,7 @@ import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
+import { Drawer } from "@/components/overlays/Drawer";
 import { AdminMutationError } from "@/lib/admin/mutations";
 import { useSession } from "@/lib/auth/session-provider";
 
@@ -117,6 +118,10 @@ export default function AdminBomHeadDetailPage({
     | null
   >(null);
 
+  // "Create new draft" form state (optional Version name).
+  const [newDraftDialogOpen, setNewDraftDialogOpen] = useState(false);
+  const [newDraftName, setNewDraftName] = useState("");
+
   const headsQuery = useQuery<ListEnvelope<BomHeadRow>>({
     queryKey: ["admin", "bom_head", "all"],
     queryFn: () => fetchJson("/api/boms/heads?limit=1000"),
@@ -151,12 +156,14 @@ export default function AdminBomHeadDetailPage({
   });
 
   const newDraftMutation = useMutation({
-    mutationFn: async () => {
-      const body = {
+    mutationFn: async (args: { display_name?: string } = {}) => {
+      const trimmed = args.display_name?.trim();
+      const body: Record<string, unknown> = {
         head_id,
         clone_from_version_id: head?.active_version_id ?? null,
         idempotency_key: randomIdempotencyKey(),
       };
+      if (trimmed) body.display_name = trimmed;
       const res = await fetch("/api/boms/versions", {
         method: "POST",
         headers: {
@@ -180,6 +187,8 @@ export default function AdminBomHeadDetailPage({
       void queryClient.invalidateQueries({
         queryKey: ["admin", "bom_version", "by-head", head_id],
       });
+      setNewDraftDialogOpen(false);
+      setNewDraftName("");
       if (data?.bom_version_id) {
         router.push(
           `/admin/boms/${encodeURIComponent(head_id)}/versions/${encodeURIComponent(data.bom_version_id)}`,
@@ -256,7 +265,8 @@ export default function AdminBomHeadDetailPage({
               className="btn-primary inline-flex items-center gap-1.5"
               onClick={() => {
                 setBanner(null);
-                newDraftMutation.mutate();
+                setNewDraftName("");
+                setNewDraftDialogOpen(true);
               }}
               disabled={newDraftMutation.isPending}
             >
@@ -346,6 +356,69 @@ export default function AdminBomHeadDetailPage({
           </div>
         )}
       </SectionCard>
+
+      {newDraftDialogOpen ? (
+        <Drawer
+          open={true}
+          onClose={() => {
+            if (newDraftMutation.isPending) return;
+            setNewDraftDialogOpen(false);
+          }}
+          title="Create new draft"
+          description={
+            head.active_version_id
+              ? "A new draft will be created by cloning the current active version. You can give it a recognizable name now or later."
+              : "A new empty draft will be created. You can give it a recognizable name now or later."
+          }
+          width="md"
+        >
+          <div className="space-y-4">
+            <div>
+              <label
+                htmlFor="new-draft-display-name"
+                className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle"
+              >
+                Version name (optional)
+              </label>
+              <input
+                id="new-draft-display-name"
+                type="text"
+                value={newDraftName}
+                onChange={(e) => setNewDraftName(e.target.value)}
+                placeholder="e.g. Initial release, Post supplier change Q2 2026"
+                className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-fg shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                disabled={newDraftMutation.isPending}
+                autoFocus
+              />
+              <p className="mt-1 text-xs text-fg-muted">
+                Helps you and others recognize this version. Leave blank to use
+                the default version number.
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-2 border-t border-border/70 pt-4">
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={newDraftMutation.isPending}
+                onClick={() => setNewDraftDialogOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={newDraftMutation.isPending}
+                onClick={() => {
+                  setBanner(null);
+                  newDraftMutation.mutate({ display_name: newDraftName });
+                }}
+              >
+                {newDraftMutation.isPending ? "Creating…" : "Create draft"}
+              </button>
+            </div>
+          </div>
+        </Drawer>
+      ) : null}
     </>
   );
 }

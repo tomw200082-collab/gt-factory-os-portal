@@ -379,6 +379,10 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
   // Shared qty: syncs simulator → net-requirements so operator types qty once
   const [simulatedQty, setSimulatedQty] = useState<string | undefined>(undefined);
 
+  // "Create new draft from this version" form state (optional Version name).
+  const [newDraftDialogOpen, setNewDraftDialogOpen] = useState(false);
+  const [newDraftName, setNewDraftName] = useState("");
+
   // --- Mutations ----------------------------------------------------------
 
   const patchLineQty = useMutation({
@@ -500,18 +504,21 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
   // editor. Mirrors the head-page "New draft" mutation exactly (same endpoint,
   // same idempotency_key, same navigation target).
   const newDraftFromThisMutation = useMutation({
-    mutationFn: async () => {
+    mutationFn: async (args: { display_name?: string } = {}) => {
+      const trimmed = args.display_name?.trim();
+      const body: Record<string, unknown> = {
+        head_id,
+        clone_from_version_id: version_id,
+        idempotency_key: randomIdempotencyKey(),
+      };
+      if (trimmed) body.display_name = trimmed;
       const res = await fetch("/api/boms/versions", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Accept: "application/json",
         },
-        body: JSON.stringify({
-          head_id,
-          clone_from_version_id: version_id,
-          idempotency_key: randomIdempotencyKey(),
-        }),
+        body: JSON.stringify(body),
       });
       const json = await res.json().catch(() => null);
       if (!res.ok) {
@@ -525,6 +532,8 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
       return json as { bom_version_id: string };
     },
     onSuccess: (data) => {
+      setNewDraftDialogOpen(false);
+      setNewDraftName("");
       if (data?.bom_version_id) {
         router.push(
           `/admin/boms/${encodeURIComponent(head_id)}/versions/${encodeURIComponent(data.bom_version_id)}`,
@@ -759,7 +768,8 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
               className="btn-primary inline-flex items-center gap-1.5"
               onClick={() => {
                 setBanner(null);
-                newDraftFromThisMutation.mutate();
+                setNewDraftName("");
+                setNewDraftDialogOpen(true);
               }}
               disabled={newDraftFromThisMutation.isPending}
             >
@@ -1207,6 +1217,70 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
                   : preview.can_publish_clean
                     ? "Confirm & publish"
                     : "Confirm override & publish"}
+              </button>
+            </div>
+          </div>
+        </Drawer>
+      ) : null}
+
+      {/* --- New draft (from active version) dialog --- */}
+      {newDraftDialogOpen ? (
+        <Drawer
+          open={true}
+          onClose={() => {
+            if (newDraftFromThisMutation.isPending) return;
+            setNewDraftDialogOpen(false);
+          }}
+          title="Create new draft"
+          description="A new draft will be created by cloning this version. You can give it a recognizable name now or later."
+          width="md"
+        >
+          <div className="space-y-4">
+            <div>
+              <label
+                htmlFor="new-draft-display-name"
+                className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle"
+              >
+                Version name (optional)
+              </label>
+              <input
+                id="new-draft-display-name"
+                type="text"
+                value={newDraftName}
+                onChange={(e) => setNewDraftName(e.target.value)}
+                placeholder="e.g. Initial release, Post supplier change Q2 2026"
+                className="mt-1 w-full rounded-md border border-border bg-bg px-3 py-2 text-sm text-fg shadow-sm focus:border-primary focus:outline-none focus:ring-1 focus:ring-primary"
+                disabled={newDraftFromThisMutation.isPending}
+                autoFocus
+              />
+              <p className="mt-1 text-xs text-fg-muted">
+                Helps you and others recognize this version. Leave blank to use
+                the default version number.
+              </p>
+            </div>
+            <div className="flex items-center justify-end gap-2 border-t border-border/70 pt-4">
+              <button
+                type="button"
+                className="btn btn-ghost"
+                disabled={newDraftFromThisMutation.isPending}
+                onClick={() => setNewDraftDialogOpen(false)}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn-primary"
+                disabled={newDraftFromThisMutation.isPending}
+                onClick={() => {
+                  setBanner(null);
+                  newDraftFromThisMutation.mutate({
+                    display_name: newDraftName,
+                  });
+                }}
+              >
+                {newDraftFromThisMutation.isPending
+                  ? "Creating…"
+                  : "Create draft"}
               </button>
             </div>
           </div>
