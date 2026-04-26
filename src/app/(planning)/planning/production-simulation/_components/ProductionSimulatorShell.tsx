@@ -40,8 +40,22 @@ export interface ItemRow {
   item_id: string;
   item_name: string;
   pack_size: string | null;
+  sales_uom: string | null;
   supply_method: string;
   base_fill_qty_per_unit: number | string | null;
+}
+
+export type BaseFillSource = "explicit" | "derived" | "unresolved";
+
+export interface BaseFillResolution {
+  // L of base liquid per finished unit, or null if it cannot be resolved.
+  qtyPerUnit: number | null;
+  // How the value was determined:
+  //   - "explicit"    → items.base_fill_qty_per_unit was set
+  //   - "derived"     → derived from pack_size + sales_uom (volume UOMs)
+  //   - "unresolved"  → no explicit value and pack_size/sales_uom can't yield
+  //                     liquid volume (e.g. KG/G items, missing pack_size)
+  source: BaseFillSource;
 }
 
 export interface SimulatableProduct {
@@ -53,7 +67,13 @@ export interface SimulatableProduct {
   item: ItemRow | null;
   displayName: string;
   packSize: string | null;
+  salesUom: string | null;
   supplyMethod: string;
+  baseFill: BaseFillResolution;
+  // Back-compat shortcut: the resolved L-per-unit (or null), regardless of
+  // whether it was explicit or derived. Consumers that only need the number
+  // can keep reading this; consumers that want to render different notices
+  // for "explicit" vs "derived" vs "unresolved" should read `baseFill`.
   baseFillQtyPerUnit: number | null;
 }
 
@@ -75,6 +95,41 @@ function toFiniteNumber(v: number | string | null | undefined): number | null {
   if (v === null || v === undefined) return null;
   const n = typeof v === "number" ? v : parseFloat(v);
   return Number.isFinite(n) ? n : null;
+}
+
+/**
+ * Determine the base liquid volume (in L) per finished unit.
+ * Priority:
+ *   1. items.base_fill_qty_per_unit (explicit override) — used as-is
+ *   2. derive from pack_size + sales_uom for volume UOMs (L, ML)
+ *   3. otherwise → unresolved (caller should warn the operator)
+ *
+ * Beverage assumption: for a finished beverage SKU sold by volume, the
+ * volume of base liquid required per finished unit equals the pack size.
+ * This holds for ENERGY 1L (1 L base / unit), COSMO LYCHEE 0.3L (0.3 L),
+ * a 500ml product (0.5 L), etc. KG/G/UNIT pack sizes don't represent
+ * liquid volume and so cannot be used to scale BASE consumption.
+ */
+export function resolveBaseFillQtyPerUnit(
+  item: ItemRow | null,
+): BaseFillResolution {
+  if (!item) return { qtyPerUnit: null, source: "unresolved" };
+
+  const explicit = toFiniteNumber(item.base_fill_qty_per_unit);
+  if (explicit !== null && explicit > 0) {
+    return { qtyPerUnit: explicit, source: "explicit" };
+  }
+
+  const packSize = toFiniteNumber(item.pack_size);
+  const uom = item.sales_uom?.toUpperCase() ?? null;
+  if (packSize !== null && packSize > 0 && uom) {
+    if (uom === "L") return { qtyPerUnit: packSize, source: "derived" };
+    if (uom === "ML")
+      return { qtyPerUnit: packSize / 1000, source: "derived" };
+    // KG / G / UNIT / other non-volume UOMs → cannot derive liquid volume.
+  }
+
+  return { qtyPerUnit: null, source: "unresolved" };
 }
 
 async function loadSimulatableProducts(): Promise<SimulatableProduct[]> {
@@ -126,14 +181,17 @@ async function loadSimulatableProducts(): Promise<SimulatableProduct[]> {
       : null;
     const displayName =
       item?.item_name ?? packHead.parent_name ?? packHead.bom_head_id;
+    const baseFill = resolveBaseFillQtyPerUnit(item);
     products.push({
       packHead,
       baseHead,
       item,
       displayName,
       packSize: item?.pack_size ?? null,
+      salesUom: item?.sales_uom ?? null,
       supplyMethod: item?.supply_method ?? packHead.bom_kind,
-      baseFillQtyPerUnit: toFiniteNumber(item?.base_fill_qty_per_unit ?? null),
+      baseFill,
+      baseFillQtyPerUnit: baseFill.qtyPerUnit,
     });
   }
 

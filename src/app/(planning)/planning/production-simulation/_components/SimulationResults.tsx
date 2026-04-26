@@ -108,6 +108,11 @@ interface ListEnvelope<T> {
   total?: number;
 }
 
+interface SimulationNotice {
+  message: string;
+  tone: "warning" | "info";
+}
+
 interface SimulationData {
   pack: SimulateResponse | null;
   base: SimulateResponse | null;
@@ -115,6 +120,7 @@ interface SimulationData {
   baseCoverage: NetRequirementsResponse | null;
   componentClassById: Map<string, string | null>;
   warnings: string[];
+  notices: SimulationNotice[];
 }
 
 async function fetchSimulate(
@@ -173,16 +179,43 @@ async function loadSimulationData(
   targetQty: number,
 ): Promise<SimulationData> {
   const warnings: string[] = [];
+  const notices: SimulationNotice[] = [];
 
   // Compute base qty up front so all parallel fetches see the same number.
+  // Source priority: explicit items.base_fill_qty_per_unit, else derived
+  // from pack_size + sales_uom for volume UOMs (see resolveBaseFillQtyPerUnit
+  // in ProductionSimulatorShell). When derived, tell the operator quietly
+  // so they know where the number came from.
   let baseLiters: number | null = null;
   if (product.baseHead) {
-    const fillPerUnit = product.baseFillQtyPerUnit;
+    const fillPerUnit = product.baseFill.qtyPerUnit;
     if (fillPerUnit && fillPerUnit > 0) {
       baseLiters = targetQty * fillPerUnit;
+      if (product.baseFill.source === "derived") {
+        notices.push({
+          tone: "info",
+          message: `BASE volume derived from pack size (${fillPerUnit} L per unit). Set base_fill_qty_per_unit on the item to override.`,
+        });
+      }
     } else {
+      // Distinguish "no pack_size at all" from "pack_size is in a non-volume
+      // UOM like KG/G" so the operator can tell which fix is needed.
+      const packSizeNum = product.packSize ? parseFloat(product.packSize) : NaN;
+      const hasUsablePackSize = Number.isFinite(packSizeNum) && packSizeNum > 0;
+      const uom = product.salesUom?.toUpperCase() ?? null;
+      const isVolumeUom = uom === "L" || uom === "ML";
+      let reason: string;
+      if (!hasUsablePackSize) {
+        reason = "pack_size is missing on the item";
+      } else if (!uom) {
+        reason = "sales_uom is missing on the item";
+      } else if (!isVolumeUom) {
+        reason = `sales_uom is ${uom} (not a liquid volume), so pack_size cannot be used to derive base volume`;
+      } else {
+        reason = "the item has no usable pack_size or sales_uom";
+      }
       warnings.push(
-        "BASE BOM is linked but base_fill_qty_per_unit is missing on the item, so BASE component requirements cannot be scaled.",
+        `BASE BOM is linked but base_fill_qty_per_unit cannot be resolved: ${reason}. Set base_fill_qty_per_unit on the item so BASE component requirements scale correctly.`,
       );
     }
   }
@@ -214,6 +247,7 @@ async function loadSimulationData(
     baseCoverage,
     componentClassById,
     warnings,
+    notices,
   };
 }
 
@@ -528,13 +562,14 @@ export function SimulationResults({
   const hasBase = !!data.base;
   const hasLinkedBase = !!product.baseHead;
 
-  const notices: string[] = [...data.warnings];
+  const warnings: string[] = [...data.warnings];
   if (data.pack && data.pack.warnings.length > 0) {
-    notices.push(...data.pack.warnings);
+    warnings.push(...data.pack.warnings);
   }
   if (data.base && data.base.warnings.length > 0) {
-    notices.push(...data.base.warnings);
+    warnings.push(...data.base.warnings);
   }
+  const infoNotices = data.notices.filter((n) => n.tone === "info");
   // Earlier the page emitted a "PACK-only recipe — no BASE liquid mix is
   // linked" notice whenever there was no separate BASE head. That message
   // was misleading: many MANUFACTURED items use a single combined BOM
@@ -563,10 +598,17 @@ export function SimulationResults({
         }
         contentClassName="p-0"
       >
-        {notices.length > 0 ? (
+        {warnings.length > 0 ? (
           <div className="space-y-1 border-b border-border/60 bg-warning-softer/40 px-4 py-3 text-xs text-warning-fg">
-            {notices.map((n, i) => (
+            {warnings.map((n, i) => (
               <div key={i}>{n}</div>
+            ))}
+          </div>
+        ) : null}
+        {infoNotices.length > 0 ? (
+          <div className="space-y-1 border-b border-info/30 bg-info-softer/40 px-4 py-3 text-xs text-info-fg">
+            {infoNotices.map((n, i) => (
+              <div key={i}>{n.message}</div>
             ))}
           </div>
         ) : null}
