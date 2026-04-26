@@ -222,7 +222,7 @@ function ComponentsPageInner(): JSX.Element {
   // BASE vs PACK lives on separate heads, so two matches naturally surface
   // as two rows).
   const usedInQuery = useQuery<UsedInRow[]>({
-    queryKey: ["idb", "used-in", selectedId, itemsList.data?.length ?? 0],
+    queryKey: ["idb", "used-in", selectedId],
     queryFn: async () => {
       if (!selectedId) return [];
       const heads = await bomsRepo.listHeads();
@@ -254,7 +254,7 @@ function ComponentsPageInner(): JSX.Element {
       }
       return out;
     },
-    enabled: !!selectedId,
+    enabled: !!selectedId && itemsList.isFetched,
   });
 
   const supplierAssignMutation = useMutation({
@@ -285,12 +285,29 @@ function ComponentsPageInner(): JSX.Element {
         notes: null,
         site_id: "GTE-IL-01",
       };
+      // Capture stable reference to existing primary BEFORE mutation.
+      const existingId = args.existing?.supplier_item_id;
       // Create the new supplier_items row first; only on success
       // soft-deactivate the previous primary so we never leave the
       // component without an active supplier link.
       const created = await supplierItemsRepo.create(draft);
-      if (args.existing) {
-        await supplierItemsRepo.setActive(args.existing.supplier_item_id, false);
+      // Deactivate old primary; if this fails, compensate by deactivating
+      // the newly-created row so we don't end with two primaries.
+      if (existingId) {
+        try {
+          await supplierItemsRepo.setActive(existingId, false);
+        } catch (err) {
+          try {
+            await supplierItemsRepo.setActive(created.supplier_item_id, false);
+          } catch (compensationErr) {
+            // Compensation failed — log and re-throw original error.
+            console.error(
+              "Compensation failed; component now has two primary suppliers",
+              compensationErr,
+            );
+          }
+          throw err;
+        }
       }
       return created;
     },
