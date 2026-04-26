@@ -209,6 +209,13 @@ export const NAV_MANIFEST: NavGroup[] = [
         required_capability: "planning:read",
       },
       {
+        href: "/planning/production-simulation",
+        label: "Production simulation",
+        icon: Factory,
+        min_role: "viewer",
+        required_capability: "planning:read",
+      },
+      {
         href: "/planning/weekly-outlook",
         label: "Weekly Outlook",
         icon: CalendarDays,
