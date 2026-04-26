@@ -11,7 +11,7 @@
 // omitted for suppliers in this slice.
 // ---------------------------------------------------------------------------
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -68,6 +68,14 @@ function StatusBadge({ status }: { status: string }): JSX.Element {
 }
 
 export default function AdminSuppliersPage(): JSX.Element {
+  return (
+    <Suspense fallback={<div className="p-4 text-fg-muted">Loading…</div>}>
+      <SuppliersPageInner />
+    </Suspense>
+  );
+}
+
+function SuppliersPageInner(): JSX.Element {
   const { session } = useSession();
   const isAdmin = session.role === "admin";
   const queryClient = useQueryClient();

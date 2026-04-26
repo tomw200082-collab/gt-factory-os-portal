@@ -10,7 +10,7 @@
 //   - List query invalidation on every create / status change
 // ---------------------------------------------------------------------------
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -75,12 +75,23 @@ function StatusBadge({ status }: { status: string }): JSX.Element {
 }
 
 export default function AdminItemsPage(): JSX.Element {
+  return (
+    <Suspense fallback={<div className="p-4 text-fg-muted">Loading…</div>}>
+      <ItemsPageInner />
+    </Suspense>
+  );
+}
+
+function ItemsPageInner(): JSX.Element {
   const { session } = useSession();
   const isAdmin = session.role === "admin";
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const preselectId = searchParams?.get("item") ?? null;
-  const [query, setQuery] = useState(preselectId ?? "");
+  // Do NOT pre-fill the search filter from the URL — that hides every
+  // other row. The URL param is only a scroll/highlight target; the
+  // highlightedId state below handles that.
+  const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ACTIVE");
   const [supplyFilter, setSupplyFilter] = useState<string>("");
   const [showCreate, setShowCreate] = useState(false);

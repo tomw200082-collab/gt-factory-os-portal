@@ -12,7 +12,7 @@
 // (Slice 5). This keeps the slice scope tight without inventing endpoints.
 // ---------------------------------------------------------------------------
 
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -31,11 +31,13 @@ import {
 import { useSession } from "@/lib/auth/session-provider";
 import {
   bomsRepo,
+  itemsRepo,
   suppliersRepo,
   supplierItemsRepo,
 } from "@/lib/repositories";
 import type {
   BomLineDto,
+  ItemDto,
   SupplierDto,
   SupplierItemDto,
 } from "@/lib/contracts/dto";
@@ -92,6 +94,14 @@ interface UsedInRow {
 }
 
 export default function AdminComponentsPage(): JSX.Element {
+  return (
+    <Suspense fallback={<div className="p-4 text-fg-muted">Loading…</div>}>
+      <ComponentsPageInner />
+    </Suspense>
+  );
+}
+
+function ComponentsPageInner(): JSX.Element {
   const { session } = useSession();
   const isAdmin = session.role === "admin";
   const queryClient = useQueryClient();
@@ -171,6 +181,16 @@ export default function AdminComponentsPage(): JSX.Element {
     queryFn: () => suppliersRepo.list(),
   });
 
+  // Items list (IDB) — used to resolve product names for "Used in".
+  const itemsList = useQuery<ItemDto[]>({
+    queryKey: ["idb", "items"],
+    queryFn: () => itemsRepo.list(),
+  });
+  const itemsMap = useMemo(
+    () => new Map((itemsList.data ?? []).map((i) => [i.item_id, i])),
+    [itemsList.data],
+  );
+
   // Primary supplier_item for the selected component (IDB).
   const primarySupplierItemQuery = useQuery<SupplierItemDto | null>({
     queryKey: ["idb", "supplier-items", "primary", selectedId],
@@ -202,7 +222,7 @@ export default function AdminComponentsPage(): JSX.Element {
   // BASE vs PACK lives on separate heads, so two matches naturally surface
   // as two rows).
   const usedInQuery = useQuery<UsedInRow[]>({
-    queryKey: ["idb", "used-in", selectedId],
+    queryKey: ["idb", "used-in", selectedId, itemsList.data?.length ?? 0],
     queryFn: async () => {
       if (!selectedId) return [];
       const heads = await bomsRepo.listHeads();
@@ -218,9 +238,10 @@ export default function AdminComponentsPage(): JSX.Element {
         for (const line of lines) {
           if (line.final_component_id === selectedId) {
             const headName =
+              itemsMap.get(head.parent_ref_id ?? "")?.item_name ??
               head.parent_name ??
               head.display_family ??
-              head.bom_head_id;
+              "Recipe";
             out.push({
               headId: head.bom_head_id,
               headName,
@@ -242,9 +263,6 @@ export default function AdminComponentsPage(): JSX.Element {
       newSupplierId: string;
       existing: SupplierItemDto | null;
     }) => {
-      if (args.existing) {
-        await supplierItemsRepo.setActive(args.existing.supplier_item_id, false);
-      }
       const draft: Omit<SupplierItemDto, "audit"> = {
         supplier_item_id:
           typeof crypto !== "undefined" && "randomUUID" in crypto
@@ -267,7 +285,14 @@ export default function AdminComponentsPage(): JSX.Element {
         notes: null,
         site_id: "GTE-IL-01",
       };
-      return supplierItemsRepo.create(draft);
+      // Create the new supplier_items row first; only on success
+      // soft-deactivate the previous primary so we never leave the
+      // component without an active supplier link.
+      const created = await supplierItemsRepo.create(draft);
+      if (args.existing) {
+        await supplierItemsRepo.setActive(args.existing.supplier_item_id, false);
+      }
+      return created;
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({
