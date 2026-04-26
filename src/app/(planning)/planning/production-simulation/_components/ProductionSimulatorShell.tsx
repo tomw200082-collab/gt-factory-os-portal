@@ -48,6 +48,7 @@ export interface ItemRow {
 export type BaseFillSource =
   | "explicit"
   | "derived_from_bom"
+  | "derived_from_name"
   | "derived_from_pack_size"
   | "unresolved";
 
@@ -58,6 +59,10 @@ export interface BaseFillResolution {
   //   - "explicit"               → items.base_fill_qty_per_unit was set
   //   - "derived_from_bom"       → read from the PACK BOM line that consumes
   //                                the BASE component (most accurate auto-source)
+  //   - "derived_from_name"      → parsed from item.item_name (e.g. "AMERICAN 1L"
+  //                                → 1.0 L). Strong fallback for BOTTLE-sold
+  //                                liquids whose pack_size/sales_uom can't yield
+  //                                a volume.
   //   - "derived_from_pack_size" → derived from pack_size + sales_uom for
   //                                volume UOMs (L, ML); fallback for items
   //                                whose sales_uom is L/ML
@@ -112,6 +117,37 @@ async function fetchJson<T>(url: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+/**
+ * Parse a liquid volume from an item name like "AMERICAN 1L", "CALM 0.5L",
+ * "MUZA JASMINE 0.2L", or "MARGARITA 0.3L". Also accepts "ML" suffix
+ * (e.g. "BASE 250ML"). Returns null if no usable token is found, or for
+ * non-liquid items (e.g. "MATCHA TIN 100g").
+ *
+ * Used as a fallback inside resolveBaseFillQtyPerUnit when neither the
+ * explicit override nor the PACK BOM line can yield a volume — common for
+ * SKUs whose `sales_uom` is BOTTLE/UNIT (so pack_size + sales_uom can't
+ * tell us liters per unit).
+ */
+export function parseVolumeFromName(
+  name: string | null | undefined,
+): { qtyPerUnit: number; uom: "L" | "ML" } | null {
+  if (!name) return null;
+  // Try "<num>L" — match digits with optional decimal, then L (case-insensitive),
+  // word boundary so we don't accidentally match the L inside "GLASS" / "ELITA".
+  const litreMatch = name.match(/(\d+(?:\.\d+)?)\s*L\b/i);
+  if (litreMatch) {
+    const v = parseFloat(litreMatch[1]);
+    if (!isNaN(v) && v > 0 && v < 100) return { qtyPerUnit: v, uom: "L" };
+  }
+  // Try "<num>ML"
+  const mlMatch = name.match(/(\d+(?:\.\d+)?)\s*ML\b/i);
+  if (mlMatch) {
+    const v = parseFloat(mlMatch[1]);
+    if (!isNaN(v) && v > 0) return { qtyPerUnit: v, uom: "ML" };
+  }
+  return null;
+}
+
 function toFiniteNumber(v: number | string | null | undefined): number | null {
   if (v === null || v === undefined) return null;
   const n = typeof v === "number" ? v : parseFloat(v);
@@ -135,8 +171,10 @@ export interface BaseFillContext {
  *   1. items.base_fill_qty_per_unit (explicit override) — used as-is
  *   2. derive from the PACK BOM line that consumes the BASE component
  *      (most accurate; works regardless of sales_uom being BOTTLE/UNIT/etc.)
- *   3. derive from pack_size + sales_uom for volume UOMs (L, ML)
- *   4. otherwise → unresolved (caller should warn the operator)
+ *   3. derive from the item name (e.g. "AMERICAN 1L" → 1.0 L) — strong
+ *      fallback for BOTTLE-sold liquids
+ *   4. derive from pack_size + sales_uom for volume UOMs (L, ML)
+ *   5. otherwise → unresolved (caller should warn the operator)
  *
  * Why step 2 is preferred: many beverage SKUs are sold as `BOTTLE` (a
  * piece UOM), so pack_size + sales_uom can't tell us the liquid volume.
@@ -190,7 +228,23 @@ export function resolveBaseFillQtyPerUnit(
     }
   }
 
-  // 3. Derive from pack_size + sales_uom (legacy fallback for L/ML SKUs).
+  // 3. Derive from item name (strong fallback for BOTTLE-sold liquids).
+  //    GT Everyday product names are highly consistent:
+  //    "<NAME> <VOLUME>L" or "<NAME> <VOLUME>ML". This catches SKUs whose
+  //    PACK recipe has no line consuming the BASE component yet, AND whose
+  //    sales_uom is BOTTLE/UNIT (so step 4 below can't help).
+  if (item) {
+    const parsed = parseVolumeFromName(item.item_name);
+    if (parsed) {
+      const litres =
+        parsed.uom === "L" ? parsed.qtyPerUnit : parsed.qtyPerUnit / 1000;
+      if (litres > 0) {
+        return { qtyPerUnit: litres, source: "derived_from_name" };
+      }
+    }
+  }
+
+  // 4. Derive from pack_size + sales_uom (legacy fallback for L/ML SKUs).
   if (item) {
     const packSize = toFiniteNumber(item.pack_size);
     const uom = item.sales_uom?.toUpperCase() ?? null;

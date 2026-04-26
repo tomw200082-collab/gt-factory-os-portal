@@ -40,6 +40,18 @@ export interface SimulationLine {
 
 interface SimulationTableProps {
   lines: SimulationLine[];
+  /**
+   * Rendering mode.
+   *  - "scaled" (default): standard table with a "Per finished unit" column.
+   *    Used for the main combined PACK + BASE results scaled to the
+   *    operator's target output.
+   *  - "unscaled": the lines represent ONE reference batch of a BOM (e.g.
+   *    a BASE recipe at its natural batch size). The "Per finished unit"
+   *    column is hidden because there are no "finished units" in this
+   *    context — only batch quantities. The "Required" column header is
+   *    relabelled to "Batch quantity".
+   */
+  mode?: "scaled" | "unscaled";
 }
 
 function classBadgeTone(c: string | null): string {
@@ -60,7 +72,7 @@ function classBadgeTone(c: string | null): string {
   return "bg-bg-muted text-fg-muted border-border/70";
 }
 
-export function SimulationTable({ lines }: SimulationTableProps) {
+export function SimulationTable({ lines, mode = "scaled" }: SimulationTableProps) {
   if (lines.length === 0) {
     return (
       <div className="px-4 py-3 text-xs text-fg-muted">
@@ -69,6 +81,8 @@ export function SimulationTable({ lines }: SimulationTableProps) {
     );
   }
 
+  const isUnscaled = mode === "unscaled";
+
   return (
     <div className="overflow-x-auto">
       <table className="w-full text-sm">
@@ -76,8 +90,12 @@ export function SimulationTable({ lines }: SimulationTableProps) {
           <tr>
             <th className="px-4 py-2 text-left">Class</th>
             <th className="px-4 py-2 text-left">Component</th>
-            <th className="px-4 py-2 text-right">Per finished unit</th>
-            <th className="px-4 py-2 text-right">Required</th>
+            {!isUnscaled && (
+              <th className="px-4 py-2 text-right">Per finished unit</th>
+            )}
+            <th className="px-4 py-2 text-right">
+              {isUnscaled ? "Batch quantity" : "Required"}
+            </th>
             <th className="px-4 py-2 text-left">UOM</th>
           </tr>
         </thead>
@@ -98,9 +116,11 @@ export function SimulationTable({ lines }: SimulationTableProps) {
               <td className="px-4 py-2 font-medium text-fg-strong">
                 {l.componentName}
               </td>
-              <td className="px-4 py-2 text-right tabular-nums text-fg">
-                {formatQty(l.qtyPerUnit, l.uom)}
-              </td>
+              {!isUnscaled && (
+                <td className="px-4 py-2 text-right tabular-nums text-fg">
+                  {formatQty(l.qtyPerUnit, l.uom)}
+                </td>
+              )}
               <td className="px-4 py-2 text-right tabular-nums font-semibold text-fg-strong">
                 {formatQty(l.requiredQty, l.uom)}
               </td>

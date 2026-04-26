@@ -126,6 +126,18 @@ interface SimulationData {
   componentClassById: Map<string, string | null>;
   warnings: string[];
   notices: SimulationNotice[];
+  /**
+   * When base_fill_qty_per_unit cannot be resolved AND a BASE BOM is linked,
+   * we still fetch the BASE simulate at its natural batch size (the head's
+   * `final_bom_output_qty`) so the BASE recipe is visible to the operator.
+   * In that case `base` above is null and `baseUnscaled` carries the
+   * reference-batch lines plus the batch size + UOM for the disclaimer.
+   */
+  baseUnscaled: {
+    response: SimulateResponse;
+    batchQty: number;
+    batchUom: string | null;
+  } | null;
 }
 
 async function fetchSimulate(
@@ -230,6 +242,11 @@ async function loadSimulationData(
           tone: "info",
           message: `BASE volume read from PACK recipe (${fillPerUnit} L per unit). Set base_fill_qty_per_unit on the item to override.`,
         });
+      } else if (resolved.source === "derived_from_name") {
+        notices.push({
+          tone: "info",
+          message: `BASE volume inferred from product name (${fillPerUnit} L per unit). Set base_fill_qty_per_unit on the item to override.`,
+        });
       } else if (resolved.source === "derived_from_pack_size") {
         notices.push({
           tone: "info",
@@ -285,6 +302,38 @@ async function loadSimulationData(
       : Promise.resolve(null),
   ]);
 
+  // Step 5: when fill is unresolved BUT a BASE BOM is linked, fetch the
+  // BASE simulate at its NATURAL BATCH SIZE (the head's
+  // `final_bom_output_qty`) so the operator can still see the BASE recipe
+  // on the same page. These rows are NOT scaled to the production target —
+  // they show one reference batch and are rendered in a separate section
+  // below the main results with an explicit disclaimer.
+  let baseUnscaled: SimulationData["baseUnscaled"] = null;
+  if (
+    product.baseHead &&
+    baseLiters === null &&
+    product.baseHead.active_version_id
+  ) {
+    const batchQtyRaw = parseFloat(product.baseHead.final_bom_output_qty);
+    const batchQty =
+      Number.isFinite(batchQtyRaw) && batchQtyRaw > 0 ? batchQtyRaw : 100;
+    try {
+      const response = await fetchSimulate(
+        product.baseHead.bom_head_id,
+        batchQty,
+      );
+      baseUnscaled = {
+        response,
+        batchQty,
+        batchUom: product.baseHead.final_bom_output_uom ?? null,
+      };
+    } catch (err: unknown) {
+      warnings.push(
+        `BASE reference-batch simulation failed: ${err instanceof Error ? err.message : "unknown error"}`,
+      );
+    }
+  }
+
   return {
     pack,
     base,
@@ -293,6 +342,7 @@ async function loadSimulationData(
     componentClassById,
     warnings,
     notices,
+    baseUnscaled,
   };
 }
 
@@ -362,6 +412,32 @@ function buildSimulationLines(data: SimulationData): SimulationLine[] {
     }
   }
   return out;
+}
+
+/**
+ * Build SimulationLine[] for the BASE reference-batch (unscaled) section.
+ * No coverage joining — coverage is intentionally omitted because these
+ * quantities are not the operator's actual demand. `qtyPerUnit` is set to
+ * 0 because "per finished unit" is undefined when we don't know how many
+ * finished units one batch yields; SimulationTable still renders the row.
+ */
+function buildUnscaledBaseLines(
+  response: SimulateResponse,
+  classMap: Map<string, string | null>,
+): SimulationLine[] {
+  return response.lines.map((line) => {
+    const requiredQty = parseFloat(line.required_qty);
+    return {
+      id: `base-unscaled-${response.bom_head_id}-${line.line_no}`,
+      componentId: line.component_id,
+      componentName: line.component_name,
+      componentClass: classMap.get(line.component_id) ?? null,
+      qtyPerUnit: 0,
+      requiredQty: Number.isFinite(requiredQty) ? requiredQty : 0,
+      uom: line.component_uom ?? "UNIT",
+      coverage: null,
+    };
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -602,6 +678,9 @@ export function SimulationResults({
 
   const data = dataQuery.data!;
   const lines = buildSimulationLines(data);
+  const unscaledBaseLines = data.baseUnscaled
+    ? buildUnscaledBaseLines(data.baseUnscaled.response, data.componentClassById)
+    : [];
 
   const hasPack = !!data.pack;
   const hasBase = !!data.base;
@@ -659,6 +738,40 @@ export function SimulationResults({
         ) : null}
         <SimulationTable lines={lines} />
       </SectionCard>
+
+      {data.baseUnscaled && unscaledBaseLines.length > 0 ? (
+        <SectionCard
+          eyebrow="BASE recipe"
+          title="BASE recipe (reference batch — not scaled to target)"
+          description={`One batch of the linked BASE recipe${
+            product.baseHead?.parent_name
+              ? ` (${product.baseHead.parent_name})`
+              : ""
+          }.`}
+          actions={
+            <Badge tone="info" dotted>
+              {data.baseUnscaled.response.lines.length} lines
+            </Badge>
+          }
+          contentClassName="p-0"
+        >
+          <div className="space-y-1 border-b border-info/30 bg-info-softer/40 px-4 py-3 text-xs text-info-fg">
+            <div>
+              BASE quantities below show one batch of the BASE recipe (
+              {formatQty(data.baseUnscaled.batchQty, data.baseUnscaled.batchUom ?? "")}
+              {data.baseUnscaled.batchUom ? ` ${data.baseUnscaled.batchUom}` : ""}
+              ). They are <span className="font-semibold">not</span> scaled to
+              the production target above.
+            </div>
+            <div>
+              To scale BASE requirements to the target output, set{" "}
+              <span className="font-mono">base_fill_qty_per_unit</span> on the
+              item (liters of BASE per finished unit).
+            </div>
+          </div>
+          <SimulationTable lines={unscaledBaseLines} mode="unscaled" />
+        </SectionCard>
+      ) : null}
 
       <SectionCard
         eyebrow="Coverage"
