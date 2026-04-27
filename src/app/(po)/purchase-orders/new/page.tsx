@@ -5,34 +5,32 @@
 //
 // 2026-04-26 (CLAUDE.md §"PO workflow" amendment — planner/admin may create a
 // PO directly without a planning recommendation, with a mandatory reason).
+// 2026-04-27 — converted to English (matching portal convention per a558e9e),
+// added SearchableSelect comboboxes for supplier + line orderable, tightened
+// visual hierarchy.
 //
 // Gate: planning:execute (planner + admin only). Operators and viewers see
 // an access-restricted message via <RoleGate>.
 //
-// Fields:
-//   ספק               — supplier picker (required)
-//   תאריך אספקה צפוי  — expected delivery date (required, default today+7)
-//   סיבה להזמנה       — free-text reason (required, min 5 chars)
-//   שורות להזמנה      — dynamic line editor (min 1 line)
-//     └─ פריט / חומר גלם  — item or component picker (required)
-//     └─ qty             — numeric, >0 (required)
-//     └─ uom             — from UOMS enum (required)
-//   הערות             — optional notes textarea
-//
 // Submit: POST /api/purchase-orders
 //   201 → redirect to /purchase-orders/[po_id]
 //   409 idempotent replay → success banner + redirect
-//   422 → field-level validation errors
+//   422 → server error banner with the first issue surfaced
 //   503/5xx → connection error banner
 // ---------------------------------------------------------------------------
 
 import { useState, useMemo, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
+import { AlertTriangle, FilePlus2, Trash2 } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { RoleGate } from "@/lib/auth/role-gate";
 import { UOMS, type Uom } from "@/lib/contracts/enums";
+import {
+  SearchableSelect,
+  type SearchableSelectOption,
+} from "@/components/fields/SearchableSelect";
 import { cn } from "@/lib/cn";
 
 // ---------------------------------------------------------------------------
@@ -65,11 +63,11 @@ interface ItemRow {
 
 type ListEnvelope<T> = { rows: T[]; count: number };
 
-// A unified "orderable" entry combining items (BOUGHT_FINISHED) and components.
 interface OrderableRow {
   kind: "item" | "component";
   id: string;
   label: string;
+  meta: string;
   default_uom: Uom;
 }
 
@@ -85,7 +83,10 @@ interface ValidationErrors {
   expected_receive_date?: string;
   manual_reason?: string;
   lines?: string;
-  line_items?: Record<number, { orderable_key?: string; quantity?: string; uom?: string }>;
+  line_items?: Record<
+    number,
+    { orderable_key?: string; quantity?: string; uom?: string }
+  >;
   general?: string;
 }
 
@@ -125,8 +126,14 @@ function emptyLine(): LineDraft {
   return { orderable_key: "", quantity: "", uom: "UNIT" };
 }
 
+const REQUIRED_LABEL = (
+  <span className="ml-0.5 text-danger-fg" aria-hidden>
+    *
+  </span>
+);
+
 // ---------------------------------------------------------------------------
-// Form page component — wrapped by RoleGate below
+// Form
 // ---------------------------------------------------------------------------
 
 function ManualPoFormInner(): JSX.Element {
@@ -151,7 +158,23 @@ function ManualPoFormInner(): JSX.Element {
     staleTime: 60_000,
   });
 
-  // Unified orderable list: BOUGHT_FINISHED items + all active components.
+  // Supplier options sorted alphabetically by official name.
+  const supplierOptions: SearchableSelectOption[] = useMemo(() => {
+    const rows = suppliersQuery.data?.rows ?? [];
+    return rows
+      .slice()
+      .sort((a, b) =>
+        a.supplier_name_official.localeCompare(b.supplier_name_official),
+      )
+      .map((s) => ({
+        value: s.supplier_id,
+        label: s.supplier_name_official,
+        meta: s.supplier_id,
+      }));
+  }, [suppliersQuery.data]);
+
+  // Unified orderable list: BOUGHT_FINISHED items + all active components,
+  // grouped (Item / Component) for visual segmentation in the dropdown.
   const orderables: OrderableRow[] = useMemo(() => {
     const items = (itemsQuery.data?.rows ?? [])
       .filter((i) => i.supply_method === "BOUGHT_FINISHED")
@@ -159,7 +182,8 @@ function ManualPoFormInner(): JSX.Element {
         (i): OrderableRow => ({
           kind: "item",
           id: i.item_id,
-          label: `${i.item_name} · ${i.sku ?? i.item_id}`,
+          label: i.item_name,
+          meta: i.sku ?? i.item_id,
           default_uom: toUom(i.sales_uom),
         }),
       );
@@ -167,7 +191,8 @@ function ManualPoFormInner(): JSX.Element {
       (c): OrderableRow => ({
         kind: "component",
         id: c.component_id,
-        label: `${c.component_name} · ${c.component_id}`,
+        label: c.component_name,
+        meta: c.component_id,
         default_uom: toUom(c.inventory_uom ?? c.purchase_uom ?? c.bom_uom),
       }),
     );
@@ -175,6 +200,17 @@ function ManualPoFormInner(): JSX.Element {
       a.label.localeCompare(b.label),
     );
   }, [itemsQuery.data, componentsQuery.data]);
+
+  const orderableOptions: SearchableSelectOption[] = useMemo(
+    () =>
+      orderables.map((r) => ({
+        value: `${r.kind}:${r.id}`,
+        label: r.label,
+        meta: r.meta,
+        group: r.kind === "item" ? "Finished goods" : "Components",
+      })),
+    [orderables],
+  );
 
   const orderableByKey = useMemo(() => {
     const m = new Map<string, OrderableRow>();
@@ -307,7 +343,7 @@ function ManualPoFormInner(): JSX.Element {
       });
     } catch {
       setServerError(
-        "לא ניתן לשמור. בדוק את החיבור ונסה שוב.",
+        "Could not submit. Check your connection and try again.",
       );
       setPhase("idle");
       return;
@@ -323,7 +359,11 @@ function ManualPoFormInner(): JSX.Element {
         setPhase("idempotent");
         setSuccessPoId(poId ?? null);
         if (poId) {
-          setTimeout(() => router.push(`/purchase-orders/${encodeURIComponent(poId)}`), 1500);
+          setTimeout(
+            () =>
+              router.push(`/purchase-orders/${encodeURIComponent(poId)}`),
+            1500,
+          );
         }
         return;
       }
@@ -336,13 +376,15 @@ function ManualPoFormInner(): JSX.Element {
     }
 
     if (res.status === 409) {
-      // Idempotency replay (same idempotency_key)
       const data = (await res.json().catch(() => ({}))) as { po_id?: string };
       setPhase("idempotent");
       setSuccessPoId(data.po_id ?? null);
       if (data.po_id) {
         setTimeout(
-          () => router.push(`/purchase-orders/${encodeURIComponent(data.po_id!)}`),
+          () =>
+            router.push(
+              `/purchase-orders/${encodeURIComponent(data.po_id!)}`,
+            ),
           1500,
         );
       }
@@ -354,8 +396,6 @@ function ManualPoFormInner(): JSX.Element {
         error?: string;
         issues?: Array<{ path: string[]; message: string }>;
       };
-      // Surface first issue as a general error; full field-level mapping is
-      // aspirational for v1 — the server Zod errors rarely map 1:1 to form fields.
       setServerError(
         data.error ??
           (data.issues?.[0]?.message
@@ -367,11 +407,10 @@ function ManualPoFormInner(): JSX.Element {
     }
 
     // 503 / 5xx
-    setServerError("לא ניתן לשמור. בדוק את החיבור ונסה שוב.");
+    setServerError("Could not submit. Check your connection and try again.");
     setPhase("idle");
   }
 
-  const suppliers = suppliersQuery.data?.rows ?? [];
   const masterDataLoading =
     suppliersQuery.isLoading ||
     componentsQuery.isLoading ||
@@ -381,19 +420,18 @@ function ManualPoFormInner(): JSX.Element {
   if (phase === "success" || phase === "idempotent") {
     return (
       <>
-        <WorkflowHeader
-          eyebrow="הזמנות רכש"
-          title="צור הזמנת רכש"
-        />
+        <WorkflowHeader eyebrow="Purchase Orders" title="New manual order" />
         <SectionCard>
-          <div className="px-6 py-8 text-center space-y-2">
-            <div className="text-sm font-medium text-success-fg">
+          <div className="px-6 py-10 text-center space-y-2">
+            <div className="text-sm font-semibold text-success-fg">
               {phase === "idempotent"
-                ? "הזמנת הרכש כבר קיימת"
-                : "הזמנת הרכש נוצרה בהצלחה"}
+                ? "This purchase order already exists."
+                : "Purchase order created."}
             </div>
             {successPoId && (
-              <div className="text-xs text-fg-muted font-mono">{successPoId}</div>
+              <div className="text-xs text-fg-muted font-mono">
+                {successPoId}
+              </div>
             )}
             <div className="text-xs text-fg-faint">Redirecting…</div>
           </div>
@@ -406,107 +444,122 @@ function ManualPoFormInner(): JSX.Element {
   return (
     <>
       <WorkflowHeader
-        eyebrow="הזמנות רכש"
-        title="צור הזמנת רכש"
-        description="הזמנה ידנית — לא מתוך המלצת רכש. נדרשת סיבה."
-        meta={null}
+        eyebrow="Purchase Orders"
+        title="New manual order"
+        description="Manual purchase order — created without a planning recommendation. A reason is required for traceability."
+        meta={
+          <span className="inline-flex items-center gap-1.5 rounded-full border border-warning/40 bg-warning/5 px-2.5 py-0.5 text-3xs font-semibold uppercase tracking-sops text-warning-fg">
+            <AlertTriangle className="h-3 w-3" aria-hidden />
+            Manual entry
+          </span>
+        }
         actions={null}
       />
 
       <form
-        onSubmit={(e) => { void handleSubmit(e); }}
+        onSubmit={(e) => {
+          void handleSubmit(e);
+        }}
         noValidate
-        className="space-y-6"
+        className="space-y-5 pb-12"
       >
         {serverError && (
           <div
-            className="rounded-md border border-danger/40 bg-danger/5 px-4 py-3 text-sm text-danger-fg"
+            role="alert"
+            className="rounded-md border border-danger/40 bg-danger/5 px-4 py-3 text-sm text-danger-fg flex items-start gap-2"
             data-testid="po-new-server-error"
           >
-            {serverError}
+            <AlertTriangle
+              className="h-4 w-4 shrink-0 mt-0.5"
+              aria-hidden
+            />
+            <span>{serverError}</span>
           </div>
         )}
 
+        {/* Section 1 — Order details */}
         <SectionCard>
+          <div className="px-6 py-4 border-b border-border/60">
+            <h2 className="text-xs font-semibold text-fg">Order details</h2>
+            <p className="mt-0.5 text-3xs text-fg-faint">
+              Who you are ordering from, when you expect it, and why this is a
+              manual order.
+            </p>
+          </div>
           <div className="px-6 py-5 space-y-5">
-
-            {/* ספק */}
-            <div className="space-y-1">
-              <label
-                htmlFor="po-new-supplier"
-                className="block text-xs font-semibold text-fg"
-              >
-                ספק
-                <span className="ml-1 text-danger-fg" aria-hidden>*</span>
-              </label>
-              <select
-                id="po-new-supplier"
-                data-testid="po-new-supplier"
-                value={supplierId}
-                onChange={(e) => setSupplierId(e.target.value)}
-                className={cn(
-                  "input w-full",
-                  errors.supplier_id && "border-danger/60",
+            {/* Supplier + Date — two-column on sm+ */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div className="space-y-1">
+                <label
+                  htmlFor="po-new-supplier-trigger"
+                  className="block text-xs font-semibold text-fg"
+                >
+                  Supplier
+                  {REQUIRED_LABEL}
+                </label>
+                <SearchableSelect
+                  value={supplierId}
+                  onChange={setSupplierId}
+                  options={supplierOptions}
+                  placeholder="— Select supplier —"
+                  searchPlaceholder="Search by supplier name…"
+                  emptyMessage="No suppliers match"
+                  loading={suppliersQuery.isLoading}
+                  disabled={phase === "submitting"}
+                  invalid={!!errors.supplier_id}
+                  testId="po-new-supplier"
+                  ariaLabel="Supplier"
+                />
+                {errors.supplier_id && (
+                  <div className="text-xs text-danger-fg">
+                    {errors.supplier_id}
+                  </div>
                 )}
-                disabled={masterDataLoading || phase === "submitting"}
-              >
-                <option value="">
-                  {masterDataLoading ? "Loading suppliers…" : "— Select supplier —"}
-                </option>
-                {suppliers.map((s) => (
-                  <option key={s.supplier_id} value={s.supplier_id}>
-                    {s.supplier_name_official}
-                  </option>
-                ))}
-              </select>
-              {errors.supplier_id && (
-                <div className="text-xs text-danger-fg">{errors.supplier_id}</div>
-              )}
+              </div>
+
+              <div className="space-y-1">
+                <label
+                  htmlFor="po-new-expected-date"
+                  className="block text-xs font-semibold text-fg"
+                >
+                  Expected delivery date
+                  {REQUIRED_LABEL}
+                </label>
+                <input
+                  id="po-new-expected-date"
+                  data-testid="po-new-expected-date"
+                  type="date"
+                  value={expectedDate}
+                  onChange={(e) => setExpectedDate(e.target.value)}
+                  className={cn(
+                    "input w-full",
+                    errors.expected_receive_date && "border-danger/60",
+                  )}
+                  disabled={phase === "submitting"}
+                />
+                {errors.expected_receive_date && (
+                  <div className="text-xs text-danger-fg">
+                    {errors.expected_receive_date}
+                  </div>
+                )}
+              </div>
             </div>
 
-            {/* תאריך אספקה צפוי */}
-            <div className="space-y-1">
-              <label
-                htmlFor="po-new-expected-date"
-                className="block text-xs font-semibold text-fg"
-              >
-                תאריך אספקה צפוי
-                <span className="ml-1 text-danger-fg" aria-hidden>*</span>
-              </label>
-              <input
-                id="po-new-expected-date"
-                data-testid="po-new-expected-date"
-                type="date"
-                value={expectedDate}
-                onChange={(e) => setExpectedDate(e.target.value)}
-                className={cn(
-                  "input w-full",
-                  errors.expected_receive_date && "border-danger/60",
-                )}
-                disabled={phase === "submitting"}
-              />
-              {errors.expected_receive_date && (
-                <div className="text-xs text-danger-fg">
-                  {errors.expected_receive_date}
-                </div>
-              )}
-            </div>
-
-            {/* סיבה להזמנה */}
+            {/* Reason — full width */}
             <div className="space-y-1">
               <label
                 htmlFor="po-new-reason"
                 className="block text-xs font-semibold text-fg"
               >
-                סיבה להזמנה
-                <span className="ml-1 text-danger-fg" aria-hidden>*</span>
+                Reason for manual order
+                {REQUIRED_LABEL}
               </label>
               <textarea
                 id="po-new-reason"
                 data-testid="po-new-reason"
                 value={manualReason}
                 onChange={(e) => setManualReason(e.target.value)}
-                placeholder="תאר את הסיבה להזמנה הידנית"
+                placeholder="Why is this PO being created without a planning recommendation?"
                 rows={3}
                 className={cn(
                   "input w-full resize-none",
@@ -514,81 +567,91 @@ function ManualPoFormInner(): JSX.Element {
                 )}
                 disabled={phase === "submitting"}
               />
+              <p className="text-3xs text-fg-faint">
+                Minimum 5 characters. This is recorded on the PO for audit.
+              </p>
               {errors.manual_reason && (
-                <div className="text-xs text-danger-fg">{errors.manual_reason}</div>
+                <div className="text-xs text-danger-fg">
+                  {errors.manual_reason}
+                </div>
               )}
             </div>
-
           </div>
         </SectionCard>
 
-        {/* שורות להזמנה */}
+        {/* Section 2 — Order lines */}
         <SectionCard>
-          <div className="px-6 py-4 border-b border-border/60">
-            <span className="text-xs font-semibold text-fg">
-              שורות להזמנה
+          <div className="px-6 py-4 border-b border-border/60 flex items-center justify-between gap-3">
+            <div>
+              <h2 className="text-xs font-semibold text-fg">Order lines</h2>
+              <p className="mt-0.5 text-3xs text-fg-faint">
+                Items or components to purchase. Quantity is in the unit you
+                pick on each line.
+              </p>
+            </div>
+            <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle tabular-nums">
+              {lines.length} line{lines.length === 1 ? "" : "s"}
             </span>
-            {errors.lines && (
-              <span className="ml-2 text-xs text-danger-fg">{errors.lines}</span>
-            )}
           </div>
-          <div className="px-6 py-4 space-y-4">
+          <div className="px-6 py-4 space-y-3">
+            {errors.lines && (
+              <div className="text-xs text-danger-fg">{errors.lines}</div>
+            )}
+
             {lines.map((line, idx) => {
               const lineErr = errors.line_items?.[idx];
+              const selectedOrderable = orderableByKey.get(line.orderable_key);
               return (
                 <div
                   key={idx}
-                  className="rounded-md border border-border/60 bg-bg-subtle/30 p-4 space-y-3"
+                  className={cn(
+                    "rounded-md border bg-bg-subtle/30 p-4 space-y-3 transition-colors",
+                    lineErr
+                      ? "border-danger/40"
+                      : "border-border/60 hover:border-border",
+                  )}
                   data-testid={`po-new-line-${idx}`}
                 >
-                  <div className="flex items-center justify-between">
-                    <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      שורה {idx + 1}
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle tabular-nums">
+                      Line {idx + 1}
                     </span>
                     {lines.length > 1 && (
                       <button
                         type="button"
                         onClick={() => removeLine(idx)}
-                        className="text-3xs text-danger-fg hover:text-danger-fg/80 transition-colors"
+                        className="inline-flex items-center gap-1 text-3xs font-semibold uppercase tracking-sops text-fg-muted hover:text-danger-fg transition-colors"
                         aria-label={`Remove line ${idx + 1}`}
                         data-testid={`po-new-line-remove-${idx}`}
+                        disabled={phase === "submitting"}
                       >
-                        הסר
+                        <Trash2 className="h-3 w-3" aria-hidden />
+                        Remove
                       </button>
                     )}
                   </div>
 
-                  {/* פריט / חומר גלם */}
+                  {/* Item / component picker */}
                   <div className="space-y-1">
-                    <label
-                      htmlFor={`po-new-line-item-${idx}`}
-                      className="block text-xs font-semibold text-fg"
-                    >
-                      פריט / חומר גלם
-                      <span className="ml-1 text-danger-fg" aria-hidden>*</span>
+                    <label className="block text-xs font-semibold text-fg">
+                      Item or component
+                      {REQUIRED_LABEL}
                     </label>
-                    <select
-                      id={`po-new-line-item-${idx}`}
-                      data-testid={`po-new-line-item-${idx}`}
+                    <SearchableSelect
                       value={line.orderable_key}
-                      onChange={(e) =>
-                        updateLine(idx, { orderable_key: e.target.value })
+                      onChange={(v) => updateLine(idx, { orderable_key: v })}
+                      options={orderableOptions}
+                      placeholder="— Select item or component —"
+                      searchPlaceholder="Search by name or SKU…"
+                      emptyMessage="No items or components match"
+                      loading={
+                        itemsQuery.isLoading || componentsQuery.isLoading
                       }
-                      className={cn(
-                        "input w-full",
-                        lineErr?.orderable_key && "border-danger/60",
-                      )}
-                      disabled={masterDataLoading || phase === "submitting"}
-                    >
-                      <option value="">
-                        {masterDataLoading ? "Loading…" : "— Select item / component —"}
-                      </option>
-                      {orderables.map((r) => (
-                        <option key={`${r.kind}:${r.id}`} value={`${r.kind}:${r.id}`}>
-                          {r.label}
-                        </option>
-                      ))}
-                    </select>
+                      disabled={phase === "submitting"}
+                      invalid={!!lineErr?.orderable_key}
+                      testId={`po-new-line-item-${idx}`}
+                      ariaLabel={`Line ${idx + 1} item or component`}
+                    />
                     {lineErr?.orderable_key && (
                       <div className="text-xs text-danger-fg">
                         {lineErr.orderable_key}
@@ -596,20 +659,21 @@ function ManualPoFormInner(): JSX.Element {
                     )}
                   </div>
 
-                  {/* Quantity + UOM row */}
-                  <div className="grid grid-cols-2 gap-3">
+                  {/* Quantity + UoM */}
+                  <div className="grid grid-cols-[1fr,auto] gap-3">
                     <div className="space-y-1">
                       <label
                         htmlFor={`po-new-line-qty-${idx}`}
                         className="block text-xs font-semibold text-fg"
                       >
-                        כמות
-                        <span className="ml-1 text-danger-fg" aria-hidden>*</span>
+                        Quantity
+                        {REQUIRED_LABEL}
                       </label>
                       <input
                         id={`po-new-line-qty-${idx}`}
                         data-testid={`po-new-line-qty-${idx}`}
                         type="number"
+                        inputMode="decimal"
                         min="0.0001"
                         step="any"
                         value={line.quantity}
@@ -617,7 +681,7 @@ function ManualPoFormInner(): JSX.Element {
                           updateLine(idx, { quantity: e.target.value })
                         }
                         className={cn(
-                          "input w-full",
+                          "input w-full tabular-nums",
                           lineErr?.quantity && "border-danger/60",
                         )}
                         disabled={phase === "submitting"}
@@ -634,8 +698,8 @@ function ManualPoFormInner(): JSX.Element {
                         htmlFor={`po-new-line-uom-${idx}`}
                         className="block text-xs font-semibold text-fg"
                       >
-                        יחידה
-                        <span className="ml-1 text-danger-fg" aria-hidden>*</span>
+                        UoM
+                        {REQUIRED_LABEL}
                       </label>
                       <select
                         id={`po-new-line-uom-${idx}`}
@@ -645,7 +709,7 @@ function ManualPoFormInner(): JSX.Element {
                           updateLine(idx, { uom: e.target.value as Uom })
                         }
                         className={cn(
-                          "input w-full",
+                          "input w-24",
                           lineErr?.uom && "border-danger/60",
                         )}
                         disabled={phase === "submitting"}
@@ -657,10 +721,25 @@ function ManualPoFormInner(): JSX.Element {
                         ))}
                       </select>
                       {lineErr?.uom && (
-                        <div className="text-xs text-danger-fg">{lineErr.uom}</div>
+                        <div className="text-xs text-danger-fg">
+                          {lineErr.uom}
+                        </div>
                       )}
                     </div>
                   </div>
+
+                  {/* Selected item meta strip — quiet helper text */}
+                  {selectedOrderable && (
+                    <div className="text-3xs text-fg-faint font-mono">
+                      <span className="uppercase tracking-sops">
+                        {selectedOrderable.kind}
+                      </span>
+                      {" · "}
+                      {selectedOrderable.meta}
+                      {" · default "}
+                      {selectedOrderable.default_uom}
+                    </div>
+                  )}
                 </div>
               );
             })}
@@ -668,24 +747,27 @@ function ManualPoFormInner(): JSX.Element {
             <button
               type="button"
               onClick={addLine}
-              className="inline-flex items-center gap-1 text-xs text-accent hover:text-accent/80 font-semibold transition-colors"
+              className="inline-flex items-center gap-1.5 text-xs font-semibold text-accent hover:text-accent/80 transition-colors disabled:opacity-50"
               data-testid="po-new-add-line"
               disabled={phase === "submitting"}
             >
-              + הוסף שורה
+              <FilePlus2 className="h-3.5 w-3.5" aria-hidden />
+              Add line
             </button>
           </div>
         </SectionCard>
 
-        {/* הערות (optional) */}
+        {/* Section 3 — Notes (optional) */}
         <SectionCard>
           <div className="px-6 py-5 space-y-1">
             <label
               htmlFor="po-new-notes"
               className="block text-xs font-semibold text-fg"
             >
-              הערות
-              <span className="ml-1 text-3xs text-fg-faint">(optional)</span>
+              Notes
+              <span className="ml-1 text-3xs font-normal text-fg-faint">
+                (optional)
+              </span>
             </label>
             <textarea
               id="po-new-notes"
@@ -693,29 +775,30 @@ function ManualPoFormInner(): JSX.Element {
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
+              placeholder="Anything else the receiving team should know…"
               className="input w-full resize-none"
               disabled={phase === "submitting"}
             />
           </div>
         </SectionCard>
 
-        {/* Submit / Cancel */}
-        <div className="flex items-center gap-3 pb-8">
-          <button
-            type="submit"
-            data-testid="po-new-submit"
-            className="btn btn-accent w-full sm:w-auto"
-            disabled={phase === "submitting" || masterDataLoading}
-          >
-            {phase === "submitting" ? "שומר…" : "צור הזמנת רכש"}
-          </button>
+        {/* Footer — submit + cancel */}
+        <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3 pt-2">
           <button
             type="button"
             className="btn btn-ghost btn-sm"
             onClick={() => router.push("/purchase-orders")}
             disabled={phase === "submitting"}
           >
-            ביטול
+            Cancel
+          </button>
+          <button
+            type="submit"
+            data-testid="po-new-submit"
+            className="btn btn-accent w-full sm:w-auto"
+            disabled={phase === "submitting" || masterDataLoading}
+          >
+            {phase === "submitting" ? "Creating…" : "Create purchase order"}
           </button>
         </div>
       </form>
