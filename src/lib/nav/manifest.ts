@@ -19,6 +19,7 @@ import type { LucideIcon } from "lucide-react";
 import {
   Activity,
   AlertCircle,
+  AlertOctagon,
   Archive,
   ArrowLeftRight,
   Building2,
@@ -212,6 +213,13 @@ export const NAV_MANIFEST: NavGroup[] = [
         href: "/planning/inventory-flow",
         label: "Inventory Flow",
         icon: CalendarDays,
+        min_role: "viewer",
+        required_capability: "planning:read",
+      },
+      {
+        href: "/planning/blockers",
+        label: "Blockers",
+        icon: AlertOctagon,
         min_role: "viewer",
         required_capability: "planning:read",
       },
