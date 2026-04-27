@@ -15,10 +15,18 @@ export async function GET(
   ctx: { params: Promise<{ itemId: string }> },
 ): Promise<Response> {
   const { itemId } = await ctx.params;
-  return proxyRequest(req, {
+  const res = await proxyRequest(req, {
     method: "GET",
     upstreamPath: `/api/v1/queries/inventory/flow/item/${encodeURIComponent(itemId)}`,
     forwardQuery: true,
     errorLabel: "inventory flow item detail",
   });
+  // Same per-user browser cache as the parent flow endpoint.
+  if (res.ok) {
+    res.headers.set(
+      "Cache-Control",
+      "private, max-age=30, stale-while-revalidate=60",
+    );
+  }
+  return res;
 }

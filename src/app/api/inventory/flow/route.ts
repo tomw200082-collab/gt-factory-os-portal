@@ -18,10 +18,24 @@ import { proxyRequest } from "@/lib/api-proxy";
 // ---------------------------------------------------------------------------
 
 export async function GET(req: Request): Promise<Response> {
-  return proxyRequest(req, {
+  const res = await proxyRequest(req, {
     method: "GET",
     upstreamPath: "/api/v1/queries/inventory/flow",
     forwardQuery: true,
     errorLabel: "inventory flow",
   });
+  // Add browser-side caching for repeat loads. Upstream DB query is ~22s
+  // and the data changes slowly (planning runs once a day, ledger events
+  // are minute-scale). 30s fresh + 60s stale-while-revalidate gives the
+  // user near-instant repeat navigation while keeping data within the
+  // same staleness window the TanStack hook already enforces (staleTime
+  // 30s + refetchInterval 60s in useInventoryFlow.ts).
+  // private = per-user only; do not cache at any shared CDN layer.
+  if (res.ok) {
+    res.headers.set(
+      "Cache-Control",
+      "private, max-age=30, stale-while-revalidate=60",
+    );
+  }
+  return res;
 }
