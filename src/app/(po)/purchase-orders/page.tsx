@@ -1,28 +1,42 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// Planner · Purchase Orders — read-only live view + manual creation entry.
+// Planner · Purchase Orders — read-only live list with manual creation entry.
 //
 // Endgame Phase C2 (crystalline-drifting-dusk §B.C2) + 2026-04-26 manual-PO
-// amendment (CLAUDE.md §"PO workflow" updated to permit planner/admin manual
-// creation alongside the recommendation-bridge path):
+// amendment + 2026-04-27 English UX redesign:
 //   - Read-only list backed by GET /api/v1/queries/purchase-orders
 //     (via portal proxy at /api/purchase-orders).
-//   - Columns: po_number, supplier_id, status, order_date,
-//     expected_receive_date, total_net, source (recommendation / manual),
-//     created_at.
-//   - Status filter bar (OPEN | PARTIAL | RECEIVED | CANCELLED | all).
-//   - Sort: created_at desc (server returns in that order).
+//   - Stat tiles: Open / Partial / Late (derived) / Received — clickable
+//     filter chips.
+//   - Status filter row + search.
+//   - Default sort: late first → expected receive date → po_number.
 //   - Two PO creation paths (planner/admin only):
-//     1. "מתוך המלצת רכש" → /planning/runs (recommendation-bridge)
-//     2. "הזמנה ידנית" → /purchase-orders/new (manual creation)
+//       1. From recommendation → /planning/runs (recommendation-bridge)
+//       2. Manual entry        → /purchase-orders/new (manual creation)
 //     Operators and viewers do NOT see the creation dropdown.
 // ---------------------------------------------------------------------------
 
-import { useMemo, useState, useCallback, useRef, useEffect } from "react";
+import {
+  useMemo,
+  useState,
+  useCallback,
+  useRef,
+  useEffect,
+} from "react";
 import Link from "next/link";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
+import {
+  AlertTriangle,
+  ChevronDown,
+  Clock,
+  ClipboardList,
+  FilePlus2,
+  Plus,
+  Search,
+  Sparkles,
+} from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
@@ -30,10 +44,12 @@ import { EmptyState } from "@/components/feedback/states";
 import { cn } from "@/lib/cn";
 import { useCapability } from "@/lib/auth/role-gate";
 
-// Mirror of api/src/purchase-orders/schemas.ts. Keep byte-aligned with
-// upstream; drift is a bug.
-// source_type added 2026-04-26: 'recommendation' | 'manual' | undefined (older
-// rows may not return this field; render gracefully when undefined).
+// ---------------------------------------------------------------------------
+// Types — mirror of api/src/purchase-orders/schemas.ts.
+// source_type added 2026-04-26: 'recommendation' | 'manual' | undefined
+// (older rows may not return this field — we infer from
+// source_recommendation_id when missing).
+// ---------------------------------------------------------------------------
 interface PurchaseOrderRow {
   po_id: string;
   po_number: string;
@@ -64,34 +80,32 @@ interface PurchaseOrdersListResponse {
 type POStatus = "OPEN" | "PARTIAL" | "RECEIVED" | "CANCELLED";
 const STATUS_OPTIONS: POStatus[] = ["OPEN", "PARTIAL", "RECEIVED", "CANCELLED"];
 
+// ---------------------------------------------------------------------------
+// Formatting helpers — locale forced to en-US for stable, predictable display
+// regardless of browser locale (Tom is on Hebrew browser locale; the previous
+// undefined-locale call rendered Hebrew month abbreviations like "באפר׳").
+// ---------------------------------------------------------------------------
 function fmtMoney(value: string | null | undefined, currency: string): string {
   if (!value) return "—";
   const n = Number(value);
   if (isNaN(n)) return value;
   if (n === 0) return "—";
   try {
-    return new Intl.NumberFormat(undefined, {
-      style: "currency", currency,
-      minimumFractionDigits: 2, maximumFractionDigits: 2,
+    return new Intl.NumberFormat("en-US", {
+      style: "currency",
+      currency,
+      minimumFractionDigits: 0,
+      maximumFractionDigits: 0,
     }).format(n);
   } catch {
     return `${value} ${currency}`;
   }
 }
 
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error("Failed to load purchase orders. Check your connection and try refreshing.");
-  }
-  return (await res.json()) as T;
-}
-
 function fmtDate(iso: string | null): string {
   if (!iso) return "—";
   try {
-    return new Date(iso).toLocaleDateString(undefined, {
+    return new Date(iso).toLocaleDateString("en-US", {
       year: "numeric",
       month: "short",
       day: "2-digit",
@@ -104,7 +118,7 @@ function fmtDate(iso: string | null): string {
 function fmtDateTime(iso: string | null): string {
   if (!iso) return "—";
   try {
-    return new Date(iso).toLocaleString(undefined, {
+    return new Date(iso).toLocaleString("en-US", {
       year: "numeric",
       month: "short",
       day: "2-digit",
@@ -114,6 +128,16 @@ function fmtDateTime(iso: string | null): string {
   } catch {
     return iso;
   }
+}
+
+async function fetchJson<T>(url: string): Promise<T> {
+  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!res.ok) {
+    throw new Error(
+      "Failed to load purchase orders. Check your connection and try refreshing.",
+    );
+  }
+  return (await res.json()) as T;
 }
 
 function POStatusBadge({ status }: { status: string }): JSX.Element {
@@ -126,21 +150,30 @@ function POStatusBadge({ status }: { status: string }): JSX.Element {
   return <Badge tone="neutral">{status}</Badge>;
 }
 
-// Derive a human-readable source label from source_type.
-// source_recommendation_id is used as a fallback for pre-amendment rows that
-// don't yet carry source_type.
-function sourceLabel(row: PurchaseOrderRow): string | null {
-  if (row.source_type === "manual") return "ידני";
-  if (row.source_type === "recommendation") return "המלצת רכש";
-  // Legacy rows: infer from presence of source_recommendation_id.
-  if (row.source_recommendation_id) return "המלצת רכש";
+// Derive a human-readable source label from source_type. Falls back to
+// inferring from source_recommendation_id for pre-amendment rows.
+function sourceKind(row: PurchaseOrderRow): "recommendation" | "manual" | null {
+  if (row.source_type === "manual") return "manual";
+  if (row.source_type === "recommendation") return "recommendation";
+  if (row.source_recommendation_id) return "recommendation";
   return null;
+}
+
+function SourceBadge({ row }: { row: PurchaseOrderRow }): JSX.Element {
+  const kind = sourceKind(row);
+  if (kind === "recommendation") {
+    return <Badge tone="info" dotted>Recommendation</Badge>;
+  }
+  if (kind === "manual") {
+    return <Badge tone="warning" dotted>Manual</Badge>;
+  }
+  return <span className="text-fg-faint">—</span>;
 }
 
 // ---------------------------------------------------------------------------
 // New PO dropdown — planner/admin only. Two options:
-//   1. מתוך המלצת רכש → /planning/runs
-//   2. הזמנה ידנית    → /purchase-orders/new
+//   1. From recommendation → /planning/runs
+//   2. Manual entry        → /purchase-orders/new
 // ---------------------------------------------------------------------------
 function NewPoDropdown(): JSX.Element | null {
   const canCreate = useCapability("planning:execute");
@@ -148,7 +181,6 @@ function NewPoDropdown(): JSX.Element | null {
   const menuRef = useRef<HTMLDivElement>(null);
   const router = useRouter();
 
-  // Close on outside click
   useEffect(() => {
     if (!open) return;
     function handleClick(e: MouseEvent): void {
@@ -156,8 +188,15 @@ function NewPoDropdown(): JSX.Element | null {
         setOpen(false);
       }
     }
+    function handleKey(e: KeyboardEvent): void {
+      if (e.key === "Escape") setOpen(false);
+    }
     document.addEventListener("mousedown", handleClick);
-    return () => document.removeEventListener("mousedown", handleClick);
+    document.addEventListener("keydown", handleKey);
+    return () => {
+      document.removeEventListener("mousedown", handleClick);
+      document.removeEventListener("keydown", handleKey);
+    };
   }, [open]);
 
   if (!canCreate) return null;
@@ -168,47 +207,67 @@ function NewPoDropdown(): JSX.Element | null {
         type="button"
         data-testid="po-list-new-po-trigger"
         onClick={() => setOpen((v) => !v)}
-        className="inline-flex items-center gap-1.5 rounded-md border border-accent/40 bg-accent-soft px-3 py-1.5 text-xs font-semibold text-accent hover:bg-accent-soft/80 transition-colors"
+        className={cn(
+          "inline-flex items-center gap-1.5 rounded-md border border-accent/40 bg-accent-soft px-3 py-1.5 text-xs font-semibold text-accent transition-colors",
+          "hover:bg-accent-soft/80 hover:border-accent/60",
+        )}
         aria-haspopup="menu"
         aria-expanded={open}
       >
-        + הזמנת רכש חדשה
-        <svg
-          className={cn("h-3 w-3 transition-transform", open && "rotate-180")}
-          fill="none"
-          stroke="currentColor"
-          strokeWidth={2}
-          viewBox="0 0 24 24"
+        <Plus className="h-3.5 w-3.5" aria-hidden />
+        New purchase order
+        <ChevronDown
+          className={cn(
+            "h-3 w-3 transition-transform duration-150",
+            open && "rotate-180",
+          )}
           aria-hidden
-        >
-          <path strokeLinecap="round" strokeLinejoin="round" d="M19 9l-7 7-7-7" />
-        </svg>
+        />
       </button>
 
       {open && (
         <div
           role="menu"
-          className="absolute right-0 top-full z-20 mt-1 min-w-[220px] rounded-md border border-border bg-bg-raised shadow-lg"
+          className="absolute right-0 top-full z-20 mt-1 min-w-[280px] rounded-md border border-border bg-bg-raised shadow-pop animate-fade-in-up overflow-hidden"
         >
           <Link
             href="/planning/runs"
             role="menuitem"
             data-testid="po-list-new-from-recommendation"
             onClick={() => setOpen(false)}
-            className="flex items-center gap-2 px-4 py-2.5 text-sm text-fg hover:bg-bg-subtle/60 transition-colors first:rounded-t-md"
+            className="flex items-start gap-3 px-4 py-3 text-sm text-fg hover:bg-bg-subtle/60 transition-colors border-b border-border/40"
           >
-            <span className="text-fg-muted text-xs">1.</span>
-            מתוך המלצת רכש
+            <Sparkles
+              className="h-4 w-4 shrink-0 mt-0.5 text-accent"
+              aria-hidden
+            />
+            <div className="flex flex-col gap-0.5 min-w-0">
+              <span className="font-semibold">From recommendation</span>
+              <span className="text-3xs text-fg-faint">
+                Convert an approved planning recommendation into a PO.
+              </span>
+            </div>
           </Link>
           <button
             type="button"
             role="menuitem"
             data-testid="po-list-new-manual"
-            onClick={() => { setOpen(false); router.push("/purchase-orders/new"); }}
-            className="flex w-full items-center gap-2 px-4 py-2.5 text-sm text-fg hover:bg-bg-subtle/60 transition-colors last:rounded-b-md text-left"
+            onClick={() => {
+              setOpen(false);
+              router.push("/purchase-orders/new");
+            }}
+            className="flex w-full items-start gap-3 px-4 py-3 text-sm text-fg hover:bg-bg-subtle/60 transition-colors text-left"
           >
-            <span className="text-fg-muted text-xs">2.</span>
-            הזמנה ידנית
+            <FilePlus2
+              className="h-4 w-4 shrink-0 mt-0.5 text-warning-fg"
+              aria-hidden
+            />
+            <div className="flex flex-col gap-0.5 min-w-0">
+              <span className="font-semibold">Manual entry</span>
+              <span className="text-3xs text-fg-faint">
+                Create a PO directly without a recommendation. Reason required.
+              </span>
+            </div>
           </button>
         </div>
       )}
@@ -216,34 +275,126 @@ function NewPoDropdown(): JSX.Element | null {
   );
 }
 
+// ---------------------------------------------------------------------------
+// KPI tile — clickable filter chip.
+// ---------------------------------------------------------------------------
+interface KpiTileProps {
+  icon: React.ReactNode;
+  label: string;
+  count: number;
+  sublabel?: string;
+  active: boolean;
+  tone: "info" | "warning" | "danger" | "success";
+  onClick: () => void;
+  testId?: string;
+}
+
+function KpiTile({
+  icon,
+  label,
+  count,
+  sublabel,
+  active,
+  tone,
+  onClick,
+  testId,
+}: KpiTileProps): JSX.Element {
+  const toneClasses = {
+    info: {
+      activeBorder: "border-info/50 bg-info-softer",
+      countText: "text-fg",
+      iconText: "text-info-fg",
+    },
+    warning: {
+      activeBorder: "border-warning/50 bg-warning/5",
+      countText: "text-warning-fg",
+      iconText: "text-warning-fg",
+    },
+    danger: {
+      activeBorder: "border-danger/50 bg-danger/5",
+      countText: "text-danger-fg",
+      iconText: "text-danger-fg",
+    },
+    success: {
+      activeBorder: "border-success/50 bg-success/5",
+      countText: "text-success-fg",
+      iconText: "text-success-fg",
+    },
+  }[tone];
+
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-testid={testId}
+      aria-pressed={active}
+      className={cn(
+        "group flex flex-col gap-1 rounded-md border px-4 py-3 text-left transition-colors min-w-[140px]",
+        active
+          ? toneClasses.activeBorder
+          : "border-border/60 bg-bg-raised hover:border-border-strong",
+      )}
+    >
+      <div className="flex items-center gap-1.5">
+        <span className={cn("inline-flex", toneClasses.iconText)}>{icon}</span>
+        <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+          {label}
+        </span>
+      </div>
+      <span
+        className={cn(
+          "text-2xl font-bold tabular-nums leading-none",
+          toneClasses.countText,
+        )}
+      >
+        {count}
+      </span>
+      {sublabel && (
+        <span className="text-3xs text-fg-faint tabular-nums">{sublabel}</span>
+      )}
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Page
+// ---------------------------------------------------------------------------
 export default function PurchaseOrdersListPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  // canCreate is not used directly here — it's checked inside NewPoDropdown.
-  // We read it here so the query is available for the empty-state button.
   const canCreate = useCapability("planning:execute");
+
   const initialStatuses = searchParams.getAll("status").filter(
     (s): s is POStatus => STATUS_OPTIONS.includes(s as POStatus),
   );
   const [statusFilter, setStatusFilter] = useState<POStatus[] | null>(
     initialStatuses.length > 0 ? initialStatuses : ["OPEN", "PARTIAL"],
   );
+  const [lateOnly, setLateOnly] = useState(false);
   const [query, setQuery] = useState("");
 
-  const applyStatusFilter = useCallback((s: POStatus[] | null) => {
-    setStatusFilter(s);
-    const params = new URLSearchParams();
-    for (const [key, val] of searchParams.entries()) {
-      if (key !== "status") params.append(key, val);
-    }
-    if (s && s.length > 0) {
-      s.forEach((status) => params.append("status", status));
-    }
-    router.replace(`?${params.toString()}`, { scroll: false });
-  }, [router, searchParams]);
+  const applyStatusFilter = useCallback(
+    (s: POStatus[] | null) => {
+      setStatusFilter(s);
+      setLateOnly(false);
+      const params = new URLSearchParams();
+      for (const [key, val] of searchParams.entries()) {
+        if (key !== "status") params.append(key, val);
+      }
+      if (s && s.length > 0) {
+        s.forEach((status) => params.append("status", status));
+      }
+      router.replace(`?${params.toString()}`, { scroll: false });
+    },
+    [router, searchParams],
+  );
 
   const posQuery = useQuery<PurchaseOrdersListResponse>({
-    queryKey: ["planner", "purchase-orders", statusFilter ? [...statusFilter].sort().join(",") : "all"],
+    queryKey: [
+      "planner",
+      "purchase-orders",
+      statusFilter ? [...statusFilter].sort().join(",") : "all",
+    ],
     queryFn: () => {
       const q = new URLSearchParams();
       if (statusFilter && statusFilter.length > 0) {
@@ -254,24 +405,44 @@ export default function PurchaseOrdersListPage() {
     },
   });
 
-  // Separate "all" query used only for stats (avoids distorting stats when a filter is active).
+  // "All" query used for stats — independent of current filter so the tiles
+  // always show full ground truth.
   const allPosQuery = useQuery<PurchaseOrdersListResponse>({
     queryKey: ["planner", "purchase-orders", "all"],
     queryFn: () => fetchJson(`/api/purchase-orders?limit=500`),
     staleTime: 60_000,
   });
+
   const allRows = allPosQuery.data?.rows ?? [];
+
   const stats = useMemo(() => {
+    const today = new Date().toISOString().slice(0, 10);
     const openRows = allRows.filter((r) => r.status === "OPEN");
     const partialRows = allRows.filter((r) => r.status === "PARTIAL");
     const receivedRows = allRows.filter((r) => r.status === "RECEIVED");
-    const openValue = openRows.reduce((s, r) => s + Number(r.total_net ?? 0), 0);
-    const partialValue = partialRows.reduce((s, r) => s + Number(r.total_net ?? 0), 0);
+    const lateRows = allRows.filter(
+      (r) =>
+        (r.status === "OPEN" || r.status === "PARTIAL") &&
+        !!r.expected_receive_date &&
+        r.expected_receive_date < today,
+    );
+    const openValue = openRows.reduce(
+      (s, r) => s + Number(r.total_net ?? 0),
+      0,
+    );
+    const partialValue = partialRows.reduce(
+      (s, r) => s + Number(r.total_net ?? 0),
+      0,
+    );
     const currency = allRows[0]?.currency ?? "ILS";
     return {
-      openCount: openRows.length, partialCount: partialRows.length,
+      openCount: openRows.length,
+      partialCount: partialRows.length,
       receivedCount: receivedRows.length,
-      openValue, partialValue, currency,
+      lateCount: lateRows.length,
+      openValue,
+      partialValue,
+      currency,
     };
   }, [allRows]);
 
@@ -279,21 +450,31 @@ export default function PurchaseOrdersListPage() {
   const total = posQuery.data?.count ?? 0;
 
   const filtered = useMemo(() => {
-    const today = new Date().toISOString().slice(0, 10); // YYYY-MM-DD for ISO date comparison
-    const base = !query ? rows : rows.filter((r) => {
-      const qLower = query.toLowerCase();
-      return (
-        r.po_number.toLowerCase().includes(qLower) ||
-        r.po_id.toLowerCase().includes(qLower) ||
-        r.supplier_id.toLowerCase().includes(qLower) ||
-        (r.supplier_name ?? "").toLowerCase().includes(qLower) ||
-        (r.notes ?? "").toLowerCase().includes(qLower)
-      );
-    });
-    const isActive = (r: PurchaseOrderRow) => r.status === "OPEN" || r.status === "PARTIAL";
-    const isOverdue = (r: PurchaseOrderRow) => isActive(r) && !!r.expected_receive_date && r.expected_receive_date < today;
-    return [...base].sort((a, b) => {
-      const aOv = isOverdue(a), bOv = isOverdue(b);
+    const today = new Date().toISOString().slice(0, 10);
+    const queryFiltered = !query
+      ? rows
+      : rows.filter((r) => {
+          const qLower = query.toLowerCase();
+          return (
+            r.po_number.toLowerCase().includes(qLower) ||
+            r.po_id.toLowerCase().includes(qLower) ||
+            r.supplier_id.toLowerCase().includes(qLower) ||
+            (r.supplier_name ?? "").toLowerCase().includes(qLower) ||
+            (r.notes ?? "").toLowerCase().includes(qLower)
+          );
+        });
+    const isActive = (r: PurchaseOrderRow) =>
+      r.status === "OPEN" || r.status === "PARTIAL";
+    const isOverdue = (r: PurchaseOrderRow) =>
+      isActive(r) &&
+      !!r.expected_receive_date &&
+      r.expected_receive_date < today;
+    const lateFiltered = lateOnly
+      ? queryFiltered.filter(isOverdue)
+      : queryFiltered;
+    return [...lateFiltered].sort((a, b) => {
+      const aOv = isOverdue(a),
+        bOv = isOverdue(b);
       if (aOv && !bOv) return -1;
       if (!aOv && bOv) return 1;
       const aDate = a.expected_receive_date ?? "9999-99-99";
@@ -301,85 +482,121 @@ export default function PurchaseOrdersListPage() {
       if (aDate !== bDate) return aDate.localeCompare(bDate);
       return a.po_number.localeCompare(b.po_number);
     });
-  }, [rows, query]);
+  }, [rows, query, lateOnly]);
 
   return (
     <>
       <WorkflowHeader
-        eyebrow="הזמנות רכש"
-        title="הזמנות רכש"
-        description="Live read of private_core.purchase_orders. POs are created from an approved recommendation or manually by planners and admins."
+        eyebrow="Purchase Orders"
+        title="Purchase Orders"
+        description="Live read of approved purchase orders. Created from approved planning recommendations or manually by planners and admins."
         meta={
           <>
             <Badge tone="info" dotted>
               {total} PO{total === 1 ? "" : "s"}
             </Badge>
             <Badge tone="neutral" dotted>
-              live API
+              Live
             </Badge>
-            {/* Two PO creation paths (planner/admin only): recommendation-bridge
-                and manual. NewPoDropdown renders null for operator/viewer. */}
             <NewPoDropdown />
           </>
         }
       />
 
+      {/* KPI tile row — 4 tiles: Open / Partial / Late / Received */}
       {allPosQuery.data && (
-        <div className="flex flex-wrap gap-3 mb-1" data-testid="po-stats-bar">
-          <button
-            type="button"
+        <div
+          className="flex flex-wrap gap-3 mb-2"
+          data-testid="po-stats-bar"
+        >
+          <KpiTile
+            icon={<ClipboardList className="h-3.5 w-3.5" aria-hidden />}
+            label="Open"
+            count={stats.openCount}
+            sublabel={fmtMoney(String(stats.openValue), stats.currency)}
+            tone="info"
+            active={
+              statusFilter?.length === 1 &&
+              statusFilter.includes("OPEN") &&
+              !lateOnly
+            }
             onClick={() => {
-              const isOnlyOpen = statusFilter?.length === 1 && statusFilter.includes("OPEN");
+              const isOnlyOpen =
+                statusFilter?.length === 1 &&
+                statusFilter.includes("OPEN") &&
+                !lateOnly;
               applyStatusFilter(isOnlyOpen ? null : ["OPEN"]);
             }}
-            className={cn(
-              "flex flex-col gap-0.5 rounded-md border px-4 py-2.5 text-left transition-colors",
-              statusFilter?.length === 1 && statusFilter.includes("OPEN")
-                ? "border-info/50 bg-info-softer"
-                : "border-border/60 bg-bg-raised hover:border-border-strong",
-            )}
-          >
-            <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Open</span>
-            <span className="text-lg font-bold tabular-nums text-fg">{stats.openCount}</span>
-            <span className="text-3xs text-fg-faint">{fmtMoney(String(stats.openValue), stats.currency)}</span>
-          </button>
-          <button
-            type="button"
+            testId="po-stat-open"
+          />
+          <KpiTile
+            icon={<Clock className="h-3.5 w-3.5" aria-hidden />}
+            label="Partial"
+            count={stats.partialCount}
+            sublabel={fmtMoney(String(stats.partialValue), stats.currency)}
+            tone="warning"
+            active={
+              statusFilter?.length === 1 &&
+              statusFilter.includes("PARTIAL") &&
+              !lateOnly
+            }
             onClick={() => {
-              const isOnlyPartial = statusFilter?.length === 1 && statusFilter.includes("PARTIAL");
+              const isOnlyPartial =
+                statusFilter?.length === 1 &&
+                statusFilter.includes("PARTIAL") &&
+                !lateOnly;
               applyStatusFilter(isOnlyPartial ? null : ["PARTIAL"]);
             }}
-            className={cn(
-              "flex flex-col gap-0.5 rounded-md border px-4 py-2.5 text-left transition-colors",
-              statusFilter?.length === 1 && statusFilter.includes("PARTIAL")
-                ? "border-warning/50 bg-warning/5"
-                : "border-border/60 bg-bg-raised hover:border-border-strong",
-            )}
-          >
-            <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Partial</span>
-            <span className="text-lg font-bold tabular-nums text-warning-fg">{stats.partialCount}</span>
-            <span className="text-3xs text-fg-faint">{fmtMoney(String(stats.partialValue), stats.currency)}</span>
-          </button>
-          <button
-            type="button"
+            testId="po-stat-partial"
+          />
+          <KpiTile
+            icon={<AlertTriangle className="h-3.5 w-3.5" aria-hidden />}
+            label="Late"
+            count={stats.lateCount}
+            sublabel="Past expected receive"
+            tone="danger"
+            active={lateOnly}
             onClick={() => {
-              const isOnlyReceived = statusFilter?.length === 1 && statusFilter.includes("RECEIVED");
+              if (lateOnly) {
+                setLateOnly(false);
+              } else {
+                setStatusFilter(["OPEN", "PARTIAL"]);
+                setLateOnly(true);
+                const params = new URLSearchParams();
+                for (const [key, val] of searchParams.entries()) {
+                  if (key !== "status") params.append(key, val);
+                }
+                params.append("status", "OPEN");
+                params.append("status", "PARTIAL");
+                router.replace(`?${params.toString()}`, { scroll: false });
+              }
+            }}
+            testId="po-stat-late"
+          />
+          <KpiTile
+            icon={<ClipboardList className="h-3.5 w-3.5" aria-hidden />}
+            label="Received"
+            count={stats.receivedCount}
+            tone="success"
+            active={
+              statusFilter?.length === 1 &&
+              statusFilter.includes("RECEIVED") &&
+              !lateOnly
+            }
+            onClick={() => {
+              const isOnlyReceived =
+                statusFilter?.length === 1 &&
+                statusFilter.includes("RECEIVED") &&
+                !lateOnly;
               applyStatusFilter(isOnlyReceived ? null : ["RECEIVED"]);
             }}
-            className={cn(
-              "flex flex-col gap-0.5 rounded-md border px-4 py-2.5 text-left transition-colors",
-              statusFilter?.length === 1 && statusFilter.includes("RECEIVED")
-                ? "border-success/50 bg-success/5"
-                : "border-border/60 bg-bg-raised hover:border-border-strong",
-            )}
-          >
-            <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Received</span>
-            <span className="text-lg font-bold tabular-nums text-success-fg">{stats.receivedCount}</span>
-          </button>
+            testId="po-stat-received"
+          />
         </div>
       )}
 
       <SectionCard contentClassName="p-0">
+        {/* Filter row */}
         <div
           className="flex flex-wrap items-center gap-3 border-b border-border/60 px-5 py-3"
           data-testid="po-list-filter-bar"
@@ -388,7 +605,8 @@ export default function PurchaseOrdersListPage() {
             Status
           </span>
           {STATUS_OPTIONS.map((s) => {
-            const active = statusFilter !== null && statusFilter.includes(s);
+            const active =
+              statusFilter !== null && statusFilter.includes(s);
             return (
               <button
                 key={s}
@@ -422,34 +640,57 @@ export default function PurchaseOrdersListPage() {
           >
             All
           </button>
-          <input
-            className="input input-sm ml-auto max-w-xs"
-            placeholder="Search po_number / supplier / notes…"
-            value={query}
-            onChange={(e) => setQuery(e.target.value)}
-          />
+          {lateOnly && (
+            <button
+              type="button"
+              onClick={() => setLateOnly(false)}
+              className="inline-flex items-center gap-1 rounded-sm border border-danger/40 bg-danger/5 px-2 py-1 text-3xs font-semibold uppercase tracking-sops text-danger-fg hover:bg-danger/10 transition-colors"
+              aria-label="Clear late filter"
+            >
+              Late only ×
+            </button>
+          )}
+
+          <div className="ml-auto relative">
+            <Search
+              className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-fg-muted pointer-events-none"
+              aria-hidden
+            />
+            <input
+              className="input input-sm pl-8 w-full sm:w-72"
+              placeholder="Search PO number, supplier, notes…"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+            />
+          </div>
         </div>
 
         {posQuery.isLoading ? (
-          <div className="p-5 text-sm text-fg-muted">Loading…</div>
+          <div className="p-5 text-sm text-fg-muted">Loading purchase orders…</div>
         ) : posQuery.isError ? (
           <div
             className="p-5 text-sm text-danger-fg"
             data-testid="po-list-error"
           >
-            Failed to load purchase orders. Check your connection and try refreshing.
+            Failed to load purchase orders. Check your connection and try
+            refreshing.
           </div>
         ) : filtered.length === 0 ? (
           <div className="p-5">
             {rows.length === 0 ? (
               <EmptyState
-                title="אין הזמנות רכש פתוחות"
-                description="To create a PO from a recommendation, go to planning runs."
+                title="No purchase orders yet"
+                description="Approve a planning recommendation to convert it into a PO, or use Manual entry for an exception order."
                 action={canCreate ? <NewPoDropdown /> : undefined}
+              />
+            ) : lateOnly ? (
+              <EmptyState
+                title="No late purchase orders"
+                description="Nothing is past its expected receive date. Clear the Late filter to see all matching orders."
               />
             ) : (
               <EmptyState
-                title="No POs match the current filter."
+                title="No purchase orders match the current filter"
                 description="Clear the filter or widen the search."
               />
             )}
@@ -462,99 +703,120 @@ export default function PurchaseOrdersListPage() {
             >
               <thead>
                 <tr className="border-b border-border/70 bg-bg-subtle/60">
-                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <th className="px-4 py-2.5 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     PO number
                   </th>
-                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <th className="px-3 py-2.5 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Supplier
                   </th>
-                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <th className="px-3 py-2.5 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Status
                   </th>
-                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <th className="px-3 py-2.5 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Order date
                   </th>
-                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    Expected receive
+                  <th className="px-3 py-2.5 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    Expected
                   </th>
-                  <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <th className="px-3 py-2.5 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Total net
                   </th>
-                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <th className="px-3 py-2.5 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Source
                   </th>
-                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <th className="px-3 py-2.5 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Created
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {filtered.map((r) => (
-                  <tr
-                    key={r.po_id}
-                    className="cursor-pointer border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
-                    data-testid="po-list-row"
-                    data-po-id={r.po_id}
-                    data-status={r.status}
-                    onClick={() => router.push(`/purchase-orders/${encodeURIComponent(r.po_id)}`)}
-                  >
-                    <td className="px-3 py-2 font-mono text-xs text-fg">
-                      <Link
-                        href={`/purchase-orders/${encodeURIComponent(r.po_id)}`}
-                        className="hover:text-accent"
-                      >
-                        {r.po_number}
-                      </Link>
-                    </td>
-                    <td className="px-3 py-2 text-xs text-fg-muted">
-                      {r.supplier_name ?? (
-                        <span className="font-mono">{r.supplier_id}</span>
+                {filtered.map((r) => {
+                  const today = new Date().toISOString().slice(0, 10);
+                  const isLate =
+                    (r.status === "OPEN" || r.status === "PARTIAL") &&
+                    !!r.expected_receive_date &&
+                    r.expected_receive_date < today;
+                  const daysLate = isLate
+                    ? Math.floor(
+                        (Date.now() -
+                          new Date(r.expected_receive_date!).getTime()) /
+                          86400000,
+                      )
+                    : 0;
+                  return (
+                    <tr
+                      key={r.po_id}
+                      className={cn(
+                        "cursor-pointer border-b border-border/40 last:border-b-0 transition-colors",
+                        "hover:bg-bg-subtle/40",
+                        isLate && "bg-danger/[0.02]",
                       )}
-                    </td>
-                    <td className="px-3 py-2">
-                      <POStatusBadge status={r.status} />
-                    </td>
-                    <td className="px-3 py-2 text-xs text-fg-muted">
-                      {fmtDate(r.order_date)}
-                    </td>
-                    <td className="px-3 py-2 text-xs">
-                      {r.expected_receive_date ? (() => {
-                        const today = new Date().toISOString().slice(0, 10);
-                        const isLate = (r.status === "OPEN" || r.status === "PARTIAL") && r.expected_receive_date < today;
-                        const daysLate = isLate
-                          ? Math.floor((Date.now() - new Date(r.expected_receive_date).getTime()) / 86400000)
-                          : 0;
-                        return (
-                          <>
-                            <span className={isLate ? "text-danger-fg font-medium" : "text-fg-muted"}>
+                      data-testid="po-list-row"
+                      data-po-id={r.po_id}
+                      data-status={r.status}
+                      onClick={() =>
+                        router.push(
+                          `/purchase-orders/${encodeURIComponent(r.po_id)}`,
+                        )
+                      }
+                    >
+                      <td className="px-4 py-2.5 font-mono text-xs">
+                        <Link
+                          href={`/purchase-orders/${encodeURIComponent(r.po_id)}`}
+                          className="font-semibold text-fg hover:text-accent transition-colors"
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {r.po_number}
+                        </Link>
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-fg">
+                        {r.supplier_name ?? (
+                          <span className="font-mono text-fg-muted">
+                            {r.supplier_id}
+                          </span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <POStatusBadge status={r.status} />
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-fg-muted tabular-nums">
+                        {fmtDate(r.order_date)}
+                      </td>
+                      <td className="px-3 py-2.5 text-xs">
+                        {r.expected_receive_date ? (
+                          <div className="flex flex-col">
+                            <span
+                              className={cn(
+                                "tabular-nums",
+                                isLate
+                                  ? "font-semibold text-danger-fg"
+                                  : "text-fg-muted",
+                              )}
+                            >
                               {fmtDate(r.expected_receive_date)}
                             </span>
                             {isLate && (
-                              <div className="text-3xs text-danger-fg/80">
-                                Late by {daysLate} day{daysLate === 1 ? "" : "s"}
-                              </div>
+                              <span className="text-3xs font-semibold text-danger-fg">
+                                {daysLate} day{daysLate === 1 ? "" : "s"} late
+                              </span>
                             )}
-                          </>
-                        );
-                      })() : <span className="text-fg-faint">—</span>}
-                    </td>
-                    <td className="px-3 py-2 text-right font-mono text-xs text-fg">
-                      {fmtMoney(r.total_net, r.currency)}
-                    </td>
-                    <td className="px-3 py-2 text-xs">
-                      {(() => {
-                        const lbl = sourceLabel(r);
-                        if (!lbl) return <span className="text-fg-faint">—</span>;
-                        if (lbl === "המלצת רכש") return <Badge tone="info" dotted>המלצת רכש</Badge>;
-                        if (lbl === "ידני") return <Badge tone="warning" dotted>ידני</Badge>;
-                        return <span className="text-fg-faint">{lbl}</span>;
-                      })()}
-                    </td>
-                    <td className="px-3 py-2 text-xs text-fg-muted">
-                      {fmtDateTime(r.created_at)}
-                    </td>
-                  </tr>
-                ))}
+                          </div>
+                        ) : (
+                          <span className="text-fg-faint">—</span>
+                        )}
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-mono text-xs text-fg tabular-nums">
+                        {fmtMoney(r.total_net, r.currency)}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <SourceBadge row={r} />
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-fg-muted tabular-nums">
+                        {fmtDateTime(r.created_at)}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
