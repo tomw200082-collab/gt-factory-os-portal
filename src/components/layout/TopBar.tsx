@@ -271,33 +271,19 @@ function UserMenu({ compact = false }: UserMenuProps) {
 }
 
 function BrandMark() {
+  // GT Everyday brand logo. Source asset at /public/brand/logo.png is
+  // white-on-transparent. Tailwind `invert dark:invert-0` flips the colors:
+  //   light theme → invert(100%) → renders BLACK on the page background
+  //   dark  theme → invert(0)    → stays WHITE
+  // (Tom-locked 2026-04-28: white in dark, black in light — logo only.)
   return (
-    <div
-      className="relative flex h-9 w-9 items-center justify-center overflow-hidden rounded bg-accent text-accent-fg shadow-raised"
-      aria-hidden
-    >
-      <svg
-        width="20"
-        height="20"
-        viewBox="0 0 20 20"
-        fill="none"
-        xmlns="http://www.w3.org/2000/svg"
-      >
-        <path
-          d="M3 4.5V15.5M3 4.5L10 1L17 4.5M3 4.5L10 8L17 4.5M17 4.5V15.5M10 8V19M3 15.5L10 19L17 15.5"
-          stroke="currentColor"
-          strokeWidth="1.5"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-        />
-      </svg>
-      <span
-        className="pointer-events-none absolute inset-0 rounded"
-        style={{
-          background:
-            "linear-gradient(180deg, hsl(var(--brand-mark-gloss)) 0%, transparent 60%)",
-        }}
-      />
-    </div>
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src="/brand/logo.png"
+      alt="GT Everyday"
+      width={40}
+      height={40}
+      className="h-10 w-10 object-contain invert dark:invert-0"
+    />
   );
 }
