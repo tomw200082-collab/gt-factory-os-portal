@@ -529,7 +529,16 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
           json,
         );
       }
-      return json as { bom_version_id: string };
+      const row = (json as { row?: { bom_version_id?: string } } | null)?.row;
+      if (!row?.bom_version_id) {
+        throw new AdminMutationError(
+          500,
+          "Server did not return the new draft id. Refresh the page and try again.",
+          undefined,
+          json,
+        );
+      }
+      return { bom_version_id: row.bom_version_id };
     },
     onSuccess: (data) => {
       setNewDraftDialogOpen(false);

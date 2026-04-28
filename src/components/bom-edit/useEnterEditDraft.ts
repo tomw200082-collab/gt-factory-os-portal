@@ -49,10 +49,11 @@ export function useEnterEditDraft() {
       });
       if (!res.ok) throw new Error(`createDraft: ${res.status}`);
       const json = await res.json();
-      return {
-        versionId: json.bom_version_id as string,
-        bomHeadId: input.bomHeadId,
-      };
+      const versionId = json?.row?.bom_version_id as string | undefined;
+      if (!versionId) {
+        throw new Error("createDraft: server returned no version id");
+      }
+      return { versionId, bomHeadId: input.bomHeadId };
     },
     onSuccess: ({ bomHeadId }) => {
       // The editor will read /api/boms/versions?bom_head_id=<head> and find
