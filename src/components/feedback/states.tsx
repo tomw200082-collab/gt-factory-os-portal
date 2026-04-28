@@ -96,21 +96,21 @@ export function ErrorState({
 const SUCCESS_TONES = {
   success: {
     card: "border-success/40 bg-success-softer",
-    chip: "bg-success text-white",
+    chip: "bg-success text-fg-inverted",
     accentBar: "bg-success",
     icon: "text-success",
     title: "text-success-fg",
   },
   warning: {
     card: "border-warning/40 bg-warning-softer",
-    chip: "bg-warning text-white",
+    chip: "bg-warning text-fg-inverted",
     accentBar: "bg-warning",
     icon: "text-warning",
     title: "text-warning-fg",
   },
   info: {
     card: "border-info/40 bg-info-softer",
-    chip: "bg-info text-white",
+    chip: "bg-info text-fg-inverted",
     accentBar: "bg-info",
     icon: "text-info",
     title: "text-info-fg",

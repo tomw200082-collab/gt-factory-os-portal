@@ -53,7 +53,7 @@ export function VersionHistorySection({
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="text-sm font-medium text-blue-700 underline"
+        className="text-sm font-medium text-info-fg underline"
       >
         {open ? "▼" : "▶"} היסטוריית גרסאות
       </button>
@@ -71,16 +71,16 @@ export function VersionHistorySection({
                   className="border-b py-1 text-sm"
                 >
                   <span>{v.version_label}</span>
-                  <span className="ml-2 rounded bg-gray-100 px-1 text-xs">
+                  <span className="ml-2 rounded bg-bg-subtle px-1 text-xs">
                     {v.status}
                   </span>
-                  <span className="ml-2 text-gray-600">
+                  <span className="ml-2 text-fg-subtle">
                     {v.published_at ?? "—"} ·{" "}
                     {v.published_by_display_name ?? "—"} · {v.lines_count} lines
                   </span>
                   {v.status === "DRAFT" && isAdmin && headId && (
                     <Link
-                      className="ml-2 text-blue-700 underline"
+                      className="ml-2 text-info-fg underline"
                       href={`/admin/masters/boms/${headId}/${v.bom_version_id}/edit`}
                     >
                       Resume editing →

@@ -7,81 +7,87 @@ import type { Config } from "tailwindcss";
  * B2B, not consumer. Industrial heritage. Designed to be read for eight-hour
  * shifts without eye fatigue.
  *
- * Foundation: warm bone paper background, deep graphite text, single petrol
+ * Light theme: warm bone paper background, deep graphite text, single petrol
  * teal accent (not generic SaaS blue), muted moss/amber/oxide for semantics.
+ * Dark theme: warm graphite background (not OLED black), warm off-white text,
+ * petrol teal lifted in luminosity to remain readable. Soft semantic backdrops
+ * flip to dark-with-hint pattern. See src/app/globals.css for the actual HSL
+ * values (defined twice — :root and :root.dark).
+ *
  * 14px base typography. Hairline 1px borders at low opacity. Minimal shadows.
  * Tabular numerics throughout.
  */
 const config: Config = {
   content: ["./src/**/*.{ts,tsx}"],
+  darkMode: "class",
   theme: {
     extend: {
       colors: {
-        // ——— Surfaces (warm bone, not cold white) ————————————————————————
+        // ——— Surfaces ———————————————————————————————————————————————————
         bg: {
-          DEFAULT: "hsl(42 18% 95%)", // page — warm bone paper
-          subtle: "hsl(42 16% 92%)", // section tint / table header
-          muted: "hsl(42 14% 88%)", // disabled / well
-          raised: "hsl(42 20% 98%)", // card interior (slightly brighter)
-          deep: "hsl(40 10% 86%)", // deepest tint for nested wells
+          DEFAULT: "hsl(var(--bg) / <alpha-value>)",
+          subtle:  "hsl(var(--bg-subtle) / <alpha-value>)",
+          muted:   "hsl(var(--bg-muted) / <alpha-value>)",
+          raised:  "hsl(var(--bg-raised) / <alpha-value>)",
+          deep:    "hsl(var(--bg-deep) / <alpha-value>)",
         },
-        // ——— Ink (warm near-black graphite) ——————————————————————————————
+        // ——— Foreground (ink) —————————————————————————————————————————
         fg: {
-          DEFAULT: "hsl(30 10% 10%)", // primary text
-          strong: "hsl(30 14% 6%)", // headings
-          muted: "hsl(30 6% 38%)", // secondary text
-          subtle: "hsl(30 5% 54%)", // tertiary / helper text
-          faint: "hsl(30 4% 68%)", // placeholder / rule text
-          inverted: "hsl(42 20% 98%)", // text on dark backgrounds
+          DEFAULT:  "hsl(var(--fg) / <alpha-value>)",
+          strong:   "hsl(var(--fg-strong) / <alpha-value>)",
+          muted:    "hsl(var(--fg-muted) / <alpha-value>)",
+          subtle:   "hsl(var(--fg-subtle) / <alpha-value>)",
+          faint:    "hsl(var(--fg-faint) / <alpha-value>)",
+          inverted: "hsl(var(--fg-inverted) / <alpha-value>)",
         },
-        // ——— Borders (hairlines at calibrated opacity) ——————————————————
+        // ——— Borders ———————————————————————————————————————————————
         border: {
-          DEFAULT: "hsl(30 8% 82%)",
-          strong: "hsl(30 10% 70%)",
-          faint: "hsl(30 8% 88%)",
-          focus: "hsl(186 42% 24%)",
+          DEFAULT: "hsl(var(--border) / <alpha-value>)",
+          strong:  "hsl(var(--border-strong) / <alpha-value>)",
+          faint:   "hsl(var(--border-faint) / <alpha-value>)",
+          focus:   "hsl(var(--border-focus) / <alpha-value>)",
         },
         // ——— Accent: petrol teal (the signature) ————————————————————————
         accent: {
-          DEFAULT: "hsl(186 42% 24%)", // deep petrol — primary action
-          hover: "hsl(186 44% 20%)",
-          soft: "hsl(186 38% 94%)", // soft backdrop
-          softer: "hsl(186 40% 97%)",
-          ring: "hsl(186 42% 24% / 0.3)",
-          fg: "hsl(42 20% 98%)", // text on accent
-          border: "hsl(186 32% 40%)",
+          DEFAULT: "hsl(var(--accent) / <alpha-value>)",
+          hover:   "hsl(var(--accent-hover) / <alpha-value>)",
+          soft:    "hsl(var(--accent-soft) / <alpha-value>)",
+          softer:  "hsl(var(--accent-softer) / <alpha-value>)",
+          ring:    "hsl(var(--accent) / 0.3)",
+          fg:      "hsl(var(--accent-fg) / <alpha-value>)",
+          border:  "hsl(var(--accent-border) / <alpha-value>)",
         },
         // ——— Semantic: muted moss for success ———————————————————————————
         success: {
-          DEFAULT: "hsl(146 34% 30%)",
-          soft: "hsl(146 30% 94%)",
-          softer: "hsl(146 30% 97%)",
-          fg: "hsl(146 40% 20%)",
-          border: "hsl(146 28% 60%)",
+          DEFAULT: "hsl(var(--success) / <alpha-value>)",
+          soft:    "hsl(var(--success-soft) / <alpha-value>)",
+          softer:  "hsl(var(--success-softer) / <alpha-value>)",
+          fg:      "hsl(var(--success-fg) / <alpha-value>)",
+          border:  "hsl(var(--success-border) / <alpha-value>)",
         },
         // ——— Semantic: burnt amber for warning ——————————————————————————
         warning: {
-          DEFAULT: "hsl(32 78% 42%)",
-          soft: "hsl(38 80% 94%)",
-          softer: "hsl(38 84% 97%)",
-          fg: "hsl(28 82% 28%)",
-          border: "hsl(34 70% 62%)",
+          DEFAULT: "hsl(var(--warning) / <alpha-value>)",
+          soft:    "hsl(var(--warning-soft) / <alpha-value>)",
+          softer:  "hsl(var(--warning-softer) / <alpha-value>)",
+          fg:      "hsl(var(--warning-fg) / <alpha-value>)",
+          border:  "hsl(var(--warning-border) / <alpha-value>)",
         },
         // ——— Semantic: oxidized red for danger ———————————————————————————
         danger: {
-          DEFAULT: "hsl(4 66% 40%)",
-          soft: "hsl(4 60% 94%)",
-          softer: "hsl(4 60% 97%)",
-          fg: "hsl(4 70% 30%)",
-          border: "hsl(4 56% 60%)",
+          DEFAULT: "hsl(var(--danger) / <alpha-value>)",
+          soft:    "hsl(var(--danger-soft) / <alpha-value>)",
+          softer:  "hsl(var(--danger-softer) / <alpha-value>)",
+          fg:      "hsl(var(--danger-fg) / <alpha-value>)",
+          border:  "hsl(var(--danger-border) / <alpha-value>)",
         },
         // ——— Semantic: slate blue for info (quieter than accent) ——————
         info: {
-          DEFAULT: "hsl(210 32% 38%)",
-          soft: "hsl(210 30% 94%)",
-          softer: "hsl(210 32% 97%)",
-          fg: "hsl(210 40% 26%)",
-          border: "hsl(210 26% 58%)",
+          DEFAULT: "hsl(var(--info) / <alpha-value>)",
+          soft:    "hsl(var(--info-soft) / <alpha-value>)",
+          softer:  "hsl(var(--info-softer) / <alpha-value>)",
+          fg:      "hsl(var(--info-fg) / <alpha-value>)",
+          border:  "hsl(var(--info-border) / <alpha-value>)",
         },
       },
       fontFamily: {
@@ -132,14 +138,14 @@ const config: Config = {
       },
       boxShadow: {
         none: "none",
-        hairline: "0 0 0 1px hsl(30 8% 82% / 1)",
-        "hairline-strong": "0 0 0 1px hsl(30 10% 70% / 1)",
+        hairline: "0 0 0 1px hsl(var(--border) / 1)",
+        "hairline-strong": "0 0 0 1px hsl(var(--border-strong) / 1)",
         raised:
-          "0 1px 0 0 hsl(30 10% 80% / 0.4), 0 1px 2px 0 hsl(30 12% 10% / 0.04)",
+          "0 1px 0 0 hsl(var(--shadow-color) / 0.4), 0 1px 2px 0 hsl(var(--shadow-color-deep) / 0.04)",
         pop:
-          "0 2px 6px -1px hsl(30 12% 10% / 0.06), 0 8px 24px -4px hsl(30 12% 10% / 0.08), 0 0 0 1px hsl(30 10% 80% / 0.5)",
-        "focus-ring": "0 0 0 3px hsl(186 42% 24% / 0.18)",
-        "danger-ring": "0 0 0 3px hsl(4 66% 40% / 0.18)",
+          "0 2px 6px -1px hsl(var(--shadow-color-deep) / 0.06), 0 8px 24px -4px hsl(var(--shadow-color-deep) / 0.08), 0 0 0 1px hsl(var(--shadow-color) / 0.5)",
+        "focus-ring": "0 0 0 3px hsl(var(--accent) / 0.18)",
+        "danger-ring": "0 0 0 3px hsl(var(--danger) / 0.18)",
       },
       spacing: {
         "4.5": "1.125rem",

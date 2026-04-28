@@ -28,6 +28,7 @@ export interface DevShimSession {
   display_name: string;
   email: string;
   role: Role;
+  theme_preference: "light" | "dark";
 }
 
 // Canonical public name. Application pages and features import `Session`; the
@@ -46,24 +47,28 @@ export const FAKE_USERS: Record<Role, DevShimSession> = {
     display_name: "Avi (operator)",
     email: "operator@fake.gtfactory",
     role: "operator",
+    theme_preference: "light",
   },
   planner: {
     user_id: "aaaaaaaa-0000-0000-0000-0000000000a2",
     display_name: "Tom (planner)",
     email: "planner@fake.gtfactory",
     role: "planner",
+    theme_preference: "light",
   },
   admin: {
     user_id: "aaaaaaaa-0000-0000-0000-0000000000a3",
     display_name: "Alex (admin)",
     email: "admin@fake.gtfactory",
     role: "admin",
+    theme_preference: "light",
   },
   viewer: {
     user_id: "aaaaaaaa-0000-0000-0000-0000000000a4",
     display_name: "Guest (viewer)",
     email: "viewer@fake.gtfactory",
     role: "viewer",
+    theme_preference: "light",
   },
 };
 
@@ -74,9 +79,13 @@ function readStorage(): DevShimSession | null {
   try {
     const raw = window.localStorage.getItem(STORAGE_KEY);
     if (!raw) return null;
-    const parsed = JSON.parse(raw) as DevShimSession;
+    const parsed = JSON.parse(raw) as Partial<DevShimSession>;
     if (!parsed.role || !(parsed.role in FAKE_USERS)) return null;
-    return parsed;
+    // Backfill theme_preference if storage was written before dark-mode shipped.
+    if (parsed.theme_preference !== "dark" && parsed.theme_preference !== "light") {
+      parsed.theme_preference = "light";
+    }
+    return parsed as DevShimSession;
   } catch {
     return null;
   }

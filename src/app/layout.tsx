@@ -6,6 +6,7 @@ import { SessionProvider } from "@/lib/auth/session-provider";
 import { ReviewModeProvider } from "@/lib/review-mode/store";
 import { QueryProvider } from "@/lib/query/query-provider";
 import { ReviewModePanel } from "@/components/review/ReviewModePanel";
+import { ThemeProvider } from "@/lib/theme";
 
 const publicSans = Public_Sans({
   subsets: ["latin"],
@@ -53,10 +54,12 @@ export default function RootLayout({ children }: { children: ReactNode }) {
       <body className="font-sans">
         <QueryProvider>
           <SessionProvider>
-            <ReviewModeProvider>
-              {children}
-              {DEV_SHIM_ENABLED ? <ReviewModePanel /> : null}
-            </ReviewModeProvider>
+            <ThemeProvider>
+              <ReviewModeProvider>
+                {children}
+                {DEV_SHIM_ENABLED ? <ReviewModePanel /> : null}
+              </ReviewModeProvider>
+            </ThemeProvider>
           </SessionProvider>
         </QueryProvider>
       </body>

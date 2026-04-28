@@ -54,6 +54,7 @@ const LOADING_SESSION: DevShimSession = {
   display_name: "",
   email: "",
   role: "viewer",
+  theme_preference: "light",
 };
 
 async function fetchRealSession(): Promise<DevShimSession> {
@@ -70,12 +71,14 @@ async function fetchRealSession(): Promise<DevShimSession> {
     email: string;
     display_name: string;
     role: Role;
+    theme_preference?: "light" | "dark";
   };
   return {
     user_id: data.user_id,
     email: data.email,
     display_name: data.display_name,
     role: data.role,
+    theme_preference: data.theme_preference === "dark" ? "dark" : "light",
   };
 }
 

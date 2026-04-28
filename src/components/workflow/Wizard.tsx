@@ -531,8 +531,8 @@ function WizardStepper<TState>({
               <span
                 className={cn(
                   "flex h-4 w-4 items-center justify-center rounded-full text-3xs font-mono font-semibold",
-                  isActive && "bg-accent text-white",
-                  !isActive && isDone && "bg-success text-white",
+                  isActive && "bg-accent text-accent-fg",
+                  !isActive && isDone && "bg-success text-fg-inverted",
                   !isActive && !isDone && "bg-bg-raised text-fg-muted",
                 )}
                 aria-hidden

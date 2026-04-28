@@ -3,13 +3,174 @@
 @tailwind utilities;
 
 /* ══════════════════════════════════════════════════════════════════════════
-   "Operational Precision" — base styles
+   "Operational Precision" — base styles + theme variables.
+
+   Token system:
+   - tailwind.config.ts maps each color token to hsl(var(--token) / alpha).
+   - This file defines the actual HSL values, twice:
+     • :root        — light theme (warm bone paper, deep graphite).
+     • :root.dark   — dark theme  (warm graphite, warm off-white).
+   - Toggling .dark on <html> swaps every token group atomically.
+   - All inline hsl(...) literals here are also var-driven so the body
+     dot grid, scrollbar, focus ring, etc. respect the active theme.
    ══════════════════════════════════════════════════════════════════════════ */
 
 @layer base {
   :root {
     color-scheme: light;
     --radius: 6px;
+
+    /* ——— Surfaces (warm bone, not cold white) ——— */
+    --bg: 42 18% 95%;
+    --bg-subtle: 42 16% 92%;
+    --bg-muted: 42 14% 88%;
+    --bg-raised: 42 20% 98%;
+    --bg-deep: 40 10% 86%;
+
+    /* ——— Foreground (warm near-black graphite) ——— */
+    --fg: 30 10% 10%;
+    --fg-strong: 30 14% 6%;
+    --fg-muted: 30 6% 38%;
+    --fg-subtle: 30 5% 54%;
+    --fg-faint: 30 4% 68%;
+    --fg-inverted: 42 20% 98%;
+
+    /* ——— Borders (hairlines at calibrated opacity) ——— */
+    --border: 30 8% 82%;
+    --border-strong: 30 10% 70%;
+    --border-faint: 30 8% 88%;
+    --border-focus: 186 42% 24%;
+
+    /* ——— Accent: petrol teal (the signature) ——— */
+    --accent: 186 42% 24%;
+    --accent-hover: 186 44% 20%;
+    --accent-soft: 186 38% 94%;
+    --accent-softer: 186 40% 97%;
+    --accent-fg: 42 20% 98%;
+    --accent-border: 186 32% 40%;
+
+    /* ——— Semantic: muted moss for success ——— */
+    --success: 146 34% 30%;
+    --success-soft: 146 30% 94%;
+    --success-softer: 146 30% 97%;
+    --success-fg: 146 40% 20%;
+    --success-border: 146 28% 60%;
+
+    /* ——— Semantic: burnt amber for warning ——— */
+    --warning: 32 78% 42%;
+    --warning-soft: 38 80% 94%;
+    --warning-softer: 38 84% 97%;
+    --warning-fg: 28 82% 28%;
+    --warning-border: 34 70% 62%;
+
+    /* ——— Semantic: oxidized red for danger ——— */
+    --danger: 4 66% 40%;
+    --danger-soft: 4 60% 94%;
+    --danger-softer: 4 60% 97%;
+    --danger-fg: 4 70% 30%;
+    --danger-border: 4 56% 60%;
+
+    /* ——— Semantic: slate blue for info ——— */
+    --info: 210 32% 38%;
+    --info-soft: 210 30% 94%;
+    --info-softer: 210 32% 97%;
+    --info-fg: 210 40% 26%;
+    --info-border: 210 26% 58%;
+
+    /* ——— Surface effects ——— */
+    --dot-grid: 30 10% 80% / 0.35;
+    --selection-bg: 186 42% 24% / 0.2;
+    --selection-fg: 30 14% 6%;
+    --scrollbar-thumb: 30 8% 78% / 0.6;
+    --scrollbar-thumb-hover: 30 10% 68% / 0.8;
+    --shadow-color: 30 10% 80%;
+    --shadow-color-deep: 30 12% 10%;
+    --grid-line: 30 8% 82% / 0.3;
+    --stripe: 30 8% 82%;
+    --kbd-shadow: 30 8% 82%;
+    --btn-highlight: 42 20% 100% / 0.6;
+    --btn-primary-highlight: 186 60% 40% / 0.3;
+    --btn-primary-shadow: 186 40% 10% / 0.15;
+    --focus-ring-bg: 42 18% 95%;
+    --brand-mark-gloss: 186 60% 50% / 0.25;
+  }
+
+  :root.dark {
+    color-scheme: dark;
+
+    /* ——— Surfaces (warm graphite, not OLED black) ——— */
+    --bg: 30 10% 10%;
+    --bg-subtle: 30 8% 13%;
+    --bg-muted: 30 6% 16%;
+    --bg-raised: 30 8% 15%;
+    --bg-deep: 30 12% 6%;
+
+    /* ——— Foreground (warm off-white, not pure white) ——— */
+    --fg: 42 14% 88%;
+    --fg-strong: 42 18% 95%;
+    --fg-muted: 42 8% 66%;
+    --fg-subtle: 42 6% 52%;
+    --fg-faint: 42 5% 38%;
+    --fg-inverted: 30 14% 6%;
+
+    /* ——— Borders (lifted) ——— */
+    --border: 30 8% 22%;
+    --border-strong: 30 10% 32%;
+    --border-faint: 30 6% 18%;
+    --border-focus: 186 50% 50%;
+
+    /* ——— Accent (petrol teal — lifted to read on dark, same hue) ——— */
+    --accent: 186 50% 50%;
+    --accent-hover: 186 52% 56%;
+    --accent-soft: 186 38% 16%;
+    --accent-softer: 186 32% 12%;
+    --accent-fg: 30 14% 6%;
+    --accent-border: 186 36% 38%;
+
+    /* ——— Semantic: moss lifted; soft flips to dark-with-hint ——— */
+    --success: 146 40% 56%;
+    --success-soft: 146 26% 14%;
+    --success-softer: 146 22% 11%;
+    --success-fg: 146 50% 80%;
+    --success-border: 146 30% 36%;
+
+    /* ——— Semantic: amber lifted ——— */
+    --warning: 32 75% 56%;
+    --warning-soft: 32 40% 14%;
+    --warning-softer: 32 36% 11%;
+    --warning-fg: 32 80% 78%;
+    --warning-border: 32 60% 38%;
+
+    /* ——— Semantic: oxide lifted ——— */
+    --danger: 4 66% 56%;
+    --danger-soft: 4 40% 14%;
+    --danger-softer: 4 36% 11%;
+    --danger-fg: 4 70% 80%;
+    --danger-border: 4 50% 38%;
+
+    /* ——— Semantic: slate lifted ——— */
+    --info: 210 48% 60%;
+    --info-soft: 210 30% 14%;
+    --info-softer: 210 26% 11%;
+    --info-fg: 210 60% 80%;
+    --info-border: 210 40% 38%;
+
+    /* ——— Surface effects ——— */
+    --dot-grid: 30 8% 30% / 0.35;
+    --selection-bg: 186 50% 50% / 0.3;
+    --selection-fg: 42 18% 95%;
+    --scrollbar-thumb: 30 8% 30% / 0.6;
+    --scrollbar-thumb-hover: 30 10% 40% / 0.8;
+    --shadow-color: 30 12% 4%;
+    --shadow-color-deep: 0 0% 0%;
+    --grid-line: 30 8% 30% / 0.3;
+    --stripe: 30 8% 30%;
+    --kbd-shadow: 30 8% 22%;
+    --btn-highlight: 42 14% 88% / 0.04;
+    --btn-primary-highlight: 186 60% 70% / 0.3;
+    --btn-primary-shadow: 0 0% 0% / 0.4;
+    --focus-ring-bg: 30 10% 10%;
+    --brand-mark-gloss: 186 60% 70% / 0.25;
   }
 
   html,
@@ -23,7 +184,7 @@
     background-image:
       radial-gradient(
         circle at 1px 1px,
-        hsl(30 10% 80% / 0.35) 1px,
+        hsl(var(--dot-grid)) 1px,
         transparent 0
       );
     background-size: 24px 24px;
@@ -38,8 +199,8 @@
   }
 
   ::selection {
-    background: hsl(186 42% 24% / 0.2);
-    color: hsl(30 14% 6%);
+    background: hsl(var(--selection-bg));
+    color: hsl(var(--selection-fg));
   }
 
   button:focus-visible,
@@ -50,7 +211,7 @@
   [role="button"]:focus-visible,
   [role="tab"]:focus-visible {
     @apply outline-none;
-    box-shadow: 0 0 0 2px hsl(42 18% 95%), 0 0 0 4px hsl(186 42% 24% / 0.4);
+    box-shadow: 0 0 0 2px hsl(var(--focus-ring-bg)), 0 0 0 4px hsl(var(--accent) / 0.4);
   }
 
   /* Fine scrollbars — Chromium only, quietly ignored elsewhere. */
@@ -62,13 +223,13 @@
     background: transparent;
   }
   ::-webkit-scrollbar-thumb {
-    background: hsl(30 8% 78% / 0.6);
+    background: hsl(var(--scrollbar-thumb));
     border-radius: 999px;
     border: 2px solid transparent;
     background-clip: padding-box;
   }
   ::-webkit-scrollbar-thumb:hover {
-    background: hsl(30 10% 68% / 0.8);
+    background: hsl(var(--scrollbar-thumb-hover));
     background-clip: padding-box;
     border: 2px solid transparent;
   }
@@ -151,18 +312,18 @@
       hover:border-border-strong hover:bg-bg
       active:translate-y-px active:shadow-none
       disabled:pointer-events-none disabled:opacity-45;
-    box-shadow: inset 0 0 0 1px hsl(42 20% 100% / 0.6);
+    box-shadow: inset 0 0 0 1px hsl(var(--btn-highlight));
   }
 
   .btn-primary {
     @apply border-accent bg-accent text-accent-fg
       hover:border-accent-hover hover:bg-accent-hover hover:text-accent-fg
       active:translate-y-px;
-    box-shadow: inset 0 1px 0 0 hsl(186 60% 40% / 0.3), 0 1px 2px 0 hsl(186 40% 10% / 0.15);
+    box-shadow: inset 0 1px 0 0 hsl(var(--btn-primary-highlight)), 0 1px 2px 0 hsl(var(--btn-primary-shadow));
   }
 
   .btn-danger {
-    @apply border-danger bg-danger text-white hover:bg-danger/90;
+    @apply border-danger bg-danger text-fg-inverted hover:bg-danger/90;
   }
 
   .btn-ghost {
@@ -273,7 +434,7 @@
 
   kbd {
     @apply inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-xs border border-border bg-bg-subtle px-1.5 font-mono text-3xs text-fg-muted;
-    box-shadow: inset 0 -1px 0 0 hsl(30 8% 82% / 1);
+    box-shadow: inset 0 -1px 0 0 hsl(var(--kbd-shadow));
   }
 
   /* ——— Divider glyph ————————————————————————————————————————————————— */
@@ -294,8 +455,8 @@
 @layer utilities {
   .bg-grid {
     background-image:
-      linear-gradient(to right, hsl(30 8% 82% / 0.3) 1px, transparent 1px),
-      linear-gradient(to bottom, hsl(30 8% 82% / 0.3) 1px, transparent 1px);
+      linear-gradient(to right, hsl(var(--grid-line)) 1px, transparent 1px),
+      linear-gradient(to bottom, hsl(var(--grid-line)) 1px, transparent 1px);
     background-size: 24px 24px;
   }
 
@@ -310,8 +471,8 @@
   .stripe-border {
     background-image: repeating-linear-gradient(
       135deg,
-      hsl(30 8% 82%) 0,
-      hsl(30 8% 82%) 1px,
+      hsl(var(--stripe)) 0,
+      hsl(var(--stripe)) 1px,
       transparent 1px,
       transparent 6px
     );
@@ -319,8 +480,8 @@
 
   /* A subtle raised affordance for nav items and cards */
   .elev-1 {
-    box-shadow: 0 0 0 1px hsl(30 10% 82% / 0.6),
-      0 1px 2px 0 hsl(30 12% 10% / 0.04);
+    box-shadow: 0 0 0 1px hsl(var(--shadow-color) / 0.6),
+      0 1px 2px 0 hsl(var(--shadow-color-deep) / 0.04);
   }
 
   /* First-visit reveal animation */

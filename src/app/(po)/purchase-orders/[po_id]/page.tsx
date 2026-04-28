@@ -1322,7 +1322,7 @@ export default function PurchaseOrderDetailPage({
                 <span className="text-xs text-fg-muted">Cancel this PO?</span>
                 <button
                   type="button"
-                  className="btn btn-sm bg-danger text-white hover:bg-danger/90"
+                  className="btn btn-sm bg-danger text-fg-inverted hover:bg-danger/90"
                   onClick={() => cancelMut.mutate()}
                   disabled={cancelMut.isPending}
                 >

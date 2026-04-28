@@ -267,7 +267,7 @@ export function SideNav({ onNavigate }: { onNavigate?: () => void } = {}) {
                         className={cn(
                           "inline-flex min-w-[1.25rem] items-center justify-center rounded-full border px-1.5 py-0.5 text-3xs font-semibold tabular-nums",
                           active
-                            ? "border-accent/40 bg-accent text-white"
+                            ? "border-accent/40 bg-accent text-accent-fg"
                             : "border-border/70 bg-bg-subtle text-fg-strong",
                         )}
                         data-testid={`sidenav-badge-${item.href}`}

@@ -124,25 +124,25 @@ const TONE_CLASSES: Record<
   success: {
     soft: "bg-success-softer text-success-fg border-success/30",
     outline: "bg-transparent text-success-fg border-success/40",
-    solid: "bg-success text-white border-success",
+    solid: "bg-success text-fg-inverted border-success",
     dot: "bg-success",
   },
   warning: {
     soft: "bg-warning-softer text-warning-fg border-warning/30",
     outline: "bg-transparent text-warning-fg border-warning/40",
-    solid: "bg-warning text-white border-warning",
+    solid: "bg-warning text-fg-inverted border-warning",
     dot: "bg-warning",
   },
   danger: {
     soft: "bg-danger-softer text-danger-fg border-danger/30",
     outline: "bg-transparent text-danger-fg border-danger/40",
-    solid: "bg-danger text-white border-danger",
+    solid: "bg-danger text-fg-inverted border-danger",
     dot: "bg-danger",
   },
   info: {
     soft: "bg-info-softer text-info-fg border-info/30",
     outline: "bg-transparent text-info-fg border-info/40",
-    solid: "bg-info text-white border-info",
+    solid: "bg-info text-fg-inverted border-info",
     dot: "bg-info",
   },
 };

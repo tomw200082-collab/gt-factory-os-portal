@@ -1,13 +1,22 @@
 "use client";
 
-import { ChevronDown, Eye, LogOut } from "lucide-react";
+import { ChevronDown, Eye, LogOut, Moon, Sun } from "lucide-react";
 import Link from "next/link";
 import { useSession } from "@/lib/auth/session-provider";
 import { useReviewMode } from "@/lib/review-mode/store";
+import { useTheme } from "@/lib/theme";
 import type { Role } from "@/lib/contracts/enums";
 import { MobileNav } from "./MobileNav";
 import { cn } from "@/lib/cn";
 import { getUserInitials } from "@/lib/user-initials";
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuLabel,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from "@/components/ui/dropdown-menu";
 
 const ROLE_OPTIONS: Role[] = ["operator", "planner", "admin", "viewer"];
 
@@ -110,10 +119,12 @@ export function TopBar() {
                   </select>
                 </div>
               </div>
+
+              {/* Compact UserMenu — also exposes Dark Mode toggle in dev-shim */}
+              <UserMenu compact />
             </>
           ) : (
-            /* Production: compact user indicator with sign-out */
-            <UserIndicator session={session} />
+            <UserMenu />
           )}
         </div>
       </div>
@@ -121,41 +132,141 @@ export function TopBar() {
   );
 }
 
-interface UserIndicatorProps {
-  session: { display_name: string; email: string; role: string };
+interface UserMenuProps {
+  compact?: boolean;
 }
 
-function UserIndicator({ session }: UserIndicatorProps) {
-  const { isLoading } = useSession();
-  if (isLoading) {
-    return <div className="h-8 w-8 rounded-full bg-bg-subtle animate-pulse" aria-label="Loading user" />;
+function UserMenu({ compact = false }: UserMenuProps) {
+  const { session, isLoading } = useSession();
+  const { theme, toggle } = useTheme();
+
+  if (isLoading && !compact) {
+    return (
+      <div
+        className="h-8 w-8 rounded-full bg-bg-subtle animate-pulse"
+        aria-label="Loading user"
+      />
+    );
   }
+
   const initials = getUserInitials(session.display_name, session.email);
   const displayName = session.display_name.split(" (")[0] || session.email;
+
   return (
-    <div className="flex items-center gap-2">
-      <div className="hidden flex-col items-end leading-none sm:flex">
-        <span className="text-[0.75rem] font-medium text-fg-strong">{displayName}</span>
-        <span className="mt-0.5 font-mono text-3xs uppercase tracking-sops text-fg-muted">{session.role}</span>
-      </div>
-      <div
-        className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/15 text-[0.6875rem] font-bold text-accent"
-        title={displayName}
-        aria-label={`Signed in as ${displayName}`}
-      >
-        {initials}
-      </div>
-      <Link
-        href="/auth/signout"
-        className={cn(
-          "hidden h-8 w-8 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-bg-subtle hover:text-fg sm:flex",
+    <DropdownMenu>
+      <DropdownMenuTrigger asChild>
+        {compact ? (
+          <button
+            type="button"
+            className={cn(
+              "flex h-8 w-8 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-bg-subtle hover:text-fg",
+              "focus-visible:outline-none",
+            )}
+            aria-label="Open user menu"
+            title="User menu"
+          >
+            {theme === "dark" ? (
+              <Moon className="h-3.5 w-3.5" strokeWidth={1.75} />
+            ) : (
+              <Sun className="h-3.5 w-3.5" strokeWidth={1.75} />
+            )}
+          </button>
+        ) : (
+          <button
+            type="button"
+            className={cn(
+              "flex items-center gap-2 rounded-md px-1.5 py-1 transition-colors",
+              "hover:bg-bg-subtle focus-visible:outline-none",
+            )}
+            aria-label="Open user menu"
+          >
+            <div className="hidden flex-col items-end leading-none sm:flex">
+              <span className="text-[0.75rem] font-medium text-fg-strong">
+                {displayName}
+              </span>
+              <span className="mt-0.5 font-mono text-3xs uppercase tracking-sops text-fg-muted">
+                {session.role}
+              </span>
+            </div>
+            <div
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/15 text-[0.6875rem] font-bold text-accent"
+              title={displayName}
+            >
+              {initials}
+            </div>
+            <ChevronDown
+              className="h-3.5 w-3.5 text-fg-muted"
+              strokeWidth={2}
+              aria-hidden
+            />
+          </button>
         )}
-        title="Sign out"
-        aria-label="Sign out"
-      >
-        <LogOut className="h-3.5 w-3.5" strokeWidth={1.75} />
-      </Link>
-    </div>
+      </DropdownMenuTrigger>
+
+      <DropdownMenuContent>
+        {!compact && (
+          <>
+            <DropdownMenuLabel className="normal-case tracking-normal">
+              <div className="flex flex-col gap-0.5">
+                <span className="text-sm font-semibold text-fg-strong">
+                  {displayName}
+                </span>
+                <span className="text-xs font-normal text-fg-muted">
+                  {session.email}
+                </span>
+                <span className="mt-0.5 font-mono text-3xs uppercase tracking-sops text-fg-subtle">
+                  {session.role}
+                </span>
+              </div>
+            </DropdownMenuLabel>
+            <DropdownMenuSeparator />
+          </>
+        )}
+
+        <DropdownMenuItem
+          onSelect={(e) => {
+            // Keep menu open after toggle — the change is visible behind it.
+            e.preventDefault();
+            toggle();
+          }}
+          className="justify-between"
+        >
+          <span className="flex items-center gap-2">
+            {theme === "dark" ? (
+              <Moon className="h-3.5 w-3.5" strokeWidth={1.75} />
+            ) : (
+              <Sun className="h-3.5 w-3.5" strokeWidth={1.75} />
+            )}
+            Dark Mode
+          </span>
+          <span
+            className={cn(
+              "ml-3 inline-flex h-4 w-7 shrink-0 items-center rounded-full border transition-colors",
+              theme === "dark"
+                ? "border-accent bg-accent"
+                : "border-border bg-bg-subtle",
+            )}
+            aria-hidden
+          >
+            <span
+              className={cn(
+                "h-3 w-3 rounded-full bg-bg-raised shadow-raised transition-transform",
+                theme === "dark" ? "translate-x-3.5" : "translate-x-0.5",
+              )}
+            />
+          </span>
+        </DropdownMenuItem>
+
+        <DropdownMenuSeparator />
+
+        <DropdownMenuItem asChild>
+          <Link href="/auth/signout" className="flex items-center gap-2">
+            <LogOut className="h-3.5 w-3.5" strokeWidth={1.75} />
+            Sign out
+          </Link>
+        </DropdownMenuItem>
+      </DropdownMenuContent>
+    </DropdownMenu>
   );
 }
 
@@ -184,7 +295,7 @@ function BrandMark() {
         className="pointer-events-none absolute inset-0 rounded"
         style={{
           background:
-            "linear-gradient(180deg, hsl(186 60% 50% / 0.25) 0%, transparent 60%)",
+            "linear-gradient(180deg, hsl(var(--brand-mark-gloss)) 0%, transparent 60%)",
         }}
       />
     </div>

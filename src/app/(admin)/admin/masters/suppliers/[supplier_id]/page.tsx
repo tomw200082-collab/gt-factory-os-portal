@@ -306,7 +306,7 @@ function CostEditCell({
         <button
           onClick={handleSave}
           disabled={mutation.isPending}
-          className="rounded bg-accent px-1.5 py-0.5 text-xs text-white hover:opacity-80 disabled:opacity-50"
+          className="rounded bg-accent px-1.5 py-0.5 text-xs text-accent-fg hover:opacity-80 disabled:opacity-50"
         >
           {mutation.isPending ? "…" : "Save"}
         </button>
