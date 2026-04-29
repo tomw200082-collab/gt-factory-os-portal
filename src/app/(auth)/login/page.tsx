@@ -225,7 +225,28 @@ function MagicLinkLogin() {
   const formBlocked = envError !== null;
 
   return (
-    <div className="mx-auto mt-16 max-w-md">
+    <div className="mx-auto mt-16 max-w-md px-4">
+      {/* Brand mark above the card. White-on-transparent logo asset; the
+          `invert dark:invert-0` Tailwind pair flips to black-on-light in
+          light theme. Same convention as TopBar.BrandMark. */}
+      <div className="mb-6 flex flex-col items-center gap-2">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src="/brand/logo.png"
+          alt="GT Everyday"
+          width={48}
+          height={48}
+          className="h-12 w-12 object-contain invert dark:invert-0"
+        />
+        <div className="text-center leading-tight">
+          <div className="text-base font-semibold tracking-tightish text-fg-strong">
+            GT Factory OS
+          </div>
+          <div className="mt-0.5 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+            Operations portal
+          </div>
+        </div>
+      </div>
       <div className="card p-6">
         <div className="text-lg font-semibold">Sign in</div>
         <p className="mt-1 text-sm text-fg-muted">
@@ -387,6 +408,26 @@ function MagicLinkLogin() {
             </button>
           </form>
         )}
+      </div>
+      {/* Footer: small print under the card. Confirms the operator hasn't
+          landed on a phishing clone, identifies the portal/version, and
+          gives a path to a status page if something is broken. */}
+      <div className="mt-4 flex items-center justify-center gap-3 text-3xs text-fg-faint">
+        <span>GT Factory OS</span>
+        <span aria-hidden>·</span>
+        <Link
+          href="/auth/signout"
+          className="hover:text-fg-muted hover:underline"
+        >
+          Sign out
+        </Link>
+        <span aria-hidden>·</span>
+        <Link
+          href="/dashboard"
+          className="hover:text-fg-muted hover:underline"
+        >
+          Status
+        </Link>
       </div>
     </div>
   );
