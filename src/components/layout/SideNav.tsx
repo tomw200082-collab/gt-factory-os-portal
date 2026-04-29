@@ -21,7 +21,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronDown, Lock, LogOut } from "lucide-react";
+import { ChevronDown, Lock, LogOut, Search, X } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, useCallback, useEffect } from "react";
 import { useSession } from "@/lib/auth/session-provider";
@@ -140,6 +140,12 @@ export function SideNav({ onNavigate }: { onNavigate?: () => void } = {}) {
     return set;
   });
 
+  // Text filter applied across all visible nav items. Case-insensitive
+  // substring match against the human-readable label. Useful for fast
+  // navigation when the manifest grows. Esc clears.
+  const [search, setSearch] = useState("");
+  const searchLower = search.trim().toLowerCase();
+
   const toggleGroup = useCallback((title: string) => {
     setExpandedGroups((prev) => {
       const next = new Set(prev);
@@ -167,9 +173,45 @@ export function SideNav({ onNavigate }: { onNavigate?: () => void } = {}) {
 
   return (
     <nav aria-label="Primary navigation" className="flex flex-col gap-4">
+      {/* Filter / quick-jump — case-insensitive substring match over labels.
+          Hidden when there are too few entries to need it (small manifests). */}
+      <div className="relative">
+        <Search
+          className="pointer-events-none absolute left-2 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-faint"
+          strokeWidth={2}
+          aria-hidden
+        />
+        <input
+          type="text"
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              setSearch("");
+              (e.target as HTMLInputElement).blur();
+            }
+          }}
+          placeholder="Filter pages…"
+          className="w-full rounded border border-border/60 bg-bg-subtle/70 py-1.5 pl-7 pr-7 text-3xs text-fg placeholder:text-fg-faint focus:border-accent/50 focus:bg-bg-raised focus:outline-none focus:ring-2 focus:ring-accent/20"
+          aria-label="Filter navigation"
+          data-testid="sidenav-search"
+        />
+        {search && (
+          <button
+            type="button"
+            onClick={() => setSearch("")}
+            className="absolute right-1.5 top-1/2 flex h-5 w-5 -translate-y-1/2 items-center justify-center rounded text-fg-faint hover:bg-bg-subtle hover:text-fg"
+            aria-label="Clear filter"
+          >
+            <X className="h-3 w-3" strokeWidth={2} />
+          </button>
+        )}
+      </div>
+
       {NAV_MANIFEST.map((group) => {
         const entries: SideNavEntry[] = group.items
           .filter((i) => meetsMinRole(session.role, i.min_role))
+          .filter((i) => searchLower === "" || i.label.toLowerCase().includes(searchLower))
           .map((i) => {
             const grantOK =
               i.required_capability === undefined ||
@@ -180,7 +222,10 @@ export function SideNav({ onNavigate }: { onNavigate?: () => void } = {}) {
         if (entries.length === 0) return null;
 
         const isCollapsible = !!group.collapsible;
-        const isExpanded = !isCollapsible || expandedGroups.has(group.title);
+        // When search is active, force-expand collapsible groups that have at
+        // least one matching entry so users can see filtered results.
+        const isExpanded =
+          !isCollapsible || expandedGroups.has(group.title) || searchLower !== "";
 
         return (
           <div key={group.title}>
