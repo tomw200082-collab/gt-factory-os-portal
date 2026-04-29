@@ -379,7 +379,56 @@ export default function DashboardPage() {
       </SectionCard>
 
       {/* -------------------------------------------------------------- */}
-      {/* Block 2 — Stock truth + parity check                          */}
+      {/* Block 2 — Quick actions (moved from bottom per S1 research:    */}
+      {/* "operator-actionable surfaces should sit above the fold so the */}
+      {/* primary daily tasks are reachable without scrolling").         */}
+      {/* -------------------------------------------------------------- */}
+      <SectionCard
+        eyebrow="Quick actions"
+        title="Common tasks"
+        className="mt-6"
+      >
+        {quickActions.length === 0 ? (
+          <div className="text-sm text-fg-muted">
+            No actions available for your current role.
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
+            {quickActions.map((a) => {
+              const Icon = a.icon;
+              return (
+                <Link
+                  key={a.href}
+                  href={a.href}
+                  className="group flex items-start gap-3 rounded border border-border/70 bg-bg-raised p-4 transition-colors hover:border-accent/50 hover:bg-accent-soft/40"
+                  data-testid={`dashboard-quick-action-${a.category}`}
+                >
+                  <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded border border-border/70 bg-bg text-accent">
+                    <Icon className="h-4 w-4" strokeWidth={2} />
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-center gap-2">
+                      <div className="truncate text-sm font-semibold text-fg-strong">
+                        {a.label}
+                      </div>
+                      <ArrowRight
+                        className="h-3 w-3 shrink-0 text-fg-faint transition-transform group-hover:translate-x-0.5 group-hover:text-accent"
+                        strokeWidth={2}
+                      />
+                    </div>
+                    <div className="mt-1 text-xs leading-relaxed text-fg-muted">
+                      {a.blurb}
+                    </div>
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        )}
+      </SectionCard>
+
+      {/* -------------------------------------------------------------- */}
+      {/* Block 3 — Stock truth + parity check                           */}
       {/* -------------------------------------------------------------- */}
       <SectionCard
         eyebrow="Stock"
@@ -444,52 +493,6 @@ export default function DashboardPage() {
         </SectionCard>
       ) : null}
 
-      {/* -------------------------------------------------------------- */}
-      {/* Block 7 — Role-adapted quick-action launcher                   */}
-      {/* -------------------------------------------------------------- */}
-      <SectionCard
-        eyebrow="Quick actions"
-        title="Common tasks"
-        className="mt-6"
-      >
-        {quickActions.length === 0 ? (
-          <div className="text-sm text-fg-muted">
-            No actions available for your current role.
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {quickActions.map((a) => {
-              const Icon = a.icon;
-              return (
-                <Link
-                  key={a.href}
-                  href={a.href}
-                  className="group flex items-start gap-3 rounded border border-border/70 bg-bg-raised p-4 transition-colors hover:border-accent/50 hover:bg-accent-soft/40"
-                  data-testid={`dashboard-quick-action-${a.category}`}
-                >
-                  <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded border border-border/70 bg-bg text-accent">
-                    <Icon className="h-4 w-4" strokeWidth={2} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <div className="truncate text-sm font-semibold text-fg-strong">
-                        {a.label}
-                      </div>
-                      <ArrowRight
-                        className="h-3 w-3 shrink-0 text-fg-faint transition-transform group-hover:translate-x-0.5 group-hover:text-accent"
-                        strokeWidth={2}
-                      />
-                    </div>
-                    <div className="mt-1 text-xs leading-relaxed text-fg-muted">
-                      {a.blurb}
-                    </div>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        )}
-      </SectionCard>
     </>
   );
 }
