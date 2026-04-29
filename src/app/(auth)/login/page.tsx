@@ -15,10 +15,26 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
+import { Mail } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 const DEV_SHIM_ON = process.env.NEXT_PUBLIC_ENABLE_DEV_SHIM_AUTH === "true";
+
+// Cooldown after sending/resending a magic link. Prevents accidental
+// double-tap rapid-fire and signals "we did send it; give it a sec".
+const RESEND_COOLDOWN_SECONDS = 30;
+
+function gmailDeepLink(email: string): string | null {
+  // If the email is a Gmail / Google Workspace address, deep-link to the
+  // user's inbox in the right account context. For other providers we cannot
+  // reliably deep-link, so return null and the UI hides the button.
+  const lower = email.toLowerCase().trim();
+  if (lower.endsWith("@gmail.com") || lower.endsWith("@googlemail.com") || lower.endsWith("@gteveryday.com")) {
+    return `https://mail.google.com/mail/u/?authuser=${encodeURIComponent(lower)}`;
+  }
+  return null;
+}
 
 export default function LoginPage() {
   if (DEV_SHIM_ON) {
@@ -78,6 +94,16 @@ function MagicLinkLogin() {
   const [error, setError] = useState<string | null>(null);
   const [sentAt, setSentAt] = useState<Date | null>(null);
   const [isResending, setIsResending] = useState(false);
+  const [cooldownRemaining, setCooldownRemaining] = useState(0);
+
+  // Tick down the resend cooldown every second when active.
+  useEffect(() => {
+    if (cooldownRemaining <= 0) return;
+    const timer = setInterval(() => {
+      setCooldownRemaining((s) => Math.max(0, s - 1));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [cooldownRemaining]);
 
   const supabase = useMemo(() => {
     try {
@@ -117,10 +143,11 @@ function MagicLinkLogin() {
     }
     setSentAt(new Date());
     setStatus("sent");
+    setCooldownRemaining(RESEND_COOLDOWN_SECONDS);
   }
 
   async function handleResend() {
-    if (!email || isResending) return;
+    if (!email || isResending || cooldownRemaining > 0) return;
     setIsResending(true);
     setError(null);
     const errMsg = await sendMagicLink(email);
@@ -130,13 +157,17 @@ function MagicLinkLogin() {
       return;
     }
     setSentAt(new Date());
+    setCooldownRemaining(RESEND_COOLDOWN_SECONDS);
   }
 
   function handleUseDifferentEmail() {
     setStatus("idle");
     setError(null);
     setSentAt(null);
+    setCooldownRemaining(0);
   }
+
+  const gmailLink = gmailDeepLink(email);
 
   // Block the form when we cannot reach Supabase at all. urlError is from a
   // prior callback failure and is informational; it does not block the form.
@@ -193,8 +224,11 @@ function MagicLinkLogin() {
             data-testid="login-sent-state"
           >
             <div className="rounded border border-success/40 bg-success-subtle p-3 text-sm text-success-fg">
-              <div className="font-semibold">Check your email</div>
-              <div className="mt-0.5 break-words">
+              <div className="flex items-center gap-2">
+                <Mail className="h-4 w-4 shrink-0" strokeWidth={2} />
+                <span className="font-semibold">Check your email</span>
+              </div>
+              <div className="mt-1 break-words">
                 We sent a sign-in link to{" "}
                 <span className="font-mono">{email}</span>. It may take up to
                 a minute to arrive.
@@ -203,16 +237,32 @@ function MagicLinkLogin() {
                 The link expires in 1 hour and can only be used once.
               </div>
             </div>
+            {gmailLink && (
+              <a
+                href={gmailLink}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="btn btn-primary w-full justify-center"
+                data-testid="login-open-gmail"
+              >
+                <Mail className="h-3.5 w-3.5" strokeWidth={2} />
+                Open Gmail
+              </a>
+            )}
             <div className="flex flex-wrap items-center gap-2 text-xs text-fg-muted">
               <span>Didn&rsquo;t receive it?</span>
               <button
                 type="button"
                 onClick={handleResend}
-                disabled={isResending}
-                className="font-medium text-accent underline-offset-2 hover:underline disabled:opacity-60"
+                disabled={isResending || cooldownRemaining > 0}
+                className="font-medium text-accent underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-60 disabled:no-underline"
                 data-testid="login-resend"
               >
-                {isResending ? "Sending…" : "Resend"}
+                {isResending
+                  ? "Sending…"
+                  : cooldownRemaining > 0
+                  ? `Resend in ${cooldownRemaining}s`
+                  : "Resend"}
               </button>
               <span aria-hidden>·</span>
               <button
