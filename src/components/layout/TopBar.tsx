@@ -26,6 +26,22 @@ const ROLE_OPTIONS: Role[] = ["operator", "planner", "admin", "viewer"];
 const DEV_SHIM_ENABLED =
   process.env.NEXT_PUBLIC_ENABLE_DEV_SHIM_AUTH === "true";
 
+// Non-production environment chip. We show a STAGING / PREVIEW pill on
+// Vercel preview deploys and on local-with-real-auth so the operator can
+// never confuse the staging portal for production at a glance. In actual
+// production (`NEXT_PUBLIC_VERCEL_ENV === "production"`) we render no chip
+// — the absence IS the signal. In dev-shim mode the FAKE SESSION pill
+// already covers the warning so we don't double up.
+const VERCEL_ENV = process.env.NEXT_PUBLIC_VERCEL_ENV ?? "";
+const NON_PROD_LABEL =
+  VERCEL_ENV === "preview"
+    ? "PREVIEW"
+    : VERCEL_ENV === "development"
+    ? "DEV"
+    : VERCEL_ENV === "" || VERCEL_ENV === "production"
+    ? null
+    : VERCEL_ENV.toUpperCase();
+
 export function TopBar() {
   const { session, setRole } = useSession();
   const { setOpen, forcedScreenState } = useReviewMode();
@@ -51,6 +67,20 @@ export function TopBar() {
             </div>
           </div>
         </div>
+
+        {/* Non-prod env chip — small visual safety so the operator never
+            confuses staging for prod. Hidden in production and in dev-shim. */}
+        {!DEV_SHIM_ENABLED && NON_PROD_LABEL ? (
+          <span
+            className="ml-2 hidden items-center gap-1 rounded-full border border-warning/40 bg-warning-softer px-2 py-0.5 text-3xs font-bold uppercase tracking-sops text-warning-fg sm:inline-flex"
+            data-testid="topbar-env-chip"
+            aria-label={`Environment: ${NON_PROD_LABEL}`}
+            title="You're not on production. Changes here will not affect live data."
+          >
+            <span className="dot bg-warning" aria-hidden />
+            {NON_PROD_LABEL}
+          </span>
+        ) : null}
 
         <div className="ml-auto flex items-center gap-2.5">
           {DEV_SHIM_ENABLED ? (
