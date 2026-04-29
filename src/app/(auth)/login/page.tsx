@@ -81,6 +81,57 @@ function DevShimLogin() {
   );
 }
 
+// Map known Supabase / OAuth-callback error codes to operator-facing copy.
+// Falls back to a generic message when the code isn't recognized so we never
+// show a raw machine string to the user. The "detail" suffix from the URL is
+// preserved as small print for support / triage.
+function explainCallbackError(code: string, detail?: string | null): {
+  title: string;
+  body: string;
+} {
+  const c = code.toLowerCase();
+  if (c === "access_denied" || c.includes("denied")) {
+    return {
+      title: "The sign-in link is no longer valid",
+      body:
+        "It may have expired or already been used. Magic links work once and time out after about an hour. Request a fresh one below.",
+    };
+  }
+  if (c.includes("expired") || c === "otp_expired") {
+    return {
+      title: "The link expired",
+      body: "Magic links expire after about an hour. Request a fresh one below.",
+    };
+  }
+  if (c.includes("used") || c === "otp_consumed") {
+    return {
+      title: "That link was already used",
+      body:
+        "Each magic link can only be used once. Request a fresh one below.",
+    };
+  }
+  if (c.includes("flow_state") || c.includes("pkce")) {
+    return {
+      title: "Open the link in the same browser that requested it",
+      body:
+        "For security, each magic link is bound to the browser session that asked for it. Request a new link from this device and click it here.",
+    };
+  }
+  if (c.includes("server") || c.includes("unavailable")) {
+    return {
+      title: "The auth service is temporarily unavailable",
+      body:
+        "We couldn't complete sign-in. Wait a moment and try again. If this keeps happening, contact the admin.",
+    };
+  }
+  return {
+    title: "Sign-in failed",
+    body: detail
+      ? `${code} — ${detail}. Request a fresh link below.`
+      : `${code}. Request a fresh link below.`,
+  };
+}
+
 function MagicLinkLogin() {
   const params = useSearchParams();
   const urlError = params.get("error");
@@ -198,23 +249,25 @@ function MagicLinkLogin() {
           </div>
         )}
 
-        {urlError && status !== "sent" && (
-          <div
-            role="alert"
-            className="mt-4 rounded border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg"
-            data-testid="login-callback-error"
-          >
-            <div className="font-semibold">Sign-in failed</div>
-            <div className="mt-0.5 text-xs">
-              {urlError}
-              {urlErrorDetail ? ` — ${urlErrorDetail}` : ""}
+        {urlError && status !== "sent" && (() => {
+          const explained = explainCallbackError(urlError, urlErrorDetail);
+          return (
+            <div
+              role="alert"
+              className="mt-4 rounded border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg"
+              data-testid="login-callback-error"
+            >
+              <div className="font-semibold">{explained.title}</div>
+              <div className="mt-1 text-xs leading-relaxed text-fg-muted">
+                {explained.body}
+              </div>
+              <div className="mt-1.5 font-mono text-3xs uppercase tracking-sops text-fg-faint">
+                code: {urlError}
+                {urlErrorDetail ? ` · ${urlErrorDetail}` : ""}
+              </div>
             </div>
-            <div className="mt-1.5 text-xs text-fg-muted">
-              The previous magic link may have expired or already been used.
-              Request a new one below.
-            </div>
-          </div>
-        )}
+          );
+        })()}
 
         {status === "sent" ? (
           <div
