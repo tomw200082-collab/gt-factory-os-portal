@@ -340,11 +340,14 @@ export default function DashboardPage() {
       <WorkflowHeader
         eyebrow="GT Factory OS"
         title={greeting}
-        description="Live operational signals. Click any tile to go to the relevant page."
+        description="Operational status at a glance — click any tile to drill in."
         meta={
           <>
             <Badge tone={roleBadgeTone(session.role)} dotted>
               {session.role}
+            </Badge>
+            <Badge tone="neutral" variant="outline" dotted>
+              as of {now.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
             </Badge>
             {loadError ? (
               <Badge tone="danger" variant="outline">
