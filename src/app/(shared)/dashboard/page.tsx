@@ -356,6 +356,14 @@ export default function DashboardPage() {
       />
 
       {/* -------------------------------------------------------------- */}
+      {/* Block 0 — Critical exceptions banner (conditional)             */}
+      {/* Loud surface that only renders when there's something critical */}
+      {/* to triage. Per S1 research: "the single most important block — */}
+      {/* it's Tom's 'what's broken right now' pane".                    */}
+      {/* -------------------------------------------------------------- */}
+      <CriticalExceptionsBanner inboxRows={inboxRows} />
+
+      {/* -------------------------------------------------------------- */}
       {/* Block 1 — Top-row stat strip                                   */}
       {/* -------------------------------------------------------------- */}
       <SectionCard
@@ -784,6 +792,78 @@ function BreakGlassCard({
 function ListChecksIcon() {
   return (
     <BadgeCheck className="h-3 w-3" strokeWidth={2} />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Critical exceptions banner — appears above the stat strip when there is at
+// least one critical row in the inbox. Shows up to 3 sample summaries plus a
+// "+N more" overflow count, with a single primary CTA into the inbox view
+// pre-filtered to critical severity. Per S1 research §C.2 Block 2: dedicated
+// red banner with red-600 left border, distinct from the stat-strip tile so
+// the planner's eye lands on it first.
+// ---------------------------------------------------------------------------
+function CriticalExceptionsBanner({
+  inboxRows,
+}: {
+  inboxRows: InboxRow[] | undefined;
+}) {
+  if (!inboxRows) return null;
+  const critical = inboxRows.filter((r) => r.severity === "critical");
+  if (critical.length === 0) return null;
+
+  const sample = critical.slice(0, 3);
+  const more = Math.max(0, critical.length - sample.length);
+
+  return (
+    <div
+      className="mt-4 flex items-start gap-3 rounded border border-danger/40 border-l-[3px] border-l-danger bg-danger-softer p-4"
+      role="alert"
+      aria-live="polite"
+      data-testid="dashboard-critical-banner"
+    >
+      <AlertOctagon
+        className="mt-0.5 h-5 w-5 shrink-0 text-danger"
+        strokeWidth={2}
+      />
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
+          <span className="text-sm font-semibold text-danger-fg">
+            {critical.length === 1
+              ? "1 critical exception is open"
+              : `${critical.length} critical exceptions are open`}
+          </span>
+          <span className="text-3xs uppercase tracking-sops text-danger-fg/70">
+            triage now
+          </span>
+        </div>
+        <ul className="mt-1.5 space-y-0.5 text-xs text-fg-muted">
+          {sample.map((row) => (
+            <li
+              key={row.id}
+              className="flex items-start gap-1.5"
+              data-testid="dashboard-critical-banner-item"
+            >
+              <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-danger" aria-hidden />
+              <span className="min-w-0 flex-1 truncate">{row.summary}</span>
+            </li>
+          ))}
+          {more > 0 ? (
+            <li className="text-fg-faint">
+              + {more} more
+            </li>
+          ) : null}
+        </ul>
+      </div>
+      <Link
+        href="/inbox?view=exceptions&sort=severity_then_age"
+        className="btn btn-sm shrink-0 self-center"
+        data-testid="dashboard-critical-banner-cta"
+      >
+        Open inbox
+        <ArrowRight className="h-3 w-3" strokeWidth={2} />
+      </Link>
+    </div>
   );
 }
 
