@@ -10,10 +10,45 @@
 //
 // Reached only when `app/error.tsx` cannot absorb the error (layout-level
 // crash). Rare but must not leave the user on a blank white page.
+//
+// Chunk-load auto-recovery: same shape as `app/error.tsx` — when a layout
+// chunk fails to load (typical after a redeploy with stale tabs), we hard
+// reload once, guarded by a 30s sessionStorage stamp to avoid loops.
 // ---------------------------------------------------------------------------
 
 import { useEffect } from "react";
 import { reportError } from "@/lib/obs/report";
+
+const CHUNK_RELOAD_GUARD_KEY = "gt-portal-chunk-reload-at";
+const CHUNK_RELOAD_GUARD_MS = 30_000;
+
+function isChunkLoadError(error: Error): boolean {
+  const name = error.name ?? "";
+  const msg = error.message ?? "";
+  return (
+    name === "ChunkLoadError" ||
+    /Loading chunk [\w-]+ failed/i.test(msg) ||
+    /Loading CSS chunk [\w-]+ failed/i.test(msg)
+  );
+}
+
+function autoReloadOnce(): void {
+  if (typeof window === "undefined") return;
+  let last = 0;
+  try {
+    last = Number(sessionStorage.getItem(CHUNK_RELOAD_GUARD_KEY) ?? 0);
+  } catch {
+    // sessionStorage may be blocked.
+  }
+  const now = Date.now();
+  if (now - last < CHUNK_RELOAD_GUARD_MS) return;
+  try {
+    sessionStorage.setItem(CHUNK_RELOAD_GUARD_KEY, String(now));
+  } catch {
+    // Best-effort; reload anyway.
+  }
+  window.location.reload();
+}
 
 export default function GlobalError({
   error,
@@ -22,9 +57,20 @@ export default function GlobalError({
   error: Error & { digest?: string };
   reset: () => void;
 }) {
+  const chunkError = isChunkLoadError(error);
+
   useEffect(() => {
-    reportError(error, { boundary: "global" });
-  }, [error]);
+    reportError(error, { boundary: "global", chunk_error: chunkError });
+    if (chunkError) autoReloadOnce();
+  }, [error, chunkError]);
+
+  const handleRetry = () => {
+    if (chunkError && typeof window !== "undefined") {
+      window.location.reload();
+      return;
+    }
+    reset();
+  };
 
   return (
     <html lang="en">
@@ -52,12 +98,14 @@ export default function GlobalError({
           }}
         >
           <h1 style={{ fontSize: "1.125rem", fontWeight: 600, margin: 0 }}>
-            Portal shell crashed.
+            {chunkError
+              ? "Refreshing to pick up the latest version…"
+              : "Portal shell crashed."}
           </h1>
           <p style={{ marginTop: "0.5rem", fontSize: "0.875rem", color: "#404040" }}>
-            The app wrapper itself couldn&apos;t render. This is unusual — it
-            typically means a provider (session, data, fonts) failed to
-            initialise. Reloading the page usually clears it.
+            {chunkError
+              ? "A new portal build was deployed while this tab was open. The page is reloading automatically. If it doesn't, click Try again."
+              : "The app wrapper itself couldn't render. This is unusual — it typically means a provider (session, data, fonts) failed to initialise. Reloading the page usually clears it."}
           </p>
           <pre
             style={{
@@ -80,7 +128,7 @@ export default function GlobalError({
           <div style={{ marginTop: "1rem", display: "flex", gap: "0.5rem", flexWrap: "wrap" }}>
             <button
               type="button"
-              onClick={() => reset()}
+              onClick={handleRetry}
               style={{
                 padding: "0.5rem 0.875rem",
                 borderRadius: "0.375rem",
