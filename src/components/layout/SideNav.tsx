@@ -21,11 +21,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ChevronDown, Lock, LogOut, Search, X } from "lucide-react";
+import { ChevronDown, Lock, LogOut, Moon, Search, Sun, X } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, useCallback, useEffect } from "react";
 import { useSession } from "@/lib/auth/session-provider";
 import { authorizeCapability } from "@/lib/auth/authorize";
+import { useTheme } from "@/lib/theme";
 import {
   NAV_MANIFEST,
   type NavItem,
@@ -394,6 +395,9 @@ function UserCard({ session }: { session: DevShimSession }) {
   const initials = getUserInitials(session.display_name, session.email);
   const displayName = session.display_name.split(" (")[0] || session.email;
   const roleLabel = ROLE_LABELS[session.role] ?? session.role;
+  const { theme, toggle } = useTheme();
+  const ThemeIcon = theme === "dark" ? Moon : Sun;
+  const themeLabelNext = theme === "dark" ? "Switch to light" : "Switch to dark";
 
   return (
     <div className="rounded-md border border-border/70 bg-bg-subtle/60 p-3">
@@ -413,14 +417,25 @@ function UserCard({ session }: { session: DevShimSession }) {
           </div>
         </div>
       </div>
-      <div className="mt-2.5 border-t border-border/50 pt-2">
+      <div className="mt-2.5 flex items-center justify-between border-t border-border/50 pt-2">
         <Link
           href="/auth/signout"
           className="flex items-center gap-1.5 text-3xs font-medium text-fg-muted transition-colors hover:text-fg"
+          data-testid="sidenav-signout"
         >
           <LogOut className="h-3 w-3" strokeWidth={2} aria-hidden />
           Sign out
         </Link>
+        <button
+          type="button"
+          onClick={toggle}
+          className="flex items-center gap-1 rounded p-1 text-fg-muted transition-colors hover:bg-bg-subtle hover:text-fg"
+          aria-label={themeLabelNext}
+          title={themeLabelNext}
+          data-testid="sidenav-theme-toggle"
+        >
+          <ThemeIcon className="h-3 w-3" strokeWidth={2} aria-hidden />
+        </button>
       </div>
     </div>
   );
