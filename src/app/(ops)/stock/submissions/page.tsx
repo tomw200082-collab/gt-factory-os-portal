@@ -111,13 +111,34 @@ export default function MySubmissionsPage() {
 
       {query.isError ? (
         <div className="rounded-md border border-danger/40 bg-danger-softer px-4 py-3 text-sm text-danger-fg">
-          Could not load recent submissions. Check your connection and refresh.
+          <div className="font-semibold">Could not load recent submissions</div>
+          <div className="mt-1 text-xs">Check your connection. The list will refresh automatically once reachable.</div>
+          <button
+            type="button"
+            onClick={() => void query.refetch()}
+            className="mt-2 text-xs font-medium text-danger-fg underline hover:no-underline"
+          >
+            Retry
+          </button>
         </div>
       ) : null}
 
       <SectionCard contentClassName="p-0">
         {query.isLoading ? (
-          <div className="px-5 py-8 text-sm text-fg-muted">Loading…</div>
+          <div className="px-5 py-5">
+            <div className="space-y-2" aria-busy="true" aria-live="polite">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="flex animate-pulse gap-3 border-b border-border/30 pb-2"
+                >
+                  <div className="h-5 w-24 shrink-0 rounded bg-bg-subtle" />
+                  <div className="h-5 flex-1 rounded bg-bg-subtle" />
+                  <div className="h-5 w-20 shrink-0 rounded bg-bg-subtle" />
+                </div>
+              ))}
+            </div>
+          </div>
         ) : rows.length === 0 ? (
           <EmptyState
             title="No submissions yet"
