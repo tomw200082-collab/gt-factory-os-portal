@@ -1178,11 +1178,13 @@ function JobsHealth24hBlock({
           label="Successes"
           value={d.successes.toLocaleString()}
           tone="success"
+          href="/admin/jobs"
         />
         <StatPill
           label="Failures"
           value={d.failures.toLocaleString()}
           tone={d.failures > 0 ? "danger" : "neutral"}
+          href="/admin/jobs"
         />
         <StatPill
           label="Skipped"
