@@ -250,6 +250,24 @@ export default function AdminItemDetailPage({
     enabled: row?.supply_method === "BOUGHT_FINISHED",
   });
 
+  // --- Data: suppliers (for resolving supplier_id -> name in UI) -----------
+  const suppliersQuery = useQuery<{ rows: { supplier_id: string; supplier_name_official: string; supplier_name_short: string | null }[]; count: number }>({
+    queryKey: ["admin", "suppliers", "all"],
+    queryFn: () => fetchJson("/api/suppliers?limit=1000"),
+  });
+  const suppliersById = useMemo(() => {
+    const m = new Map<string, { supplier_name_short: string | null; supplier_name_official: string }>();
+    for (const s of suppliersQuery.data?.rows ?? []) {
+      m.set(s.supplier_id, { supplier_name_short: s.supplier_name_short, supplier_name_official: s.supplier_name_official });
+    }
+    return m;
+  }, [suppliersQuery.data]);
+  function supplierNameOf(id: string | null | undefined): string {
+    if (!id) return "—";
+    const s = suppliersById.get(id);
+    return s?.supplier_name_short || s?.supplier_name_official || id;
+  }
+
   // --- Data: exceptions (client-side filter by related_entity_id) ----------
   const exceptionsQuery = useQuery<ExceptionsListResponse>({
     queryKey: ["admin", "masters", "item", item_id, "exceptions"],
@@ -304,7 +322,7 @@ export default function AdminItemDetailPage({
         ? [{ label: "Active recipe (BOM)", status: hasActiveBom ? ("ok" as const) : ("error" as const), detail: hasActiveBom ? undefined : "No BOM linked — item cannot be planned" }]
         : []),
       ...(isBought
-        ? [{ label: "Primary supplier", status: primarySi.length > 0 ? ("ok" as const) : ("warn" as const), detail: primarySi.length > 0 ? primarySi[0]!.supplier_id : "No primary supplier set" }]
+        ? [{ label: "Primary supplier", status: primarySi.length > 0 ? ("ok" as const) : ("warn" as const), detail: primarySi.length > 0 ? supplierNameOf(primarySi[0]!.supplier_id) : "No primary supplier set" }]
         : []),
       { label: "Name set", status: row.item_name ? ("ok" as const) : ("error" as const) },
     ];
@@ -556,7 +574,7 @@ export default function AdminItemDetailPage({
             <DetailTabEmpty message="No supplier linked to this purchased product. Use Admin → Supplier Items to add one." />
           );
         }
-        return <SupplierItemsTable rows={rows} />;
+        return <SupplierItemsTable rows={rows} supplierNameOf={supplierNameOf} />;
       }
       // MANUFACTURED / REPACK: per-component supplier fan-out requires a
       // bom_line → component → supplier_item aggregation we will not
@@ -698,7 +716,7 @@ export default function AdminItemDetailPage({
     linkages.push({
       label: "Primary supplier",
       items: primarySi.map((si) => ({
-        label: si.supplier_id,
+        label: supplierNameOf(si.supplier_id),
         href: `/admin/masters/suppliers/${encodeURIComponent(si.supplier_id)}`,
         subtitle: si.relationship ?? undefined,
         badge: <Badge tone="success" dotted>primary</Badge>,
@@ -953,8 +971,10 @@ function BomSection({
 
 function SupplierItemsTable({
   rows,
+  supplierNameOf,
 }: {
   rows: SupplierItemRow[];
+  supplierNameOf: (id: string) => string;
 }): JSX.Element {
   return (
     <SectionCard density="compact" contentClassName="p-0">
@@ -987,12 +1007,13 @@ function SupplierItemsTable({
               key={r.supplier_item_id}
               className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
             >
-              <td className="px-3 py-2 font-mono text-xs text-fg">
+              <td className="px-3 py-2 text-xs text-fg">
                 <Link
                   href={`/admin/masters/suppliers/${encodeURIComponent(r.supplier_id)}`}
                   className="hover:text-accent"
+                  title={r.supplier_id}
                 >
-                  {r.supplier_id}
+                  {supplierNameOf(r.supplier_id)}
                 </Link>
               </td>
               <td className="px-3 py-2 text-fg-muted">

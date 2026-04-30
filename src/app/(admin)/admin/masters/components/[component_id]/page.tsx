@@ -174,11 +174,27 @@ export default function AdminComponentDetailPage({
       ),
   });
 
-  const suppliersQuery = useQuery<{ rows: { supplier_id: string; supplier_name_official: string }[]; count: number }>({
+  // Suppliers list — used by the picker AND to render names everywhere a
+  // supplier_id appears in the UI. Loaded for everyone (not just admin) so
+  // non-admin viewers also read names instead of raw IDs.
+  const suppliersQuery = useQuery<{ rows: { supplier_id: string; supplier_name_official: string; supplier_name_short: string | null }[]; count: number }>({
     queryKey: ["admin", "suppliers", "all"],
     queryFn: () => fetchJson("/api/suppliers?limit=1000"),
-    enabled: isAdmin,
   });
+
+  const suppliersById = useMemo(() => {
+    const m = new Map<string, { supplier_name_short: string | null; supplier_name_official: string }>();
+    for (const s of suppliersQuery.data?.rows ?? []) {
+      m.set(s.supplier_id, { supplier_name_short: s.supplier_name_short, supplier_name_official: s.supplier_name_official });
+    }
+    return m;
+  }, [suppliersQuery.data]);
+
+  function supplierNameOf(id: string | null | undefined): string {
+    if (!id) return "—";
+    const s = suppliersById.get(id);
+    return s?.supplier_name_short || s?.supplier_name_official || id;
+  }
 
   const exceptionsQuery = useQuery<ExceptionsListResponse>({
     queryKey: ["admin", "masters", "component", component_id, "exceptions"],
@@ -306,7 +322,7 @@ export default function AdminComponentDetailPage({
       {
         label: "Primary supplier",
         status: primarySiItem ? "ok" : "error",
-        detail: primarySiItem ? primarySiItem.supplier_id : "No primary supplier set",
+        detail: primarySiItem ? supplierNameOf(primarySiItem.supplier_id) : "No primary supplier set",
       },
       {
         label: "Standard cost",
@@ -453,9 +469,10 @@ export default function AdminComponentDetailPage({
                 {row.primary_supplier_id ? (
                   <Link
                     href={`/admin/masters/suppliers/${encodeURIComponent(row.primary_supplier_id)}`}
-                    className="font-mono text-xs text-accent hover:underline"
+                    className="text-xs text-accent hover:underline"
+                    title={row.primary_supplier_id}
                   >
-                    {row.primary_supplier_id}
+                    {supplierNameOf(row.primary_supplier_id)}
                   </Link>
                 ) : (
                   <span className="text-fg-muted text-xs">—</span>
@@ -556,6 +573,7 @@ export default function AdminComponentDetailPage({
             <SupplierItemsTable
               rows={allSi}
               isAdmin={isAdmin}
+              supplierNameOf={supplierNameOf}
               onFieldSave={async (id, field, value, updated_at) => {
                 setEditBanner(null);
                 await fieldMutation.mutateAsync({ supplier_item_id: id, field, value, updated_at });
@@ -587,7 +605,7 @@ export default function AdminComponentDetailPage({
           <DetailTabEmpty message="No supplier is flagged primary for this component." />
         );
       }
-      return <SupplierItemsTable rows={primarySi} isAdmin={false} onFieldSave={async () => {}} onPromotePrimary={() => {}} />;
+      return <SupplierItemsTable rows={primarySi} isAdmin={false} supplierNameOf={supplierNameOf} onFieldSave={async () => {}} onPromotePrimary={() => {}} />;
     })(),
   };
 
@@ -652,7 +670,7 @@ export default function AdminComponentDetailPage({
       label: "Primary supplier",
       items: [
         {
-          label: row.primary_supplier_id,
+          label: supplierNameOf(row.primary_supplier_id),
           href: `/admin/masters/suppliers/${encodeURIComponent(row.primary_supplier_id)}`,
           badge: <Badge tone="success" dotted>primary</Badge>,
         },
@@ -663,7 +681,7 @@ export default function AdminComponentDetailPage({
   linkages.push({
     label: "All sourcing links",
     items: allSi.slice(0, 10).map((si) => ({
-      label: si.supplier_id,
+      label: supplierNameOf(si.supplier_id),
       href: `/admin/masters/suppliers/${encodeURIComponent(si.supplier_id)}`,
       subtitle: si.relationship ?? undefined,
       badge: si.is_primary ? (
@@ -779,11 +797,13 @@ export default function AdminComponentDetailPage({
 function SupplierItemsTable({
   rows,
   isAdmin,
+  supplierNameOf,
   onFieldSave,
   onPromotePrimary,
 }: {
   rows: SupplierItemRow[];
   isAdmin: boolean;
+  supplierNameOf: (id: string) => string;
   onFieldSave: (id: string, field: "lead_time_days" | "moq" | "std_cost_per_inv_uom", value: string | number, updated_at: string) => Promise<void>;
   onPromotePrimary: (id: string, updated_at: string) => void;
 }): JSX.Element {
@@ -804,9 +824,13 @@ function SupplierItemsTable({
         <tbody>
           {rows.map((r) => (
             <tr key={r.supplier_item_id} className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40">
-              <td className="px-3 py-2 font-mono text-xs text-fg">
-                <Link href={`/admin/masters/suppliers/${encodeURIComponent(r.supplier_id)}`} className="hover:text-accent">
-                  {r.supplier_id}
+              <td className="px-3 py-2 text-xs text-fg">
+                <Link
+                  href={`/admin/masters/suppliers/${encodeURIComponent(r.supplier_id)}`}
+                  className="hover:text-accent"
+                  title={r.supplier_id}
+                >
+                  {supplierNameOf(r.supplier_id)}
                 </Link>
               </td>
               <td className="px-3 py-2 text-fg-muted">{r.relationship ?? "—"}</td>

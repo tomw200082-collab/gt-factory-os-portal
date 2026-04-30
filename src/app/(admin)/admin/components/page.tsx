@@ -193,8 +193,9 @@ function ComponentsPageInner(): JSX.Element {
     [rows, selectedId],
   );
 
-  // Suppliers list — used by the picker. Reads from the live API so the
-  // dropdown shows the operator's real suppliers (not stale browser-IDB
+  // Suppliers list — used by the picker AND by the table to resolve
+  // primary_supplier_id -> human-readable name. Reads from the live API so
+  // the dropdown shows the operator's real suppliers (not stale browser-IDB
   // fixtures). Filter out INACTIVE so deprecated suppliers can't be picked.
   const suppliersList = useQuery<ListEnvelope<ApiSupplierRow>>({
     queryKey: ["api", "suppliers", "list"],
@@ -203,6 +204,20 @@ function ComponentsPageInner(): JSX.Element {
         "/api/suppliers?status=ACTIVE&limit=1000",
       ),
   });
+
+  // O(1) lookup of supplier name by id — operators read names, never IDs
+  // (supplier_id is internal). Empty Map until suppliers load.
+  const suppliersById = useMemo(() => {
+    const m = new Map<string, ApiSupplierRow>();
+    for (const s of suppliersList.data?.rows ?? []) m.set(s.supplier_id, s);
+    return m;
+  }, [suppliersList.data]);
+
+  function supplierNameOf(id: string | null | undefined): string {
+    if (!id) return "—";
+    const s = suppliersById.get(id);
+    return s?.supplier_name_short || s?.supplier_name_official || id;
+  }
 
   // Items list (IDB) — used to resolve product names for "Used in".
   const itemsList = useQuery<ItemDto[]>({
@@ -617,9 +632,10 @@ function ComponentsPageInner(): JSX.Element {
                       {r.primary_supplier_id ? (
                         <Link
                           href={`/admin/masters/suppliers/${encodeURIComponent(r.primary_supplier_id)}`}
-                          className="font-mono text-fg-muted hover:text-accent"
+                          className="text-fg hover:text-accent"
+                          title={r.primary_supplier_id}
                         >
-                          {r.primary_supplier_id}
+                          {supplierNameOf(r.primary_supplier_id)}
                         </Link>
                       ) : (
                         <Badge tone="warning" dotted>No supplier</Badge>

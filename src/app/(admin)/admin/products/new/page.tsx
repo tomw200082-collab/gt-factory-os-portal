@@ -673,6 +673,14 @@ function Step5Suppliers({
       }));
   }, [suppliersQuery.data]);
 
+  // Resolve supplier_id -> human-readable name for any badge / label that
+  // would otherwise render the raw FK. Names primary, IDs internal.
+  const supplierNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const s of suppliersQuery.data?.rows ?? []) m.set(s.supplier_id, s.supplier_name);
+    return m;
+  }, [suppliersQuery.data]);
+
   const componentOptions: EntityOption[] = useMemo(() => {
     return (componentsQuery.data?.rows ?? [])
       .filter((c) => c.status === "ACTIVE")
@@ -784,13 +792,11 @@ function Step5Suppliers({
                   {existing.length > 0 ? (
                     <div className="mt-2 flex flex-wrap gap-1.5">
                       {existing.map((si) => (
-                        <Badge
-                          key={si.supplier_item_id}
-                          tone="success"
-                          dotted
-                        >
-                          {si.supplier_id}
-                        </Badge>
+                        <span key={si.supplier_item_id} title={si.supplier_id}>
+                          <Badge tone="success" dotted>
+                            {supplierNameById.get(si.supplier_id) ?? si.supplier_id}
+                          </Badge>
+                        </span>
                       ))}
                     </div>
                   ) : (
