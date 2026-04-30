@@ -436,12 +436,36 @@ function AdminProduct360PageInner({ params }: PageProps): JSX.Element {
   // --- Render guards ------------------------------------------------------
 
   if (itemsQuery.isLoading) {
-    return <div className="p-5 text-sm text-fg-muted">Loading item…</div>;
+    return (
+      <div className="p-5">
+        <div className="space-y-3" aria-busy="true" aria-live="polite">
+          <div className="h-9 w-1/3 animate-pulse rounded bg-bg-subtle" />
+          <div className="h-5 w-2/3 animate-pulse rounded bg-bg-subtle" />
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="h-20 w-full animate-pulse rounded bg-bg-subtle" />
+            <div className="h-20 w-full animate-pulse rounded bg-bg-subtle" />
+            <div className="h-20 w-full animate-pulse rounded bg-bg-subtle" />
+            <div className="h-20 w-full animate-pulse rounded bg-bg-subtle" />
+          </div>
+          <div className="h-48 w-full animate-pulse rounded bg-bg-subtle" />
+        </div>
+      </div>
+    );
   }
   if (itemsQuery.isError) {
     return (
-      <div className="p-5 text-sm text-danger-fg">
-        {(itemsQuery.error as Error).message}
+      <div className="p-5">
+        <div className="rounded border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg">
+          <div className="font-semibold">Could not load product</div>
+          <div className="mt-1 text-xs">{(itemsQuery.error as Error).message}</div>
+          <button
+            type="button"
+            onClick={() => void itemsQuery.refetch()}
+            className="mt-2 text-xs font-medium text-danger-fg underline hover:no-underline"
+          >
+            Retry
+          </button>
+        </div>
       </div>
     );
   }
