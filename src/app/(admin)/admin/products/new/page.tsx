@@ -878,8 +878,18 @@ function Step6PlanningPolicy({
 
   if (policyQuery.isLoading) {
     return (
-      <SectionCard title="Planning policy" description="Loading…">
-        <div className="text-sm text-fg-muted">Loading policy values…</div>
+      <SectionCard title="Planning policy">
+        <div className="space-y-2" aria-busy="true" aria-live="polite">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div
+              key={i}
+              className="flex animate-pulse gap-3 border-b border-border/30 pb-2"
+            >
+              <div className="h-4 w-32 shrink-0 rounded bg-bg-subtle" />
+              <div className="h-4 flex-1 rounded bg-bg-subtle" />
+            </div>
+          ))}
+        </div>
       </SectionCard>
     );
   }
