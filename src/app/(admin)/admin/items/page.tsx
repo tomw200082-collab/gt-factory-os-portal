@@ -307,13 +307,80 @@ function ItemsPageInner(): JSX.Element {
         contentClassName="p-0"
       >
         {itemsQuery.isLoading ? (
-          <div className="p-5 text-sm text-fg-muted">Loading…</div>
+          <div className="p-5">
+            {/* Skeleton rows — 6 placeholder rows that approximate the
+                table columns so the layout doesn't jump in on data arrival. */}
+            <div className="space-y-2" aria-busy="true" aria-live="polite">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="flex animate-pulse gap-3 border-b border-border/30 pb-2"
+                >
+                  <div className="h-4 w-20 shrink-0 rounded bg-bg-subtle" />
+                  <div className="h-4 flex-1 rounded bg-bg-subtle" />
+                  <div className="h-4 w-16 shrink-0 rounded bg-bg-subtle" />
+                  <div className="h-4 w-16 shrink-0 rounded bg-bg-subtle" />
+                </div>
+              ))}
+            </div>
+          </div>
         ) : itemsQuery.isError ? (
-          <div className="p-5 text-sm text-danger-fg">
-            {(itemsQuery.error as Error).message}
+          <div className="p-5">
+            <div className="rounded border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg">
+              <div className="font-semibold">Could not load items</div>
+              <div className="mt-1 text-xs">
+                {(itemsQuery.error as Error).message}
+              </div>
+              <button
+                type="button"
+                onClick={() => itemsQuery.refetch()}
+                className="mt-2 text-xs font-medium text-danger-fg underline hover:no-underline"
+              >
+                Retry
+              </button>
+            </div>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="p-5 text-sm text-fg-muted">{query ? "No items match your search." : "No items match filters."}</div>
+          <div className="p-8">
+            <div className="mx-auto max-w-sm text-center">
+              <div className="text-sm font-semibold text-fg-strong">
+                {rows.length === 0
+                  ? "No items in the master yet."
+                  : query
+                  ? "No items match your search."
+                  : "No items match these filters."}
+              </div>
+              <div className="mt-1 text-xs text-fg-muted">
+                {rows.length === 0
+                  ? "Add the first item with + New product."
+                  : "Try clearing the search or relaxing the filters."}
+              </div>
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                {(query || statusFilter !== "ACTIVE" || supplyFilter) ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuery("");
+                      setStatusFilter("ACTIVE");
+                      setSupplyFilter("");
+                    }}
+                    className="btn btn-ghost btn-sm"
+                  >
+                    Reset filters
+                  </button>
+                ) : null}
+                {isAdmin ? (
+                  <Link
+                    href="/admin/products/new"
+                    className="btn-primary inline-flex items-center gap-1.5"
+                  >
+                    <Plus className="h-3 w-3" strokeWidth={2.5} />
+                    New product
+                  </Link>
+                ) : null}
+              </div>
+            </div>
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
