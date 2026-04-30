@@ -453,14 +453,76 @@ function ComponentsPageInner(): JSX.Element {
         contentClassName="p-0"
       >
         {componentsQuery.isLoading ? (
-          <div className="p-5 text-sm text-fg-muted">Loading…</div>
+          <div className="p-5">
+            <div className="space-y-2" aria-busy="true" aria-live="polite">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="flex animate-pulse gap-3 border-b border-border/30 pb-2"
+                >
+                  <div className="h-4 w-20 shrink-0 rounded bg-bg-subtle" />
+                  <div className="h-4 flex-1 rounded bg-bg-subtle" />
+                  <div className="h-4 w-16 shrink-0 rounded bg-bg-subtle" />
+                </div>
+              ))}
+            </div>
+          </div>
         ) : componentsQuery.isError ? (
-          <div className="p-5 text-sm text-danger-fg">
-            {(componentsQuery.error as Error).message}
+          <div className="p-5">
+            <div className="rounded border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg">
+              <div className="font-semibold">Could not load components</div>
+              <div className="mt-1 text-xs">
+                {(componentsQuery.error as Error).message}
+              </div>
+              <button
+                type="button"
+                onClick={() => componentsQuery.refetch()}
+                className="mt-2 text-xs font-medium text-danger-fg underline hover:no-underline"
+              >
+                Retry
+              </button>
+            </div>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="p-5 text-sm text-fg-muted">
-            No components match filters.
+          <div className="p-8">
+            <div className="mx-auto max-w-sm text-center">
+              <div className="text-sm font-semibold text-fg-strong">
+                {rows.length === 0
+                  ? "No components in the master yet."
+                  : query
+                  ? "No components match your search."
+                  : "No components match these filters."}
+              </div>
+              <div className="mt-1 text-xs text-fg-muted">
+                {rows.length === 0
+                  ? "Add a component with + New component."
+                  : "Try clearing the search or relaxing the filters."}
+              </div>
+              <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
+                {(query || statusFilter !== "ACTIVE") ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setQuery("");
+                      setStatusFilter("ACTIVE");
+                    }}
+                    className="btn btn-ghost btn-sm"
+                  >
+                    Reset filters
+                  </button>
+                ) : null}
+                {isAdmin ? (
+                  <button
+                    type="button"
+                    className="btn-primary inline-flex items-center gap-1.5"
+                    onClick={() => setShowCreate(true)}
+                  >
+                    <Plus className="h-3 w-3" strokeWidth={2.5} />
+                    New component
+                  </button>
+                ) : null}
+              </div>
+            </div>
           </div>
         ) : (
           <div className="overflow-x-auto">
