@@ -203,7 +203,19 @@ export default function AdminMasterDataHealthPage(): JSX.Element {
 
       {isError ? (
         <div className="rounded-md border border-danger/40 bg-danger-softer p-4 text-sm text-danger-fg">
-          Failed to load data. Check your connection and refresh.
+          <div className="font-semibold">Could not load master data health</div>
+          <div className="mt-1 text-xs">Check your connection. Health checks will rerun once the API is reachable.</div>
+          <button
+            type="button"
+            onClick={() => {
+              void componentsQuery.refetch();
+              void itemsQuery.refetch();
+              void bomsQuery.refetch();
+            }}
+            className="mt-2 text-xs font-medium text-danger-fg underline hover:no-underline"
+          >
+            Retry
+          </button>
         </div>
       ) : null}
 
