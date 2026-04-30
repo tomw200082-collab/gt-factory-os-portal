@@ -26,21 +26,39 @@ import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { formatQty } from "@/lib/utils/format-quantity";
 import {
   AdminMutationError,
+  patchEntity,
   postStatus,
 } from "@/lib/admin/mutations";
 import { useSession } from "@/lib/auth/session-provider";
 import {
   bomsRepo,
   itemsRepo,
-  suppliersRepo,
-  supplierItemsRepo,
 } from "@/lib/repositories";
 import type {
   BomLineDto,
   ItemDto,
-  SupplierDto,
-  SupplierItemDto,
 } from "@/lib/contracts/dto";
+
+// API-shape rows. The live /api/suppliers and /api/supplier-items responses
+// return plain DB rows wrapped in { rows, count }, distinct from the IDB DTOs
+// (which carry an `audit` envelope). The supplier-assign workflow on this
+// page reads/writes through the API so values stay in sync with production.
+interface ApiSupplierRow {
+  supplier_id: string;
+  supplier_name_official: string;
+  supplier_name_short: string | null;
+  status: string;
+}
+
+interface ApiSupplierItemRow {
+  supplier_item_id: string;
+  supplier_id: string;
+  component_id: string | null;
+  item_id: string | null;
+  is_primary: boolean;
+  approval_status: string | null;
+  updated_at: string;
+}
 
 interface ComponentRow {
   component_id: string;
@@ -175,10 +193,15 @@ function ComponentsPageInner(): JSX.Element {
     [rows, selectedId],
   );
 
-  // Suppliers list (IDB) — used by the picker.
-  const suppliersList = useQuery<SupplierDto[]>({
-    queryKey: ["idb", "suppliers"],
-    queryFn: () => suppliersRepo.list(),
+  // Suppliers list — used by the picker. Reads from the live API so the
+  // dropdown shows the operator's real suppliers (not stale browser-IDB
+  // fixtures). Filter out INACTIVE so deprecated suppliers can't be picked.
+  const suppliersList = useQuery<ListEnvelope<ApiSupplierRow>>({
+    queryKey: ["api", "suppliers", "list"],
+    queryFn: () =>
+      fetchJson<ListEnvelope<ApiSupplierRow>>(
+        "/api/suppliers?status=ACTIVE&limit=1000",
+      ),
   });
 
   // Items list (IDB) — used to resolve product names for "Used in".
@@ -191,20 +214,17 @@ function ComponentsPageInner(): JSX.Element {
     [itemsList.data],
   );
 
-  // Primary supplier_item for the selected component (IDB).
-  const primarySupplierItemQuery = useQuery<SupplierItemDto | null>({
-    queryKey: ["idb", "supplier-items", "primary", selectedId],
+  // Primary supplier_item for the selected component — read from the live API.
+  const primarySupplierItemQuery = useQuery<ApiSupplierItemRow | null>({
+    queryKey: ["api", "supplier-items", "primary", selectedId],
     queryFn: async () => {
       if (!selectedId) return null;
-      const all = await supplierItemsRepo.list();
-      return (
-        all.find(
-          (s) =>
-            s.component_id === selectedId &&
-            s.is_primary === true &&
-            s.audit.active !== false,
-        ) ?? null
+      const env = await fetchJson<ListEnvelope<ApiSupplierItemRow>>(
+        `/api/supplier-items?component_id=${encodeURIComponent(
+          selectedId,
+        )}&limit=1000`,
       );
+      return env.rows.find((s) => s.is_primary === true) ?? null;
     },
     enabled: !!selectedId,
   });
@@ -213,7 +233,8 @@ function ComponentsPageInner(): JSX.Element {
     const si = primarySupplierItemQuery.data;
     if (!si) return null;
     return (
-      suppliersList.data?.find((s) => s.supplier_id === si.supplier_id) ?? null
+      suppliersList.data?.rows.find((s) => s.supplier_id === si.supplier_id) ??
+      null
     );
   }, [primarySupplierItemQuery.data, suppliersList.data]);
 
@@ -261,59 +282,64 @@ function ComponentsPageInner(): JSX.Element {
     mutationFn: async (args: {
       componentId: string;
       newSupplierId: string;
-      existing: SupplierItemDto | null;
+      existing: ApiSupplierItemRow | null;
     }) => {
-      const draft: Omit<SupplierItemDto, "audit"> = {
-        supplier_item_id:
-          typeof crypto !== "undefined" && "randomUUID" in crypto
-            ? crypto.randomUUID()
-            : `si_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`,
-        supplier_id: args.newSupplierId,
-        component_id: args.componentId,
-        item_id: null,
-        relationship: null,
-        is_primary: true,
-        order_uom: null,
-        inventory_uom: null,
-        pack_conversion: 1,
-        lead_time_days: null,
-        moq: null,
-        payment_terms: null,
-        safety_days: 0,
-        approval_status: null,
-        source_basis: "portal_admin",
-        notes: null,
-        site_id: "GTE-IL-01",
-      };
-      // Capture stable reference to existing primary BEFORE mutation.
-      const existingId = args.existing?.supplier_item_id;
-      // Create the new supplier_items row first; only on success
-      // soft-deactivate the previous primary so we never leave the
-      // component without an active supplier link.
-      const created = await supplierItemsRepo.create(draft);
-      // Deactivate old primary; if this fails, compensate by deactivating
-      // the newly-created row so we don't end with two primaries.
-      if (existingId) {
-        try {
-          await supplierItemsRepo.setActive(existingId, false);
-        } catch (err) {
-          try {
-            await supplierItemsRepo.setActive(created.supplier_item_id, false);
-          } catch (compensationErr) {
-            // Compensation failed — log and re-throw original error.
-            console.error(
-              "Compensation failed; component now has two primary suppliers",
-              compensationErr,
-            );
-          }
-          throw err;
-        }
+      // The supplier_items table has a partial unique index that allows at
+      // most one is_primary=true row per component. To swap primary cleanly
+      // we (1) demote the current primary if any, (2) create the new row as
+      // primary. Trigger 0112 will auto-fill lead_time_days from the new
+      // supplier's default, and the supplier-cascade trigger keeps the
+      // component's lead_time_days in sync.
+      if (args.existing) {
+        await patchEntity({
+          url: `/api/supplier-items/${encodeURIComponent(
+            args.existing.supplier_item_id,
+          )}`,
+          fields: { is_primary: false },
+          ifMatchUpdatedAt: args.existing.updated_at,
+        });
+      }
+      // POST the new primary row. Mark approval_status='approved' so the
+      // readiness gate sees a valid supplier link immediately. lead_time
+      // and pack_conversion default safely on the server.
+      const res = await fetch("/api/supplier-items", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          supplier_id: args.newSupplierId,
+          component_id: args.componentId,
+          item_id: null,
+          is_primary: true,
+          approval_status: "approved",
+          pack_conversion: 1,
+        }),
+      });
+      const created = (await res.json().catch(() => null)) as
+        | { row?: ApiSupplierItemRow }
+        | ApiSupplierItemRow
+        | null;
+      if (!res.ok) {
+        const message =
+          created && typeof created === "object" && "message" in created
+            ? String((created as { message?: unknown }).message)
+            : `Could not assign supplier (HTTP ${res.status}).`;
+        const code =
+          created && typeof created === "object" && "code" in created
+            ? String((created as { code?: unknown }).code)
+            : undefined;
+        throw new AdminMutationError(res.status, message, code, created);
       }
       return created;
     },
     onSuccess: () => {
       void queryClient.invalidateQueries({
-        queryKey: ["idb", "supplier-items"],
+        queryKey: ["api", "supplier-items"],
+      });
+      void queryClient.invalidateQueries({
+        queryKey: ["api", "supplier-items", "primary"],
       });
       setShowSupplierPicker(false);
       setPendingSupplier("");
@@ -836,7 +862,7 @@ function ComponentsPageInner(): JSX.Element {
                       onChange={(e) => setPendingSupplier(e.target.value)}
                     >
                       <option value="">Choose a supplier…</option>
-                      {(suppliersList.data ?? []).map((s) => (
+                      {(suppliersList.data?.rows ?? []).map((s) => (
                         <option key={s.supplier_id} value={s.supplier_id}>
                           {s.supplier_name_official}
                         </option>
