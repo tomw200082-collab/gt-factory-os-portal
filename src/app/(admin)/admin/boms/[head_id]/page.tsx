@@ -347,10 +347,33 @@ export default function AdminBomHeadDetailPage({
         contentClassName="p-0"
       >
         {versionsQuery.isLoading ? (
-          <div className="p-5 text-sm text-fg-muted">Loading versions…</div>
+          <div className="p-5">
+            <div className="space-y-2" aria-busy="true" aria-live="polite">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="flex animate-pulse gap-3 border-b border-border/30 pb-2"
+                >
+                  <div className="h-4 w-24 shrink-0 rounded bg-bg-subtle" />
+                  <div className="h-4 flex-1 rounded bg-bg-subtle" />
+                  <div className="h-4 w-16 shrink-0 rounded bg-bg-subtle" />
+                </div>
+              ))}
+            </div>
+          </div>
         ) : versionsQuery.isError ? (
-          <div className="p-5 text-sm text-danger-fg">
-            {(versionsQuery.error as Error).message}
+          <div className="p-5">
+            <div className="rounded border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg">
+              <div className="font-semibold">Could not load BOM versions</div>
+              <div className="mt-1 text-xs">{(versionsQuery.error as Error).message}</div>
+              <button
+                type="button"
+                onClick={() => void versionsQuery.refetch()}
+                className="mt-2 text-xs font-medium text-danger-fg underline hover:no-underline"
+              >
+                Retry
+              </button>
+            </div>
           </div>
         ) : versions.length === 0 ? (
           <div className="p-5 text-sm text-fg-muted">
