@@ -151,10 +151,32 @@ export default function AdminPlanningPolicyPage(): JSX.Element {
         contentClassName="p-0"
       >
         {policyQuery.isLoading ? (
-          <div className="p-5 text-sm text-fg-muted">Loading…</div>
+          <div className="p-5">
+            <div className="space-y-2" aria-busy="true" aria-live="polite">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="flex animate-pulse gap-3 border-b border-border/30 pb-2"
+                >
+                  <div className="h-4 w-32 shrink-0 rounded bg-bg-subtle" />
+                  <div className="h-4 flex-1 rounded bg-bg-subtle" />
+                </div>
+              ))}
+            </div>
+          </div>
         ) : policyQuery.isError ? (
-          <div className="p-5 text-sm text-danger-fg">
-            {(policyQuery.error as Error).message}
+          <div className="p-5">
+            <div className="rounded border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg">
+              <div className="font-semibold">Could not load policy keys</div>
+              <div className="mt-1 text-xs">{(policyQuery.error as Error).message}</div>
+              <button
+                type="button"
+                onClick={() => void policyQuery.refetch()}
+                className="mt-2 text-xs font-medium text-danger-fg underline hover:no-underline"
+              >
+                Retry
+              </button>
+            </div>
           </div>
         ) : filtered.length === 0 ? (
           <div className="p-5 text-sm text-fg-muted">No keys match filter.</div>
