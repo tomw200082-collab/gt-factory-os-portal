@@ -545,11 +545,27 @@ export default function ProductionActualPage() {
       ) : null}
 
       {loading ? (
-        <div className="p-5 text-sm text-fg-muted">Loading masters…</div>
+        <SectionCard title="Loading items…">
+          <div className="space-y-3" aria-busy="true" aria-live="polite">
+            <div className="h-9 w-full animate-pulse rounded bg-bg-subtle" />
+            <div className="h-9 w-full animate-pulse rounded bg-bg-subtle" />
+            <div className="h-9 w-full animate-pulse rounded bg-bg-subtle" />
+          </div>
+        </SectionCard>
       ) : loadErr ? (
-        <div className="p-5 text-sm text-danger-fg">
-          {(loadErr as Error).message}
-        </div>
+        <SectionCard title="Could not load items">
+          <div className="rounded border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg">
+            <div className="font-semibold">Could not load items</div>
+            <div className="mt-1 text-xs">{(loadErr as Error).message}</div>
+            <button
+              type="button"
+              onClick={() => void itemsQuery.refetch()}
+              className="mt-2 text-xs font-medium text-danger-fg underline hover:no-underline"
+            >
+              Retry
+            </button>
+          </div>
+        </SectionCard>
       ) : phase === "pick" ? (
         <form onSubmit={handleOpen} className="space-y-5">
           <SectionCard
