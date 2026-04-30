@@ -1119,12 +1119,17 @@ function IntegrationFreshnessBlock({
           : r.state === "critical" ? "Critical"
           : r.state === "never_ran" ? "Never ran"
           : r.state;
+        // When the producer is in a non-fresh state, deep-link to the
+        // integrations admin so Tom can drill in. Fresh state = no href
+        // (no action needed).
+        const href = tone === "success" ? undefined : "/admin/integrations";
         return (
           <StatPill
             key={r.producer}
             label={r.producer}
             value={stateLabel}
             tone={tone}
+            href={href}
             icon={<CalendarClock className="h-3 w-3" strokeWidth={2} />}
             sub={
               <div className="text-fg-muted">
