@@ -279,7 +279,7 @@ export default function PhysicalCountReviewPage() {
       <SectionCard
         eyebrow="Approve"
         title="Accept this count"
-        description="Approving calls replace_anchor() with COUNT_APPROVAL provenance and resolves the open exception. Self-approval is forbidden for all roles including admin."
+        description="Approving calls replace_anchor() with COUNT_APPROVAL provenance and resolves the open exception. Admin and planner roles may self-approve their own count; operator and viewer cannot."
       >
         <label className="text-xs font-semibold text-fg-muted">
           Approval notes (optional)
