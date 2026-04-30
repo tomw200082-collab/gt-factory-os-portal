@@ -890,13 +890,36 @@ export default function PlanningRunDetailPage() {
           </div>
 
           {activeRecsQuery.isLoading ? (
-            <div className="p-5 text-xs text-fg-muted">Loading recommendations…</div>
+            <div className="p-5">
+              <div className="space-y-2" aria-busy="true" aria-live="polite">
+                {Array.from({ length: 4 }).map((_, i) => (
+                  <div
+                    key={i}
+                    className="flex animate-pulse gap-3 border-b border-border/30 pb-2"
+                  >
+                    <div className="h-5 w-32 shrink-0 rounded bg-bg-subtle" />
+                    <div className="h-5 flex-1 rounded bg-bg-subtle" />
+                    <div className="h-5 w-20 shrink-0 rounded bg-bg-subtle" />
+                  </div>
+                ))}
+              </div>
+            </div>
           ) : activeRecsQuery.isError ? (
-            <div
-              className="p-5 text-xs text-danger-fg"
-              data-testid="planning-run-recs-error"
-            >
-              Could not load recommendations. Check your connection and try refreshing.
+            <div className="p-5">
+              <div
+                className="rounded border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg"
+                data-testid="planning-run-recs-error"
+              >
+                <div className="font-semibold">Could not load recommendations</div>
+                <div className="mt-1 text-xs">Check your connection. The recommendation list will reload once the API is reachable.</div>
+                <button
+                  type="button"
+                  onClick={() => void activeRecsQuery.refetch()}
+                  className="mt-2 text-xs font-medium text-danger-fg underline hover:no-underline"
+                >
+                  Retry
+                </button>
+              </div>
             </div>
           ) : activeRecs.length === 0 ? (
             <div className="p-5">
