@@ -439,18 +439,62 @@ export default function AdminSupplierItemsPage(): JSX.Element {
         contentClassName="p-0"
       >
         {!supplierId ? (
-          <div className="p-5 text-sm text-fg-muted">
-            Select a supplier above to see their items.
+          <div className="p-8 text-center">
+            <div className="mx-auto max-w-sm">
+              <div className="text-sm font-semibold text-fg-strong">
+                Pick a supplier to view their catalog
+              </div>
+              <div className="mt-1 text-xs text-fg-muted">
+                Choose a supplier in the dropdown above. The catalog shows the
+                items and components that supplier offers.
+              </div>
+            </div>
           </div>
         ) : supplierItemsQuery.isLoading ? (
-          <div className="p-5 text-sm text-fg-muted">Loading…</div>
+          <div className="p-5">
+            <div className="space-y-2" aria-busy="true" aria-live="polite">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="flex animate-pulse gap-3 border-b border-border/30 pb-2"
+                >
+                  <div className="h-4 w-32 shrink-0 rounded bg-bg-subtle" />
+                  <div className="h-4 flex-1 rounded bg-bg-subtle" />
+                  <div className="h-4 w-20 shrink-0 rounded bg-bg-subtle" />
+                </div>
+              ))}
+            </div>
+          </div>
         ) : supplierItemsQuery.isError ? (
-          <div className="p-5 text-sm text-danger-fg">
-            {(supplierItemsQuery.error as Error).message}
+          <div className="p-5">
+            <div className="rounded border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg">
+              <div className="font-semibold">Could not load supplier-items</div>
+              <div className="mt-1 text-xs">
+                {(supplierItemsQuery.error as Error).message}
+              </div>
+              <button
+                type="button"
+                onClick={() => supplierItemsQuery.refetch()}
+                className="mt-2 text-xs font-medium text-danger-fg underline hover:no-underline"
+              >
+                Retry
+              </button>
+            </div>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="p-5 text-sm text-fg-muted">
-            No supplier-items for this supplier match filters.
+          <div className="p-8 text-center">
+            <div className="mx-auto max-w-sm">
+              <div className="text-sm font-semibold text-fg-strong">
+                {rows.length === 0
+                  ? "This supplier has no catalog items yet."
+                  : "No supplier-items match the filters."}
+              </div>
+              <div className="mt-1 text-xs text-fg-muted">
+                {rows.length === 0
+                  ? "Use the supplier-item authoring flow on the supplier detail page to add items."
+                  : "Try clearing the search or relaxing the filters."}
+              </div>
+            </div>
           </div>
         ) : (
           <div className="overflow-x-auto">
