@@ -13,7 +13,8 @@
 // ---------------------------------------------------------------------------
 
 import { useState } from "react";
-import { ChevronUp, ChevronDown, AlertTriangle, CheckCircle2 } from "lucide-react";
+import Link from "next/link";
+import { ChevronUp, ChevronDown, AlertTriangle, CheckCircle2, ExternalLink } from "lucide-react";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
 import { cn } from "@/lib/cn";
@@ -90,9 +91,24 @@ function ComponentCard({ row }: { row: RecDetailComponent }) {
   const shortage = parseQty(row.net_purchase_qty);
   return (
     <div className="rounded border border-border/60 bg-bg-raised p-3 space-y-1.5">
-      <div>
-        <div className="text-sm font-medium text-fg-strong">{row.component_name}</div>
-        <div className="font-mono text-3xs text-fg-subtle">{row.component_id}</div>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="text-sm font-medium text-fg-strong">{row.component_name}</div>
+          <div className="font-mono text-3xs text-fg-subtle">{row.component_id}</div>
+        </div>
+        {/* Loop 14 — fast-fix link for blocked rows. Operator/manager
+            can jump straight to item master to update supplier mapping
+            or BOM, instead of copy-pasting the component_id elsewhere. */}
+        {shortage > 0 ? (
+          <Link
+            href={`/admin/masters/items/${encodeURIComponent(row.component_id)}`}
+            className="inline-flex shrink-0 items-center gap-1 rounded border border-warning/30 bg-warning-softer px-1.5 py-0.5 text-3xs font-medium text-warning-fg hover:bg-warning-soft"
+            title="Open item master to fix supplier mapping or check stock"
+          >
+            <ExternalLink className="h-2.5 w-2.5" strokeWidth={2.5} />
+            תקן
+          </Link>
+        ) : null}
       </div>
       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
         <div>
@@ -235,8 +251,23 @@ export function ComponentBreakdown({ rec }: ComponentBreakdownProps) {
                       className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
                     >
                       <td className="px-3 py-2.5">
-                        <div className="font-medium text-fg-strong">{row.component_name}</div>
-                        <div className="font-mono text-3xs text-fg-subtle">{row.component_id}</div>
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <div className="font-medium text-fg-strong">{row.component_name}</div>
+                            <div className="font-mono text-3xs text-fg-subtle">{row.component_id}</div>
+                          </div>
+                          {/* Loop 14 — fast-fix link for blocked rows. */}
+                          {shortage > 0 ? (
+                            <Link
+                              href={`/admin/masters/items/${encodeURIComponent(row.component_id)}`}
+                              className="inline-flex shrink-0 items-center gap-1 rounded border border-warning/30 bg-warning-softer px-1.5 py-0.5 text-3xs font-medium text-warning-fg hover:bg-warning-soft"
+                              title="Open item master to fix supplier mapping or check stock"
+                            >
+                              <ExternalLink className="h-2.5 w-2.5" strokeWidth={2.5} />
+                              תקן
+                            </Link>
+                          ) : null}
+                        </div>
                       </td>
                       <td className="px-3 py-2.5 text-right font-mono tabular-nums text-fg-muted">
                         {fmtQty(row.demand_qty, row.unit)}
