@@ -114,7 +114,7 @@ export default function MovementLogPage() {
   const [appliedFilters, setAppliedFilters] = useState<Filters>(EMPTY_FILTERS);
   const [offset, setOffset] = useState(0);
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isLoading, error, refetch } = useQuery({
     queryKey: ["stock-ledger", appliedFilters, offset],
     queryFn: () => fetchLedger(appliedFilters, offset),
     staleTime: 30_000,
@@ -238,11 +238,31 @@ export default function MovementLogPage() {
 
       <SectionCard eyebrow="Results" title="Ledger Entries">
         {isLoading && (
-          <p className="py-8 text-center text-sm text-fg-muted">Loading…</p>
+          <div className="space-y-2 py-2" aria-busy="true" aria-live="polite">
+            {Array.from({ length: 6 }).map((_, i) => (
+              <div
+                key={i}
+                className="flex animate-pulse gap-3 border-b border-border/30 pb-2"
+              >
+                <div className="h-4 w-32 shrink-0 rounded bg-bg-subtle" />
+                <div className="h-4 w-16 shrink-0 rounded bg-bg-subtle" />
+                <div className="h-4 flex-1 rounded bg-bg-subtle" />
+                <div className="h-4 w-16 shrink-0 rounded bg-bg-subtle" />
+              </div>
+            ))}
+          </div>
         )}
         {error && (
           <div className="rounded-md border border-danger/40 bg-danger-softer px-4 py-3 text-sm text-danger-fg">
-            Could not load movement log. Check your connection and try refreshing.
+            <div className="font-semibold">Could not load movement log</div>
+            <div className="mt-1 text-xs">Check your connection. The ledger will reload once the API is reachable.</div>
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              className="mt-2 text-xs font-medium text-danger-fg underline hover:no-underline"
+            >
+              Retry
+            </button>
           </div>
         )}
         {!isLoading && !error && rows.length === 0 && (
