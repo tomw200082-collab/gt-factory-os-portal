@@ -61,6 +61,7 @@ import {
 import type { Signal } from "@/features/dashboard/types";
 import { QUICK_ACTIONS } from "@/features/dashboard/quick-actions";
 import type { InboxRow } from "@/features/inbox/types";
+import { usePrefetchInventoryFlow } from "@/app/(planning)/planning/inventory-flow/_lib/useInventoryFlow";
 
 // ---------------------------------------------------------------------------
 // Cache keys. Dashboard queries are segregated from the inbox's to avoid
@@ -245,6 +246,14 @@ export default function DashboardPage() {
   const { session, isLoading: sessionLoading, loadError } = useSession();
   const queryClient = useQueryClient();
   const now = useMemo(() => new Date(), []);
+
+  // Background prefetch of /planning/inventory-flow. The upstream SQL takes
+  // ~22s on a cold run; firing this when Tom lands on /dashboard means by
+  // the time he clicks "Inventory Flow" in the sidebar the data is usually
+  // already in cache and the page renders instantly. Defaults to the same
+  // params the inventory-flow page reads from URL on first visit (no family,
+  // at_risk_only=true). Idempotent — TanStack Query dedupes in-flight.
+  usePrefetchInventoryFlow({ at_risk_only: true });
 
   // -------------------------------------------------------------------------
   // Parallel dashboard queries. Each signal has its own key so a future

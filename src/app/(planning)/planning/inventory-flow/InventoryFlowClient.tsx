@@ -146,11 +146,24 @@ export function InventoryFlowClient() {
     );
   }
 
-  // Loading state (first paint)
+  // Loading state (first paint). The upstream SQL projection takes ~22s on
+  // a cold cache so we surface that explicitly instead of an open-ended
+  // skeleton. On subsequent visits the localStorage-persisted cache + the
+  // 24h gcTime + the dashboard prefetch usually mean this state never
+  // shows — when it does, the user knows why.
   if (flowQuery.isLoading || !data) {
     return (
       <>
         {header}
+        <div className="rounded border border-info/30 bg-info-softer px-4 py-3 text-xs text-info-fg">
+          <div className="font-semibold">Calculating projection…</div>
+          <div className="mt-0.5 text-fg-muted">
+            Daily inventory flow runs a heavy SQL pass over forecast + open
+            orders + BOM + on-hand for every active FG. First-time loads can
+            take ~20 seconds. Subsequent loads use a cached snapshot and
+            should be instant.
+          </div>
+        </div>
         <HeroBar summary={null} isLoading />
         <SkeletonGrid />
       </>
