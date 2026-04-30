@@ -1,7 +1,9 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useState } from "react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
+import { Badge } from "@/components/badges/StatusBadge";
 
 interface JobRow {
   job_name: string;
@@ -31,8 +33,9 @@ function fmtTs(iso: string | null): string {
   } catch { return iso; }
 }
 
+
 export default function AdminJobsPage() {
-  const { data, isLoading, error, refetch } = useQuery<{ rows: JobRow[] }>({
+  const { data, isLoading, error, refetch, dataUpdatedAt, isFetching } = useQuery<{ rows: JobRow[] }>({
     queryKey: ["admin-jobs"],
     queryFn: async () => {
       const res = await fetch("/api/admin/jobs");
@@ -42,12 +45,53 @@ export default function AdminJobsPage() {
     refetchInterval: 60_000,
   });
 
+  // Tick-down "next refresh in X" so the operator sees the auto-refresh
+  // is actually working. Resets when dataUpdatedAt advances.
+  const [now, setNow] = useState(() => Date.now());
+  useEffect(() => {
+    const t = setInterval(() => setNow(Date.now()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  const secondsSinceUpdate = Math.max(0, Math.floor((now - dataUpdatedAt) / 1000));
+  const secondsToNextRefresh = Math.max(0, 60 - secondsSinceUpdate);
+
+  // Aggregate health summary across all known jobs.
+  const totalJobs = data?.rows.length ?? 0;
+  const failedJobs = data?.rows.filter((r) => r.last_status === "failed").length ?? 0;
+  const runningJobs = data?.rows.filter((r) => r.last_status === "running").length ?? 0;
+
   return (
     <>
       <WorkflowHeader
         eyebrow="Admin · jobs"
         title="Jobs Monitor"
         description="Last run status for all scheduled jobs. Auto-refreshes every 60 seconds."
+        meta={
+          data ? (
+            <>
+              <Badge tone="neutral" dotted>
+                {totalJobs} {totalJobs === 1 ? "job" : "jobs"}
+              </Badge>
+              {failedJobs > 0 ? (
+                <Badge tone="danger" dotted>
+                  {failedJobs} failed
+                </Badge>
+              ) : (
+                <Badge tone="success" dotted>
+                  all healthy
+                </Badge>
+              )}
+              {runningJobs > 0 ? (
+                <Badge tone="info" dotted>
+                  {runningJobs} running
+                </Badge>
+              ) : null}
+              <Badge tone="neutral" variant="outline" dotted>
+                {isFetching ? "refreshing…" : `next refresh in ${secondsToNextRefresh}s`}
+              </Badge>
+            </>
+          ) : null
+        }
       />
       <SectionCard
         eyebrow="Scheduled jobs"
@@ -58,21 +102,56 @@ export default function AdminJobsPage() {
             type="button"
             onClick={() => void refetch()}
             className="btn btn-ghost btn-sm"
+            disabled={isFetching}
           >
-            Refresh now
+            {isFetching ? "Refreshing…" : "Refresh now"}
           </button>
         }
       >
         {isLoading && (
-          <div className="p-5 text-sm text-fg-muted">Loading…</div>
+          <div className="p-5">
+            <div className="space-y-2" aria-busy="true" aria-live="polite">
+              {Array.from({ length: 5 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="flex animate-pulse gap-3 border-b border-border/30 pb-2"
+                >
+                  <div className="h-4 w-32 shrink-0 rounded bg-bg-subtle" />
+                  <div className="h-4 w-20 shrink-0 rounded bg-bg-subtle" />
+                  <div className="h-4 flex-1 rounded bg-bg-subtle" />
+                </div>
+              ))}
+            </div>
+          </div>
         )}
         {error && (
-          <div className="p-5 text-sm text-danger-fg">
-            {(error as Error).message}
+          <div className="p-5">
+            <div className="rounded border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg">
+              <div className="font-semibold">Could not load jobs</div>
+              <div className="mt-1 text-xs">{(error as Error).message}</div>
+              <button
+                type="button"
+                onClick={() => void refetch()}
+                className="mt-2 text-xs font-medium text-danger-fg underline hover:no-underline"
+              >
+                Retry
+              </button>
+            </div>
           </div>
         )}
         {data && data.rows.length === 0 && (
-          <div className="p-5 text-sm text-fg-muted">No job runs recorded yet.</div>
+          <div className="p-8 text-center">
+            <div className="mx-auto max-w-sm">
+              <div className="text-sm font-semibold text-fg-strong">
+                No scheduled jobs yet.
+              </div>
+              <div className="mt-1 text-xs text-fg-muted">
+                Jobs are registered by W1 migrations / Edge Functions. Once a
+                job runs at least once, it appears here. Check that pg_cron
+                is enabled and the Edge Function is deployed.
+              </div>
+            </div>
+          </div>
         )}
         {data && data.rows.length > 0 && (
           <div className="overflow-x-auto">
