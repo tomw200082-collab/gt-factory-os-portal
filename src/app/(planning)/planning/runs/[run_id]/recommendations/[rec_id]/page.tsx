@@ -171,6 +171,17 @@ export default function RecommendationDrillDownPage() {
   const rec = result.data;
   const isApprovedAndUnconverted =
     rec.rec_status === "approved" && rec.converted_po_id === null;
+  const isProductionRec = rec.rec_type === "production";
+
+  // For production recs, deep-link to /ops/stock/production-actual with
+  // item_id + suggested_qty + breadcrumb params. For purchase recs, route
+  // to the existing convert-to-PO flow.
+  const productionFormHref =
+    `/ops/stock/production-actual` +
+    `?item_id=${encodeURIComponent(rec.item_id)}` +
+    `&suggested_qty=${encodeURIComponent(rec.recommended_qty)}` +
+    `&from_rec=${encodeURIComponent(recId)}` +
+    `&from_run=${encodeURIComponent(runId)}`;
 
   return (
     <div className="space-y-5">
@@ -239,15 +250,28 @@ export default function RecommendationDrillDownPage() {
           )}
         </dl>
 
-        {/* Action buttons */}
+        {/* Action buttons — adapts to rec_type:
+            - purchase rec: "צור הזמנת רכש" → /convert flow (existing)
+            - production rec: "פתח טופס דיווח ייצור" → /ops/stock/production-actual
+              with prefilled item_id + suggested_qty + back-chain breadcrumb */}
         <div className="mt-4 flex flex-wrap items-center gap-3">
-          {canExecute && isApprovedAndUnconverted ? (
+          {canExecute && isApprovedAndUnconverted && !isProductionRec ? (
             <Link
               href={`/planning/runs/${encodeURIComponent(runId)}/recommendations/${encodeURIComponent(recId)}/convert`}
               className="btn btn-sm gap-1.5"
               data-testid="rec-detail-create-po-btn"
             >
               צור הזמנת רכש
+            </Link>
+          ) : null}
+          {canExecute && isProductionRec ? (
+            <Link
+              href={productionFormHref}
+              className="btn btn-primary btn-sm gap-1.5"
+              data-testid="rec-detail-open-production-form-btn"
+              title={`Open Production Actual form prefilled with ${rec.item_name} × ${fmtQty(rec.recommended_qty)} (you can adjust before submit)`}
+            >
+              פתח טופס דיווח ייצור
             </Link>
           ) : null}
 
