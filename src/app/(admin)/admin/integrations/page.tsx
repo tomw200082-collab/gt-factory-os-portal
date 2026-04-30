@@ -332,22 +332,43 @@ export default function AdminIntegrationsPage() {
           ))}
         </div>
       )}
-      {INTEGRATIONS.map((intg) => {
+      {!isLoading && INTEGRATIONS.map((intg) => {
         const relevant = data.filter((e) =>
           intg.categories.includes(e.category),
         );
-        const hasCritical = relevant.some((e) => e.severity === "critical");
-        const hasWarning = relevant.some((e) => e.severity === "warning");
-        const statusTone = hasCritical
-          ? ("danger" as const)
-          : hasWarning
-            ? ("warning" as const)
-            : ("success" as const);
-        const statusLabel = hasCritical
-          ? "CRITICAL"
-          : hasWarning
-            ? "WARNING"
-            : "OK";
+        const criticalCount = relevant.filter((e) => e.severity === "critical").length;
+        const warningCount = relevant.filter((e) => e.severity === "warning").length;
+        // Derive a 4-state pill per S7 research §A: Active / Stale / Error / Disabled.
+        // Without a real auth/last-sync feed for non-Shopify integrations we
+        // approximate via exception severity: critical → Error, stale_*
+        // category present → Stale, otherwise Active.
+        const hasStale = relevant.some((e) => e.category.endsWith("_stale"));
+        const statusTone =
+          criticalCount > 0
+            ? ("danger" as const)
+            : hasStale
+              ? ("warning" as const)
+              : warningCount > 0
+                ? ("warning" as const)
+                : ("success" as const);
+        const statusLabel =
+          criticalCount > 0
+            ? "Error"
+            : hasStale
+              ? "Stale"
+              : warningCount > 0
+                ? "Warning"
+                : "Active";
+
+        // Newest exception age — proxy for "last event".
+        const newest = relevant
+          .map((e) => (e.created_at ? new Date(e.created_at).getTime() : 0))
+          .filter((t) => t > 0)
+          .sort((a, b) => b - a)[0];
+        const newestAgo = newest ? timeAgo(new Date(newest).toISOString()) : null;
+
+        // Per-integration deep-links into the inbox with category prefilter.
+        const inboxHref = `/inbox?view=exceptions&category=${intg.categories.join(",")}`;
 
         return (
           <SectionCard
@@ -356,54 +377,70 @@ export default function AdminIntegrationsPage() {
             title={intg.label}
             density="compact"
           >
-            <div className="flex items-center gap-3 mb-2">
+            <div className="flex flex-wrap items-center gap-3">
               <Badge tone={statusTone} dotted>
                 {statusLabel}
               </Badge>
-              <span className="text-sm text-fg-muted">
-                {relevant.length} open exception
-                {relevant.length !== 1 ? "s" : ""}
+              <span className="text-xs text-fg-muted">
+                {relevant.length === 0
+                  ? "No open exceptions"
+                  : `${relevant.length} open · ${criticalCount} crit · ${warningCount} warn`}
               </span>
-              {intg.key === "shopify" && (
-                <Link
-                  href="/admin/sku-aliases?channel=shopify"
-                  className="text-xs text-accent underline-offset-4 hover:underline"
-                >
-                  Map aliases →
-                </Link>
-              )}
-              {intg.key === "lionwheel" && (
-                <Link
-                  href="/admin/sku-aliases"
-                  className="text-xs text-accent underline-offset-4 hover:underline"
-                >
-                  Map aliases →
-                </Link>
-              )}
+              {newestAgo ? (
+                <span className="text-xs text-fg-muted" title={`Newest open exception ${newestAgo}`}>
+                  · last event {newestAgo}
+                </span>
+              ) : null}
+              <div className="ml-auto flex flex-wrap items-center gap-2">
+                {(intg.key === "shopify" || intg.key === "lionwheel") && (
+                  <Link
+                    href={
+                      intg.key === "shopify"
+                        ? "/admin/sku-aliases?channel=shopify"
+                        : "/admin/sku-aliases"
+                    }
+                    className="btn btn-ghost btn-sm"
+                  >
+                    Map aliases →
+                  </Link>
+                )}
+                {relevant.length > 0 ? (
+                  <Link
+                    href={inboxHref}
+                    className="btn btn-ghost btn-sm"
+                    data-testid={`integration-card-${intg.key}-inbox`}
+                  >
+                    Triage in inbox →
+                  </Link>
+                ) : null}
+              </div>
             </div>
             {relevant.length > 0 && (
-              <ul className="text-xs space-y-1">
-                {relevant.slice(0, 5).map((e) => (
-                  <li key={e.exception_id} className="text-fg-muted">
-                    <span className="font-mono">{e.category}</span> —{" "}
-                    {e.title}{" "}
-                    <span className="opacity-50">
-                      (
-                      {e.created_at
-                        ? new Date(e.created_at).toLocaleDateString()
-                        : "—"}
-                      )
-                    </span>
-                  </li>
-                ))}
-                {relevant.length > 5 && (
-                  <li className="opacity-50">
-                    +{relevant.length - 5} more — see{" "}
-                    <Link
-                      href="/inbox?view=exceptions"
-                      className="underline"
-                    >
-                      Exceptions Inbox
+              <ul className="mt-3 space-y-1 text-xs">
+                {relevant.slice(0, 3).map((e) => {
+                  const tone =
+                    e.severity === "critical"
+                      ? "text-danger-fg"
+                      : e.severity === "warning"
+                        ? "text-warning-fg"
+                        : "text-fg-muted";
+                  return (
+                    <li key={e.exception_id} className={tone}>
+                      <span className="font-mono opacity-70">
+                        {e.category}
+                      </span>{" "}
+                      — {e.title}{" "}
+                      <span className="opacity-50">
+                        ({e.created_at ? timeAgo(e.created_at) : "—"})
+                      </span>
+                    </li>
+                  );
+                })}
+                {relevant.length > 3 && (
+                  <li className="text-fg-faint">
+                    +{relevant.length - 3} more —{" "}
+                    <Link href={inboxHref} className="underline">
+                      view all
                     </Link>
                   </li>
                 )}
