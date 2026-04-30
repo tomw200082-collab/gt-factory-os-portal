@@ -5,8 +5,14 @@
 //
 // Shows min on-hand for that week + tier color + small "Stockout day N" label
 // when applicable.
+//
+// Performance: wrapped in React.memo. 68 items × ~6 weekly cells = ~408
+// instances; combined with 952 DayCells under the same tree, memoization
+// keeps the parent re-render cost near-zero when filter / search state
+// changes.
 // ---------------------------------------------------------------------------
 
+import { memo } from "react";
 import { cn } from "@/lib/cn";
 import { fmtQty } from "../_lib/format";
 import { dayCellClassName } from "../_lib/risk";
@@ -16,7 +22,7 @@ interface WeekCellProps {
   week: FlowWeek;
 }
 
-export function WeekCell({ week }: WeekCellProps) {
+function WeekCellInner({ week }: WeekCellProps) {
   const stockoutDay = week.stockout_day;
   let stockoutDayNum: number | null = null;
   if (stockoutDay) {
@@ -51,3 +57,5 @@ export function WeekCell({ week }: WeekCellProps) {
     </div>
   );
 }
+
+export const WeekCell = memo(WeekCellInner);
