@@ -541,13 +541,38 @@ export default function PlanningRunsListPage() {
         </div>
 
         {query.isLoading ? (
-          <div className="p-5 text-xs text-fg-muted">Loading…</div>
+          <div className="p-5">
+            <div className="space-y-2" aria-busy="true" aria-live="polite">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="flex animate-pulse gap-3 border-b border-border/30 pb-2"
+                >
+                  <div className="h-5 w-20 shrink-0 rounded bg-bg-subtle" />
+                  <div className="h-5 flex-1 rounded bg-bg-subtle" />
+                  <div className="h-5 w-24 shrink-0 rounded bg-bg-subtle" />
+                </div>
+              ))}
+            </div>
+          </div>
         ) : query.isError ? (
-          <div
-            className="p-5 text-xs text-danger-fg"
-            data-testid="planning-runs-list-error"
-          >
-            Failed to load planning runs. Check your connection and try refreshing.
+          <div className="p-5">
+            <div
+              className="rounded border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg"
+              data-testid="planning-runs-list-error"
+            >
+              <div className="font-semibold">Could not load planning runs</div>
+              <div className="mt-1 text-xs">
+                Check your connection. The list will refresh when the API is reachable again.
+              </div>
+              <button
+                type="button"
+                onClick={() => void query.refetch()}
+                className="mt-2 text-xs font-medium text-danger-fg underline hover:no-underline"
+              >
+                Retry
+              </button>
+            </div>
           </div>
         ) : rows.length === 0 ? (
           <div className="p-5">
