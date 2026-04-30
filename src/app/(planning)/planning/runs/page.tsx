@@ -241,6 +241,10 @@ function timeAgo(iso: string | null): string {
   return `${Math.floor(diffH / 24)}d ago`;
 }
 
+function fmtTriggerSourceHebrew(t: "manual" | "scheduled"): string {
+  return t === "manual" ? "ידני" : "אוטומטי";
+}
+
 export default function PlanningRunsListPage() {
   const { session } = useSession();
   const router = useRouter();
@@ -249,6 +253,7 @@ export default function PlanningRunsListPage() {
     useState<PlanningRunStatus | null>(null);
   const [breakGlass, setBreakGlass] = useState(false);
   const [triggerError, setTriggerError] = useState<string | null>(null);
+  const [showTriggerConfirm, setShowTriggerConfirm] = useState(false);
   const canAuthor = session.role === "planner" || session.role === "admin";
 
   const forecastQuery = useQuery<{ rows: ForecastContextRow[] }>({
@@ -321,11 +326,11 @@ export default function PlanningRunsListPage() {
     <>
       <WorkflowHeader
         eyebrow="Planner workspace"
-        title="Planning runs"
-        description="Reproducible planning-engine executions. Each run snapshots demand, stock, BOM, and policy, then emits purchase and production recommendations. Nothing orders autonomously."
+        title="ריצות תכנון"
+        description="ריצות תכנון משוחזרות. כל ריצה לוכדת תמונת מצב של ביקוש, מלאי, BOM ומדיניות ומפיקה המלצות רכש וייצור. שום פעולה לא תופעל אוטומטית."
         meta={
           <Badge tone="neutral" dotted>
-            {total} run{total === 1 ? "" : "s"}
+            {total} {total === 1 ? "ריצה" : "ריצות"}
           </Badge>
         }
         actions={
@@ -335,18 +340,10 @@ export default function PlanningRunsListPage() {
               className="btn btn-primary btn-sm gap-1.5"
               data-testid="planning-runs-trigger-button"
               disabled={triggerMutation.isPending}
-              onClick={() => {
-                if (
-                  window.confirm(
-                    "Trigger a new planning run now? This snapshots current demand, stock, BOM, and policy, then computes recommendations. Nothing orders autonomously.",
-                  )
-                ) {
-                  triggerMutation.mutate();
-                }
-              }}
+              onClick={() => setShowTriggerConfirm(true)}
             >
               <Play className="h-3 w-3" strokeWidth={2.5} />
-              {triggerMutation.isPending ? "Triggering…" : "Trigger planning run"}
+              {triggerMutation.isPending ? "מריץ…" : "הרץ תכנון חדש"}
             </button>
           ) : null
         }
@@ -612,7 +609,7 @@ export default function PlanningRunsListPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <RunStatusBadge status={r.status} />
-                      <span className="chip">{r.trigger_source}</span>
+                      <span className="chip">{fmtTriggerSourceHebrew(r.trigger_source)}</span>
                     </div>
                     <div className="mt-1.5 text-base font-semibold tracking-tightish text-fg-strong">
                       Executed {fmtDate(r.executed_at)}
@@ -622,7 +619,7 @@ export default function PlanningRunsListPage() {
                         horizon {fmtDate(r.planning_horizon_start_at)} ·{" "}
                         {r.planning_horizon_weeks}w
                       </span>
-                      <span>{r.trigger_source === "scheduled" ? "Scheduled" : "Manual"}</span>
+                      <span>{fmtTriggerSourceHebrew(r.trigger_source)}</span>
                     </div>
                   </div>
                 </Link>
@@ -679,6 +676,57 @@ export default function PlanningRunsListPage() {
           </ul>
         )}
       </SectionCard>
+
+      {showTriggerConfirm ? (
+        <div
+          className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="trigger-run-title"
+          data-testid="planning-runs-trigger-modal"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setShowTriggerConfirm(false);
+          }}
+        >
+          <div className="w-full max-w-md rounded-lg border border-border bg-bg-raised p-5 shadow-2xl">
+            <h2 id="trigger-run-title" className="text-base font-semibold text-fg-strong">
+              להריץ תכנון חדש?
+            </h2>
+            <p className="mt-2 text-sm text-fg-muted leading-relaxed">
+              הריצה תיצור תמונה של הביקוש (תחזית + הזמנות פתוחות), המלאי, ה-BOM
+              והמדיניות הנוכחית, ותחשב המלצות רכש וייצור.
+            </p>
+            <p className="mt-2 text-xs text-fg-muted">
+              שום הזמנת רכש או דיווח ייצור לא ייווצרו אוטומטית — אתה תאשר כל המלצה
+              בנפרד אחרי שהריצה תסתיים.
+            </p>
+            <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => setShowTriggerConfirm(false)}
+                disabled={triggerMutation.isPending}
+                data-testid="planning-runs-trigger-modal-cancel"
+              >
+                ביטול
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm gap-1.5"
+                disabled={triggerMutation.isPending}
+                onClick={() => {
+                  setShowTriggerConfirm(false);
+                  triggerMutation.mutate();
+                }}
+                data-testid="planning-runs-trigger-modal-confirm"
+              >
+                <Play className="h-3 w-3" strokeWidth={2.5} />
+                הרץ תכנון
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }

@@ -159,6 +159,23 @@ function newIdempotencyKey(): string {
   return `pa_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 }
 
+function supplyMethodHebrew(sm: string | null | undefined): string {
+  if (sm === "MANUFACTURED") return "פריט ייצור";
+  if (sm === "REPACK") return "פריט אריזה מחדש";
+  if (sm === "BOUGHT_FINISHED") return "פריט מוגמר לרכישה";
+  return "פריט לא מזוהה";
+}
+
+const REASON_CODE_HEBREW: Record<string, string> = {
+  STALE_BOM_VERSION: "ה-BOM של הפריט עודכן לאחר פתיחת הטופס. סגור ופתח מחדש כדי להצמיד את הגרסה החדשה.",
+  WRONG_SUPPLY_METHOD: "הפריט אינו פריט ייצור או אריזה מחדש — לא ניתן לדווח עליו דרך טופס זה.",
+  UOM_MISMATCH: "יחידת המידה שהוזנה אינה תואמת לפריט. בדוק את שדה יחידת המידה ונסה שוב.",
+  IDEMPOTENCY_KEY_REUSED: "הדיווח הזה נשלח כבר. אם הדיווח לא נראה לך מחובר, פתח מחדש את הטופס.",
+};
+function reasonCodeMessageHebrew(reason: string): string {
+  return REASON_CODE_HEBREW[reason] ?? `הדיווח נדחה. קוד שגיאה: ${reason}. פנה למנהל המערכת.`;
+}
+
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url, { headers: { Accept: "application/json" } });
   if (!res.ok) {
@@ -266,7 +283,7 @@ export default function ProductionActualPage() {
       const exists = allItems.find((r) => r.item_id === initialItemId);
       setPrefillRejected(
         exists
-          ? `הפריט ${initialItemId} אינו ניתן לייצור (supply_method=${exists.supply_method ?? "unknown"}). בחר פריט אחר.`
+          ? `הפריט ${exists.item_name ?? initialItemId} (${supplyMethodHebrew(exists.supply_method)}) — לא ניתן לדווח עליו דרך טופס ייצור. בחר פריט ייצור או אריזה מחדש.`
           : `הפריט ${initialItemId} לא נמצא במערכת. בחר פריט מהרשימה.`,
       );
       setSelectedItemId("");
@@ -310,7 +327,9 @@ export default function ProductionActualPage() {
         setPreviewExpanded(snap.bom_lines.length > 0);
         setPhase("entering");
       } else {
-        const detail = body ? JSON.stringify(body) : `HTTP ${res.status}`;
+        const detail = session.role === "admin"
+          ? (body ? JSON.stringify(body) : `HTTP ${res.status}`)
+          : "פרטי שגיאה זמינים בלוג המערכת.";
         setDone({
           kind: "error",
           message: `Failed to open production snapshot (HTTP ${res.status}).`,
@@ -322,7 +341,9 @@ export default function ProductionActualPage() {
       setDone({
         kind: "error",
         message: "Network error opening snapshot.",
-        detail: err instanceof Error ? err.message : String(err),
+        detail: session.role === "admin"
+          ? (err instanceof Error ? err.message : String(err))
+          : "פרטי שגיאה זמינים בלוג המערכת.",
       });
       setPhase("pick");
     }
@@ -429,12 +450,12 @@ export default function ProductionActualPage() {
       ) {
         const reason = (body as { reason_code: string; detail?: string }).reason_code;
         const detail = (body as { detail?: string }).detail ?? reason;
+        const adminDetail = session.role === "admin" ? detail : "פרטי שגיאה זמינים בלוג המערכת.";
         if (reason === "STALE_BOM_VERSION") {
           setDone({
             kind: "stale",
-            message:
-              "The BOM for this item changed after this form was opened. Re-open the form to pin the new version.",
-            detail,
+            message: reasonCodeMessageHebrew(reason),
+            detail: adminDetail,
           });
           setPhase("entering");
           return;
@@ -442,17 +463,16 @@ export default function ProductionActualPage() {
         if (reason === "WRONG_SUPPLY_METHOD") {
           setDone({
             kind: "error",
-            message:
-              "This item is not manufactured or repacked — Production Actual does not apply.",
-            detail,
+            message: reasonCodeMessageHebrew(reason),
+            detail: adminDetail,
           });
           setPhase("pick");
           return;
         }
         setDone({
           kind: "error",
-          message: `Submit refused (${reason}).`,
-          detail,
+          message: reasonCodeMessageHebrew(reason),
+          detail: adminDetail,
         });
         setPhase("entering");
         return;
@@ -463,7 +483,9 @@ export default function ProductionActualPage() {
           kind: "error",
           message:
             "Break-glass active — platform writes are temporarily paused.",
-          detail: body ? JSON.stringify(body) : "HTTP 503",
+          detail: session.role === "admin"
+            ? (body ? JSON.stringify(body) : "HTTP 503")
+            : "פרטי שגיאה זמינים בלוג המערכת.",
         });
         setPhase("entering");
         return;
@@ -476,13 +498,17 @@ export default function ProductionActualPage() {
             res.status === 401
               ? "Not authenticated — please sign in again."
               : "Not authorized — operator or admin role required.",
-          detail: body ? JSON.stringify(body) : `HTTP ${res.status}`,
+          detail: session.role === "admin"
+            ? (body ? JSON.stringify(body) : `HTTP ${res.status}`)
+            : "פרטי שגיאה זמינים בלוג המערכת.",
         });
         setPhase("entering");
         return;
       }
       // Fallback
-      const detail = body ? JSON.stringify(body) : `HTTP ${res.status}`;
+      const detail = session.role === "admin"
+        ? (body ? JSON.stringify(body) : `HTTP ${res.status}`)
+        : "פרטי שגיאה זמינים בלוג המערכת.";
       setDone({
         kind: "error",
         message: "Could not submit. Check your connection and try again.",
@@ -493,7 +519,9 @@ export default function ProductionActualPage() {
       setDone({
         kind: "error",
         message: "Network error submitting production actual.",
-        detail: err instanceof Error ? err.message : String(err),
+        detail: session.role === "admin"
+          ? (err instanceof Error ? err.message : String(err))
+          : "פרטי שגיאה זמינים בלוג המערכת.",
       });
       setPhase("entering");
     }
@@ -552,8 +580,8 @@ export default function ProductionActualPage() {
     <>
       <WorkflowHeader
         eyebrow="Operator form"
-        title="Production Actual"
-        description="Report produced output and scrap. Component consumption is calculated automatically from the active BOM."
+        title="דיווח ייצור"
+        description="דווח על כמות שיוצרה ופחת. צריכת רכיבים מחושבת אוטומטית לפי ה-BOM הפעיל."
       />
 
       {/* Production-recommendation breadcrumb — appears only when the form
@@ -615,10 +643,9 @@ export default function ProductionActualPage() {
           className="mb-4 rounded-md border border-warning/40 bg-warning-softer px-4 py-3 text-sm text-warning-fg"
           role="status"
         >
-          <div className="font-medium">Read-only view.</div>
+          <div className="font-medium">תצוגה בלבד.</div>
           <div className="mt-1 text-xs opacity-80">
-            Your role is <code>{session.role}</code>. Only operators and admins
-            can submit a Production Actual. Backend will return 403 on submit.
+            {`התפקיד שלך הוא ${session.role}. רק מפעיל או אדמין יכול לדווח על ייצור.`}
           </div>
         </div>
       ) : null}
@@ -648,7 +675,7 @@ export default function ProductionActualPage() {
                 className="btn btn-sm"
                 onClick={restartFromStep1}
               >
-                Re-open form
+                פתח טופס מחדש
               </button>
             </div>
           ) : null}
@@ -677,7 +704,7 @@ export default function ProductionActualPage() {
       ) : null}
 
       {loading ? (
-        <SectionCard title="Loading items…">
+        <SectionCard title="טוען פריטים…">
           <div className="space-y-3" aria-busy="true" aria-live="polite">
             <div className="h-9 w-full animate-pulse rounded bg-bg-subtle" />
             <div className="h-9 w-full animate-pulse rounded bg-bg-subtle" />
@@ -685,29 +712,29 @@ export default function ProductionActualPage() {
           </div>
         </SectionCard>
       ) : loadErr ? (
-        <SectionCard title="Could not load items">
+        <SectionCard title="לא ניתן לטעון פריטים">
           <div className="rounded border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg">
-            <div className="font-semibold">Could not load items</div>
+            <div className="font-semibold">לא ניתן לטעון פריטים</div>
             <div className="mt-1 text-xs">{(loadErr as Error).message}</div>
             <button
               type="button"
               onClick={() => void itemsQuery.refetch()}
               className="mt-2 text-xs font-medium text-danger-fg underline hover:no-underline"
             >
-              Retry
+              נסה שוב
             </button>
           </div>
         </SectionCard>
       ) : phase === "pick" ? (
         <form onSubmit={handleOpen} className="space-y-5">
           <SectionCard
-            title="Step 1 — choose what you produced"
-            description="Only manufactured and repackaged items are listed. If the BOM changes after you open the form, the form will ask you to reopen before submitting."
+            title="שלב 1 — בחר את הפריט שיוצר"
+            description="מוצגים רק פריטים בייצור או באריזה מחדש. אם ה-BOM משתנה אחרי פתיחת הטופס, יידרש פתיחה מחדש לפני שליחה."
           >
             <div className="grid grid-cols-1 gap-3">
               <label className="block min-w-0">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Item *
+                  פריט *
                 </span>
                 <select
                   className="input"
@@ -715,8 +742,8 @@ export default function ProductionActualPage() {
                   onChange={(e) => setSelectedItemId(e.target.value)}
                   required
                 >
-                  <option value="">— select —</option>
-                  <optgroup label="Manufactured">
+                  <option value="">— בחר —</option>
+                  <optgroup label="ייצור">
                     {producibleItems
                       .filter((r) => r.supply_method === "MANUFACTURED")
                       .map((r) => (
@@ -725,7 +752,7 @@ export default function ProductionActualPage() {
                         </option>
                       ))}
                   </optgroup>
-                  <optgroup label="Repack">
+                  <optgroup label="אריזה מחדש">
                     {producibleItems
                       .filter((r) => r.supply_method === "REPACK")
                       .map((r) => (
@@ -737,17 +764,7 @@ export default function ProductionActualPage() {
                 </select>
               </label>
               <div className="text-xs text-fg-muted">
-                {producibleItems.length} producible items ·{" "}
-                {
-                  producibleItems.filter((r) => r.supply_method === "MANUFACTURED")
-                    .length
-                }{" "}
-                manufactured ·{" "}
-                {
-                  producibleItems.filter((r) => r.supply_method === "REPACK")
-                    .length
-                }{" "}
-                repack
+                {`${producibleItems.length} פריטים ניתן לייצור · ${producibleItems.filter((r) => r.supply_method === "MANUFACTURED").length} בייצור · ${producibleItems.filter((r) => r.supply_method === "REPACK").length} באריזה מחדש`}
               </div>
             </div>
           </SectionCard>
@@ -757,40 +774,40 @@ export default function ProductionActualPage() {
               className="btn btn-primary"
               disabled={!selectedItemId}
             >
-              Continue to entry
+              המשך להזנה
             </button>
           </div>
         </form>
       ) : phase === "entering" || phase === "submitting" || phase === "done" ? (
         <form onSubmit={handleSubmit} className="space-y-5">
           <SectionCard
-            title="Step 2 — enter produced output"
-            description="Output quantity is what you produced good. Scrap quantity is material consumed but not usable as finished goods. Both are required; scrap defaults to 0."
+            title="שלב 2 — הזן כמות שיוצרה"
+            description="כמות הפלט = כמות סחורה תקינה שיוצרה. כמות פחת = חומר שנצרך אבל לא ניתן למכירה כמוצר מוגמר. שני השדות חובה. ברירת מחדל לפחת היא 0."
           >
             {snapshot ? (
               <div className="mb-3 rounded-md border border-border/60 bg-bg-subtle/40 p-3 text-xs">
                 <div>
-                  <span className="text-fg-subtle">Producing:</span>{" "}
+                  <span className="text-fg-subtle">מייצר:</span>{" "}
                   <span className="text-fg font-medium">
                     {snapshot.item_name}
                   </span>{" "}
                   <span className="text-fg-muted">({snapshot.item_id})</span>
                   <span className="ml-2 rounded-sm border border-info/40 bg-info-soft px-1.5 py-0.5 text-3xs text-info-fg">
-                    {snapshot.supply_method === "MANUFACTURED" ? "Manufactured" : snapshot.supply_method === "REPACK" ? "Repack" : snapshot.supply_method}
+                    {snapshot.supply_method === "MANUFACTURED" ? "ייצור" : snapshot.supply_method === "REPACK" ? "אריזה מחדש" : snapshot.supply_method}
                   </span>
                 </div>
                 <div className="mt-1">
-                  <span className="text-fg-subtle">Pinned BOM:</span>{" "}
+                  <span className="text-fg-subtle">BOM מוצמד:</span>{" "}
                   <span className="font-mono text-fg">
                     {snapshot.bom_version_label}
                   </span>
                 </div>
                 <div className="mt-1">
-                  <span className="text-fg-subtle">BOM produces</span>{" "}
+                  <span className="text-fg-subtle">BOM מפיק</span>{" "}
                   <span className="font-mono text-fg">
                     {snapshot.bom_final_output_qty} {snapshot.bom_final_output_uom}
                   </span>{" "}
-                  <span className="text-fg-subtle">per batch</span>
+                  <span className="text-fg-subtle">לכל מנה</span>
                 </div>
               </div>
             ) : null}
@@ -798,7 +815,7 @@ export default function ProductionActualPage() {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="block min-w-0">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Event time *
+                  זמן אירוע *
                 </span>
                 <input
                   type="datetime-local"
@@ -810,7 +827,7 @@ export default function ProductionActualPage() {
               </label>
               <label className="block min-w-0">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Output UoM *
+                  יחידת מידה *
                 </span>
                 <input
                   className="input"
@@ -821,7 +838,7 @@ export default function ProductionActualPage() {
               </label>
               <label className="block min-w-0">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Output quantity *
+                  כמות פלט *
                 </span>
                 <input
                   type="number"
@@ -836,7 +853,7 @@ export default function ProductionActualPage() {
               </label>
               <label className="block min-w-0">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Scrap quantity
+                  כמות פחת
                 </span>
                 <input
                   type="number"
@@ -850,35 +867,35 @@ export default function ProductionActualPage() {
               </label>
               <label className="block min-w-0 sm:col-span-2">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Notes
+                  הערות
                 </span>
                 <textarea
                   className="input min-h-[3rem]"
                   rows={2}
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Optional notes (shift, operator comments, etc.)."
+                  placeholder="הערות (משמרת, תגובות מפעיל וכו')."
                 />
               </label>
             </div>
           </SectionCard>
 
           <SectionCard
-            title="Expected consumption preview"
-            description="Estimated component usage based on the BOM and quantities entered. The final consumption is calculated at submit time."
+            title="תצוגה מקדימה — צריכת רכיבים צפויה"
+            description="הערכת צריכת רכיבים לפי BOM וכמויות שהוזנו. הערך הסופי מחושב בעת השליחה."
           >
             <button
               type="button"
               className="btn btn-ghost btn-sm mb-3"
               onClick={() => setPreviewExpanded((v) => !v)}
             >
-              {previewExpanded ? "Hide components" : "Show components"}{" "}
+              {previewExpanded ? "הסתר רכיבים" : "הצג רכיבים"}{" "}
               ({snapshot?.bom_lines.length ?? 0})
             </button>
             {previewExpanded && snapshot ? (
               previewRows.length === 0 ? (
                 <div className="text-xs text-fg-muted">
-                  Enter an output or scrap quantity to see expected consumption.
+                  הזן כמות פלט או פחת כדי לראות צריכת רכיבים צפויה.
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -886,13 +903,13 @@ export default function ProductionActualPage() {
                     <thead>
                       <tr className="border-b border-border/70 bg-bg-subtle/60">
                         <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                          Component
+                          רכיב
                         </th>
                         <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                          Expected consumption
+                          צריכה צפויה
                         </th>
                         <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                          UoM
+                          יחידה
                         </th>
                       </tr>
                     </thead>
@@ -927,14 +944,14 @@ export default function ProductionActualPage() {
 
           <div className="flex items-center justify-end gap-2">
             <button type="button" className="btn" onClick={resetFlow}>
-              Cancel snapshot
+              בטל ופתח מחדש
             </button>
             <button
               type="submit"
               className="btn btn-primary"
               disabled={phase === "submitting" || !canSubmit}
             >
-              {phase === "submitting" ? "Submitting…" : "Submit production"}
+              {phase === "submitting" ? "שולח…" : "שלח דיווח ייצור"}
             </button>
           </div>
         </form>
@@ -953,30 +970,30 @@ export default function ProductionActualPage() {
       {historyRows.length > 0 ? (
         <div className="mt-8">
           <SectionCard
-            title="Recent production runs"
-            description="Last 10 submitted production actuals. Output = good units produced (FG stock increases by output qty only). Scrap = consumed but not yielded as finished goods."
+            title="דיווחי ייצור אחרונים"
+            description="10 הדיווחים האחרונים. כמות פלט = סחורה תקינה (מלאי FG עולה לפי כמות פלט בלבד). כמות פחת = חומר שנצרך אך לא הופק כסחורה תקינה."
           >
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-border/70 bg-bg-subtle/60">
                     <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      Item
+                      פריט
                     </th>
                     <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      Output
+                      פלט
                     </th>
                     <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      Scrap
+                      פחת
                     </th>
                     <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      BOM version
+                      גרסת BOM
                     </th>
                     <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      Event time
+                      זמן אירוע
                     </th>
                     <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      Consumed
+                      נצרך
                     </th>
                   </tr>
                 </thead>

@@ -25,7 +25,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Check, X, Factory, FileOutput } from "lucide-react";
+import { ArrowLeft, Check, X, Factory, FileOutput, Copy } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { SectionCard } from "@/components/workflow/SectionCard";
@@ -71,6 +71,24 @@ async function postRecAction(
     }
     throw new Error(detail || `Could not ${action} this recommendation. Try again.`);
   }
+}
+
+async function postConvertToPO(recId: string): Promise<{ po_id: string; po_number: string | null; idempotent_replay: boolean }> {
+  const res = await fetch(
+    `/api/planning/recommendations/${encodeURIComponent(recId)}/convert-to-po`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idempotency_key: genIdempotencyKey() }),
+    },
+  );
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    let detail = "";
+    try { detail = (JSON.parse(txt) as { detail?: string }).detail ?? ""; } catch { /* ignore */ }
+    throw new Error(detail || "לא ניתן ליצור הזמנת רכש. נסה שוב.");
+  }
+  return await res.json();
 }
 
 function fmtDateAgo(iso: string | null): string {
@@ -166,6 +184,29 @@ export default function RecommendationDrillDownPage() {
     "stay" | "execute"
   >("stay");
 
+  const convertMut = useMutation({
+    mutationFn: () => postConvertToPO(recId),
+    onSuccess: (data) => {
+      void queryClient.invalidateQueries({ queryKey: ["rec-detail", recId] });
+      void queryClient.invalidateQueries({
+        queryKey: ["planning", "run", runId, "recs"],
+      });
+      router.push(`/purchase-orders/${encodeURIComponent(data.po_id)}`);
+    },
+    onError: (err: Error) => {
+      // Approve already succeeded server-side; surface the convert failure
+      // honestly so the planner can finish the job manually instead of
+      // discovering the orphaned approval later.
+      setActionToast({
+        kind: "error",
+        message:
+          err.message ||
+          "ההמלצה אושרה אך יצירת ההזמנה נכשלה. ניתן ליצור הזמנה ידנית מהטבלה.",
+      });
+      window.setTimeout(() => setActionToast(null), 6000);
+    },
+  });
+
   const approveMut = useMutation({
     mutationFn: () => postRecAction(recId, "approve"),
     onSuccess: () => {
@@ -189,9 +230,11 @@ export default function RecommendationDrillDownPage() {
               `&from_run=${encodeURIComponent(runId)}`,
           );
         } else {
-          router.push(
-            `/planning/runs/${encodeURIComponent(runId)}/recommendations/${encodeURIComponent(recId)}/convert`,
-          );
+          // Purchase recs: chain straight into convert-to-PO. There is no
+          // /convert portal page — the API does the work and we navigate
+          // to the resulting PO. If convert fails, convertMut.onError
+          // surfaces the orphaned-approval message.
+          convertMut.mutate();
         }
         setPostApproveTarget("stay");
         return;
@@ -284,7 +327,7 @@ export default function RecommendationDrillDownPage() {
     rec.rec_status === "approved" && rec.converted_po_id === null;
   const isProductionRec = rec.rec_type === "production";
   const isDraft = rec.rec_status === "draft";
-  const isMutating = approveMut.isPending || dismissMut.isPending;
+  const isMutating = approveMut.isPending || dismissMut.isPending || convertMut.isPending;
 
   // For production recs, deep-link to /ops/stock/production-actual with
   // item_id + suggested_qty + breadcrumb params. For purchase recs, route
@@ -345,9 +388,15 @@ export default function RecommendationDrillDownPage() {
               <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                 זמן אספקה:
               </dt>
+              {/* The current RecommendationDetailResponse DTO does not
+                  include a lead_time_source field — we cannot tell whether
+                  this number came from supplier_items, item override, or a
+                  default. T1 surfaces the gap honestly with a caveat instead
+                  of implying false precision. Add to W1 contract backlog. */}
               <dd className="mt-0.5 text-xs text-fg-muted">
                 {rec.lead_time_days}{" "}
-                {rec.lead_time_days === 1 ? "יום" : "ימים"}
+                {rec.lead_time_days === 1 ? "יום" : "ימים"}{" "}
+                <span className="text-fg-subtle">(לא זמין מקור)</span>
               </dd>
             </div>
           )}
@@ -399,9 +448,11 @@ export default function RecommendationDrillDownPage() {
                 )}
                 {approveMut.isPending && postApproveTarget === "execute"
                   ? "מאשר…"
-                  : isProductionRec
-                    ? "אשר ופתח טופס ייצור"
-                    : "אשר וצור הזמנת רכש"}
+                  : convertMut.isPending
+                    ? "יוצר הזמנת רכש…"
+                    : isProductionRec
+                      ? "אשר ופתח טופס ייצור"
+                      : "אשר וצור הזמנת רכש"}
               </button>
               <button
                 type="button"
@@ -432,13 +483,16 @@ export default function RecommendationDrillDownPage() {
             </>
           ) : null}
           {canExecute && isApprovedAndUnconverted && !isProductionRec ? (
-            <Link
-              href={`/planning/runs/${encodeURIComponent(runId)}/recommendations/${encodeURIComponent(recId)}/convert`}
+            <button
+              type="button"
               className="btn btn-sm gap-1.5"
               data-testid="rec-detail-create-po-btn"
+              disabled={isMutating}
+              onClick={() => convertMut.mutate()}
             >
-              צור הזמנת רכש
-            </Link>
+              <FileOutput className="h-3 w-3" strokeWidth={2.5} />
+              {convertMut.isPending ? "יוצר הזמנת רכש…" : "צור הזמנת רכש"}
+            </button>
           ) : null}
           {canExecute && isProductionRec && rec.rec_status === "approved" ? (
             <Link
@@ -503,16 +557,26 @@ export default function RecommendationDrillDownPage() {
         <dl className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
           <div>
             <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              ריצת תכנון:
+              מזהה ריצה:
             </dt>
-            <dd className="mt-0.5 font-mono text-fg">
+            <dd className="mt-0.5 font-mono text-fg inline-flex items-center gap-1">
               <Link
                 href={`/planning/runs/${encodeURIComponent(rec.run_id)}`}
                 className="text-accent hover:underline"
               >
-                {rec.run_id.slice(0, 8)}
+                {rec.run_id.slice(0, 8)}…
               </Link>
-              {" "}
+              <button
+                type="button"
+                className="inline-flex items-center justify-center rounded p-0.5 text-fg-subtle hover:text-fg hover:bg-bg-subtle"
+                title="העתק מזהה מלא"
+                aria-label="העתק מזהה ריצה"
+                onClick={() => {
+                  void navigator.clipboard.writeText(rec.run_id);
+                }}
+              >
+                <Copy className="h-3 w-3" strokeWidth={2} />
+              </button>
               <span className="text-fg-muted">
                 ({fmtDateAgo(rec.run_created_at)})
               </span>
@@ -532,9 +596,12 @@ export default function RecommendationDrillDownPage() {
           </div>
           <div>
             <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              מזהה המלצה:
+              תחזית מקור:
             </dt>
-            <dd className="mt-0.5 font-mono text-fg-muted text-3xs">{rec.rec_id}</dd>
+            {/* Forecast version that drove this rec is a contract gap — not in the
+                current RecommendationDetailResponse DTO. T1 surfaces the gap honestly
+                rather than hiding it. Add to W1 contract backlog. */}
+            <dd className="mt-0.5 text-fg-muted text-xs">לא זמין כרגע</dd>
           </div>
         </dl>
       </SectionCard>

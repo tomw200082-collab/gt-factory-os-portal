@@ -370,6 +370,19 @@ function fmtDate(iso: string | null): string {
   }
 }
 
+function fmtAgeFromRun(executed_at: string): { label: string; stale: boolean } {
+  try {
+    const ms = Date.now() - new Date(executed_at).getTime();
+    const hours = Math.floor(ms / 3600000);
+    if (hours < 1) return { label: "לפי הריצה — כרגע", stale: false };
+    if (hours < 24) return { label: `לפי הריצה — לפני ${hours} שע'`, stale: false };
+    const days = Math.floor(hours / 24);
+    return { label: `לפי הריצה — לפני ${days} ימים`, stale: true };
+  } catch {
+    return { label: "לפי הריצה", stale: false };
+  }
+}
+
 function fmtDateOnly(iso: string | null): string {
   if (!iso) return "—";
   try {
@@ -754,14 +767,14 @@ export default function PlanningRunDetailPage() {
 
       <div className="space-y-5">
         <SectionCard
-          eyebrow="Snapshot refs"
-          title="Inputs captured at run time"
-          description="This run is reproducible byte-for-byte from these snapshot references."
+          eyebrow="מקורות הריצה"
+          title="נתונים בעת ההפעלה"
+          description="ניתן לשחזר את הריצה במלואה מהמקורות שנשמרו בעת ההפעלה."
         >
           <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
             <div>
               <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                Executed at
+                זמן ריצה
               </dt>
               <dd className="font-mono text-xs tabular-nums text-fg">
                 {fmtDate(detail.executed_at)}
@@ -769,15 +782,19 @@ export default function PlanningRunDetailPage() {
             </div>
             <div>
               <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                Triggered by
+                הופעל על-ידי
               </dt>
-              <dd className="text-xs text-fg capitalize">
-                {detail.trigger_source}
+              <dd className="text-xs text-fg">
+                {detail.trigger_source === "manual"
+                  ? "ידני"
+                  : detail.trigger_source === "scheduled"
+                    ? "אוטומטי"
+                    : detail.trigger_source}
               </dd>
             </div>
             <div>
               <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                Demand — forecast version
+                תחזית ביקוש
               </dt>
               <dd className="text-xs text-fg">
                 {detail.demand_snapshot_forecast_version_id ? (
@@ -785,22 +802,22 @@ export default function PlanningRunDetailPage() {
                     href={`/planning/forecast/${encodeURIComponent(detail.demand_snapshot_forecast_version_id)}`}
                     className="text-accent underline underline-offset-2 hover:text-accent/80"
                   >
-                    View forecast
+                    פתח תחזית
                   </Link>
                 ) : "—"}
               </dd>
             </div>
             <div>
               <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                Demand — orders snapshot
+                הזמנות פתוחות בעת הריצה
               </dt>
               <dd className="text-xs text-fg">
-                {detail.demand_snapshot_orders_snapshot_run_id ? "Linked" : "—"}
+                {detail.demand_snapshot_orders_snapshot_run_id ? "מסונכרן" : "לא זמין"}
               </dd>
             </div>
             <div>
               <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                Stock anchor refreshed
+                עוגן מלאי עודכן
               </dt>
               <dd className="font-mono text-xs text-fg">
                 {fmtDate(detail.stock_snapshot_anchor_refreshed_at)}
@@ -808,7 +825,7 @@ export default function PlanningRunDetailPage() {
             </div>
             <div>
               <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                Stock parity drift at run
+                סטיית מלאי בעת הריצה
               </dt>
               <dd className="font-mono text-xs tabular-nums text-fg">
                 {detail.rebuild_verifier_drift_at_run ?? "—"}
@@ -816,18 +833,20 @@ export default function PlanningRunDetailPage() {
             </div>
           </dl>
 
-          <details className="mt-4" data-testid="planning-run-policy-snapshot">
-            <summary className="cursor-pointer text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              Planning policy at run time ({detail.policy_snapshot_preview.key_count} parameters)
-            </summary>
-            <ul className="mt-2 grid grid-cols-2 gap-1 text-xs font-mono text-fg-muted sm:grid-cols-3 lg:grid-cols-4">
-              {detail.policy_snapshot_preview.keys.map((k) => (
-                <li key={k} className="truncate">
-                  {k}
-                </li>
-              ))}
-            </ul>
-          </details>
+          {session.role === "admin" ? (
+            <details className="mt-4" data-testid="planning-run-policy-snapshot">
+              <summary className="cursor-pointer text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                Planning policy at run time ({detail.policy_snapshot_preview.key_count} parameters)
+              </summary>
+              <ul className="mt-2 grid grid-cols-2 gap-1 text-xs font-mono text-fg-muted sm:grid-cols-3 lg:grid-cols-4">
+                {detail.policy_snapshot_preview.keys.map((k) => (
+                  <li key={k} className="truncate">
+                    {k}
+                  </li>
+                ))}
+              </ul>
+            </details>
+          ) : null}
         </SectionCard>
 
         {detail.exceptions.length > 0 ? (
@@ -1012,7 +1031,8 @@ export default function PlanningRunDetailPage() {
               />
             </div>
           ) : (
-            <div className="overflow-x-auto">
+            <>
+            <div className="hidden sm:block overflow-x-auto">
               <table
                 className="w-full border-collapse text-sm"
                 data-testid={`planning-run-recs-table-${activeTab}`}
@@ -1073,8 +1093,11 @@ export default function PlanningRunDetailPage() {
                 </thead>
                 <tbody>
                   {activeRecs.map((r) => {
+                    // pending_approval is operationally equivalent to draft for the planner; both need Approve/Dismiss. DB-level enum reconciliation deferred to W1.
                     const canActThisRow =
-                      canAct && r.recommendation_status === "draft";
+                      canAct &&
+                      (r.recommendation_status === "draft" ||
+                        r.recommendation_status === "pending_approval");
                     const canConvertThisRow =
                       canAct &&
                       activeTab === "purchase" &&
@@ -1149,6 +1172,14 @@ export default function PlanningRunDetailPage() {
                         >
                           {r.current_stock_bal ?? "—"}
                           {r.current_stock_bal && r.uom ? <span className="ml-1 text-3xs text-fg-subtle">{r.uom}</span> : null}
+                          {r.current_stock_bal !== null ? (() => {
+                            const age = fmtAgeFromRun(detail.executed_at);
+                            return (
+                              <div className={cn("text-3xs font-sans", age.stale ? "text-warning-fg" : "text-fg-subtle")}>
+                                {age.label}
+                              </div>
+                            );
+                          })() : null}
                         </td>
                         <td className="px-3 py-2.5 text-xs text-fg-muted">
                           {activeTab === "purchase"
@@ -1286,6 +1317,85 @@ export default function PlanningRunDetailPage() {
                 </tbody>
               </table>
             </div>
+            {/* Mobile card list — surfaces actions inline. Renders below sm breakpoint
+                where the desktop table requires horizontal scroll. */}
+            <div className="sm:hidden divide-y divide-border/40">
+              {activeRecs.map((r) => {
+                const canActThisRow =
+                  canAct &&
+                  (r.recommendation_status === "draft" ||
+                   r.recommendation_status === "pending_approval");
+                const canConvertThisRow =
+                  canAct &&
+                  activeTab === "purchase" &&
+                  r.recommendation_status === "approved" &&
+                  !r.converted_to_po_id;
+                const rowKey = r.recommendation_id;
+                const isApproving = approveMutation.isPending && approveMutation.variables === rowKey;
+                const isDismissing = dismissMutation.isPending && dismissMutation.variables === rowKey;
+                const isConverting = convertMutation.isPending && convertMutation.variables === rowKey;
+                return (
+                  <div key={rowKey} className="px-4 py-3" data-testid="planning-run-rec-row-mobile">
+                    <Link
+                      href={`/planning/runs/${encodeURIComponent(runId)}/recommendations/${encodeURIComponent(rowKey)}`}
+                      className="block"
+                    >
+                      <div className="font-medium text-fg-strong">
+                        {activeTab === "purchase"
+                          ? r.component_name ?? r.component_id ?? "—"
+                          : r.item_name ?? r.item_id ?? "—"}
+                      </div>
+                    </Link>
+                    <div className="mt-1 flex flex-wrap gap-1.5 text-3xs">
+                      <FeasibilityBadge status={r.feasibility_status} />
+                      <RecStatusBadge status={r.recommendation_status} />
+                    </div>
+                    <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-fg-muted">
+                      <div><span className="text-fg-subtle">נדרש:</span> <span className="font-mono tabular-nums">{r.required_qty}{r.uom ? ` ${r.uom}` : ""}</span></div>
+                      <div><span className="text-fg-subtle">מומלץ:</span> <span className="font-mono tabular-nums text-fg-strong">{r.recommended_qty}{r.uom ? ` ${r.uom}` : ""}</span></div>
+                      <div><span className="text-fg-subtle">לתאריך:</span> <span className="text-xs">{fmtPeriodBucket(r.target_period_bucket_key)}</span></div>
+                      <div><span className="text-fg-subtle">להזמין עד:</span> <span className={r.order_by_date && new Date(r.order_by_date) < new Date() ? "text-danger-fg font-medium" : ""}>{fmtDateOnly(r.order_by_date)}</span></div>
+                    </div>
+                    {canAct ? (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {canActThisRow ? (
+                          <>
+                            <button type="button" className="btn btn-sm gap-1 flex-1" disabled={isApproving || isDismissing} onClick={() => approveMutation.mutate(rowKey)}>
+                              <Check className="h-3 w-3" strokeWidth={2.5} />
+                              {isApproving ? "מאשר…" : "אשר"}
+                            </button>
+                            <button type="button" className="btn btn-ghost btn-sm gap-1 text-danger" disabled={isApproving || isDismissing} onClick={() => dismissMutation.mutate(rowKey)}>
+                              <X className="h-3 w-3" strokeWidth={2.5} />
+                              {isDismissing ? "דוחה…" : "דחה"}
+                            </button>
+                          </>
+                        ) : canConvertThisRow ? (
+                          <button type="button" className="btn btn-sm gap-1 flex-1" disabled={isConverting} onClick={() => convertMutation.mutate(rowKey)}>
+                            <FileOutput className="h-3 w-3" strokeWidth={2.5} />
+                            {isConverting ? "ממיר…" : "צור הזמנת רכש"}
+                          </button>
+                        ) : canAct && activeTab === "production" && r.recommendation_status === "approved" ? (
+                          <Link
+                            href={
+                              `/ops/stock/production-actual` +
+                              `?item_id=${encodeURIComponent(r.item_id ?? "")}` +
+                              `&suggested_qty=${encodeURIComponent(r.recommended_qty ?? "")}` +
+                              `&from_rec=${encodeURIComponent(rowKey)}` +
+                              `&from_run=${encodeURIComponent(runId)}`
+                            }
+                            className="btn btn-sm gap-1 flex-1"
+                          >
+                            <Factory className="h-3 w-3" strokeWidth={2.5} />
+                            פתח טופס דיווח ייצור
+                          </Link>
+                        ) : null}
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+            </>
           )}
         </SectionCard>
       </div>

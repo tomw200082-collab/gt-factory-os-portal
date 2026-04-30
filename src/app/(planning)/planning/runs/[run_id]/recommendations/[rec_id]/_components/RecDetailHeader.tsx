@@ -47,21 +47,42 @@ function supplyMethodBadge(method: "BOUGHT_FINISHED" | "MANUFACTURED" | "REPACK"
   return <Badge tone="neutral" variant="outline">ייצור</Badge>;
 }
 
+function supplyMethodLabel(method: "BOUGHT_FINISHED" | "MANUFACTURED" | "REPACK"): string {
+  if (method === "MANUFACTURED") return "ייצור";
+  if (method === "REPACK") return "אריזה מחדש";
+  return "פריט מוגמר לרכישה";
+}
+
 interface RecDetailHeaderProps {
   rec: RecommendationDetailResponse;
 }
 
 export function RecDetailHeader({ rec }: RecDetailHeaderProps) {
+  // Description must NOT be the raw item_id. For purchase recs we surface
+  // supplier; for production recs we surface the supply method label.
+  // The bare SKU lives in the small monospace chip in `meta` below.
+  const description =
+    rec.rec_type === "production"
+      ? `${rec.item_name} · ${supplyMethodLabel(rec.supply_method)}`
+      : `${rec.item_name} · ${rec.supplier_name ?? "—"}`;
+
   return (
     <WorkflowHeader
       eyebrow="פרטי המלצה"
       title={rec.item_name}
-      description={rec.item_id}
+      description={description}
       meta={
         <>
           {recTypeBadge(rec.rec_type)}
           {recStatusBadge(rec.rec_status)}
           {supplyMethodBadge(rec.supply_method)}
+          <span
+            className="inline-flex items-center gap-1 rounded border border-border-subtle bg-bg-subtle px-1.5 py-0.5 font-mono text-3xs text-fg-muted"
+            title="מק״ט"
+          >
+            <span className="text-3xs uppercase tracking-sops text-fg-subtle">מק״ט</span>
+            <span>{rec.item_id}</span>
+          </span>
         </>
       }
     />
