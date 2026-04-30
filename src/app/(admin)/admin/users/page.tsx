@@ -75,7 +75,7 @@ export default function AdminUsersPage() {
     }));
   };
 
-  const { data, isLoading, error } = useQuery<{ rows: AppUser[] }>({
+  const { data, isLoading, error, refetch } = useQuery<{ rows: AppUser[] }>({
     queryKey: ["admin-users"],
     queryFn: async () => {
       const res = await fetch("/api/users");
@@ -117,15 +117,49 @@ export default function AdminUsersPage() {
         contentClassName="p-0"
       >
         {isLoading && (
-          <div className="p-5 text-sm text-fg-muted">Loading…</div>
+          <div className="p-5">
+            <div className="space-y-2" aria-busy="true" aria-live="polite">
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="flex animate-pulse gap-3 border-b border-border/30 pb-2"
+                >
+                  <div className="h-4 w-32 shrink-0 rounded bg-bg-subtle" />
+                  <div className="h-4 flex-1 rounded bg-bg-subtle" />
+                  <div className="h-4 w-16 shrink-0 rounded bg-bg-subtle" />
+                </div>
+              ))}
+            </div>
+          </div>
         )}
         {error && (
-          <div className="p-5 text-sm text-danger-fg">
-            {(error as Error).message}
+          <div className="p-5">
+            <div className="rounded border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg">
+              <div className="font-semibold">Could not load users</div>
+              <div className="mt-1 text-xs">{(error as Error).message}</div>
+              <button
+                type="button"
+                onClick={() => void refetch()}
+                className="mt-2 text-xs font-medium text-danger-fg underline hover:no-underline"
+              >
+                Retry
+              </button>
+            </div>
           </div>
         )}
         {data && data.rows.length === 0 && (
-          <div className="p-5 text-sm text-fg-muted">No users found.</div>
+          <div className="p-8 text-center">
+            <div className="mx-auto max-w-sm">
+              <div className="text-sm font-semibold text-fg-strong">
+                No users yet.
+              </div>
+              <div className="mt-1 text-xs text-fg-muted">
+                Users appear automatically the first time they sign in via
+                Supabase magic-link. The provision flow is sign-in driven —
+                there's no separate "invite" path in v1.
+              </div>
+            </div>
+          </div>
         )}
         {data && data.rows.length > 0 && (
           <div className="overflow-x-auto">
