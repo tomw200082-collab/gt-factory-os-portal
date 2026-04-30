@@ -669,12 +669,35 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
   // --- Render guards ------------------------------------------------------
 
   if (headsQuery.isLoading || versionsQuery.isLoading) {
-    return <div className="p-5 text-sm text-fg-muted">Loading BOM editor…</div>;
+    return (
+      <div className="p-5">
+        <div className="space-y-3" aria-busy="true" aria-live="polite">
+          <div className="h-7 w-1/2 animate-pulse rounded bg-bg-subtle" />
+          <div className="h-5 w-2/3 animate-pulse rounded bg-bg-subtle" />
+          <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+            <div className="h-9 w-full animate-pulse rounded bg-bg-subtle" />
+            <div className="h-9 w-full animate-pulse rounded bg-bg-subtle" />
+            <div className="h-9 w-full animate-pulse rounded bg-bg-subtle" />
+          </div>
+          <div className="h-48 w-full animate-pulse rounded bg-bg-subtle" />
+        </div>
+      </div>
+    );
   }
   if (headsQuery.isError) {
     return (
-      <div className="p-5 text-sm text-danger-fg">
-        {(headsQuery.error as Error).message}
+      <div className="p-5">
+        <div className="rounded border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg">
+          <div className="font-semibold">Could not load BOM editor</div>
+          <div className="mt-1 text-xs">{(headsQuery.error as Error).message}</div>
+          <button
+            type="button"
+            onClick={() => void headsQuery.refetch()}
+            className="mt-2 text-xs font-medium text-danger-fg underline hover:no-underline"
+          >
+            Retry
+          </button>
+        </div>
       </div>
     );
   }
