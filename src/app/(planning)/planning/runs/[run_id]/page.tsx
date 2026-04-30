@@ -26,7 +26,7 @@ import Link from "next/link";
 import { useParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { ArrowLeft, Check, X, FileOutput, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Check, X, FileOutput, Factory, AlertTriangle } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
@@ -847,10 +847,10 @@ export default function PlanningRunDetailPage() {
 
         <SectionCard
           eyebrow="Recommendations"
-          title={`${detail.summary.purchase_recs_count + detail.summary.production_recs_count} total`}
+          title={`${detail.summary.purchase_recs_count + detail.summary.production_recs_count} total · ${detail.summary.purchase_recs_count} רכש · ${detail.summary.production_recs_count} ייצור`}
           description={
             canAct
-              ? "Review each line and approve or dismiss. Approved purchase lines stage to PO creation; nothing orders autonomously."
+              ? "Review and approve. Approved purchase recs convert to POs (one supplier = one PO ideally). Approved production recs open the Production Actual form prefilled with item + qty + BOM. Nothing orders or produces autonomously."
               : "Read-only view — contact a planner or admin to approve or dismiss recommendations."
           }
           contentClassName="p-0"
@@ -1153,6 +1153,34 @@ export default function PlanningRunDetailPage() {
                                   </span>
                                 ) : null}
                               </div>
+                            ) : canAct &&
+                              activeTab === "production" &&
+                              r.recommendation_status === "approved" ? (
+                              // Approved production rec → deep-link to
+                              // Production Actual form prefilled with item +
+                              // recommended qty + back-chain to this run/rec
+                              // (loops 1-2 wired the receiving end). Manager
+                              // approves → clicks Open form → enters output
+                              // qty (already prefilled) → submits → ledger
+                              // writes consumption + output rows.
+                              <Link
+                                href={
+                                  `/ops/stock/production-actual` +
+                                  `?item_id=${encodeURIComponent(r.item_id ?? "")}` +
+                                  `&suggested_qty=${encodeURIComponent(r.recommended_qty ?? "")}` +
+                                  `&from_rec=${encodeURIComponent(rowKey)}` +
+                                  `&from_run=${encodeURIComponent(runId)}`
+                                }
+                                className="btn btn-ghost btn-sm gap-1.5 text-accent"
+                                data-testid="planning-run-rec-open-production"
+                                title="Open Production Actual form prefilled with this item + qty"
+                              >
+                                <Factory
+                                  className="h-3 w-3"
+                                  strokeWidth={2.5}
+                                />
+                                Open production form
+                              </Link>
                             ) : r.converted_to_po_id ? (
                               <Link
                                 href={`/purchase-orders/${encodeURIComponent(r.converted_to_po_id)}`}
