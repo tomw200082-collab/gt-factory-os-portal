@@ -953,6 +953,7 @@ function ParityCheckBlock({
         label="Stock integrity"
         value={parityLabel}
         tone={parityTone}
+        href={d.parity_ok ? undefined : "/admin/masters/health"}
         sub={
           d.parity_ok ? (
             <span className="text-success-fg">
@@ -961,7 +962,8 @@ function ParityCheckBlock({
           ) : (
             <span className="text-danger-fg">
               {d.drift_count.toLocaleString()} row
-              {d.drift_count !== 1 ? "s" : ""} of drift — do not rely on stock counts until resolved.
+              {d.drift_count !== 1 ? "s" : ""} of drift — do not rely on
+              stock counts until resolved. Click to view master-data health.
             </span>
           )
         }
