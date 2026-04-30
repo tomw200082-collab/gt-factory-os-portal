@@ -341,6 +341,27 @@ export default function InboxListPage() {
     [allRows, filter.view, session.user_id],
   );
 
+  // Per-view row counts. S7 research §B: "Sentry-style tabs at top of list:
+  // 'Open · 24' / 'Stale · 41' / 'Resolved · …'". 7 views × ~100 rows is
+  // cheap; compute once per allRows / userId change.
+  const viewCounts = useMemo(() => {
+    const userId = session.user_id || null;
+    const counts: Record<InboxView, number> = {
+      all: 0,
+      approvals: 0,
+      exceptions: 0,
+      stock: 0,
+      planning: 0,
+      integrations: 0,
+      data_quality: 0,
+      mine: 0,
+    };
+    for (const v of INBOX_VIEWS) {
+      counts[v] = applyInboxView(allRows, v, userId).length;
+    }
+    return counts;
+  }, [allRows, session.user_id]);
+
   // -------------------------------------------------------------------------
   // URL-backed filter writers.
   // -------------------------------------------------------------------------
@@ -445,6 +466,7 @@ export default function InboxListPage() {
             </span>
             {INBOX_VIEWS.map((v) => {
               const active = filter.view === v;
+              const count = viewCounts[v];
               return (
                 <button
                   key={v}
@@ -460,6 +482,18 @@ export default function InboxListPage() {
                   )}
                 >
                   {VIEW_LABELS[v]}
+                  {!anyLoading && count > 0 ? (
+                    <span
+                      className={cn(
+                        "ml-0.5 inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full px-1 text-[0.6rem] font-bold tabular-nums",
+                        active
+                          ? "bg-accent text-accent-fg"
+                          : "bg-bg-subtle text-fg-strong ring-1 ring-border/60",
+                      )}
+                    >
+                      {count > 99 ? "99+" : count}
+                    </span>
+                  ) : null}
                 </button>
               );
             })}
