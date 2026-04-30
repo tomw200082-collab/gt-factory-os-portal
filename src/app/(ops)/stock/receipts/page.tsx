@@ -467,11 +467,38 @@ export default function GoodsReceiptPage() {
       ) : null}
 
       {loading ? (
-        <div className="p-5 text-sm text-fg-muted">Loading masters…</div>
+        <SectionCard title="Loading masters…">
+          <div className="space-y-3" aria-busy="true" aria-live="polite">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+              <div className="h-9 w-full animate-pulse rounded bg-bg-subtle" />
+              <div className="h-9 w-full animate-pulse rounded bg-bg-subtle" />
+            </div>
+            <div className="h-9 w-full animate-pulse rounded bg-bg-subtle" />
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+              <div className="h-9 w-full animate-pulse rounded bg-bg-subtle" />
+              <div className="h-9 w-full animate-pulse rounded bg-bg-subtle" />
+              <div className="h-9 w-full animate-pulse rounded bg-bg-subtle" />
+            </div>
+          </div>
+        </SectionCard>
       ) : loadErr ? (
-        <div className="p-5 text-sm text-danger-fg">
-          {(loadErr as Error).message}
-        </div>
+        <SectionCard title="Could not load suppliers / items / components">
+          <div className="rounded border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg">
+            <div className="font-semibold">Could not load masters</div>
+            <div className="mt-1 text-xs">{(loadErr as Error).message}</div>
+            <button
+              type="button"
+              onClick={() => {
+                void itemsQuery.refetch();
+                void componentsQuery.refetch();
+                void suppliersQuery.refetch();
+              }}
+              className="mt-2 text-xs font-medium text-danger-fg underline hover:no-underline"
+            >
+              Retry
+            </button>
+          </div>
+        </SectionCard>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-5">
           <SectionCard title="Receipt context">
