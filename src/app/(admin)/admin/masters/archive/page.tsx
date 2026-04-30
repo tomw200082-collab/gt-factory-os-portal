@@ -223,10 +223,31 @@ function ArchiveSection({
   children: React.ReactNode;
 }) {
   if (isLoading) {
-    return <div className="p-6 text-sm text-fg-muted">Loading…</div>;
+    return (
+      <div className="p-5">
+        <div className="space-y-2" aria-busy="true" aria-live="polite">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div
+              key={i}
+              className="flex animate-pulse gap-3 border-b border-border/30 pb-2"
+            >
+              <div className="h-4 w-32 shrink-0 rounded bg-bg-subtle" />
+              <div className="h-4 flex-1 rounded bg-bg-subtle" />
+            </div>
+          ))}
+        </div>
+      </div>
+    );
   }
   if (isError) {
-    return <div className="p-6 text-sm text-danger-fg">{errorMessage}</div>;
+    return (
+      <div className="p-5">
+        <div className="rounded border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg">
+          <div className="font-semibold">Could not load archive</div>
+          <div className="mt-1 text-xs">{errorMessage}</div>
+        </div>
+      </div>
+    );
   }
   const rows = Array.isArray(children) ? children : [children];
   const hasRows = rows.length > 0 && rows.some(Boolean);
