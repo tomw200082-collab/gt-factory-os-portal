@@ -214,12 +214,30 @@ export default function AdminBomHeadDetailPage({
   });
 
   if (headsQuery.isLoading) {
-    return <div className="p-5 text-sm text-fg-muted">Loading BOM head…</div>;
+    return (
+      <div className="p-5">
+        <div className="space-y-3" aria-busy="true" aria-live="polite">
+          <div className="h-7 w-1/2 animate-pulse rounded bg-bg-subtle" />
+          <div className="h-5 w-2/3 animate-pulse rounded bg-bg-subtle" />
+          <div className="h-32 w-full animate-pulse rounded bg-bg-subtle" />
+        </div>
+      </div>
+    );
   }
   if (headsQuery.isError) {
     return (
-      <div className="p-5 text-sm text-danger-fg">
-        {(headsQuery.error as Error).message}
+      <div className="p-5">
+        <div className="rounded border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg">
+          <div className="font-semibold">Could not load BOM head</div>
+          <div className="mt-1 text-xs">{(headsQuery.error as Error).message}</div>
+          <button
+            type="button"
+            onClick={() => void headsQuery.refetch()}
+            className="mt-2 text-xs font-medium text-danger-fg underline hover:no-underline"
+          >
+            Retry
+          </button>
+        </div>
       </div>
     );
   }
