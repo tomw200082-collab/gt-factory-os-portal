@@ -10,8 +10,12 @@
 //   - One-sentence insight
 //   - Mini 14-day strip (color blocks)
 //   - Tap routes to /planning/inventory-flow/[itemId]
+//
+// Performance: wrapped in React.memo to skip re-render when FlowItem
+// reference is stable across TanStack Query refetches.
 // ---------------------------------------------------------------------------
 
+import { memo } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/badges/StatusBadge";
 import { cn } from "@/lib/cn";
@@ -23,7 +27,7 @@ interface MobileItemCardProps {
   item: FlowItem;
 }
 
-export function MobileItemCard({ item }: MobileItemCardProps) {
+function MobileItemCardInner({ item }: MobileItemCardProps) {
   const style = RISK_TIER_STYLE[item.risk_tier];
   const insight = buildInsight(item);
 
@@ -100,6 +104,8 @@ export function MobileItemCard({ item }: MobileItemCardProps) {
     </Link>
   );
 }
+
+export const MobileItemCard = memo(MobileItemCardInner);
 
 function buildInsight(item: FlowItem): string {
   if (item.risk_tier === "stockout" && item.earliest_stockout_date) {
