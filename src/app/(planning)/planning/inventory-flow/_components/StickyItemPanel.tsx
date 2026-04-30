@@ -8,8 +8,13 @@
 //   - Days-of-cover hero (text-2xl tabular-nums)
 //
 // `position: sticky; left: 0` keeps it pinned while the day columns scroll.
+//
+// Performance: wrapped in React.memo. 68 instances per render; FlowItem
+// reference is stable across TanStack Query refetches when data hasn't
+// changed, so memo skips re-render entirely on filter / search / hover.
 // ---------------------------------------------------------------------------
 
+import { memo } from "react";
 import { Badge } from "@/components/badges/StatusBadge";
 import { cn } from "@/lib/cn";
 import { fmtDaysOfCover } from "../_lib/format";
@@ -20,7 +25,7 @@ interface StickyItemPanelProps {
   item: FlowItem;
 }
 
-export function StickyItemPanel({ item }: StickyItemPanelProps) {
+function StickyItemPanelInner({ item }: StickyItemPanelProps) {
   const style = RISK_TIER_STYLE[item.risk_tier];
 
   return (
@@ -53,3 +58,5 @@ export function StickyItemPanel({ item }: StickyItemPanelProps) {
     </div>
   );
 }
+
+export const StickyItemPanel = memo(StickyItemPanelInner);
