@@ -652,6 +652,27 @@ export default function ProductionActualPage() {
               </button>
             </div>
           ) : null}
+          {/* Loop 9 — close the production-planning loop. After a successful
+              submission that originated from a planning rec, the manager
+              usually wants to go fulfill the next rec from the same run.
+              Surface "Back to planning run" inline in the success banner
+              so it's a single click instead of a scroll-to-top + breadcrumb
+              hunt. The breadcrumb stays in place at the top for general
+              context. */}
+          {done.kind === "success" && fromRunId ? (
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <Link
+                href={`/planning/runs/${encodeURIComponent(fromRunId)}?tab=production`}
+                className="btn btn-sm gap-1.5"
+                data-testid="production-actual-success-back-to-run"
+              >
+                ← חזור להמלצות הייצור של הריצה
+              </Link>
+              <span className="text-xs opacity-80">
+                להמשיך לדווח על המלצה נוספת מאותה ריצת תכנון
+              </span>
+            </div>
+          ) : null}
         </div>
       ) : null}
 
