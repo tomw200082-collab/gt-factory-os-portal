@@ -128,6 +128,8 @@ export async function fetchLatestPlanningRun(
           executed_at: "",
           status: "none",
           exceptions_count: null,
+          purchase_recs_count: null,
+          production_recs_count: null,
         },
       };
     }
@@ -142,6 +144,8 @@ export async function fetchLatestPlanningRun(
         executed_at: "",
         status: "none",
         exceptions_count: null,
+        purchase_recs_count: null,
+        production_recs_count: null,
       },
     };
   }
@@ -152,6 +156,8 @@ export async function fetchLatestPlanningRun(
       executed_at: row.executed_at,
       status: row.status,
       exceptions_count: row.summary?.exceptions_count ?? null,
+      purchase_recs_count: row.summary?.purchase_recs_count ?? null,
+      production_recs_count: row.summary?.production_recs_count ?? null,
     },
   };
 }

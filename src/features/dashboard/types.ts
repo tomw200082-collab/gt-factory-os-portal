@@ -58,6 +58,11 @@ export interface LatestPlanningRunSummary {
   status: "draft" | "running" | "completed" | "failed" | "superseded" | string;
   // DR-11: exceptions_count from summary projection on the list row.
   exceptions_count: number | null;
+  // Loop 13: rec counts surfaced on the dashboard tile so the manager sees
+  // the production-planning chain progress without drilling in. null when
+  // the projection hasn't supplied them (older API or no run yet).
+  purchase_recs_count: number | null;
+  production_recs_count: number | null;
 }
 
 export interface BreakGlassState {

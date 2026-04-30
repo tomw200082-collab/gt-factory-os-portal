@@ -26,6 +26,7 @@
 
 import { useMemo, type ReactNode } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { useQueries, useQueryClient } from "@tanstack/react-query";
 import {
   AlertOctagon,
@@ -658,9 +659,16 @@ function LatestPlanningRunCard({
     executed_at: string;
     status: string;
     exceptions_count: number | null;
+    purchase_recs_count: number | null;
+    production_recs_count: number | null;
   }> | undefined;
   now: Date;
 }) {
+  // Loop 13 — uses router.push for the rec-count tab deep-links because
+  // StatPill wraps the whole card in a <Link>, and nested anchors are
+  // invalid. Buttons are a clean escape hatch and let us still stop
+  // propagation so the card-level navigation doesn't fire too.
+  const router = useRouter();
   if (!signal) {
     return (
       <StatPill
@@ -724,12 +732,55 @@ function LatestPlanningRunCard({
     : d.status === "superseded" ? "Superseded"
     : d.status;
   // DR-11 — exceptions_count from summary projection.
+  // Loop 13 — also surface purchase + production rec counts so the manager
+  // sees what's actionable from the dashboard without drilling in. Each is
+  // a stop-propagation Link so the badges deep-link into the right tab on
+  // the run detail (Loops 6 + 11) without triggering the parent StatPill's
+  // anchor.
   const sub = (
     <div className="flex flex-wrap items-center gap-1.5">
       <Badge tone={tone} variant="soft">
         {statusLabel}
       </Badge>
       <span className="text-fg-muted">{ageHumanized(d.executed_at, now)}</span>
+      {typeof d.purchase_recs_count === "number" ? (
+        <button
+          type="button"
+          className="cursor-pointer hover:opacity-80"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            router.push(
+              `/planning/runs/${encodeURIComponent(d.run_id)}?tab=purchase`,
+            );
+          }}
+          title="Open purchase recommendations for the latest run"
+          data-testid="dashboard-stat-latest-planning-run-purchase-link"
+        >
+          <Badge tone="info" variant="outline">
+            {d.purchase_recs_count} purchase
+          </Badge>
+        </button>
+      ) : null}
+      {typeof d.production_recs_count === "number" ? (
+        <button
+          type="button"
+          className="cursor-pointer hover:opacity-80"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            router.push(
+              `/planning/runs/${encodeURIComponent(d.run_id)}?tab=production`,
+            );
+          }}
+          title="Open production recommendations for the latest run"
+          data-testid="dashboard-stat-latest-planning-run-production-link"
+        >
+          <Badge tone="neutral" variant="outline">
+            {d.production_recs_count} production
+          </Badge>
+        </button>
+      ) : null}
       {typeof d.exceptions_count === "number" ? (
         <Badge
           tone={d.exceptions_count > 0 ? "warning" : "neutral"}
