@@ -290,14 +290,64 @@ function SuppliersPageInner(): JSX.Element {
         contentClassName="p-0"
       >
         {suppliersQuery.isLoading ? (
-          <div className="p-5 text-sm text-fg-muted">Loading…</div>
+          <div className="p-5">
+            <div className="space-y-2" aria-busy="true" aria-live="polite">
+              {Array.from({ length: 6 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="flex animate-pulse gap-3 border-b border-border/30 pb-2"
+                >
+                  <div className="h-4 w-24 shrink-0 rounded bg-bg-subtle" />
+                  <div className="h-4 flex-1 rounded bg-bg-subtle" />
+                  <div className="h-4 w-16 shrink-0 rounded bg-bg-subtle" />
+                </div>
+              ))}
+            </div>
+          </div>
         ) : suppliersQuery.isError ? (
-          <div className="p-5 text-sm text-danger-fg">
-            {(suppliersQuery.error as Error).message}
+          <div className="p-5">
+            <div className="rounded border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg">
+              <div className="font-semibold">Could not load suppliers</div>
+              <div className="mt-1 text-xs">
+                {(suppliersQuery.error as Error).message}
+              </div>
+              <button
+                type="button"
+                onClick={() => suppliersQuery.refetch()}
+                className="mt-2 text-xs font-medium text-danger-fg underline hover:no-underline"
+              >
+                Retry
+              </button>
+            </div>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="p-5 text-sm text-fg-muted">
-            {query ? "No suppliers match your search." : "No suppliers match filters."}
+          <div className="p-8 text-center">
+            <div className="mx-auto max-w-sm">
+              <div className="text-sm font-semibold text-fg-strong">
+                {rows.length === 0
+                  ? "No suppliers in the master yet."
+                  : query
+                  ? "No suppliers match your search."
+                  : "No suppliers match these filters."}
+              </div>
+              <div className="mt-1 text-xs text-fg-muted">
+                {rows.length === 0
+                  ? "Add a supplier to start mapping items."
+                  : "Try clearing the search or relaxing the filters."}
+              </div>
+              {(query || statusFilter !== "ACTIVE") ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setQuery("");
+                    setStatusFilter("ACTIVE");
+                  }}
+                  className="btn btn-ghost btn-sm mt-3"
+                >
+                  Reset filters
+                </button>
+              ) : null}
+            </div>
           </div>
         ) : (
           <div className="overflow-x-auto">
