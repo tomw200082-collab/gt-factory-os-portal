@@ -713,7 +713,7 @@ export default function ForecastVersionDetailPage() {
             <div className="mb-1.5 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
               Add item to forecast
             </div>
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <select
                 value={addItemInput}
                 onChange={(e) => setAddItemInput(e.target.value)}
@@ -752,6 +752,37 @@ export default function ForecastVersionDetailPage() {
               >
                 + Add
               </button>
+              {(() => {
+                // Seed-all-active-FG: one-click pre-populate the grid with
+                // every active item so the planner doesn't have to dropdown
+                // -pick 68 entries one at a time. Filters items already in
+                // the forecast or already locally added so the button text
+                // stays accurate when re-pressed.
+                const allActive = itemsQuery.data?.rows ?? [];
+                const remaining = allActive.filter(
+                  (r) => !itemsInForecast.has(r.item_id),
+                );
+                if (remaining.length === 0) return null;
+                return (
+                  <button
+                    type="button"
+                    disabled={itemsQuery.isLoading}
+                    className="btn btn-sm shrink-0"
+                    data-testid="forecast-seed-all-btn"
+                    title={`Add all ${remaining.length} active items to the grid at once. You'll fill in quantities and Save.`}
+                    onClick={() => {
+                      setAddedItemIds((prev) => {
+                        const next = new Set(prev);
+                        for (const r of remaining) next.add(r.item_id);
+                        return next;
+                      });
+                      setAddItemInput("");
+                    }}
+                  >
+                    + Seed all ({remaining.length})
+                  </button>
+                );
+              })()}
             </div>
             {addedItemIds.size > 0 ? (
               <p
