@@ -397,19 +397,41 @@ export default function PlanningLandingPage() {
                 </span>
               </div>
 
-              {/* Recommendation counts */}
+              {/* Recommendation counts — each badge deep-links into the
+                  matching tab on the run detail (Loop 11, builds on Loop 6's
+                  ?tab= URL param support). */}
               {latestRun.status === "completed" && (
                 <div className="flex flex-wrap gap-2">
-                  <Badge tone="info" dotted>
-                    {latestRun.summary.purchase_recs_count} purchase rec{latestRun.summary.purchase_recs_count !== 1 ? "s" : ""}
-                  </Badge>
-                  <Badge tone="neutral" dotted>
-                    {latestRun.summary.production_recs_count} production rec{latestRun.summary.production_recs_count !== 1 ? "s" : ""}
-                  </Badge>
-                  {latestRun.summary.exceptions_count > 0 ? (
-                    <Badge tone="warning" dotted>
-                      {latestRun.summary.exceptions_count} exception{latestRun.summary.exceptions_count !== 1 ? "s" : ""}
+                  <Link
+                    href={`/planning/runs/${encodeURIComponent(latestRun.run_id)}?tab=purchase`}
+                    className="hover:opacity-80"
+                    title="Open purchase recommendations for the latest run"
+                    data-testid="planning-landing-latest-purchase-link"
+                  >
+                    <Badge tone="info" dotted>
+                      {latestRun.summary.purchase_recs_count} purchase rec{latestRun.summary.purchase_recs_count !== 1 ? "s" : ""}
                     </Badge>
+                  </Link>
+                  <Link
+                    href={`/planning/runs/${encodeURIComponent(latestRun.run_id)}?tab=production`}
+                    className="hover:opacity-80"
+                    title="Open production recommendations for the latest run"
+                    data-testid="planning-landing-latest-production-link"
+                  >
+                    <Badge tone="neutral" dotted>
+                      {latestRun.summary.production_recs_count} production rec{latestRun.summary.production_recs_count !== 1 ? "s" : ""}
+                    </Badge>
+                  </Link>
+                  {latestRun.summary.exceptions_count > 0 ? (
+                    <Link
+                      href={`/planning/runs/${encodeURIComponent(latestRun.run_id)}`}
+                      className="hover:opacity-80"
+                      title="Open run detail to review exceptions"
+                    >
+                      <Badge tone="warning" dotted>
+                        {latestRun.summary.exceptions_count} exception{latestRun.summary.exceptions_count !== 1 ? "s" : ""}
+                      </Badge>
+                    </Link>
                   ) : null}
                 </div>
               )}
@@ -460,7 +482,7 @@ export default function PlanningLandingPage() {
             {
               label: "Planning runs",
               href: "/planning/runs",
-              blurb: "Review runs, approve purchase recommendations, convert to POs.",
+              blurb: "Review runs, approve recommendations. Purchase recs convert to POs; production recs open the production form prefilled with item, qty, and BOM.",
             },
             {
               label: "BOM simulation",
