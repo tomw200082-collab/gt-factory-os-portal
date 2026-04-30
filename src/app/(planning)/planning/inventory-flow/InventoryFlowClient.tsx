@@ -15,6 +15,7 @@
 
 import { useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
+import { RefreshCw } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import {
   EmptyState,
@@ -31,6 +32,7 @@ import { UnmappedSkusBanner } from "./_components/UnmappedSkusBanner";
 import { useInventoryFlow } from "./_lib/useInventoryFlow";
 import type { FlowItem, FlowQueryParams } from "./_lib/types";
 import { isAtRisk } from "./_lib/risk";
+import { cn } from "@/lib/cn";
 
 const UNMAPPED_GATE = 0.1;
 
@@ -105,6 +107,10 @@ export function InventoryFlowClient() {
             <Badge tone="danger" dotted>
               Error
             </Badge>
+          ) : flowQuery.isFetching ? (
+            <Badge tone="info" dotted>
+              Refreshing…
+            </Badge>
           ) : (
             <Badge tone="success" dotted>
               Live
@@ -116,9 +122,26 @@ export function InventoryFlowClient() {
               lastAt={data.as_of}
               warnAfterMinutes={5}
               failAfterMinutes={30}
+              producer="inventory_flow_projection"
             />
           ) : null}
         </>
+      }
+      actions={
+        <button
+          type="button"
+          onClick={() => void flowQuery.refetch()}
+          disabled={flowQuery.isFetching}
+          className="btn btn-ghost btn-sm gap-1.5"
+          data-testid="inventory-flow-refresh"
+          title="Force a fresh projection. The auto-refresh runs every 60s; use this if you just posted a movement and want to see it immediately."
+        >
+          <RefreshCw
+            className={cn("h-3.5 w-3.5", flowQuery.isFetching && "animate-spin")}
+            strokeWidth={2}
+          />
+          {flowQuery.isFetching ? "Refreshing…" : "Refresh now"}
+        </button>
       }
     />
   );
