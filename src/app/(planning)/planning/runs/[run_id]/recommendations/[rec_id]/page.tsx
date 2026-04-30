@@ -24,8 +24,8 @@
 // ---------------------------------------------------------------------------
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { ArrowLeft, Check, X } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
+import { ArrowLeft, Check, X, Factory, FileOutput } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { SectionCard } from "@/components/workflow/SectionCard";
@@ -138,6 +138,7 @@ function SkeletonLayout({ runId }: { runId: string }) {
 export default function RecommendationDrillDownPage() {
   const { session } = useSession();
   const params = useParams();
+  const router = useRouter();
   const queryClient = useQueryClient();
   const runId = String(params?.run_id ?? "");
   const recId = String(params?.rec_id ?? "");
@@ -157,6 +158,14 @@ export default function RecommendationDrillDownPage() {
     message: string;
   } | null>(null);
 
+  // Loop 12 — "approve and continue" navigates after a successful approve.
+  // Tracks the post-approve target so the same approve mutation can either
+  // stay on the page (manager wants to triage more recs first) or jump
+  // straight into execution (the common case for a clean rec).
+  const [postApproveTarget, setPostApproveTarget] = useState<
+    "stay" | "execute"
+  >("stay");
+
   const approveMut = useMutation({
     mutationFn: () => postRecAction(recId, "approve"),
     onSuccess: () => {
@@ -165,10 +174,33 @@ export default function RecommendationDrillDownPage() {
       void queryClient.invalidateQueries({
         queryKey: ["planning", "run", runId, "recs"],
       });
+      // If the manager clicked "Approve and execute", jump into the right
+      // execution flow now that the rec is approved server-side.
+      if (postApproveTarget === "execute") {
+        const isProd = result?.data?.rec_type === "production";
+        const itemId = result?.data?.item_id ?? "";
+        const recommendedQty = result?.data?.recommended_qty ?? "";
+        if (isProd) {
+          router.push(
+            `/ops/stock/production-actual` +
+              `?item_id=${encodeURIComponent(itemId)}` +
+              `&suggested_qty=${encodeURIComponent(recommendedQty)}` +
+              `&from_rec=${encodeURIComponent(recId)}` +
+              `&from_run=${encodeURIComponent(runId)}`,
+          );
+        } else {
+          router.push(
+            `/planning/runs/${encodeURIComponent(runId)}/recommendations/${encodeURIComponent(recId)}/convert`,
+          );
+        }
+        setPostApproveTarget("stay");
+        return;
+      }
       window.setTimeout(() => setActionToast(null), 3500);
     },
     onError: (err: Error) => {
       setActionToast({ kind: "error", message: err.message });
+      setPostApproveTarget("stay");
       window.setTimeout(() => setActionToast(null), 6000);
     },
   });
@@ -339,15 +371,53 @@ export default function RecommendationDrillDownPage() {
         <div className="mt-4 flex flex-wrap items-center gap-3">
           {canExecute && isDraft ? (
             <>
+              {/* Loop 12 — "אשר ובצע" collapses approve+execute into one
+                  click for the common case where the planner has already
+                  decided. Production: approve → production form prefilled.
+                  Purchase: approve → /convert flow. The standalone "אשר
+                  בלבד" stays on this page so a planner who's batch-triaging
+                  many recs can approve without navigating away. */}
               <button
                 type="button"
                 className="btn btn-primary btn-sm gap-1.5"
+                data-testid="rec-detail-approve-and-execute-btn"
+                disabled={isMutating}
+                onClick={() => {
+                  setPostApproveTarget("execute");
+                  approveMut.mutate();
+                }}
+                title={
+                  isProductionRec
+                    ? "Approve this rec and open the Production Actual form prefilled"
+                    : "Approve this rec and continue to the Create PO flow"
+                }
+              >
+                {isProductionRec ? (
+                  <Factory className="h-3 w-3" strokeWidth={2.5} />
+                ) : (
+                  <FileOutput className="h-3 w-3" strokeWidth={2.5} />
+                )}
+                {approveMut.isPending && postApproveTarget === "execute"
+                  ? "מאשר…"
+                  : isProductionRec
+                    ? "אשר ופתח טופס ייצור"
+                    : "אשר וצור הזמנת רכש"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm gap-1.5"
                 data-testid="rec-detail-approve-btn"
                 disabled={isMutating}
-                onClick={() => approveMut.mutate()}
+                onClick={() => {
+                  setPostApproveTarget("stay");
+                  approveMut.mutate();
+                }}
+                title="Approve only — stay on this page"
               >
                 <Check className="h-3 w-3" strokeWidth={2.5} />
-                {approveMut.isPending ? "מאשר…" : "אשר המלצה"}
+                {approveMut.isPending && postApproveTarget === "stay"
+                  ? "מאשר…"
+                  : "אשר בלבד"}
               </button>
               <button
                 type="button"
