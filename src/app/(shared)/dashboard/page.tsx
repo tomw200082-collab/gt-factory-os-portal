@@ -1023,6 +1023,7 @@ function StockTruthBlock({
         label="Stock parity drift"
         value={drift === null ? "—" : drift.toLocaleString()}
         tone={driftTone}
+        href={drift && drift > 0 ? "/admin/masters/health" : undefined}
         sub={
           drift === 0 ? (
             <span className="text-success-fg">
@@ -1030,7 +1031,8 @@ function StockTruthBlock({
             </span>
           ) : drift && drift > 0 ? (
             <span className="text-danger-fg">
-              {drift} row{drift === 1 ? "" : "s"} of drift — review before trusting stock.
+              {drift} row{drift === 1 ? "" : "s"} of drift — review before
+              trusting stock. Click to investigate.
             </span>
           ) : (
             <span className="text-fg-muted">Not yet available.</span>
@@ -1045,6 +1047,7 @@ function StockTruthBlock({
             : "—"
         }
         tone="neutral"
+        href={typeof d.anchors_count === "number" ? "/stock/movement-log" : undefined}
         sub={
           typeof d.anchors_count === "number" ? (
             <span className="text-fg-muted">
