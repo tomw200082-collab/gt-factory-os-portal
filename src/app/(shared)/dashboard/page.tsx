@@ -35,6 +35,7 @@ import {
   CalendarClock,
   CheckCircle2,
   CircleDashed,
+  RefreshCw,
   ShieldAlert,
   Signal as SignalIcon,
 } from "lucide-react";
@@ -364,6 +365,37 @@ export default function DashboardPage() {
               </Badge>
             ) : null}
           </>
+        }
+        actions={
+          <button
+            type="button"
+            onClick={() => {
+              // Refetch every dashboard query that has a fetch attached.
+              // Don't blanket-invalidate inbox cache (it's seeded by the
+              // /inbox page; clobbering it forces a cold fetch).
+              void planningRunQ.refetch();
+              void forecastQ.refetch();
+              void breakGlassQ.refetch();
+              void parityCheckQ.refetch();
+              void stockTruthQ.refetch();
+              void freshnessQ.refetch();
+              void jobsHealthQ.refetch();
+              void runtimeReadyQ.refetch();
+            }}
+            disabled={queries.some((q) => q.isFetching)}
+            className="btn btn-ghost btn-sm gap-1.5"
+            data-testid="dashboard-refresh"
+            title="Refresh every signal tile. Each tile auto-refreshes every 30s; use this to force an immediate refresh."
+          >
+            <RefreshCw
+              className={cn(
+                "h-3.5 w-3.5",
+                queries.some((q) => q.isFetching) && "animate-spin",
+              )}
+              strokeWidth={2}
+            />
+            {queries.some((q) => q.isFetching) ? "Refreshing…" : "Refresh"}
+          </button>
         }
       />
 
