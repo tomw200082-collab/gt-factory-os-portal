@@ -151,15 +151,41 @@ function ShopifySyncStatusCard() {
       description="One-way push from platform stock projections to Shopify inventory. Platform is authoritative on disagreement."
     >
       {isLoading && (
-        <div className="text-sm text-fg-muted">Loading sync status…</div>
+        <div className="space-y-3" aria-busy="true" aria-live="polite">
+          <div className="flex items-center gap-3">
+            <div className="h-5 w-20 animate-pulse rounded bg-bg-subtle" />
+            <div className="h-4 w-32 animate-pulse rounded bg-bg-subtle" />
+          </div>
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+            <div className="h-12 w-full animate-pulse rounded bg-bg-subtle" />
+            <div className="h-12 w-full animate-pulse rounded bg-bg-subtle" />
+          </div>
+          <div className="h-9 w-full animate-pulse rounded bg-bg-subtle" />
+        </div>
       )}
 
       {isError && (
-        <div className="text-sm text-danger-fg">
-          Failed to load sync status:{" "}
-          {error instanceof Error ? error.message : String(error)}
+        <div className="rounded border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg">
+          <div className="font-semibold">Could not load Shopify sync status</div>
+          <div className="mt-1 text-xs">
+            {error instanceof Error ? error.message : String(error)}
+          </div>
           <div className="mt-1 text-xs text-fg-muted">
-            The sync status endpoint may not yet be available. Contact your administrator if this persists.
+            The sync status endpoint may be unavailable. The integration itself may still be running — check the Jobs Monitor.
+          </div>
+          <div className="mt-2 flex flex-wrap gap-3">
+            <Link
+              href="/admin/sku-aliases?channel=shopify"
+              className="text-xs font-medium text-accent underline-offset-2 hover:underline"
+            >
+              Map SKU aliases →
+            </Link>
+            <Link
+              href="/admin/jobs"
+              className="text-xs font-medium text-accent underline-offset-2 hover:underline"
+            >
+              Open Jobs Monitor →
+            </Link>
           </div>
         </div>
       )}
@@ -297,7 +323,14 @@ export default function AdminIntegrationsPage() {
 
       {/* Per-integration exception health cards */}
       {isLoading && (
-        <div className="text-sm text-fg-muted px-1">Loading exceptions…</div>
+        <div className="space-y-3" aria-busy="true" aria-live="polite">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div
+              key={i}
+              className="h-20 w-full animate-pulse rounded border border-border/40 bg-bg-subtle"
+            />
+          ))}
+        </div>
       )}
       {INTEGRATIONS.map((intg) => {
         const relevant = data.filter((e) =>
