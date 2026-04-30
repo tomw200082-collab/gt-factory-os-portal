@@ -765,8 +765,19 @@ function AdminSkuAliasesPageInner(): JSX.Element {
         contentClassName="p-0"
       >
         {approvedQuery.isLoading ? (
-          <div className="p-5 text-sm text-fg-muted">
-            Loading approved aliases…
+          <div className="p-5">
+            <div className="space-y-2" aria-busy="true" aria-live="polite">
+              {Array.from({ length: 3 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="flex animate-pulse gap-3 border-b border-border/30 pb-2"
+                >
+                  <div className="h-4 w-32 shrink-0 rounded bg-bg-subtle" />
+                  <div className="h-4 flex-1 rounded bg-bg-subtle" />
+                  <div className="h-4 w-20 shrink-0 rounded bg-bg-subtle" />
+                </div>
+              ))}
+            </div>
           </div>
         ) : approvedQuery.isError ? (
           <div className="p-5 text-sm text-fg-muted">
