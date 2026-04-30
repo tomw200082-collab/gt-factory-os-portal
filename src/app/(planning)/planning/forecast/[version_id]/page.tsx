@@ -689,8 +689,37 @@ export default function ForecastVersionDetailPage() {
                       <div className="font-medium text-fg leading-tight">
                         {itemsById.get(itemId)?.item_name ?? itemId}
                       </div>
-                      <div className="mt-0.5 font-mono text-3xs text-fg-faint">
-                        {itemId}
+                      <div className="mt-0.5 flex items-center gap-1.5 font-mono text-3xs text-fg-faint">
+                        <span>{itemId}</span>
+                        {(() => {
+                          // Supply method chip — tells the planner whether
+                          // forecast on this row will produce a *production*
+                          // recommendation (MANUFACTURED / REPACK) or a
+                          // *purchase* recommendation (BOUGHT_FINISHED) when
+                          // the next planning run executes. Closes the
+                          // forecast→planning-recommendation visibility gap.
+                          const sm = itemsById.get(itemId)?.supply_method;
+                          if (!sm) return null;
+                          const isManufactured =
+                            sm === "MANUFACTURED" || sm === "REPACK";
+                          return (
+                            <span
+                              className={
+                                "inline-flex items-center rounded-sm border px-1 py-px font-sans text-3xs font-semibold uppercase tracking-sops " +
+                                (isManufactured
+                                  ? "border-info/40 bg-info-softer text-info-fg"
+                                  : "border-warning/40 bg-warning-softer text-warning-fg")
+                              }
+                              title={
+                                isManufactured
+                                  ? "פריט בייצור — תחזית כאן תפעיל המלצת ייצור בריצת התכנון הבאה"
+                                  : "פריט מוגמר נרכש — תחזית כאן תפעיל המלצת רכש בריצת התכנון הבאה"
+                              }
+                            >
+                              {isManufactured ? "ייצור" : "רכש"}
+                            </span>
+                          );
+                        })()}
                       </div>
                     </td>
                     {buckets.map((b) => {
