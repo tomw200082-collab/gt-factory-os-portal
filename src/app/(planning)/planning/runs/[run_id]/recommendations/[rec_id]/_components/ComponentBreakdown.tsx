@@ -6,11 +6,16 @@
 // Desktop: sortable table
 // Mobile: card per component (no horizontal scroll)
 // BOUGHT_FINISHED: shows empty-state message
+//
+// Feasibility summary at the top — answers "can I run this batch now?"
+// at a glance (sum components with shortage > 0). Manager doesn't need to
+// scan the whole table to know whether the run is blocked on missing RM.
 // ---------------------------------------------------------------------------
 
 import { useState } from "react";
-import { ChevronUp, ChevronDown } from "lucide-react";
+import { ChevronUp, ChevronDown, AlertTriangle, CheckCircle2 } from "lucide-react";
 import { SectionCard } from "@/components/workflow/SectionCard";
+import { Badge } from "@/components/badges/StatusBadge";
 import { cn } from "@/lib/cn";
 import type { RecDetailComponent, RecommendationDetailResponse } from "../_lib/types";
 
@@ -139,6 +144,18 @@ export function ComponentBreakdown({ rec }: ComponentBreakdownProps) {
 
   const sorted = isBF ? [] : sortComponents(rec.components, sortKey, sortDir);
 
+  // Feasibility rollup — count components with shortage > 0 and sum the
+  // total shortfall qty (the demand the planning engine can't cover from
+  // current on-hand + open POs). For production recs (rec_type=production
+  // with supply_method MANUFACTURED|REPACK) this is the "can I run this
+  // batch now?" answer at a glance.
+  const shortComponents = isBF
+    ? []
+    : rec.components.filter((r) => parseQty(r.net_purchase_qty) > 0);
+  const totalComponents = isBF ? 0 : rec.components.length;
+  const shortCount = shortComponents.length;
+  const isReady = !isBF && totalComponents > 0 && shortCount === 0;
+
   return (
     <SectionCard
       eyebrow="פירוט רכיבים"
@@ -149,6 +166,48 @@ export function ComponentBreakdown({ rec }: ComponentBreakdownProps) {
           : `${rec.components.length} רכיב${rec.components.length !== 1 ? "ים" : ""} בהמלצה`
       }
     >
+      {/* Feasibility chip — shows only for production-type recs (i.e.
+          components present + not BOUGHT_FINISHED). Two states:
+            ✓ READY: all components on-hand or covered by open POs
+            ⚠ SHORT: N components blocked; click to scroll the table */}
+      {!isBF && totalComponents > 0 && rec.rec_type === "production" ? (
+        <div
+          className={cn(
+            "mb-3 flex flex-wrap items-center gap-3 rounded-md border px-3 py-2",
+            isReady
+              ? "border-success/40 bg-success-softer text-success-fg"
+              : "border-warning/40 bg-warning-softer text-warning-fg",
+          )}
+          data-testid="production-rec-feasibility"
+        >
+          {isReady ? (
+            <CheckCircle2 className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
+          ) : (
+            <AlertTriangle className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
+          )}
+          <div className="flex-1 min-w-0">
+            {isReady ? (
+              <span className="font-medium">
+                מוכן לייצור — כל הרכיבים זמינים במלאי או בהזמנות פתוחות
+              </span>
+            ) : (
+              <span className="font-medium">
+                לא ניתן לייצר עכשיו — {shortCount} מתוך {totalComponents} רכיבים חסרים
+              </span>
+            )}
+          </div>
+          {!isReady ? (
+            <Badge tone="warning" variant="soft" dotted>
+              {shortCount} חסר
+            </Badge>
+          ) : (
+            <Badge tone="success" variant="soft" dotted>
+              {totalComponents} מוכן
+            </Badge>
+          )}
+        </div>
+      ) : null}
+
       {isBF || rec.components.length === 0 ? (
         <div className="text-sm text-fg-muted italic">
           פריט מוגמר שנרכש — אין פירוק לרכיבים
