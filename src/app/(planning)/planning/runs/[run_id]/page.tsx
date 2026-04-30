@@ -652,7 +652,45 @@ export default function PlanningRunDetailPage() {
   const detail = detailQuery.data!.detail!;
   const activeRecsQuery =
     activeTab === "purchase" ? purchaseQuery : productionQuery;
-  const activeRecs = activeRecsQuery.data?.rows ?? [];
+  const rawRecs = activeRecsQuery.data?.rows ?? [];
+
+  // Loop 8 — production-tab feasibility ordering. Production recs are noisy
+  // by nature (mixed readiness + missing BOM/supplier/stock). Sorting puts
+  // ready_now → ready_if_purchase_executes → blocked at the bottom, so the
+  // manager scans top-down to find what to make today, then drops to the
+  // bottom to triage blockers. Purchase tab is left untouched (server order
+  // already respects supplier urgency).
+  const FEASIBILITY_RANK: Record<FeasibilityStatus, number> = {
+    ready_now: 0,
+    ready_if_purchase_executes: 1,
+    blocked_stock_gap: 2,
+    blocked_missing_bom: 3,
+    blocked_missing_supplier_mapping: 4,
+    blocked_ambiguous_supplier: 5,
+    blocked_missing_pack_conversion: 6,
+  };
+  const activeRecs =
+    activeTab === "production"
+      ? [...rawRecs].sort((a, b) => {
+          const ra = FEASIBILITY_RANK[a.feasibility_status] ?? 99;
+          const rb = FEASIBILITY_RANK[b.feasibility_status] ?? 99;
+          if (ra !== rb) return ra - rb;
+          // Tie-break: earlier shortage_date first (more urgent), then by name.
+          const sa = a.shortage_date ?? "9999-12-31";
+          const sb = b.shortage_date ?? "9999-12-31";
+          if (sa !== sb) return sa.localeCompare(sb);
+          return (a.item_name ?? a.item_id ?? "").localeCompare(
+            b.item_name ?? b.item_id ?? "",
+          );
+        })
+      : rawRecs;
+
+  const productionReadyCount = rawRecs.filter(
+    (r) =>
+      r.feasibility_status === "ready_now" ||
+      r.feasibility_status === "ready_if_purchase_executes",
+  ).length;
+  const productionBlockedCount = rawRecs.length - productionReadyCount;
 
   return (
     <>
@@ -908,6 +946,31 @@ export default function PlanningRunDetailPage() {
               Production ({detail.summary.production_recs_count})
             </button>
           </div>
+
+          {/* Loop 8 — production-tab readiness summary. Mirrors the
+              feasibility chip on individual rec detail (Loop 3) but at the
+              run-level so the manager sees the breakdown before scrolling.
+              Sort already groups ready rows on top, blocked at the bottom —
+              this just labels the split. */}
+          {activeTab === "production" && rawRecs.length > 0 ? (
+            <div
+              className="flex flex-wrap items-center gap-2 border-b border-border/40 bg-bg-subtle/40 px-5 py-2 text-xs"
+              data-testid="planning-run-production-summary"
+            >
+              <span className="text-fg-muted">סיכום מוכנות:</span>
+              <Badge tone={productionReadyCount > 0 ? "success" : "neutral"} variant="soft" dotted>
+                {productionReadyCount} מוכן
+              </Badge>
+              {productionBlockedCount > 0 ? (
+                <Badge tone="warning" variant="soft" dotted>
+                  {productionBlockedCount} חסום
+                </Badge>
+              ) : null}
+              <span className="text-3xs text-fg-subtle ml-1">
+                — מסודר לפי דחיפות (מוכן לייצור בראש, חסום בתחתית)
+              </span>
+            </div>
+          ) : null}
 
           {activeRecsQuery.isLoading ? (
             <div className="p-5">
