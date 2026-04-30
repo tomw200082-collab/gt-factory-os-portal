@@ -23,7 +23,7 @@
 // ---------------------------------------------------------------------------
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { ArrowLeft, Check, X, FileOutput, Factory, AlertTriangle } from "lucide-react";
@@ -495,12 +495,32 @@ function ExceptionActionLink({ category, itemId, componentId }: {
 export default function PlanningRunDetailPage() {
   const { session } = useSession();
   const params = useParams();
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const queryClient = useQueryClient();
   const runId = String(params?.run_id ?? "");
   const canAct = session.role === "planner" || session.role === "admin";
 
-  const [activeTab, setActiveTab] =
-    useState<RecommendationType>("purchase");
+  // Honour ?tab=production|purchase deep links from the runs landing page
+  // and from any future external entry points. Anything else falls back to
+  // purchase (the more common starting point for daily review).
+  const tabFromUrl = searchParams?.get("tab");
+  const initialTab: RecommendationType =
+    tabFromUrl === "production" ? "production" : "purchase";
+  const [activeTab, setActiveTabState] =
+    useState<RecommendationType>(initialTab);
+
+  function setActiveTab(t: RecommendationType) {
+    setActiveTabState(t);
+    // Sync the URL so the manager can refresh / share / back-button without
+    // losing the tab. Skip on first render — initial state already matches.
+    const current = searchParams?.get("tab");
+    if (current !== t) {
+      const sp = new URLSearchParams(searchParams?.toString() ?? "");
+      sp.set("tab", t);
+      router.replace(`?${sp.toString()}`, { scroll: false });
+    }
+  }
   const [toast, setToast] = useState<
     {
       kind: "success" | "error";

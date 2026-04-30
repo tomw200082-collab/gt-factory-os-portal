@@ -590,17 +590,23 @@ export default function PlanningRunsListPage() {
             className="divide-y divide-border/60"
             data-testid="planning-runs-list"
           >
-            {rows.map((r) => (
+            {rows.map((r) => {
+              const runHref = `/planning/runs/${encodeURIComponent(r.run_id)}`;
+              return (
               <li
                 key={r.run_id}
-                className="px-5 py-4"
+                className="px-5 py-4 hover:bg-bg-subtle/40 transition-colors duration-150 rounded"
                 data-testid="planning-runs-row"
                 data-run-id={r.run_id}
                 data-status={r.status}
               >
+                {/* Header region — clicking anywhere here opens the run detail
+                    on its default (Purchase) tab. The summary badges below
+                    are their own links so the manager can jump straight into
+                    the right tab without an extra click. */}
                 <Link
-                  href={`/planning/runs/${encodeURIComponent(r.run_id)}`}
-                  className="flex items-start gap-4 hover:bg-bg-subtle/40 -mx-2 px-2 py-1 rounded"
+                  href={runHref}
+                  className="block -mx-2 px-2 py-1 rounded"
                   data-testid="planning-runs-row-link"
                 >
                   <div className="min-w-0 flex-1">
@@ -618,27 +624,58 @@ export default function PlanningRunsListPage() {
                       </span>
                       <span>{r.trigger_source === "scheduled" ? "Scheduled" : "Manual"}</span>
                     </div>
-                    <div className="mt-2 flex flex-wrap gap-2">
-                      <Badge tone="neutral">
-                        {r.summary.purchase_recs_count} purchase
-                      </Badge>
-                      <Badge tone="neutral">
-                        {r.summary.production_recs_count} production
-                      </Badge>
-                      <Badge tone="neutral">
-                        {r.summary.fg_coverage_count} FG lines
-                      </Badge>
-                      {r.summary.exceptions_count > 0 ? (
-                        <Badge tone="warning" dotted>
-                          {r.summary.exceptions_count} exception
-                          {r.summary.exceptions_count === 1 ? "" : "s"}
-                        </Badge>
-                      ) : null}
-                    </div>
                   </div>
                 </Link>
+
+                {/* Summary badges — each is its own deep link. Purchase and
+                    Production land directly on the matching tab; FG and
+                    exceptions go to the run detail (no exceptions tab yet). */}
+                <div className="mt-2 -mx-2 px-2 flex flex-wrap gap-2" data-testid="planning-runs-row-summary">
+                  <Link
+                    href={`${runHref}?tab=purchase`}
+                    className="hover:opacity-80"
+                    data-testid="planning-runs-row-purchase-link"
+                    title="Open purchase recommendations for this run"
+                  >
+                    <Badge tone="neutral">
+                      {r.summary.purchase_recs_count} purchase
+                    </Badge>
+                  </Link>
+                  <Link
+                    href={`${runHref}?tab=production`}
+                    className="hover:opacity-80"
+                    data-testid="planning-runs-row-production-link"
+                    title="Open production recommendations for this run"
+                  >
+                    <Badge tone="neutral">
+                      {r.summary.production_recs_count} production
+                    </Badge>
+                  </Link>
+                  <Link
+                    href={runHref}
+                    className="hover:opacity-80"
+                    title="Open run detail"
+                  >
+                    <Badge tone="neutral">
+                      {r.summary.fg_coverage_count} FG lines
+                    </Badge>
+                  </Link>
+                  {r.summary.exceptions_count > 0 ? (
+                    <Link
+                      href={runHref}
+                      className="hover:opacity-80"
+                      title="Open run detail to review exceptions"
+                    >
+                      <Badge tone="warning" dotted>
+                        {r.summary.exceptions_count} exception
+                        {r.summary.exceptions_count === 1 ? "" : "s"}
+                      </Badge>
+                    </Link>
+                  ) : null}
+                </div>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </SectionCard>
