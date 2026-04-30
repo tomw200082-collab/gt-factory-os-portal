@@ -25,7 +25,7 @@ import { useParams, useRouter } from "next/navigation";
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, ChevronLeft, Save } from "lucide-react";
+import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, Play, Save } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
@@ -613,11 +613,43 @@ export default function ForecastVersionDetailPage() {
       ) : null}
 
       {isPublished ? (
+        // Active-published bridge — closes the "I published, now what?" gap.
+        // Before: a static read-only notice that didn't tell the planner the
+        // next step is to run planning to materialize this demand into recs.
+        // After: actionable banner with a one-click path to /planning/runs
+        // where the planner can trigger or review runs that consume this
+        // forecast. To update demand, create a new draft from the list view.
         <div
-          className="mb-3 rounded border border-info/30 bg-info-softer px-4 py-2 text-xs text-info-fg"
+          className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded border border-info/30 bg-info-softer px-4 py-3 text-xs text-info-fg"
           data-testid="forecast-published-notice"
         >
-          This version is published and read-only. To update demand, create a new forecast draft.
+          <div className="min-w-0 flex-1">
+            <div className="font-semibold">
+              תחזית פעילה — מקור הביקוש לתכנון
+            </div>
+            <div className="mt-0.5 text-fg-muted">
+              הצעד הבא: הפעל ריצת תכנון כדי להפיק המלצות רכש וייצור מהתחזית הזו.
+              לעדכון הביקוש, צור טיוטת תחזית חדשה מרשימת התחזיות.
+            </div>
+          </div>
+          <Link
+            href="/planning/runs"
+            className="btn btn-sm btn-primary gap-1.5 shrink-0"
+            data-testid="forecast-published-go-runs"
+            title="Open planning runs to trigger or review"
+          >
+            {canAuthor ? (
+              <>
+                <Play className="h-3 w-3" strokeWidth={2.5} />
+                הפעל תכנון
+              </>
+            ) : (
+              <>
+                <ChevronRight className="h-3 w-3" strokeWidth={2.5} />
+                ריצות תכנון
+              </>
+            )}
+          </Link>
         </div>
       ) : null}
 
