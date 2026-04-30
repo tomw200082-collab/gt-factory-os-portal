@@ -1,5 +1,13 @@
 ﻿"use client";
 
+// Deep-link integration with planning recommendations:
+// /ops/stock/production-actual?item_id=<id>&suggested_qty=<n>&from_rec=<rec_id>&from_run=<run_id>
+// — item_id pre-selects the producible item dropdown
+// — suggested_qty pre-fills the output_qty field (operator can override)
+// — from_rec / from_run surface a small "this run is authorized by..." breadcrumb
+//   so the operator sees the chain back to the planning run that triggered it.
+// All four params are optional and graceful: form works identically without them.
+
 // ---------------------------------------------------------------------------
 // Production Actual — operator form (live API backed).
 //
@@ -26,7 +34,9 @@
 //       backend returns 403); happy path is operator + admin.
 // ---------------------------------------------------------------------------
 
-import { useMemo, useState } from "react";
+import { useMemo, useState, useEffect, useRef } from "react";
+import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
@@ -215,14 +225,56 @@ export default function ProductionActualPage() {
       .sort((a, b) => a.item_name.localeCompare(b.item_name));
   }, [itemsQuery.data]);
 
-  const [selectedItemId, setSelectedItemId] = useState<string>("");
+  // Query-string-driven deep-link prefill from planning recommendations.
+  // Read once on mount and apply ONLY if the corresponding state field is
+  // still empty (does not stomp manually-typed values on URL changes).
+  const searchParams = useSearchParams();
+  const initialItemId = searchParams?.get("item_id") ?? "";
+  const initialSuggestedQty = searchParams?.get("suggested_qty") ?? "";
+  const fromRecId = searchParams?.get("from_rec") ?? null;
+  const fromRunId = searchParams?.get("from_run") ?? null;
+
+  const [selectedItemId, setSelectedItemId] = useState<string>(initialItemId);
   const [phase, setPhase] = useState<Phase>("pick");
   const [snapshot, setSnapshot] = useState<ProductionActualOpenResponse | null>(
     null,
   );
   const [eventAt, setEventAt] = useState<string>(nowLocalDateTime());
-  const [outputQty, setOutputQty] = useState<string>("");
+  const [outputQty, setOutputQty] = useState<string>(initialSuggestedQty);
   const [scrapQty, setScrapQty] = useState<string>("0");
+
+  // One-shot apply of URL-driven prefill. Once the items query lands AND
+  // the URL carried an item_id, validate that the item is producible (the
+  // form rejects BOUGHT_FINISHED upstream so we don't want a deep-link
+  // landing in a state that will 409 on submit). If the URL item_id isn't
+  // valid, surface a small inline notice and clear the prefilled state so
+  // the operator picks manually.
+  const prefillAppliedRef = useRef(false);
+  const [prefillRejected, setPrefillRejected] = useState<string | null>(null);
+  useEffect(() => {
+    if (prefillAppliedRef.current) return;
+    if (!initialItemId) {
+      prefillAppliedRef.current = true;
+      return;
+    }
+    if (itemsQuery.isLoading || itemsQuery.isError) return;
+    const match = producibleItems.find((r) => r.item_id === initialItemId);
+    if (!match) {
+      // Item exists but isn't producible (BOUGHT_FINISHED), or doesn't
+      // exist at all. Either way, clear the prefill and warn.
+      const allItems = itemsQuery.data?.rows ?? [];
+      const exists = allItems.find((r) => r.item_id === initialItemId);
+      setPrefillRejected(
+        exists
+          ? `הפריט ${initialItemId} אינו ניתן לייצור (supply_method=${exists.supply_method ?? "unknown"}). בחר פריט אחר.`
+          : `הפריט ${initialItemId} לא נמצא במערכת. בחר פריט מהרשימה.`,
+      );
+      setSelectedItemId("");
+      setOutputQty("");
+    }
+    prefillAppliedRef.current = true;
+  }, [initialItemId, itemsQuery.isLoading, itemsQuery.isError, itemsQuery.data, producibleItems]);
+
   const [outputUom, setOutputUom] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
   // Default to expanded so the operator sees expected consumption inline
@@ -503,6 +555,60 @@ export default function ProductionActualPage() {
         title="Production Actual"
         description="Report produced output and scrap. Component consumption is calculated automatically from the active BOM."
       />
+
+      {/* Production-recommendation breadcrumb — appears only when the form
+          was opened via deep-link from a planning recommendation. Gives the
+          operator visible chain back to the run + recommendation that
+          authorized this batch, and a quick path back to the run if they
+          need to change something. */}
+      {(fromRecId || fromRunId) ? (
+        <div
+          className="mb-4 flex flex-wrap items-start gap-2 rounded-md border border-info/40 bg-info-softer px-4 py-3 text-sm text-info-fg"
+          role="status"
+          data-testid="production-actual-from-rec-banner"
+        >
+          <div className="flex-1 min-w-0">
+            <div className="font-medium">
+              דיווח ייצור מתוך המלצה
+            </div>
+            <div className="mt-1 text-xs opacity-90">
+              הטופס נפתח מתוך המלצת ייצור. כמות מומלצת מולאה מראש; ניתן לערוך
+              לפני שליחה.
+            </div>
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            {fromRecId && fromRunId ? (
+              <Link
+                href={`/planning/runs/${encodeURIComponent(fromRunId)}/recommendations/${encodeURIComponent(fromRecId)}`}
+                className="text-xs font-medium underline underline-offset-2 hover:no-underline"
+                data-testid="production-actual-from-rec-link"
+              >
+                חזור להמלצה →
+              </Link>
+            ) : null}
+            {fromRunId ? (
+              <Link
+                href={`/planning/runs/${encodeURIComponent(fromRunId)}`}
+                className="text-xs font-medium underline underline-offset-2 hover:no-underline"
+              >
+                ריצת תכנון →
+              </Link>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Item prefill rejection banner — shows when ?item_id= in URL pointed
+          to a non-producible item (e.g. BOUGHT_FINISHED) or unknown id. */}
+      {prefillRejected ? (
+        <div
+          className="mb-4 rounded-md border border-warning/40 bg-warning-softer px-4 py-3 text-sm text-warning-fg"
+          role="alert"
+          data-testid="production-actual-prefill-rejected"
+        >
+          {prefillRejected}
+        </div>
+      ) : null}
 
       {!canSubmit ? (
         <div
