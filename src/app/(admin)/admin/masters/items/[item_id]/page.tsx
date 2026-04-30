@@ -898,7 +898,19 @@ function BomSection({
         contentClassName="p-0"
       >
         {versionsLoading ? (
-          <div className="p-3 text-xs text-fg-muted">Loading versions…</div>
+          <div className="p-3">
+            <div className="space-y-1.5" aria-busy="true" aria-live="polite">
+              {Array.from({ length: 2 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="flex animate-pulse gap-3 border-b border-border/30 pb-1.5 last:border-b-0"
+                >
+                  <div className="h-3 w-20 shrink-0 rounded bg-bg-subtle" />
+                  <div className="h-3 flex-1 rounded bg-bg-subtle" />
+                </div>
+              ))}
+            </div>
+          </div>
         ) : versions.length === 0 ? (
           <div className="p-3 text-xs text-fg-muted">No versions.</div>
         ) : (
