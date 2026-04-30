@@ -225,7 +225,12 @@ export default function ProductionActualPage() {
   const [scrapQty, setScrapQty] = useState<string>("0");
   const [outputUom, setOutputUom] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
-  const [previewExpanded, setPreviewExpanded] = useState<boolean>(false);
+  // Default to expanded so the operator sees expected consumption inline
+  // while entering output_qty / scrap_qty — no extra click required to
+  // verify the BOM × qty math matches expectation. Per S4 research §C
+  // ("Production confirmation: BOM version snapshot UX, computed
+  //  consumption preview"), this is the canonical pattern.
+  const [previewExpanded, setPreviewExpanded] = useState<boolean>(true);
   const [done, setDone] = useState<DoneState | null>(null);
 
   const loading = itemsQuery.isLoading;
