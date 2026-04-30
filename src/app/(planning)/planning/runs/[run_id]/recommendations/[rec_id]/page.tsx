@@ -25,17 +25,53 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Check, X } from "lucide-react";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
 import { ErrorState } from "@/components/feedback/states";
 import { useSession } from "@/lib/auth/session-provider";
+import { cn } from "@/lib/cn";
 import { useRecDetail } from "./_lib/useRecDetail";
 import { RecDetailHeader, RecDetailHeaderSkeleton } from "./_components/RecDetailHeader";
 import { ShortageContext, ShortageContextSkeleton } from "./_components/ShortageContext";
 import { ComponentBreakdown, ComponentBreakdownSkeleton } from "./_components/ComponentBreakdown";
 import { OpenPOsCard, OpenPOsCardSkeleton } from "./_components/OpenPOsCard";
 import { ExceptionsCard } from "./_components/ExceptionsCard";
+
+function genIdempotencyKey(): string {
+  try {
+    return (globalThis as { crypto?: { randomUUID?: () => string } }).crypto
+      ?.randomUUID?.() ?? `rid-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  } catch {
+    return `rid-${Date.now()}-${Math.random().toString(16).slice(2)}`;
+  }
+}
+
+async function postRecAction(
+  recId: string,
+  action: "approve" | "dismiss",
+): Promise<void> {
+  const res = await fetch(
+    `/api/planning/recommendations/${encodeURIComponent(recId)}/${action}`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ idempotency_key: genIdempotencyKey() }),
+    },
+  );
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    let detail = "";
+    try {
+      detail = (JSON.parse(txt) as { detail?: string }).detail ?? "";
+    } catch {
+      /* ignore */
+    }
+    throw new Error(detail || `Could not ${action} this recommendation. Try again.`);
+  }
+}
 
 function fmtDateAgo(iso: string | null): string {
   if (!iso) return "—";
@@ -102,6 +138,7 @@ function SkeletonLayout({ runId }: { runId: string }) {
 export default function RecommendationDrillDownPage() {
   const { session } = useSession();
   const params = useParams();
+  const queryClient = useQueryClient();
   const runId = String(params?.run_id ?? "");
   const recId = String(params?.rec_id ?? "");
 
@@ -109,6 +146,48 @@ export default function RecommendationDrillDownPage() {
     session.role === "planner" || session.role === "admin";
 
   const { data: result, isLoading, isError } = useRecDetail(recId);
+
+  // Loop 10 — inline approve / dismiss. The planner has every input here
+  // to decide (item, qty, MOQ, lead time, components, open POs, exceptions),
+  // so making them go back to the run-detail table to click Approve was
+  // pure friction. Mutations invalidate both rec-detail and run-detail
+  // queries so the parent table reflects the new state immediately.
+  const [actionToast, setActionToast] = useState<{
+    kind: "success" | "error";
+    message: string;
+  } | null>(null);
+
+  const approveMut = useMutation({
+    mutationFn: () => postRecAction(recId, "approve"),
+    onSuccess: () => {
+      setActionToast({ kind: "success", message: "ההמלצה אושרה." });
+      void queryClient.invalidateQueries({ queryKey: ["rec-detail", recId] });
+      void queryClient.invalidateQueries({
+        queryKey: ["planning", "run", runId, "recs"],
+      });
+      window.setTimeout(() => setActionToast(null), 3500);
+    },
+    onError: (err: Error) => {
+      setActionToast({ kind: "error", message: err.message });
+      window.setTimeout(() => setActionToast(null), 6000);
+    },
+  });
+
+  const dismissMut = useMutation({
+    mutationFn: () => postRecAction(recId, "dismiss"),
+    onSuccess: () => {
+      setActionToast({ kind: "success", message: "ההמלצה נדחתה." });
+      void queryClient.invalidateQueries({ queryKey: ["rec-detail", recId] });
+      void queryClient.invalidateQueries({
+        queryKey: ["planning", "run", runId, "recs"],
+      });
+      window.setTimeout(() => setActionToast(null), 3500);
+    },
+    onError: (err: Error) => {
+      setActionToast({ kind: "error", message: err.message });
+      window.setTimeout(() => setActionToast(null), 6000);
+    },
+  });
 
   if (isLoading) {
     return <SkeletonLayout runId={runId} />;
@@ -172,6 +251,8 @@ export default function RecommendationDrillDownPage() {
   const isApprovedAndUnconverted =
     rec.rec_status === "approved" && rec.converted_po_id === null;
   const isProductionRec = rec.rec_type === "production";
+  const isDraft = rec.rec_status === "draft";
+  const isMutating = approveMut.isPending || dismissMut.isPending;
 
   // For production recs, deep-link to /ops/stock/production-actual with
   // item_id + suggested_qty + breadcrumb params. For purchase recs, route
@@ -250,11 +331,36 @@ export default function RecommendationDrillDownPage() {
           )}
         </dl>
 
-        {/* Action buttons — adapts to rec_type:
-            - purchase rec: "צור הזמנת רכש" → /convert flow (existing)
-            - production rec: "פתח טופס דיווח ייצור" → /ops/stock/production-actual
+        {/* Action buttons — adapts to rec_status × rec_type:
+            - draft: "אשר" / "דחה" — inline approve/dismiss (loop 10)
+            - approved purchase: "צור הזמנת רכש" → /convert flow
+            - approved production: "פתח טופס דיווח ייצור" → /ops/stock/production-actual
               with prefilled item_id + suggested_qty + back-chain breadcrumb */}
         <div className="mt-4 flex flex-wrap items-center gap-3">
+          {canExecute && isDraft ? (
+            <>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm gap-1.5"
+                data-testid="rec-detail-approve-btn"
+                disabled={isMutating}
+                onClick={() => approveMut.mutate()}
+              >
+                <Check className="h-3 w-3" strokeWidth={2.5} />
+                {approveMut.isPending ? "מאשר…" : "אשר המלצה"}
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm gap-1.5 text-danger"
+                data-testid="rec-detail-dismiss-btn"
+                disabled={isMutating}
+                onClick={() => dismissMut.mutate()}
+              >
+                <X className="h-3 w-3" strokeWidth={2.5} />
+                {dismissMut.isPending ? "דוחה…" : "דחה"}
+              </button>
+            </>
+          ) : null}
           {canExecute && isApprovedAndUnconverted && !isProductionRec ? (
             <Link
               href={`/planning/runs/${encodeURIComponent(runId)}/recommendations/${encodeURIComponent(recId)}/convert`}
@@ -264,7 +370,7 @@ export default function RecommendationDrillDownPage() {
               צור הזמנת רכש
             </Link>
           ) : null}
-          {canExecute && isProductionRec ? (
+          {canExecute && isProductionRec && rec.rec_status === "approved" ? (
             <Link
               href={productionFormHref}
               className="btn btn-primary btn-sm gap-1.5"
@@ -289,6 +395,21 @@ export default function RecommendationDrillDownPage() {
             </div>
           ) : null}
         </div>
+
+        {actionToast ? (
+          <div
+            className={cn(
+              "mt-3 rounded-md border px-3 py-2 text-xs",
+              actionToast.kind === "success"
+                ? "border-success/40 bg-success-softer text-success-fg"
+                : "border-danger/40 bg-danger-softer text-danger-fg",
+            )}
+            data-testid="rec-detail-action-toast"
+            role="status"
+          >
+            {actionToast.message}
+          </div>
+        ) : null}
       </SectionCard>
 
       {/* 4. Open POs */}
