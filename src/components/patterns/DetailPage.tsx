@@ -284,12 +284,26 @@ export function PendingTabPlaceholder({
 
 export function DetailTabError({
   message,
+  onRetry,
 }: {
   message: string;
+  onRetry?: () => void;
 }): JSX.Element {
   return (
     <SectionCard density="compact" tone="danger">
-      <div className="text-sm text-danger-fg">{message}</div>
+      <div className="rounded border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg">
+        <div className="font-semibold">Could not load this section</div>
+        <div className="mt-1 text-xs">{message}</div>
+        {onRetry ? (
+          <button
+            type="button"
+            onClick={onRetry}
+            className="mt-2 text-xs font-medium text-danger-fg underline hover:no-underline"
+          >
+            Retry
+          </button>
+        ) : null}
+      </div>
     </SectionCard>
   );
 }
@@ -297,7 +311,17 @@ export function DetailTabError({
 export function DetailTabLoading(): JSX.Element {
   return (
     <SectionCard density="compact">
-      <div className="text-sm text-fg-muted">Loading…</div>
+      <div className="space-y-2 py-1" aria-busy="true" aria-live="polite">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div
+            key={i}
+            className="flex animate-pulse gap-3 border-b border-border/30 pb-2 last:border-b-0 last:pb-0"
+          >
+            <div className="h-4 w-32 shrink-0 rounded bg-bg-subtle" />
+            <div className="h-4 flex-1 rounded bg-bg-subtle" />
+          </div>
+        ))}
+      </div>
     </SectionCard>
   );
 }
