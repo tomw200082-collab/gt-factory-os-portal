@@ -458,7 +458,31 @@ export default function ForecastVersionDetailPage() {
   });
 
   if (query.isLoading) {
-    return <div className="p-5 text-xs text-fg-muted">Loading…</div>;
+    return (
+      <>
+        <WorkflowHeader
+          eyebrow="Planner workspace"
+          title="Loading forecast version…"
+          actions={
+            <Link href="/planning/forecast" className="btn btn-sm gap-1.5">
+              <ChevronLeft className="h-3 w-3" strokeWidth={2} /> Back
+            </Link>
+          }
+        />
+        <SectionCard>
+          <div className="space-y-3" aria-busy="true" aria-live="polite">
+            <div className="h-9 w-1/3 animate-pulse rounded bg-bg-subtle" />
+            <div className="h-5 w-2/3 animate-pulse rounded bg-bg-subtle" />
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <div className="h-9 w-full animate-pulse rounded bg-bg-subtle" />
+              <div className="h-9 w-full animate-pulse rounded bg-bg-subtle" />
+              <div className="h-9 w-full animate-pulse rounded bg-bg-subtle" />
+            </div>
+            <div className="h-32 w-full animate-pulse rounded bg-bg-subtle" />
+          </div>
+        </SectionCard>
+      </>
+    );
   }
   if (query.isError || !version) {
     return (
@@ -474,10 +498,18 @@ export default function ForecastVersionDetailPage() {
         />
         <SectionCard>
           <div
-            className="text-xs text-danger-fg"
+            className="rounded border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg"
             data-testid="forecast-detail-error"
           >
-            Could not load this forecast version. Check your connection and try refreshing, or go back to the forecast list.
+            <div className="font-semibold">Could not load this forecast version</div>
+            <div className="mt-1 text-xs">Check your connection and try refreshing, or go back to the forecast list.</div>
+            <button
+              type="button"
+              onClick={() => void query.refetch()}
+              className="mt-2 text-xs font-medium text-danger-fg underline hover:no-underline"
+            >
+              Retry
+            </button>
           </div>
         </SectionCard>
       </>
