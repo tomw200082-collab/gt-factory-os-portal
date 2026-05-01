@@ -34,6 +34,7 @@ import { ErrorState } from "@/components/feedback/states";
 import { useSession } from "@/lib/auth/session-provider";
 import { cn } from "@/lib/cn";
 import { useRecDetail } from "./_lib/useRecDetail";
+import type { LeadTimeSource } from "./_lib/types";
 import { RecDetailHeader, RecDetailHeaderSkeleton } from "./_components/RecDetailHeader";
 import { ShortageContext, ShortageContextSkeleton } from "./_components/ShortageContext";
 import { ComponentBreakdown, ComponentBreakdownSkeleton } from "./_components/ComponentBreakdown";
@@ -128,6 +129,18 @@ function fmtQty(s: string): string {
   const n = parseQty(s);
   return Number.isInteger(n) ? n.toFixed(0) : n.toFixed(2).replace(/\.?0+$/, "");
 }
+
+// DTO v1.1 (signal #21) — friendly chip labels for lead_time_source. Keys
+// match LeadTimeSourceValues const exhaustively (Record<…> enforces this at
+// build time). 'unknown' is a normal terminal state — render the chip in a
+// soft warning tone to flag the missing provenance for data-cleanup, not as
+// an error.
+const LEAD_TIME_SOURCE_LABELS: Record<LeadTimeSource, string> = {
+  supplier_items: "Supplier-defined",
+  supplier_default: "Supplier default",
+  recommendation_snapshot: "Run snapshot",
+  unknown: "Source unknown",
+};
 
 function SkeletonLayout({ runId }: { runId: string }) {
   return (
@@ -403,16 +416,22 @@ export default function RecommendationDrillDownPage() {
               <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                 Lead time
               </dt>
-              {/* The current RecommendationDetailResponse DTO does not
-                  include a lead_time_source field — we cannot tell whether
-                  this number came from supplier_items, item override, or a
-                  default. T1 surfaces the gap honestly with a caveat instead
-                  of implying false precision. Add to W1 contract backlog
-                  (W1-FOLLOWUP-REC-DETAIL-LEAD-TIME-SOURCE). */}
-              <dd className="mt-0.5 text-xs text-fg-muted">
-                {rec.lead_time_days}{" "}
-                {rec.lead_time_days === 1 ? "day" : "days"}{" "}
-                <span className="text-fg-subtle">(source unknown)</span>
+              {/* DTO v1.1 (signal #21) lead_time_source consumption: shows a
+                  small chip naming the resolution path. Cascade priority is
+                  supplier_items → supplier_default → recommendation_snapshot
+                  → 'unknown' fallback. Closes W2 cycle 3 marker
+                  W1-FOLLOWUP-REC-DETAIL-LEAD-TIME-SOURCE. */}
+              <dd className="mt-0.5 text-xs text-fg-muted flex flex-wrap items-center gap-1.5">
+                <span className="font-mono tabular-nums text-fg-strong">
+                  {rec.lead_time_days}
+                </span>
+                <span>{rec.lead_time_days === 1 ? "day" : "days"}</span>
+                <Badge
+                  tone={rec.lead_time_source === "unknown" ? "warning" : "info"}
+                  variant="soft"
+                >
+                  {LEAD_TIME_SOURCE_LABELS[rec.lead_time_source]}
+                </Badge>
               </dd>
             </div>
           )}
@@ -614,11 +633,27 @@ export default function RecommendationDrillDownPage() {
             <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
               Source forecast
             </dt>
-            {/* Forecast version that drove this rec is a contract gap — not in the
-                current RecommendationDetailResponse DTO. T1 surfaces the gap honestly
-                rather than hiding it. Add to W1 contract backlog
-                (W1-FOLLOWUP-REC-DETAIL-FORECAST-VERSION). */}
-            <dd className="mt-0.5 text-fg-muted text-xs">Not available — W1 follow-up</dd>
+            {/* DTO v1.1 (signal #21) forecast_version_id consumption: when
+                non-null, surfaces the truncated id with a deep link into the
+                forecast detail page; when null, shows a small caveat that
+                this run was not tied to a forecast (e.g., orders-only or run
+                executed before the snapshot link landed — ~39 of 98 live runs
+                per W1 cycle 4 distribution check). Closes W2 cycle 3 marker
+                W1-FOLLOWUP-REC-DETAIL-FORECAST-VERSION. */}
+            {rec.forecast_version_id !== null ? (
+              <dd className="mt-0.5 text-xs text-fg-muted inline-flex items-center gap-1">
+                <Link
+                  href={`/planning/forecast/${encodeURIComponent(rec.forecast_version_id)}`}
+                  className="font-mono text-accent hover:underline"
+                  data-testid="rec-detail-forecast-version-link"
+                >
+                  {rec.forecast_version_id.slice(0, 8)}…
+                </Link>
+                <span className="text-fg-subtle">view forecast</span>
+              </dd>
+            ) : (
+              <dd className="mt-0.5 text-xs text-fg-muted">Not recorded for this run</dd>
+            )}
           </div>
         </dl>
       </SectionCard>

@@ -117,6 +117,104 @@ function fmtQty(s: string, uom: string | null): string {
 }
 
 // ---------------------------------------------------------------------------
+// Variance display helpers — implements the W4 variance display contract
+// (docs/integrations/production_actual_variance_display_contract.md §3 / §4).
+//
+// Single canonical formula, applied identically across every surface:
+//   variance_qty  = output_qty - planned_qty   (NO scrap — CLAUDE.md prod
+//                                               reporting v1 lock)
+//   variance_pct  = variance_qty / planned_qty * 100   (NULL if planned=0)
+//   variance_sign = on_target  if |variance_qty| <= planned_qty * 2%
+//                 | over       if variance_qty >  planned_qty * 2%
+//                 | under      if variance_qty < -planned_qty * 2%
+//
+// The backend (api/src/production-plan/schemas.ts §136-178) already returns
+// pre-computed variance_qty + variance_pct on the completed_actual sub-object
+// — we re-derive variance_sign on display per §3.3 v1 default ±2% band.
+// We trust the backend's pre-computed numerics (qty_8dp string serialization)
+// and avoid duplicating the divide-by-zero defense.
+//
+// On_target band tolerance is 2% per §3.3. Reversible: change the literal.
+// ---------------------------------------------------------------------------
+const VARIANCE_ON_TARGET_THRESHOLD_PCT = 2.0;
+
+type VarianceSign = "on_target" | "over" | "under";
+
+function computeVarianceSign(
+  varianceQtyStr: string,
+  plannedQtyStr: string,
+): VarianceSign {
+  const variance = parseFloat(varianceQtyStr);
+  const planned = parseFloat(plannedQtyStr);
+  if (!Number.isFinite(variance) || !Number.isFinite(planned)) {
+    return "on_target";
+  }
+  // §3.5: planned=0 unreachable per CHECK; defensively treat any non-zero
+  // output as 'over' (over-production against zero plan).
+  if (planned <= 0) {
+    return variance === 0 ? "on_target" : "over";
+  }
+  const band = Math.abs(planned) * (VARIANCE_ON_TARGET_THRESHOLD_PCT / 100);
+  if (variance > band) return "over";
+  if (variance < -band) return "under";
+  return "on_target";
+}
+
+function fmtVarianceQty(varianceQtyStr: string): string {
+  // Format the variance qty with explicit sign prefix and trimmed precision.
+  // Backend returns qty_8dp text; mirror parseFloat path used by fmtQty for
+  // numerical consistency.
+  const n = parseFloat(varianceQtyStr);
+  if (!Number.isFinite(n)) return varianceQtyStr;
+  if (n === 0) return "0";
+  const abs = Math.abs(n);
+  const formatted = Number.isInteger(abs)
+    ? abs.toFixed(0)
+    : abs.toFixed(2).replace(/\.?0+$/, "");
+  return n > 0 ? `+${formatted}` : `−${formatted}`;
+}
+
+function fmtVariancePct(variancePctStr: string | null): string {
+  // §3.5: NULL when planned_qty was 0 (unreachable per CHECK). Render em-dash
+  // so the percent column never crashes.
+  if (variancePctStr === null) return "—";
+  const n = parseFloat(variancePctStr);
+  if (!Number.isFinite(n)) return "—";
+  if (n === 0) return "0.0%";
+  const abs = Math.abs(n);
+  return `${n > 0 ? "+" : "−"}${abs.toFixed(1)}%`;
+}
+
+// W4 contract §4.1.2 — sign-badge tone + icon. Both 'over' and 'under' use
+// the SAME amber/warning tone per §A13 row 5 (variance is a visibility
+// metric, not a quality grade — neither over nor under is "bad enough to
+// render red"). 'on_target' uses success/green.
+const VARIANCE_SIGN_TONE: Record<VarianceSign, "success" | "warning"> = {
+  on_target: "success",
+  over: "warning",
+  under: "warning",
+};
+const VARIANCE_SIGN_ICON: Record<VarianceSign, string> = {
+  on_target: "✓",
+  over: "↑",
+  under: "↓",
+};
+const VARIANCE_SIGN_LABEL: Record<VarianceSign, string> = {
+  on_target: "On target",
+  over: "Over",
+  under: "Under",
+};
+
+// Tooltip / disclaimer copy. CLAUDE.md production reporting v1 citation per
+// W4 contract §3.4 + §7.1: scrap is excluded from the variance numerator on
+// purpose — output_qty is good-output, scrap is loss.
+const VARIANCE_TOOLTIP =
+  "Variance compares output to planned quantity. " +
+  "It does not include scrap (per the production reporting v1 model: " +
+  "system computes consumption from BOM; scrap is loss, not output). " +
+  "Stock has already been updated by the production report.";
+
+// ---------------------------------------------------------------------------
 // Items hook (for the manual-add form).
 // ---------------------------------------------------------------------------
 interface ItemRow {
@@ -237,33 +335,77 @@ function PlanRowCard({
         </div>
       </div>
 
-      {/* Done variance */}
+      {/* Done variance — implements W4 variance display contract §4.2.
+          The plan-row variance row when rendered_state='done' shows:
+            - output_qty + uom
+            - variance_qty (signed) + variance_pct (signed)
+            - variance_sign chip (on_target | over | under) per ±2% band
+          Tooltip (title attribute) cites the CLAUDE.md production reporting
+          v1 lock: variance excludes scrap.
+          The backend pre-computes variance_qty + variance_pct on the
+          completed_actual sub-object (api/src/production-plan/schemas.ts
+          §136-178); we re-derive variance_sign on display per §3.3.
+          GAP-VAR-2 / VAR-3 / VAR-4 from the contract are all closed: the
+          response shape includes completed_actual with output_qty, scrap_qty,
+          output_uom, variance_qty, variance_pct. */}
       {isDone && plan.completed_actual ? (
-        <div className="rounded border border-success/30 bg-success-softer/40 p-2 text-xs">
-          <div className="font-medium text-success-fg">
-            Completed in actual production
-          </div>
-          <div className="mt-0.5 text-fg-muted">
-            Produced{" "}
-            {fmtQty(
-              plan.completed_actual.output_qty,
-              plan.completed_actual.output_uom,
-            )}
-            {Number(plan.completed_actual.variance_qty) !== 0 ? (
-              <span
-                className={cn(
-                  "ml-2 font-mono tabular-nums",
-                  Number(plan.completed_actual.variance_qty) > 0
-                    ? "text-success-fg"
-                    : "text-warning-fg",
-                )}
+        (() => {
+          const ca = plan.completed_actual;
+          const sign = computeVarianceSign(ca.variance_qty, plan.planned_qty);
+          const tone = VARIANCE_SIGN_TONE[sign];
+          return (
+            <div
+              className="rounded border border-success/30 bg-success-softer/40 p-2 text-xs"
+              data-testid="plan-row-variance"
+              data-variance-sign={sign}
+            >
+              <div className="font-medium text-success-fg">
+                Completed in actual production
+              </div>
+              <div
+                className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-fg-muted"
+                title={VARIANCE_TOOLTIP}
               >
-                ({Number(plan.completed_actual.variance_qty) > 0 ? "+" : ""}
-                {plan.completed_actual.variance_qty} vs planned)
-              </span>
-            ) : null}
-          </div>
-        </div>
+                <span>
+                  Plan:{" "}
+                  <span className="font-mono tabular-nums text-fg-strong">
+                    {fmtQty(plan.planned_qty, plan.uom)}
+                  </span>
+                </span>
+                <span>
+                  Output:{" "}
+                  <span className="font-mono tabular-nums text-fg-strong">
+                    {fmtQty(ca.output_qty, ca.output_uom)}
+                  </span>
+                </span>
+                <span className="font-mono tabular-nums">
+                  Variance:{" "}
+                  <span
+                    className={cn(
+                      tone === "success" ? "text-success-fg" : "text-warning-fg",
+                    )}
+                  >
+                    {fmtVarianceQty(ca.variance_qty)} {ca.output_uom}
+                    {" "}
+                    ({fmtVariancePct(ca.variance_pct)})
+                  </span>
+                </span>
+                <Badge tone={tone} variant="soft">
+                  <span aria-hidden className="mr-1">
+                    {VARIANCE_SIGN_ICON[sign]}
+                  </span>
+                  {VARIANCE_SIGN_LABEL[sign]}
+                </Badge>
+                {Number(ca.scrap_qty) > 0 ? (
+                  <span className="text-3xs text-fg-subtle">
+                    Scrap reported: {fmtQty(ca.scrap_qty, ca.output_uom)} (excluded
+                    from variance)
+                  </span>
+                ) : null}
+              </div>
+            </div>
+          );
+        })()
       ) : null}
 
       {/* Cancelled reason */}

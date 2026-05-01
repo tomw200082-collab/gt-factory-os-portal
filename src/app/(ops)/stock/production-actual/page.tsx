@@ -229,6 +229,95 @@ function supplyMethodLabel(sm: string | null | undefined): string {
 }
 
 // ---------------------------------------------------------------------------
+// Variance display — implements W4 contract §3 / §4.1 (post-submit
+// confirmation panel). The contract's canonical formula is computed
+// client-side here because POST /api/v1/mutations/production-actuals does
+// NOT echo planned_qty in its response (linked_plan_id is exposed but the
+// plan row itself is not denormalized — GAP-VAR-4 in the contract). The form
+// already has the linked plan in state via `linkedPlan` (the row the user
+// selected pre-submit), which carries planned_qty + uom + plan_date.
+//
+// Numbers stay bit-identical to the /planning/production-plan plan-row
+// display (W4 contract §10.1 acceptance criterion) because both surfaces
+// derive from the same inputs (planned_qty + output_qty) using the same
+// formula. The plan-row variance is pre-computed by the backend and read
+// from completed_actual.variance_qty / variance_pct; here we re-derive
+// because the production_actual response shape predates GAP-VAR-2 closure.
+//
+// CLAUDE.md production reporting v1 lock: scrap is excluded from variance.
+// ---------------------------------------------------------------------------
+const VARIANCE_ON_TARGET_THRESHOLD_PCT = 2.0;
+
+type VarianceSign = "on_target" | "over" | "under";
+
+interface VarianceComputation {
+  variance_qty: number;
+  variance_pct: number | null;
+  variance_sign: VarianceSign;
+}
+
+function computeVariance(
+  outputQtyStr: string,
+  plannedQtyStr: string,
+): VarianceComputation {
+  const output = parseFloat(outputQtyStr);
+  const planned = parseFloat(plannedQtyStr);
+  if (!Number.isFinite(output) || !Number.isFinite(planned)) {
+    return { variance_qty: 0, variance_pct: null, variance_sign: "on_target" };
+  }
+  const variance = output - planned;
+  // §3.5: planned=0 unreachable per CHECK; defensively map to NULL pct.
+  if (planned <= 0) {
+    return {
+      variance_qty: variance,
+      variance_pct: null,
+      variance_sign: variance === 0 ? "on_target" : "over",
+    };
+  }
+  const pct = (variance / planned) * 100;
+  const band = Math.abs(planned) * (VARIANCE_ON_TARGET_THRESHOLD_PCT / 100);
+  const sign: VarianceSign =
+    variance > band ? "over" : variance < -band ? "under" : "on_target";
+  return { variance_qty: variance, variance_pct: pct, variance_sign: sign };
+}
+
+function fmtVarianceQty(n: number): string {
+  if (n === 0) return "0";
+  const abs = Math.abs(n);
+  const formatted = Number.isInteger(abs)
+    ? abs.toFixed(0)
+    : abs.toFixed(2).replace(/\.?0+$/, "");
+  return n > 0 ? `+${formatted}` : `−${formatted}`;
+}
+
+function fmtVariancePct(n: number | null): string {
+  if (n === null || !Number.isFinite(n)) return "—";
+  if (n === 0) return "0.0%";
+  const abs = Math.abs(n);
+  return `${n > 0 ? "+" : "−"}${abs.toFixed(1)}%`;
+}
+
+const VARIANCE_SIGN_LABEL: Record<VarianceSign, string> = {
+  on_target: "On target",
+  over: "Over",
+  under: "Under",
+};
+const VARIANCE_SIGN_ICON: Record<VarianceSign, string> = {
+  on_target: "✓",
+  over: "↑",
+  under: "↓",
+};
+
+// W4 §4.1 disclaimer copy. Mandatory on the post-submit confirmation per
+// §A13 row 10. Cites the CLAUDE.md production reporting v1 lock so an
+// operator who reads it understands why scrap is not in the formula.
+const VARIANCE_DISCLAIMER =
+  "Variance compares output to planned quantity. It does not include scrap " +
+  "(per the production reporting v1 model: output is the good-output metric, " +
+  "scrap is loss). The variance is for visibility only and does not affect " +
+  "stock — your production has been posted and stock is updated.";
+
+// ---------------------------------------------------------------------------
 // Reason-code → English short-label map. Keyed by ProductionActualConflictReason
 // from api/src/production-actuals/schemas.ts. Each label is the operator-facing
 // one-liner; longer detail (when admin) shows below in mono.
@@ -1027,8 +1116,90 @@ export default function ProductionActualPage() {
                   <span className="font-mono">
                     {done.committed.linked_plan_id}
                   </span>
+                  {linkedPlan ? (
+                    <span className="text-fg-muted">
+                      {" "}· {fmtPlanDate(linkedPlan.plan_date)} ·{" "}
+                      {linkedPlan.item_name ?? linkedPlan.item_id}
+                    </span>
+                  ) : null}
                 </div>
               ) : null}
+
+              {/* W4 contract §4.1 — variance row on confirmation panel.
+                  Shown only when the submission was linked to a plan AND
+                  the form still has the linked plan in state (carries
+                  planned_qty + uom). On no-link submits (§4.1.1) the
+                  variance row is omitted entirely. */}
+              {done.committed.linked_plan_id && linkedPlan ? (
+                (() => {
+                  const v = computeVariance(
+                    done.committed.output_qty,
+                    linkedPlan.planned_qty,
+                  );
+                  const isOnTarget = v.variance_sign === "on_target";
+                  return (
+                    <div
+                      className={
+                        "mt-2 rounded border px-3 py-2 " +
+                        (isOnTarget
+                          ? "border-success/30 bg-success-softer/30"
+                          : "border-warning/40 bg-warning-softer/30")
+                      }
+                      data-testid="production-actual-variance"
+                      data-variance-sign={v.variance_sign}
+                    >
+                      <div
+                        className="flex flex-wrap items-center gap-x-3 gap-y-1"
+                        title={VARIANCE_DISCLAIMER}
+                      >
+                        <span>
+                          Plan:{" "}
+                          <span className="font-mono tabular-nums">
+                            {linkedPlan.planned_qty} {linkedPlan.uom}
+                          </span>
+                        </span>
+                        <span>
+                          Output:{" "}
+                          <span className="font-mono tabular-nums">
+                            {done.committed.output_qty}{" "}
+                            {done.committed.output_uom}
+                          </span>
+                        </span>
+                        <span className="font-mono tabular-nums">
+                          Variance:{" "}
+                          <span
+                            className={
+                              isOnTarget ? "text-success-fg" : "text-warning-fg"
+                            }
+                          >
+                            {fmtVarianceQty(v.variance_qty)}{" "}
+                            {done.committed.output_uom}
+                            {" "}
+                            ({fmtVariancePct(v.variance_pct)})
+                          </span>
+                        </span>
+                        <span
+                          className={
+                            "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-3xs font-semibold uppercase " +
+                            (isOnTarget
+                              ? "bg-success-softer text-success-fg"
+                              : "bg-warning-softer text-warning-fg")
+                          }
+                        >
+                          <span aria-hidden>
+                            {VARIANCE_SIGN_ICON[v.variance_sign]}
+                          </span>
+                          {VARIANCE_SIGN_LABEL[v.variance_sign]}
+                        </span>
+                      </div>
+                      <div className="mt-1 text-3xs opacity-75">
+                        {VARIANCE_DISCLAIMER}
+                      </div>
+                    </div>
+                  );
+                })()
+              ) : null}
+
               <div className="font-mono text-3xs opacity-80">
                 ref: {done.committed.submission_id}
               </div>
