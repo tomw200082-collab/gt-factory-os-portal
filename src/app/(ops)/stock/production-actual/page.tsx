@@ -1,42 +1,55 @@
-﻿"use client";
+"use client";
 
-// Deep-link integration with planning recommendations:
+// Deep-link integration with planning recommendations and Daily Production Plan:
 // /ops/stock/production-actual?item_id=<id>&suggested_qty=<n>&from_rec=<rec_id>&from_run=<run_id>
-// — item_id pre-selects the producible item dropdown
-// — suggested_qty pre-fills the output_qty field (operator can override)
-// — from_rec / from_run surface a small "this run is authorized by..." breadcrumb
-//   so the operator sees the chain back to the planning run that triggered it.
-// All four params are optional and graceful: form works identically without them.
+//   — item_id pre-selects the producible item dropdown
+//   — suggested_qty pre-fills the output_qty field (operator can override)
+//   — from_rec / from_run surface a "this run is authorized by..." breadcrumb
+//
+// /ops/stock/production-actual?from_plan_id=<plan_id>
+//   — pre-selects item from production_plan.item_id
+//   — pre-fills output_qty from production_plan.planned_qty
+//   — submits with body.from_plan_id; on success, the plan flips to status=done
+//   — handles 4 plan conflict codes (PLAN_NOT_FOUND, PLAN_ITEM_MISMATCH,
+//     PLAN_ALREADY_COMPLETED, PLAN_CANCELLED) with re-submit-without-link
+//     fallbacks (Tom-locked conflict UX per W1 checkpoint).
+// All params are optional; the form works identically without them.
 
 // ---------------------------------------------------------------------------
 // Production Actual — operator form (live API backed).
 //
-// Endgame Phase B2 (crystalline-drifting-dusk §B.B2):
-//   - CLAUDE.md §"Production reporting v1" locked semantics:
-//       output_qty + scrap_qty + notes only; system computes standard
-//       consumption from pinned BOM version; NO manual per-component actual.
-//   - Step 1 — Pick item: dropdown of items filtered to
-//       supply_method ∈ {MANUFACTURED, REPACK} (client-side filter against
-//       GET /api/items?status=ACTIVE&limit=1000). Selecting item and
-//       clicking "Open" calls GET /api/production-actuals/open?item_id=<id>
-//       which returns pinned bom_version_id + bom_lines snapshot.
-//   - Step 2 — Enter qty + submit: form shows pinned BOM version id +
-//       expandable "expected consumption preview" panel that multiplies
-//       bom_lines × (output_qty + scrap_qty) / bom_final_output_qty on the
-//       client (purely informational; server re-explodes authoritatively).
-//       Submit POSTs to /api/production-actuals with bom_version_id_pinned
-//       carried from Step 1.
-//   - 409 conflict handling:
-//       STALE_BOM_VERSION -> "BOM changed while this form was open" + restart
-//       WRONG_SUPPLY_METHOD -> "This item is not manufactured/repacked"
-//       UOM_MISMATCH / other -> show reason_code + detail
-//   - Role-gate defense: planner/viewer see the page (middleware allows, but
-//       backend returns 403); happy path is operator + admin.
+// CLAUDE.md §"Production reporting v1" locked semantics:
+//   output_qty + scrap_qty + notes only; system computes standard consumption
+//   from pinned BOM version; NO manual per-component actual.
+//
+// Step 1 — Pick item: dropdown of items filtered to supply_method ∈
+// {MANUFACTURED, REPACK} (client-side filter against
+// GET /api/items?status=ACTIVE&limit=1000). Selecting item and clicking
+// "Open" calls GET /api/production-actuals/open?item_id=<id> which returns
+// pinned bom_version_id + bom_lines snapshot.
+//
+// Step 2 — Enter qty + submit: form shows pinned BOM version id +
+// expandable expected-consumption preview (multiplies bom_lines × (output +
+// scrap) / bom_final_output_qty client-side; server re-explodes
+// authoritatively). Submit POSTs to /api/production-actuals with
+// bom_version_id_pinned carried from Step 1.
+//
+// 409 conflict handling:
+//   STALE_BOM_VERSION   → "BOM changed while form was open" + restart
+//   WRONG_SUPPLY_METHOD → "Item is not manufactured / repacked"
+//   UOM_MISMATCH        → reason map entry + detail
+//   PLAN_NOT_FOUND      → "Linked plan no longer exists. Submit without linking?"
+//   PLAN_ITEM_MISMATCH  → "Plan is for a different product. Submit anyway?"
+//   PLAN_ALREADY_COMPLETED → "Plan was already completed."
+//   PLAN_CANCELLED      → "Plan was cancelled. Submit without linking?"
+//
+// Role gate: operator + admin submit; planner / viewer see read-only banner
+// (middleware allows access, backend returns 403 on submit attempts).
 // ---------------------------------------------------------------------------
 
-import { useMemo, useState, useEffect, useRef } from "react";
+import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
-import { useSearchParams } from "next/navigation";
+import { useSearchParams, useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
@@ -45,10 +58,9 @@ import { useSession } from "@/lib/auth/session-provider";
 // ---------------------------------------------------------------------------
 // Production Actual contract — inlined.
 //
-// Mirror of api/src/production-actuals/schemas.ts. Inlined (rather than
-// imported from src/lib/contracts/production-actual.ts) because that file
-// is held out of the committed tree pending the Gate-3 commit-hygiene
-// tranche. Keep byte-aligned with upstream schema; drift is a bug.
+// Mirror of api/src/production-actuals/schemas.ts. Inlined per repo
+// convention; the portal does not import directly from the backend tree.
+// Keep byte-aligned with upstream schema; drift is a bug.
 // ---------------------------------------------------------------------------
 
 interface BomLineSnapshot {
@@ -81,6 +93,11 @@ interface ProductionActualSubmit {
   scrap_qty: number;
   output_uom: string;
   notes: string | null;
+  // Optional link back to a Daily Production Plan row. When provided, the
+  // backend flips production_plan.completed_submission_id NULL→submission_id
+  // inside the same transaction as the production_actual + ledger writes.
+  // See api/src/production-actuals/schemas.ts ProductionActualSubmitSchema.
+  from_plan_id?: string | null;
 }
 
 interface ProductionActualCommitted {
@@ -102,6 +119,10 @@ interface ProductionActualCommitted {
     stock_ledger_movement_id: string;
   }>;
   idempotent_replay: boolean;
+  // Linked plan id when the submit included a valid from_plan_id; null
+  // otherwise. On idempotent replay this reflects the link state at first
+  // commit (back-looked-up; not re-resolved from the request body).
+  linked_plan_id: string | null;
 }
 
 interface ItemRow {
@@ -116,8 +137,31 @@ interface ItemRow {
 type ListEnvelope<T> = { rows: T[]; count: number };
 
 // ---------------------------------------------------------------------------
-// History row — mirrors GET /api/v1/queries/production-actuals response shape
-// (W1 backend; being deployed in parallel by W1).
+// Production plan row — mirror of api/src/production-plan/schemas.ts.
+// We only need the fields we actually consume from the prefill query.
+// ---------------------------------------------------------------------------
+interface ProductionPlanRow {
+  plan_id: string;
+  plan_date: string;
+  item_id: string;
+  item_name: string | null;
+  planned_qty: string;
+  uom: string;
+  status: "planned" | "cancelled";
+  rendered_state: "planned" | "done" | "cancelled";
+  bom_version_id_pinned: string | null;
+  bom_version_label: string | null;
+  completed_submission_id: string | null;
+}
+
+interface ListProductionPlanResponse {
+  rows: ProductionPlanRow[];
+  count: number;
+  as_of: string;
+}
+
+// ---------------------------------------------------------------------------
+// History row — mirrors GET /api/v1/queries/production-actuals.
 // ---------------------------------------------------------------------------
 interface ProductionActualListRow {
   submission_id: string;
@@ -132,9 +176,13 @@ interface ProductionActualListRow {
   consumption_count: number;
 }
 
+// ---------------------------------------------------------------------------
+// Formatting helpers — English / LTR locale forced for date output to
+// prevent the Hebrew-month abbreviation regression cited in §8 of the audit.
+// ---------------------------------------------------------------------------
 function fmtDate(iso: string): string {
   try {
-    return new Date(iso).toLocaleString(undefined, {
+    return new Date(iso).toLocaleString("en-US", {
       year: "numeric",
       month: "short",
       day: "2-digit",
@@ -143,6 +191,20 @@ function fmtDate(iso: string): string {
     });
   } catch {
     return iso;
+  }
+}
+
+function fmtPlanDate(ymd: string): string {
+  // Plan dates are YYYY-MM-DD strings; render as "May 1, 2026" en-US locale.
+  try {
+    const d = new Date(ymd + "T00:00:00");
+    return d.toLocaleDateString("en-US", {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+    });
+  } catch {
+    return ymd;
   }
 }
 
@@ -159,27 +221,49 @@ function newIdempotencyKey(): string {
   return `pa_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 }
 
-function supplyMethodHebrew(sm: string | null | undefined): string {
-  if (sm === "MANUFACTURED") return "פריט ייצור";
-  if (sm === "REPACK") return "פריט אריזה מחדש";
-  if (sm === "BOUGHT_FINISHED") return "פריט מוגמר לרכישה";
-  return "פריט לא מזוהה";
+function supplyMethodLabel(sm: string | null | undefined): string {
+  if (sm === "MANUFACTURED") return "Manufactured";
+  if (sm === "REPACK") return "Repack";
+  if (sm === "BOUGHT_FINISHED") return "Bought finished";
+  return "Unknown supply method";
 }
 
-const REASON_CODE_HEBREW: Record<string, string> = {
-  STALE_BOM_VERSION: "ה-BOM של הפריט עודכן לאחר פתיחת הטופס. סגור ופתח מחדש כדי להצמיד את הגרסה החדשה.",
-  WRONG_SUPPLY_METHOD: "הפריט אינו פריט ייצור או אריזה מחדש — לא ניתן לדווח עליו דרך טופס זה.",
-  UOM_MISMATCH: "יחידת המידה שהוזנה אינה תואמת לפריט. בדוק את שדה יחידת המידה ונסה שוב.",
-  IDEMPOTENCY_KEY_REUSED: "הדיווח הזה נשלח כבר. אם הדיווח לא נראה לך מחובר, פתח מחדש את הטופס.",
+// ---------------------------------------------------------------------------
+// Reason-code → English short-label map. Keyed by ProductionActualConflictReason
+// from api/src/production-actuals/schemas.ts. Each label is the operator-facing
+// one-liner; longer detail (when admin) shows below in mono.
+// ---------------------------------------------------------------------------
+const REASON_CODE_LABELS: Record<string, string> = {
+  ITEM_NOT_FOUND: "Item not found in master data.",
+  ITEM_INACTIVE: "Item is inactive — production cannot post against it.",
+  WRONG_SUPPLY_METHOD:
+    "This item is not manufactured or repacked. Production reports do not apply.",
+  NO_BOM_HEAD: "No active BOM is configured for this item.",
+  NO_ACTIVE_BOM_VERSION: "Item has no active BOM version. Configure one before reporting production.",
+  STALE_BOM_VERSION:
+    "The BOM was updated since this form opened. Reopen the form to pin the new version.",
+  UOM_MISMATCH:
+    "The unit of measure does not match the item. Check the UoM field and resubmit.",
+  UNIT_NOT_FOUND: "The unit of measure code is not recognized.",
+  IDEMPOTENCY_KEY_REUSED:
+    "This submission was already received. If you do not see it linked, reopen the form.",
+  NO_BOM_LINES: "The pinned BOM has no component lines. Configure the BOM before reporting production.",
+  PLAN_NOT_FOUND: "The linked plan no longer exists.",
+  PLAN_ITEM_MISMATCH: "This plan is for a different product.",
+  PLAN_ALREADY_COMPLETED: "This plan was already completed.",
+  PLAN_CANCELLED: "This plan was cancelled.",
 };
-function reasonCodeMessageHebrew(reason: string): string {
-  return REASON_CODE_HEBREW[reason] ?? `הדיווח נדחה. קוד שגיאה: ${reason}. פנה למנהל המערכת.`;
+
+function reasonCodeLabel(reason: string): string {
+  return REASON_CODE_LABELS[reason] ?? `Submission rejected. Code: ${reason}.`;
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url, { headers: { Accept: "application/json" } });
   if (!res.ok) {
-    throw new Error(`Could not load data (HTTP ${res.status}). Check your connection and try refreshing.`);
+    throw new Error(
+      `Could not load data (HTTP ${res.status}). Check your connection and try again.`,
+    );
   }
   return (await res.json()) as T;
 }
@@ -189,6 +273,15 @@ interface DoneState {
   kind: "success" | "error" | "stale";
   message: string;
   detail?: string;
+  // Plan-conflict variants surface inline retry-without-link buttons.
+  planConflict?:
+    | "PLAN_NOT_FOUND"
+    | "PLAN_ITEM_MISMATCH"
+    | "PLAN_ALREADY_COMPLETED"
+    | "PLAN_CANCELLED";
+  // Persisted committed response (for the success panel only).
+  committed?: ProductionActualCommitted;
+  committedItemName?: string;
 }
 
 // Decimal-string arithmetic helpers (keep server-side precision intact for
@@ -205,8 +298,10 @@ function stringDiv(num: string, denom: string, prodQty: number): string {
 export default function ProductionActualPage() {
   const { session } = useSession();
   const canSubmit = session.role === "operator" || session.role === "admin";
+  const isAdmin = session.role === "admin";
 
   const queryClient = useQueryClient();
+  const router = useRouter();
 
   const historyQuery = useQuery<ListEnvelope<ProductionActualListRow>>({
     queryKey: ["production-actuals", "history"],
@@ -242,14 +337,66 @@ export default function ProductionActualPage() {
       .sort((a, b) => a.item_name.localeCompare(b.item_name));
   }, [itemsQuery.data]);
 
-  // Query-string-driven deep-link prefill from planning recommendations.
-  // Read once on mount and apply ONLY if the corresponding state field is
-  // still empty (does not stomp manually-typed values on URL changes).
+  // Query-string-driven deep-link prefill from planning recommendations OR
+  // Daily Production Plan board. Read once on mount; do not stomp manually
+  // typed values on subsequent re-renders.
   const searchParams = useSearchParams();
   const initialItemId = searchParams?.get("item_id") ?? "";
   const initialSuggestedQty = searchParams?.get("suggested_qty") ?? "";
   const fromRecId = searchParams?.get("from_rec") ?? null;
   const fromRunId = searchParams?.get("from_run") ?? null;
+  const fromPlanIdParam = searchParams?.get("from_plan_id") ?? null;
+
+  // Live state for the plan link. Starts at the URL value; cleared by the
+  // user via "Submit without linking" buttons on PLAN_* conflicts.
+  const [fromPlanId, setFromPlanId] = useState<string | null>(fromPlanIdParam);
+
+  // Fetch the linked plan (if any) so we can show the operator the plan
+  // context up-front and prefill item + qty. We use the LIST endpoint with
+  // a wide window because there is no GET-by-id endpoint; we filter
+  // client-side. Window = today − 7d to today + 90d (covers re-runs of
+  // older plans + the 90-day window cap on the API).
+  const planQueryWindow = useMemo(() => {
+    const today = new Date();
+    const back = new Date(today);
+    back.setDate(today.getDate() - 7);
+    const fwd = new Date(today);
+    fwd.setDate(today.getDate() + 90);
+    const ymd = (d: Date) =>
+      `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+    return { from: ymd(back), to: ymd(fwd) };
+  }, []);
+
+  const planQuery = useQuery<ListProductionPlanResponse>({
+    queryKey: [
+      "production-plan",
+      "by-id",
+      fromPlanId,
+      planQueryWindow.from,
+      planQueryWindow.to,
+    ],
+    queryFn: () =>
+      fetchJson(
+        `/api/production-plan?from=${encodeURIComponent(planQueryWindow.from)}&to=${encodeURIComponent(planQueryWindow.to)}&include_completed=true`,
+      ),
+    enabled: Boolean(fromPlanId),
+    staleTime: 60_000,
+    retry: false,
+  });
+
+  const linkedPlan = useMemo<ProductionPlanRow | null>(() => {
+    if (!fromPlanId) return null;
+    const rows = planQuery.data?.rows ?? [];
+    return rows.find((r) => r.plan_id === fromPlanId) ?? null;
+  }, [fromPlanId, planQuery.data]);
+
+  // Derived initial qty: when the operator landed via from_plan_id and the
+  // plan is found, the planned_qty wins over an explicitly passed
+  // ?suggested_qty (the plan is the more authoritative source).
+  const planSuggestedQty =
+    linkedPlan && linkedPlan.rendered_state === "planned"
+      ? linkedPlan.planned_qty
+      : null;
 
   const [selectedItemId, setSelectedItemId] = useState<string>(initialItemId);
   const [phase, setPhase] = useState<Phase>("pick");
@@ -260,50 +407,85 @@ export default function ProductionActualPage() {
   const [outputQty, setOutputQty] = useState<string>(initialSuggestedQty);
   const [scrapQty, setScrapQty] = useState<string>("0");
 
-  // One-shot apply of URL-driven prefill. Once the items query lands AND
-  // the URL carried an item_id, validate that the item is producible (the
-  // form rejects BOUGHT_FINISHED upstream so we don't want a deep-link
-  // landing in a state that will 409 on submit). If the URL item_id isn't
-  // valid, surface a small inline notice and clear the prefilled state so
-  // the operator picks manually.
-  const prefillAppliedRef = useRef(false);
+  // Apply the plan-derived prefill once the plan query lands. This runs
+  // separately from the items-prefill effect so we don't race the two
+  // queries against each other.
+  const planPrefillAppliedRef = useRef(false);
+  useEffect(() => {
+    if (planPrefillAppliedRef.current) return;
+    if (!fromPlanId) {
+      planPrefillAppliedRef.current = true;
+      return;
+    }
+    if (planQuery.isLoading || planQuery.isError) return;
+    if (!linkedPlan) {
+      // Plan not in the window — surface inline below; do not stomp item.
+      planPrefillAppliedRef.current = true;
+      return;
+    }
+    // Prefer plan.item_id over URL ?item_id= when the two disagree.
+    if (!selectedItemId || selectedItemId !== linkedPlan.item_id) {
+      setSelectedItemId(linkedPlan.item_id);
+    }
+    if (!outputQty && planSuggestedQty) {
+      setOutputQty(planSuggestedQty);
+    }
+    planPrefillAppliedRef.current = true;
+  }, [
+    fromPlanId,
+    planQuery.isLoading,
+    planQuery.isError,
+    linkedPlan,
+    planSuggestedQty,
+    selectedItemId,
+    outputQty,
+  ]);
+
+  // One-shot apply of URL-driven item_id prefill. If items query confirms
+  // the item exists but isn't producible (BOUGHT_FINISHED), surface a small
+  // inline notice and clear so the operator picks manually.
+  const itemPrefillAppliedRef = useRef(false);
   const [prefillRejected, setPrefillRejected] = useState<string | null>(null);
   useEffect(() => {
-    if (prefillAppliedRef.current) return;
+    if (itemPrefillAppliedRef.current) return;
     if (!initialItemId) {
-      prefillAppliedRef.current = true;
+      itemPrefillAppliedRef.current = true;
       return;
     }
     if (itemsQuery.isLoading || itemsQuery.isError) return;
     const match = producibleItems.find((r) => r.item_id === initialItemId);
     if (!match) {
-      // Item exists but isn't producible (BOUGHT_FINISHED), or doesn't
-      // exist at all. Either way, clear the prefill and warn.
       const allItems = itemsQuery.data?.rows ?? [];
       const exists = allItems.find((r) => r.item_id === initialItemId);
       setPrefillRejected(
         exists
-          ? `הפריט ${exists.item_name ?? initialItemId} (${supplyMethodHebrew(exists.supply_method)}) — לא ניתן לדווח עליו דרך טופס ייצור. בחר פריט ייצור או אריזה מחדש.`
-          : `הפריט ${initialItemId} לא נמצא במערכת. בחר פריט מהרשימה.`,
+          ? `Item ${exists.item_name ?? initialItemId} (${supplyMethodLabel(exists.supply_method)}) is not produced or repacked here. Production reports do not apply. Pick a manufactured or repack item from the list.`
+          : `Item ${initialItemId} was not found. Pick an item from the list.`,
       );
       setSelectedItemId("");
       setOutputQty("");
     }
-    prefillAppliedRef.current = true;
-  }, [initialItemId, itemsQuery.isLoading, itemsQuery.isError, itemsQuery.data, producibleItems]);
+    itemPrefillAppliedRef.current = true;
+  }, [
+    initialItemId,
+    itemsQuery.isLoading,
+    itemsQuery.isError,
+    itemsQuery.data,
+    producibleItems,
+  ]);
 
   const [outputUom, setOutputUom] = useState<string>("");
   const [notes, setNotes] = useState<string>("");
   // Default to expanded so the operator sees expected consumption inline
   // while entering output_qty / scrap_qty — no extra click required to
-  // verify the BOM × qty math matches expectation. Per S4 research §C
-  // ("Production confirmation: BOM version snapshot UX, computed
-  //  consumption preview"), this is the canonical pattern.
+  // verify the BOM × qty math matches expectation.
   const [previewExpanded, setPreviewExpanded] = useState<boolean>(true);
   const [done, setDone] = useState<DoneState | null>(null);
 
-  const loading = itemsQuery.isLoading;
-  const loadErr = itemsQuery.error;
+  // Combined loading guard. Pick screen waits for items; once snapshot is
+  // resolved we don't need items anymore.
+  const isLoadingItems = itemsQuery.isLoading;
+  const itemsLoadErr = itemsQuery.error;
 
   async function handleOpen(e: React.FormEvent): Promise<void> {
     e.preventDefault();
@@ -327,12 +509,14 @@ export default function ProductionActualPage() {
         setPreviewExpanded(snap.bom_lines.length > 0);
         setPhase("entering");
       } else {
-        const detail = session.role === "admin"
-          ? (body ? JSON.stringify(body) : `HTTP ${res.status}`)
-          : "פרטי שגיאה זמינים בלוג המערכת.";
+        const detail = isAdmin
+          ? body
+            ? JSON.stringify(body)
+            : `HTTP ${res.status}`
+          : "Error details available in the system log.";
         setDone({
           kind: "error",
-          message: `Failed to open production snapshot (HTTP ${res.status}).`,
+          message: `Could not open the production form (HTTP ${res.status}).`,
           detail,
         });
         setPhase("pick");
@@ -340,191 +524,267 @@ export default function ProductionActualPage() {
     } catch (err) {
       setDone({
         kind: "error",
-        message: "Network error opening snapshot.",
-        detail: session.role === "admin"
-          ? (err instanceof Error ? err.message : String(err))
-          : "פרטי שגיאה זמינים בלוג המערכת.",
+        message: "Network error opening the production form.",
+        detail: isAdmin
+          ? err instanceof Error
+            ? err.message
+            : String(err)
+          : "Error details available in the system log.",
       });
       setPhase("pick");
     }
   }
 
-  async function handleSubmit(e: React.FormEvent): Promise<void> {
-    e.preventDefault();
-    if (!snapshot) return;
-    setDone(null);
-    const outNum = Number(outputQty);
-    const scrapNum = Number(scrapQty || "0");
-    if (!Number.isFinite(outNum) || outNum < 0) {
-      setDone({
-        kind: "error",
-        message: "Output quantity must be a non-negative number.",
-      });
-      return;
-    }
-    if (!Number.isFinite(scrapNum) || scrapNum < 0) {
-      setDone({
-        kind: "error",
-        message: "Scrap quantity must be a non-negative number.",
-      });
-      return;
-    }
-    const envelope: ProductionActualSubmit = {
-      idempotency_key: newIdempotencyKey(),
-      event_at: new Date(eventAt).toISOString(),
-      item_id: snapshot.item_id,
-      bom_version_id_pinned: snapshot.bom_version_id_pinned,
-      output_qty: outNum,
-      scrap_qty: scrapNum,
-      output_uom: outputUom,
-      notes: notes ? notes : null,
-    };
-    setPhase("submitting");
-    try {
-      const res = await fetch("/api/production-actuals", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(envelope),
-      });
-      const body = await res.json().catch(() => null);
-      if (
-        body &&
-        typeof body === "object" &&
-        (body as { status?: unknown }).status === "posted"
-      ) {
-        const committed = body as ProductionActualCommitted;
-        const scrapNote =
-          Number(committed.scrap_qty) > 0
-            ? ` · scrap ${committed.scrap_qty} ${committed.output_uom}`
-            : "";
-        setDone({
-          kind: "success",
-          message: committed.idempotent_replay
-            ? "Production already recorded."
-            : `Posted ${committed.output_qty} ${committed.output_uom} of ${snapshot.item_name}${scrapNote}. ${committed.consumption.length} component${committed.consumption.length !== 1 ? "s" : ""} consumed.`,
-          detail: `ref: ${committed.submission_id}`,
-        });
-        // Refresh the recent-runs history so the new submission appears immediately.
-        void queryClient.invalidateQueries({
-          queryKey: ["production-actuals", "history"],
-        });
-        resetFlow();
-        return;
-      }
-      // 409 INSUFFICIENT_STOCK — check before generic reason_code handler
-      if (
-        res.status === 409 &&
-        body &&
-        typeof body === "object" &&
-        (body as { error?: unknown }).error === "INSUFFICIENT_STOCK"
-      ) {
-        const insuffBody = body as {
-          error: string;
-          message?: string;
-          shortfalls?: Array<{
-            component_id: string;
-            required_qty: string | number;
-            available_qty: string | number;
-          }>;
-        };
-        const shortfallLines = (insuffBody.shortfalls ?? [])
-          .map(
-            (s) =>
-              `${s.component_id}: need ${s.required_qty}, have ${s.available_qty}`,
-          )
-          .join("; ");
+  const submitProductionActual = useCallback(
+    async (overrideFromPlanId: string | null): Promise<void> => {
+      if (!snapshot) return;
+      setDone(null);
+      const outNum = Number(outputQty);
+      const scrapNum = Number(scrapQty || "0");
+      if (!Number.isFinite(outNum) || outNum < 0) {
         setDone({
           kind: "error",
-          message: `Insufficient stock: ${shortfallLines || (insuffBody.message ?? "check component stock levels.")}`,
-          detail: insuffBody.message,
+          message: "Output quantity must be a non-negative number.",
         });
-        setPhase("entering");
         return;
       }
-      // 409 conflicts (other reason_codes)
-      if (
-        res.status === 409 &&
-        body &&
-        typeof body === "object" &&
-        typeof (body as { reason_code?: unknown }).reason_code === "string"
-      ) {
-        const reason = (body as { reason_code: string; detail?: string }).reason_code;
-        const detail = (body as { detail?: string }).detail ?? reason;
-        const adminDetail = session.role === "admin" ? detail : "פרטי שגיאה זמינים בלוג המערכת.";
-        if (reason === "STALE_BOM_VERSION") {
+      if (!Number.isFinite(scrapNum) || scrapNum < 0) {
+        setDone({
+          kind: "error",
+          message: "Scrap quantity must be a non-negative number.",
+        });
+        return;
+      }
+      const envelope: ProductionActualSubmit = {
+        idempotency_key: newIdempotencyKey(),
+        event_at: new Date(eventAt).toISOString(),
+        item_id: snapshot.item_id,
+        bom_version_id_pinned: snapshot.bom_version_id_pinned,
+        output_qty: outNum,
+        scrap_qty: scrapNum,
+        output_uom: outputUom,
+        notes: notes ? notes : null,
+        // Send from_plan_id only when supplied; backend treats undefined and
+        // null identically (both → no plan link).
+        ...(overrideFromPlanId ? { from_plan_id: overrideFromPlanId } : {}),
+      };
+      setPhase("submitting");
+      try {
+        const res = await fetch("/api/production-actuals", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify(envelope),
+        });
+        const body = await res.json().catch(() => null);
+        if (
+          body &&
+          typeof body === "object" &&
+          (body as { status?: unknown }).status === "posted"
+        ) {
+          const committed = body as ProductionActualCommitted;
           setDone({
-            kind: "stale",
-            message: reasonCodeMessageHebrew(reason),
+            kind: "success",
+            message: committed.idempotent_replay
+              ? "Production already recorded."
+              : "Inventory has been updated.",
+            committed,
+            committedItemName: snapshot.item_name,
+          });
+          // Refresh the recent-runs history so the new submission appears.
+          void queryClient.invalidateQueries({
+            queryKey: ["production-actuals", "history"],
+          });
+          // Refresh the plan list so the linked plan flips to done state on
+          // re-navigation back to /planning/production-plan.
+          if (overrideFromPlanId) {
+            void queryClient.invalidateQueries({
+              queryKey: ["production-plan"],
+            });
+          }
+          // Clear inputs but keep the success panel.
+          setSnapshot(null);
+          setOutputQty("");
+          setScrapQty("0");
+          setOutputUom("");
+          setNotes("");
+          setSelectedItemId("");
+          setPhase("done");
+          setEventAt(nowLocalDateTime());
+          setPreviewExpanded(false);
+          return;
+        }
+        // 409 INSUFFICIENT_STOCK — generic shape (legacy, not in the new
+        // ProductionActualConflictReason enum but still possible from the
+        // BOM-explosion path).
+        if (
+          res.status === 409 &&
+          body &&
+          typeof body === "object" &&
+          (body as { error?: unknown }).error === "INSUFFICIENT_STOCK"
+        ) {
+          const insuffBody = body as {
+            error: string;
+            message?: string;
+            shortfalls?: Array<{
+              component_id: string;
+              required_qty: string | number;
+              available_qty: string | number;
+            }>;
+          };
+          const shortfallLines = (insuffBody.shortfalls ?? [])
+            .map(
+              (s) =>
+                `${s.component_id}: need ${s.required_qty}, have ${s.available_qty}`,
+            )
+            .join("; ");
+          setDone({
+            kind: "error",
+            message: `Insufficient stock: ${shortfallLines || (insuffBody.message ?? "check component stock levels.")}`,
+            detail: insuffBody.message,
+          });
+          setPhase("entering");
+          return;
+        }
+        // 409 conflicts (other reason_codes)
+        if (
+          res.status === 409 &&
+          body &&
+          typeof body === "object" &&
+          typeof (body as { reason_code?: unknown }).reason_code === "string"
+        ) {
+          const reason = (body as { reason_code: string; detail?: string })
+            .reason_code;
+          const detail = (body as { detail?: string }).detail ?? reason;
+          const adminDetail = isAdmin
+            ? detail
+            : "Error details available in the system log.";
+          if (reason === "STALE_BOM_VERSION") {
+            setDone({
+              kind: "stale",
+              message: reasonCodeLabel(reason),
+              detail: adminDetail,
+            });
+            setPhase("entering");
+            return;
+          }
+          if (reason === "WRONG_SUPPLY_METHOD") {
+            setDone({
+              kind: "error",
+              message: reasonCodeLabel(reason),
+              detail: adminDetail,
+            });
+            setPhase("pick");
+            return;
+          }
+          // Plan-conflict codes carry a special UX with retry buttons.
+          if (
+            reason === "PLAN_NOT_FOUND" ||
+            reason === "PLAN_ITEM_MISMATCH" ||
+            reason === "PLAN_ALREADY_COMPLETED" ||
+            reason === "PLAN_CANCELLED"
+          ) {
+            setDone({
+              kind: "error",
+              message: reasonCodeLabel(reason),
+              detail: adminDetail,
+              planConflict: reason,
+            });
+            setPhase("entering");
+            return;
+          }
+          setDone({
+            kind: "error",
+            message: reasonCodeLabel(reason),
             detail: adminDetail,
           });
           setPhase("entering");
           return;
         }
-        if (reason === "WRONG_SUPPLY_METHOD") {
+        // 503 break-glass
+        if (res.status === 503) {
           setDone({
             kind: "error",
-            message: reasonCodeMessageHebrew(reason),
-            detail: adminDetail,
+            message:
+              "Break-glass active — platform writes are temporarily paused.",
+            detail: isAdmin
+              ? body
+                ? JSON.stringify(body)
+                : "HTTP 503"
+              : "Error details available in the system log.",
           });
-          setPhase("pick");
+          setPhase("entering");
           return;
         }
+        // 401/403
+        if (res.status === 401 || res.status === 403) {
+          setDone({
+            kind: "error",
+            message:
+              res.status === 401
+                ? "Not authenticated. Please sign in again."
+                : "Not authorized. Operator or admin role is required to submit.",
+            detail: isAdmin
+              ? body
+                ? JSON.stringify(body)
+                : `HTTP ${res.status}`
+              : "Error details available in the system log.",
+          });
+          setPhase("entering");
+          return;
+        }
+        // Fallback
+        const detail = isAdmin
+          ? body
+            ? JSON.stringify(body)
+            : `HTTP ${res.status}`
+          : "Error details available in the system log.";
         setDone({
           kind: "error",
-          message: reasonCodeMessageHebrew(reason),
-          detail: adminDetail,
+          message: "Could not submit. Check your connection and try again.",
+          detail,
         });
         setPhase("entering");
-        return;
-      }
-      // 503 break-glass
-      if (res.status === 503) {
+      } catch (err) {
         setDone({
           kind: "error",
-          message:
-            "Break-glass active — platform writes are temporarily paused.",
-          detail: session.role === "admin"
-            ? (body ? JSON.stringify(body) : "HTTP 503")
-            : "פרטי שגיאה זמינים בלוג המערכת.",
+          message: "Network error submitting the production report.",
+          detail: isAdmin
+            ? err instanceof Error
+              ? err.message
+              : String(err)
+            : "Error details available in the system log.",
         });
         setPhase("entering");
-        return;
       }
-      // 401/403
-      if (res.status === 401 || res.status === 403) {
-        setDone({
-          kind: "error",
-          message:
-            res.status === 401
-              ? "Not authenticated — please sign in again."
-              : "Not authorized — operator or admin role required.",
-          detail: session.role === "admin"
-            ? (body ? JSON.stringify(body) : `HTTP ${res.status}`)
-            : "פרטי שגיאה זמינים בלוג המערכת.",
-        });
-        setPhase("entering");
-        return;
-      }
-      // Fallback
-      const detail = session.role === "admin"
-        ? (body ? JSON.stringify(body) : `HTTP ${res.status}`)
-        : "פרטי שגיאה זמינים בלוג המערכת.";
-      setDone({
-        kind: "error",
-        message: "Could not submit. Check your connection and try again.",
-        detail,
-      });
-      setPhase("entering");
-    } catch (err) {
-      setDone({
-        kind: "error",
-        message: "Network error submitting production actual.",
-        detail: session.role === "admin"
-          ? (err instanceof Error ? err.message : String(err))
-          : "פרטי שגיאה זמינים בלוג המערכת.",
-      });
-      setPhase("entering");
+    },
+    [
+      snapshot,
+      outputQty,
+      scrapQty,
+      outputUom,
+      notes,
+      eventAt,
+      isAdmin,
+      queryClient,
+    ],
+  );
+
+  async function handleSubmit(e: React.FormEvent): Promise<void> {
+    e.preventDefault();
+    void submitProductionActual(fromPlanId);
+  }
+
+  // "Submit without linking" — clears fromPlanId state AND drops the URL
+  // param so a subsequent navigation does not re-resurrect the link.
+  async function handleResubmitWithoutLink(): Promise<void> {
+    setFromPlanId(null);
+    // Drop ?from_plan_id from the URL while preserving everything else.
+    if (typeof window !== "undefined") {
+      const url = new URL(window.location.href);
+      url.searchParams.delete("from_plan_id");
+      router.replace(url.pathname + (url.search || ""));
     }
+    void submitProductionActual(null);
   }
 
   function resetFlow(): void {
@@ -540,7 +800,7 @@ export default function ProductionActualPage() {
   }
 
   function restartFromStep1(): void {
-    // Same as reset but keep the 'done' banner visible (used after
+    // Same as reset but leave the 'done' banner visible (used after
     // STALE_BOM_VERSION so the operator sees why they're restarting).
     setSnapshot(null);
     setOutputQty("");
@@ -556,12 +816,13 @@ export default function ProductionActualPage() {
   // Preview panel — multiplies bom_lines × (output + scrap) / bom_final_output.
   // Server re-explodes authoritatively; this is informational only.
   const previewRows = useMemo(() => {
-    if (!snapshot) return [] as Array<{
-      component_id: string;
-      component_name: string;
-      consumption_preview: string;
-      component_uom: string | null;
-    }>;
+    if (!snapshot)
+      return [] as Array<{
+        component_id: string;
+        component_name: string;
+        consumption_preview: string;
+        component_uom: string | null;
+      }>;
     const productionQty = Number(outputQty || "0") + Number(scrapQty || "0");
     if (!Number.isFinite(productionQty) || productionQty <= 0) return [];
     return snapshot.bom_lines.map((bl) => ({
@@ -576,32 +837,106 @@ export default function ProductionActualPage() {
     }));
   }, [snapshot, outputQty, scrapQty]);
 
+  // Plan-link banner state derived from the live plan query. This is the
+  // small chip at the top of the form that confirms "you are reporting
+  // production against plan X for item Y on date Z".
+  const planLoadFailed =
+    Boolean(fromPlanId) &&
+    !planQuery.isLoading &&
+    (planQuery.isError || (!linkedPlan && (planQuery.data?.rows ?? []).length >= 0 && !planQuery.isLoading));
+
   return (
-    <>
+    <div dir="ltr">
       <WorkflowHeader
         eyebrow="Operator form"
-        title="דיווח ייצור"
-        description="דווח על כמות שיוצרה ופחת. צריכת רכיבים מחושבת אוטומטית לפי ה-BOM הפעיל."
+        title="Production Report"
+        description="Report what you produced and any scrap. The system computes component consumption from the active BOM."
       />
 
+      {/* ======================================================================
+          Plan-link banner — only when ?from_plan_id= was supplied.
+          ====================================================================== */}
+      {fromPlanId ? (
+        <div
+          className="mb-4 rounded-md border border-info/40 bg-info-softer px-4 py-3 text-sm text-info-fg"
+          role="status"
+          data-testid="production-actual-from-plan-banner"
+        >
+          {planQuery.isLoading ? (
+            <div className="flex items-center gap-2">
+              <span className="font-medium">Linked to a production plan</span>
+              <span className="text-xs opacity-80">— loading plan details…</span>
+            </div>
+          ) : linkedPlan ? (
+            <div>
+              <div className="font-medium">
+                Linked to plan {fmtPlanDate(linkedPlan.plan_date)} ·{" "}
+                {linkedPlan.item_name ?? linkedPlan.item_id}
+              </div>
+              <div className="mt-1 text-xs opacity-90">
+                Plan target:{" "}
+                <span className="font-mono tabular-nums">
+                  {linkedPlan.planned_qty} {linkedPlan.uom}
+                </span>
+                {" · "}
+                <Link
+                  href="/planning/production-plan"
+                  className="underline underline-offset-2 hover:no-underline"
+                >
+                  View on the daily plan board
+                </Link>
+              </div>
+              {linkedPlan.rendered_state === "done" ? (
+                <div className="mt-1 text-xs">
+                  This plan is already marked as completed. A new submission
+                  would not link to it.
+                </div>
+              ) : null}
+              {linkedPlan.rendered_state === "cancelled" ? (
+                <div className="mt-1 text-xs">
+                  This plan was cancelled. A new submission would not link to it.
+                </div>
+              ) : null}
+            </div>
+          ) : planLoadFailed ? (
+            <div>
+              <div className="font-medium">
+                Linked plan not found
+              </div>
+              <div className="mt-1 text-xs opacity-90">
+                Plan id {fromPlanId} was not visible in the current window. You
+                can submit without linking, or
+                {" "}
+                <button
+                  type="button"
+                  className="underline underline-offset-2 hover:no-underline"
+                  onClick={() => void planQuery.refetch()}
+                >
+                  retry the lookup
+                </button>
+                .
+              </div>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
       {/* Production-recommendation breadcrumb — appears only when the form
-          was opened via deep-link from a planning recommendation. Gives the
-          operator visible chain back to the run + recommendation that
-          authorized this batch, and a quick path back to the run if they
-          need to change something. */}
-      {(fromRecId || fromRunId) ? (
+          was opened via deep-link from a planning recommendation. */}
+      {fromRecId || fromRunId ? (
         <div
           className="mb-4 flex flex-wrap items-start gap-2 rounded-md border border-info/40 bg-info-softer px-4 py-3 text-sm text-info-fg"
           role="status"
           data-testid="production-actual-from-rec-banner"
         >
-          <div className="flex-1 min-w-0">
+          <div className="min-w-0 flex-1">
             <div className="font-medium">
-              דיווח ייצור מתוך המלצה
+              Reporting against a planning recommendation
             </div>
             <div className="mt-1 text-xs opacity-90">
-              הטופס נפתח מתוך המלצת ייצור. כמות מומלצת מולאה מראש; ניתן לערוך
-              לפני שליחה.
+              The form was opened from a production recommendation. The
+              suggested quantity has been pre-filled; you can adjust before
+              submitting.
             </div>
           </div>
           <div className="flex flex-wrap items-center gap-2">
@@ -611,7 +946,7 @@ export default function ProductionActualPage() {
                 className="text-xs font-medium underline underline-offset-2 hover:no-underline"
                 data-testid="production-actual-from-rec-link"
               >
-                חזור להמלצה →
+                Back to the recommendation →
               </Link>
             ) : null}
             {fromRunId ? (
@@ -619,7 +954,7 @@ export default function ProductionActualPage() {
                 href={`/planning/runs/${encodeURIComponent(fromRunId)}`}
                 className="text-xs font-medium underline underline-offset-2 hover:no-underline"
               >
-                ריצת תכנון →
+                Open the planning run →
               </Link>
             ) : null}
           </div>
@@ -643,9 +978,10 @@ export default function ProductionActualPage() {
           className="mb-4 rounded-md border border-warning/40 bg-warning-softer px-4 py-3 text-sm text-warning-fg"
           role="status"
         >
-          <div className="font-medium">תצוגה בלבד.</div>
+          <div className="font-medium">Read-only.</div>
           <div className="mt-1 text-xs opacity-80">
-            {`התפקיד שלך הוא ${session.role}. רק מפעיל או אדמין יכול לדווח על ייצור.`}
+            Your role is {session.role}. Only operator or admin can submit a
+            production report.
           </div>
         </div>
       ) : null}
@@ -663,11 +999,49 @@ export default function ProductionActualPage() {
           role="status"
         >
           <div className="font-medium">{done.message}</div>
+
+          {/* Success-panel detail — show what was posted, plus contextual
+              follow-up links. */}
+          {done.kind === "success" && done.committed ? (
+            <div className="mt-2 space-y-1 text-xs">
+              <div>
+                Output:{" "}
+                <span className="font-mono tabular-nums">
+                  {done.committed.output_qty} {done.committed.output_uom}
+                </span>
+                {Number(done.committed.scrap_qty) > 0 ? (
+                  <>
+                    {" · scrap "}
+                    <span className="font-mono tabular-nums">
+                      {done.committed.scrap_qty} {done.committed.output_uom}
+                    </span>
+                  </>
+                ) : null}
+                {" · "}
+                {done.committed.consumption.length} component
+                {done.committed.consumption.length !== 1 ? "s" : ""} consumed
+              </div>
+              {done.committed.linked_plan_id ? (
+                <div>
+                  Linked plan:{" "}
+                  <span className="font-mono">
+                    {done.committed.linked_plan_id}
+                  </span>
+                </div>
+              ) : null}
+              <div className="font-mono text-3xs opacity-80">
+                ref: {done.committed.submission_id}
+              </div>
+            </div>
+          ) : null}
+
           {done.detail ? (
             <div className="mt-1 font-mono text-xs opacity-80">
               {done.detail}
             </div>
           ) : null}
+
+          {/* STALE_BOM_VERSION restart action */}
           {done.kind === "stale" ? (
             <div className="mt-2">
               <button
@@ -675,66 +1049,156 @@ export default function ProductionActualPage() {
                 className="btn btn-sm"
                 onClick={restartFromStep1}
               >
-                פתח טופס מחדש
+                Reopen the form
               </button>
             </div>
           ) : null}
-          {/* Loop 9 — close the production-planning loop. After a successful
-              submission that originated from a planning rec, the manager
-              usually wants to go fulfill the next rec from the same run.
-              Surface "Back to planning run" inline in the success banner
-              so it's a single click instead of a scroll-to-top + breadcrumb
-              hunt. The breadcrumb stays in place at the top for general
-              context. */}
-          {done.kind === "success" && fromRunId ? (
+
+          {/* Plan-conflict retry actions — surface a single "Submit without
+              linking" button on PLAN_NOT_FOUND / PLAN_CANCELLED, and a
+              navigation link on PLAN_ALREADY_COMPLETED. PLAN_ITEM_MISMATCH
+              is admin-only because letting an operator override item
+              identity is dangerous; non-admins see the message but no
+              override button. */}
+          {done.planConflict === "PLAN_NOT_FOUND" ||
+          done.planConflict === "PLAN_CANCELLED" ? (
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => void handleResubmitWithoutLink()}
+                data-testid="production-actual-submit-without-link"
+              >
+                Submit without linking
+              </button>
+              <span className="text-xs opacity-80">
+                Re-sends the report without the plan link. The plan will not
+                be marked complete.
+              </span>
+            </div>
+          ) : null}
+
+          {done.planConflict === "PLAN_ALREADY_COMPLETED" ? (
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <Link
-                href={`/planning/runs/${encodeURIComponent(fromRunId)}?tab=production`}
-                className="btn btn-sm gap-1.5"
-                data-testid="production-actual-success-back-to-run"
+                href="/planning/production-plan"
+                className="btn btn-sm"
+                data-testid="production-actual-view-existing-plan"
               >
-                ← חזור להמלצות הייצור של הריצה
+                View the daily plan board
               </Link>
               <span className="text-xs opacity-80">
-                להמשיך לדווח על המלצה נוספת מאותה ריצת תכנון
+                Another submission already completed this plan.
               </span>
+            </div>
+          ) : null}
+
+          {done.planConflict === "PLAN_ITEM_MISMATCH" ? (
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              {isAdmin ? (
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  onClick={() => void handleResubmitWithoutLink()}
+                  data-testid="production-actual-admin-submit-anyway"
+                >
+                  Submit anyway, without linking
+                </button>
+              ) : null}
+              <Link
+                href="/planning/production-plan"
+                className="text-xs font-medium underline underline-offset-2 hover:no-underline"
+              >
+                Open the daily plan board to switch plans
+              </Link>
+            </div>
+          ) : null}
+
+          {/* Success-panel follow-up links */}
+          {done.kind === "success" ? (
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              {done.committed?.linked_plan_id ? (
+                <Link
+                  href="/planning/production-plan"
+                  className="btn btn-sm gap-1.5"
+                  data-testid="production-actual-success-back-to-plan"
+                >
+                  ← Back to the daily plan
+                </Link>
+              ) : null}
+              {done.committed?.item_id ? (
+                <Link
+                  href={`/planning/inventory-flow/${encodeURIComponent(done.committed.item_id)}`}
+                  className="btn btn-sm gap-1.5"
+                  data-testid="production-actual-success-inventory-flow"
+                >
+                  Open inventory flow
+                </Link>
+              ) : null}
+              {fromRunId ? (
+                <Link
+                  href={`/planning/runs/${encodeURIComponent(fromRunId)}?tab=production`}
+                  className="btn btn-sm gap-1.5"
+                  data-testid="production-actual-success-back-to-run"
+                >
+                  Back to the planning run
+                </Link>
+              ) : null}
+              <button
+                type="button"
+                className="btn btn-sm btn-ghost"
+                onClick={() => {
+                  setDone(null);
+                  resetFlow();
+                }}
+                data-testid="production-actual-success-new-report"
+              >
+                Report another
+              </button>
             </div>
           ) : null}
         </div>
       ) : null}
 
-      {loading ? (
-        <SectionCard title="טוען פריטים…">
+      {/* ======================================================================
+          Form body. Loading / error / pick / entering states are mutually
+          exclusive; once the form is in `done` the user sees only the
+          success/error panel above plus the recent-runs section below.
+          ====================================================================== */}
+      {phase === "done" ? null : isLoadingItems ? (
+        <SectionCard title="Loading items…">
           <div className="space-y-3" aria-busy="true" aria-live="polite">
             <div className="h-9 w-full animate-pulse rounded bg-bg-subtle" />
             <div className="h-9 w-full animate-pulse rounded bg-bg-subtle" />
             <div className="h-9 w-full animate-pulse rounded bg-bg-subtle" />
           </div>
         </SectionCard>
-      ) : loadErr ? (
-        <SectionCard title="לא ניתן לטעון פריטים">
+      ) : itemsLoadErr ? (
+        <SectionCard title="Could not load items">
           <div className="rounded border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg">
-            <div className="font-semibold">לא ניתן לטעון פריטים</div>
-            <div className="mt-1 text-xs">{(loadErr as Error).message}</div>
+            <div className="font-semibold">Could not load items</div>
+            <div className="mt-1 text-xs">
+              {(itemsLoadErr as Error).message}
+            </div>
             <button
               type="button"
               onClick={() => void itemsQuery.refetch()}
               className="mt-2 text-xs font-medium text-danger-fg underline hover:no-underline"
             >
-              נסה שוב
+              Try again
             </button>
           </div>
         </SectionCard>
       ) : phase === "pick" ? (
         <form onSubmit={handleOpen} className="space-y-5">
           <SectionCard
-            title="שלב 1 — בחר את הפריט שיוצר"
-            description="מוצגים רק פריטים בייצור או באריזה מחדש. אם ה-BOM משתנה אחרי פתיחת הטופס, יידרש פתיחה מחדש לפני שליחה."
+            title="Step 1 — Pick the item being produced"
+            description="Only manufactured or repacked items are listed. If the BOM is updated after this form opens, you will need to reopen before submitting."
           >
             <div className="grid grid-cols-1 gap-3">
               <label className="block min-w-0">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  פריט *
+                  Item *
                 </span>
                 <select
                   className="input"
@@ -742,8 +1206,8 @@ export default function ProductionActualPage() {
                   onChange={(e) => setSelectedItemId(e.target.value)}
                   required
                 >
-                  <option value="">— בחר —</option>
-                  <optgroup label="ייצור">
+                  <option value="">— Pick —</option>
+                  <optgroup label="Manufactured">
                     {producibleItems
                       .filter((r) => r.supply_method === "MANUFACTURED")
                       .map((r) => (
@@ -752,7 +1216,7 @@ export default function ProductionActualPage() {
                         </option>
                       ))}
                   </optgroup>
-                  <optgroup label="אריזה מחדש">
+                  <optgroup label="Repack">
                     {producibleItems
                       .filter((r) => r.supply_method === "REPACK")
                       .map((r) => (
@@ -764,7 +1228,7 @@ export default function ProductionActualPage() {
                 </select>
               </label>
               <div className="text-xs text-fg-muted">
-                {`${producibleItems.length} פריטים ניתן לייצור · ${producibleItems.filter((r) => r.supply_method === "MANUFACTURED").length} בייצור · ${producibleItems.filter((r) => r.supply_method === "REPACK").length} באריזה מחדש`}
+                {`${producibleItems.length} producible items · ${producibleItems.filter((r) => r.supply_method === "MANUFACTURED").length} manufactured · ${producibleItems.filter((r) => r.supply_method === "REPACK").length} repack`}
               </div>
             </div>
           </SectionCard>
@@ -774,40 +1238,43 @@ export default function ProductionActualPage() {
               className="btn btn-primary"
               disabled={!selectedItemId}
             >
-              המשך להזנה
+              Continue to entry
             </button>
           </div>
         </form>
-      ) : phase === "entering" || phase === "submitting" || phase === "done" ? (
+      ) : phase === "entering" || phase === "submitting" ? (
         <form onSubmit={handleSubmit} className="space-y-5">
           <SectionCard
-            title="שלב 2 — הזן כמות שיוצרה"
-            description="כמות הפלט = כמות סחורה תקינה שיוצרה. כמות פחת = חומר שנצרך אבל לא ניתן למכירה כמוצר מוגמר. שני השדות חובה. ברירת מחדל לפחת היא 0."
+            title="Step 2 — Enter the produced quantity"
+            description="Output = good units produced. Scrap = material consumed but not usable as finished goods. Both are required; scrap defaults to 0."
           >
             {snapshot ? (
               <div className="mb-3 rounded-md border border-border/60 bg-bg-subtle/40 p-3 text-xs">
                 <div>
-                  <span className="text-fg-subtle">מייצר:</span>{" "}
+                  <span className="text-fg-subtle">Producing:</span>{" "}
                   <span className="text-fg font-medium">
                     {snapshot.item_name}
-                  </span>{" "}
-                  <span className="text-fg-muted">({snapshot.item_id})</span>
+                  </span>
+                  {isAdmin ? (
+                    <span className="text-fg-muted"> ({snapshot.item_id})</span>
+                  ) : null}
                   <span className="ml-2 rounded-sm border border-info/40 bg-info-soft px-1.5 py-0.5 text-3xs text-info-fg">
-                    {snapshot.supply_method === "MANUFACTURED" ? "ייצור" : snapshot.supply_method === "REPACK" ? "אריזה מחדש" : snapshot.supply_method}
+                    {supplyMethodLabel(snapshot.supply_method)}
                   </span>
                 </div>
                 <div className="mt-1">
-                  <span className="text-fg-subtle">BOM מוצמד:</span>{" "}
+                  <span className="text-fg-subtle">Pinned BOM:</span>{" "}
                   <span className="font-mono text-fg">
                     {snapshot.bom_version_label}
                   </span>
                 </div>
                 <div className="mt-1">
-                  <span className="text-fg-subtle">BOM מפיק</span>{" "}
+                  <span className="text-fg-subtle">BOM produces</span>{" "}
                   <span className="font-mono text-fg">
-                    {snapshot.bom_final_output_qty} {snapshot.bom_final_output_uom}
+                    {snapshot.bom_final_output_qty}{" "}
+                    {snapshot.bom_final_output_uom}
                   </span>{" "}
-                  <span className="text-fg-subtle">לכל מנה</span>
+                  <span className="text-fg-subtle">per batch</span>
                 </div>
               </div>
             ) : null}
@@ -815,7 +1282,7 @@ export default function ProductionActualPage() {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               <label className="block min-w-0">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  זמן אירוע *
+                  Event time *
                 </span>
                 <input
                   type="datetime-local"
@@ -827,7 +1294,7 @@ export default function ProductionActualPage() {
               </label>
               <label className="block min-w-0">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  יחידת מידה *
+                  Unit of measure *
                 </span>
                 <input
                   className="input"
@@ -838,7 +1305,7 @@ export default function ProductionActualPage() {
               </label>
               <label className="block min-w-0">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  כמות פלט *
+                  Output quantity *
                 </span>
                 <input
                   type="number"
@@ -853,7 +1320,7 @@ export default function ProductionActualPage() {
               </label>
               <label className="block min-w-0">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  כמות פחת
+                  Scrap quantity
                 </span>
                 <input
                   type="number"
@@ -867,35 +1334,36 @@ export default function ProductionActualPage() {
               </label>
               <label className="block min-w-0 sm:col-span-2">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  הערות
+                  Notes
                 </span>
                 <textarea
                   className="input min-h-[3rem]"
                   rows={2}
                   value={notes}
                   onChange={(e) => setNotes(e.target.value)}
-                  placeholder="הערות (משמרת, תגובות מפעיל וכו')."
+                  placeholder="Notes (shift, operator comments, etc.)."
                 />
               </label>
             </div>
           </SectionCard>
 
           <SectionCard
-            title="תצוגה מקדימה — צריכת רכיבים צפויה"
-            description="הערכת צריכת רכיבים לפי BOM וכמויות שהוזנו. הערך הסופי מחושב בעת השליחה."
+            title="Preview — expected component consumption"
+            description="Estimated component consumption from the BOM and quantities entered. The final value is computed at submit time."
           >
             <button
               type="button"
               className="btn btn-ghost btn-sm mb-3"
               onClick={() => setPreviewExpanded((v) => !v)}
             >
-              {previewExpanded ? "הסתר רכיבים" : "הצג רכיבים"}{" "}
-              ({snapshot?.bom_lines.length ?? 0})
+              {previewExpanded ? "Hide components" : "Show components"} (
+              {snapshot?.bom_lines.length ?? 0})
             </button>
             {previewExpanded && snapshot ? (
               previewRows.length === 0 ? (
                 <div className="text-xs text-fg-muted">
-                  הזן כמות פלט או פחת כדי לראות צריכת רכיבים צפויה.
+                  Enter an output or scrap quantity to see expected
+                  consumption.
                 </div>
               ) : (
                 <div className="overflow-x-auto">
@@ -903,13 +1371,13 @@ export default function ProductionActualPage() {
                     <thead>
                       <tr className="border-b border-border/70 bg-bg-subtle/60">
                         <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                          רכיב
+                          Component
                         </th>
                         <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                          צריכה צפויה
+                          Expected consumption
                         </th>
                         <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                          יחידה
+                          Unit
                         </th>
                       </tr>
                     </thead>
@@ -923,11 +1391,13 @@ export default function ProductionActualPage() {
                             <div className="text-fg-strong">
                               {r.component_name}
                             </div>
-                            <div className="font-mono text-3xs text-fg-muted">
-                              {r.component_id}
-                            </div>
+                            {isAdmin ? (
+                              <div className="font-mono text-3xs text-fg-muted">
+                                {r.component_id}
+                              </div>
+                            ) : null}
                           </td>
-                          <td className="px-3 py-2 font-mono text-fg">
+                          <td className="px-3 py-2 font-mono tabular-nums text-fg">
                             {r.consumption_preview}
                           </td>
                           <td className="px-3 py-2 text-fg-muted">
@@ -944,56 +1414,54 @@ export default function ProductionActualPage() {
 
           <div className="flex items-center justify-end gap-2">
             <button type="button" className="btn" onClick={resetFlow}>
-              בטל ופתח מחדש
+              Cancel and start over
             </button>
             <button
               type="submit"
               className="btn btn-primary"
               disabled={phase === "submitting" || !canSubmit}
             >
-              {phase === "submitting" ? "שולח…" : "שלח דיווח ייצור"}
+              {phase === "submitting"
+                ? "Submitting…"
+                : "Submit production report"}
             </button>
           </div>
         </form>
       ) : null}
 
       {/* ---------------------------------------------------------------------------
-          Recent production runs — shows the last 10 submissions.
-          Section is hidden entirely when there are no rows (endpoint not yet
-          deployed, or no submissions recorded yet). Graceful degrade: if the
-          backend endpoint is not yet live, historyQuery.isError is true and
-          historyRows is empty, so the section stays hidden with no user-facing
-          error noise.
+          Recent production runs — last 10 submissions.
+          Hidden when the endpoint is not yet deployed (graceful degrade).
           Output = good units produced; FG stock increases by output qty only.
           Scrap = consumed but not usable as finished goods (FG stock unchanged).
       --------------------------------------------------------------------------- */}
       {historyRows.length > 0 ? (
         <div className="mt-8">
           <SectionCard
-            title="דיווחי ייצור אחרונים"
-            description="10 הדיווחים האחרונים. כמות פלט = סחורה תקינה (מלאי FG עולה לפי כמות פלט בלבד). כמות פחת = חומר שנצרך אך לא הופק כסחורה תקינה."
+            title="Recent production reports"
+            description="The 10 most recent reports. Output = good units (FG stock increases by output only). Scrap = material consumed but not produced as good output."
           >
             <div className="overflow-x-auto">
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-border/70 bg-bg-subtle/60">
                     <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      פריט
+                      Item
                     </th>
                     <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      פלט
+                      Output
                     </th>
                     <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      פחת
+                      Scrap
                     </th>
                     <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      גרסת BOM
+                      BOM version
                     </th>
                     <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      זמן אירוע
+                      Event time
                     </th>
                     <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      נצרך
+                      Components
                     </th>
                   </tr>
                 </thead>
@@ -1004,14 +1472,12 @@ export default function ProductionActualPage() {
                       className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
                     >
                       <td className="px-3 py-2">
-                        <div className="font-medium text-fg">
-                          {r.item_name}
-                        </div>
+                        <div className="font-medium text-fg">{r.item_name}</div>
                       </td>
-                      <td className="px-3 py-2 text-right font-mono text-fg">
+                      <td className="px-3 py-2 text-right font-mono tabular-nums text-fg">
                         {r.output_qty} {r.output_uom}
                       </td>
-                      <td className="px-3 py-2 text-right font-mono text-fg-muted">
+                      <td className="px-3 py-2 text-right font-mono tabular-nums text-fg-muted">
                         {r.scrap_qty} {r.output_uom}
                       </td>
                       <td className="px-3 py-2 font-mono text-fg-muted">
@@ -1031,6 +1497,6 @@ export default function ProductionActualPage() {
           </SectionCard>
         </div>
       ) : null}
-    </>
+    </div>
   );
 }

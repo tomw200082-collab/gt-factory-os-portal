@@ -300,17 +300,19 @@ function PlanRowCard({
             <Ban className="h-3 w-3" strokeWidth={2.5} />
             Cancel
           </button>
-          {/* Production-actual deep link — Gate 5 will wire from_plan.
-              For now, pre-fill the form with item_id and suggested_qty
-              from this plan; the from_plan link itself comes in Gate 5. */}
+          {/* Production-actual deep link — wired with from_plan_id (Gate 5
+              from_plan additive linkage, signal #18 RUNTIME_READY,
+              2026-05-01). The Production Actual form fetches the plan,
+              prefills item + qty from it, and submits the body with
+              from_plan_id so the plan flips to status=done in the same
+              transaction as the ledger writes. */}
           <Link
             href={
               `/ops/stock/production-actual` +
-              `?item_id=${encodeURIComponent(plan.item_id)}` +
-              `&suggested_qty=${encodeURIComponent(plan.planned_qty)}`
+              `?from_plan_id=${encodeURIComponent(plan.plan_id)}`
             }
             className="btn btn-ghost btn-sm gap-1.5 text-accent"
-            title="Open the Production Actual form prefilled with this plan's item and quantity"
+            title="Open the production report linked to this plan; submit will mark this plan complete."
           >
             <Factory className="h-3 w-3" strokeWidth={2.5} />
             Open Production Report
