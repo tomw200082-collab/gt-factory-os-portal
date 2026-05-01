@@ -26,7 +26,7 @@ import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
-import { ArrowLeft, Check, X, FileOutput, Factory, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Check, X, FileOutput, Factory, AlertTriangle, CheckCheck, Loader2 } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
@@ -587,6 +587,16 @@ export default function PlanningRunDetailPage() {
     } | null
   >(null);
 
+  // Bulk-approve state for the production recommendations tab. The action
+  // is gated to >= 2 pending production recs (single-rec already has its
+  // own per-row Approve button, so the bulk path only appears once it
+  // actually saves clicks). Confirmation modal asks the planner to confirm
+  // before kicking off the per-rec sequence — the existing approve endpoint
+  // is per-rec; we do not invent a bulk endpoint per the
+  // Mode B-Planning-Corridor "no invented contract values" rule.
+  const [showBulkApproveConfirm, setShowBulkApproveConfirm] = useState(false);
+  const [bulkApproveInProgress, setBulkApproveInProgress] = useState(false);
+
   const detailQuery = useQuery({
     queryKey: ["planning", "run", runId, session.role],
     queryFn: () => fetchDetail(session, runId),
@@ -748,6 +758,77 @@ export default function PlanningRunDetailPage() {
       r.feasibility_status === "ready_if_purchase_executes",
   ).length;
   const productionBlockedCount = rawRecs.length - productionReadyCount;
+
+  // Pending production recs eligible for bulk approve. Mirrors the
+  // per-row canActThisRow gate (status === draft || pending_approval).
+  // The count is computed off rawRecs (server data) so it stays correct
+  // while the per-row Approve buttons are also active — though the bulk
+  // button is disabled while the bulk run is in flight to keep the UX
+  // unambiguous.
+  const pendingProductionRecs =
+    activeTab === "production"
+      ? rawRecs.filter(
+          (r) =>
+            r.recommendation_type === "production" &&
+            (r.recommendation_status === "draft" ||
+              r.recommendation_status === "pending_approval"),
+        )
+      : [];
+  const pendingProductionCount = pendingProductionRecs.length;
+  const canBulkApprove =
+    canAct &&
+    activeTab === "production" &&
+    pendingProductionCount >= 2 &&
+    !bulkApproveInProgress &&
+    !approveMutation.isPending &&
+    !dismissMutation.isPending;
+
+  async function runBulkApproveProductionRecs(): Promise<void> {
+    // Sequential per-rec calls so the backend serializes idempotency_key
+    // generation per rec and so a failure mid-run produces a clean
+    // partial-success summary. Parallel calls would race on the same
+    // queryClient invalidation and offer no operator-visible benefit at
+    // the small batch sizes we expect on a daily run.
+    setBulkApproveInProgress(true);
+    setToast(null);
+    const targets = pendingProductionRecs.map((r) => ({
+      recommendation_id: r.recommendation_id,
+      label: r.item_name ?? r.item_id ?? r.recommendation_id,
+    }));
+    let successCount = 0;
+    const failures: Array<{ label: string; reason: string }> = [];
+    for (const t of targets) {
+      try {
+        await approveRec(session, t.recommendation_id);
+        successCount += 1;
+      } catch (err) {
+        const reason = err instanceof Error ? err.message : String(err);
+        failures.push({ label: t.label, reason });
+      }
+    }
+    void queryClient.invalidateQueries({
+      queryKey: ["planning", "run", runId, "recs"],
+    });
+    setBulkApproveInProgress(false);
+    if (failures.length === 0) {
+      setToast({
+        kind: "success",
+        message: `Approved ${successCount} of ${targets.length} production recommendations.`,
+      });
+      window.setTimeout(() => setToast(null), 4500);
+    } else {
+      const failureSummary = failures
+        .slice(0, 3)
+        .map((f) => `${f.label}: ${f.reason}`)
+        .join("; ");
+      const more = failures.length > 3 ? ` (+${failures.length - 3} more)` : "";
+      setToast({
+        kind: "error",
+        message: `Approved ${successCount} of ${targets.length}. ${failures.length} failed: ${failureSummary}${more}`,
+      });
+      window.setTimeout(() => setToast(null), 9000);
+    }
+  }
 
   return (
     <>
@@ -1023,6 +1104,30 @@ export default function PlanningRunDetailPage() {
             canAct
               ? "Review and approve. Approved purchase recs convert to POs (one supplier = one PO ideally). Approved production recs open the Production Actual form prefilled with item + qty + BOM. Nothing orders or produces autonomously."
               : "Read-only view — contact a planner or admin to approve or dismiss recommendations."
+          }
+          actions={
+            canAct && activeTab === "production" && pendingProductionCount >= 2 ? (
+              <button
+                type="button"
+                className="btn btn-primary btn-sm gap-1.5"
+                disabled={!canBulkApprove}
+                onClick={() => setShowBulkApproveConfirm(true)}
+                data-testid="planning-run-bulk-approve-production"
+                title={`Approve all ${pendingProductionCount} pending production recommendations in this run`}
+              >
+                {bulkApproveInProgress ? (
+                  <>
+                    <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.5} />
+                    Approving…
+                  </>
+                ) : (
+                  <>
+                    <CheckCheck className="h-3 w-3" strokeWidth={2.5} />
+                    Approve all production recommendations ({pendingProductionCount})
+                  </>
+                )}
+              </button>
+            ) : null
           }
           contentClassName="p-0"
         >
@@ -1493,6 +1598,65 @@ export default function PlanningRunDetailPage() {
           )}
         </SectionCard>
       </div>
+
+      {showBulkApproveConfirm ? (
+        <div
+          className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 px-4"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="bulk-approve-title"
+          data-testid="planning-run-bulk-approve-modal"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !bulkApproveInProgress) {
+              setShowBulkApproveConfirm(false);
+            }
+          }}
+        >
+          <div className="w-full max-w-md rounded-lg border border-border bg-bg-raised p-5 shadow-2xl">
+            <h2
+              id="bulk-approve-title"
+              className="text-base font-semibold text-fg-strong"
+            >
+              Approve {pendingProductionCount} production recommendation
+              {pendingProductionCount === 1 ? "" : "s"}?
+            </h2>
+            <p className="mt-2 text-sm text-fg-muted leading-relaxed">
+              Each will become ready to convert to a daily plan. Approval does
+              not start production — operators still open the Production Actual
+              form to report what was made.
+            </p>
+            <p className="mt-2 text-xs text-fg-muted">
+              Approval runs one rec at a time. If any fail (for example, a rec
+              has already been dismissed in another tab), you will see a
+              summary of which succeeded and which did not.
+            </p>
+            <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => setShowBulkApproveConfirm(false)}
+                disabled={bulkApproveInProgress}
+                data-testid="planning-run-bulk-approve-modal-cancel"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm gap-1.5"
+                disabled={bulkApproveInProgress}
+                onClick={() => {
+                  setShowBulkApproveConfirm(false);
+                  void runBulkApproveProductionRecs();
+                }}
+                data-testid="planning-run-bulk-approve-modal-confirm"
+              >
+                <CheckCheck className="h-3 w-3" strokeWidth={2.5} />
+                Approve all {pendingProductionCount}
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </>
   );
 }

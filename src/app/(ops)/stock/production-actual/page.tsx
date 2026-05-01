@@ -690,6 +690,29 @@ export default function ProductionActualPage() {
               queryKey: ["production-plan"],
             });
           }
+          // Drop ?from_plan_id from the URL on success so a refresh after
+          // submit does not re-resurrect the linked-plan banner for a plan
+          // that has just been marked done. The success panel itself is
+          // already populated from React state and does not need the URL
+          // param. Cycle 2 wired the from_plan_id UX; this closes the
+          // round-trip by cleaning the URL once the link has been
+          // committed. Same cleanup runs for the retry-without-link path
+          // because handleResubmitWithoutLink clears the URL before its
+          // submitProductionActual(null) call, so this branch is a no-op
+          // if the param was already removed.
+          if (typeof window !== "undefined" && overrideFromPlanId) {
+            const url = new URL(window.location.href);
+            if (url.searchParams.has("from_plan_id")) {
+              url.searchParams.delete("from_plan_id");
+              router.replace(url.pathname + (url.search || ""), {
+                scroll: false,
+              });
+            }
+          }
+          // Drop the React-state link too so the post-submit panel reads
+          // from `done.committed.linked_plan_id` rather than `fromPlanId`,
+          // which is intended for the pre-submit banner only.
+          setFromPlanId(null);
           // Clear inputs but keep the success panel.
           setSnapshot(null);
           setOutputQty("");
@@ -855,6 +878,7 @@ export default function ProductionActualPage() {
       eventAt,
       isAdmin,
       queryClient,
+      router,
     ],
   );
 
