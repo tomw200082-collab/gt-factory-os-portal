@@ -625,11 +625,12 @@ export default function ForecastVersionDetailPage() {
         >
           <div className="min-w-0 flex-1">
             <div className="font-semibold">
-              תחזית פעילה — מקור הביקוש לתכנון
+              Active forecast — demand source for planning
             </div>
             <div className="mt-0.5 text-fg-muted">
-              הצעד הבא: הפעל ריצת תכנון כדי להפיק המלצות רכש וייצור מהתחזית הזו.
-              לעדכון הביקוש, צור טיוטת תחזית חדשה מרשימת התחזיות.
+              Next step: trigger a planning run to turn this forecast into
+              purchase and production recommendations. To update the demand,
+              create a new draft forecast from the list view.
             </div>
           </div>
           <Link
@@ -641,12 +642,12 @@ export default function ForecastVersionDetailPage() {
             {canAuthor ? (
               <>
                 <Play className="h-3 w-3" strokeWidth={2.5} />
-                הפעל תכנון
+                Run planning
               </>
             ) : (
               <>
                 <ChevronRight className="h-3 w-3" strokeWidth={2.5} />
-                ריצות תכנון
+                Planning runs
               </>
             )}
           </Link>
@@ -744,11 +745,11 @@ export default function ForecastVersionDetailPage() {
                               }
                               title={
                                 isManufactured
-                                  ? "פריט בייצור — תחזית כאן תפעיל המלצת ייצור בריצת התכנון הבאה"
-                                  : "פריט מוגמר נרכש — תחזית כאן תפעיל המלצת רכש בריצת התכנון הבאה"
+                                  ? "Manufactured item — forecasting demand here triggers a production recommendation in the next planning run."
+                                  : "Bought-finished item — forecasting demand here triggers a purchase recommendation in the next planning run."
                               }
                             >
-                              {isManufactured ? "ייצור" : "רכש"}
+                              {isManufactured ? "Make" : "Buy"}
                             </span>
                           );
                         })()}

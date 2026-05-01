@@ -16,7 +16,9 @@
 import type { LucideIcon } from "lucide-react";
 import {
   Activity,
+  AlertOctagon,
   Building2,
+  CalendarDays,
   ClipboardCheck,
   Cog,
   Factory,
@@ -28,6 +30,7 @@ import {
   Package,
   PackageOpen,
   ShoppingCart,
+  TrendingUp,
 } from "lucide-react";
 
 import type { CapabilityRequirement } from "@/lib/auth/authorize";
@@ -101,6 +104,30 @@ export const QUICK_ACTIONS: readonly QuickAction[] = [
     label: "Planning Runs",
     blurb: "Review runs + purchase/production recommendations.",
     icon: ListChecks,
+    required: "planning:read",
+    category: "planning",
+  },
+  {
+    href: "/planning/production-plan",
+    label: "Daily production plan",
+    blurb: "Plan output by day; mark planned, completed, or cancelled.",
+    icon: CalendarDays,
+    required: "planning:read",
+    category: "planning",
+  },
+  {
+    href: "/planning/inventory-flow",
+    label: "Inventory flow",
+    blurb: "Daily projected balance per item with shortage tier.",
+    icon: TrendingUp,
+    required: "planning:read",
+    category: "planning",
+  },
+  {
+    href: "/planning/blockers",
+    label: "Blockers",
+    blurb: "Items with demand that didn't become a usable recommendation.",
+    icon: AlertOctagon,
     required: "planning:read",
     category: "planning",
   },

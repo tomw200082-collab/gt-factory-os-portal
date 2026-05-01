@@ -41,6 +41,7 @@ import {
   ChevronLeft,
   ChevronRight,
   ArrowRight,
+  Sparkles,
 } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
@@ -51,9 +52,11 @@ import {
   usePlans,
   useCreatePlan,
   usePatchPlan,
+  useRecommendationCandidates,
 } from "./_lib/usePlans";
 import type {
   ProductionPlanRow,
+  RecommendationCandidate,
   RenderedState,
 } from "./_lib/types";
 
@@ -640,6 +643,338 @@ function ManualAddModal({
 }
 
 // ---------------------------------------------------------------------------
+// Add from Recommendations modal — picker over W1's recommendation-candidates
+// endpoint. Shows approved + production-type recs from completed planning runs
+// that are NOT yet linked to any production_plan row.
+//
+// W1 contract: docs/recommendation_candidates_endpoint_checkpoint.md §6.
+// Backend: GET /api/v1/queries/production-plan/recommendation-candidates.
+// Single-select MVP per A13 (simpler UX); multi-select can land later.
+// ---------------------------------------------------------------------------
+function fmtRecQty(s: string, uom: string | null): string {
+  const n = parseFloat(s);
+  if (!Number.isFinite(n)) return uom ? `${s} ${uom}` : s;
+  const formatted = Number.isInteger(n)
+    ? n.toFixed(0)
+    : n.toFixed(2).replace(/\.?0+$/, "");
+  return uom ? `${formatted} ${uom}` : formatted;
+}
+
+function fmtRunExecutedAt(iso: string): string {
+  try {
+    const d = new Date(iso);
+    if (!Number.isFinite(d.getTime())) return iso;
+    return d.toLocaleString(undefined, {
+      month: "short",
+      day: "2-digit",
+      year: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
+function fmtFeasibilityLabel(status: string): string {
+  // Backend feasibility_status is opaque per W1 PBR-3 precedent — no
+  // commitment to enum stability. Map known values; passthrough on miss.
+  switch (status) {
+    case "ready_now":
+      return "Ready to produce";
+    case "blocked_missing_bom":
+      return "Blocked — missing BOM";
+    case "blocked_missing_components":
+      return "Blocked — missing components";
+    case "blocked_inactive_item":
+      return "Blocked — inactive item";
+    case "blocked_inactive_bom":
+      return "Blocked — inactive BOM";
+    default:
+      return status;
+  }
+}
+
+function AddFromRecommendationsModal({
+  defaultDate,
+  onClose,
+  onConfirm,
+  isSubmitting,
+}: {
+  defaultDate: string;
+  onClose: () => void;
+  onConfirm: (rec: RecommendationCandidate) => void;
+  isSubmitting: boolean;
+}) {
+  // Picker shows ALL approved candidates by default (no date filter); planner
+  // can narrow with the optional date filter. Default-empty matches the
+  // backend's "leave unset for full list" semantics per W1 §6.4.
+  const [filterDate, setFilterDate] = useState<string>("");
+  const [selectedRecId, setSelectedRecId] = useState<string | null>(null);
+
+  const candidatesQuery = useRecommendationCandidates({
+    date: filterDate || undefined,
+    pageSize: 200,
+  });
+
+  const rows: RecommendationCandidate[] = candidatesQuery.data?.rows ?? [];
+  const total = candidatesQuery.data?.total ?? 0;
+
+  const selectedRec =
+    rows.find((r) => r.recommendation_id === selectedRecId) ?? null;
+
+  const canSubmit = !!selectedRec && !isSubmitting;
+
+  return (
+    <div
+      dir="ltr"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 px-2 sm:px-4"
+      role="dialog"
+      aria-modal="true"
+      data-testid="add-from-recs-modal"
+      onClick={(e) => {
+        if (e.target === e.currentTarget) onClose();
+      }}
+    >
+      <div className="w-full max-w-2xl rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-2xl max-h-[90vh] flex flex-col">
+        <div className="flex items-start justify-between gap-3">
+          <div className="min-w-0 flex-1">
+            <h2 className="text-base font-semibold text-fg-strong">
+              Add from production recommendations
+            </h2>
+            <p className="mt-1 text-3xs text-fg-muted">
+              Approved production recommendations from completed planning runs
+              that are not yet on the plan. Selecting one creates a new plan row
+              linked back to the recommendation.
+            </p>
+          </div>
+          <button
+            type="button"
+            className="btn btn-sm shrink-0"
+            onClick={onClose}
+            disabled={isSubmitting}
+            title="Close"
+          >
+            <XCircle className="h-3 w-3" strokeWidth={2.5} />
+          </button>
+        </div>
+
+        {/* Optional date filter */}
+        <div className="mt-3 flex flex-wrap items-end gap-2">
+          <label className="block">
+            <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+              Filter by target date (optional)
+            </span>
+            <input
+              type="date"
+              className="input"
+              value={filterDate}
+              onChange={(e) => setFilterDate(e.target.value)}
+              data-testid="add-from-recs-date-filter"
+            />
+          </label>
+          {filterDate ? (
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={() => setFilterDate("")}
+            >
+              Clear filter
+            </button>
+          ) : null}
+          <div className="ml-auto text-3xs text-fg-muted">
+            Default suggested day:{" "}
+            <span className="font-mono tabular-nums">{defaultDate}</span>
+          </div>
+        </div>
+
+        {/* Body — exactly one of loading | error | empty | list. */}
+        <div className="mt-4 min-h-0 flex-1 overflow-y-auto rounded border border-border/60 bg-bg-subtle/30">
+          {candidatesQuery.isLoading ? (
+            <div
+              className="space-y-2 p-3"
+              aria-busy="true"
+              aria-live="polite"
+              data-testid="add-from-recs-loading"
+            >
+              {Array.from({ length: 4 }).map((_, i) => (
+                <div
+                  key={i}
+                  className="h-16 w-full animate-pulse rounded-md bg-bg-subtle"
+                />
+              ))}
+            </div>
+          ) : candidatesQuery.isError ? (
+            <div
+              className="m-3 rounded border border-danger/40 bg-danger-softer p-3 text-xs text-danger-fg"
+              data-testid="add-from-recs-error"
+            >
+              <div className="font-semibold">
+                We couldn&apos;t load production recommendations.
+              </div>
+              <div className="mt-1 text-3xs">
+                Try again in a moment. If the problem continues, contact the
+                system administrator.
+              </div>
+              <button
+                type="button"
+                onClick={() => void candidatesQuery.refetch()}
+                className="mt-2 text-3xs font-medium underline hover:no-underline"
+              >
+                Try again
+              </button>
+            </div>
+          ) : rows.length === 0 ? (
+            <div
+              className="p-6 text-center"
+              data-testid="add-from-recs-empty"
+            >
+              <Sparkles
+                className="mx-auto h-8 w-8 text-fg-faint"
+                strokeWidth={1.5}
+              />
+              <div className="mt-2 text-sm font-medium text-fg-strong">
+                No production recommendations available to add.
+              </div>
+              <div className="mt-1 text-3xs text-fg-muted">
+                They appear here when planning runs approve them. Open the
+                planning run review screen to approve recommendations first.
+              </div>
+              <Link
+                href="/planning/runs"
+                className="btn btn-sm mt-3 gap-1.5"
+              >
+                Open planning runs
+                <ArrowRight className="h-3 w-3" strokeWidth={2} />
+              </Link>
+            </div>
+          ) : (
+            <ul
+              className="divide-y divide-border/60"
+              role="radiogroup"
+              aria-label="Approved production recommendations"
+              data-testid="add-from-recs-list"
+            >
+              {rows.map((rec) => {
+                const selected = rec.recommendation_id === selectedRecId;
+                const supersededRun = rec.run_status !== "completed";
+                return (
+                  <li key={rec.recommendation_id}>
+                    <button
+                      type="button"
+                      role="radio"
+                      aria-checked={selected}
+                      onClick={() => setSelectedRecId(rec.recommendation_id)}
+                      className={cn(
+                        "flex w-full flex-col gap-1.5 px-3 py-3 text-left transition-colors",
+                        "hover:bg-bg-subtle/60",
+                        selected && "bg-info-softer/60 ring-1 ring-info/40 ring-inset",
+                      )}
+                      data-testid="add-from-recs-row"
+                      data-rec-id={rec.recommendation_id}
+                      data-selected={selected ? "true" : "false"}
+                    >
+                      <div className="flex flex-wrap items-start justify-between gap-2">
+                        <div className="min-w-0 flex-1">
+                          <div className="text-sm font-medium text-fg-strong">
+                            {rec.item_display_name ?? rec.item_id}
+                          </div>
+                          <div className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-3xs text-fg-muted">
+                            <span>
+                              <span className="text-fg-faint">Suggested qty: </span>
+                              <span className="font-mono tabular-nums font-semibold text-fg-strong">
+                                {fmtRecQty(rec.suggested_qty, rec.uom)}
+                              </span>
+                            </span>
+                            <span>
+                              <span className="text-fg-faint">Target date: </span>
+                              <span className="font-mono tabular-nums">
+                                {rec.suggested_for_date}
+                              </span>
+                            </span>
+                          </div>
+                        </div>
+                        <div className="flex flex-col items-end gap-1 shrink-0">
+                          {rec.feasibility_status === "ready_now" ? (
+                            <Badge tone="success" variant="soft" dotted>
+                              {fmtFeasibilityLabel(rec.feasibility_status)}
+                            </Badge>
+                          ) : (
+                            <Badge tone="warning" variant="soft" dotted>
+                              {fmtFeasibilityLabel(rec.feasibility_status)}
+                            </Badge>
+                          )}
+                          {rec.item_supply_method ? (
+                            <span className="text-3xs text-fg-faint">
+                              {rec.item_supply_method === "MANUFACTURED"
+                                ? "Manufactured"
+                                : rec.item_supply_method === "REPACK"
+                                ? "Repack"
+                                : rec.item_supply_method}
+                            </span>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-0.5 text-3xs text-fg-muted">
+                        <span>
+                          <span className="text-fg-faint">From planning run: </span>
+                          {fmtRunExecutedAt(rec.run_executed_at)}
+                        </span>
+                        {supersededRun ? (
+                          <Badge tone="warning" variant="soft">
+                            Superseded run
+                          </Badge>
+                        ) : null}
+                        {rec.approved_at ? (
+                          <span className="text-fg-faint">
+                            · Approved {fmtRunExecutedAt(rec.approved_at)}
+                          </span>
+                        ) : null}
+                      </div>
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+        </div>
+
+        {/* Footer — total + actions */}
+        <div className="mt-3 flex flex-wrap items-center justify-between gap-2">
+          <div className="text-3xs text-fg-muted">
+            {candidatesQuery.isSuccess
+              ? `${total} recommendation${total === 1 ? "" : "s"} available`
+              : null}
+          </div>
+          <div className="flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={onClose}
+              disabled={isSubmitting}
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm gap-1.5"
+              onClick={() => {
+                if (selectedRec) onConfirm(selectedRec);
+              }}
+              disabled={!canSubmit}
+              data-testid="add-from-recs-confirm"
+            >
+              <Plus className="h-3 w-3" strokeWidth={2.5} />
+              {isSubmitting ? "Adding…" : "Add to plan"}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Edit modal
 // ---------------------------------------------------------------------------
 function EditModal({
@@ -923,6 +1258,9 @@ export default function ProductionPlanPage() {
   const [showManualAdd, setShowManualAdd] = useState<{
     defaultDate: string;
   } | null>(null);
+  const [showAddFromRecs, setShowAddFromRecs] = useState<{
+    defaultDate: string;
+  } | null>(null);
   const [editingPlan, setEditingPlan] = useState<ProductionPlanRow | null>(
     null,
   );
@@ -987,6 +1325,46 @@ export default function ProductionPlanPage() {
         flashToast("error", err.message);
       },
     });
+  }
+
+  function handleAddFromRec(rec: RecommendationCandidate) {
+    // Mirror the picked recommendation's date/qty/uom/item into a new plan
+    // row, with `source_recommendation_id` set so the backend records the
+    // linkage. Backend handler T09 in production_plan_api.test.ts validates
+    // approved + production-type before accepting the source linkage.
+    const qty = parseFloat(rec.suggested_qty);
+    if (!Number.isFinite(qty) || qty <= 0) {
+      flashToast(
+        "error",
+        "This recommendation has an invalid quantity. Please contact the system administrator.",
+      );
+      return;
+    }
+    if (!rec.uom) {
+      flashToast(
+        "error",
+        "This recommendation is missing a unit of measure. Open the planning run to investigate.",
+      );
+      return;
+    }
+    createMut.mutate(
+      {
+        plan_date: rec.suggested_for_date,
+        item_id: rec.item_id,
+        planned_qty: qty,
+        uom: rec.uom,
+        source_recommendation_id: rec.recommendation_id,
+      },
+      {
+        onSuccess: () => {
+          flashToast("success", "Plan added from recommendation.");
+          setShowAddFromRecs(null);
+        },
+        onError: (err) => {
+          flashToast("error", err.message);
+        },
+      },
+    );
   }
 
   function handleEdit(body: {
@@ -1106,13 +1484,14 @@ export default function ProductionPlanPage() {
                 <button
                   type="button"
                   className="btn btn-sm gap-1.5"
-                  disabled
-                  title="Coming next — pick from approved production recommendations"
+                  onClick={() =>
+                    setShowAddFromRecs({ defaultDate: toIsoDate(weekStart) })
+                  }
+                  title="Pick from approved production recommendations"
                   data-testid="header-add-from-recs"
                 >
-                  <Plus className="h-3 w-3" strokeWidth={2.5} />
+                  <Sparkles className="h-3 w-3" strokeWidth={2.5} />
                   Add from Recommendations
-                  <span className="ml-1 text-3xs text-fg-faint">(coming next)</span>
                 </button>
               </>
             ) : null}
@@ -1275,6 +1654,15 @@ export default function ProductionPlanPage() {
           defaultDate={showManualAdd.defaultDate}
           onClose={() => setShowManualAdd(null)}
           onSubmit={handleManualAdd}
+          isSubmitting={createMut.isPending}
+        />
+      ) : null}
+
+      {showAddFromRecs ? (
+        <AddFromRecommendationsModal
+          defaultDate={showAddFromRecs.defaultDate}
+          onClose={() => setShowAddFromRecs(null)}
+          onConfirm={handleAddFromRec}
           isSubmitting={createMut.isPending}
         />
       ) : null}

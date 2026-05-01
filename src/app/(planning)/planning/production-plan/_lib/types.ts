@@ -82,3 +82,36 @@ export type PatchProductionPlanRequest =
       notes?: string;
       bom_version_id_pinned?: string;
     };
+
+// ---------------------------------------------------------------------------
+// GET /api/v1/queries/production-plan/recommendation-candidates
+// W1 contract source: docs/recommendation_candidates_endpoint_checkpoint.md §6.2.
+// Mirrored verbatim from api/src/production-plan/schemas.ts
+// `RecommendationCandidate` + `RecommendationCandidatesResponse`.
+// ---------------------------------------------------------------------------
+export interface RecommendationCandidate {
+  recommendation_id: string;     // uuid
+  run_id: string;                // uuid
+  run_executed_at: string;       // ISO 8601 — planning_runs.executed_at
+  run_status: string;            // typically 'completed'
+  item_id: string;
+  item_display_name: string | null;
+  item_supply_method: string | null;  // MANUFACTURED | REPACK
+  suggested_qty: string;         // qty_8dp serialized as text
+  uom: string | null;            // items.sales_uom
+  suggested_for_date: string;    // YYYY-MM-DD (target_period_bucket_key)
+  due_date: string | null;       // YYYY-MM-DD
+  order_by_date: string | null;  // YYYY-MM-DD
+  shortage_date: string | null;  // YYYY-MM-DD
+  feasibility_status: string;    // ready_now | blocked_*
+  recommendation_status: string; // 'approved'
+  approved_at: string | null;    // ISO 8601
+}
+
+export interface RecommendationCandidatesResponse {
+  rows: RecommendationCandidate[];
+  page: number;
+  page_size: number;
+  total: number;
+  as_of: string;
+}
