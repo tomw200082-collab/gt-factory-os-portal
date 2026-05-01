@@ -56,6 +56,10 @@ import {
   applyInboxView,
 } from "@/features/inbox/client";
 import {
+  CreditNeededFactCard,
+  extractCreditNeededPayload,
+} from "@/features/inbox/credit-card";
+import {
   acknowledgeException,
   newIdempotencyKey,
   resolveException,
@@ -666,6 +670,15 @@ function InboxRowItem({
   const canResolve =
     canAct && !isApproval && row.inline_actions.includes("resolve");
 
+  // LionWheel credit-needed rows (Tom-locked Hebrew end-to-end per
+  // W4 Doc B §6/§7) render the four-fact card pattern inline beneath the
+  // standard summary. The deep-link button still routes to the dedicated
+  // detail page where Approve/Reject/Acknowledge buttons live.
+  const isCreditNeeded = row.category === "lionwheel_credit_needed";
+  const creditPayload = isCreditNeeded
+    ? extractCreditNeededPayload(row.raw)
+    : null;
+
   return (
     <li
       className="relative px-5 py-4"
@@ -721,6 +734,11 @@ function InboxRowItem({
           >
             {row.summary}
           </div>
+          {isCreditNeeded && creditPayload ? (
+            <div className="mt-3" data-testid="inbox-row-credit-card">
+              <CreditNeededFactCard payload={creditPayload} now={now} />
+            </div>
+          ) : null}
           <div className="mt-3 flex flex-wrap items-center gap-2">
             {isApproval ? (
               <Link

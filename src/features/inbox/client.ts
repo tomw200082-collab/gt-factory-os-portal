@@ -95,9 +95,30 @@ interface PlanningRecommendationListResponse {
 // ---------------------------------------------------------------------------
 // Human-readable explanations for known exception categories.
 // Used as fallback when the DB row has no title/detail.
+//
+// Hebrew labels for LionWheel chain-repair categories are Tom-locked per
+// the night-run dispatch 2026-04-30 + W4 contracts:
+//   - docs/integrations/lionwheel_credit_inbox_contract.md §6 (Doc B)
+//   - docs/integrations/lionwheel_order_note_contract.md §5 (Doc D)
+// These strings are user-facing on the Inbox card and MUST appear verbatim.
 const EXCEPTION_EXPLANATIONS: Record<string, string> = {
-  lionwheel_unknown_sku:
-    "LionWheel order contains an SKU not mapped to any catalog item. Map it in Admin → SKU Aliases to include it in demand.",
+  // -------------------------------------------------------------------------
+  // LionWheel chain-repair categories (Tom-locked Hebrew per night-run dispatch
+  // 2026-04-30; appears on user-facing Inbox cards). Backend categories may
+  // not have any rows in production until W1 Phase 2 emits them post-soak —
+  // the empty state still uses these labels in the filter chip / category
+  // header, so they must be present even before first emission.
+  // -------------------------------------------------------------------------
+  lionwheel_credit_needed: "נדרש אישור זיכוי",
+  lionwheel_order_note: "הערת נהג לבדיקה",
+  lionwheel_unknown_sku: "מוצר לא מזוהה",
+  lw_pick_data_missing: "כמות ליקוט חסרה",
+  lionwheel_capped_window_gap: "משלוח נעלם מחלון המעקב",
+  lionwheel_payload_invalid_picked_quantity: "כמות ליקוט לא תקינה",
+  // -------------------------------------------------------------------------
+  // Other LionWheel / integration categories — English fallback retained as
+  // the W4 contract pack does not yet pin Hebrew strings for these.
+  // -------------------------------------------------------------------------
   lionwheel_stale:
     "LionWheel sync has not completed recently. Demand data may be out of date. Check API credentials and network.",
   lionwheel_auth_failure:
@@ -219,8 +240,24 @@ function toApprovalInboxRow(
 
 // Maps exception categories to their actionable fix surface.
 // Returning "/inbox" means "stay in inbox — inline actions are the fix path."
-function resolveExceptionDeepLink(category: string): string {
+//
+// `lionwheel_credit_needed` deep-links per exception_id to the credit-detail
+// page (W4 Doc B §2.2). Caller passes (category, exception_id); when the
+// category is credit-needed and an exception_id is present, we emit the
+// per-row deep link. Otherwise the prior category→surface map applies.
+function resolveExceptionDeepLink(
+  category: string,
+  exceptionId?: string,
+): string {
   const c = category.toLowerCase();
+  if (c === "lionwheel_credit_needed" && exceptionId) {
+    return `/inbox/credit/${encodeURIComponent(exceptionId)}`;
+  }
+  // `lionwheel_order_note` stays inline in the global Inbox per W4 Doc D §4
+  // (deep_link: '/inbox' — no dedicated detail page).
+  if (c === "lionwheel_order_note") {
+    return "/inbox";
+  }
   if (c.includes("lionwheel_unknown_sku") || c.includes("sku_unresolved") || c.includes("unknown_sku"))
     return "/admin/sku-aliases";
   if (c.startsWith("lionwheel_") || c.startsWith("shopify_") || c.startsWith("gi_") || c.includes("stale"))
@@ -252,7 +289,7 @@ function toExceptionInboxRow(row: ExceptionRow): InboxRow {
     summary: summarizeException(row),
     item_id: itemId,
     component_id: componentId,
-    deep_link: resolveExceptionDeepLink(row.category),
+    deep_link: resolveExceptionDeepLink(row.category, row.exception_id),
     inline_actions:
       row.status === "open"
         ? ["acknowledge", "resolve"]
