@@ -241,8 +241,8 @@ function timeAgo(iso: string | null): string {
   return `${Math.floor(diffH / 24)}d ago`;
 }
 
-function fmtTriggerSourceHebrew(t: "manual" | "scheduled"): string {
-  return t === "manual" ? "ידני" : "אוטומטי";
+function fmtTriggerSource(t: "manual" | "scheduled"): string {
+  return t === "manual" ? "Manual" : "Scheduled";
 }
 
 export default function PlanningRunsListPage() {
@@ -326,11 +326,11 @@ export default function PlanningRunsListPage() {
     <>
       <WorkflowHeader
         eyebrow="Planner workspace"
-        title="ריצות תכנון"
-        description="ריצות תכנון משוחזרות. כל ריצה לוכדת תמונת מצב של ביקוש, מלאי, BOM ומדיניות ומפיקה המלצות רכש וייצור. שום פעולה לא תופעל אוטומטית."
+        title="Planning runs"
+        description="Reproducible planning runs. Each run snapshots demand, stock, BOM, and policy and produces purchase + production recommendations. Nothing acts autonomously."
         meta={
           <Badge tone="neutral" dotted>
-            {total} {total === 1 ? "ריצה" : "ריצות"}
+            {total} {total === 1 ? "run" : "runs"}
           </Badge>
         }
         actions={
@@ -343,7 +343,7 @@ export default function PlanningRunsListPage() {
               onClick={() => setShowTriggerConfirm(true)}
             >
               <Play className="h-3 w-3" strokeWidth={2.5} />
-              {triggerMutation.isPending ? "מריץ…" : "הרץ תכנון חדש"}
+              {triggerMutation.isPending ? "Triggering…" : "Trigger planning run"}
             </button>
           ) : null
         }
@@ -609,17 +609,17 @@ export default function PlanningRunsListPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <RunStatusBadge status={r.status} />
-                      <span className="chip">{fmtTriggerSourceHebrew(r.trigger_source)}</span>
+                      <span className="chip">{fmtTriggerSource(r.trigger_source)}</span>
                     </div>
                     <div className="mt-1.5 text-base font-semibold tracking-tightish text-fg-strong">
                       Executed {fmtDate(r.executed_at)}
                     </div>
                     <div className="mt-1 flex flex-wrap gap-4 text-xs text-fg-muted">
                       <span>
-                        horizon {fmtDate(r.planning_horizon_start_at)} ·{" "}
+                        Horizon {fmtDate(r.planning_horizon_start_at)} ·{" "}
                         {r.planning_horizon_weeks}w
                       </span>
-                      <span>{fmtTriggerSourceHebrew(r.trigger_source)}</span>
+                      <span>{fmtTriggerSource(r.trigger_source)} trigger</span>
                     </div>
                   </div>
                 </Link>
@@ -690,15 +690,13 @@ export default function PlanningRunsListPage() {
         >
           <div className="w-full max-w-md rounded-lg border border-border bg-bg-raised p-5 shadow-2xl">
             <h2 id="trigger-run-title" className="text-base font-semibold text-fg-strong">
-              להריץ תכנון חדש?
+              Trigger a new planning run?
             </h2>
             <p className="mt-2 text-sm text-fg-muted leading-relaxed">
-              הריצה תיצור תמונה של הביקוש (תחזית + הזמנות פתוחות), המלאי, ה-BOM
-              והמדיניות הנוכחית, ותחשב המלצות רכש וייצור.
+              The run will snapshot demand (forecast + open orders), stock, BOM, and current policy, then compute purchase + production recommendations.
             </p>
             <p className="mt-2 text-xs text-fg-muted">
-              שום הזמנת רכש או דיווח ייצור לא ייווצרו אוטומטית — אתה תאשר כל המלצה
-              בנפרד אחרי שהריצה תסתיים.
+              No purchase order or production report is created automatically — you approve each recommendation individually once the run completes.
             </p>
             <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
               <button
@@ -708,7 +706,7 @@ export default function PlanningRunsListPage() {
                 disabled={triggerMutation.isPending}
                 data-testid="planning-runs-trigger-modal-cancel"
               >
-                ביטול
+                Cancel
               </button>
               <button
                 type="button"
@@ -721,7 +719,7 @@ export default function PlanningRunsListPage() {
                 data-testid="planning-runs-trigger-modal-confirm"
               >
                 <Play className="h-3 w-3" strokeWidth={2.5} />
-                הרץ תכנון
+                Trigger run
               </button>
             </div>
           </div>

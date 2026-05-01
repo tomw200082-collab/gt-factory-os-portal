@@ -29,7 +29,7 @@ async function fetchRecDetail(recId: string): Promise<RecDetailResult> {
     return {
       data: null,
       notFound: false,
-      error: "לא ניתן לטעון פרטי ההמלצה. בדוק את החיבור ונסה שוב.",
+      error: "Could not load recommendation details. Check your connection and try again.",
     };
   }
 

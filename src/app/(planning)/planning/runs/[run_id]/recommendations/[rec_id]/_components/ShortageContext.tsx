@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 // ShortageContext — explains why this recommendation was created
 //
-// Hebrew labels for planner-facing copy per CLAUDE.md UI language policy.
+// English labels per Tom-locked 2026-05-01 portal-wide standard.
 // Shows demand / on-hand / open POs / net shortage.
 // ---------------------------------------------------------------------------
 
@@ -62,32 +62,34 @@ export function ShortageContext({ rec }: ShortageContextProps) {
 
   return (
     <SectionCard
-      eyebrow="סיבת ההמלצה"
-      title="מה גורם להמלצה זו?"
+      eyebrow="Why this recommendation"
+      title="What is driving this recommendation?"
       description={
         rec.supply_method === "MANUFACTURED"
-          ? "הסכום מחושב על בסיס רכיבי הייצור. ראה פירוט רכיבים למטה."
-          : "פריט מוגמר הנרכש ישירות מספק."
+          ? "Quantity computed from BOM components. See the component breakdown below."
+          : rec.supply_method === "REPACK"
+            ? "Repacked from an input component. See the component breakdown below."
+            : "Bought finished — purchased directly from a supplier."
       }
     >
       <dl className="divide-y divide-border/40">
         <ShortageRow
-          label="ביקוש:"
+          label="Demand"
           value={rec.demand_qty}
           unit={null}
         />
         <ShortageRow
-          label="במלאי:"
+          label="On hand"
           value={rec.on_hand_qty}
           unit={null}
         />
         <ShortageRow
-          label="בהזמנות פתוחות:"
+          label="In open POs"
           value={rec.open_po_qty}
           unit={null}
         />
         <ShortageRow
-          label="חוסר נטו:"
+          label="Net shortage"
           value={rec.net_shortage_qty}
           unit={null}
           bold
@@ -97,17 +99,17 @@ export function ShortageContext({ rec }: ShortageContextProps) {
 
       {hasShortage && (
         <div className="mt-3 rounded border border-danger/30 bg-danger-softer/60 px-3 py-2 text-xs text-danger-fg">
-          חוסר של{" "}
+          Shortage of{" "}
           <span className="font-mono font-bold">
             {fmtQty(rec.net_shortage_qty, null)}
           </span>{" "}
-          יחידות עלול לגרום לאי-עמידה בביקוש.
+          units may lead to unmet demand.
         </div>
       )}
 
       {rec.supplier_id && (
         <div className="mt-3 text-xs text-fg-muted">
-          <span className="font-semibold text-fg">ספק: </span>
+          <span className="font-semibold text-fg">Supplier: </span>
           {rec.supplier_name ?? rec.supplier_id}
         </div>
       )}

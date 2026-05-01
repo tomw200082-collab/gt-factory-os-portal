@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 // ExceptionsCard — scoped exceptions as plain-language explanations
 //
-// Maps exception categories to Hebrew operational text.
+// Maps exception categories to English operational text.
 // severity → tone: critical→danger, warning→warning, info→info
 // If scoped_exceptions is empty: component should not be rendered (caller gates).
 // ---------------------------------------------------------------------------
@@ -13,10 +13,14 @@ import { Badge } from "@/components/badges/StatusBadge";
 import { cn } from "@/lib/cn";
 import type { RecDetailException } from "../_lib/types";
 
+// Known categories surfaced by the rec-detail endpoint per W1 contract
+// (Planning-Tranche2-RecommendationDetail signal #16). Unknown categories
+// fall through to the raw enum string in monospace so the planner sees
+// the gap honestly instead of a silently-translated label.
 const CATEGORY_LABELS: Record<string, string> = {
-  recommendation_below_trigger_threshold: "המלצה קטנה מסף ההפעלה (info)",
-  missing_supplier_mapping: "אין ספק מוגדר לפריט",
-  po_substrate_absent: "לא ניתן לבדוק הזמנות פתוחות",
+  recommendation_below_trigger_threshold: "Recommendation below trigger threshold (info)",
+  missing_supplier_mapping: "No supplier mapped for this item",
+  po_substrate_absent: "Open PO substrate not available — cannot net inbound",
 };
 
 function categoryLabel(category: string): string {
@@ -31,20 +35,20 @@ function severityBadge(severity: string) {
   if (severity === "critical") {
     return (
       <Badge tone="danger" variant="solid">
-        קריטי
+        Critical
       </Badge>
     );
   }
   if (severity === "warning") {
     return (
       <Badge tone="warning" dotted>
-        אזהרה
+        Warning
       </Badge>
     );
   }
   return (
     <Badge tone="info" dotted>
-      מידע
+      Info
     </Badge>
   );
 }
@@ -69,9 +73,9 @@ interface ExceptionsCardProps {
 export function ExceptionsCard({ exceptions }: ExceptionsCardProps) {
   return (
     <SectionCard
-      eyebrow="חריגות"
-      title={`${exceptions.length} חריגה${exceptions.length !== 1 ? "ות" : ""} קשורות להמלצה`}
-      description="הודעות שהשפיעו על חישוב ההמלצה"
+      eyebrow="Exceptions"
+      title={`${exceptions.length} exception${exceptions.length === 1 ? "" : "s"} affecting this recommendation`}
+      description="Signals that affected how this recommendation was computed."
     >
       <ul className="divide-y divide-border/60 space-y-0">
         {exceptions.map((exc) => {

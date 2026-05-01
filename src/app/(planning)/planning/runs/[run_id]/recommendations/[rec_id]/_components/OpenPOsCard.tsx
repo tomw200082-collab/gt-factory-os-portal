@@ -4,7 +4,7 @@
 // OpenPOsCard — what is already ordered / on the way
 //
 // Shows open POs reducing the required quantity.
-// If open_pos is empty → shows "אין הזמנות פתוחות רלוונטיות"
+// If open_pos is empty → shows "No open POs for this item or component"
 // ---------------------------------------------------------------------------
 
 import Link from "next/link";
@@ -42,17 +42,17 @@ export function OpenPOsCard({ rec }: OpenPOsCardProps) {
 
   return (
     <SectionCard
-      eyebrow="מה כבר בדרך"
-      title="הזמנות פתוחות רלוונטיות"
+      eyebrow="Already on the way"
+      title="Open POs included in the computation"
       description={
         hasPOs
-          ? `${rec.open_pos.length} הזמנה${rec.open_pos.length !== 1 ? "ות" : ""} פתוחה${rec.open_pos.length !== 1 ? "ות" : ""} הכלולות בחישוב`
+          ? `${rec.open_pos.length} open PO${rec.open_pos.length === 1 ? "" : "s"} included`
           : undefined
       }
     >
       {!hasPOs ? (
         <div className="text-sm text-fg-muted">
-          אין הזמנות פתוחות רלוונטיות
+          No open POs for this item or component.
         </div>
       ) : (
         <>
@@ -62,16 +62,16 @@ export function OpenPOsCard({ rec }: OpenPOsCardProps) {
               <thead>
                 <tr className="border-b border-border/70 bg-bg-subtle/60">
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    מספר הזמנה
+                    PO number
                   </th>
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    ספק
+                    Supplier
                   </th>
                   <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    כמות פתוחה
+                    Open qty
                   </th>
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    תאריך קבלה צפוי
+                    Expected receive date
                   </th>
                 </tr>
               </thead>
@@ -104,10 +104,14 @@ export function OpenPOsCard({ rec }: OpenPOsCardProps) {
             </table>
           </div>
 
-          {/* Mobile cards */}
+          {/* Mobile cards — supplier name above the PO number on small
+              screens so a long supplier name does not push qty off-screen. */}
           <div className="sm:hidden space-y-2">
             {rec.open_pos.map((po) => (
               <div key={po.po_id} className="rounded border border-border/60 bg-bg-raised p-3 space-y-1.5">
+                <div className="text-xs font-medium text-fg">
+                  {po.supplier_name ?? po.supplier_id}
+                </div>
                 <div className="flex items-center justify-between">
                   <Link
                     href={`/purchase-orders/${encodeURIComponent(po.po_id)}`}
@@ -120,10 +124,7 @@ export function OpenPOsCard({ rec }: OpenPOsCardProps) {
                   </span>
                 </div>
                 <div className="text-xs text-fg-muted">
-                  {po.supplier_name ?? po.supplier_id}
-                </div>
-                <div className="text-xs text-fg-muted">
-                  תאריך קבלה: {fmtDate(po.expected_receive_date)}
+                  Expected: {fmtDate(po.expected_receive_date)}
                 </div>
               </div>
             ))}

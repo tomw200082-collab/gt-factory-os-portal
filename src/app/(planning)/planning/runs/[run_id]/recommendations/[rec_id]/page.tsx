@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 // /planning/runs/[run_id]/recommendations/[rec_id] — Recommendation Drill-Down
 //
-// Answers: "למה נוצרה ההמלצה הזו?"
+// Answers: "Why was this recommendation generated?"
 //
 // Layout:
 //   1. RecDetailHeader — item name, type + status badges, supply method
@@ -16,7 +16,7 @@
 //
 // State: useRecDetail(rec_id) → TanStack Query, staleTime 60s
 // Loading: skeleton per section
-// Error: <ErrorState /> with Hebrew message
+// Error: <ErrorState /> with English message
 // 404: <ErrorState /> with back link
 //
 // Role gate: planning:execute (planner/admin) for action button only.
@@ -86,7 +86,7 @@ async function postConvertToPO(recId: string): Promise<{ po_id: string; po_numbe
     const txt = await res.text().catch(() => "");
     let detail = "";
     try { detail = (JSON.parse(txt) as { detail?: string }).detail ?? ""; } catch { /* ignore */ }
-    throw new Error(detail || "לא ניתן ליצור הזמנת רכש. נסה שוב.");
+    throw new Error(detail || "Could not create the purchase order. Try again.");
   }
   return await res.json();
 }
@@ -96,12 +96,12 @@ function fmtDateAgo(iso: string | null): string {
   try {
     const ms = Date.now() - new Date(iso).getTime();
     const mins = Math.floor(ms / 60000);
-    if (mins < 2) return "כרגע";
-    if (mins < 60) return `לפני ${mins} דק'`;
+    if (mins < 2) return "just now";
+    if (mins < 60) return `${mins}m ago`;
     const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `לפני ${hrs} שע'`;
+    if (hrs < 24) return `${hrs}h ago`;
     const days = Math.floor(hrs / 24);
-    return `לפני ${days} ימים`;
+    return `${days}d ago`;
   } catch {
     return iso;
   }
@@ -131,7 +131,7 @@ function fmtQty(s: string): string {
 
 function SkeletonLayout({ runId }: { runId: string }) {
   return (
-    <div className="space-y-5" aria-busy="true" aria-label="טוען המלצה…">
+    <div className="space-y-5" aria-busy="true" aria-label="Loading recommendation…">
       <div className="mb-2">
         <div className="h-4 w-32 animate-pulse rounded bg-bg-subtle" />
       </div>
@@ -201,7 +201,7 @@ export default function RecommendationDrillDownPage() {
         kind: "error",
         message:
           err.message ||
-          "ההמלצה אושרה אך יצירת ההזמנה נכשלה. ניתן ליצור הזמנה ידנית מהטבלה.",
+          "Recommendation approved, but the purchase order could not be created. You can create the PO manually from the run table.",
       });
       window.setTimeout(() => setActionToast(null), 6000);
     },
@@ -210,7 +210,7 @@ export default function RecommendationDrillDownPage() {
   const approveMut = useMutation({
     mutationFn: () => postRecAction(recId, "approve"),
     onSuccess: () => {
-      setActionToast({ kind: "success", message: "ההמלצה אושרה." });
+      setActionToast({ kind: "success", message: "Recommendation approved." });
       void queryClient.invalidateQueries({ queryKey: ["rec-detail", recId] });
       void queryClient.invalidateQueries({
         queryKey: ["planning", "run", runId, "recs"],
@@ -251,7 +251,7 @@ export default function RecommendationDrillDownPage() {
   const dismissMut = useMutation({
     mutationFn: () => postRecAction(recId, "dismiss"),
     onSuccess: () => {
-      setActionToast({ kind: "success", message: "ההמלצה נדחתה." });
+      setActionToast({ kind: "success", message: "Recommendation dismissed." });
       void queryClient.invalidateQueries({ queryKey: ["rec-detail", recId] });
       void queryClient.invalidateQueries({
         queryKey: ["planning", "run", runId, "recs"],
@@ -271,16 +271,21 @@ export default function RecommendationDrillDownPage() {
   if (isError) {
     return (
       <ErrorState
-        title="לא ניתן לטעון פרטי ההמלצה"
-        description="אירעה שגיאה בעת טעינת ההמלצה. בדוק את החיבור ונסה שוב."
+        title="Could not load recommendation"
+        description="Something went wrong loading this recommendation. Check your connection and try again."
         action={
-          <Link
-            href={`/planning/runs/${encodeURIComponent(runId)}`}
-            className="btn btn-sm gap-1.5"
-          >
-            <ArrowLeft className="h-3 w-3" strokeWidth={2.5} />
-            חזרה להמלצות
-          </Link>
+          <div className="flex flex-wrap gap-2 justify-center">
+            <Link
+              href={`/planning/runs/${encodeURIComponent(runId)}`}
+              className="btn btn-sm gap-1.5"
+            >
+              <ArrowLeft className="h-3 w-3" strokeWidth={2.5} />
+              Back to recommendations
+            </Link>
+            <Link href="/planning/runs" className="btn btn-sm">
+              View all planning runs
+            </Link>
+          </div>
         }
       />
     );
@@ -289,16 +294,21 @@ export default function RecommendationDrillDownPage() {
   if (result?.notFound) {
     return (
       <ErrorState
-        title="ההמלצה לא נמצאה"
-        description="לא קיימת המלצה עם מזהה זה. ייתכן שהיא הוחלפה או שאינה קיימת."
+        title="Recommendation not found"
+        description="No recommendation matches this id. The run may have been superseded, or the recommendation no longer exists."
         action={
-          <Link
-            href={`/planning/runs/${encodeURIComponent(runId)}`}
-            className="btn btn-sm gap-1.5"
-          >
-            <ArrowLeft className="h-3 w-3" strokeWidth={2.5} />
-            חזרה להמלצות
-          </Link>
+          <div className="flex flex-wrap gap-2 justify-center">
+            <Link
+              href={`/planning/runs/${encodeURIComponent(runId)}`}
+              className="btn btn-sm gap-1.5"
+            >
+              <ArrowLeft className="h-3 w-3" strokeWidth={2.5} />
+              Back to recommendations
+            </Link>
+            <Link href="/planning/runs" className="btn btn-sm">
+              View all planning runs
+            </Link>
+          </div>
         }
       />
     );
@@ -307,16 +317,21 @@ export default function RecommendationDrillDownPage() {
   if (result?.error || !result?.data) {
     return (
       <ErrorState
-        title="לא ניתן לטעון פרטי ההמלצה"
-        description={result?.error ?? "שגיאה לא ידועה"}
+        title="Could not load recommendation"
+        description={result?.error ?? "Unknown error."}
         action={
-          <Link
-            href={`/planning/runs/${encodeURIComponent(runId)}`}
-            className="btn btn-sm gap-1.5"
-          >
-            <ArrowLeft className="h-3 w-3" strokeWidth={2.5} />
-            חזרה להמלצות
-          </Link>
+          <div className="flex flex-wrap gap-2 justify-center">
+            <Link
+              href={`/planning/runs/${encodeURIComponent(runId)}`}
+              className="btn btn-sm gap-1.5"
+            >
+              <ArrowLeft className="h-3 w-3" strokeWidth={2.5} />
+              Back to recommendations
+            </Link>
+            <Link href="/planning/runs" className="btn btn-sm">
+              View all planning runs
+            </Link>
+          </div>
         }
       />
     );
@@ -349,7 +364,7 @@ export default function RecommendationDrillDownPage() {
           data-testid="rec-detail-back-link"
         >
           <ArrowLeft className="h-3 w-3" strokeWidth={2} />
-          חזרה להמלצות
+          Back to recommendations
         </Link>
       </div>
 
@@ -361,13 +376,13 @@ export default function RecommendationDrillDownPage() {
 
       {/* 3. Action card — recommended qty + action button */}
       <SectionCard
-        eyebrow="פעולה מומלצת"
-        title="מה עושים עכשיו?"
+        eyebrow="Recommended action"
+        title="What to do next"
       >
         <dl className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4 text-sm">
           <div>
             <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              כמות מומלצת:
+              Recommended qty
             </dt>
             <dd className="mt-0.5 font-mono text-base font-bold tabular-nums text-fg-strong">
               {fmtQty(rec.recommended_qty)}
@@ -376,7 +391,7 @@ export default function RecommendationDrillDownPage() {
           {rec.moq !== null && (
             <div>
               <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                MOQ:
+                MOQ
               </dt>
               <dd className="mt-0.5 font-mono text-xs tabular-nums text-fg-muted">
                 {fmtQty(rec.moq)}
@@ -386,24 +401,25 @@ export default function RecommendationDrillDownPage() {
           {rec.lead_time_days !== null && (
             <div>
               <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                זמן אספקה:
+                Lead time
               </dt>
               {/* The current RecommendationDetailResponse DTO does not
                   include a lead_time_source field — we cannot tell whether
                   this number came from supplier_items, item override, or a
                   default. T1 surfaces the gap honestly with a caveat instead
-                  of implying false precision. Add to W1 contract backlog. */}
+                  of implying false precision. Add to W1 contract backlog
+                  (W1-FOLLOWUP-REC-DETAIL-LEAD-TIME-SOURCE). */}
               <dd className="mt-0.5 text-xs text-fg-muted">
                 {rec.lead_time_days}{" "}
-                {rec.lead_time_days === 1 ? "יום" : "ימים"}{" "}
-                <span className="text-fg-subtle">(לא זמין מקור)</span>
+                {rec.lead_time_days === 1 ? "day" : "days"}{" "}
+                <span className="text-fg-subtle">(source unknown)</span>
               </dd>
             </div>
           )}
           {rec.suggested_order_date !== null && (
             <div>
               <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                תאריך הזמנה מוצע:
+                Order by
               </dt>
               <dd className="mt-0.5 text-xs font-medium text-fg-strong">
                 {fmtDate(rec.suggested_order_date)}
@@ -413,18 +429,18 @@ export default function RecommendationDrillDownPage() {
         </dl>
 
         {/* Action buttons — adapts to rec_status × rec_type:
-            - draft: "אשר" / "דחה" — inline approve/dismiss (loop 10)
-            - approved purchase: "צור הזמנת רכש" → /convert flow
-            - approved production: "פתח טופס דיווח ייצור" → /ops/stock/production-actual
+            - draft: "Approve" / "Dismiss" — inline approve/dismiss (loop 10)
+            - approved purchase: "Create purchase order" → /convert flow
+            - approved production: "Open production report" → /ops/stock/production-actual
               with prefilled item_id + suggested_qty + back-chain breadcrumb */}
         <div className="mt-4 flex flex-wrap items-center gap-3">
           {canExecute && isDraft ? (
             <>
-              {/* Loop 12 — "אשר ובצע" collapses approve+execute into one
-                  click for the common case where the planner has already
+              {/* Loop 12 — "Approve and execute" collapses approve+execute into
+                  one click for the common case where the planner has already
                   decided. Production: approve → production form prefilled.
-                  Purchase: approve → /convert flow. The standalone "אשר
-                  בלבד" stays on this page so a planner who's batch-triaging
+                  Purchase: approve → /convert flow. The standalone "Approve
+                  only" stays on this page so a planner who's batch-triaging
                   many recs can approve without navigating away. */}
               <button
                 type="button"
@@ -447,12 +463,12 @@ export default function RecommendationDrillDownPage() {
                   <FileOutput className="h-3 w-3" strokeWidth={2.5} />
                 )}
                 {approveMut.isPending && postApproveTarget === "execute"
-                  ? "מאשר…"
+                  ? "Approving…"
                   : convertMut.isPending
-                    ? "יוצר הזמנת רכש…"
+                    ? "Creating purchase order…"
                     : isProductionRec
-                      ? "אשר ופתח טופס ייצור"
-                      : "אשר וצור הזמנת רכש"}
+                      ? "Approve and open production form"
+                      : "Approve and create purchase order"}
               </button>
               <button
                 type="button"
@@ -467,8 +483,8 @@ export default function RecommendationDrillDownPage() {
               >
                 <Check className="h-3 w-3" strokeWidth={2.5} />
                 {approveMut.isPending && postApproveTarget === "stay"
-                  ? "מאשר…"
-                  : "אשר בלבד"}
+                  ? "Approving…"
+                  : "Approve only"}
               </button>
               <button
                 type="button"
@@ -478,7 +494,7 @@ export default function RecommendationDrillDownPage() {
                 onClick={() => dismissMut.mutate()}
               >
                 <X className="h-3 w-3" strokeWidth={2.5} />
-                {dismissMut.isPending ? "דוחה…" : "דחה"}
+                {dismissMut.isPending ? "Dismissing…" : "Dismiss"}
               </button>
             </>
           ) : null}
@@ -491,7 +507,7 @@ export default function RecommendationDrillDownPage() {
               onClick={() => convertMut.mutate()}
             >
               <FileOutput className="h-3 w-3" strokeWidth={2.5} />
-              {convertMut.isPending ? "יוצר הזמנת רכש…" : "צור הזמנת רכש"}
+              {convertMut.isPending ? "Creating purchase order…" : "Create purchase order"}
             </button>
           ) : null}
           {canExecute && isProductionRec && rec.rec_status === "approved" ? (
@@ -501,13 +517,13 @@ export default function RecommendationDrillDownPage() {
               data-testid="rec-detail-open-production-form-btn"
               title={`Open Production Actual form prefilled with ${rec.item_name} × ${fmtQty(rec.recommended_qty)} (you can adjust before submit)`}
             >
-              פתח טופס דיווח ייצור
+              Open production report
             </Link>
           ) : null}
 
           {rec.converted_po_id !== null ? (
             <div className="flex items-center gap-2">
-              <span className="text-xs text-fg-muted">הזמנה קיימת:</span>
+              <span className="text-xs text-fg-muted">Existing PO:</span>
               <Link
                 href={`/purchase-orders/${encodeURIComponent(rec.converted_po_id)}`}
                 className="text-xs text-accent hover:underline font-mono"
@@ -515,7 +531,7 @@ export default function RecommendationDrillDownPage() {
               >
                 {rec.converted_po_id.slice(0, 8)}…
               </Link>
-              <Badge tone="success" dotted>הומר</Badge>
+              <Badge tone="success" dotted>Converted</Badge>
             </div>
           ) : null}
         </div>
@@ -549,15 +565,15 @@ export default function RecommendationDrillDownPage() {
 
       {/* 7. Source / freshness footer */}
       <SectionCard
-        eyebrow="מקור"
-        title="ריצת התכנון"
-        description="פרטי ריצת התכנון שממנה נוצרה המלצה זו"
+        eyebrow="Source"
+        title="Planning run"
+        description="Details of the planning run that produced this recommendation"
         density="compact"
       >
         <dl className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
           <div>
             <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              מזהה ריצה:
+              Run id
             </dt>
             <dd className="mt-0.5 font-mono text-fg inline-flex items-center gap-1">
               <Link
@@ -569,8 +585,8 @@ export default function RecommendationDrillDownPage() {
               <button
                 type="button"
                 className="inline-flex items-center justify-center rounded p-0.5 text-fg-subtle hover:text-fg hover:bg-bg-subtle"
-                title="העתק מזהה מלא"
-                aria-label="העתק מזהה ריצה"
+                title="Copy full id"
+                aria-label="Copy run id"
                 onClick={() => {
                   void navigator.clipboard.writeText(rec.run_id);
                 }}
@@ -584,24 +600,25 @@ export default function RecommendationDrillDownPage() {
           </div>
           <div>
             <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              אתר:
+              Site
             </dt>
             <dd className="mt-0.5 font-mono text-fg">{rec.planning_run_site_id}</dd>
           </div>
           <div>
             <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              סטטוס ריצה:
+              Run status
             </dt>
             <dd className="mt-0.5 text-fg capitalize">{rec.planning_run_status}</dd>
           </div>
           <div>
             <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              תחזית מקור:
+              Source forecast
             </dt>
             {/* Forecast version that drove this rec is a contract gap — not in the
                 current RecommendationDetailResponse DTO. T1 surfaces the gap honestly
-                rather than hiding it. Add to W1 contract backlog. */}
-            <dd className="mt-0.5 text-fg-muted text-xs">לא זמין כרגע</dd>
+                rather than hiding it. Add to W1 contract backlog
+                (W1-FOLLOWUP-REC-DETAIL-FORECAST-VERSION). */}
+            <dd className="mt-0.5 text-fg-muted text-xs">Not available — W1 follow-up</dd>
           </div>
         </dl>
       </SectionCard>

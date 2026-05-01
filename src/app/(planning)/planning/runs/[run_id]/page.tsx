@@ -373,13 +373,52 @@ function fmtDate(iso: string | null): string {
 function fmtAgeFromRun(executed_at: string): { label: string; stale: boolean } {
   try {
     const ms = Date.now() - new Date(executed_at).getTime();
-    const hours = Math.floor(ms / 3600000);
-    if (hours < 1) return { label: "לפי הריצה — כרגע", stale: false };
-    if (hours < 24) return { label: `לפי הריצה — לפני ${hours} שע'`, stale: false };
+    const minutes = Math.floor(ms / 60000);
+    if (minutes < 1) return { label: "as of run — just now", stale: false };
+    if (minutes < 60) return { label: `as of run — ${minutes}m ago`, stale: false };
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return { label: `as of run — ${hours}h ago`, stale: false };
     const days = Math.floor(hours / 24);
-    return { label: `לפי הריצה — לפני ${days} ימים`, stale: true };
+    return { label: `as of run — ${days}d ago`, stale: true };
   } catch {
-    return { label: "לפי הריצה", stale: false };
+    return { label: "as of run", stale: false };
+  }
+}
+
+// Renders an absolute timestamp + relative age side-by-side. Used for the
+// run sources card so a planner can tell at a glance whether the snapshot
+// behind a run is hours, minutes, or days old before approving recs based
+// on it. Pattern matches the FreshnessBadge tooltip output but uses the
+// inline format already established in /planning/inventory-flow.
+function fmtRelativeAndAbsolute(iso: string | null): {
+  absolute: string;
+  relative: string;
+  stale: boolean;
+} {
+  if (!iso) return { absolute: "—", relative: "never", stale: false };
+  try {
+    const ms = Date.now() - new Date(iso).getTime();
+    const minutes = Math.floor(ms / 60000);
+    let relative: string;
+    let stale = false;
+    if (minutes < 1) relative = "just now";
+    else if (minutes < 60) relative = `${minutes}m ago`;
+    else if (minutes < 24 * 60) relative = `${Math.floor(minutes / 60)}h ago`;
+    else {
+      const days = Math.floor(minutes / (24 * 60));
+      relative = `${days}d ago`;
+      stale = true;
+    }
+    const absolute = new Date(iso).toLocaleString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+      hour: "2-digit",
+      minute: "2-digit",
+    });
+    return { absolute, relative, stale };
+  } catch {
+    return { absolute: iso, relative: "—", stale: false };
   }
 }
 
@@ -474,16 +513,21 @@ function ExceptionActionLink({ category, itemId, componentId }: {
   itemId: string | null;
   componentId: string | null;
 }): JSX.Element | null {
+  // Audit P0-B / §3.B/P1 — missing_bom links straight to the BOM tab on the
+  // item master (Tranche-D pattern). Components master gets the supplier-
+  // mapping links because components are NOT items: the legacy route
+  // /admin/masters/items/<componentId> rendered an item detail with an
+  // unknown id and showed an error.
   if (category === "missing_bom" && itemId) {
     return (
-      <Link href={`/admin/masters/items/${encodeURIComponent(itemId)}`} className="ml-2 text-3xs text-accent hover:underline">
+      <Link href={`/admin/masters/items/${encodeURIComponent(itemId)}?tab=bom`} className="ml-2 text-3xs text-accent hover:underline">
         Fix BOM →
       </Link>
     );
   }
   if ((category === "missing_supplier_mapping" || category === "ambiguous_supplier_mapping" || category === "impossible_lead_time") && componentId) {
     return (
-      <Link href={`/admin/masters/items/${encodeURIComponent(componentId)}`} className="ml-2 text-3xs text-accent hover:underline">
+      <Link href={`/admin/masters/components/${encodeURIComponent(componentId)}`} className="ml-2 text-3xs text-accent hover:underline">
         Fix supplier →
       </Link>
     );
@@ -767,65 +811,115 @@ export default function PlanningRunDetailPage() {
 
       <div className="space-y-5">
         <SectionCard
-          eyebrow="מקורות הריצה"
-          title="נתונים בעת ההפעלה"
-          description="ניתן לשחזר את הריצה במלואה מהמקורות שנשמרו בעת ההפעלה."
+          eyebrow="Run sources"
+          title="Inputs captured at run time"
+          description="The full run is reproducible from the snapshots saved when it was triggered."
         >
           <dl className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
             <div>
               <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                זמן ריצה
+                Run time
               </dt>
               <dd className="font-mono text-xs tabular-nums text-fg">
-                {fmtDate(detail.executed_at)}
+                {(() => {
+                  const f = fmtRelativeAndAbsolute(detail.executed_at);
+                  return (
+                    <>
+                      {f.absolute}
+                      <span className={cn("ml-2 text-3xs font-sans", f.stale ? "text-warning-fg" : "text-fg-subtle")}>
+                        · {f.relative}
+                      </span>
+                    </>
+                  );
+                })()}
               </dd>
             </div>
             <div>
               <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                הופעל על-ידי
+                Triggered by
               </dt>
               <dd className="text-xs text-fg">
                 {detail.trigger_source === "manual"
-                  ? "ידני"
+                  ? "Manual"
                   : detail.trigger_source === "scheduled"
-                    ? "אוטומטי"
+                    ? "Scheduled"
                     : detail.trigger_source}
               </dd>
             </div>
             <div>
               <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                תחזית ביקוש
+                Demand forecast
               </dt>
+              {/* Forecast snapshot is captured at run-time. The id either
+                  points at a published forecast or is null (run used open
+                  orders only). The freshness clock is the run's executed_at
+                  — the snapshot is, by definition, as old as the run. */}
               <dd className="text-xs text-fg">
                 {detail.demand_snapshot_forecast_version_id ? (
-                  <Link
-                    href={`/planning/forecast/${encodeURIComponent(detail.demand_snapshot_forecast_version_id)}`}
-                    className="text-accent underline underline-offset-2 hover:text-accent/80"
-                  >
-                    פתח תחזית
-                  </Link>
-                ) : "—"}
+                  <>
+                    <Link
+                      href={`/planning/forecast/${encodeURIComponent(detail.demand_snapshot_forecast_version_id)}`}
+                      className="text-accent underline underline-offset-2 hover:text-accent/80"
+                    >
+                      Open forecast
+                    </Link>
+                    <span className="ml-2 text-3xs text-fg-subtle">
+                      · captured {fmtRelativeAndAbsolute(detail.executed_at).relative}
+                    </span>
+                  </>
+                ) : (
+                  <span className="text-fg-muted">No forecast attached — run used open orders only</span>
+                )}
               </dd>
             </div>
             <div>
               <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                הזמנות פתוחות בעת הריצה
+                Open orders snapshot
               </dt>
+              {/* Orders snapshot id is the LionWheel mirror snapshot row
+                  attached to this run. When present the run included open
+                  orders; when null the run was forecast-only. The freshness
+                  clock is again the run's executed_at — the orders snapshot
+                  was taken inside the same transaction. */}
               <dd className="text-xs text-fg">
-                {detail.demand_snapshot_orders_snapshot_run_id ? "מסונכרן" : "לא זמין"}
+                {detail.demand_snapshot_orders_snapshot_run_id ? (() => {
+                  const f = fmtRelativeAndAbsolute(detail.executed_at);
+                  return (
+                    <>
+                      <span className="text-fg">Captured at run time</span>
+                      <span className={cn("ml-2 text-3xs font-sans", f.stale ? "text-warning-fg" : "text-fg-subtle")}>
+                        · {f.absolute} · {f.relative}
+                      </span>
+                    </>
+                  );
+                })() : (
+                  <span className="text-fg-muted">No open-orders snapshot attached</span>
+                )}
               </dd>
             </div>
             <div>
               <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                עוגן מלאי עודכן
+                Stock anchor refreshed
               </dt>
               <dd className="font-mono text-xs text-fg">
-                {fmtDate(detail.stock_snapshot_anchor_refreshed_at)}
+                {(() => {
+                  const f = fmtRelativeAndAbsolute(detail.stock_snapshot_anchor_refreshed_at);
+                  return detail.stock_snapshot_anchor_refreshed_at ? (
+                    <>
+                      {f.absolute}
+                      <span className={cn("ml-2 text-3xs font-sans", f.stale ? "text-warning-fg" : "text-fg-subtle")}>
+                        · {f.relative}
+                      </span>
+                    </>
+                  ) : (
+                    <span className="font-sans text-fg-muted">—</span>
+                  );
+                })()}
               </dd>
             </div>
             <div>
               <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                סטיית מלאי בעת הריצה
+                Stock parity drift at run time
               </dt>
               <dd className="font-mono text-xs tabular-nums text-fg">
                 {detail.rebuild_verifier_drift_at_run ?? "—"}
@@ -924,7 +1018,7 @@ export default function PlanningRunDetailPage() {
 
         <SectionCard
           eyebrow="Recommendations"
-          title={`${detail.summary.purchase_recs_count + detail.summary.production_recs_count} total · ${detail.summary.purchase_recs_count} רכש · ${detail.summary.production_recs_count} ייצור`}
+          title={`${detail.summary.purchase_recs_count + detail.summary.production_recs_count} total · ${detail.summary.purchase_recs_count} purchase · ${detail.summary.production_recs_count} production`}
           description={
             canAct
               ? "Review and approve. Approved purchase recs convert to POs (one supplier = one PO ideally). Approved production recs open the Production Actual form prefilled with item + qty + BOM. Nothing orders or produces autonomously."
@@ -976,17 +1070,17 @@ export default function PlanningRunDetailPage() {
               className="flex flex-wrap items-center gap-2 border-b border-border/40 bg-bg-subtle/40 px-5 py-2 text-xs"
               data-testid="planning-run-production-summary"
             >
-              <span className="text-fg-muted">סיכום מוכנות:</span>
+              <span className="text-fg-muted">Readiness:</span>
               <Badge tone={productionReadyCount > 0 ? "success" : "neutral"} variant="soft" dotted>
-                {productionReadyCount} מוכן
+                {productionReadyCount} ready
               </Badge>
               {productionBlockedCount > 0 ? (
                 <Badge tone="warning" variant="soft" dotted>
-                  {productionBlockedCount} חסום
+                  {productionBlockedCount} blocked
                 </Badge>
               ) : null}
               <span className="text-3xs text-fg-subtle ml-1">
-                — מסודר לפי דחיפות (מוכן לייצור בראש, חסום בתחתית)
+                — sorted by urgency (ready at top, blocked at bottom)
               </span>
             </div>
           ) : null}
@@ -1351,10 +1445,10 @@ export default function PlanningRunDetailPage() {
                       <RecStatusBadge status={r.recommendation_status} />
                     </div>
                     <div className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-fg-muted">
-                      <div><span className="text-fg-subtle">נדרש:</span> <span className="font-mono tabular-nums">{r.required_qty}{r.uom ? ` ${r.uom}` : ""}</span></div>
-                      <div><span className="text-fg-subtle">מומלץ:</span> <span className="font-mono tabular-nums text-fg-strong">{r.recommended_qty}{r.uom ? ` ${r.uom}` : ""}</span></div>
-                      <div><span className="text-fg-subtle">לתאריך:</span> <span className="text-xs">{fmtPeriodBucket(r.target_period_bucket_key)}</span></div>
-                      <div><span className="text-fg-subtle">להזמין עד:</span> <span className={r.order_by_date && new Date(r.order_by_date) < new Date() ? "text-danger-fg font-medium" : ""}>{fmtDateOnly(r.order_by_date)}</span></div>
+                      <div><span className="text-fg-subtle">Required:</span> <span className="font-mono tabular-nums">{r.required_qty}{r.uom ? ` ${r.uom}` : ""}</span></div>
+                      <div><span className="text-fg-subtle">Recommended:</span> <span className="font-mono tabular-nums text-fg-strong">{r.recommended_qty}{r.uom ? ` ${r.uom}` : ""}</span></div>
+                      <div><span className="text-fg-subtle">Target period:</span> <span className="text-xs">{fmtPeriodBucket(r.target_period_bucket_key)}</span></div>
+                      <div><span className="text-fg-subtle">Order by:</span> <span className={r.order_by_date && new Date(r.order_by_date) < new Date() ? "text-danger-fg font-medium" : ""}>{fmtDateOnly(r.order_by_date)}</span></div>
                     </div>
                     {canAct ? (
                       <div className="mt-2 flex flex-wrap gap-1.5">
@@ -1362,17 +1456,17 @@ export default function PlanningRunDetailPage() {
                           <>
                             <button type="button" className="btn btn-sm gap-1 flex-1" disabled={isApproving || isDismissing} onClick={() => approveMutation.mutate(rowKey)}>
                               <Check className="h-3 w-3" strokeWidth={2.5} />
-                              {isApproving ? "מאשר…" : "אשר"}
+                              {isApproving ? "Approving…" : "Approve"}
                             </button>
                             <button type="button" className="btn btn-ghost btn-sm gap-1 text-danger" disabled={isApproving || isDismissing} onClick={() => dismissMutation.mutate(rowKey)}>
                               <X className="h-3 w-3" strokeWidth={2.5} />
-                              {isDismissing ? "דוחה…" : "דחה"}
+                              {isDismissing ? "Dismissing…" : "Dismiss"}
                             </button>
                           </>
                         ) : canConvertThisRow ? (
                           <button type="button" className="btn btn-sm gap-1 flex-1" disabled={isConverting} onClick={() => convertMutation.mutate(rowKey)}>
                             <FileOutput className="h-3 w-3" strokeWidth={2.5} />
-                            {isConverting ? "ממיר…" : "צור הזמנת רכש"}
+                            {isConverting ? "Converting…" : "Convert to PO"}
                           </button>
                         ) : canAct && activeTab === "production" && r.recommendation_status === "approved" ? (
                           <Link
@@ -1386,7 +1480,7 @@ export default function PlanningRunDetailPage() {
                             className="btn btn-sm gap-1 flex-1"
                           >
                             <Factory className="h-3 w-3" strokeWidth={2.5} />
-                            פתח טופס דיווח ייצור
+                            Open production form
                           </Link>
                         ) : null}
                       </div>

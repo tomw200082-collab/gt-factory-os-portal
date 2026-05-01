@@ -41,7 +41,11 @@ function sortComponents(
   return [...rows].sort((a, b) => {
     let cmp = 0;
     if (key === "component_name") {
-      cmp = a.component_name.localeCompare(b.component_name, "he");
+      // Component names may be Hebrew (data-side, allowed per CLAUDE.md
+      // §"UI language" exception for data values) or English; the locale
+      // string undefined defers to the runtime which collates both groups
+      // sensibly without forcing a hard choice between he/en.
+      cmp = a.component_name.localeCompare(b.component_name);
     } else {
       cmp = parseQty(a[key]) - parseQty(b[key]);
     }
@@ -97,34 +101,34 @@ function ComponentCard({ row }: { row: RecDetailComponent }) {
           <div className="font-mono text-3xs text-fg-subtle">{row.component_id}</div>
         </div>
         {/* Loop 14 — fast-fix link for blocked rows. Operator/manager
-            can jump straight to item master to update supplier mapping
+            can jump straight to component master to update supplier mapping
             or BOM, instead of copy-pasting the component_id elsewhere. */}
         {shortage > 0 ? (
           <Link
-            href={`/admin/masters/items/${encodeURIComponent(row.component_id)}`}
+            href={`/admin/masters/components/${encodeURIComponent(row.component_id)}`}
             className="inline-flex shrink-0 items-center gap-1 rounded border border-warning/30 bg-warning-softer px-1.5 py-0.5 text-3xs font-medium text-warning-fg hover:bg-warning-soft"
-            title="Open item master to fix supplier mapping or check stock"
+            title="Open component master to fix supplier mapping or check stock"
           >
             <ExternalLink className="h-2.5 w-2.5" strokeWidth={2.5} />
-            תקן
+            Fix
           </Link>
         ) : null}
       </div>
       <div className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs">
         <div>
-          <span className="text-fg-muted">ביקוש: </span>
+          <span className="text-fg-muted">Demand: </span>
           <span className="font-mono tabular-nums">{fmtQty(row.demand_qty, row.unit)}</span>
         </div>
         <div>
-          <span className="text-fg-muted">במלאי: </span>
+          <span className="text-fg-muted">On hand: </span>
           <span className="font-mono tabular-nums">{fmtQty(row.on_hand_qty, row.unit)}</span>
         </div>
         <div>
-          <span className="text-fg-muted">בהזמנה: </span>
+          <span className="text-fg-muted">In PO: </span>
           <span className="font-mono tabular-nums">{fmtQty(row.open_po_qty, row.unit)}</span>
         </div>
         <div>
-          <span className="text-fg-muted">חוסר: </span>
+          <span className="text-fg-muted">Shortage: </span>
           <span
             className={cn(
               "font-mono tabular-nums font-semibold",
@@ -174,12 +178,12 @@ export function ComponentBreakdown({ rec }: ComponentBreakdownProps) {
 
   return (
     <SectionCard
-      eyebrow="פירוט רכיבים"
-      title="רכיבי הייצור"
+      eyebrow="Component breakdown"
+      title="BOM components"
       description={
         isBF
-          ? "פריט מוגמר שנרכש — אין פירוק לרכיבים"
-          : `${rec.components.length} רכיב${rec.components.length !== 1 ? "ים" : ""} בהמלצה`
+          ? "Bought finished — no component breakdown"
+          : `${rec.components.length} component${rec.components.length === 1 ? "" : "s"} in this recommendation`
       }
     >
       {/* Feasibility chip — shows only for production-type recs (i.e.
@@ -204,21 +208,21 @@ export function ComponentBreakdown({ rec }: ComponentBreakdownProps) {
           <div className="flex-1 min-w-0">
             {isReady ? (
               <span className="font-medium">
-                מוכן לייצור — כל הרכיבים זמינים במלאי או בהזמנות פתוחות
+                Ready to produce — all components available on hand or in open POs
               </span>
             ) : (
               <span className="font-medium">
-                לא ניתן לייצר עכשיו — {shortCount} מתוך {totalComponents} רכיבים חסרים
+                Cannot produce now — {shortCount} of {totalComponents} components short
               </span>
             )}
           </div>
           {!isReady ? (
             <Badge tone="warning" variant="soft" dotted>
-              {shortCount} חסר
+              {shortCount} short
             </Badge>
           ) : (
             <Badge tone="success" variant="soft" dotted>
-              {totalComponents} מוכן
+              {totalComponents} ready
             </Badge>
           )}
         </div>
@@ -226,7 +230,7 @@ export function ComponentBreakdown({ rec }: ComponentBreakdownProps) {
 
       {isBF || rec.components.length === 0 ? (
         <div className="text-sm text-fg-muted italic">
-          פריט מוגמר שנרכש — אין פירוק לרכיבים
+          Bought finished — no component breakdown
         </div>
       ) : (
         <>
@@ -235,11 +239,11 @@ export function ComponentBreakdown({ rec }: ComponentBreakdownProps) {
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b border-border/70 bg-bg-subtle/60">
-                  <SortHeader label="רכיב" sortKey="component_name" currentKey={sortKey} dir={sortDir} onSort={handleSort} align="left" />
-                  <SortHeader label="ביקוש" sortKey="demand_qty" currentKey={sortKey} dir={sortDir} onSort={handleSort} />
-                  <SortHeader label="במלאי" sortKey="on_hand_qty" currentKey={sortKey} dir={sortDir} onSort={handleSort} />
-                  <SortHeader label="בהזמנה" sortKey="open_po_qty" currentKey={sortKey} dir={sortDir} onSort={handleSort} />
-                  <SortHeader label="חוסר" sortKey="net_purchase_qty" currentKey={sortKey} dir={sortDir} onSort={handleSort} />
+                  <SortHeader label="Component" sortKey="component_name" currentKey={sortKey} dir={sortDir} onSort={handleSort} align="left" />
+                  <SortHeader label="Demand" sortKey="demand_qty" currentKey={sortKey} dir={sortDir} onSort={handleSort} />
+                  <SortHeader label="On hand" sortKey="on_hand_qty" currentKey={sortKey} dir={sortDir} onSort={handleSort} />
+                  <SortHeader label="In PO" sortKey="open_po_qty" currentKey={sortKey} dir={sortDir} onSort={handleSort} />
+                  <SortHeader label="Shortage" sortKey="net_purchase_qty" currentKey={sortKey} dir={sortDir} onSort={handleSort} />
                 </tr>
               </thead>
               <tbody>
@@ -259,12 +263,12 @@ export function ComponentBreakdown({ rec }: ComponentBreakdownProps) {
                           {/* Loop 14 — fast-fix link for blocked rows. */}
                           {shortage > 0 ? (
                             <Link
-                              href={`/admin/masters/items/${encodeURIComponent(row.component_id)}`}
+                              href={`/admin/masters/components/${encodeURIComponent(row.component_id)}`}
                               className="inline-flex shrink-0 items-center gap-1 rounded border border-warning/30 bg-warning-softer px-1.5 py-0.5 text-3xs font-medium text-warning-fg hover:bg-warning-soft"
-                              title="Open item master to fix supplier mapping or check stock"
+                              title="Open component master to fix supplier mapping or check stock"
                             >
                               <ExternalLink className="h-2.5 w-2.5" strokeWidth={2.5} />
-                              תקן
+                              Fix
                             </Link>
                           ) : null}
                         </div>
