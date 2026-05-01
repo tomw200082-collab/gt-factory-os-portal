@@ -101,6 +101,19 @@ export const NAV_MANIFEST: NavGroup[] = [
         min_role: "viewer",
         required_capability: "viewer:read",
       },
+      {
+        // /dashboard/v2 — Control Tower v2 morning view (Tom priority #8).
+        // Per W4 dashboard control tower v2 spec §13 DCT2-8 default: ships at
+        // a NEW route alongside the existing /dashboard 7-block page until Tom
+        // promotes one over the other. Two live blocks in v1: §4.1 Critical
+        // Today + §4.4 Slipped Plans. The other seven blocks render as
+        // placeholder cards awaiting their read-models (no mock data).
+        href: "/dashboard/v2",
+        label: "Control tower (v2)",
+        icon: LayoutDashboard,
+        min_role: "viewer",
+        required_capability: "viewer:read",
+      },
     ],
   },
   {
