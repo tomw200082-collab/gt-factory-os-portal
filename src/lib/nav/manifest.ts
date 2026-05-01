@@ -204,7 +204,7 @@ export const NAV_MANIFEST: NavGroup[] = [
       },
       {
         href: "/planning/production-plan",
-        label: "תכנון ייצור יומי",
+        label: "Daily Production Plan",
         icon: Factory,
         min_role: "viewer",
         required_capability: "planning:read",

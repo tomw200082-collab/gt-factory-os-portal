@@ -1,23 +1,29 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// /planning/production-plan — Daily Production Plan v1 (Gate 4 of Planning
-// Corridor v1).
+// /planning/production-plan — Daily Production Plan
 //
 // Operational board that lets a planner:
 //   - See the week
 //   - Add planned production manually OR from approved production
-//     recommendations (latest completed run)
+//     recommendations (rec picker shipped in a follow-up tranche)
 //   - Edit qty/date/uom/notes while planned
 //   - Cancel with a reason
-//   - See planned/done/cancelled state per row
+//   - See planned / completed / cancelled state per row
 //
-// LOCKED PRINCIPLE (visible at the top of the page, non-dismissible):
-//   "תכנון בלבד — המלאי לא השתנה עד דיווח ייצור בפועל"
+// Locked principle (visible non-dismissible banner at the top):
+//   "Planned Only — inventory will update only after actual production
+//    is reported."
 //
 // Plans NEVER write stock_ledger. Stock changes only via production_actual.
-// "done" rendered_state is derived by the API from completed_submission_id
-// (Gate 5 will wire production_actual?from_plan to set this).
+// "Completed" rendered_state is derived by the API from
+// completed_submission_id (Gate 5 will wire production_actual?from_plan).
+//
+// Portal UX standard (Gate 4.2 lock):
+//   - English only, LTR only
+//   - Empty / loading / error states are mutually exclusive
+//   - No raw IDs / JSON / enums in primary UI
+//   - Mobile-first at 390px
 // ---------------------------------------------------------------------------
 
 import Link from "next/link";
@@ -52,7 +58,7 @@ import type {
 } from "./_lib/types";
 
 // ---------------------------------------------------------------------------
-// Date helpers — local Israel time (operator-facing).
+// Date helpers
 // ---------------------------------------------------------------------------
 function toIsoDate(d: Date): string {
   const y = d.getFullYear();
@@ -62,7 +68,7 @@ function toIsoDate(d: Date): string {
 }
 
 function startOfWeek(d: Date): Date {
-  // Sunday-first per Israel convention
+  // Sunday-first per the operator week convention.
   const day = d.getDay();
   const out = new Date(d);
   out.setDate(d.getDate() - day);
@@ -76,21 +82,34 @@ function addDays(d: Date, n: number): Date {
   return out;
 }
 
+const DAY_NAMES = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
+const MONTH_NAMES = [
+  "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+  "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+];
+
 function fmtDayHeader(d: Date): { dayName: string; dateLabel: string } {
-  const dayNames = ["ראשון", "שני", "שלישי", "רביעי", "חמישי", "שישי", "שבת"];
-  const dayName = dayNames[d.getDay()];
-  const dateLabel = `${d.getDate()}/${d.getMonth() + 1}`;
-  return { dayName, dateLabel };
+  return {
+    dayName: DAY_NAMES[d.getDay()],
+    dateLabel: `${MONTH_NAMES[d.getMonth()]} ${d.getDate()}`,
+  };
 }
 
 function fmtWeekRange(start: Date, end: Date): string {
-  return `${start.getDate()}/${start.getMonth() + 1} – ${end.getDate()}/${end.getMonth() + 1}/${end.getFullYear()}`;
+  const s = `${MONTH_NAMES[start.getMonth()]} ${start.getDate()}`;
+  const sameMonth = start.getMonth() === end.getMonth();
+  const e = sameMonth
+    ? `${end.getDate()}, ${end.getFullYear()}`
+    : `${MONTH_NAMES[end.getMonth()]} ${end.getDate()}, ${end.getFullYear()}`;
+  return `Week of ${s}–${e}`;
 }
 
 function fmtQty(s: string, uom: string | null): string {
   const n = parseFloat(s);
   if (!Number.isFinite(n)) return s;
-  const formatted = Number.isInteger(n) ? n.toFixed(0) : n.toFixed(2).replace(/\.?0+$/, "");
+  const formatted = Number.isInteger(n)
+    ? n.toFixed(0)
+    : n.toFixed(2).replace(/\.?0+$/, "");
   return uom ? `${formatted} ${uom}` : formatted;
 }
 
@@ -124,20 +143,20 @@ function StatusChip({ state }: { state: RenderedState }) {
   if (state === "done") {
     return (
       <Badge tone="success" variant="soft" dotted>
-        בוצע בפועל
+        Completed
       </Badge>
     );
   }
   if (state === "cancelled") {
     return (
       <Badge tone="neutral" variant="soft" dotted>
-        בוטל
+        Cancelled
       </Badge>
     );
   }
   return (
     <Badge tone="info" variant="soft" dotted>
-      מתוכנן
+      Planned
     </Badge>
   );
 }
@@ -162,6 +181,7 @@ function PlanRowCard({
 
   return (
     <div
+      dir="ltr"
       className={cn(
         "rounded-md border p-3 space-y-2 transition-colors",
         isLive && "border-info/40 bg-info-softer/30",
@@ -193,7 +213,7 @@ function PlanRowCard({
       {/* Quantity + source */}
       <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
         <div>
-          <span className="text-fg-muted">כמות מתוכננת: </span>
+          <span className="text-fg-muted">Planned qty: </span>
           <span className="font-mono tabular-nums font-semibold text-fg-strong">
             {fmtQty(plan.planned_qty, plan.uom)}
           </span>
@@ -201,13 +221,15 @@ function PlanRowCard({
         <div className="text-3xs text-fg-muted">
           {plan.source_recommendation_id ? (
             <span>
-              מקור: המלצת ייצור
+              Source: production recommendation
               {plan.source_run_status === "superseded" ? (
-                <span className="ml-1 text-warning-fg">(ריצה ישנה)</span>
+                <span className="ml-1 text-warning-fg">
+                  (older planning run)
+                </span>
               ) : null}
             </span>
           ) : (
-            <span>מקור: תכנון ידני</span>
+            <span>Source: manual entry</span>
           )}
         </div>
       </div>
@@ -215,16 +237,26 @@ function PlanRowCard({
       {/* Done variance */}
       {isDone && plan.completed_actual ? (
         <div className="rounded border border-success/30 bg-success-softer/40 p-2 text-xs">
-          <div className="font-medium text-success-fg">בוצע בפועל</div>
+          <div className="font-medium text-success-fg">
+            Completed in actual production
+          </div>
           <div className="mt-0.5 text-fg-muted">
-            יוצר {fmtQty(plan.completed_actual.output_qty, plan.completed_actual.output_uom)}
+            Produced{" "}
+            {fmtQty(
+              plan.completed_actual.output_qty,
+              plan.completed_actual.output_uom,
+            )}
             {Number(plan.completed_actual.variance_qty) !== 0 ? (
-              <span className={cn(
-                "ml-2 font-mono tabular-nums",
-                Number(plan.completed_actual.variance_qty) > 0 ? "text-success-fg" : "text-warning-fg",
-              )}>
+              <span
+                className={cn(
+                  "ml-2 font-mono tabular-nums",
+                  Number(plan.completed_actual.variance_qty) > 0
+                    ? "text-success-fg"
+                    : "text-warning-fg",
+                )}
+              >
                 ({Number(plan.completed_actual.variance_qty) > 0 ? "+" : ""}
-                {plan.completed_actual.variance_qty})
+                {plan.completed_actual.variance_qty} vs planned)
               </span>
             ) : null}
           </div>
@@ -234,7 +266,7 @@ function PlanRowCard({
       {/* Cancelled reason */}
       {isCancelled && plan.cancel_reason ? (
         <div className="rounded border border-border/40 bg-bg-subtle/40 p-2 text-3xs text-fg-muted">
-          <span className="font-medium text-fg">סיבת ביטול: </span>
+          <span className="font-medium text-fg">Reason for cancellation: </span>
           {plan.cancel_reason}
         </div>
       ) : null}
@@ -242,12 +274,12 @@ function PlanRowCard({
       {/* Notes */}
       {plan.notes ? (
         <div className="text-3xs text-fg-muted">
-          <span className="font-medium">הערות: </span>
+          <span className="font-medium">Notes: </span>
           {plan.notes}
         </div>
       ) : null}
 
-      {/* Actions row */}
+      {/* Actions row — only visible while planned and only to planner/admin */}
       {canAct && isLive ? (
         <div className="flex flex-wrap items-center gap-2 pt-1">
           <button
@@ -257,7 +289,7 @@ function PlanRowCard({
             onClick={() => onEdit(plan)}
           >
             <Pencil className="h-3 w-3" strokeWidth={2.5} />
-            ערוך
+            Edit
           </button>
           <button
             type="button"
@@ -266,11 +298,11 @@ function PlanRowCard({
             onClick={() => onCancel(plan)}
           >
             <Ban className="h-3 w-3" strokeWidth={2.5} />
-            בטל
+            Cancel
           </button>
           {/* Production-actual deep link — Gate 5 will wire from_plan.
               For now, pre-fill the form with item_id and suggested_qty
-              from this plan; the form_plan link itself comes in Gate 5. */}
+              from this plan; the from_plan link itself comes in Gate 5. */}
           <Link
             href={
               `/ops/stock/production-actual` +
@@ -278,10 +310,10 @@ function PlanRowCard({
               `&suggested_qty=${encodeURIComponent(plan.planned_qty)}`
             }
             className="btn btn-ghost btn-sm gap-1.5 text-accent"
-            title="פתח את טופס דיווח ייצור עם פרטי התכנון מולאים מראש"
+            title="Open the Production Actual form prefilled with this plan's item and quantity"
           >
             <Factory className="h-3 w-3" strokeWidth={2.5} />
-            פתח דיווח ייצור
+            Open Production Report
           </Link>
         </div>
       ) : null}
@@ -319,6 +351,7 @@ function DayCard({
 
   return (
     <div
+      dir="ltr"
       className={cn(
         "rounded-md border bg-bg-raised transition-colors",
         isToday ? "border-accent/50" : "border-border/60",
@@ -340,28 +373,28 @@ function DayCard({
             <span className="text-3xs text-fg-muted">{dateLabel}</span>
             {isToday ? (
               <Badge tone="accent" variant="soft">
-                היום
+                Today
               </Badge>
             ) : null}
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-3xs">
             {planned.length > 0 ? (
               <Badge tone="info" variant="soft" dotted>
-                {planned.length} מתוכנן
+                {planned.length} planned
               </Badge>
             ) : null}
             {done.length > 0 ? (
               <Badge tone="success" variant="soft" dotted>
-                {done.length} בוצע
+                {done.length} completed
               </Badge>
             ) : null}
             {cancelled.length > 0 ? (
               <Badge tone="neutral" variant="soft" dotted>
-                {cancelled.length} בוטל
+                {cancelled.length} cancelled
               </Badge>
             ) : null}
             {plans.length === 0 ? (
-              <span className="text-fg-muted">אין תכנון</span>
+              <span className="text-fg-muted">No production planned</span>
             ) : null}
           </div>
         </div>
@@ -378,7 +411,7 @@ function DayCard({
         <div className="border-t border-border/40 p-3 space-y-2">
           {plans.length === 0 ? (
             <div className="text-xs text-fg-muted text-center py-2">
-              אין עדיין ייצור מתוכנן ליום זה
+              No production planned for this day yet.
             </div>
           ) : (
             plans.map((p) => (
@@ -402,7 +435,7 @@ function DayCard({
               data-testid="day-card-add"
             >
               <Plus className="h-3 w-3" strokeWidth={2.5} />
-              הוסף ייצור ליום זה
+              Add production for this day
             </button>
           ) : null}
         </div>
@@ -442,7 +475,8 @@ function ManualAddModal({
     const rows = itemsQuery.data?.rows ?? [];
     return rows
       .filter(
-        (r) => r.supply_method === "MANUFACTURED" || r.supply_method === "REPACK",
+        (r) =>
+          r.supply_method === "MANUFACTURED" || r.supply_method === "REPACK",
       )
       .sort((a, b) => a.item_name.localeCompare(b.item_name));
   }, [itemsQuery.data]);
@@ -458,6 +492,7 @@ function ManualAddModal({
 
   return (
     <div
+      dir="ltr"
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 px-2 sm:px-4"
       role="dialog"
       aria-modal="true"
@@ -468,10 +503,11 @@ function ManualAddModal({
     >
       <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-2xl">
         <h2 className="text-base font-semibold text-fg-strong">
-          הוסף תכנון ידני
+          Add production manually
         </h2>
         <p className="mt-1 text-3xs text-fg-muted">
-          תכנון בלבד — המלאי לא ישתנה עד דיווח ייצור בפועל.
+          Planned only — inventory will not change until actual production is
+          reported.
         </p>
 
         <form
@@ -490,7 +526,7 @@ function ManualAddModal({
         >
           <label className="block">
             <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              יום ייצור *
+              Production day *
             </span>
             <input
               type="date"
@@ -503,7 +539,7 @@ function ManualAddModal({
 
           <label className="block">
             <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              בחר מוצר *
+              Product *
             </span>
             <select
               className="input"
@@ -512,8 +548,8 @@ function ManualAddModal({
               disabled={itemsQuery.isLoading}
               required
             >
-              <option value="">— בחר —</option>
-              <optgroup label="ייצור">
+              <option value="">— select a product —</option>
+              <optgroup label="Manufactured">
                 {producibleItems
                   .filter((r) => r.supply_method === "MANUFACTURED")
                   .map((r) => (
@@ -522,7 +558,7 @@ function ManualAddModal({
                     </option>
                   ))}
               </optgroup>
-              <optgroup label="אריזה מחדש">
+              <optgroup label="Repack">
                 {producibleItems
                   .filter((r) => r.supply_method === "REPACK")
                   .map((r) => (
@@ -537,7 +573,7 @@ function ManualAddModal({
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
               <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                כמות מתוכננת *
+                Planned quantity *
               </span>
               <input
                 type="number"
@@ -552,7 +588,7 @@ function ManualAddModal({
             </label>
             <label className="block">
               <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                יחידת מידה *
+                Unit of measure *
               </span>
               <input
                 className="input"
@@ -565,14 +601,14 @@ function ManualAddModal({
 
           <label className="block">
             <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              הערות
+              Notes
             </span>
             <textarea
               rows={2}
               className="input min-h-[3rem]"
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="הערות לתכנון (אופציונלי)"
+              placeholder="Optional notes about this plan"
             />
           </label>
 
@@ -583,7 +619,7 @@ function ManualAddModal({
               onClick={onClose}
               disabled={isSubmitting}
             >
-              ביטול
+              Cancel
             </button>
             <button
               type="submit"
@@ -592,7 +628,7 @@ function ManualAddModal({
               data-testid="manual-add-submit"
             >
               <Plus className="h-3 w-3" strokeWidth={2.5} />
-              {isSubmitting ? "שומר…" : "הוסף לתוכנית"}
+              {isSubmitting ? "Saving…" : "Add to Plan"}
             </button>
           </div>
         </form>
@@ -627,6 +663,7 @@ function EditModal({
 
   return (
     <div
+      dir="ltr"
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 px-2 sm:px-4"
       role="dialog"
       aria-modal="true"
@@ -636,7 +673,7 @@ function EditModal({
       }}
     >
       <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-2xl">
-        <h2 className="text-base font-semibold text-fg-strong">ערוך תכנון</h2>
+        <h2 className="text-base font-semibold text-fg-strong">Edit plan</h2>
         <p className="mt-1 text-3xs text-fg-muted">
           {plan.item_name ?? plan.item_id}
         </p>
@@ -660,7 +697,7 @@ function EditModal({
         >
           <label className="block">
             <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              יום ייצור
+              Production day
             </span>
             <input
               type="date"
@@ -673,7 +710,7 @@ function EditModal({
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
               <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                כמות מתוכננת
+                Planned quantity
               </span>
               <input
                 type="number"
@@ -687,7 +724,7 @@ function EditModal({
             </label>
             <label className="block">
               <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                יחידת מידה
+                Unit of measure
               </span>
               <input
                 className="input"
@@ -699,7 +736,7 @@ function EditModal({
 
           <label className="block">
             <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              הערות
+              Notes
             </span>
             <textarea
               rows={2}
@@ -716,7 +753,7 @@ function EditModal({
               onClick={onClose}
               disabled={isSubmitting}
             >
-              ביטול
+              Cancel
             </button>
             <button
               type="submit"
@@ -724,7 +761,7 @@ function EditModal({
               disabled={isSubmitting}
               data-testid="edit-submit"
             >
-              {isSubmitting ? "שומר…" : "שמור שינויים"}
+              {isSubmitting ? "Saving…" : "Save changes"}
             </button>
           </div>
         </form>
@@ -751,6 +788,7 @@ function CancelModal({
 
   return (
     <div
+      dir="ltr"
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 px-2 sm:px-4"
       role="dialog"
       aria-modal="true"
@@ -760,14 +798,16 @@ function CancelModal({
       }}
     >
       <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-2xl">
-        <h2 className="text-base font-semibold text-fg-strong">בטל תכנון</h2>
+        <h2 className="text-base font-semibold text-fg-strong">Cancel plan</h2>
         <p className="mt-1 text-3xs text-fg-muted">
-          {plan.item_name ?? plan.item_id} · {fmtQty(plan.planned_qty, plan.uom)}
+          {plan.item_name ?? plan.item_id} ·{" "}
+          {fmtQty(plan.planned_qty, plan.uom)}
         </p>
 
         <div className="mt-3 rounded border border-warning/30 bg-warning-softer/30 p-3 text-xs text-warning-fg">
-          <span className="font-medium">שים לב: </span>
-          ביטול תכנון לא משנה מלאי. הוא רק מסיר את השורה מלוח הייצור.
+          <span className="font-medium">Heads up: </span>
+          Cancelling a plan does not change inventory. It only removes the row
+          from the production board.
         </div>
 
         <form
@@ -780,14 +820,14 @@ function CancelModal({
         >
           <label className="block">
             <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              סיבת הביטול *
+              Reason for cancellation *
             </span>
             <textarea
               rows={3}
               className="input min-h-[4rem]"
               value={reason}
               onChange={(e) => setReason(e.target.value)}
-              placeholder="לדוגמה: שינוי בלוח הזמנים, חוסר חומר גלם, ביקוש שופץ"
+              placeholder="e.g. schedule change, raw material shortage, demand updated"
               required
             />
           </label>
@@ -799,7 +839,7 @@ function CancelModal({
               onClick={onClose}
               disabled={isSubmitting}
             >
-              חזור
+              Back
             </button>
             <button
               type="submit"
@@ -808,7 +848,7 @@ function CancelModal({
               data-testid="cancel-submit"
             >
               <Ban className="h-3 w-3" strokeWidth={2.5} />
-              {isSubmitting ? "מבטל…" : "בטל תכנון"}
+              {isSubmitting ? "Cancelling…" : "Cancel plan"}
             </button>
           </div>
         </form>
@@ -831,6 +871,7 @@ function Toast({
 }) {
   return (
     <div
+      dir="ltr"
       className={cn(
         "fixed bottom-4 left-4 right-4 z-40 mx-auto max-w-md rounded-md border px-4 py-3 text-sm shadow-lg",
         kind === "success"
@@ -843,7 +884,10 @@ function Toast({
       <div className="flex items-start justify-between gap-3">
         <div className="flex items-start gap-2">
           {kind === "success" ? (
-            <CheckCircle2 className="h-4 w-4 shrink-0 mt-0.5" strokeWidth={2} />
+            <CheckCircle2
+              className="h-4 w-4 shrink-0 mt-0.5"
+              strokeWidth={2}
+            />
           ) : (
             <XCircle className="h-4 w-4 shrink-0 mt-0.5" strokeWidth={2} />
           )}
@@ -854,7 +898,7 @@ function Toast({
           onClick={onClose}
           className="text-3xs underline hover:no-underline"
         >
-          סגור
+          Close
         </button>
       </div>
     </div>
@@ -874,11 +918,20 @@ export default function ProductionPlanPage() {
   const [expandedDay, setExpandedDay] = useState<string | null>(null);
 
   // Modal state
-  const [showManualAdd, setShowManualAdd] = useState<{ defaultDate: string } | null>(null);
-  const [editingPlan, setEditingPlan] = useState<ProductionPlanRow | null>(null);
-  const [cancellingPlan, setCancellingPlan] = useState<ProductionPlanRow | null>(null);
+  const [showManualAdd, setShowManualAdd] = useState<{
+    defaultDate: string;
+  } | null>(null);
+  const [editingPlan, setEditingPlan] = useState<ProductionPlanRow | null>(
+    null,
+  );
+  const [cancellingPlan, setCancellingPlan] = useState<ProductionPlanRow | null>(
+    null,
+  );
 
-  const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
+  const [toast, setToast] = useState<{
+    kind: "success" | "error";
+    message: string;
+  } | null>(null);
 
   const plansQuery = usePlans(toIsoDate(weekStart), toIsoDate(weekEnd));
   const createMut = useCreatePlan();
@@ -889,7 +942,8 @@ export default function ProductionPlanPage() {
     window.setTimeout(() => setToast(null), 4500);
   }
 
-  // Group plans by day
+  // Group plans by day — ONLY when data has actually loaded successfully.
+  // Computing this before data lands would create misleading zero counts.
   const plansByDay = useMemo(() => {
     const out = new Map<string, ProductionPlanRow[]>();
     for (let i = 0; i < 7; i++) {
@@ -902,7 +956,12 @@ export default function ProductionPlanPage() {
     return out;
   }, [plansQuery.data, weekStart]);
 
-  const allPlans = plansQuery.data?.rows ?? [];
+  // State-hygiene gate: derive counts only when we have real data.
+  // If `plansQuery.data` is undefined (loading or error), the header chips
+  // do NOT render — that prevents the "0 planned + red error" contradiction
+  // Tom flagged.
+  const hasData = plansQuery.data !== undefined && !plansQuery.isError;
+  const allPlans = hasData ? plansQuery.data!.rows : [];
   const plannedCount = allPlans.filter((p) => p.rendered_state === "planned").length;
   const doneCount = allPlans.filter((p) => p.rendered_state === "done").length;
   const cancelledCount = allPlans.filter((p) => p.rendered_state === "cancelled").length;
@@ -916,7 +975,10 @@ export default function ProductionPlanPage() {
   }) {
     createMut.mutate(req, {
       onSuccess: () => {
-        flashToast("success", "הייצור נוסף לתוכנית. המלאי עדיין לא השתנה.");
+        flashToast(
+          "success",
+          "Production added to the plan. Inventory has not changed.",
+        );
         setShowManualAdd(null);
       },
       onError: (err) => {
@@ -940,7 +1002,7 @@ export default function ProductionPlanPage() {
       { plan_id: editingPlan.plan_id, body },
       {
         onSuccess: () => {
-          flashToast("success", "התכנון עודכן.");
+          flashToast("success", "Plan updated.");
           setEditingPlan(null);
         },
         onError: (err) => {
@@ -953,10 +1015,16 @@ export default function ProductionPlanPage() {
   function handleCancel(reason: string) {
     if (!cancellingPlan) return;
     patchMut.mutate(
-      { plan_id: cancellingPlan.plan_id, body: { action: "cancel", cancel_reason: reason } },
+      {
+        plan_id: cancellingPlan.plan_id,
+        body: { action: "cancel", cancel_reason: reason },
+      },
       {
         onSuccess: () => {
-          flashToast("success", "התכנון בוטל. המלאי לא השתנה.");
+          flashToast(
+            "success",
+            "Plan cancelled. Inventory has not changed.",
+          );
           setCancellingPlan(null);
         },
         onError: (err) => {
@@ -967,27 +1035,31 @@ export default function ProductionPlanPage() {
   }
 
   return (
-    <>
+    <div dir="ltr">
       <WorkflowHeader
-        eyebrow="תכנון ייצור"
-        title="תכנון ייצור יומי"
-        description={`שבוע: ${fmtWeekRange(weekStart, weekEnd)}`}
+        eyebrow="Planning"
+        title="Daily Production Plan"
+        description={fmtWeekRange(weekStart, weekEnd)}
         meta={
-          <>
-            <Badge tone="info" variant="soft" dotted>
-              {plannedCount} מתוכננים
-            </Badge>
-            {doneCount > 0 ? (
-              <Badge tone="success" variant="soft" dotted>
-                {doneCount} בוצעו
+          // State-hygiene: only render summary chips when data has loaded.
+          // While loading or on error, no chips → no false "0 planned" claim.
+          hasData ? (
+            <>
+              <Badge tone="info" variant="soft" dotted>
+                {plannedCount} planned
               </Badge>
-            ) : null}
-            {cancelledCount > 0 ? (
-              <Badge tone="neutral" variant="soft" dotted>
-                {cancelledCount} בוטלו
-              </Badge>
-            ) : null}
-          </>
+              {doneCount > 0 ? (
+                <Badge tone="success" variant="soft" dotted>
+                  {doneCount} completed
+                </Badge>
+              ) : null}
+              {cancelledCount > 0 ? (
+                <Badge tone="neutral" variant="soft" dotted>
+                  {cancelledCount} cancelled
+                </Badge>
+              ) : null}
+            </>
+          ) : null
         }
         actions={
           <div className="flex flex-wrap items-center gap-2">
@@ -995,37 +1067,52 @@ export default function ProductionPlanPage() {
               type="button"
               className="btn btn-sm gap-1"
               onClick={() => setWeekStart(addDays(weekStart, -7))}
-              title="שבוע קודם"
+              title="Previous week"
             >
-              <ChevronRight className="h-3 w-3" strokeWidth={2} />
-              שבוע קודם
+              <ChevronLeft className="h-3 w-3" strokeWidth={2} />
+              Previous Week
             </button>
             <button
               type="button"
               className="btn btn-sm"
               onClick={() => setWeekStart(startOfWeek(new Date()))}
             >
-              שבוע נוכחי
+              This Week
             </button>
             <button
               type="button"
               className="btn btn-sm gap-1"
               onClick={() => setWeekStart(addDays(weekStart, 7))}
-              title="שבוע הבא"
+              title="Next week"
             >
-              שבוע הבא
-              <ChevronLeft className="h-3 w-3" strokeWidth={2} />
+              Next Week
+              <ChevronRight className="h-3 w-3" strokeWidth={2} />
             </button>
             {canAct ? (
-              <button
-                type="button"
-                className="btn btn-primary btn-sm gap-1.5"
-                onClick={() => setShowManualAdd({ defaultDate: toIsoDate(weekStart) })}
-                data-testid="header-add-manual"
-              >
-                <Plus className="h-3 w-3" strokeWidth={2.5} />
-                הוסף ידנית
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm gap-1.5"
+                  onClick={() =>
+                    setShowManualAdd({ defaultDate: toIsoDate(weekStart) })
+                  }
+                  data-testid="header-add-manual"
+                >
+                  <Plus className="h-3 w-3" strokeWidth={2.5} />
+                  Add Manually
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm gap-1.5"
+                  disabled
+                  title="Coming next — pick from approved production recommendations"
+                  data-testid="header-add-from-recs"
+                >
+                  <Plus className="h-3 w-3" strokeWidth={2.5} />
+                  Add from Recommendations
+                  <span className="ml-1 text-3xs text-fg-faint">(coming next)</span>
+                </button>
+              </>
             ) : null}
           </div>
         }
@@ -1036,14 +1123,17 @@ export default function ProductionPlanPage() {
         className="mb-4 flex items-start gap-3 rounded-md border border-info/40 bg-info-softer px-4 py-3 text-sm"
         data-testid="production-plan-banner"
       >
-        <AlertCircle className="h-4 w-4 shrink-0 mt-0.5 text-info-fg" strokeWidth={2} />
+        <AlertCircle
+          className="h-4 w-4 shrink-0 mt-0.5 text-info-fg"
+          strokeWidth={2}
+        />
         <div>
           <div className="font-semibold text-info-fg">
-            תכנון בלבד — המלאי לא השתנה עד דיווח ייצור בפועל
+            Planned Only — inventory will update only after actual production is reported.
           </div>
           <div className="mt-0.5 text-xs text-fg-muted">
-            התוכנית מציגה מה תוכנן לכל יום. המלאי בפועל יתעדכן רק לאחר שליחת
-            דיווח ייצור.
+            This board shows what's planned for each day. Real inventory only
+            changes once the operator submits an actual production report.
           </div>
         </div>
       </div>
@@ -1054,28 +1144,33 @@ export default function ProductionPlanPage() {
           href="/planning/runs"
           className="inline-flex items-center gap-1 text-accent hover:underline"
         >
+          Production recommendations
           <ArrowRight className="h-3 w-3" strokeWidth={2} />
-          המלצות ייצור (ריצות תכנון)
         </Link>
         <span className="text-fg-faint">·</span>
         <Link
           href="/planning/forecast"
           className="inline-flex items-center gap-1 text-accent hover:underline"
         >
+          Demand forecast
           <ArrowRight className="h-3 w-3" strokeWidth={2} />
-          תחזית ביקוש
         </Link>
         <span className="text-fg-faint">·</span>
         <Link
           href="/planning/inventory-flow"
           className="inline-flex items-center gap-1 text-accent hover:underline"
         >
+          Daily inventory flow
           <ArrowRight className="h-3 w-3" strokeWidth={2} />
-          תזרים מלאי יומי
         </Link>
       </div>
 
-      {/* Loading state */}
+      {/* ---------------------------------------------------------------- */}
+      {/* State-hygiene rendering: exactly one of                          */}
+      {/*   loading | error | empty | week-view                            */}
+      {/* is shown at any time. Header chips above are gated on hasData    */}
+      {/* so the page never shows "0 planned" together with an error.     */}
+      {/* ---------------------------------------------------------------- */}
       {plansQuery.isLoading ? (
         <SectionCard contentClassName="p-3">
           <div className="space-y-2" aria-busy="true" aria-live="polite">
@@ -1090,47 +1185,59 @@ export default function ProductionPlanPage() {
       ) : plansQuery.isError ? (
         <SectionCard contentClassName="p-5">
           <div
-            className="rounded border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg"
+            className="rounded border border-danger/40 bg-danger-softer p-4 text-sm text-danger-fg"
             data-testid="production-plan-error"
           >
-            <div className="font-semibold">לא ניתן לטעון את התוכנית</div>
+            <div className="font-semibold">
+              We couldn't load the production plan.
+            </div>
             <div className="mt-1 text-xs">
-              בדוק את החיבור ונסה לרענן. אם הבעיה נמשכת, פנה למנהל המערכת.
+              Try refreshing the page. If the problem continues, contact the
+              system administrator.
             </div>
             <button
               type="button"
               onClick={() => void plansQuery.refetch()}
-              className="mt-2 text-xs font-medium underline hover:no-underline"
+              className="mt-3 text-xs font-medium underline hover:no-underline"
             >
-              נסה שוב
+              Try again
             </button>
           </div>
         </SectionCard>
       ) : allPlans.length === 0 ? (
         <SectionCard contentClassName="p-5">
-          <div className="text-center py-6 space-y-3" data-testid="production-plan-empty">
-            <Calendar className="h-10 w-10 mx-auto text-fg-faint" strokeWidth={1.5} />
+          <div
+            className="text-center py-6 space-y-3"
+            data-testid="production-plan-empty"
+          >
+            <Calendar
+              className="h-10 w-10 mx-auto text-fg-faint"
+              strokeWidth={1.5}
+            />
             <div className="text-sm font-medium text-fg-strong">
-              אין עדיין ייצור מתוכנן לשבוע הזה
+              No production is planned for this week yet.
             </div>
             <div className="text-3xs text-fg-muted">
-              אפשר להוסיף ייצור ידני או להוסיף מתוך המלצות הייצור.
+              You can add a plan manually or add one from production
+              recommendations.
             </div>
             {canAct ? (
               <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
                 <button
                   type="button"
                   className="btn btn-primary btn-sm gap-1.5"
-                  onClick={() => setShowManualAdd({ defaultDate: toIsoDate(weekStart) })}
+                  onClick={() =>
+                    setShowManualAdd({ defaultDate: toIsoDate(weekStart) })
+                  }
                 >
                   <Plus className="h-3 w-3" strokeWidth={2.5} />
-                  הוסף ידנית
+                  Add Manually
                 </button>
                 <Link
                   href="/planning/runs"
                   className="btn btn-sm gap-1.5"
                 >
-                  פתח המלצות ייצור
+                  Open production recommendations
                   <ArrowRight className="h-3 w-3" strokeWidth={2} />
                 </Link>
               </div>
@@ -1195,6 +1302,6 @@ export default function ProductionPlanPage() {
           onClose={() => setToast(null)}
         />
       ) : null}
-    </>
+    </div>
   );
 }

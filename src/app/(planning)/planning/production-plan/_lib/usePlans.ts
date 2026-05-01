@@ -17,7 +17,7 @@ export function usePlans(from: string, to: string) {
         `/api/production-plan?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
       );
       if (!res.ok) {
-        throw new Error("לא ניתן לטעון את תכנון הייצור. בדוק את החיבור ונסה שוב.");
+        throw new Error("We couldn't load the production plan. Check your connection and try again.");
       }
       return (await res.json()) as ListProductionPlanResponse;
     },
@@ -57,7 +57,9 @@ export function useCreatePlan() {
         } catch {
           /* ignore */
         }
-        throw new Error(detail || mapStatusToHebrew(res.status));
+        // Use code-mapped English on every status; backend `detail` strings
+        // are typically API-internal — don't surface raw to the operator.
+        throw new Error(mapStatusToHebrew(res.status) + (detail && res.status === 422 ? ` (${detail})` : ""));
       }
       return (await res.json()) as CreateProductionPlanResponse;
     },
@@ -91,7 +93,7 @@ export function usePatchPlan() {
         } catch {
           /* ignore */
         }
-        throw new Error(detail || mapStatusToHebrew(res.status));
+        throw new Error(mapStatusToHebrew(res.status) + (detail && res.status === 422 ? ` (${detail})` : ""));
       }
       return (await res.json()) as ProductionPlanRow;
     },
@@ -102,11 +104,12 @@ export function usePatchPlan() {
 }
 
 function mapStatusToHebrew(status: number): string {
-  if (status === 401) return "נדרש להתחבר מחדש למערכת.";
-  if (status === 403) return "אין הרשאה לבצע פעולה זו.";
-  if (status === 404) return "התכנון לא נמצא.";
-  if (status === 409) return "התכנון כבר בוצע או בוטל ולא ניתן לערוך אותו.";
-  if (status === 422) return "הנתונים שהוזנו אינם תקינים. בדוק את הטופס ונסה שוב.";
-  if (status === 503) return "המערכת בנעילה כרגע. נסה מאוחר יותר.";
-  return "אירעה שגיאה. נסה שוב.";
+  // Function name kept for now; copy is English-only per portal standard.
+  if (status === 401) return "You need to sign in again.";
+  if (status === 403) return "You don't have permission for this action.";
+  if (status === 404) return "Plan not found.";
+  if (status === 409) return "This plan is already completed or cancelled and cannot be edited.";
+  if (status === 422) return "The data you entered isn't valid. Check the form and try again.";
+  if (status === 503) return "The system is locked right now. Try again later.";
+  return "Something went wrong. Try again.";
 }
