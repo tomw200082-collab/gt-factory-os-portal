@@ -1,33 +1,36 @@
-import { NextResponse } from "next/server";
+import { proxyRequest } from "@/lib/api-proxy";
 
 // ---------------------------------------------------------------------------
-// POST /api/inbox/credit/[exception_id]/reject — credit-needed Reject stub.
+// POST /api/inbox/credit/[exception_id]/reject
 //
-// Per W4 Doc B §3.3 (`docs/integrations/lionwheel_credit_inbox_contract.md`)
-// the upstream Fastify endpoint is
-//   POST /api/v1/mutations/lionwheel/credit-needed/reject
-// which is NOT YET BUILT. W1 authors it under a future
-//   RUNTIME_READY(LionWheelCreditInbox)
-// dispatch (plan-of-record §Chunk 5b — Inbox runtime). Until then this stub
-// returns 503 NOT_YET_WIRED so the portal credit-detail page renders an
-// honest "ה-backend עדיין לא חי — הדחייה תיכנס אחרי soak" status without
-// 500-ing.
+// Portal proxy for the LionWheel credit-needed Reject action.
 //
-// Mirrors the precedent of /api/admin/holidays/route.ts (cycle 6.5,
-// 2026-04-26).
+// Upstream (LIVE on Railway as of 2026-05-02 per signal #28
+// RUNTIME_READY(LionWheelCreditDecisionBackend), evidence pack
+// Projects/gt-factory-os/.claude/evidence/credit_decisions_handlers_2026-05-02.txt):
+//   POST /api/v1/mutations/lionwheel/credit-needed/:exception_id/reject
 //
-// Tracking key: UNRESOLVED-LWCI-REJECT-API.
-// Mode: B-LionWheelCreditInbox-NightRun (Tom auth 2026-04-30 + plan §5b).
+// Authority:
+//   - W4 Doc B §3.3 (docs/integrations/lionwheel_credit_inbox_contract.md)
+//   - Plan-of-record §Chunk C.3
+//     (docs/post_recovery_advance_plan_2026-05-02.md)
+//   - W1 backend schemas: api/src/inbox/credit_decisions/schemas.ts
+//     (request body = { idempotency_key, reason } — reason REQUIRED min 5
+//     chars; exception_id is in URL, NOT body — replaces the prior stub
+//     which included exception_id in body)
+//
+// Role gate enforced upstream: planner | admin only (operator/viewer = 403).
+// 422 returned upstream when reason is missing or under 5 chars.
 // ---------------------------------------------------------------------------
 
-const NOT_YET_WIRED_BODY = {
-  error: "NOT_YET_WIRED",
-  message:
-    "Backend credit-needed Reject endpoint not yet built. W1 lands it post-soak per plan-of-record §Chunk 5b. See UNRESOLVED-LWCI-REJECT-API.",
-};
-
-export function POST(): Promise<Response> {
-  return Promise.resolve(
-    NextResponse.json(NOT_YET_WIRED_BODY, { status: 503 }),
-  );
+export async function POST(
+  req: Request,
+  { params }: { params: Promise<{ exception_id: string }> },
+): Promise<Response> {
+  const { exception_id } = await params;
+  return proxyRequest(req, {
+    method: "POST",
+    upstreamPath: `/api/v1/mutations/lionwheel/credit-needed/${encodeURIComponent(exception_id)}/reject`,
+    errorLabel: "credit-needed reject",
+  });
 }

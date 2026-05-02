@@ -3,24 +3,35 @@
 // ---------------------------------------------------------------------------
 // /inbox/credit/[exception_id] — credit-needed detail page.
 //
-// Authored under Mode B-LionWheelCreditInbox-NightRun per Tom's night-run
-// authorization 2026-04-30 + plan-of-record §Chunk 5b. Consumes the W4 Doc B
-// DTO (`docs/integrations/lionwheel_credit_inbox_contract.md`) verbatim.
+// Originally authored under Mode B-LionWheelCreditInbox-NightRun (2026-04-30,
+// plan §Chunk 5b) with 503 NOT_YET_WIRED stubs. Wave 3 Chunk C.3
+// (Mode B-LionWheelCreditDecisionPortal, 2026-05-02) flipped the proxies
+// to live `proxyRequest` calls now that signal #28
+// RUNTIME_READY(LionWheelCreditDecisionBackend) authorizes the swap.
 //
-// Surfaces the four-fact card (Tom-locked per Doc B §7) plus three inline
+// Consumes the W4 Doc B DTO
+// (`docs/integrations/lionwheel_credit_inbox_contract.md`) verbatim and
+// surfaces the four-fact card (Tom-locked per Doc B §7) plus three inline
 // actions:
-//   - אשר זיכוי (Approve)   — gated to planner+admin (Doc B §3.2)
-//   - דחה זיכוי   (Reject)    — gated to planner+admin (Doc B §3.3); requires reason ≥5 chars
-//   - ראיתי         (Acknowledge) — operator+planner+admin (Doc B §3.1)
+//   - אשר זיכוי (Approve)    — planner+admin (Doc B §3.2);
+//                               persists state='pending_gi_action' (SC-A3:
+//                               no Green Invoice call)
+//   - דחה זיכוי  (Reject)     — planner+admin (Doc B §3.3); reason ≥5 chars
+//   - ראיתי       (Acknowledge) — operator+planner+admin (Doc B §3.1)
 //
-// The Approve/Reject backend endpoints DO NOT EXIST yet (W1 authors them
-// post-soak per plan §Chunk 5b). The portal proxies at
-// /api/inbox/credit/[exception_id]/{approve,reject} return 503 NOT_YET_WIRED;
-// this page handles that gracefully with a Hebrew status message.
+// HTTP status mapping (per Wave 3 dispatch + W4 Doc B §3 + W1 schemas):
+//   200/201            success → Hebrew register success banner
+//   201 idempotent_replay  silent re-success (treat as 200)
+//   401                redirect to /login
+//   403                "אין הרשאה — נדרש planner או admin"
+//   409 EXCEPTION_NOT_PENDING        "הבקשה כבר טופלה"
+//   409 EXCEPTION_WRONG_CATEGORY    defensive (page guards on category already)
+//   422 reason validation             inline error on reject panel
+//   503 break-glass                  "בעיה זמנית — נסה שוב בעוד דקה"
 //
-// Acknowledge wires through to the EXISTING /api/exceptions/[id]/acknowledge
+// Acknowledge wires through the existing /api/exceptions/[id]/acknowledge
 // endpoint (Doc B §3.1 explicitly notes "existing inbox handler from
-// gate3_exceptions_inbox_evidence.md") so it works today.
+// gate3_exceptions_inbox_evidence.md").
 //
 // Until the first lionwheel_credit_needed row arrives in production
 // (post-soak), this page returns a clean "exception not found" empty state.
@@ -91,72 +102,132 @@ const STATUS_LABEL_HE: Record<CreditExceptionStatus, string> = {
   gi_action_failed: "לא נוצר זיכוי עדיין",
 };
 
-// W4 Doc B §3.2 — request body shape for approve.
-async function postApprove(
+// ---------------------------------------------------------------------------
+// HTTP response → discriminated outcome mapping. Per Wave 3 dispatch +
+// W4 Doc B §3 + W1 backend schemas.ts CreditDecisionConflictReason union.
+//
+// Note: 201 with idempotent_replay=true is treated as silent success (kind=ok)
+// — same outcome as a fresh 201 from the operator's perspective.
+//
+// `kind: "auth_required"` triggers a redirect to /login at the call-site
+// (handles session expiry mid-action without surfacing a confusing toast).
+// ---------------------------------------------------------------------------
+type CreditActionOutcome =
+  | { kind: "ok"; data: { decision_id?: string; idempotent_replay?: boolean } }
+  | { kind: "auth_required" }
+  | { kind: "forbidden" }
+  | { kind: "validation_error"; message: string }
+  | { kind: "not_pending" }
+  | { kind: "wrong_category" }
+  | { kind: "transient"; message: string }
+  | { kind: "error"; message: string };
+
+// W1 backend body shape (api/src/inbox/credit_decisions/schemas.ts):
+//   request:  { idempotency_key, reason? }   on approve
+//             { idempotency_key, reason }    on reject (reason ≥5 chars)
+//   response success: { exception_id, decision_id, status, decided_at,
+//                       decided_by_user_id, decided_by_snapshot,
+//                       idempotent_replay }
+//   conflict 409:    { reason_code: 'EXCEPTION_NOT_FOUND'|'EXCEPTION_WRONG_CATEGORY'
+//                                  |'EXCEPTION_NOT_PENDING'|'IDEMPOTENCY_KEY_REUSED',
+//                       detail, current_status?, current_category? }
+// exception_id is in the URL — NOT in the body.
+async function postCreditAction(
+  endpoint: "approve" | "reject",
   exceptionId: string,
-): Promise<{ kind: "ok"; data: unknown } | { kind: "not_yet_wired" } | { kind: "error"; message: string }> {
+  body: { idempotency_key: string; reason?: string },
+  fallbackErrorHe: string,
+): Promise<CreditActionOutcome> {
+  let res: Response;
   try {
-    const res = await fetch(
-      `/api/inbox/credit/${encodeURIComponent(exceptionId)}/approve`,
+    res = await fetch(
+      `/api/inbox/credit/${encodeURIComponent(exceptionId)}/${endpoint}`,
       {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          exception_id: exceptionId,
-          idempotency_key: newIdempotencyKey(),
-        }),
+        body: JSON.stringify(body),
       },
     );
-    const body = (await res.json().catch(() => ({}))) as {
-      error?: string;
-      message?: string;
-    };
-    if (res.ok) return { kind: "ok", data: body };
-    if (res.status === 503 || body.error === "NOT_YET_WIRED") {
-      return { kind: "not_yet_wired" };
-    }
-    return { kind: "error", message: body.message ?? "האישור נכשל." };
   } catch (err) {
     return {
       kind: "error",
-      message: err instanceof Error ? err.message : "האישור נכשל.",
+      message: err instanceof Error ? err.message : fallbackErrorHe,
     };
   }
+
+  const responseBody = (await res.json().catch(() => ({}))) as {
+    error?: string;
+    detail?: string;
+    message?: string;
+    reason_code?: string;
+    decision_id?: string;
+    idempotent_replay?: boolean;
+    validation_errors?: Array<{ message?: string }>;
+  };
+
+  if (res.ok) {
+    return {
+      kind: "ok",
+      data: {
+        decision_id: responseBody.decision_id,
+        idempotent_replay: responseBody.idempotent_replay,
+      },
+    };
+  }
+  if (res.status === 401) return { kind: "auth_required" };
+  if (res.status === 403) return { kind: "forbidden" };
+  if (res.status === 422) {
+    const firstFieldMessage =
+      responseBody.validation_errors?.[0]?.message ??
+      responseBody.detail ??
+      responseBody.message ??
+      fallbackErrorHe;
+    return { kind: "validation_error", message: firstFieldMessage };
+  }
+  if (res.status === 409) {
+    const code = responseBody.reason_code;
+    if (code === "EXCEPTION_NOT_PENDING") return { kind: "not_pending" };
+    if (code === "EXCEPTION_WRONG_CATEGORY") return { kind: "wrong_category" };
+    // IDEMPOTENCY_KEY_REUSED is treated as silent re-success by the W1
+    // handler (returns 201 with idempotent_replay=true), so it should never
+    // reach this branch. EXCEPTION_NOT_FOUND falls through to generic error.
+    return {
+      kind: "error",
+      message:
+        responseBody.detail ?? responseBody.message ?? fallbackErrorHe,
+    };
+  }
+  if (res.status === 503) {
+    return { kind: "transient", message: "בעיה זמנית — נסה שוב בעוד דקה." };
+  }
+  return {
+    kind: "error",
+    message: responseBody.detail ?? responseBody.message ?? fallbackErrorHe,
+  };
 }
 
-// W4 Doc B §3.3 — request body shape for reject.
-async function postReject(
+// W4 Doc B §3.2 — Approve.
+function postApprove(exceptionId: string): Promise<CreditActionOutcome> {
+  return postCreditAction(
+    "approve",
+    exceptionId,
+    { idempotency_key: newIdempotencyKey() },
+    "האישור נכשל.",
+  );
+}
+
+// W4 Doc B §3.3 — Reject (reason REQUIRED, min 5 chars; enforced both
+// client-side here and server-side via Zod min(5)).
+function postReject(
   exceptionId: string,
   reason: string,
-): Promise<{ kind: "ok"; data: unknown } | { kind: "not_yet_wired" } | { kind: "error"; message: string }> {
-  try {
-    const res = await fetch(
-      `/api/inbox/credit/${encodeURIComponent(exceptionId)}/reject`,
-      {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          exception_id: exceptionId,
-          idempotency_key: newIdempotencyKey(),
-          reason,
-        }),
-      },
-    );
-    const body = (await res.json().catch(() => ({}))) as {
-      error?: string;
-      message?: string;
-    };
-    if (res.ok) return { kind: "ok", data: body };
-    if (res.status === 503 || body.error === "NOT_YET_WIRED") {
-      return { kind: "not_yet_wired" };
-    }
-    return { kind: "error", message: body.message ?? "הדחייה נכשלה." };
-  } catch (err) {
-    return {
-      kind: "error",
-      message: err instanceof Error ? err.message : "הדחייה נכשלה.",
-    };
-  }
+): Promise<CreditActionOutcome> {
+  return postCreditAction(
+    "reject",
+    exceptionId,
+    { idempotency_key: newIdempotencyKey(), reason },
+    "הדחייה נכשלה.",
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -229,17 +300,39 @@ export default function CreditDetailPage(): ReactNode {
     const res = await postApprove(exceptionId);
     setBusy(false);
     if (res.kind === "ok") {
+      // W4 Doc B §6 Hebrew register — Tom-locked phrasing for post-Approve
+      // pending_gi_action state. Note this is the operator-facing copy from
+      // the Wave 3 dispatch ("the credit will be created in Green Invoice
+      // after document approval"); it intentionally does not promise a
+      // synchronous GI write (SC-A3).
       setFeedback({
         kind: "success",
-        text: "הזיכוי אושר ומחכה ליצירת מסמך בגרין-אינווייס.",
+        text: "זיכוי אושר — הזיכוי ייווצר ב-Green Invoice לאחר אישור הקובץ.",
       });
       void exceptionQuery.refetch();
-    } else if (res.kind === "not_yet_wired") {
+    } else if (res.kind === "auth_required") {
+      window.location.href = `/login?redirectTo=${encodeURIComponent(window.location.pathname)}`;
+    } else if (res.kind === "forbidden") {
       setFeedback({
-        kind: "warning",
-        text: "ה-backend עדיין לא חי — האישור ייכנס אחרי soak.",
+        kind: "error",
+        text: "אין הרשאה — נדרש planner או admin.",
       });
+    } else if (res.kind === "not_pending") {
+      setFeedback({ kind: "warning", text: "הבקשה כבר טופלה." });
+      void exceptionQuery.refetch();
+    } else if (res.kind === "wrong_category") {
+      // Defensive: the page guards on category before rendering action
+      // buttons, so this is unreachable in practice. If it fires, the
+      // exception was racy-mutated between render and submit.
+      setFeedback({
+        kind: "error",
+        text: "זו אינה בקשת זיכוי. רענן את הדף.",
+      });
+    } else if (res.kind === "transient") {
+      setFeedback({ kind: "warning", text: res.message });
     } else {
+      // Approve has no client-side validation_error path (no reason field
+      // requirement), so this branch covers generic 5xx / network errors.
       setFeedback({ kind: "error", text: res.message });
     }
   };
@@ -257,15 +350,36 @@ export default function CreditDetailPage(): ReactNode {
     const res = await postReject(exceptionId, rejectReason);
     setBusy(false);
     if (res.kind === "ok") {
-      setFeedback({ kind: "success", text: "הזיכוי נדחה." });
+      // W4 Doc B §6 Hebrew register — Tom-locked phrasing for post-Reject
+      // resolved state.
+      setFeedback({ kind: "success", text: "בקשת הזיכוי נדחתה." });
       setShowRejectPanel(false);
       setRejectReason("");
       void exceptionQuery.refetch();
-    } else if (res.kind === "not_yet_wired") {
+    } else if (res.kind === "auth_required") {
+      window.location.href = `/login?redirectTo=${encodeURIComponent(window.location.pathname)}`;
+    } else if (res.kind === "forbidden") {
       setFeedback({
-        kind: "warning",
-        text: "ה-backend עדיין לא חי — הדחייה תיכנס אחרי soak.",
+        kind: "error",
+        text: "אין הרשאה — נדרש planner או admin.",
       });
+    } else if (res.kind === "validation_error") {
+      // Server-side Zod min(5) — should be unreachable given the client-
+      // side guard above, but render the server's message verbatim if it
+      // ever fires (e.g., schema drift).
+      setFeedback({ kind: "error", text: res.message });
+    } else if (res.kind === "not_pending") {
+      setFeedback({ kind: "warning", text: "הבקשה כבר טופלה." });
+      setShowRejectPanel(false);
+      setRejectReason("");
+      void exceptionQuery.refetch();
+    } else if (res.kind === "wrong_category") {
+      setFeedback({
+        kind: "error",
+        text: "זו אינה בקשת זיכוי. רענן את הדף.",
+      });
+    } else if (res.kind === "transient") {
+      setFeedback({ kind: "warning", text: res.message });
     } else {
       setFeedback({ kind: "error", text: res.message });
     }
