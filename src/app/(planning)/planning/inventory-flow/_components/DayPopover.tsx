@@ -18,17 +18,14 @@ import { cn } from "@/lib/cn";
 import { fmtDateLong, fmtQty } from "../_lib/format";
 import { RISK_TIER_STYLE } from "../_lib/risk";
 import type { FlowDay, FlowItem } from "../_lib/types";
-import type { PlannedInflowRow } from "../_lib/plannedInflow";
-import { PlannedTooltipSection } from "./PlannedTooltipSection";
 
 interface DayPopoverProps {
   item: FlowItem;
   day: FlowDay;
   children: React.ReactNode;
-  plannedRow?: PlannedInflowRow | null;
 }
 
-export function DayPopover({ item, day, children, plannedRow }: DayPopoverProps) {
+export function DayPopover({ item, day, children }: DayPopoverProps) {
   const isStockout = day.tier === "stockout";
   const isNonWorking = day.tier === "non_working";
 
@@ -94,11 +91,6 @@ export function DayPopover({ item, day, children, plannedRow }: DayPopoverProps)
               also block pickup.
             </p>
           )}
-
-          {/* Planned production overlay (when present, never on non-working days) */}
-          {!isNonWorking && plannedRow && plannedRow.planned_remaining_qty > 0 ? (
-            <PlannedTooltipSection row={plannedRow} className="mt-3 border-t border-border/40 pt-2" />
-          ) : null}
 
           {/* Item context */}
           <div className="mt-3 border-t border-border/40 pt-2">

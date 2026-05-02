@@ -29,40 +29,20 @@ import {
   NON_WORKING_STRIPE_STYLE,
 } from "../_lib/risk";
 import type { FlowDay, FlowItem } from "../_lib/types";
-import type { PlannedInflowRow } from "../_lib/plannedInflow";
 import { DayPopover } from "./DayPopover";
-import { PlannedChip } from "./PlannedChip";
 
 interface DayCellProps {
   item: FlowItem;
   day: FlowDay;
   avgDailyDemand: number;
   isToday: boolean;
-  /**
-   * When non-null, render the secondary "Planned: N" chip in the bottom-left
-   * corner of the cell. Always passed independently from the truth fill —
-   * the chip is additive overlay, never replaces the projected-on-hand
-   * number (contract §5.1 V7).
-   */
-  plannedRow?: PlannedInflowRow | null;
-  /** Skeleton chip while the overlay endpoint is in flight (truth still renders). */
-  plannedLoading?: boolean;
 }
 
-function DayCellInner({
-  item,
-  day,
-  avgDailyDemand,
-  isToday,
-  plannedRow,
-  plannedLoading,
-}: DayCellProps) {
+function DayCellInner({ item, day, avgDailyDemand, isToday }: DayCellProps) {
   const isNonWorking = day.tier === "non_working";
   const totalDemand = day.demand_lionwheel + day.demand_forecast;
   const spike = !isNonWorking && isDemandSpike(totalDemand, avgDailyDemand);
   const incoming = !isNonWorking && hasIncomingPo(day);
-  const plannedQty = plannedRow?.planned_remaining_qty ?? 0;
-  const showPlannedChip = !isNonWorking && (plannedLoading || plannedQty > 0);
 
   const cellInner = (
     <div
@@ -98,17 +78,6 @@ function DayCellInner({
           strokeWidth={2.5}
         />
       ) : null}
-
-      {/* Bottom-left: planned overlay chip (V1 — secondary in size + saturation;
-          dotted info-tone primitive distinct from posted-stock fill). Empty days
-          render nothing per contract §6.1. */}
-      {showPlannedChip ? (
-        <PlannedChip
-          plannedRemainingQty={plannedQty}
-          variant="compact"
-          loading={!!plannedLoading && plannedQty <= 0}
-        />
-      ) : null}
     </div>
   );
 
@@ -118,7 +87,7 @@ function DayCellInner({
   }
 
   return (
-    <DayPopover item={item} day={day} plannedRow={plannedRow ?? null}>
+    <DayPopover item={item} day={day}>
       {cellInner}
     </DayPopover>
   );

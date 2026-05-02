@@ -22,14 +22,12 @@ import { DayCell } from "./DayCell";
 import { DayHeaderRow } from "./DayHeaderRow";
 import { StickyItemPanel } from "./StickyItemPanel";
 import { WeekCell } from "./WeekCell";
-import type { PlannedInflowIndex } from "../_lib/plannedInflow";
 
 interface FlowGridDesktopProps {
   items: FlowItem[];
-  plannedIndex?: PlannedInflowIndex;
 }
 
-export function FlowGridDesktop({ items, plannedIndex }: FlowGridDesktopProps) {
+export function FlowGridDesktop({ items }: FlowGridDesktopProps) {
   const sortedItems = useMemo(
     () => [...items].sort(compareItemsByRisk),
     [items],
@@ -94,7 +92,6 @@ export function FlowGridDesktop({ items, plannedIndex }: FlowGridDesktopProps) {
             item={item}
             avgDailyDemand={avgDailyDemand}
             todayIso={todayIso}
-            plannedIndex={plannedIndex}
           />
         ))}
       </div>
@@ -106,10 +103,9 @@ interface ItemRowProps {
   item: FlowItem;
   avgDailyDemand: number;
   todayIso: string;
-  plannedIndex?: PlannedInflowIndex;
 }
 
-function ItemRow({ item, avgDailyDemand, todayIso, plannedIndex }: ItemRowProps) {
+function ItemRow({ item, avgDailyDemand, todayIso }: ItemRowProps) {
   const dailyWeekCount = Math.ceil(item.days.length / 7);
   const weeklyOnly = item.weeks.slice(dailyWeekCount);
   return (
@@ -125,7 +121,6 @@ function ItemRow({ item, avgDailyDemand, todayIso, plannedIndex }: ItemRowProps)
             day={d}
             avgDailyDemand={avgDailyDemand}
             isToday={d.day === todayIso}
-            plannedRow={plannedIndex?.byItemDay.get(`${item.item_id}|${d.day}`) ?? null}
           />
         </div>
       ))}
