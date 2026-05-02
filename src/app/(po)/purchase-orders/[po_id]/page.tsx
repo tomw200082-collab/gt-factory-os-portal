@@ -882,7 +882,7 @@ export default function PurchaseOrderDetailPage({
                         <LineStatusBadge status={line.line_status} />
                         {overReceiptLineIds.has(line.po_line_id) && (
                           <a
-                            href="/planner/exceptions"
+                            href="/inbox?view=exceptions"
                             className="inline-flex items-center gap-1 text-3xs text-warning-fg hover:underline"
                             title="Over-receipt exception open — check exceptions inbox"
                           >
