@@ -1,31 +1,31 @@
-import { NextResponse } from "next/server";
-
 // ---------------------------------------------------------------------------
-// GET / PATCH /api/admin/holidays — Israel holidays admin (NOT YET WIRED).
+// /api/admin/holidays — list (GET) + create (POST) proxy.
 //
-// Per inventory_flow_contract.md §7.4 the upstream Fastify endpoints
-// (GET /api/v1/queries/admin/holidays + PATCH /api/v1/admin/holidays/:date)
-// are NOT YET BUILT as of 2026-04-26. W1 will land them in a follow-on
-// cycle. This stub returns 503 SERVICE_UNAVAILABLE so the portal page can
-// render an honest "not yet wired" empty state without 500-ing.
+// Mirror-only. Forwards to upstream Fastify endpoints landed by W1 cycle 7
+// (signal #25 RUNTIME_READY(AdminHolidays), 2026-05-01T22:48:23Z, evidence
+// Projects/gt-factory-os/docs/admin_holidays_crud_checkpoint.md):
 //
-// Tracking key: UNRESOLVED-IF-ADMIN-HOLIDAYS-API.
+//   GET  /api/v1/queries/admin/holidays         — planner + admin read
+//   POST /api/v1/mutations/admin/holidays       — admin only create
+//
+// No contract authorship here. The upstream auth gate enforces role; this
+// proxy only forwards the Bearer JWT extracted by the shared helper.
 // ---------------------------------------------------------------------------
 
-const NOT_YET_WIRED_BODY = {
-  error: "NOT_YET_WIRED",
-  message:
-    "Backend admin holidays endpoint not yet built. Holiday data is seeded from Hebcal (75 rows for 2026–2028); admin override UI activates once W1 lands the CRUD handler. See UNRESOLVED-IF-ADMIN-HOLIDAYS-API.",
-};
+import { proxyRequest } from "@/lib/api-proxy";
 
-export function GET(): Promise<Response> {
-  return Promise.resolve(
-    NextResponse.json(NOT_YET_WIRED_BODY, { status: 503 }),
-  );
+export async function GET(req: Request): Promise<Response> {
+  return proxyRequest(req, {
+    method: "GET",
+    upstreamPath: "/api/v1/queries/admin/holidays",
+    errorLabel: "admin holidays list",
+  });
 }
 
-export function PATCH(): Promise<Response> {
-  return Promise.resolve(
-    NextResponse.json(NOT_YET_WIRED_BODY, { status: 503 }),
-  );
+export async function POST(req: Request): Promise<Response> {
+  return proxyRequest(req, {
+    method: "POST",
+    upstreamPath: "/api/v1/mutations/admin/holidays",
+    errorLabel: "admin holidays create",
+  });
 }
