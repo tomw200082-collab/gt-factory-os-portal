@@ -262,6 +262,110 @@ async function postPublish(
   }
 }
 
+// ---------------------------------------------------------------------------
+// Seed-cells call — wired to W1 cycle-10 endpoint POST
+// /api/v1/mutations/forecast/:version_id/seed-cells (signal #27
+// RUNTIME_READY(ForecastSeedCells), 2026-05-01).
+//
+// Persists one zero-quantity forecast_lines row per (eligible_item × ISO week)
+// so the F1 publish completeness check has rows to match. Returns
+// { added_count, total_cells, expected_cells, all_seeded, ... }.
+// Used by the cold-start path of the "Seed all" button.
+// ---------------------------------------------------------------------------
+interface SeedCellsResponse {
+  submission_id: string;
+  version: string;
+  added_count: number;
+  expected_cells: number;
+  total_cells: number;
+  all_seeded: boolean;
+  idempotent_replay: boolean;
+}
+
+interface SeedCellsErrorBody {
+  reason_code?: string;
+  detail?: string;
+  error?: string;
+}
+
+class SeedCellsError extends Error {
+  constructor(
+    message: string,
+    public status: number,
+    public reason_code: string | null,
+    public detail: string | null,
+  ) {
+    super(message);
+    this.name = "SeedCellsError";
+  }
+}
+
+async function postSeedCells(
+  session: Session,
+  version_id: string,
+): Promise<SeedCellsResponse> {
+  const res = await fetch(
+    `/api/forecast/${encodeURIComponent(version_id)}/seed-cells`,
+    {
+      method: "POST",
+      headers: sessionHeaders(session),
+      body: JSON.stringify({
+        idempotency_key: newIdempotencyKey(),
+      }),
+    },
+  );
+  if (!res.ok) {
+    const txt = await res.text().catch(() => "");
+    let body: SeedCellsErrorBody = {};
+    try {
+      body = JSON.parse(txt) as SeedCellsErrorBody;
+    } catch {
+      /* keep body empty */
+    }
+    const reasonCode = body.reason_code ?? null;
+    const detail = body.detail ?? body.error ?? null;
+    // User-facing message keyed on the typed reason_code where the backend
+    // provides one; falls back to the detail string for shapes without a
+    // canonical code (Zod 422, 503 break-glass) and finally to a generic.
+    let message: string;
+    if (res.status === 404 && (reasonCode === "VERSION_NOT_FOUND" || !reasonCode)) {
+      message = "This forecast version was not found.";
+    } else if (res.status === 409 && reasonCode === "FROZEN_PERIOD") {
+      message =
+        "Forecast is frozen — admin can override.";
+    } else if (
+      res.status === 409 &&
+      reasonCode === "ILLEGAL_STATUS_TRANSITION"
+    ) {
+      message =
+        "Cannot seed a published forecast — create a new draft first.";
+    } else if (res.status === 409 && reasonCode === "IDEMPOTENCY_KEY_REUSED") {
+      message =
+        "Duplicate seed request detected. Refresh the page and try again.";
+    } else if (
+      res.status === 409 &&
+      (reasonCode === "CADENCE_NOT_SUPPORTED" ||
+        reasonCode === "SITE_NOT_SUPPORTED" ||
+        reasonCode === "VERSION_CONFLICT")
+    ) {
+      message = detail || "This forecast version cannot be seeded.";
+    } else if (res.status === 401) {
+      message = "Sign in again to continue.";
+    } else if (res.status === 403) {
+      message = "Only planners and admins can seed forecast cells.";
+    } else if (res.status === 422) {
+      message = detail || "Seed request was rejected as invalid.";
+    } else if (res.status === 503) {
+      message =
+        "System is in break-glass read-only mode. Try again after the admin clears it.";
+    } else {
+      message = detail || "Could not seed forecast cells. Try again.";
+    }
+    throw new SeedCellsError(message, res.status, reasonCode, detail);
+  }
+  return (await res.json()) as SeedCellsResponse;
+}
+
 function StatusBadge({ status }: { status: ForecastStatus }) {
   if (status === "published") {
     return (
@@ -475,6 +579,34 @@ export default function ForecastVersionDetailPage() {
     },
     onError: (err: unknown) => {
       setActionError(err instanceof Error ? err.message : String(err));
+      setActionSuccess(null);
+    },
+  });
+
+  // Seed-cells mutation — used by the "Seed all" button when the draft is in
+  // cold-start state (zero existing forecast_lines). Calls the W1 cycle-10
+  // endpoint, which materializes one zero-quantity row per (eligible_item ×
+  // ISO week) so the planner has cells to fill and the F1 publish-completeness
+  // check has rows to match.
+  //
+  // On 200: success toast + invalidate the version query so the seeded cells
+  //         appear in the grid; clear local addedItemIds set (now redundant
+  //         since the rows live in the backend).
+  // On 4xx / 5xx: typed error message via SeedCellsError (see postSeedCells).
+  const seedCellsMut = useMutation<SeedCellsResponse, SeedCellsError>({
+    mutationFn: () => postSeedCells(session, versionId),
+    onSuccess: (data) => {
+      setActionSuccess(
+        `Seeded ${data.added_count} cell${data.added_count === 1 ? "" : "s"}. ${data.total_cells} cell${data.total_cells === 1 ? "" : "s"} now ready to edit.`,
+      );
+      setActionError(null);
+      setAddedItemIds(new Set());
+      queryClient.invalidateQueries({
+        queryKey: ["forecast", "version", versionId],
+      });
+    },
+    onError: (err) => {
+      setActionError(err.message);
       setActionSuccess(null);
     },
   });
@@ -925,22 +1057,53 @@ export default function ForecastVersionDetailPage() {
               {(() => {
                 // Seed-all-active-FG: one-click pre-populate the grid with
                 // every active item so the planner doesn't have to dropdown
-                // -pick 68 entries one at a time. Filters items already in
-                // the forecast or already locally added so the button text
-                // stays accurate when re-pressed.
+                // -pick 68 entries one at a time.
+                //
+                // Two paths, keyed on the version's existing-line state:
+                //   (1) Cold-start path (lines.length === 0): call the W1
+                //       cycle-10 backend endpoint POST
+                //       /api/forecast/:version_id/seed-cells which writes one
+                //       zero-quantity row per (eligible_item × ISO week) in
+                //       a single transaction. After 200, the grid re-fetches
+                //       and the seeded cells appear ready to edit.
+                //   (2) Augmentation path (lines.length > 0): the planner is
+                //       adding more items to a draft that already has cells.
+                //       Keep the original client-side local-add behavior so
+                //       the planner can fill in quantities and Save without
+                //       overwriting the persisted backend state.
+                //
+                // remaining is computed against itemsInForecast which already
+                // accounts for existing lines + locally-added items, so the
+                // button text reflects what actually still needs adding.
                 const allActive = itemsQuery.data?.rows ?? [];
                 const remaining = allActive.filter(
                   (r) => !itemsInForecast.has(r.item_id),
                 );
                 if (remaining.length === 0) return null;
+                const isColdStart = lines.length === 0;
+                const seedingInFlight = seedCellsMut.isPending;
                 return (
                   <button
                     type="button"
-                    disabled={itemsQuery.isLoading}
+                    disabled={itemsQuery.isLoading || seedingInFlight}
                     className="btn btn-sm shrink-0"
                     data-testid="forecast-seed-all-btn"
-                    title={`Add all ${remaining.length} active items to the grid at once. You'll fill in quantities and Save.`}
+                    data-cold-start={isColdStart ? "1" : "0"}
+                    title={
+                      isColdStart
+                        ? `Seed ${remaining.length} active items × ${version.horizon_weeks || 8} weeks of zero-quantity cells server-side, then fill in and Save.`
+                        : `Add all ${remaining.length} active items to the grid at once. You'll fill in quantities and Save.`
+                    }
                     onClick={() => {
+                      setActionError(null);
+                      setActionSuccess(null);
+                      if (isColdStart) {
+                        // Backend seed path. The mutation's onSuccess /
+                        // onError set actionSuccess / actionError directly.
+                        seedCellsMut.mutate();
+                        return;
+                      }
+                      // Augmentation path — original local-add behavior.
                       setAddedItemIds((prev) => {
                         const next = new Set(prev);
                         for (const r of remaining) next.add(r.item_id);
@@ -949,7 +1112,9 @@ export default function ForecastVersionDetailPage() {
                       setAddItemInput("");
                     }}
                   >
-                    + Seed all ({remaining.length})
+                    {seedingInFlight
+                      ? "Seeding…"
+                      : `+ Seed all (${remaining.length})`}
                   </button>
                 );
               })()}
