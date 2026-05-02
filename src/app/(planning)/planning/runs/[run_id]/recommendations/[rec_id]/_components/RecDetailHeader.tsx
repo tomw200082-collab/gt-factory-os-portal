@@ -4,6 +4,7 @@
 // RecDetailHeader — item name, type badge, status badge, planning run reference
 // ---------------------------------------------------------------------------
 
+import Link from "next/link";
 import { Badge } from "@/components/badges/StatusBadge";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import type { RecommendationDetailResponse } from "../_lib/types";
@@ -114,6 +115,37 @@ export function RecDetailHeader({ rec }: RecDetailHeaderProps) {
           {recTypeBadge(rec.rec_type)}
           {recStatusBadge(rec.rec_status)}
           {supplyMethodBadge(rec.supply_method)}
+          {/*
+            Converted-to-PO chip — at-glance signal in the header badge row.
+            Closes scorecard P1 #3 / cycle-1 audit Tom-tax: previously the
+            planner had to scroll into the action card (page.tsx:543-555) to
+            discover the linked PO. The chip is presence-only — when
+            converted_po_id is null/absent we render NOTHING (no
+            "Not converted" placeholder) per UX hygiene: a chip that appears
+            on every non-converted rec is noise, not signal.
+            Data source: RecommendationDetailResponse.converted_po_id
+            (api/src/planning/schemas.ts §710, signal #21 dto_shape_version
+            1.1, migration 0052 + 0096). The W1 DTO does NOT denormalize a
+            converted_po_number — acceptable degraded state per dispatch:
+            we render a truncated UUID and rely on the PO detail page to
+            resolve the human-readable po_number on click.
+          */}
+          {rec.converted_po_id !== null ? (
+            <Link
+              href={`/purchase-orders/${encodeURIComponent(rec.converted_po_id)}`}
+              aria-label="Open converted purchase order"
+              data-testid="rec-converted-to-po-chip"
+              className="inline-flex items-center gap-1.5 rounded-sm border border-info/30 bg-info-softer px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-sops text-info-fg hover:underline"
+              title="Open the purchase order this recommendation was converted into"
+            >
+              <span aria-hidden>{"→"}</span>
+              <span>PO</span>
+              <span className="font-mono normal-case tracking-normal">
+                {rec.converted_po_id.slice(0, 8)}
+                {"…"}
+              </span>
+            </Link>
+          ) : null}
           <span
             className="inline-flex items-center gap-1 rounded border border-border-subtle bg-bg-subtle px-1.5 py-0.5 font-mono text-3xs text-fg-muted"
             title="Item id"
