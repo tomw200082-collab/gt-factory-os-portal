@@ -61,6 +61,7 @@ import {
 } from "@/features/inbox/credit-card";
 import {
   acknowledgeException,
+  bulkResolveExceptions,
   newIdempotencyKey,
   resolveException,
 } from "@/features/inbox/actions";
@@ -191,8 +192,9 @@ function ageHumanized(iso: string, now: Date): string {
 }
 
 // ---------------------------------------------------------------------------
-// Inline resolve panel — reused from the legacy /exceptions page pattern
-// (one required textarea, 1..2000 chars).
+// Inline resolve panel. Notes are now OPTIONAL (Tom 2026-05-02) — bulk-clearing
+// cosmetic exceptions shouldn't require typing a justification per row. Notes
+// are still capped at 2000 chars when supplied; empty submission is allowed.
 // ---------------------------------------------------------------------------
 function ResolvePanel({
   onConfirm,
@@ -204,17 +206,17 @@ function ResolvePanel({
   busy: boolean;
 }) {
   const [notes, setNotes] = useState("");
-  const canSubmit = notes.trim().length >= 1 && notes.length <= 2000 && !busy;
+  const canSubmit = notes.length <= 2000 && !busy;
   return (
     <div className="mt-3 rounded border border-warning/40 bg-warning-softer p-3">
       <div className="text-3xs font-semibold uppercase tracking-sops text-warning-fg">
-        Resolution notes (required)
+        Resolution notes (optional)
       </div>
       <NotesBox
         data-testid="inbox-resolve-notes"
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
-        placeholder="Explain what was done."
+        placeholder="Optional — leave blank to resolve without a note."
       />
       <div className="mt-3 flex gap-2">
         <button
@@ -241,6 +243,78 @@ function ResolvePanel({
 }
 
 // ---------------------------------------------------------------------------
+// Bulk action bar. Renders when at least one row is selected. Confirms before
+// firing to prevent accidental wipes (especially for the 99+ INFO LionWheel
+// noise-band that Tom expressly wants to clear in one shot).
+// ---------------------------------------------------------------------------
+function BulkActionBar({
+  selectedCount,
+  visibleSelectableCount,
+  allVisibleSelected,
+  onSelectAllVisible,
+  onClearSelection,
+  onBulkResolve,
+  busy,
+}: {
+  selectedCount: number;
+  visibleSelectableCount: number;
+  allVisibleSelected: boolean;
+  onSelectAllVisible: () => void;
+  onClearSelection: () => void;
+  onBulkResolve: () => void;
+  busy: boolean;
+}) {
+  if (selectedCount === 0 && visibleSelectableCount === 0) return null;
+  return (
+    <div
+      className="flex flex-wrap items-center gap-3 border-b border-accent/40 bg-accent-soft px-5 py-2 text-xs"
+      data-testid="inbox-bulk-bar"
+    >
+      <label
+        className="inline-flex items-center gap-2 font-semibold text-accent"
+        data-testid="inbox-bulk-select-all"
+      >
+        <input
+          type="checkbox"
+          className="h-4 w-4 cursor-pointer accent-accent"
+          checked={allVisibleSelected && visibleSelectableCount > 0}
+          onChange={onSelectAllVisible}
+          aria-label="Select all visible resolvable rows"
+          disabled={visibleSelectableCount === 0 || busy}
+        />
+        {allVisibleSelected
+          ? `All ${visibleSelectableCount} visible selected`
+          : `Select all ${visibleSelectableCount} visible`}
+      </label>
+      <span className="font-mono text-3xs uppercase tracking-sops text-accent/80">
+        {selectedCount} selected
+      </span>
+      <div className="ml-auto flex items-center gap-2">
+        <button
+          type="button"
+          className="btn btn-sm"
+          data-testid="inbox-bulk-clear"
+          onClick={onClearSelection}
+          disabled={selectedCount === 0 || busy}
+        >
+          Clear selection
+        </button>
+        <button
+          type="button"
+          className="btn btn-sm btn-primary gap-1.5"
+          data-testid="inbox-bulk-resolve"
+          onClick={onBulkResolve}
+          disabled={selectedCount === 0 || busy}
+        >
+          <CheckCircle2 className="h-3 w-3" strokeWidth={2} />
+          {busy ? "Resolving…" : `Resolve ${selectedCount}`}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Main page.
 // ---------------------------------------------------------------------------
 export default function InboxListPage() {
@@ -259,6 +333,20 @@ export default function InboxListPage() {
   const [resolvingId, setResolvingId] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+
+  // Bulk selection: rows the user has checked. Keys are exception_id (== row.id
+  // for non-approval rows). Approval rows cannot be bulk-resolved and are
+  // never added to this set.
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const toggleSelected = useCallback((id: string, isOn: boolean) => {
+    setSelected((prev) => {
+      const next = new Set(prev);
+      if (isOn) next.add(id);
+      else next.delete(id);
+      return next;
+    });
+  }, []);
+  const clearSelection = useCallback(() => setSelected(new Set()), []);
 
   // Memoize a stable "now" per render tree so all row ages use the same frame
   // of reference.
@@ -344,6 +432,47 @@ export default function InboxListPage() {
     () => applyInboxView(allRows, filter.view, session.user_id || null),
     [allRows, filter.view, session.user_id],
   );
+
+  // Rows the user can actually bulk-resolve right now: non-approval exception
+  // rows whose inline_actions includes "resolve" (i.e., status open or
+  // acknowledged). Approval rows are excluded — they need their own approve/
+  // reject flow on the dedicated detail page.
+  const visibleSelectableIds = useMemo(() => {
+    const out: string[] = [];
+    for (const r of visibleRows) {
+      if (r.type.startsWith("approval:")) continue;
+      if (!r.inline_actions.includes("resolve")) continue;
+      out.push(r.id);
+    }
+    return out;
+  }, [visibleRows]);
+
+  const allVisibleSelected = useMemo(() => {
+    if (visibleSelectableIds.length === 0) return false;
+    for (const id of visibleSelectableIds) {
+      if (!selected.has(id)) return false;
+    }
+    return true;
+  }, [visibleSelectableIds, selected]);
+
+  const onSelectAllVisible = useCallback(() => {
+    if (allVisibleSelected) {
+      setSelected((prev) => {
+        const next = new Set(prev);
+        for (const id of visibleSelectableIds) next.delete(id);
+        return next;
+      });
+    } else {
+      setSelected((prev) => {
+        const next = new Set(prev);
+        for (const id of visibleSelectableIds) next.add(id);
+        return next;
+      });
+    }
+  }, [allVisibleSelected, visibleSelectableIds]);
+
+  // onBulkResolve declared further down, after bulkResolveMutation, so the
+  // closure captures a defined mutation handle.
 
   // Per-view row counts. S7 research §B: "Sentry-style tabs at top of list:
   // 'Open · 24' / 'Stale · 41' / 'Resolved · …'". 7 views × ~100 rows is
@@ -442,6 +571,52 @@ export default function InboxListPage() {
       setActionSuccess(null);
     },
   });
+
+  const bulkResolveMutation = useMutation({
+    mutationFn: ({ ids }: { ids: string[] }) =>
+      bulkResolveExceptions(ids, undefined, newIdempotencyKey()),
+    onSuccess: (res) => {
+      if (res.ok) {
+        const { resolved, idempotent_replay, conflict, not_found, total } = res.data;
+        const parts: string[] = [];
+        if (resolved > 0) parts.push(`${resolved} resolved`);
+        if (idempotent_replay > 0) parts.push(`${idempotent_replay} already resolved`);
+        if (conflict > 0) parts.push(`${conflict} conflict`);
+        if (not_found > 0) parts.push(`${not_found} not found`);
+        const summary = parts.length > 0 ? parts.join(" · ") : `${total} processed`;
+        setActionSuccess(`Bulk resolve: ${summary}.`);
+        setActionError(null);
+        clearSelection();
+        invalidateExceptions();
+      } else {
+        setActionError(res.detail ? `Bulk resolve failed — ${res.detail}` : "Bulk resolve failed. Try again.");
+        setActionSuccess(null);
+      }
+    },
+    onError: (err: unknown) => {
+      console.error("[Inbox] bulk resolve error:", err);
+      setActionError("Bulk resolve failed. Check your connection and try again.");
+      setActionSuccess(null);
+    },
+  });
+
+  // Declared here (after bulkResolveMutation) so the closure captures a real
+  // mutation handle. See "onBulkResolve declared further down" comment above.
+  const onBulkResolve = useCallback(() => {
+    if (selected.size === 0) return;
+    const ids = Array.from(selected);
+    if (
+      typeof window !== "undefined" &&
+      !window.confirm(
+        `Resolve ${ids.length} exception${ids.length === 1 ? "" : "s"}? This cannot be undone.`,
+      )
+    ) {
+      return;
+    }
+    setActionSuccess(null);
+    setActionError(null);
+    bulkResolveMutation.mutate({ ids });
+  }, [selected, bulkResolveMutation]);
 
   // -------------------------------------------------------------------------
   // Render.
@@ -567,6 +742,16 @@ export default function InboxListPage() {
           </div>
         ) : null}
 
+        <BulkActionBar
+          selectedCount={selected.size}
+          visibleSelectableCount={visibleSelectableIds.length}
+          allVisibleSelected={allVisibleSelected}
+          onSelectAllVisible={onSelectAllVisible}
+          onClearSelection={clearSelection}
+          onBulkResolve={onBulkResolve}
+          busy={bulkResolveMutation.isPending}
+        />
+
         {anyLoading ? (
           <LoadingSkeleton />
         ) : visibleRows.length === 0 ? (
@@ -588,6 +773,8 @@ export default function InboxListPage() {
                 now={now}
                 canAct={canAct}
                 isResolvingThis={resolvingId === row.id}
+                isSelected={selected.has(row.id)}
+                onToggleSelected={toggleSelected}
                 onStartResolve={(id) => {
                   setActionSuccess(null);
                   setActionError(null);
@@ -644,6 +831,8 @@ function InboxRowItem({
   now,
   canAct,
   isResolvingThis,
+  isSelected,
+  onToggleSelected,
   onStartResolve,
   onCancelResolve,
   onConfirmResolve,
@@ -655,6 +844,8 @@ function InboxRowItem({
   now: Date;
   canAct: boolean;
   isResolvingThis: boolean;
+  isSelected: boolean;
+  onToggleSelected: (id: string, isOn: boolean) => void;
   onStartResolve: (id: string) => void;
   onCancelResolve: () => void;
   onConfirmResolve: (id: string, notes: string) => void;
@@ -669,6 +860,9 @@ function InboxRowItem({
     canAct && !isApproval && row.inline_actions.includes("acknowledge");
   const canResolve =
     canAct && !isApproval && row.inline_actions.includes("resolve");
+  // Bulk-select is gated to the same population as canResolve (non-approval
+  // exception rows the caller is permitted to resolve).
+  const showSelectCheckbox = canResolve;
 
   // LionWheel credit-needed rows (Tom-locked Hebrew end-to-end per
   // W4 Doc B §6/§7) render the four-fact card pattern inline beneath the
@@ -692,6 +886,24 @@ function InboxRowItem({
         aria-hidden
       />
       <div className="flex items-start gap-4">
+        {showSelectCheckbox ? (
+          <label
+            className="mt-1.5 flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center"
+            data-testid="inbox-row-select"
+          >
+            <input
+              type="checkbox"
+              className="h-4 w-4 cursor-pointer accent-accent"
+              checked={isSelected}
+              onChange={(e) => onToggleSelected(row.id, e.currentTarget.checked)}
+              aria-label={`Select row ${row.id}`}
+            />
+          </label>
+        ) : (
+          // Reserve the same horizontal slot so non-selectable rows
+          // (approvals, already-resolved) align with selectable ones.
+          <div className="mt-1.5 h-5 w-5 shrink-0" aria-hidden />
+        )}
         <div
           className={cn(
             "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded border",
