@@ -760,18 +760,19 @@ export default function GoodsReceiptPage() {
                 View receipts on this PO →
               </Link>
               {/*
-                Movement log link. The /stock/movement-log surface does
-                not yet filter by po_id query param; logged as
-                W1-FOLLOWUP-MOVEMENT-LOG-URL-PREFILL (also tracked in
-                cycle 12 active_mode entry). The link still routes to
-                the unfiltered movement log, which the operator can
-                manually scope by submission/event_at.
+                Cycle 19 — Movement log link now resolves the ?po_id= filter
+                end-to-end. W1 cycle 18 Task C added the backend filter on
+                /api/v1/queries/stock/ledger; W2 cycle 19 wired the
+                /stock/movement-log page to read ?po_id= from URL, render an
+                active-filter chip with resolved po_number, and provide a
+                "Clear filter" affordance. Closes cycle 12
+                W1-FOLLOWUP-MOVEMENT-LOG-URL-PREFILL.
               */}
               <Link
                 href={`/stock/movement-log?po_id=${encodeURIComponent(done.poId)}`}
                 className="btn btn-ghost btn-sm"
                 data-testid="receipt-success-view-movement-log"
-                title="Filter by po_id is not yet supported on the movement log; the link routes to the unfiltered ledger."
+                title="View ledger movements scoped to this PO."
               >
                 View movement log →
               </Link>

@@ -1,6 +1,8 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
@@ -23,6 +25,23 @@ interface LedgerRow {
 interface LedgerResponse {
   rows: LedgerRow[];
   total: number;
+}
+
+// Cycle 19 — PO header shape returned by GET /api/purchase-orders/:po_id.
+// Used solely to resolve a human-readable po_number from the ?po_id= query
+// param so the active-filter chip can show "Filtered by PO: PO-2026-00112"
+// instead of the raw text PK. Mirrors the canonical shape consumed at
+// /purchase-orders/[po_id]/page.tsx + /stock/receipts/page.tsx (cycle 16).
+interface PurchaseOrderHeaderLite {
+  po_id: string;
+  po_number: string;
+  supplier_id: string;
+  supplier_name: string | null;
+  status: string;
+}
+
+interface PurchaseOrderDetailResponse {
+  row: PurchaseOrderHeaderLite;
 }
 
 const PAGE_SIZE = 100;
@@ -65,7 +84,11 @@ const EMPTY_FILTERS: Filters = {
   to_date: "",
 };
 
-function buildQuery(filters: Filters, offset: number): string {
+function buildQuery(
+  filters: Filters,
+  poId: string,
+  offset: number,
+): string {
   const params = new URLSearchParams();
   if (filters.item_id) params.set("item_id", filters.item_id);
   if (filters.item_type) params.set("item_type", filters.item_type);
@@ -73,18 +96,36 @@ function buildQuery(filters: Filters, offset: number): string {
   // API expects ISO datetime params named "from"/"to"; inputs are date-only so append time bounds.
   if (filters.from_date) params.set("from", `${filters.from_date}T00:00:00Z`);
   if (filters.to_date) params.set("to", `${filters.to_date}T23:59:59Z`);
+  // Cycle 19: po_id from URL ?po_id= search param. Backend filter shipped in
+  // W1 cycle 18 Task C (api/src/stock/{schemas.ts,ledger-handler.ts}). The
+  // portal proxy at src/app/api/stock/ledger/route.ts forwards query params
+  // verbatim (forwardQuery: true), so adding po_id here propagates to the
+  // upstream /api/v1/queries/stock/ledger endpoint with no proxy change.
+  if (poId) params.set("po_id", poId);
   params.set("limit", String(PAGE_SIZE));
   params.set("offset", String(offset));
   return params.toString();
 }
 
-async function fetchLedger(filters: Filters, offset: number): Promise<LedgerResponse> {
-  const qs = buildQuery(filters, offset);
+async function fetchLedger(
+  filters: Filters,
+  poId: string,
+  offset: number,
+): Promise<LedgerResponse> {
+  const qs = buildQuery(filters, poId, offset);
   const res = await fetch(`/api/stock/ledger?${qs}`);
   if (!res.ok) throw new Error("Could not load movement log. Check your connection and try refreshing.");
   const data = await res.json();
   if (Array.isArray(data)) return { rows: data, total: data.length };
   return { rows: data.rows ?? [], total: data.total ?? (data.rows ?? []).length };
+}
+
+async function fetchPoHeader(
+  poId: string,
+): Promise<PurchaseOrderDetailResponse> {
+  const res = await fetch(`/api/purchase-orders/${encodeURIComponent(poId)}`);
+  if (!res.ok) throw new Error("PO header lookup failed");
+  return (await res.json()) as PurchaseOrderDetailResponse;
 }
 
 function formatDate(iso: string): string {
@@ -110,13 +151,46 @@ function QtyDeltaCell({ value }: { value: string }) {
 }
 
 export default function MovementLogPage() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  // Cycle 19 — read ?po_id= from URL on every render so a navigation that
+  // changes the query string (e.g. "Clear filter" replaces the URL) takes
+  // effect immediately. We do NOT seed a useState from this — the URL is
+  // the source of truth for the po_id filter.
+  const urlPoId = searchParams?.get("po_id") ?? "";
+
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [appliedFilters, setAppliedFilters] = useState<Filters>(EMPTY_FILTERS);
   const [offset, setOffset] = useState(0);
 
+  // Reset pagination when the URL po_id changes (e.g. operator arrives via
+  // the GR success-panel "View movement log →" link, or clears the chip).
+  useEffect(() => {
+    setOffset(0);
+  }, [urlPoId]);
+
+  // Resolve po_number from po_id for the chip label. Tolerant: if the lookup
+  // fails (PO not found, network error, auth glitch) we fall back to the raw
+  // po_id text — Tom-locked rule "names not IDs in UI" is best-effort here
+  // because the filter must still work even if the header endpoint flickers.
+  const poHeaderQuery = useQuery<PurchaseOrderDetailResponse>({
+    queryKey: ["stock-ledger", "po-header", urlPoId],
+    queryFn: () => fetchPoHeader(urlPoId),
+    enabled: Boolean(urlPoId),
+    staleTime: 60_000,
+    retry: 0,
+  });
+  const poHeader = poHeaderQuery.data?.row ?? null;
+  const poDisplay = useMemo(() => {
+    if (!urlPoId) return "";
+    if (poHeader?.po_number) return poHeader.po_number;
+    return urlPoId; // graceful fallback
+  }, [urlPoId, poHeader]);
+
   const { data, isLoading, error, refetch } = useQuery({
-    queryKey: ["stock-ledger", appliedFilters, offset],
-    queryFn: () => fetchLedger(appliedFilters, offset),
+    queryKey: ["stock-ledger", appliedFilters, urlPoId, offset],
+    queryFn: () => fetchLedger(appliedFilters, urlPoId, offset),
     staleTime: 30_000,
   });
 
@@ -136,6 +210,16 @@ export default function MovementLogPage() {
     setOffset(0);
   }
 
+  // Cycle 19 — drop the ?po_id= search param + refetch. We use router.replace
+  // (not push) to avoid littering history with toggles between filtered /
+  // unfiltered states. Other filters (item_id, etc.) are preserved by leaving
+  // them out of the new URLSearchParams instance — they live in component
+  // state, not the URL.
+  function clearPoFilter() {
+    router.replace("/stock/movement-log");
+    setOffset(0);
+  }
+
   function handleFieldChange(field: keyof Filters, value: string) {
     setFilters((prev) => ({ ...prev, [field]: value }));
   }
@@ -147,6 +231,60 @@ export default function MovementLogPage() {
         title="Movement Log"
         description="Ledger history for all stock movements. Filter by item, type, or date range."
       />
+
+      {/*
+        Cycle 19 — active PO filter chip. Renders only when ?po_id= is on the
+        URL. Info-tone styling, distinct from the form filters below. The
+        "Clear filter" affordance drops the search param and refetches; other
+        filters (item_id, etc.) remain untouched. If the PO header lookup is
+        in flight or failed, we fall back to the raw po_id so the chip is
+        informative even in a degraded state.
+      */}
+      {urlPoId ? (
+        <div
+          className="flex flex-wrap items-center gap-3 rounded-md border border-info/30 bg-info-softer/30 px-4 py-3 text-sm"
+          role="note"
+          aria-live="polite"
+          data-testid="movement-log-po-filter-chip"
+        >
+          <span className="text-fg-muted">Filtered by PO:</span>
+          <span
+            className="font-mono text-fg"
+            data-testid="movement-log-po-filter-value"
+          >
+            {poDisplay}
+          </span>
+          {poHeader?.supplier_name ? (
+            <span className="text-xs text-fg-subtle">
+              · {poHeader.supplier_name}
+            </span>
+          ) : null}
+          {poHeader?.status ? (
+            <span className="text-xs text-fg-subtle">
+              · {poHeader.status}
+            </span>
+          ) : null}
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {poHeader ? (
+              <Link
+                href={`/purchase-orders/${encodeURIComponent(urlPoId)}`}
+                className="btn btn-ghost btn-sm"
+                data-testid="movement-log-po-filter-back-link"
+              >
+                Back to PO →
+              </Link>
+            ) : null}
+            <button
+              type="button"
+              onClick={clearPoFilter}
+              className="btn btn-ghost btn-sm"
+              data-testid="movement-log-po-filter-clear"
+            >
+              Clear filter
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       <SectionCard eyebrow="Filter" title="Search Movements">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
@@ -265,7 +403,28 @@ export default function MovementLogPage() {
             </button>
           </div>
         )}
-        {!isLoading && !error && rows.length === 0 && (
+        {!isLoading && !error && rows.length === 0 && urlPoId ? (
+          // Cycle 19 — PO-scoped empty state. The cycle 16 success-panel link
+          // arrives with ?po_id=<just-posted-PO>; depending on backend timing
+          // the GR ledger row may not yet be visible, OR an over-receipt may
+          // have routed to exceptions instead of the ledger. The copy steers
+          // operators to those two real possibilities rather than implying a
+          // bug.
+          <div
+            className="space-y-2 py-6 text-center text-sm text-fg-muted"
+            data-testid="movement-log-po-filter-empty"
+          >
+            <p>
+              No movements found for PO{" "}
+              <span className="font-mono text-fg">{poDisplay}</span>.
+            </p>
+            <p className="text-xs text-fg-subtle">
+              The PO may not have ledger postings yet, or you may have
+              over-receipt exceptions.
+            </p>
+          </div>
+        ) : null}
+        {!isLoading && !error && rows.length === 0 && !urlPoId && (
           <p className="py-8 text-center text-sm text-fg-muted">
             No movements found for the selected filters.
           </p>
