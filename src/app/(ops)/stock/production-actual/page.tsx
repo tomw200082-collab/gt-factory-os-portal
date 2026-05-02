@@ -1330,6 +1330,23 @@ export default function ProductionActualPage() {
                   Open inventory flow
                 </Link>
               ) : null}
+              {/* Cycle 12 Part B fix: link to the canonical movement-log
+                  surface so the operator can verify the production_output +
+                  production_consumption ledger rows posted as expected.
+                  Closes W4 cycle-10 acceptance contract §9 PAR-3 (suggested
+                  addition; supports rehearsal step 24 — "View posted ledger
+                  movement →"). Movement-log displays the most recent rows
+                  at the top by default, so the just-posted submission is
+                  immediately visible. URL deep-link filter prefill on
+                  movement-log is out of this tranche's surface scope and
+                  can land in a follow-up. */}
+              <Link
+                href="/stock/movement-log"
+                className="btn btn-sm gap-1.5"
+                data-testid="production-actual-success-movement-log"
+              >
+                View posted ledger →
+              </Link>
               {fromRunId ? (
                 <Link
                   href={`/planning/runs/${encodeURIComponent(fromRunId)}?tab=production`}

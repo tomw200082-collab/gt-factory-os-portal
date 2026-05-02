@@ -731,8 +731,25 @@ function ManualAddModal({
                 className="input"
                 value={qty}
                 onChange={(e) => setQty(e.target.value)}
+                aria-describedby={
+                  qty && !(parseFloat(qty) > 0) ? "manual-add-qty-hint" : undefined
+                }
+                aria-invalid={qty && !(parseFloat(qty) > 0) ? true : undefined}
                 required
               />
+              {/* Cycle 12 P2 Phase3-S5-A fix: inline hint when qty <= 0 so the
+                  operator sees WHY submit is disabled, not just the disabled
+                  state. Backend CHECK is `planned_qty > 0`
+                  (production_plan_contract.md §103). */}
+              {qty && !(parseFloat(qty) > 0) ? (
+                <p
+                  id="manual-add-qty-hint"
+                  className="mt-1 text-3xs text-warning-fg"
+                  data-testid="manual-add-qty-hint"
+                >
+                  Enter a positive quantity (greater than 0).
+                </p>
+              ) : null}
             </label>
             <label className="block">
               <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
@@ -1617,7 +1634,14 @@ export default function ProductionPlanPage() {
                   type="button"
                   className="btn btn-primary btn-sm gap-1.5"
                   onClick={() =>
-                    setShowManualAdd({ defaultDate: toIsoDate(weekStart) })
+                    // Cycle 12 P1 Phase3-S4-A fix: default the modal date to
+                    // today (operator's working day) rather than the start of
+                    // the currently-shown week (often a Sunday — non-working
+                    // day for an Israeli factory). Operator can still pick
+                    // any date in the picker; this just sets a friendlier
+                    // default. Per W4 contract §4.1 step 4 + cycle-11 audit
+                    // PRODUCTION/docs/qa/runtime_dead_end_audit.md.
+                    setShowManualAdd({ defaultDate: toIsoDate(new Date()) })
                   }
                   data-testid="header-add-manual"
                 >
@@ -1628,7 +1652,11 @@ export default function ProductionPlanPage() {
                   type="button"
                   className="btn btn-sm gap-1.5"
                   onClick={() =>
-                    setShowAddFromRecs({ defaultDate: toIsoDate(weekStart) })
+                    // Cycle 12 P1 Phase3-S4-A fix: same default-to-today
+                    // semantics for the rec-picker CTA. The picked rec
+                    // brings its own suggested_for_date in the modal, so
+                    // this default only matters before the operator picks.
+                    setShowAddFromRecs({ defaultDate: toIsoDate(new Date()) })
                   }
                   title="Pick from approved production recommendations"
                   data-testid="header-add-from-recs"
@@ -1814,7 +1842,9 @@ export default function ProductionPlanPage() {
                   type="button"
                   className="btn btn-primary btn-sm gap-1.5"
                   onClick={() =>
-                    setShowManualAdd({ defaultDate: toIsoDate(weekStart) })
+                    // Cycle 12 P1 Phase3-S4-A fix: empty-state CTA defaults
+                    // to today, matching the header CTAs.
+                    setShowManualAdd({ defaultDate: toIsoDate(new Date()) })
                   }
                 >
                   <Plus className="h-3 w-3" strokeWidth={2.5} />
