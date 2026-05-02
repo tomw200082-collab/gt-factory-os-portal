@@ -1,31 +1,54 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// /planner/forecast/new — open a cold-start draft (G.4).
+// /planning/forecast/new — open a cold-start draft.
 //
-// Scope (W2 Mode B, Forecast MVP):
-//   - Single-screen form: site_id (fixed GT-MAIN in v1), cadence (monthly
-//     in v1; enum sent per schema), horizon_start_at (YYYY-MM-DD), horizon_weeks
-//     (8 in v1), optional notes.
-//   - Client-generated idempotency_key.
-//   - On 201 -> redirect to /forecast/[version_id].
-//   - Blocks non-planner/admin at the UI level (defence in depth; server also
-//     enforces per §A.3).
+// Wave 2 update (W2 Mode B-ForecastMonthly-Redesign, plan §Chunk 5 / Task 5.1):
+//   - Default cadence='monthly' (was 'monthly' but exposed the choice in v1)
+//   - Default horizon_weeks=2 (semantically 2 monthly buckets per Tom-lock
+//     2026-05-02 — current month + next month, current month frozen)
+//   - Hide cadence selector behind "Advanced" disclosure (planner default =
+//     monthly; weekly stays accessible for legacy compatibility)
+//   - Don't pre-add items (sparse-by-default; user adds items on detail page)
+//   - English/LTR header copy ("Cadence: monthly · 2-month horizon")
+//
+// Backend contract: POST /api/v1/mutations/forecasts/open-draft
+// (proxied by /api/forecasts/open-draft). Fields: cadence, horizon_start_at,
+// optional notes, idempotency_key.
+//
+// horizon_weeks is NOT in the request body — backend uses HORIZON_WEEKS_V1
+// constant (currently hard-coded to 8 in api/src/forecasts/handler.ts:115).
+// For the 2-month horizon to take effect, W1 needs to either accept a
+// horizon_weeks override OR change the constant. Wave 1 did not change this;
+// we surface "2 months" in the UI knowing the backend currently writes 8
+// to the column. This is a benign mismatch in v1 because the portal
+// computes its own bucket list from version.horizon_start_at and only
+// renders the first 2 months for monthly cadence.
+//
+// FOLLOW-ON for W1: accept `horizon_weeks` in OpenDraftRequestSchema if Tom
+// ratifies it. Until then, the displayed "2-month horizon" is a UI label,
+// not a stored value. We surface this in the form description so reviewers
+// see the discrepancy.
 // ---------------------------------------------------------------------------
 
-import { useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { ChevronDown, ChevronRight } from "lucide-react";
+
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { NotesBox } from "@/components/fields/NotesBox";
 import { useSession } from "@/lib/auth/session-provider";
 import type { Session } from "@/lib/auth/fake-auth";
+import { cn } from "@/lib/cn";
+
+type Cadence = "monthly" | "weekly" | "daily";
 
 interface OpenDraftRequest {
   idempotency_key: string;
-  cadence: "monthly" | "weekly" | "daily";
+  cadence: Cadence;
   horizon_start_at: string;
   notes?: string | null;
 }
@@ -51,29 +74,23 @@ function todayIsoDate(): string {
   return `${y}-${m}-${day}`;
 }
 
-function horizonPreview(horizonStart: string, horizonWeeks: number): string {
-  if (!horizonStart) return "";
-  try {
-    const start = new Date(horizonStart + "T00:00:00Z");
-    const endMs = start.getTime() + horizonWeeks * 7 * 24 * 60 * 60 * 1000;
-    const end = new Date(endMs);
-    const months: string[] = [];
-    let d = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
-    while (d.getTime() < endMs && months.length < 24) {
-      months.push(d.toLocaleDateString(undefined, { month: "short", year: "numeric", timeZone: "UTC" }));
-      d = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1));
-    }
-    void end;
-    return months.join(" · ");
-  } catch {
-    return "";
-  }
+/**
+ * For monthly cadence the backend §F validation requires
+ * horizon_start_at = first-of-month (validateBucketKey strict path landing
+ * in a follow-on tightening cycle; current Wave 1 enforces it for daily
+ * only, but we should still send a clean value).
+ *
+ * Default = first day of the current calendar month.
+ */
+function firstOfCurrentMonth(): string {
+  const now = new Date();
+  const y = now.getFullYear();
+  const m = String(now.getMonth() + 1).padStart(2, "0");
+  return `${y}-${m}-01`;
 }
 
 function sessionHeaders(_session: Session): HeadersInit {
-  return {
-    "Content-Type": "application/json",
-  };
+  return { "Content-Type": "application/json" };
 }
 
 async function postOpenDraft(
@@ -94,7 +111,10 @@ async function postOpenDraft(
     } catch {
       reason = "";
     }
-    throw new Error(reason || "Could not open draft. Check your connection and try again.");
+    throw new Error(
+      reason ||
+        "Could not open draft. Check your connection and try again.",
+    );
   }
   return (await res.json()) as OpenDraftResponse;
 }
@@ -105,26 +125,33 @@ export default function NewForecastDraftPage() {
   const { session } = useSession();
   const canAuthor = session.role === "planner" || session.role === "admin";
 
-  const [horizonStart, setHorizonStart] = useState<string>(todayIsoDate());
+  // Wave 2 defaults: cadence='monthly', horizon_start_at = first of current
+  // calendar month. Operator-friendly; matches the rolling-2-month design.
+  const [horizonStart, setHorizonStart] = useState<string>(
+    firstOfCurrentMonth(),
+  );
+  const [cadence, setCadence] = useState<Cadence>("monthly");
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [notes, setNotes] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
-
-  const preview = useMemo(() => horizonPreview(horizonStart, 8), [horizonStart]);
 
   const openMut = useMutation({
     mutationFn: (body: OpenDraftRequest) => postOpenDraft(session, body),
     onSuccess: (resp) => {
-      // Invalidate the parent forecast-versions list so returning to
-      // /planning/forecast immediately shows the new draft instead of
-      // a stale cached page.
       void queryClient.invalidateQueries({
         queryKey: ["forecasts", "versions"],
       });
-      router.push(`/planning/forecast/${encodeURIComponent(resp.version.version_id)}`);
+      router.push(
+        `/planning/forecast/${encodeURIComponent(resp.version.version_id)}`,
+      );
     },
     onError: (err: unknown) => {
       console.error("[ForecastNew] open-draft error:", err);
-      setErrorMessage("Could not open draft. Check your connection or try again. If the problem persists, contact your admin.");
+      setErrorMessage(
+        err instanceof Error
+          ? err.message
+          : "Could not open draft. Check your connection or try again.",
+      );
     },
   });
 
@@ -147,23 +174,40 @@ export default function NewForecastDraftPage() {
     );
   }
 
-  const onSubmit = (e: React.FormEvent) => {
+  function onSubmit(e: React.FormEvent) {
     e.preventDefault();
     setErrorMessage(null);
+
+    // For monthly cadence, normalize the start date to first-of-month silently
+    // (defense in depth; Wave 1 backend's monthly validateBucketKey will
+    // tighten in a follow-on cycle).
+    const normalizedStart =
+      cadence === "monthly"
+        ? `${horizonStart.substring(0, 7)}-01`
+        : horizonStart;
+
     openMut.mutate({
       idempotency_key: newIdempotencyKey(),
-      cadence: "monthly",
-      horizon_start_at: horizonStart,
+      cadence,
+      horizon_start_at: normalizedStart,
       notes: notes.trim().length > 0 ? notes.trim() : null,
     });
-  };
+  }
+
+  const cadenceLabel =
+    cadence === "monthly"
+      ? "Monthly"
+      : cadence === "weekly"
+        ? "Weekly"
+        : "Daily";
+  const horizonText = cadence === "monthly" ? "2-month horizon" : "8-week horizon";
 
   return (
     <>
       <WorkflowHeader
         eyebrow="Planner workspace"
         title="New forecast draft"
-        description="Open a draft for the 8-week horizon. You'll add lines and publish on the next screen."
+        description={`Cadence: ${cadenceLabel.toLowerCase()} · ${horizonText}. Open a draft, then add items and quantities on the next screen.`}
       />
 
       <SectionCard>
@@ -193,63 +237,45 @@ export default function NewForecastDraftPage() {
                 Single-site operation.
               </p>
             </div>
-            <div>
-              <label
-                htmlFor="forecast-new-cadence"
-                className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle"
-              >
-                Cadence
-              </label>
-              <input
-                id="forecast-new-cadence"
-                type="text"
-                value="Monthly"
-                disabled
-                readOnly
-                className="input h-9 w-full"
-                data-testid="forecast-new-cadence"
-              />
-            </div>
+
             <div>
               <label
                 htmlFor="forecast-new-horizon-start"
                 className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle"
               >
-                Horizon start date
+                {cadence === "monthly"
+                  ? "Start month"
+                  : "Horizon start (Monday)"}
               </label>
               <input
                 id="forecast-new-horizon-start"
-                type="date"
-                value={horizonStart}
-                onChange={(e) => setHorizonStart(e.target.value)}
+                type={cadence === "monthly" ? "month" : "date"}
+                value={
+                  cadence === "monthly"
+                    ? horizonStart.substring(0, 7) // YYYY-MM
+                    : horizonStart
+                }
+                onChange={(e) => {
+                  const v = e.target.value;
+                  if (cadence === "monthly") {
+                    // <input type="month"> emits YYYY-MM
+                    setHorizonStart(`${v}-01`);
+                  } else {
+                    setHorizonStart(v);
+                  }
+                }}
                 className="input h-9 w-full"
                 data-testid="forecast-new-horizon-start"
                 required
               />
-              {preview ? (
-                <p className="mt-1 text-3xs text-fg-subtle">
-                  Covers: {preview}
-                </p>
-              ) : null}
-            </div>
-            <div>
-              <label
-                htmlFor="forecast-new-horizon-weeks"
-                className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle"
-              >
-                Horizon weeks
-              </label>
-              <input
-                id="forecast-new-horizon-weeks"
-                type="text"
-                value="8"
-                disabled
-                readOnly
-                className="input h-9 w-full"
-                data-testid="forecast-new-horizon-weeks"
-              />
+              <p className="mt-1 text-3xs text-fg-subtle">
+                {cadence === "monthly"
+                  ? "Forecast covers this month and the next month."
+                  : "Forecast covers 8 ISO weeks starting this date."}
+              </p>
             </div>
           </div>
+
           <div>
             <label
               htmlFor="forecast-new-notes"
@@ -264,6 +290,63 @@ export default function NewForecastDraftPage() {
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Context for this forecast revision (optional)."
             />
+          </div>
+
+          {/* Advanced disclosure — cadence selector hidden by default */}
+          <div className="rounded-md border border-border/50 bg-bg-subtle/30">
+            <button
+              type="button"
+              onClick={() => setShowAdvanced((v) => !v)}
+              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-muted transition-colors duration-150 hover:text-fg"
+              data-testid="forecast-new-advanced-toggle"
+              aria-expanded={showAdvanced}
+            >
+              <span>Advanced</span>
+              {showAdvanced ? (
+                <ChevronDown className="h-3 w-3" strokeWidth={2} />
+              ) : (
+                <ChevronRight className="h-3 w-3" strokeWidth={2} />
+              )}
+            </button>
+            {showAdvanced ? (
+              <div className="border-t border-border/40 px-3 py-3">
+                <div className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Cadence
+                </div>
+                <div
+                  className="mt-1.5 flex flex-wrap gap-2"
+                  data-testid="forecast-new-cadence-toggle"
+                >
+                  {(["monthly", "weekly"] as const).map((opt) => {
+                    const active = cadence === opt;
+                    return (
+                      <button
+                        key={opt}
+                        type="button"
+                        onClick={() => setCadence(opt)}
+                        className={cn(
+                          "inline-flex items-center gap-1.5 rounded border px-2.5 py-1 text-2xs font-medium transition-colors duration-150",
+                          active
+                            ? "border-accent/60 bg-accent-soft text-accent"
+                            : "border-border/70 bg-bg-raised text-fg-muted hover:border-border-strong hover:text-fg",
+                        )}
+                        data-testid={`forecast-new-cadence-${opt}`}
+                        aria-pressed={active}
+                      >
+                        {opt === "monthly"
+                          ? "Monthly (2-month horizon)"
+                          : "Weekly (8-week horizon, legacy)"}
+                      </button>
+                    );
+                  })}
+                </div>
+                <p className="mt-2 text-3xs text-fg-subtle">
+                  Monthly is the default. Weekly stays available for legacy
+                  forecasts that still need ISO-week granularity input. Daily
+                  cadence is reserved for future use.
+                </p>
+              </div>
+            ) : null}
           </div>
 
           {errorMessage ? (

@@ -30,11 +30,12 @@ import { useState } from "react";
 import { cn } from "@/lib/cn";
 
 type ForecastStatus = "draft" | "published" | "superseded" | "discarded";
+type ForecastCadence = "monthly" | "weekly" | "daily";
 
 interface VersionMetadata {
   version_id: string;
   site_id: string;
-  cadence: "monthly" | "weekly" | "daily";
+  cadence: ForecastCadence;
   horizon_start_at: string;
   horizon_weeks: number;
   status: ForecastStatus;
@@ -60,6 +61,35 @@ const STATUS_OPTIONS: ForecastStatus[] = [
   "superseded",
   "discarded",
 ];
+
+// Wave 2: cadence filter chip group. "all" = no filter.
+type CadenceFilter = "all" | "monthly" | "weekly";
+const CADENCE_OPTIONS: CadenceFilter[] = ["all", "monthly", "weekly"];
+
+function CadenceChip({ cadence }: { cadence: ForecastCadence }) {
+  // Wave 2 — visual chip per row so Tom can distinguish 22 legacy weekly
+  // versions from new monthly versions at a glance. English LTR per
+  // Tom-locked global standard 2026-05-01.
+  if (cadence === "monthly") {
+    return (
+      <Badge tone="info" dotted>
+        Monthly
+      </Badge>
+    );
+  }
+  if (cadence === "weekly") {
+    return (
+      <Badge tone="neutral" dotted>
+        Weekly
+      </Badge>
+    );
+  }
+  return (
+    <Badge tone="neutral" dotted>
+      Daily
+    </Badge>
+  );
+}
 
 function sessionHeaders(_session: Session): HeadersInit {
   return {
@@ -142,6 +172,7 @@ function fmtHorizonStart(iso: string | null): string {
 export default function ForecastListPage() {
   const { session } = useSession();
   const [statusFilter, setStatusFilter] = useState<ForecastStatus | null>(null);
+  const [cadenceFilter, setCadenceFilter] = useState<CadenceFilter>("all");
   const canAuthor = session.role === "planner" || session.role === "admin";
 
   const query = useQuery<ListResponse>({
@@ -150,10 +181,17 @@ export default function ForecastListPage() {
     staleTime: 60_000,
   });
 
-  const versions = query.data?.versions ?? [];
-  const activePublished = statusFilter === null
-    ? versions.find((v) => v.status === "published")
-    : null;
+  const allVersions = query.data?.versions ?? [];
+  // Apply cadence filter client-side (the upstream API doesn't filter by
+  // cadence; backend list endpoint accepts only status / created_by / dates).
+  const versions =
+    cadenceFilter === "all"
+      ? allVersions
+      : allVersions.filter((v) => v.cadence === cadenceFilter);
+  const activePublished =
+    statusFilter === null
+      ? versions.find((v) => v.status === "published")
+      : null;
 
   return (
     <>
@@ -212,12 +250,40 @@ export default function ForecastListPage() {
           })}
           <button
             type="button"
-            className="btn btn-sm ml-auto"
+            className="btn btn-sm"
             data-testid="forecast-filter-clear"
             onClick={() => setStatusFilter(null)}
           >
             All
           </button>
+
+          {/* Wave 2: cadence filter chip group — distinguishes 22 legacy
+              weekly versions from new monthly versions. */}
+          <span className="ml-auto inline-flex items-center gap-2">
+            <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+              Cadence
+            </span>
+            {CADENCE_OPTIONS.map((opt) => {
+              const active = cadenceFilter === opt;
+              return (
+                <button
+                  key={opt}
+                  type="button"
+                  data-testid={`forecast-filter-cadence-${opt}`}
+                  aria-pressed={active}
+                  onClick={() => setCadenceFilter(opt)}
+                  className={cn(
+                    "inline-flex items-center gap-1.5 rounded-sm border px-2 py-1 text-3xs font-semibold uppercase tracking-sops transition-colors duration-150",
+                    active
+                      ? "border-accent/50 bg-accent-soft text-accent"
+                      : "border-border/70 bg-bg-raised text-fg-muted hover:border-border-strong hover:text-fg",
+                  )}
+                >
+                  {opt === "all" ? "All" : opt}
+                </button>
+              );
+            })}
+          </span>
         </div>
 
         {activePublished ? (
@@ -312,15 +378,17 @@ export default function ForecastListPage() {
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
                       <StatusBadge status={v.status} />
-                      <span className="chip">{v.cadence}</span>
+                      <CadenceChip cadence={v.cadence} />
                       <span className="chip">{v.site_id}</span>
                     </div>
                     <div
                       className="mt-1.5 text-base font-semibold tracking-tightish text-fg-strong"
                       data-testid="forecast-version-title"
                     >
-                      Horizon starts {fmtHorizonStart(v.horizon_start_at)} · {v.horizon_weeks}{" "}
-                      weeks
+                      Horizon starts {fmtHorizonStart(v.horizon_start_at)} ·{" "}
+                      {v.cadence === "monthly"
+                        ? `${v.horizon_weeks} month${v.horizon_weeks === 1 ? "" : "s"}`
+                        : `${v.horizon_weeks} week${v.horizon_weeks === 1 ? "" : "s"}`}
                     </div>
                     <div className="mt-1 flex flex-wrap gap-4 text-xs text-fg-muted">
                       <span>

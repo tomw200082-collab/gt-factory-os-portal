@@ -1,45 +1,89 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// /planner/forecast/[version_id] — version detail, line editor, publish.
+// Forecast version detail — Wave 2 redesign (W2 Mode B-ForecastMonthly-Redesign).
 //
-// Scope (W2 Mode B, Forecast MVP):
-//   - GET /api/v1/queries/forecasts/versions/:version_id (§G.2)
-//   - For drafts: editable line grid (item × period × qty), Save button
-//     calling POST /api/v1/mutations/forecasts/save-lines (§G.5).
-//   - For published: read-only grid.
-//   - Publish button visible on drafts only; calls
-//     POST /api/v1/mutations/forecasts/publish (§G.6).
-//   - Freeze indicator (minimal): rows whose period_bucket_key is within
-//     FREEZE_HORIZON_WEEKS=1 of today are marked read-only in UI. Admin
-//     break-glass override UI is DEFERRED (checkpoint §8).
-//   - Uses existing lines from the API response; no grid auto-expansion to
-//     include eligible-items-without-lines (that is the job of a "seed from
-//     prior" flow — deferred).
+// Plan-of-record §Chunks 4 + 5 of
+// docs/forecast_monthly_cadence_refactor_plan_2026-05-02.md
 //
-// Out of MVP scope (deferred):
-//   Revise, Discard, admin freeze override UI, active-published callout.
+// Wave 1 backend (commit 31d3ee0) shipped:
+//   - cadence='monthly' end-to-end on the API
+//   - F1 sparse: only existing forecast_lines must be filled at publish
+//   - v_planning_demand monthly→weekly disaggregation (migration 0128)
+//   - fn_compute_daily_fg_projection extension (migration 0129)
+//   - parity verified (monthly 200 → 4×50 weekly → SUM(daily June)≈200 ±1)
+//   - RUNTIME_READY(Forecast-Monthly) signal #33 emitted
+//
+// Wave 2 (this commit) — frontend redesign:
+//   - English LTR everywhere (Tom-locked global standard 2026-05-01)
+//   - Integer-only display via formatQty (no .00000000 leakage)
+//   - Month column labels "May 2026" / "Jun 2026" (no "26 מאי" duplicates)
+//   - Sparse grid (start empty, items added via autocomplete)
+//   - 800ms debounced auto-save
+//   - Hero KPI band + AutoSaveIndicator + PublishGate modal
+//   - Stunning visual quality per Tom-locked UI standard
+//
+// Backend contracts consumed verbatim — NO contract authoring here.
+//   GET  /api/forecasts/versions/:version_id    (read draft + lines)
+//   GET  /api/items?status=ACTIVE&limit=1000    (eligible-FG list)
+//   POST /api/forecasts/save-lines              (auto-save)
+//   POST /api/forecasts/publish                 (publish)
+//
+// Forbidden under Mode B:
+//   - Backend authorship (api/src/**) — none touched
+//   - New migrations — none authored
+//   - Sandbox-to-canonical promotion — n/a (this IS the canonical portal per
+//     EXECUTION_POLICY.md §Mode B-Portal-Refactor)
 // ---------------------------------------------------------------------------
 
-import { useParams, useRouter } from "next/navigation";
-import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useParams } from "next/navigation";
+import { useCallback, useMemo, useState, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { AlertTriangle, CheckCircle2, ChevronLeft, ChevronRight, Play, Save } from "lucide-react";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  ChevronLeft,
+  ChevronRight,
+  Play,
+} from "lucide-react";
+
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
-import { EmptyState } from "@/components/feedback/states";
 import { useSession } from "@/lib/auth/session-provider";
 import type { Session } from "@/lib/auth/fake-auth";
-import { cn } from "@/lib/cn";
+
+import { computeMonthBuckets, formatInt } from "./_lib/format";
+import { useAutoSave } from "./_lib/use-auto-save";
+import { HeroKpiBand } from "./_components/HeroKpiBand";
+import {
+  ItemAutocompleteAdder,
+  type ItemForAutocomplete,
+} from "./_components/ItemAutocompleteAdder";
+import {
+  MonthlyGrid,
+  type ForecastLineLite,
+  type ItemForGrid,
+} from "./_components/MonthlyGrid";
+import { AutoSaveIndicator } from "./_components/AutoSaveIndicator";
+import {
+  PublishGate,
+  type PublishMissingCell,
+} from "./_components/PublishGate";
+import { ForecastEmptyState } from "./_components/EmptyState";
+
+// ---------------------------------------------------------------------------
+// Types — mirror backend response shapes verbatim (no invention).
+// ---------------------------------------------------------------------------
 
 type ForecastStatus = "draft" | "published" | "superseded" | "discarded";
+type ForecastCadence = "monthly" | "weekly" | "daily";
 
 interface VersionMetadata {
   version_id: string;
   site_id: string;
-  cadence: "monthly" | "weekly" | "daily";
+  cadence: ForecastCadence;
   horizon_start_at: string;
   horizon_weeks: number;
   status: ForecastStatus;
@@ -55,16 +99,9 @@ interface VersionMetadata {
   notes: string | null;
 }
 
-interface ForecastLine {
-  line_id: string;
-  item_id: string;
-  period_bucket_key: string;
-  forecast_quantity: string;
-}
-
 interface GetVersionResponse {
   version: VersionMetadata;
-  lines: ForecastLine[];
+  lines: ForecastLineLite[];
 }
 
 interface ItemRow {
@@ -75,90 +112,34 @@ interface ItemRow {
   sales_uom: string | null;
 }
 
-async function fetchJsonSilent<T>(url: string): Promise<T> {
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) throw new Error("Request failed");
-  return (await res.json()) as T;
+interface ItemsListResponse {
+  rows: ItemRow[];
+  count: number;
 }
 
-// Generate expected period bucket keys from version metadata when the draft
-// has no existing lines yet (fresh draft). Keys are ISO date strings matching
-// the server's period_bucket_key format: YYYY-MM-DD.
-//
-// Contract reference: forecast_planning_contract.md §B.2 (horizon = 8 ISO 8601
-// weeks, Monday→Sunday) + §C.1 line 121 ("The planner authors a quantity per
-// finished-good item per ISO week") + §F1 (publish-time completeness checks
-// every (item, ISO week) cell across the horizon = eligible_items × 8 cells).
-//
-// Important: in v1, `cadence` is the PUBLISH cadence (one publish per month),
-// NOT the bucket size. Bucket size is always ISO weekly. The 'weekly' / 'daily'
-// enum values are reserved for future use (§B.1) but server-side validation
-// rejects them today (§F7). For grid generation we therefore emit
-// `horizonWeeks` ISO weekly buckets (Monday-anchored) regardless of the
-// cadence string. Matches backend F1 expectation in api/src/forecasts/
-// handler.ts:597-609 (expected = eligible_items × horizon_weeks).
-function generateBucketsFromMetadata(
-  horizonStartAt: string,
-  horizonWeeks: number,
-  // Cadence is accepted for forward compatibility but does not change bucket
-  // size in v1; the 'daily' branch below is dead-code-guarded for §B.1
-  // reserved-but-not-built future cadence and is never reached at runtime
-  // because §F7 rejects non-'monthly' values upstream.
-  cadence: "monthly" | "weekly" | "daily",
-): string[] {
-  const start = new Date(horizonStartAt + "T00:00:00Z");
-  const buckets: string[] = [];
-
-  // Daily branch — reserved future cadence per §B.1; never reached in v1
-  // because the backend rejects cadence='daily' at create-version time (§F7).
-  // Kept to preserve type completeness only.
-  if (cadence === "daily") {
-    const d = new Date(
-      Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()),
-    );
-    for (let i = 0; i < Math.min(horizonWeeks * 7, 62); i++) {
-      const y = d.getUTCFullYear();
-      const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-      const dd = String(d.getUTCDate()).padStart(2, "0");
-      buckets.push(`${y}-${m}-${dd}`);
-      d.setUTCDate(d.getUTCDate() + 1);
-    }
-    return buckets;
-  }
-
-  // Weekly bucket generation — applies to BOTH cadence='monthly' (v1 publish
-  // cadence with weekly buckets per §B.2 + §C.1) and the reserved cadence=
-  // 'weekly' enum value. Buckets are Monday-anchored ISO 8601 week starts.
-  // The day-of-week math: Sunday (UTC getDay()=0) maps to "back 6 days";
-  // Monday (1) maps to 0; Tuesday..Saturday (2..6) map to (dow-1).
-  const d = new Date(
-    Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()),
-  );
-  const dow = d.getUTCDay();
-  d.setUTCDate(d.getUTCDate() - (dow === 0 ? 6 : dow - 1));
-  // Emit exactly horizonWeeks buckets (count-bounded, not endMs-bounded)
-  // so the grid matches the backend F1 expectation byte-for-byte. Previously
-  // an endMs-bounded loop could emit horizonWeeks+1 if horizon_start_at was
-  // not already a Monday — that drift caused F1 to fail with
-  // "expected 536 cells, found N" mismatches.
-  for (let i = 0; i < horizonWeeks; i++) {
-    const y = d.getUTCFullYear();
-    const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-    const dd = String(d.getUTCDate()).padStart(2, "0");
-    buckets.push(`${y}-${m}-${dd}`);
-    d.setUTCDate(d.getUTCDate() + 7);
-  }
-  return buckets;
+interface PublishErrorResponse {
+  reason_code?: string;
+  detail?: string;
+  error_code?: string;
+  recovery?: string;
+  expected_cell_count?: string;
+  found_cell_count?: string;
+  missing_cell_count?: string;
 }
 
-// Matches api/src/forecasts/schemas.ts FORECAST_FREEZE_HORIZON_WEEKS.
-// FP-2 = 1 per contract §B.4.
-const FREEZE_HORIZON_WEEKS = 1;
+// Eligible supply methods for FG forecast — mirrors backend §F4.
+const ELIGIBLE_SUPPLY_METHODS = new Set([
+  "BOUGHT_FINISHED",
+  "MANUFACTURED",
+  "REPACK",
+]);
 
-function sessionHeaders(_session: Session): HeadersInit {
-  return {
-    "Content-Type": "application/json",
-  };
+// ---------------------------------------------------------------------------
+// Fetchers
+// ---------------------------------------------------------------------------
+
+function sessionHeaders(_s: Session): HeadersInit {
+  return { "Content-Type": "application/json" };
 }
 
 function newIdempotencyKey(): string {
@@ -168,203 +149,675 @@ function newIdempotencyKey(): string {
   return `fc_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 }
 
-function todayIsoDate(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
-
-function addDays(isoDate: string, days: number): string {
-  const [y, m, d] = isoDate.split("-").map(Number);
-  const dt = new Date(Date.UTC(y, m - 1, d));
-  dt.setUTCDate(dt.getUTCDate() + days);
-  const yy = dt.getUTCFullYear();
-  const mm = String(dt.getUTCMonth() + 1).padStart(2, "0");
-  const dd = String(dt.getUTCDate()).padStart(2, "0");
-  return `${yy}-${mm}-${dd}`;
-}
-
-// A period bucket is "frozen" if its ISO-week-start <= today + FREEZE_WEEKS*7.
-function isBucketFrozen(bucketKey: string): boolean {
-  const cutoff = addDays(todayIsoDate(), FREEZE_HORIZON_WEEKS * 7);
-  return bucketKey <= cutoff;
-}
-
 async function fetchVersion(
   session: Session,
-  version_id: string,
+  versionId: string,
 ): Promise<GetVersionResponse> {
   const res = await fetch(
-    `/api/forecasts/versions/${encodeURIComponent(version_id)}`,
-    {
-      method: "GET",
-      headers: sessionHeaders(session),
-    },
+    `/api/forecasts/versions/${encodeURIComponent(versionId)}`,
+    { method: "GET", headers: sessionHeaders(session) },
   );
   if (!res.ok) {
-    const body = await res.text().catch(() => "");
-    throw new Error("Could not load this forecast version. Check your connection and try refreshing.");
+    throw new Error(
+      "Could not load this forecast version. Check your connection and try refreshing.",
+    );
   }
   return (await res.json()) as GetVersionResponse;
 }
 
-async function postSaveLines(
+async function fetchItemsList(
   session: Session,
-  version_id: string,
-  lines: Array<{
-    item_id: string;
-    period_bucket_key: string;
-    forecast_quantity: string;
-  }>,
-): Promise<void> {
-  const res = await fetch("/api/forecasts/save-lines", {
-    method: "POST",
+): Promise<ItemsListResponse> {
+  const res = await fetch(`/api/items?status=ACTIVE&limit=1000`, {
+    method: "GET",
     headers: sessionHeaders(session),
-    body: JSON.stringify({
-      version_id,
-      idempotency_key: newIdempotencyKey(),
-      lines,
-    }),
   });
   if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    let detail = "";
-    try {
-      const parsed = JSON.parse(txt) as { detail?: string };
-      detail = parsed.detail ?? "";
-    } catch { /* ignore */ }
-    throw new Error(detail || "Save failed. Check your connection and try again.");
+    throw new Error("Could not load eligible items.");
+  }
+  return (await res.json()) as ItemsListResponse;
+}
+
+async function fetchVersionsList(
+  session: Session,
+): Promise<{ versions: VersionMetadata[] }> {
+  const res = await fetch(`/api/forecasts/versions?status=published`, {
+    method: "GET",
+    headers: sessionHeaders(session),
+  });
+  if (!res.ok) {
+    // Soft fail: prev-month KPI just shows "—" if list query errors.
+    return { versions: [] };
+  }
+  return (await res.json()) as { versions: VersionMetadata[] };
+}
+
+async function fetchVersionLines(
+  session: Session,
+  versionId: string,
+): Promise<GetVersionResponse | null> {
+  try {
+    return await fetchVersion(session, versionId);
+  } catch {
+    return null;
   }
 }
 
 async function postPublish(
   session: Session,
-  version_id: string,
-): Promise<void> {
-  const res = await fetch("/api/forecasts/publish", {
+  versionId: string,
+): Promise<{ ok: true } | { ok: false; status: number; body: PublishErrorResponse }> {
+  const res = await fetch(`/api/forecasts/publish`, {
     method: "POST",
     headers: sessionHeaders(session),
     body: JSON.stringify({
-      version_id,
+      version_id: versionId,
       idempotency_key: newIdempotencyKey(),
     }),
   });
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    let detail = "";
-    try {
-      const parsed = JSON.parse(txt) as { detail?: string };
-      detail = parsed.detail ?? "";
-    } catch { /* ignore */ }
-    throw new Error(detail || "Publish failed. Check your connection and try again.");
+  if (res.ok) return { ok: true };
+  const txt = await res.text().catch(() => "");
+  let body: PublishErrorResponse = {};
+  try {
+    body = JSON.parse(txt) as PublishErrorResponse;
+  } catch {
+    /* ignore */
   }
+  return { ok: false, status: res.status, body };
 }
 
 // ---------------------------------------------------------------------------
-// Seed-cells call — wired to W1 cycle-10 endpoint POST
-// /api/v1/mutations/forecast/:version_id/seed-cells (signal #27
-// RUNTIME_READY(ForecastSeedCells), 2026-05-01).
-//
-// Persists one zero-quantity forecast_lines row per (eligible_item × ISO week)
-// so the F1 publish completeness check has rows to match. Returns
-// { added_count, total_cells, expected_cells, all_seeded, ... }.
-// Used by the cold-start path of the "Seed all" button.
+// Page
 // ---------------------------------------------------------------------------
-interface SeedCellsResponse {
-  submission_id: string;
-  version: string;
-  added_count: number;
-  expected_cells: number;
-  total_cells: number;
-  all_seeded: boolean;
-  idempotent_replay: boolean;
-}
 
-interface SeedCellsErrorBody {
-  reason_code?: string;
-  detail?: string;
-  error?: string;
-}
+export default function ForecastVersionDetailPage() {
+  const params = useParams<{ version_id: string }>();
+  const versionId = params.version_id;
+  const queryClient = useQueryClient();
+  const { session } = useSession();
+  const canAuthor = session.role === "planner" || session.role === "admin";
 
-class SeedCellsError extends Error {
-  constructor(
-    message: string,
-    public status: number,
-    public reason_code: string | null,
-    public detail: string | null,
-  ) {
-    super(message);
-    this.name = "SeedCellsError";
-  }
-}
+  // ----- Data -----
+  const versionQuery = useQuery<GetVersionResponse>({
+    queryKey: ["forecast", "version", versionId, session.role],
+    queryFn: () => fetchVersion(session, versionId),
+    enabled: Boolean(versionId),
+    staleTime: 60_000,
+  });
 
-async function postSeedCells(
-  session: Session,
-  version_id: string,
-): Promise<SeedCellsResponse> {
-  const res = await fetch(
-    `/api/forecast/${encodeURIComponent(version_id)}/seed-cells`,
-    {
-      method: "POST",
-      headers: sessionHeaders(session),
-      body: JSON.stringify({
-        idempotency_key: newIdempotencyKey(),
-      }),
-    },
+  const itemsQuery = useQuery<ItemsListResponse>({
+    queryKey: ["master", "items", "ALL_ACTIVE"],
+    queryFn: () => fetchItemsList(session),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Most recent published version, if any — used for the "vs prev month" KPI.
+  const priorPublishedQuery = useQuery({
+    queryKey: ["forecast", "versions", "published-list", session.role],
+    queryFn: () => fetchVersionsList(session),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  const data = versionQuery.data;
+  const version = data?.version;
+  const lines = data?.lines ?? [];
+  const isDraft = version?.status === "draft";
+  const isPublished = version?.status === "published";
+  const isEditable = isDraft && canAuthor;
+
+  // ----- Local UI state -----
+  const [localCells, setLocalCells] = useState<Record<string, string>>({});
+  const [freshlyAddedItemIds, setFreshlyAddedItemIds] = useState<Set<string>>(
+    new Set(),
   );
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    let body: SeedCellsErrorBody = {};
-    try {
-      body = JSON.parse(txt) as SeedCellsErrorBody;
-    } catch {
-      /* keep body empty */
+  const [publishOpen, setPublishOpen] = useState(false);
+  const [publishMissing, setPublishMissing] = useState<
+    PublishMissingCell[] | null
+  >(null);
+  const [publishError, setPublishError] = useState<string | null>(null);
+  const [publishSuccess, setPublishSuccess] = useState<string | null>(null);
+
+  const autocompleteInputRef = useRef<HTMLInputElement | null>(null);
+  const focusAutocomplete = useCallback(() => {
+    autocompleteInputRef.current?.focus();
+  }, []);
+
+  // ----- Buckets + items derived -----
+  const buckets = useMemo(() => {
+    if (!version) return [];
+    return computeMonthBuckets(
+      version.cadence,
+      version.horizon_start_at,
+      version.horizon_weeks,
+    );
+  }, [version]);
+
+  const itemsById = useMemo(() => {
+    const m = new Map<string, ItemRow>();
+    for (const r of itemsQuery.data?.rows ?? []) m.set(r.item_id, r);
+    return m;
+  }, [itemsQuery.data]);
+
+  const eligibleItems: ItemForAutocomplete[] = useMemo(() => {
+    return (itemsQuery.data?.rows ?? [])
+      .filter((r) => ELIGIBLE_SUPPLY_METHODS.has(r.supply_method))
+      .filter((r) => r.status === "ACTIVE")
+      .map((r) => ({
+        item_id: r.item_id,
+        item_name: r.item_name,
+        status: r.status,
+        supply_method: r.supply_method,
+        sales_uom: r.sales_uom,
+      }));
+  }, [itemsQuery.data]);
+
+  // Items in the grid = items with at least one line OR freshly added.
+  const itemsForGrid: ItemForGrid[] = useMemo(() => {
+    const ids = new Set(lines.map((l) => l.item_id));
+    for (const id of freshlyAddedItemIds) ids.add(id);
+    return Array.from(ids)
+      .map((id) => {
+        const meta = itemsById.get(id);
+        return {
+          item_id: id,
+          item_name: meta?.item_name ?? id,
+          supply_method: meta?.supply_method ?? "",
+        };
+      })
+      .sort((a, b) => a.item_name.localeCompare(b.item_name));
+  }, [lines, freshlyAddedItemIds, itemsById]);
+
+  const itemsForGridById = useMemo(() => {
+    const m = new Map<string, { item_id: string; item_name: string }>();
+    for (const it of itemsForGrid) {
+      m.set(it.item_id, { item_id: it.item_id, item_name: it.item_name });
     }
-    const reasonCode = body.reason_code ?? null;
-    const detail = body.detail ?? body.error ?? null;
-    // User-facing message keyed on the typed reason_code where the backend
-    // provides one; falls back to the detail string for shapes without a
-    // canonical code (Zod 422, 503 break-glass) and finally to a generic.
-    let message: string;
-    if (res.status === 404 && (reasonCode === "VERSION_NOT_FOUND" || !reasonCode)) {
-      message = "This forecast version was not found.";
-    } else if (res.status === 409 && reasonCode === "FROZEN_PERIOD") {
-      message =
-        "Forecast is frozen — admin can override.";
-    } else if (
-      res.status === 409 &&
-      reasonCode === "ILLEGAL_STATUS_TRANSITION"
-    ) {
-      message =
-        "Cannot seed a published forecast — create a new draft first.";
-    } else if (res.status === 409 && reasonCode === "IDEMPOTENCY_KEY_REUSED") {
-      message =
-        "Duplicate seed request detected. Refresh the page and try again.";
-    } else if (
-      res.status === 409 &&
-      (reasonCode === "CADENCE_NOT_SUPPORTED" ||
-        reasonCode === "SITE_NOT_SUPPORTED" ||
-        reasonCode === "VERSION_CONFLICT")
-    ) {
-      message = detail || "This forecast version cannot be seeded.";
-    } else if (res.status === 401) {
-      message = "Sign in again to continue.";
-    } else if (res.status === 403) {
-      message = "Only planners and admins can seed forecast cells.";
-    } else if (res.status === 422) {
-      message = detail || "Seed request was rejected as invalid.";
-    } else if (res.status === 503) {
-      message =
-        "System is in break-glass read-only mode. Try again after the admin clears it.";
-    } else {
-      message = detail || "Could not seed forecast cells. Try again.";
-    }
-    throw new SeedCellsError(message, res.status, reasonCode, detail);
+    return m;
+  }, [itemsForGrid]);
+
+  const alreadyAddedItemIds = useMemo(
+    () => new Set(itemsForGrid.map((i) => i.item_id)),
+    [itemsForGrid],
+  );
+
+  // ----- Auto-save -----
+  const autoSave = useAutoSave(versionId, {
+    debounceMs: 800,
+    enabled: isEditable,
+  });
+
+  // ----- KPI computation -----
+  // Find the next-unfrozen bucket (typical case: bucket[1] when bucket[0] is current month).
+  const nextUnfrozenBucket = useMemo(
+    () => buckets.find((b) => !b.frozen) ?? buckets[buckets.length - 1] ?? null,
+    [buckets],
+  );
+
+  const totalDemandNextMonth = useMemo(() => {
+    if (!nextUnfrozenBucket) return 0;
+    return lines
+      .filter((l) => l.period_bucket_key === nextUnfrozenBucket.key)
+      .reduce((acc, l) => {
+        // Prefer local cell value when present (planner is mid-edit).
+        const localKey = `${l.item_id}|${l.period_bucket_key}`;
+        const local = localCells[localKey];
+        const v = local !== undefined && local !== "" ? local : l.forecast_quantity;
+        return acc + Number(v);
+      }, 0);
+  }, [lines, nextUnfrozenBucket, localCells]);
+
+  const itemsInForecast = itemsForGrid.length;
+  const totalEligibleItems = eligibleItems.length;
+
+  // Cells expected = items with lines × unfrozen buckets.
+  const unfrozenBucketCount = buckets.filter((b) => !b.frozen).length;
+  const expectedCells =
+    new Set(lines.map((l) => l.item_id)).size * unfrozenBucketCount;
+  const filledCells = lines.filter(
+    (l) => Number(l.forecast_quantity) > 0,
+  ).length;
+  const percentProgress =
+    expectedCells > 0
+      ? Math.min(100, Math.round((filledCells / expectedCells) * 100))
+      : 0;
+
+  // Prev-month demand from the most recent prior published version (if any).
+  const priorPublishedVersionId = useMemo(() => {
+    const list = priorPublishedQuery.data?.versions ?? [];
+    // Skip the current version itself if it's already published.
+    return (
+      list.find((v) => v.version_id !== versionId)?.version_id ?? null
+    );
+  }, [priorPublishedQuery.data, versionId]);
+
+  const priorPublishedQueryLines = useQuery<GetVersionResponse | null>({
+    queryKey: ["forecast", "version", priorPublishedVersionId, "prev-month"],
+    queryFn: () =>
+      priorPublishedVersionId
+        ? fetchVersionLines(session, priorPublishedVersionId)
+        : Promise.resolve(null),
+    enabled: Boolean(priorPublishedVersionId),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Compute prev-month's "next-month" demand by aligning to the same bucket
+  // index in the prior version. Cheap heuristic; null if no prior or buckets
+  // don't align.
+  const totalDemandPrevMonth: number | null = useMemo(() => {
+    const prior = priorPublishedQueryLines.data;
+    if (!prior || !nextUnfrozenBucket) return null;
+    // Match by bucket key directly first (best case: same horizon_start_at).
+    const sameKey = prior.lines
+      .filter((l) => l.period_bucket_key === nextUnfrozenBucket.key)
+      .reduce((acc, l) => acc + Number(l.forecast_quantity), 0);
+    if (sameKey > 0) return sameKey;
+    return null;
+  }, [priorPublishedQueryLines.data, nextUnfrozenBucket]);
+
+  // ----- Mutations -----
+  const publishMut = useMutation({
+    mutationFn: () => postPublish(session, versionId),
+    onSuccess: (result) => {
+      if (result.ok) {
+        setPublishSuccess(
+          "Published. This forecast is now the active demand source for planning.",
+        );
+        setPublishError(null);
+        setPublishMissing(null);
+        setPublishOpen(false);
+        queryClient.invalidateQueries({
+          queryKey: ["forecast", "version", versionId],
+        });
+        queryClient.invalidateQueries({
+          queryKey: ["forecasts", "versions"],
+        });
+        return;
+      }
+      // 409 / 400: surface inline list when the structured payload is present.
+      const body = result.body;
+      if (
+        body.error_code === "FORECAST_CELLS_MISSING" ||
+        body.recovery === "GENERATE_MISSING_CELLS"
+      ) {
+        // Backend returns counts but not per-cell list (Wave 1 backend); we
+        // re-derive missing cells client-side from the version's lines so
+        // the modal shows them inline.
+        const linesByCell = new Map<string, string>();
+        for (const l of lines)
+          linesByCell.set(`${l.item_id}|${l.period_bucket_key}`, l.forecast_quantity);
+        const itemsWithLines = new Set(lines.map((l) => l.item_id));
+        const missing: PublishMissingCell[] = [];
+        for (const itemId of itemsWithLines) {
+          for (const b of buckets) {
+            if (b.frozen) continue;
+            const v = linesByCell.get(`${itemId}|${b.key}`);
+            if (v === undefined || v === "" || Number(v) <= 0) {
+              missing.push({ item_id: itemId, period_bucket_key: b.key });
+            }
+          }
+        }
+        setPublishMissing(missing);
+        setPublishError(null);
+      } else {
+        setPublishMissing(null);
+        setPublishError(
+          body.detail ||
+            body.reason_code ||
+            "Publish failed. Check your changes and try again.",
+        );
+      }
+    },
+    onError: (err: unknown) => {
+      setPublishError(err instanceof Error ? err.message : String(err));
+    },
+  });
+
+  // Delete-item handler — clears all cells for the item via auto-save with
+  // empty string (the backend treats "" as zero-quantity = effectively a
+  // no-op delete in v1; full delete-line endpoint not yet exposed).
+  // For Wave 2, we treat removal as: clear the local cells, then drop the
+  // item from freshlyAddedItemIds. The backend lines remain (zero out via
+  // setting forecast_quantity = "0" for each cell). This is the Wave-2-safe
+  // path; a true line-delete handler is W1 follow-on work if needed.
+  const onItemRemove = useCallback(
+    (itemId: string) => {
+      // Zero out every cell for this item via auto-save.
+      for (const b of buckets) {
+        if (b.frozen) continue;
+        autoSave.queueChange({
+          item_id: itemId,
+          period_bucket_key: b.key,
+          forecast_quantity: "0",
+        });
+        setLocalCells((prev) => ({ ...prev, [`${itemId}|${b.key}`]: "0" }));
+      }
+      setFreshlyAddedItemIds((prev) => {
+        const next = new Set(prev);
+        next.delete(itemId);
+        return next;
+      });
+    },
+    [autoSave, buckets],
+  );
+
+  // ----- Render: loading / error -----
+  if (versionQuery.isLoading) {
+    return (
+      <>
+        <WorkflowHeader
+          eyebrow="Planner workspace"
+          title="Loading forecast…"
+          actions={
+            <Link href="/planning/forecast" className="btn btn-sm gap-1.5">
+              <ChevronLeft className="h-3 w-3" strokeWidth={2} /> Back
+            </Link>
+          }
+        />
+        <SectionCard>
+          <div className="space-y-3" aria-busy="true" aria-live="polite">
+            <div className="h-9 w-1/3 animate-pulse rounded bg-bg-subtle" />
+            <div className="h-5 w-2/3 animate-pulse rounded bg-bg-subtle" />
+            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
+              <div className="h-9 w-full animate-pulse rounded bg-bg-subtle" />
+              <div className="h-9 w-full animate-pulse rounded bg-bg-subtle" />
+              <div className="h-9 w-full animate-pulse rounded bg-bg-subtle" />
+            </div>
+            <div className="h-32 w-full animate-pulse rounded bg-bg-subtle" />
+          </div>
+        </SectionCard>
+      </>
+    );
   }
-  return (await res.json()) as SeedCellsResponse;
+
+  if (versionQuery.isError || !version) {
+    return (
+      <>
+        <WorkflowHeader
+          eyebrow="Planner workspace"
+          title="Forecast"
+          actions={
+            <Link href="/planning/forecast" className="btn btn-sm gap-1.5">
+              <ChevronLeft className="h-3 w-3" strokeWidth={2} /> Back
+            </Link>
+          }
+        />
+        <SectionCard>
+          <div
+            className="rounded border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg"
+            data-testid="forecast-detail-error"
+          >
+            <div className="font-semibold">
+              Could not load this forecast version
+            </div>
+            <div className="mt-1 text-xs">
+              Check your connection and try refreshing, or go back to the list.
+            </div>
+            <button
+              type="button"
+              onClick={() => void versionQuery.refetch()}
+              className="mt-2 text-xs font-medium text-danger-fg underline hover:no-underline"
+            >
+              Retry
+            </button>
+          </div>
+        </SectionCard>
+      </>
+    );
+  }
+
+  // ----- Render: main -----
+  const horizonLabel =
+    buckets.length > 0
+      ? `${buckets[0]!.label} → ${buckets[buckets.length - 1]!.label}`
+      : "—";
+
+  const cadenceLabel =
+    version.cadence === "monthly"
+      ? "Monthly"
+      : version.cadence === "weekly"
+        ? "Weekly"
+        : "Daily";
+
+  return (
+    <>
+      <WorkflowHeader
+        eyebrow="Planner workspace"
+        title="Forecast"
+        description={`${cadenceLabel} cadence · ${horizonLabel}`}
+        meta={
+          <>
+            <StatusBadge status={version.status} />
+            <Badge tone="neutral" dotted>
+              {cadenceLabel}
+            </Badge>
+            {version.published_at ? (
+              <Badge tone="neutral" dotted>
+                published {fmtDate(version.published_at)}
+              </Badge>
+            ) : null}
+            {version.updated_at && version.updated_at !== version.created_at ? (
+              <Badge tone="neutral" dotted>
+                updated {fmtDate(version.updated_at)}
+              </Badge>
+            ) : null}
+          </>
+        }
+        actions={
+          <div className="flex items-center gap-2">
+            {isEditable ? (
+              <AutoSaveIndicator
+                state={autoSave.state}
+                lastSavedAt={autoSave.lastSavedAt}
+                errorMessage={autoSave.errorMessage}
+                pendingCount={autoSave.pendingCount}
+                onRetry={() => void autoSave.flush()}
+              />
+            ) : null}
+            <Link
+              href="/planning/forecast"
+              className="btn btn-sm gap-1.5"
+              data-testid="forecast-detail-back"
+            >
+              <ChevronLeft className="h-3 w-3" strokeWidth={2} /> Back
+            </Link>
+            {isEditable ? (
+              <button
+                type="button"
+                className="btn btn-primary btn-sm gap-1.5"
+                data-testid="forecast-detail-publish"
+                disabled={publishMut.isPending || itemsInForecast === 0}
+                onClick={async () => {
+                  setPublishError(null);
+                  setPublishSuccess(null);
+                  // Make sure any in-flight edits are saved before opening
+                  // the gate, so the F1 preview reflects current state.
+                  await autoSave.flush();
+                  setPublishOpen(true);
+                }}
+              >
+                <CheckCircle2 className="h-3 w-3" strokeWidth={2.5} />
+                Publish
+              </button>
+            ) : null}
+          </div>
+        }
+      />
+
+      {/* Inline success / error banners */}
+      {publishSuccess ? (
+        <div
+          className="mb-3 flex items-center gap-2 rounded border border-success/30 bg-success-softer px-4 py-2 text-xs text-success-fg"
+          data-testid="forecast-action-success"
+        >
+          <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+          {publishSuccess}
+        </div>
+      ) : null}
+
+      {publishError && !publishOpen ? (
+        <div
+          className="mb-3 flex items-center gap-2 rounded border border-danger/30 bg-danger-softer px-4 py-2 text-xs text-danger-fg"
+          data-testid="forecast-action-error"
+        >
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          {publishError}
+        </div>
+      ) : null}
+
+      {/* Active-published bridge: tell the planner the next step */}
+      {isPublished ? (
+        <div
+          className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded border border-info/30 bg-info-softer px-4 py-3 text-xs text-info-fg"
+          data-testid="forecast-published-notice"
+        >
+          <div className="min-w-0 flex-1">
+            <div className="font-semibold">
+              Active forecast — demand source for planning
+            </div>
+            <div className="mt-0.5 text-fg-muted">
+              Trigger a planning run to turn this forecast into purchase and
+              production recommendations.
+            </div>
+          </div>
+          <Link
+            href="/planning/runs"
+            className="btn btn-sm btn-primary gap-1.5 shrink-0"
+            data-testid="forecast-published-go-runs"
+          >
+            {canAuthor ? (
+              <>
+                <Play className="h-3 w-3" strokeWidth={2.5} />
+                Run planning
+              </>
+            ) : (
+              <>
+                <ChevronRight className="h-3 w-3" strokeWidth={2.5} />
+                Planning runs
+              </>
+            )}
+          </Link>
+        </div>
+      ) : null}
+
+      {/* Hero KPI band */}
+      <HeroKpiBand
+        totalDemandNextMonth={totalDemandNextMonth}
+        itemsInForecast={itemsInForecast}
+        totalEligibleItems={totalEligibleItems}
+        totalDemandPrevMonth={totalDemandPrevMonth}
+        percentProgress={percentProgress}
+        nextMonthLabel={nextUnfrozenBucket?.label ?? "—"}
+        prevMonthLabel={
+          // Derive prev-month label from the next-unfrozen month minus 1.
+          nextUnfrozenBucket
+            ? prevMonthLabelFromKey(nextUnfrozenBucket.key, version.cadence)
+            : null
+        }
+      />
+
+      {/* Grid section */}
+      <SectionCard
+        eyebrow="Lines"
+        title={
+          itemsInForecast === 0
+            ? "No items yet"
+            : `${formatInt(itemsInForecast)} item${itemsInForecast === 1 ? "" : "s"} × ${buckets.length} month${buckets.length === 1 ? "" : "s"}`
+        }
+        description={
+          isEditable
+            ? "Add items via the search box. Edits auto-save after a brief pause. Frozen months (current period) are read-only."
+            : isPublished
+              ? "Read-only view of the published forecast."
+              : "Read-only."
+        }
+        contentClassName="p-0"
+      >
+        {/* Toolbar: autocomplete + secondary actions */}
+        {isEditable ? (
+          <div className="border-b border-border/60 px-4 py-3">
+            <ItemAutocompleteAdder
+              eligibleItems={eligibleItems}
+              alreadyAddedItemIds={alreadyAddedItemIds}
+              isLoading={itemsQuery.isLoading}
+              inputRefCallback={(el) => {
+                autocompleteInputRef.current = el;
+              }}
+              onAdd={(itemId) => {
+                setFreshlyAddedItemIds((prev) => {
+                  const next = new Set(prev);
+                  next.add(itemId);
+                  return next;
+                });
+                // Pre-seed an empty-string local value for each unfrozen
+                // bucket so the editor renders editable inputs immediately.
+                setLocalCells((prev) => {
+                  const next = { ...prev };
+                  for (const b of buckets) {
+                    if (b.frozen) continue;
+                    next[`${itemId}|${b.key}`] = "";
+                  }
+                  return next;
+                });
+              }}
+            />
+          </div>
+        ) : null}
+
+        {/* Empty state vs grid */}
+        {itemsForGrid.length === 0 ? (
+          <div className="p-6">
+            <ForecastEmptyState onAddFirstItem={focusAutocomplete} />
+          </div>
+        ) : (
+          <MonthlyGrid
+            items={itemsForGrid}
+            lines={lines}
+            localCells={localCells}
+            freshlyAddedItemIds={freshlyAddedItemIds}
+            buckets={buckets}
+            isEditable={isEditable}
+            onCellEdit={(itemId, bucketKey, value) => {
+              const cellKey = `${itemId}|${bucketKey}`;
+              setLocalCells((prev) => ({ ...prev, [cellKey]: value }));
+              if (value === "") return; // wait for a real value before saving
+              autoSave.queueChange({
+                item_id: itemId,
+                period_bucket_key: bucketKey,
+                forecast_quantity: value,
+              });
+            }}
+            onItemRemove={onItemRemove}
+          />
+        )}
+      </SectionCard>
+
+      {/* Publish gate modal */}
+      <PublishGate
+        open={publishOpen}
+        onOpenChange={(o) => {
+          setPublishOpen(o);
+          if (!o) {
+            setPublishMissing(null);
+          }
+        }}
+        items={itemsForGrid}
+        lines={lines}
+        buckets={buckets}
+        itemsById={itemsForGridById}
+        missingCellsFromBackend={publishMissing ?? undefined}
+        isPublishing={publishMut.isPending}
+        onConfirm={() => {
+          setPublishError(null);
+          publishMut.mutate();
+        }}
+      />
+    </>
+  );
 }
+
+// ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
 
 function StatusBadge({ status }: { status: ForecastStatus }) {
   if (status === "published") {
@@ -398,7 +851,7 @@ function StatusBadge({ status }: { status: ForecastStatus }) {
 function fmtDate(iso: string | null): string {
   if (!iso) return "—";
   try {
-    return new Date(iso).toLocaleString(undefined, {
+    return new Date(iso).toLocaleString("en-US", {
       year: "numeric",
       month: "short",
       day: "2-digit",
@@ -410,735 +863,34 @@ function fmtDate(iso: string | null): string {
   }
 }
 
-function fmtHorizonStart(iso: string): string {
+/**
+ * Derive a prev-month label from a YYYY-MM-DD bucket key.
+ * Example: "2026-06-01" + monthly → "May 2026".
+ */
+function prevMonthLabelFromKey(
+  bucketKey: string,
+  cadence: ForecastCadence,
+): string | null {
   try {
-    return new Date(iso + "T00:00:00Z").toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
-}
-
-function fmtBucket(
-  key: string,
-  cadence: "monthly" | "weekly" | "daily",
-): string {
-  try {
-    const d = new Date(key + "T00:00:00Z");
+    const d = new Date(bucketKey + "T00:00:00.000Z");
     if (cadence === "monthly") {
-      return d.toLocaleDateString(undefined, { month: "short", year: "2-digit", timeZone: "UTC" });
+      d.setUTCMonth(d.getUTCMonth() - 1);
+      return d.toLocaleDateString("en-US", {
+        month: "short",
+        year: "numeric",
+        timeZone: "UTC",
+      });
     }
-    return d.toLocaleDateString(undefined, { month: "short", day: "2-digit", timeZone: "UTC" });
+    if (cadence === "weekly") {
+      d.setUTCDate(d.getUTCDate() - 7);
+      return d.toLocaleDateString("en-US", {
+        month: "short",
+        day: "2-digit",
+        timeZone: "UTC",
+      });
+    }
+    return null;
   } catch {
-    return key;
+    return null;
   }
-}
-
-export default function ForecastVersionDetailPage() {
-  const params = useParams<{ version_id: string }>();
-  const router = useRouter();
-  const queryClient = useQueryClient();
-  const { session } = useSession();
-  const canAuthor = session.role === "planner" || session.role === "admin";
-  const versionId = params.version_id;
-
-  const [localCells, setLocalCells] = useState<Record<string, string>>({});
-  const [actionSuccess, setActionSuccess] = useState<string | null>(null);
-  const [actionError, setActionError] = useState<string | null>(null);
-  const [addedItemIds, setAddedItemIds] = useState<Set<string>>(new Set());
-  const [addItemInput, setAddItemInput] = useState<string>("");
-
-  const query = useQuery<GetVersionResponse>({
-    queryKey: ["forecast", "version", versionId, session.role],
-    queryFn: () => fetchVersion(session, versionId),
-    enabled: Boolean(versionId),
-    staleTime: 60_000,
-  });
-
-  const data = query.data;
-  const version = data?.version;
-  const lines = data?.lines ?? [];
-  const isDraft = version?.status === "draft";
-  const isPublished = version?.status === "published";
-  const isEditable = isDraft && canAuthor;
-
-  const itemsQuery = useQuery<{ rows: ItemRow[]; count: number }>({
-    queryKey: ["master", "items", "ALL_ACTIVE"],
-    queryFn: () => fetchJsonSilent("/api/items?status=ACTIVE&limit=1000"),
-    staleTime: 5 * 60 * 1000,
-  });
-
-  const itemsById = useMemo(() => {
-    const m = new Map<string, ItemRow>();
-    for (const r of itemsQuery.data?.rows ?? []) {
-      m.set(r.item_id, r);
-    }
-    return m;
-  }, [itemsQuery.data]);
-
-  // Group lines by item for a stable row order, distinct buckets as columns.
-  // Existing items are sorted alphabetically; locally-added items trail at bottom
-  // in insertion order so the user sees them immediately after adding.
-  // When the draft has no existing lines, buckets are generated from version
-  // metadata (horizon_start_at + horizon_weeks + cadence) so a fresh draft is
-  // immediately editable without requiring a prior API seed call.
-  const { items, buckets } = useMemo(() => {
-    const lineItemSet = new Set<string>();
-    const bucketSet = new Set<string>();
-    for (const l of lines) {
-      lineItemSet.add(l.item_id);
-      bucketSet.add(l.period_bucket_key);
-    }
-    const sortedExisting = Array.from(lineItemSet).sort();
-    const newItems = Array.from(addedItemIds).filter(
-      (id) => !lineItemSet.has(id),
-    );
-    const derivedBuckets =
-      bucketSet.size > 0
-        ? Array.from(bucketSet).sort()
-        : version
-          ? generateBucketsFromMetadata(
-              version.horizon_start_at,
-              version.horizon_weeks,
-              version.cadence,
-            )
-          : [];
-    return {
-      items: [...sortedExisting, ...newItems],
-      buckets: derivedBuckets,
-    };
-  }, [lines, addedItemIds, version]);
-
-  // Set used for O(1) membership checks in the add-item combobox filter.
-  const itemsInForecast = useMemo(() => new Set(items), [items]);
-
-  const cellKey = (item_id: string, bucket: string) => `${item_id}|${bucket}`;
-  const originalByKey = useMemo(() => {
-    const m = new Map<string, string>();
-    for (const l of lines) {
-      m.set(cellKey(l.item_id, l.period_bucket_key), l.forecast_quantity);
-    }
-    return m;
-  }, [lines]);
-
-  const dirtyEntries = useMemo(() => {
-    const out: Array<{
-      item_id: string;
-      period_bucket_key: string;
-      forecast_quantity: string;
-    }> = [];
-    for (const [key, val] of Object.entries(localCells)) {
-      const [item_id, period_bucket_key] = key.split("|");
-      const orig = originalByKey.get(key) ?? null;
-      if (orig !== val) {
-        out.push({
-          item_id,
-          period_bucket_key,
-          forecast_quantity: val,
-        });
-      }
-    }
-    return out;
-  }, [localCells, originalByKey]);
-
-  const saveMut = useMutation({
-    mutationFn: (
-      payload: Array<{
-        item_id: string;
-        period_bucket_key: string;
-        forecast_quantity: string;
-      }>,
-    ) => postSaveLines(session, versionId, payload),
-    onSuccess: () => {
-      setActionSuccess("Lines saved.");
-      setActionError(null);
-      setLocalCells({});
-      setAddedItemIds(new Set());
-      queryClient.invalidateQueries({
-        queryKey: ["forecast", "version", versionId],
-      });
-    },
-    onError: (err: unknown) => {
-      setActionError(err instanceof Error ? err.message : String(err));
-      setActionSuccess(null);
-    },
-  });
-
-  const publishMut = useMutation({
-    mutationFn: () => postPublish(session, versionId),
-    onSuccess: () => {
-      setActionSuccess("Published successfully. This forecast is now active.");
-      setActionError(null);
-      queryClient.invalidateQueries({
-        queryKey: ["forecast", "version", versionId],
-      });
-      queryClient.invalidateQueries({ queryKey: ["forecasts", "versions"] });
-    },
-    onError: (err: unknown) => {
-      setActionError(err instanceof Error ? err.message : String(err));
-      setActionSuccess(null);
-    },
-  });
-
-  // Seed-cells mutation — used by the "Seed all" button when the draft is in
-  // cold-start state (zero existing forecast_lines). Calls the W1 cycle-10
-  // endpoint, which materializes one zero-quantity row per (eligible_item ×
-  // ISO week) so the planner has cells to fill and the F1 publish-completeness
-  // check has rows to match.
-  //
-  // On 200: success toast + invalidate the version query so the seeded cells
-  //         appear in the grid; clear local addedItemIds set (now redundant
-  //         since the rows live in the backend).
-  // On 4xx / 5xx: typed error message via SeedCellsError (see postSeedCells).
-  const seedCellsMut = useMutation<SeedCellsResponse, SeedCellsError>({
-    mutationFn: () => postSeedCells(session, versionId),
-    onSuccess: (data) => {
-      setActionSuccess(
-        `Seeded ${data.added_count} cell${data.added_count === 1 ? "" : "s"}. ${data.total_cells} cell${data.total_cells === 1 ? "" : "s"} now ready to edit.`,
-      );
-      setActionError(null);
-      setAddedItemIds(new Set());
-      queryClient.invalidateQueries({
-        queryKey: ["forecast", "version", versionId],
-      });
-    },
-    onError: (err) => {
-      setActionError(err.message);
-      setActionSuccess(null);
-    },
-  });
-
-  if (query.isLoading) {
-    return (
-      <>
-        <WorkflowHeader
-          eyebrow="Planner workspace"
-          title="Loading forecast version…"
-          actions={
-            <Link href="/planning/forecast" className="btn btn-sm gap-1.5">
-              <ChevronLeft className="h-3 w-3" strokeWidth={2} /> Back
-            </Link>
-          }
-        />
-        <SectionCard>
-          <div className="space-y-3" aria-busy="true" aria-live="polite">
-            <div className="h-9 w-1/3 animate-pulse rounded bg-bg-subtle" />
-            <div className="h-5 w-2/3 animate-pulse rounded bg-bg-subtle" />
-            <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
-              <div className="h-9 w-full animate-pulse rounded bg-bg-subtle" />
-              <div className="h-9 w-full animate-pulse rounded bg-bg-subtle" />
-              <div className="h-9 w-full animate-pulse rounded bg-bg-subtle" />
-            </div>
-            <div className="h-32 w-full animate-pulse rounded bg-bg-subtle" />
-          </div>
-        </SectionCard>
-      </>
-    );
-  }
-  if (query.isError || !version) {
-    return (
-      <>
-        <WorkflowHeader
-          eyebrow="Planner workspace"
-          title="Forecast version"
-          actions={
-            <Link href="/planning/forecast" className="btn btn-sm gap-1.5">
-              <ChevronLeft className="h-3 w-3" strokeWidth={2} /> Back
-            </Link>
-          }
-        />
-        <SectionCard>
-          <div
-            className="rounded border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg"
-            data-testid="forecast-detail-error"
-          >
-            <div className="font-semibold">Could not load this forecast version</div>
-            <div className="mt-1 text-xs">Check your connection and try refreshing, or go back to the forecast list.</div>
-            <button
-              type="button"
-              onClick={() => void query.refetch()}
-              className="mt-2 text-xs font-medium text-danger-fg underline hover:no-underline"
-            >
-              Retry
-            </button>
-          </div>
-        </SectionCard>
-      </>
-    );
-  }
-
-  return (
-    <>
-      <WorkflowHeader
-        eyebrow="Planner workspace"
-        title="Forecast"
-        description={
-          // "8-week planning horizon" per CLAUDE.md §Forecast lock when the
-          // version matches that horizon; otherwise be explicit about the
-          // actual horizon length so the planner sees the discrepancy.
-          version.horizon_weeks === 8
-            ? `8-week planning horizon · starts ${fmtHorizonStart(version.horizon_start_at)} · ${version.cadence}`
-            : `${version.horizon_weeks}-week horizon · starts ${fmtHorizonStart(version.horizon_start_at)} · ${version.cadence}`
-        }
-        meta={
-          <>
-            <StatusBadge status={version.status} />
-            <Badge tone="neutral" dotted>
-              created {fmtDate(version.created_at)}
-            </Badge>
-            {version.published_at ? (
-              <Badge tone="neutral" dotted>
-                published {fmtDate(version.published_at)}
-              </Badge>
-            ) : null}
-            {version.updated_at && version.updated_at !== version.created_at ? (
-              <Badge tone="neutral" dotted>
-                updated {fmtDate(version.updated_at)}
-              </Badge>
-            ) : null}
-          </>
-        }
-        actions={
-          <div className="flex gap-2">
-            <Link
-              href="/planning/forecast"
-              className="btn btn-sm gap-1.5"
-              data-testid="forecast-detail-back"
-            >
-              <ChevronLeft className="h-3 w-3" strokeWidth={2} /> Back
-            </Link>
-            {isEditable ? (
-              <button
-                type="button"
-                className="btn btn-sm gap-1.5"
-                disabled={dirtyEntries.length === 0 || saveMut.isPending}
-                data-testid="forecast-detail-save"
-                onClick={() => {
-                  setActionSuccess(null);
-                  setActionError(null);
-                  saveMut.mutate(dirtyEntries);
-                }}
-              >
-                <Save className="h-3 w-3" strokeWidth={2} />
-                {saveMut.isPending
-                  ? "Saving…"
-                  : dirtyEntries.length > 0
-                    ? `Save ${dirtyEntries.length} change${dirtyEntries.length === 1 ? "" : "s"}`
-                    : "Save"}
-              </button>
-            ) : null}
-            {isEditable ? (
-              <button
-                type="button"
-                className="btn btn-primary btn-sm gap-1.5"
-                data-testid="forecast-detail-publish"
-                disabled={publishMut.isPending}
-                onClick={() => {
-                  setActionSuccess(null);
-                  if (dirtyEntries.length > 0) {
-                    setActionError("You have unsaved changes. Save them before publishing.");
-                    return;
-                  }
-                  if (items.length === 0) {
-                    setActionError("This forecast has no lines. Add at least one item before publishing.");
-                    return;
-                  }
-                  setActionError(null);
-                  publishMut.mutate();
-                }}
-              >
-                <CheckCircle2 className="h-3 w-3" strokeWidth={2.5} />
-                {publishMut.isPending ? "Publishing…" : "Publish"}
-              </button>
-            ) : null}
-          </div>
-        }
-      />
-
-      {actionSuccess ? (
-        <div
-          className="mb-3 flex items-center gap-2 rounded border border-success/30 bg-success-subtle/40 px-4 py-2 text-xs text-success-fg"
-          data-testid="forecast-action-success"
-        >
-          <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-          {actionSuccess}
-        </div>
-      ) : null}
-
-      {actionError ? (
-        (() => {
-          // Detect the "expected N cells, found 0" backend leak — it's a
-          // shape-mismatch validation message (the backend wants the request
-          // body to carry one cell per (item × bucket)) that surfaces as a
-          // dead end if shown verbatim. Convert it into an actionable
-          // recovery: surface the seed-all-active-FG flow that's already in
-          // this page (lines below), which fills the grid with every active
-          // item so the planner can fill quantities and re-save.
-          const cellsPattern = /expected\s+\d+\s+cells.*found\s+0/i;
-          const isCellsShapeError = cellsPattern.test(actionError);
-          if (isCellsShapeError) {
-            return (
-              <div
-                className="mb-3 rounded border border-danger/30 bg-danger-subtle/40 px-4 py-3 text-xs text-danger-fg"
-                data-testid="forecast-action-error"
-                data-error-shape="cells-missing"
-              >
-                <div className="flex items-start gap-2">
-                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
-                  <div className="min-w-0 flex-1">
-                    <div className="font-semibold">
-                      This forecast is missing planning cells.
-                    </div>
-                    <div className="mt-0.5 leading-relaxed text-fg-muted">
-                      The save call expected one quantity per item × bucket but
-                      received none. Add items to the grid below using
-                      <span className="font-mono text-fg"> Seed all active</span>
-                      , fill in quantities, and try Save again. If this keeps
-                      happening on a previously-saved version, contact the
-                      system administrator.
-                    </div>
-                    <div className="mt-1 text-3xs text-fg-faint">
-                      Backend message: <span className="font-mono">{actionError}</span>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            );
-          }
-          return (
-            <div
-              className="mb-3 flex items-center gap-2 rounded border border-danger/30 bg-danger-subtle/40 px-4 py-2 text-xs text-danger-fg"
-              data-testid="forecast-action-error"
-            >
-              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-              {actionError}
-            </div>
-          );
-        })()
-      ) : null}
-
-      {isPublished ? (
-        // Active-published bridge — closes the "I published, now what?" gap.
-        // Before: a static read-only notice that didn't tell the planner the
-        // next step is to run planning to materialize this demand into recs.
-        // After: actionable banner with a one-click path to /planning/runs
-        // where the planner can trigger or review runs that consume this
-        // forecast. To update demand, create a new draft from the list view.
-        <div
-          className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded border border-info/30 bg-info-softer px-4 py-3 text-xs text-info-fg"
-          data-testid="forecast-published-notice"
-        >
-          <div className="min-w-0 flex-1">
-            <div className="font-semibold">
-              Active forecast — demand source for planning
-            </div>
-            <div className="mt-0.5 text-fg-muted">
-              Next step: trigger a planning run to turn this forecast into
-              purchase and production recommendations. To update the demand,
-              create a new draft forecast from the list view.
-            </div>
-          </div>
-          <Link
-            href="/planning/runs"
-            className="btn btn-sm btn-primary gap-1.5 shrink-0"
-            data-testid="forecast-published-go-runs"
-            title="Open planning runs to trigger or review"
-          >
-            {canAuthor ? (
-              <>
-                <Play className="h-3 w-3" strokeWidth={2.5} />
-                Run planning
-              </>
-            ) : (
-              <>
-                <ChevronRight className="h-3 w-3" strokeWidth={2.5} />
-                Planning runs
-              </>
-            )}
-          </Link>
-        </div>
-      ) : null}
-
-      <SectionCard
-        eyebrow="Lines"
-        title={`${items.length} item${items.length === 1 ? "" : "s"} × ${buckets.length} bucket${buckets.length === 1 ? "" : "s"}`}
-        description={
-          isEditable
-            ? "Edit qty cells. Frozen buckets (within the freeze window) are read-only; break-glass override UI is not in this release."
-            : "Read-only view."
-        }
-        contentClassName="p-0"
-      >
-        {items.length === 0 ? (
-          <div className="p-5">
-            <EmptyState
-              title="No items yet."
-              description={
-                isEditable
-                  ? "Use the add-item control below to start populating this draft."
-                  : "This version has no forecast lines."
-              }
-            />
-          </div>
-        ) : (
-          <div className="overflow-x-auto">
-            <table
-              className="w-full border-collapse text-sm"
-              data-testid="forecast-lines-table"
-            >
-              <thead>
-                <tr className="border-b border-border/70 bg-bg-subtle/60">
-                  <th className="sticky left-0 z-[1] min-w-[220px] bg-bg-subtle/80 px-4 py-2.5 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    Item
-                  </th>
-                  {buckets.map((b) => {
-                    const frozen = isBucketFrozen(b);
-                    return (
-                      <th
-                        key={b}
-                        className={cn(
-                          "px-2 py-2.5 text-right font-mono text-3xs font-semibold uppercase tracking-sops",
-                          frozen ? "text-fg-faint" : "text-fg-subtle",
-                        )}
-                        data-testid="forecast-lines-bucket-header"
-                        data-bucket={b}
-                        data-frozen={frozen ? "1" : "0"}
-                        title={frozen ? `${b} — frozen (within ${FREEZE_HORIZON_WEEKS}w window)` : b}
-                      >
-                        {fmtBucket(b, version.cadence)}
-                        {frozen ? <div className="mt-0.5 text-3xs font-normal normal-case tracking-normal opacity-60">freeze</div> : null}
-                      </th>
-                    );
-                  })}
-                </tr>
-              </thead>
-              <tbody>
-                {items.map((itemId) => (
-                  <tr
-                    key={itemId}
-                    className={cn(
-                      "border-b border-border/40",
-                      addedItemIds.has(itemId) && "bg-accent-soft/10",
-                    )}
-                    data-testid="forecast-lines-row"
-                    data-item-id={itemId}
-                  >
-                    <td className="sticky left-0 z-[1] bg-bg-raised px-4 py-1.5 text-xs">
-                      <div className="font-medium text-fg leading-tight">
-                        {itemsById.get(itemId)?.item_name ?? itemId}
-                      </div>
-                      <div className="mt-0.5 flex items-center gap-1.5 font-mono text-3xs text-fg-faint">
-                        <span>{itemId}</span>
-                        {(() => {
-                          // Supply method chip — tells the planner whether
-                          // forecast on this row will produce a *production*
-                          // recommendation (MANUFACTURED / REPACK) or a
-                          // *purchase* recommendation (BOUGHT_FINISHED) when
-                          // the next planning run executes. Closes the
-                          // forecast→planning-recommendation visibility gap.
-                          const sm = itemsById.get(itemId)?.supply_method;
-                          if (!sm) return null;
-                          const isManufactured =
-                            sm === "MANUFACTURED" || sm === "REPACK";
-                          return (
-                            <span
-                              className={
-                                "inline-flex items-center rounded-sm border px-1 py-px font-sans text-3xs font-semibold uppercase tracking-sops " +
-                                (isManufactured
-                                  ? "border-info/40 bg-info-softer text-info-fg"
-                                  : "border-warning/40 bg-warning-softer text-warning-fg")
-                              }
-                              title={
-                                isManufactured
-                                  ? "Manufactured item — forecasting demand here triggers a production recommendation in the next planning run."
-                                  : "Bought-finished item — forecasting demand here triggers a purchase recommendation in the next planning run."
-                              }
-                            >
-                              {isManufactured ? "Make" : "Buy"}
-                            </span>
-                          );
-                        })()}
-                      </div>
-                    </td>
-                    {buckets.map((b) => {
-                      const k = cellKey(itemId, b);
-                      const orig = originalByKey.get(k) ?? "";
-                      const local = localCells[k];
-                      const displayValue = local !== undefined ? local : orig;
-                      const frozen = isBucketFrozen(b);
-                      const readonly = !isEditable || frozen;
-                      return (
-                        <td
-                          key={b}
-                          className="p-0"
-                          data-testid="forecast-lines-cell"
-                          data-item-id={itemId}
-                          data-bucket={b}
-                          data-frozen={frozen ? "1" : "0"}
-                        >
-                          {readonly ? (
-                            <span
-                              className={cn(
-                                "block min-w-[80px] px-2 py-2 text-right font-mono text-xs tabular-nums",
-                                frozen && "text-fg-faint",
-                              )}
-                            >
-                              {displayValue === "" ? "—" : displayValue}
-                            </span>
-                          ) : (
-                            <input
-                              type="text"
-                              inputMode="decimal"
-                              value={displayValue}
-                              onChange={(e) => {
-                                const v = e.target.value;
-                                setLocalCells((prev) => ({ ...prev, [k]: v }));
-                              }}
-                              className="h-9 w-full min-w-[80px] border-0 bg-transparent px-2 text-right font-mono text-xs tabular-nums outline-none focus:bg-accent-soft focus:text-accent"
-                              data-testid="forecast-lines-input"
-                            />
-                          )}
-                        </td>
-                      );
-                    })}
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-        {isEditable ? (
-          <div className="border-t border-border/40 px-4 py-3">
-            <div className="mb-1.5 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              Add item to forecast
-            </div>
-            <div className="flex flex-wrap items-center gap-2">
-              <select
-                value={addItemInput}
-                onChange={(e) => setAddItemInput(e.target.value)}
-                disabled={itemsQuery.isLoading}
-                className="min-w-0 flex-1 rounded border border-border/60 bg-bg-subtle px-2 py-1.5 text-xs text-fg disabled:opacity-50"
-                data-testid="forecast-add-item-select"
-              >
-                <option value="">
-                  {itemsQuery.isLoading
-                    ? "Loading items…"
-                    : "— select item to add —"}
-                </option>
-                {(itemsQuery.data?.rows ?? [])
-                  .filter((r) => !itemsInForecast.has(r.item_id))
-                  .sort((a, b) => a.item_name.localeCompare(b.item_name))
-                  .map((r) => (
-                    <option key={r.item_id} value={r.item_id}>
-                      {r.item_name}
-                    </option>
-                  ))}
-              </select>
-              <button
-                type="button"
-                disabled={!addItemInput || itemsQuery.isLoading}
-                className="btn btn-sm shrink-0"
-                data-testid="forecast-add-item-btn"
-                onClick={() => {
-                  if (!addItemInput) return;
-                  setAddedItemIds((prev) => {
-                    const next = new Set(prev);
-                    next.add(addItemInput);
-                    return next;
-                  });
-                  setAddItemInput("");
-                }}
-              >
-                + Add
-              </button>
-              {(() => {
-                // Seed-all-active-FG: one-click pre-populate the grid with
-                // every active item so the planner doesn't have to dropdown
-                // -pick 68 entries one at a time.
-                //
-                // Two paths, keyed on the version's existing-line state:
-                //   (1) Cold-start path (lines.length === 0): call the W1
-                //       cycle-10 backend endpoint POST
-                //       /api/forecast/:version_id/seed-cells which writes one
-                //       zero-quantity row per (eligible_item × ISO week) in
-                //       a single transaction. After 200, the grid re-fetches
-                //       and the seeded cells appear ready to edit.
-                //   (2) Augmentation path (lines.length > 0): the planner is
-                //       adding more items to a draft that already has cells.
-                //       Keep the original client-side local-add behavior so
-                //       the planner can fill in quantities and Save without
-                //       overwriting the persisted backend state.
-                //
-                // remaining is computed against itemsInForecast which already
-                // accounts for existing lines + locally-added items, so the
-                // button text reflects what actually still needs adding.
-                const allActive = itemsQuery.data?.rows ?? [];
-                const remaining = allActive.filter(
-                  (r) => !itemsInForecast.has(r.item_id),
-                );
-                if (remaining.length === 0) return null;
-                const isColdStart = lines.length === 0;
-                const seedingInFlight = seedCellsMut.isPending;
-                return (
-                  <button
-                    type="button"
-                    disabled={itemsQuery.isLoading || seedingInFlight}
-                    className="btn btn-sm shrink-0"
-                    data-testid="forecast-seed-all-btn"
-                    data-cold-start={isColdStart ? "1" : "0"}
-                    title={
-                      isColdStart
-                        ? `Seed ${remaining.length} active items × ${version.horizon_weeks || 8} weeks of zero-quantity cells server-side, then fill in and Save.`
-                        : `Add all ${remaining.length} active items to the grid at once. You'll fill in quantities and Save.`
-                    }
-                    onClick={() => {
-                      setActionError(null);
-                      setActionSuccess(null);
-                      if (isColdStart) {
-                        // Backend seed path. The mutation's onSuccess /
-                        // onError set actionSuccess / actionError directly.
-                        seedCellsMut.mutate();
-                        return;
-                      }
-                      // Augmentation path — original local-add behavior.
-                      setAddedItemIds((prev) => {
-                        const next = new Set(prev);
-                        for (const r of remaining) next.add(r.item_id);
-                        return next;
-                      });
-                      setAddItemInput("");
-                    }}
-                  >
-                    {seedingInFlight
-                      ? "Seeding…"
-                      : `+ Seed all (${remaining.length})`}
-                  </button>
-                );
-              })()}
-            </div>
-            {addedItemIds.size > 0 ? (
-              <p
-                className="mt-1.5 text-3xs text-fg-muted"
-                data-testid="forecast-added-hint"
-              >
-                {addedItemIds.size} item
-                {addedItemIds.size !== 1 ? "s" : ""} added — fill quantities
-                in the grid above, then click Save.
-              </p>
-            ) : null}
-            {buckets.length === 0 ? (
-              <p className="mt-1.5 text-3xs text-warning-fg">
-                No period columns yet — period buckets are derived from the
-                draft&apos;s horizon. Check that horizon_start_at and
-                horizon_weeks are set.
-              </p>
-            ) : null}
-          </div>
-        ) : null}
-      </SectionCard>
-    </>
-  );
 }
