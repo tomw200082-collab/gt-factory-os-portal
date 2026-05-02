@@ -30,6 +30,7 @@ import {
 } from "../_lib/format";
 import { RISK_TIER_STYLE } from "../_lib/risk";
 import { useInventoryFlowItem } from "../_lib/useInventoryFlow";
+import { PlannedItemSection } from "../_components/PlannedItemSection";
 
 type TabKey = "demand" | "supply" | "timeline";
 
@@ -47,6 +48,22 @@ export default function InventoryFlowItemPage({ params }: PageParams) {
   const { itemId } = use(params);
   const detailQuery = useInventoryFlowItem(itemId);
   const [activeTab, setActiveTab] = useState<TabKey>("demand");
+
+  // Planned-inflow horizon — same 8-week window the main board uses so
+  // the per-day mini-section sees every plan visible on the grid.
+  const plannedHorizon = useMemo(() => {
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, "0");
+    const dd = String(today.getDate()).padStart(2, "0");
+    const from = `${yyyy}-${mm}-${dd}`;
+    const end = new Date(today.getTime() + 56 * 24 * 3600 * 1000);
+    const ey = end.getFullYear();
+    const em = String(end.getMonth() + 1).padStart(2, "0");
+    const ed = String(end.getDate()).padStart(2, "0");
+    const to = `${ey}-${em}-${ed}`;
+    return { from, to };
+  }, []);
 
   const detail = detailQuery.data ?? null;
   const style = detail ? RISK_TIER_STYLE[detail.risk_tier] : null;
@@ -155,6 +172,16 @@ export default function InventoryFlowItemPage({ params }: PageParams) {
               tone="neutral"
             />
           </div>
+
+          {/* Planned-inflow per-day mini-section (signal #32 / contract §5.2).
+              Renders only when the planned-overlay toggle is ON and at
+              least one plan_remaining row exists for this item over the
+              horizon. Silent otherwise. */}
+          <PlannedItemSection
+            itemId={detail.item_id}
+            from={plannedHorizon.from}
+            to={plannedHorizon.to}
+          />
 
           {/* Tabs */}
           <div className="mt-6 flex gap-1 border-b border-border/40">

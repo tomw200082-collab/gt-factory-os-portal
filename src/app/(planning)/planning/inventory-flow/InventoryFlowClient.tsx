@@ -28,8 +28,14 @@ import { FilterBar } from "./_components/FilterBar";
 import { FlowGridDesktop } from "./_components/FlowGridDesktop";
 import { HeroBar } from "./_components/HeroBar";
 import { MobileCardStream } from "./_components/MobileCardStream";
+import { PlannedFooterCaveat } from "./_components/PlannedFooterCaveat";
+import {
+  PlannedOverlayToggle,
+  usePlannedOverlayEnabled,
+} from "./_components/PlannedOverlayToggle";
 import { UnmappedSkusBanner } from "./_components/UnmappedSkusBanner";
 import { useInventoryFlow } from "./_lib/useInventoryFlow";
+import { usePlannedInflow, indexByItemDate } from "./_lib/plannedInflow";
 import type { FlowItem, FlowQueryParams } from "./_lib/types";
 import { isAtRisk } from "./_lib/risk";
 import { cn } from "@/lib/cn";
@@ -58,6 +64,41 @@ export function InventoryFlowClient() {
 
   const data = flowQuery.data ?? null;
   const summary = data?.summary ?? null;
+
+  // -----------------------------------------------------------------------
+  // Planned-inflow overlay (signal #32; Mode B-Planning-Corridor cycle 21)
+  //
+  // Horizon mirrors the inventory-flow daily band: today through today+8w
+  // so the same query covers both the 14-day daily band rendered by
+  // DayCell and the weekly band (weeks 3..8) rendered by WeekCell after
+  // client-side bucketing. The endpoint is cheap (small table aggregate);
+  // there is no read-perf reason to split into two ranges.
+  // -----------------------------------------------------------------------
+  const overlayEnabled = usePlannedOverlayEnabled();
+  const horizon = useMemo(() => {
+    const today = new Date();
+    const yyyy = today.getFullYear();
+    const mm = String(today.getMonth() + 1).padStart(2, "0");
+    const dd = String(today.getDate()).padStart(2, "0");
+    const from = `${yyyy}-${mm}-${dd}`;
+    const end = new Date(today.getTime() + 56 * 24 * 3600 * 1000);
+    const ey = end.getFullYear();
+    const em = String(end.getMonth() + 1).padStart(2, "0");
+    const ed = String(end.getDate()).padStart(2, "0");
+    const to = `${ey}-${em}-${ed}`;
+    return { from, to };
+  }, []);
+  const plannedInflowQuery = usePlannedInflow(
+    { from: horizon.from, to: horizon.to },
+    { enabled: overlayEnabled },
+  );
+  const plannedRows = plannedInflowQuery.data?.rows ?? [];
+  const plannedByItemDate = useMemo(
+    () => indexByItemDate(plannedRows),
+    [plannedRows],
+  );
+  const plannedRowsArray = plannedRows;
+  const plannedFailed = overlayEnabled && plannedInflowQuery.isError;
 
   const q = (searchParams.get("q") ?? "").trim().toLowerCase();
   const atRiskOnlyClient = searchParams.get("at_risk_only") !== "false";
@@ -128,20 +169,23 @@ export function InventoryFlowClient() {
         </>
       }
       actions={
-        <button
-          type="button"
-          onClick={() => void flowQuery.refetch()}
-          disabled={flowQuery.isFetching}
-          className="btn btn-ghost btn-sm gap-1.5"
-          data-testid="inventory-flow-refresh"
-          title="Force a fresh projection. The auto-refresh runs every 60s; use this if you just posted a movement and want to see it immediately."
-        >
-          <RefreshCw
-            className={cn("h-3.5 w-3.5", flowQuery.isFetching && "animate-spin")}
-            strokeWidth={2}
-          />
-          {flowQuery.isFetching ? "Refreshing…" : "Refresh now"}
-        </button>
+        <div className="flex items-center gap-2">
+          <PlannedOverlayToggle />
+          <button
+            type="button"
+            onClick={() => void flowQuery.refetch()}
+            disabled={flowQuery.isFetching}
+            className="btn btn-ghost btn-sm gap-1.5"
+            data-testid="inventory-flow-refresh"
+            title="Force a fresh projection. The auto-refresh runs every 60s; use this if you just posted a movement and want to see it immediately."
+          >
+            <RefreshCw
+              className={cn("h-3.5 w-3.5", flowQuery.isFetching && "animate-spin")}
+              strokeWidth={2}
+            />
+            {flowQuery.isFetching ? "Refreshing…" : "Refresh now"}
+          </button>
+        </div>
       }
     />
   );
@@ -208,6 +252,14 @@ export function InventoryFlowClient() {
         ) : (
           <>
             <FilterBar families={families} />
+            {plannedFailed ? (
+              <div
+                className="rounded border border-info/30 bg-info-softer/60 px-3 py-2 text-2xs text-info-fg"
+                data-testid="planned-overlay-error-caveat"
+              >
+                Planned production data unavailable — showing posted stock only.
+              </div>
+            ) : null}
             {filteredItems.length === 0 ? (
               <EmptyState
                 title="All clear ✨"
@@ -218,10 +270,21 @@ export function InventoryFlowClient() {
                 }
               />
             ) : isMobile ? (
-              <MobileCardStream items={filteredItems} summary={summary} />
+              <MobileCardStream
+                items={filteredItems}
+                summary={summary}
+                overlayEnabled={overlayEnabled}
+                plannedByItemDate={plannedByItemDate}
+              />
             ) : (
-              <FlowGridDesktop items={filteredItems} />
+              <FlowGridDesktop
+                items={filteredItems}
+                overlayEnabled={overlayEnabled}
+                plannedByItemDate={plannedByItemDate}
+                plannedRows={plannedRowsArray}
+              />
             )}
+            {overlayEnabled ? <PlannedFooterCaveat /> : null}
           </>
         )}
       </div>

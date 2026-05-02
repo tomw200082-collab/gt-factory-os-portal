@@ -29,20 +29,38 @@ import {
   NON_WORKING_STRIPE_STYLE,
 } from "../_lib/risk";
 import type { FlowDay, FlowItem } from "../_lib/types";
+import type { PlannedInflowRow } from "../_lib/plannedInflow";
 import { DayPopover } from "./DayPopover";
+import { PlannedChip } from "./PlannedChip";
 
 interface DayCellProps {
   item: FlowItem;
   day: FlowDay;
   avgDailyDemand: number;
   isToday: boolean;
+  /** Render planned-inflow overlay chip + tooltip section when true. */
+  overlayEnabled?: boolean;
+  /** Aggregated planned-inflow row for this (item, day), if any. */
+  plannedRow?: PlannedInflowRow;
 }
 
-function DayCellInner({ item, day, avgDailyDemand, isToday }: DayCellProps) {
+function DayCellInner({
+  item,
+  day,
+  avgDailyDemand,
+  isToday,
+  overlayEnabled = false,
+  plannedRow,
+}: DayCellProps) {
   const isNonWorking = day.tier === "non_working";
   const totalDemand = day.demand_lionwheel + day.demand_forecast;
   const spike = !isNonWorking && isDemandSpike(totalDemand, avgDailyDemand);
   const incoming = !isNonWorking && hasIncomingPo(day);
+  const showPlannedChip =
+    overlayEnabled &&
+    !isNonWorking &&
+    plannedRow != null &&
+    plannedRow.planned_remaining_qty > 0;
 
   const cellInner = (
     <div
@@ -71,11 +89,24 @@ function DayCellInner({ item, day, avgDailyDemand, isToday }: DayCellProps) {
         />
       ) : null}
 
-      {/* Bottom-right: incoming PO */}
+      {/* Bottom-right: incoming PO (truth) — top-most so the planned chip
+          (lower bottom-right) does not cover it. */}
       {incoming ? (
         <ArrowDown
           className="absolute bottom-1 right-1 h-2.5 w-2.5 text-info"
           strokeWidth={2.5}
+        />
+      ) : null}
+
+      {/* Bottom-left corner: planned-inflow overlay chip (intent, not truth).
+          Per contract V1: secondary in size/saturation; info-tone; dashed
+          border; carries the literal "Planned" word in title/aria. */}
+      {showPlannedChip && plannedRow ? (
+        <PlannedChip
+          qty={plannedRow.planned_remaining_qty}
+          uom={plannedRow.sales_uom}
+          variant="day"
+          className="bottom-0.5 left-0.5 right-auto"
         />
       ) : null}
     </div>
@@ -87,7 +118,12 @@ function DayCellInner({ item, day, avgDailyDemand, isToday }: DayCellProps) {
   }
 
   return (
-    <DayPopover item={item} day={day}>
+    <DayPopover
+      item={item}
+      day={day}
+      overlayEnabled={overlayEnabled}
+      plannedRow={plannedRow}
+    >
       {cellInner}
     </DayPopover>
   );

@@ -18,14 +18,26 @@ import { cn } from "@/lib/cn";
 import { fmtDateLong, fmtQty } from "../_lib/format";
 import { RISK_TIER_STYLE } from "../_lib/risk";
 import type { FlowDay, FlowItem } from "../_lib/types";
+import type { PlannedInflowRow } from "../_lib/plannedInflow";
+import { PlannedTooltip } from "./PlannedTooltip";
 
 interface DayPopoverProps {
   item: FlowItem;
   day: FlowDay;
   children: React.ReactNode;
+  /** Render the planned-inflow tooltip section when true. */
+  overlayEnabled?: boolean;
+  /** Planned-inflow row for this (item, day). */
+  plannedRow?: PlannedInflowRow;
 }
 
-export function DayPopover({ item, day, children }: DayPopoverProps) {
+export function DayPopover({
+  item,
+  day,
+  children,
+  overlayEnabled = false,
+  plannedRow,
+}: DayPopoverProps) {
   const isStockout = day.tier === "stockout";
   const isNonWorking = day.tier === "non_working";
 
@@ -91,6 +103,16 @@ export function DayPopover({ item, day, children }: DayPopoverProps) {
               also block pickup.
             </p>
           )}
+
+          {/* Planned-inflow overlay section (intent — not truth).
+              Visually separated by border-t inside PlannedTooltip per
+              contract §5.1 tooltip rules. Only renders when toggle ON
+              AND a planned-remaining row exists for this (item, day). */}
+          {overlayEnabled &&
+          plannedRow &&
+          plannedRow.planned_remaining_qty > 0 ? (
+            <PlannedTooltip row={plannedRow} />
+          ) : null}
 
           {/* Item context */}
           <div className="mt-3 border-t border-border/40 pt-2">

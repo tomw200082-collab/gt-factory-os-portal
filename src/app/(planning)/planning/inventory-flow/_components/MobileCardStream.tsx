@@ -13,18 +13,25 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { compareItemsByRisk } from "../_lib/risk";
 import { fmtDaysFromNow } from "../_lib/format";
 import type { FlowItem, FlowSummary } from "../_lib/types";
+import type { PlannedInflowRow } from "../_lib/plannedInflow";
 import { MobileItemCard } from "./MobileItemCard";
 
 interface MobileCardStreamProps {
   items: FlowItem[];
   summary: FlowSummary | null;
   onRefresh?: () => void;
+  /** When true, mobile cards render planned-inflow chips per day. */
+  overlayEnabled?: boolean;
+  /** Pre-indexed `${item_id}|${plan_date}` → row map for O(1) lookup. */
+  plannedByItemDate?: Map<string, PlannedInflowRow>;
 }
 
 export function MobileCardStream({
   items,
   summary,
   onRefresh,
+  overlayEnabled = false,
+  plannedByItemDate,
 }: MobileCardStreamProps) {
   const sorted = useMemo(() => [...items].sort(compareItemsByRisk), [items]);
   const queryClient = useQueryClient();
@@ -90,7 +97,12 @@ export function MobileCardStream({
       ) : null}
 
       {sorted.map((item) => (
-        <MobileItemCard key={item.item_id} item={item} />
+        <MobileItemCard
+          key={item.item_id}
+          item={item}
+          overlayEnabled={overlayEnabled}
+          plannedByItemDate={plannedByItemDate}
+        />
       ))}
     </div>
   );

@@ -18,6 +18,10 @@ import { useEffect, useMemo, useRef } from "react";
 import { compareItemsByRisk } from "../_lib/risk";
 import { todayIsoLocal } from "../_lib/format";
 import type { FlowItem } from "../_lib/types";
+import {
+  weeklySumsByItem,
+  type PlannedInflowRow,
+} from "../_lib/plannedInflow";
 import { DayCell } from "./DayCell";
 import { DayHeaderRow } from "./DayHeaderRow";
 import { StickyItemPanel } from "./StickyItemPanel";
@@ -25,9 +29,20 @@ import { WeekCell } from "./WeekCell";
 
 interface FlowGridDesktopProps {
   items: FlowItem[];
+  /** When true, render planned-inflow overlay chips/tooltip section. */
+  overlayEnabled?: boolean;
+  /** Pre-indexed `${item_id}|${plan_date}` → row map for O(1) day-cell lookup. */
+  plannedByItemDate?: Map<string, PlannedInflowRow>;
+  /** Full row array (used for client-side weekly aggregation per item). */
+  plannedRows?: PlannedInflowRow[];
 }
 
-export function FlowGridDesktop({ items }: FlowGridDesktopProps) {
+export function FlowGridDesktop({
+  items,
+  overlayEnabled = false,
+  plannedByItemDate,
+  plannedRows,
+}: FlowGridDesktopProps) {
   const sortedItems = useMemo(
     () => [...items].sort(compareItemsByRisk),
     [items],
@@ -92,6 +107,9 @@ export function FlowGridDesktop({ items }: FlowGridDesktopProps) {
             item={item}
             avgDailyDemand={avgDailyDemand}
             todayIso={todayIso}
+            overlayEnabled={overlayEnabled}
+            plannedByItemDate={plannedByItemDate}
+            plannedRows={plannedRows}
           />
         ))}
       </div>
@@ -103,27 +121,56 @@ interface ItemRowProps {
   item: FlowItem;
   avgDailyDemand: number;
   todayIso: string;
+  overlayEnabled: boolean;
+  plannedByItemDate?: Map<string, PlannedInflowRow>;
+  plannedRows?: PlannedInflowRow[];
 }
 
-function ItemRow({ item, avgDailyDemand, todayIso }: ItemRowProps) {
+function ItemRow({
+  item,
+  avgDailyDemand,
+  todayIso,
+  overlayEnabled,
+  plannedByItemDate,
+  plannedRows,
+}: ItemRowProps) {
   const dailyWeekCount = Math.ceil(item.days.length / 7);
   const weeklyOnly = item.weeks.slice(dailyWeekCount);
+
+  // Client-side weekly aggregation — sum planned-remaining quantities for
+  // this item across each week_start (Sunday-anchored). Computed once per
+  // item-row render; cheap because plannedRows is bounded by horizon.
+  const weeklySums = useMemo(
+    () =>
+      overlayEnabled
+        ? weeklySumsByItem(plannedRows, item.item_id)
+        : new Map<string, number>(),
+    [overlayEnabled, plannedRows, item.item_id],
+  );
+
   return (
     <div className="flex border-b border-border/30 last:border-b-0 hover:bg-bg-subtle/30">
       <StickyItemPanel item={item} />
-      {item.days.map((d) => (
-        <div
-          key={d.day}
-          className="border-r border-border/30 last:border-r-0"
-        >
-          <DayCell
-            item={item}
-            day={d}
-            avgDailyDemand={avgDailyDemand}
-            isToday={d.day === todayIso}
-          />
-        </div>
-      ))}
+      {item.days.map((d) => {
+        const plannedRow = overlayEnabled
+          ? plannedByItemDate?.get(`${item.item_id}|${d.day}`)
+          : undefined;
+        return (
+          <div
+            key={d.day}
+            className="border-r border-border/30 last:border-r-0"
+          >
+            <DayCell
+              item={item}
+              day={d}
+              avgDailyDemand={avgDailyDemand}
+              isToday={d.day === todayIso}
+              overlayEnabled={overlayEnabled}
+              plannedRow={plannedRow}
+            />
+          </div>
+        );
+      })}
       {/* spacer between daily and weekly bands */}
       <div className="h-[52px] w-4 shrink-0" />
       {weeklyOnly.map((w) => (
@@ -131,7 +178,12 @@ function ItemRow({ item, avgDailyDemand, todayIso }: ItemRowProps) {
           key={w.week_start}
           className="border-l border-r border-border/30"
         >
-          <WeekCell week={w} />
+          <WeekCell
+            week={w}
+            overlayEnabled={overlayEnabled}
+            plannedRemainingQty={weeklySums.get(w.week_start) ?? 0}
+            sales_uom={null}
+          />
         </div>
       ))}
     </div>
