@@ -83,39 +83,37 @@ async function fetchJsonSilent<T>(url: string): Promise<T> {
 
 // Generate expected period bucket keys from version metadata when the draft
 // has no existing lines yet (fresh draft). Keys are ISO date strings matching
-// the server's period_bucket_key format: YYYY-MM-DD (first day of month for
-// monthly, Monday for weekly, daily date for daily).
+// the server's period_bucket_key format: YYYY-MM-DD.
+//
+// Contract reference: forecast_planning_contract.md §B.2 (horizon = 8 ISO 8601
+// weeks, Monday→Sunday) + §C.1 line 121 ("The planner authors a quantity per
+// finished-good item per ISO week") + §F1 (publish-time completeness checks
+// every (item, ISO week) cell across the horizon = eligible_items × 8 cells).
+//
+// Important: in v1, `cadence` is the PUBLISH cadence (one publish per month),
+// NOT the bucket size. Bucket size is always ISO weekly. The 'weekly' / 'daily'
+// enum values are reserved for future use (§B.1) but server-side validation
+// rejects them today (§F7). For grid generation we therefore emit
+// `horizonWeeks` ISO weekly buckets (Monday-anchored) regardless of the
+// cadence string. Matches backend F1 expectation in api/src/forecasts/
+// handler.ts:597-609 (expected = eligible_items × horizon_weeks).
 function generateBucketsFromMetadata(
   horizonStartAt: string,
   horizonWeeks: number,
+  // Cadence is accepted for forward compatibility but does not change bucket
+  // size in v1; the 'daily' branch below is dead-code-guarded for §B.1
+  // reserved-but-not-built future cadence and is never reached at runtime
+  // because §F7 rejects non-'monthly' values upstream.
   cadence: "monthly" | "weekly" | "daily",
 ): string[] {
   const start = new Date(horizonStartAt + "T00:00:00Z");
-  const endMs = start.getTime() + horizonWeeks * 7 * 24 * 60 * 60 * 1000;
   const buckets: string[] = [];
-  if (cadence === "monthly") {
-    let d = new Date(Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), 1));
-    while (d.getTime() < endMs && buckets.length < 24) {
-      const y = d.getUTCFullYear();
-      const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-      buckets.push(`${y}-${m}-01`);
-      d = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 1));
-    }
-  } else if (cadence === "weekly") {
-    let d = new Date(
-      Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()),
-    );
-    const dow = d.getUTCDay();
-    d.setUTCDate(d.getUTCDate() - (dow === 0 ? 6 : dow - 1));
-    while (d.getTime() < endMs && buckets.length < horizonWeeks + 2) {
-      const y = d.getUTCFullYear();
-      const m = String(d.getUTCMonth() + 1).padStart(2, "0");
-      const dd = String(d.getUTCDate()).padStart(2, "0");
-      buckets.push(`${y}-${m}-${dd}`);
-      d.setUTCDate(d.getUTCDate() + 7);
-    }
-  } else {
-    let d = new Date(
+
+  // Daily branch — reserved future cadence per §B.1; never reached in v1
+  // because the backend rejects cadence='daily' at create-version time (§F7).
+  // Kept to preserve type completeness only.
+  if (cadence === "daily") {
+    const d = new Date(
       Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()),
     );
     for (let i = 0; i < Math.min(horizonWeeks * 7, 62); i++) {
@@ -125,6 +123,30 @@ function generateBucketsFromMetadata(
       buckets.push(`${y}-${m}-${dd}`);
       d.setUTCDate(d.getUTCDate() + 1);
     }
+    return buckets;
+  }
+
+  // Weekly bucket generation — applies to BOTH cadence='monthly' (v1 publish
+  // cadence with weekly buckets per §B.2 + §C.1) and the reserved cadence=
+  // 'weekly' enum value. Buckets are Monday-anchored ISO 8601 week starts.
+  // The day-of-week math: Sunday (UTC getDay()=0) maps to "back 6 days";
+  // Monday (1) maps to 0; Tuesday..Saturday (2..6) map to (dow-1).
+  const d = new Date(
+    Date.UTC(start.getUTCFullYear(), start.getUTCMonth(), start.getUTCDate()),
+  );
+  const dow = d.getUTCDay();
+  d.setUTCDate(d.getUTCDate() - (dow === 0 ? 6 : dow - 1));
+  // Emit exactly horizonWeeks buckets (count-bounded, not endMs-bounded)
+  // so the grid matches the backend F1 expectation byte-for-byte. Previously
+  // an endMs-bounded loop could emit horizonWeeks+1 if horizon_start_at was
+  // not already a Monday — that drift caused F1 to fail with
+  // "expected 536 cells, found N" mismatches.
+  for (let i = 0; i < horizonWeeks; i++) {
+    const y = d.getUTCFullYear();
+    const m = String(d.getUTCMonth() + 1).padStart(2, "0");
+    const dd = String(d.getUTCDate()).padStart(2, "0");
+    buckets.push(`${y}-${m}-${dd}`);
+    d.setUTCDate(d.getUTCDate() + 7);
   }
   return buckets;
 }
