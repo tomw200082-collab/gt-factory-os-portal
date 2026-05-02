@@ -5,7 +5,10 @@
 //
 // 1. Refresh the Supabase session cookie (via updateSupabaseSession) so that
 //    downstream server components see a fresh access_token.
-// 2. Redirect unauthenticated requests for gated routes to /login.
+// 2. Redirect unauthenticated requests for gated WEB routes to /login;
+//    return 401 JSON for unauthenticated /api/* requests so page-level
+//    fetch hooks can categorize the error correctly. (See
+//    docs/superpowers/specs/2026-05-02-middleware-401-json-for-api-paths-design.md.)
 // 3. (Tranche 016) Path-specific role gating. When user.app_metadata.role
 //    is present, enforce a prefix → allow-list check. When it is absent
 //    (current backend state — the app_users role is not yet projected into
@@ -66,6 +69,17 @@ function isPublicPath(pathname: string): boolean {
   return false;
 }
 
+function isApiPath(pathname: string): boolean {
+  // API routes return JSON, never HTML. Auth/role failures must surface
+  // as 401/403 JSON so the page-level fetch hook can categorize them
+  // correctly — a 307 redirect to /login would deliver login HTML to a
+  // fetch() call that expects JSON, defeating error categorization and
+  // surfacing the generic "could not load" copy instead of the auth-aware
+  // "your session expired" copy. Spec:
+  // docs/superpowers/specs/2026-05-02-middleware-401-json-for-api-paths-design.md
+  return pathname.startsWith("/api/");
+}
+
 export async function middleware(request: NextRequest) {
   // T019: wrap the entire body in try/catch. Any failure inside
   // updateSupabaseSession (env-var missing, upstream Supabase timeout,
@@ -84,6 +98,12 @@ export async function middleware(request: NextRequest) {
     const { pathname } = request.nextUrl;
 
     if (!user && !isPublicPath(pathname)) {
+      if (isApiPath(pathname)) {
+        return NextResponse.json(
+          { error: "Not authenticated", code: "session_expired" },
+          { status: 401 },
+        );
+      }
       const loginUrl = request.nextUrl.clone();
       loginUrl.pathname = "/login";
       loginUrl.searchParams.set("redirectTo", pathname);
@@ -102,6 +122,12 @@ export async function middleware(request: NextRequest) {
       if (role) {
         const gate = findRoleGate(pathname);
         if (gate && !gate.allow.includes(role)) {
+          if (isApiPath(pathname)) {
+            return NextResponse.json(
+              { error: "Forbidden", code: "role_forbidden" },
+              { status: 403 },
+            );
+          }
           const forbidden = request.nextUrl.clone();
           forbidden.pathname = "/dashboard";
           forbidden.searchParams.set("forbidden", pathname);
