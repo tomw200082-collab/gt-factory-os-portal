@@ -12,11 +12,27 @@
 //     the UI.
 //   - Quarantine stub removed; form is the live surface.
 //
+// Cycle 16 — PO prefill (W4 cycle 8 spec §3.4):
+//   - Reads ?po_id={po_id} from URL on mount.
+//   - When present: fetches PO header + filtered OPEN/PARTIAL PO lines,
+//     locks supplier picker, prepopulates one GR line per OPEN/PARTIAL
+//     PO line with received_qty = open_qty (editable downward, upward,
+//     or to zero per §3.4.1 / §3.4.3).
+//   - Status guard: if PO is RECEIVED/CANCELLED, renders empty-state
+//     panel with a "View receipts" link back to the PO detail page;
+//     submit is hidden.
+//   - PO-less direct entry (no ?po_id=) preserved verbatim — prefill is
+//     additive based on the URL param's presence.
+//   - Closes W2-FOLLOWUP-RECEIPTS-PO-PREFILL logged at cycle 14 commit
+//     19c0025.
+//
 // Envelope shape is the GoodsReceiptRequestSchema contract at
 // src/lib/contracts/goods-receipts.ts (mirror of API schemas.ts).
 // ---------------------------------------------------------------------------
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
@@ -108,6 +124,27 @@ interface PoOption {
   expected_receive_date: string | null;
 }
 
+// Cycle 16: PO header shape returned by GET /api/purchase-orders/:po_id.
+// Used by the URL-driven prefill path (?po_id=) to display PO context and
+// enforce the terminal-status guard. Mirrors the response of the canonical
+// PO detail endpoint already consumed at /purchase-orders/[po_id]/page.tsx.
+interface PurchaseOrderHeader {
+  po_id: string;
+  po_number: string;
+  supplier_id: string;
+  supplier_name: string | null;
+  status: string;
+  order_date: string;
+  expected_receive_date: string | null;
+  currency: string;
+  total_net: string;
+  notes: string | null;
+}
+
+interface PurchaseOrderDetailResponse {
+  row: PurchaseOrderHeader;
+}
+
 interface PoLineOption {
   po_line_id: string;
   line_number: number;
@@ -188,9 +225,28 @@ interface DoneState {
   message: string;
   detail?: string;
   itemSummary?: string;
+  // Cycle 16 — post-submit context links rendered when the receipt is
+  // attached to a PO. Allows the operator to navigate directly to the PO
+  // detail page (to verify status flip OPEN→PARTIAL or →RECEIVED) and to
+  // the movement log for ledger verification. Both links are optional;
+  // omitted on PO-less receipts. The `movement_log_filter_supported`
+  // flag carries an honest disclosure when /stock/movement-log does
+  // not yet filter by po_id (W1 follow-up; the link still works as a
+  // generic deep-link).
+  poId?: string;
+  poNumber?: string;
+  postedLines?: number;
 }
 
 export default function GoodsReceiptPage() {
+  // Cycle 16 — URL-driven prefill (W4 spec §3.4). When the operator arrives
+  // here from the "Receive against this PO →" CTA on /purchase-orders/[po_id]
+  // (cycle 14, commit 19c0025), the URL carries ?po_id=<uuid>. We read it
+  // ONCE on mount and lock the supplier picker plus prepopulate lines.
+  // Direct-entry path (no ?po_id=) is preserved verbatim.
+  const searchParams = useSearchParams();
+  const urlPoId = searchParams?.get("po_id") ?? "";
+
   const itemsQuery = useQuery<ListEnvelope<ItemRow>>({
     queryKey: ["master", "items", "ACTIVE"],
     queryFn: () => fetchJson("/api/items?status=ACTIVE&limit=1000"),
@@ -270,7 +326,19 @@ export default function GoodsReceiptPage() {
   // Tranche 013: optional PO reference. When set, all receipt lines
   // submit with envelope.po_id = poId; per-line po_line_id is picked
   // from the selected PO's lines[].
-  const [poId, setPoId] = useState<string>("");
+  //
+  // Cycle 16: seeded from ?po_id= URL param so the "Receive against this PO"
+  // CTA on /purchase-orders/[po_id] arrives with the PO already linked. The
+  // poId state remains mutable in the prefill path so handlePoChange (e.g.,
+  // operator clicking the dropdown to clear) still works; supplier locking
+  // is enforced separately by the urlPoLocked flag below.
+  const [poId, setPoId] = useState<string>(urlPoId);
+
+  // Cycle 16: when prefill is driven by the URL we lock the supplier picker
+  // per W4 spec §3.4 step 1. The operator MUST NOT change supplier in this
+  // path — the handler-side SUPPLIER_MISMATCH 409 guard remains the
+  // last-resort defense, but we don't want them to even attempt it.
+  const urlPoLocked = Boolean(urlPoId);
 
   // Lazy-load the chosen PO's detail to populate the per-line
   // po_line_id picker. enabled only when poId is set so we don't
@@ -285,6 +353,85 @@ export default function GoodsReceiptPage() {
   const poLines: PoLineOption[] = useMemo(() => {
     return poDetailQuery.data?.rows ?? [];
   }, [poDetailQuery.data]);
+
+  // Cycle 16 — PO header fetch for URL-driven prefill (W4 spec §3.4 step 1
+  // + §3.5.5 status guard). This is in addition to the openPosQuery list
+  // because (a) the URL may point at a terminal-status PO that the list
+  // omits, and (b) we want the supplier_name display value, which the list
+  // shape does not carry. Only enabled in the URL-driven path; a manually
+  // chosen PO via the dropdown stays on the openPosQuery's list shape.
+  const poHeaderQuery = useQuery<PurchaseOrderDetailResponse>({
+    queryKey: ["ops", "receipts", "po-header", urlPoId],
+    queryFn: () =>
+      fetchJson(`/api/purchase-orders/${encodeURIComponent(urlPoId)}`),
+    enabled: urlPoLocked,
+    staleTime: 30_000,
+  });
+  const urlPoHeader = poHeaderQuery.data?.row ?? null;
+  // Terminal-status guard per W4 spec §3.5.5 + dispatch instruction.
+  const urlPoTerminal =
+    urlPoHeader !== null &&
+    (urlPoHeader.status === "RECEIVED" || urlPoHeader.status === "CANCELLED");
+
+  // Cycle 16 — prefill effect: once both the PO header and the OPEN/PARTIAL
+  // PO lines are loaded, set the supplier from the header and replace the
+  // initial empty line draft with one prefilled draft per OPEN/PARTIAL PO
+  // line. CLOSED + CANCELLED lines are filtered out (W4 spec §3.4 step 2).
+  // Read once per mount: a `prefillApplied` guard prevents stomping the
+  // operator's edits on subsequent re-renders. If the operator manually
+  // adds/removes lines after prefill, those edits stick.
+  const [prefillApplied, setPrefillApplied] = useState(false);
+  useEffect(() => {
+    if (!urlPoLocked) return;
+    if (prefillApplied) return;
+    if (urlPoTerminal) return;
+    if (!urlPoHeader) return;
+    if (poDetailQuery.isLoading) return;
+    // Lock supplier from PO header.
+    if (!supplierId) {
+      setSupplierId(urlPoHeader.supplier_id);
+    }
+    // Build one line per OPEN/PARTIAL PO line; received_qty default = open_qty.
+    // Receivable resolution: try component_id first, then item_id; fall back
+    // to leaving the line picker empty (the operator can correct, then the
+    // handler's PO_LINE_PARENT_MISMATCH 409 enforces consistency).
+    const eligible = poLines.filter(
+      (pl) => pl.line_status === "OPEN" || pl.line_status === "PARTIAL",
+    );
+    if (eligible.length === 0) {
+      // No eligible lines — keep the initial empty draft so the empty-state
+      // copy below carries the operator to "View receipts". No-op here.
+      setPrefillApplied(true);
+      return;
+    }
+    const drafts: LineDraft[] = eligible.map((pl) => {
+      const key = pl.component_id
+        ? `component:${pl.component_id}`
+        : pl.item_id
+          ? `item:${pl.item_id}`
+          : "";
+      const unit = (UOMS as readonly string[]).includes(pl.uom)
+        ? (pl.uom as Uom)
+        : "UNIT";
+      return {
+        receivable_key: key,
+        quantity: pl.open_qty,
+        unit,
+        notes: "",
+        po_line_id: pl.po_line_id,
+      };
+    });
+    setLines(drafts);
+    setPrefillApplied(true);
+  }, [
+    urlPoLocked,
+    prefillApplied,
+    urlPoTerminal,
+    urlPoHeader,
+    poDetailQuery.isLoading,
+    poLines,
+    supplierId,
+  ]);
 
   // When the operator picks a PO, default the supplier to the PO's
   // supplier so the supplier dropdown stays consistent. The operator can
@@ -408,6 +555,12 @@ export default function GoodsReceiptPage() {
             : "Receipt posted successfully.",
           itemSummary,
           detail: `ref: ${committed.submission_id} · ${committed.lines.length} line${committed.lines.length !== 1 ? "s" : ""}`,
+          // Cycle 16: carry PO context through to the success panel so the
+          // operator can verify status flip + ledger movement without
+          // re-navigating manually.
+          poId: committed.po_id ?? undefined,
+          poNumber: urlPoHeader?.po_number ?? undefined,
+          postedLines: committed.lines.length,
         });
         // Reset form for a fresh submission
         setLines([emptyLine()]);
@@ -437,10 +590,127 @@ export default function GoodsReceiptPage() {
   return (
     <>
       <WorkflowHeader
-        eyebrow="Operator form"
+        eyebrow={urlPoLocked && urlPoHeader ? `Receiving against PO ${urlPoHeader.po_number}` : "Operator form"}
         title="Goods Receipt"
-        description="Record physical goods arrival. Partial receipts are supported."
+        description={
+          urlPoLocked && urlPoHeader
+            ? `From ${urlPoHeader.supplier_name ?? urlPoHeader.supplier_id}${urlPoHeader.expected_receive_date ? ` · expected ${urlPoHeader.expected_receive_date}` : ""}.`
+            : "Record physical goods arrival. Partial receipts are supported."
+        }
       />
+
+      {/* Cycle 16 — PO-attached prefill: terminal-status guard panel.
+          When the URL points at a RECEIVED or CANCELLED PO, we hide the
+          form entirely and show a closed-out empty state with a link
+          back to the PO detail's attached-grs tab (W4 spec §3.5.5). */}
+      {urlPoLocked && urlPoTerminal && urlPoHeader ? (
+        <SectionCard title={`PO ${urlPoHeader.po_number} cannot accept further receipts`}>
+          <div
+            className="rounded-md border border-border/60 bg-bg-raised p-4 text-sm"
+            role="status"
+            data-testid="receipts-po-terminal-guard"
+          >
+            <div className="font-medium text-fg">
+              This PO is in {urlPoHeader.status === "RECEIVED" ? "Received" : "Cancelled"} state.
+            </div>
+            <div className="mt-1 text-fg-muted">
+              No additional goods receipts may be posted against PO {urlPoHeader.po_number}
+              {urlPoHeader.supplier_name ? ` (${urlPoHeader.supplier_name})` : ""}.
+            </div>
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Link
+                href={`/purchase-orders/${encodeURIComponent(urlPoHeader.po_id)}?tab=attached-grs`}
+                className="btn btn-sm btn-primary"
+                data-testid="receipts-po-terminal-view-receipts"
+              >
+                View receipts →
+              </Link>
+              <Link
+                href={`/purchase-orders/${encodeURIComponent(urlPoHeader.po_id)}`}
+                className="btn btn-ghost btn-sm"
+              >
+                Back to PO detail
+              </Link>
+              <Link
+                href="/stock/receipts"
+                className="btn btn-ghost btn-sm"
+                data-testid="receipts-po-terminal-clear-link"
+              >
+                Start a manual receipt
+              </Link>
+            </div>
+          </div>
+        </SectionCard>
+      ) : null}
+
+      {/* Cycle 16 — PO header context strip rendered above the form when
+          prefill is active and the PO is acceptable. Shows PO number,
+          supplier, expected date, and a "Cancel / Back to PO" affordance
+          per dispatch instruction. Loading state shown while the PO
+          header is in flight. */}
+      {urlPoLocked && !urlPoTerminal && poHeaderQuery.isLoading ? (
+        <SectionCard title="Loading PO context…">
+          <div className="h-9 w-full animate-pulse rounded bg-bg-subtle" aria-busy="true" />
+        </SectionCard>
+      ) : null}
+      {urlPoLocked && !urlPoTerminal && poHeaderQuery.isError ? (
+        <SectionCard title="Could not load PO context">
+          <div
+            className="rounded-md border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg"
+            role="status"
+            data-testid="receipts-po-header-error"
+          >
+            <div className="font-semibold">Could not load PO {urlPoId}</div>
+            <div className="mt-1 text-xs">
+              {(poHeaderQuery.error as Error).message}
+            </div>
+            <div className="mt-2 flex gap-2">
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => void poHeaderQuery.refetch()}
+              >
+                Retry
+              </button>
+              <Link
+                href="/stock/receipts"
+                className="btn btn-ghost btn-sm"
+              >
+                Start a manual receipt instead
+              </Link>
+            </div>
+          </div>
+        </SectionCard>
+      ) : null}
+      {urlPoLocked && !urlPoTerminal && urlPoHeader ? (
+        <div
+          className="mb-4 flex flex-wrap items-center gap-3 rounded-md border border-info/30 bg-info-softer/30 px-4 py-3 text-sm"
+          role="note"
+          data-testid="receipts-po-context-strip"
+        >
+          <span className="font-medium text-fg">
+            Receiving against PO{" "}
+            <span className="font-mono">{urlPoHeader.po_number}</span>
+          </span>
+          <span className="text-fg-muted">
+            {urlPoHeader.supplier_name ?? urlPoHeader.supplier_id}
+          </span>
+          {urlPoHeader.expected_receive_date ? (
+            <span className="text-fg-muted">
+              expected {urlPoHeader.expected_receive_date}
+            </span>
+          ) : null}
+          <span className="ml-auto flex items-center gap-2">
+            <Link
+              href={`/purchase-orders/${encodeURIComponent(urlPoHeader.po_id)}`}
+              className="btn btn-ghost btn-sm"
+              data-testid="receipts-po-back-to-po"
+            >
+              ← Back to PO
+            </Link>
+          </span>
+        </div>
+      ) : null}
 
       {done ? (
         <div
@@ -451,6 +721,11 @@ export default function GoodsReceiptPage() {
               : "border-danger/40 bg-danger-softer text-danger-fg")
           }
           role="status"
+          data-testid={
+            done.kind === "success"
+              ? "receipt-success-panel"
+              : "receipt-error-panel"
+          }
         >
           <div className="font-medium">{done.message}</div>
           {done.itemSummary ? (
@@ -461,6 +736,45 @@ export default function GoodsReceiptPage() {
           {done.detail ? (
             <div className="mt-1 font-mono text-xs opacity-60">
               {done.detail}
+            </div>
+          ) : null}
+          {/* Cycle 16: post-submit nav cluster for PO-attached receipts.
+              Renders verbatim links to PO detail + movement log so the
+              operator can verify the status flip + ledger movement
+              without re-navigating manually. Hidden on PO-less posts
+              and on errors. */}
+          {done.kind === "success" && done.poId ? (
+            <div className="mt-3 flex flex-wrap items-center gap-2">
+              <Link
+                href={`/purchase-orders/${encodeURIComponent(done.poId)}`}
+                className="btn btn-ghost btn-sm"
+                data-testid="receipt-success-back-to-po"
+              >
+                Back to PO{done.poNumber ? ` ${done.poNumber}` : ""} →
+              </Link>
+              <Link
+                href={`/purchase-orders/${encodeURIComponent(done.poId)}?tab=attached-grs`}
+                className="btn btn-ghost btn-sm"
+                data-testid="receipt-success-view-attached-grs"
+              >
+                View receipts on this PO →
+              </Link>
+              {/*
+                Movement log link. The /stock/movement-log surface does
+                not yet filter by po_id query param; logged as
+                W1-FOLLOWUP-MOVEMENT-LOG-URL-PREFILL (also tracked in
+                cycle 12 active_mode entry). The link still routes to
+                the unfiltered movement log, which the operator can
+                manually scope by submission/event_at.
+              */}
+              <Link
+                href={`/stock/movement-log?po_id=${encodeURIComponent(done.poId)}`}
+                className="btn btn-ghost btn-sm"
+                data-testid="receipt-success-view-movement-log"
+                title="Filter by po_id is not yet supported on the movement log; the link routes to the unfiltered ledger."
+              >
+                View movement log →
+              </Link>
             </div>
           ) : null}
         </div>
@@ -499,7 +813,7 @@ export default function GoodsReceiptPage() {
             </button>
           </div>
         </SectionCard>
-      ) : (
+      ) : urlPoLocked && urlPoTerminal ? null : (
         <form onSubmit={handleSubmit} className="space-y-5">
           <SectionCard title="Receipt context">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -524,6 +838,9 @@ export default function GoodsReceiptPage() {
                   value={supplierId}
                   onChange={(e) => setSupplierId(e.target.value)}
                   required
+                  disabled={urlPoLocked}
+                  data-testid="receipt-supplier-select"
+                  aria-describedby={urlPoLocked && urlPoHeader ? "receipt-supplier-locked-caption" : undefined}
                 >
                   <option value="">— select —</option>
                   {(suppliersQuery.data?.rows ?? []).map((s) => (
@@ -532,6 +849,14 @@ export default function GoodsReceiptPage() {
                     </option>
                   ))}
                 </select>
+                {urlPoLocked && urlPoHeader ? (
+                  <span
+                    id="receipt-supplier-locked-caption"
+                    className="mt-1 block text-3xs text-fg-muted"
+                  >
+                    From PO {urlPoHeader.po_number} — supplier locked.
+                  </span>
+                ) : null}
               </label>
               <label className="block min-w-0 sm:col-span-2">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
@@ -542,6 +867,7 @@ export default function GoodsReceiptPage() {
                   value={poId}
                   onChange={(e) => handlePoChange(e.target.value)}
                   data-testid="receipt-po-select"
+                  disabled={urlPoLocked}
                 >
                   <option value="">— manual receipt (no PO) —</option>
                   {(openPosQuery.data?.rows ?? []).map((p) => (
@@ -552,6 +878,16 @@ export default function GoodsReceiptPage() {
                         : ""}
                     </option>
                   ))}
+                  {/* Cycle 16: when prefill is URL-driven, the PO may not be
+                      in the openPosQuery list (cycle 16 source uses a
+                      separate header fetch). Render a synthetic option so
+                      the disabled select shows the current selection. */}
+                  {urlPoLocked && urlPoHeader &&
+                    !(openPosQuery.data?.rows ?? []).some((p) => p.po_id === urlPoHeader.po_id) ? (
+                    <option key={urlPoHeader.po_id} value={urlPoHeader.po_id}>
+                      {urlPoHeader.po_number} · {urlPoHeader.supplier_id} · {urlPoHeader.status}
+                    </option>
+                  ) : null}
                 </select>
                 {poId && poDetailQuery.isError ? (
                   <span className="mt-1 block text-3xs text-warning-fg">

@@ -223,11 +223,22 @@ export const NAV_MANIFEST: NavGroup[] = [
         required_capability: "planning:read",
       },
       {
+        // Cycle 16 — gated to admin per W4 cycle 6 spec
+        // production_simulation_runtime_decision_pack.md §5 default A+B,
+        // PSDP-3 default (ii) "min_role: admin". Daily planners should
+        // not see this surface in the sidebar because the page is
+        // IDB-backed and can silently disagree with live production data
+        // (audit 2026-05-01 §16 #9 P0). Direct URL navigation still
+        // works for admins / dev preview; the in-page containment
+        // banner at /planning/production-simulation labels the surface
+        // as "Simulation preview only — this does not change inventory
+        // and is not the production planning source of truth." Full
+        // backend wiring is the queued replacement (W4 → W1 → W2).
         href: "/planning/production-simulation",
         label: "Production Simulation",
         icon: Network,
-        min_role: "viewer",
-        required_capability: "planning:read",
+        min_role: "admin",
+        required_capability: "admin:execute",
       },
       {
         href: "/planning/inventory-flow",
