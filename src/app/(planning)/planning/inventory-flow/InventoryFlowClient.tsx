@@ -14,7 +14,7 @@
 // ---------------------------------------------------------------------------
 
 import { useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import {
@@ -29,7 +29,14 @@ import { FlowGridDesktop } from "./_components/FlowGridDesktop";
 import { HeroBar } from "./_components/HeroBar";
 import { MobileCardStream } from "./_components/MobileCardStream";
 import { UnmappedSkusBanner } from "./_components/UnmappedSkusBanner";
+import { PlannedOverlayToggle } from "./_components/PlannedOverlayToggle";
+import { PlannedFooterCaveat } from "./_components/PlannedFooterCaveat";
 import { useInventoryFlow } from "./_lib/useInventoryFlow";
+import {
+  usePlannedInflowIndex,
+  readPlannedOverlayPref,
+  writePlannedOverlayPref,
+} from "./_lib/plannedInflow";
 import type { FlowItem, FlowQueryParams } from "./_lib/types";
 import { isAtRisk } from "./_lib/risk";
 import { cn } from "@/lib/cn";
@@ -58,6 +65,30 @@ export function InventoryFlowClient() {
 
   const data = flowQuery.data ?? null;
   const summary = data?.summary ?? null;
+
+  // Planned-inflow overlay (signal #32 — cycle 21).
+  const [overlayEnabled, setOverlayEnabled] = useState<boolean>(true);
+  useEffect(() => {
+    setOverlayEnabled(readPlannedOverlayPref());
+  }, []);
+  const handleOverlayToggle = useCallback((next: boolean) => {
+    setOverlayEnabled(next);
+    writePlannedOverlayPref(next);
+  }, []);
+  const today = useMemo(() => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }, []);
+  const horizonEnd = useMemo(() => {
+    const d = new Date();
+    d.setDate(d.getDate() + 56);
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }, []);
+  const plannedInflow = usePlannedInflowIndex({
+    from: today,
+    to: horizonEnd,
+    enabled: overlayEnabled,
+  });
 
   const q = (searchParams.get("q") ?? "").trim().toLowerCase();
   const atRiskOnlyClient = searchParams.get("at_risk_only") !== "false";
@@ -220,10 +251,22 @@ export function InventoryFlowClient() {
             ) : isMobile ? (
               <MobileCardStream items={filteredItems} summary={summary} />
             ) : (
-              <FlowGridDesktop items={filteredItems} />
+              <FlowGridDesktop
+                items={filteredItems}
+                plannedIndex={overlayEnabled ? plannedInflow.index : undefined}
+              />
             )}
           </>
         )}
+        {!banner && filteredItems.length > 0 ? (
+          <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/40 pt-3">
+            <PlannedFooterCaveat />
+            <PlannedOverlayToggle
+              enabled={overlayEnabled}
+              onChange={handleOverlayToggle}
+            />
+          </div>
+        ) : null}
       </div>
     </>
   );

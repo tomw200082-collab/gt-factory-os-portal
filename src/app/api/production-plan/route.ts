@@ -11,11 +11,14 @@ import { proxyRequest } from "@/lib/api-proxy";
 // Gate 3B backend: gt-factory-os/api/src/production-plan/route.ts.
 
 export async function GET(req: Request): Promise<Response> {
-  const url = new URL(req.url);
-  const qs = url.searchParams.toString();
+  // proxyRequest's forwardQuery default (true for GET) appends the
+  // incoming searchParams. Do NOT also concatenate ?qs into upstreamPath
+  // — that would double-append the querystring (`?from=...?from=...`),
+  // mangle `to` to `2026-05-02?from=…`, and trip backend Zod validation
+  // with a 422.
   return proxyRequest(req, {
     method: "GET",
-    upstreamPath: `/api/v1/queries/production-plan${qs ? "?" + qs : ""}`,
+    upstreamPath: "/api/v1/queries/production-plan",
     errorLabel: "production plan list",
   });
 }

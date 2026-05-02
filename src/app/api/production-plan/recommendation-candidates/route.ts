@@ -12,11 +12,13 @@ import { proxyRequest } from "@/lib/api-proxy";
 // Role gate is enforced upstream: planner + admin only (operator + viewer = 403).
 
 export async function GET(req: Request): Promise<Response> {
-  const url = new URL(req.url);
-  const qs = url.searchParams.toString();
+  // proxyRequest's forwardQuery default (true for GET) appends the
+  // incoming searchParams. Do NOT also concatenate ?qs into upstreamPath
+  // — that would double-append the querystring and trip backend Zod
+  // validation with a 422 (see /api/production-plan/route.ts comment).
   return proxyRequest(req, {
     method: "GET",
-    upstreamPath: `/api/v1/queries/production-plan/recommendation-candidates${qs ? "?" + qs : ""}`,
+    upstreamPath: "/api/v1/queries/production-plan/recommendation-candidates",
     errorLabel: "production plan recommendation candidates",
   });
 }
