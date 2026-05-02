@@ -49,7 +49,18 @@ import { useCapability } from "@/lib/auth/role-gate";
 // source_type added 2026-04-26: 'recommendation' | 'manual' | undefined
 // (older rows may not return this field — we infer from
 // source_recommendation_id when missing).
+// lines_summary added 2026-05-01 per W1 cycle 9 (po_list_summary_extension_checkpoint.md):
+// LEFT JOIN LATERAL aggregation; "0" when no lines (line_count=0 path).
+// Field is optional on the wire to remain forward-compatible if the API rolls
+// back; UI degrades gracefully when undefined.
 // ---------------------------------------------------------------------------
+interface PurchaseOrderLinesSummary {
+  line_count: number;          // count(po_line_id), 0 when no lines
+  total_ordered_qty: string;   // sum(ordered_qty)::text  ("0" when no lines)
+  total_received_qty: string;  // sum(received_qty)::text ("0" when no lines)
+  total_open_qty: string;      // sum(open_qty)::text     ("0" when no lines)
+}
+
 interface PurchaseOrderRow {
   po_id: string;
   po_number: string;
@@ -66,6 +77,7 @@ interface PurchaseOrderRow {
   source_run_id: string | null;
   source_recommendation_id: string | null;
   source_type?: "recommendation" | "manual";
+  lines_summary?: PurchaseOrderLinesSummary;
   created_by_user_id: string;
   created_by_snapshot: string;
   created_at: string;
@@ -168,6 +180,89 @@ function SourceBadge({ row }: { row: PurchaseOrderRow }): JSX.Element {
     return <Badge tone="warning" dotted>Manual</Badge>;
   }
   return <span className="text-fg-faint">—</span>;
+}
+
+// ---------------------------------------------------------------------------
+// LinesSummaryCell — renders W1 cycle 9 lines_summary rollup.
+// Shows: receipts ratio "{received}/{ordered}", N-line caption, and an
+// "open" pill when total_open_qty > 0. Static numeric format, no locale
+// formatting — qty strings come from the wire as-is.
+// Defensive: when lines_summary is absent (older API or transient rollback),
+// renders a neutral em-dash placeholder.
+// ---------------------------------------------------------------------------
+function fmtQtyTrim(value: string): string {
+  // Strip trailing zeros and the decimal point if everything after is zero.
+  // Wire format from `pg` numeric is e.g. "10", "10.5000", "0.00000000".
+  const n = Number(value);
+  if (isNaN(n)) return value;
+  return n.toLocaleString("en-US", { maximumFractionDigits: 4 });
+}
+
+function LinesSummaryCell({
+  summary,
+}: {
+  summary: PurchaseOrderLinesSummary | undefined;
+}): JSX.Element {
+  if (!summary) {
+    return <span className="text-fg-faint">—</span>;
+  }
+  const lineCount = summary.line_count;
+  const ordered = Number(summary.total_ordered_qty) || 0;
+  const received = Number(summary.total_received_qty) || 0;
+  const open = Number(summary.total_open_qty) || 0;
+  const pct = ordered > 0 ? Math.min(100, Math.round((received / ordered) * 100)) : 0;
+  const fullyReceived = ordered > 0 && received >= ordered && open === 0;
+  if (lineCount === 0) {
+    return (
+      <div className="flex flex-col gap-0.5">
+        <span className="text-3xs text-fg-faint">No lines</span>
+      </div>
+    );
+  }
+  return (
+    <div className="flex flex-col gap-0.5 min-w-[110px]">
+      <div className="flex items-baseline gap-1">
+        <span
+          className={cn(
+            "font-mono text-xs tabular-nums",
+            fullyReceived ? "text-success-fg" : "text-fg",
+          )}
+        >
+          {fmtQtyTrim(summary.total_received_qty)}
+          <span className="text-fg-faint">/</span>
+          {fmtQtyTrim(summary.total_ordered_qty)}
+        </span>
+        <span className="text-3xs text-fg-faint">
+          {lineCount} line{lineCount === 1 ? "" : "s"}
+        </span>
+      </div>
+      <div
+        className="h-1 w-full overflow-hidden rounded-full bg-border/40"
+        title={`${pct}% received`}
+        role="progressbar"
+        aria-valuenow={pct}
+        aria-valuemin={0}
+        aria-valuemax={100}
+      >
+        <div
+          className={cn(
+            "h-full rounded-full transition-all",
+            fullyReceived
+              ? "bg-success"
+              : received > 0
+                ? "bg-warning"
+                : "bg-border-strong/60",
+          )}
+          style={{ width: `${pct}%` }}
+        />
+      </div>
+      {open > 0 && (
+        <span className="text-3xs font-semibold text-warning-fg tabular-nums">
+          {fmtQtyTrim(summary.total_open_qty)} open
+        </span>
+      )}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -743,6 +838,9 @@ export default function PurchaseOrdersListPage() {
                   <th className="px-3 py-2.5 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Expected
                   </th>
+                  <th className="px-3 py-2.5 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    Receipts
+                  </th>
                   <th className="px-3 py-2.5 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Total net
                   </th>
@@ -829,6 +927,9 @@ export default function PurchaseOrdersListPage() {
                         ) : (
                           <span className="text-fg-faint">—</span>
                         )}
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <LinesSummaryCell summary={r.lines_summary} />
                       </td>
                       <td className="px-3 py-2.5 text-right font-mono text-xs text-fg tabular-nums">
                         {fmtMoney(r.total_net, r.currency)}

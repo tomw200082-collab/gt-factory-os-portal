@@ -1308,6 +1308,38 @@ export default function PurchaseOrderDetailPage({
         meta: headerMeta,
         actions: (
           <div className="flex items-center gap-2">
+            {/*
+              Receive-against-this-PO header CTA per W4 cycle 8 spec
+              docs/integrations/po_attached_gr_enhancement_spec.md §3.
+              Visibility rule (locked §3.1): visible iff status IN ('OPEN','PARTIAL').
+              Routes to /stock/receipts?po_id={po_id} per POE-A13-1 (95% confidence).
+              Replacement on terminal status (RECEIVED/CANCELLED): "View receipts"
+              link routing to the same-page attached-grs tab via DetailPage's
+              ?tab=<key> URL convention. No silent absence.
+              W2 follow-up logged: the canonical /stock/receipts form does not
+              yet honor ?po_id= for pre-fill (W2-FOLLOWUP-RECEIPTS-PO-PREFILL);
+              the param is harmless until that work lands per POE-A13-1.
+            */}
+            {po && (po.status === "OPEN" || po.status === "PARTIAL") && (
+              <Link
+                href={`/stock/receipts?po_id=${encodeURIComponent(po_id)}`}
+                className="btn btn-sm btn-primary"
+                data-testid="po-receive-against-cta"
+                aria-label={`Receive against PO ${po.po_number}`}
+                title="Receiving against this PO will update line balances atomically. Over-receipt is permitted but emits an exception for review."
+              >
+                Receive against this PO →
+              </Link>
+            )}
+            {po && (po.status === "RECEIVED" || po.status === "CANCELLED") && (
+              <Link
+                href={`/purchase-orders/${encodeURIComponent(po_id)}?tab=attached-grs`}
+                className="btn btn-ghost btn-sm"
+                data-testid="po-view-receipts-link"
+              >
+                View receipts →
+              </Link>
+            )}
             {cancelError && (
               <span className="text-xs text-danger-fg">{cancelError}</span>
             )}
