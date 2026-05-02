@@ -1316,9 +1316,11 @@ export default function PurchaseOrderDetailPage({
               Replacement on terminal status (RECEIVED/CANCELLED): "View receipts"
               link routing to the same-page attached-grs tab via DetailPage's
               ?tab=<key> URL convention. No silent absence.
-              W2 follow-up logged: the canonical /stock/receipts form does not
-              yet honor ?po_id= for pre-fill (W2-FOLLOWUP-RECEIPTS-PO-PREFILL);
-              the param is harmless until that work lands per POE-A13-1.
+              Cycle 16 (commit 223ba83) closed the W2-FOLLOWUP-RECEIPTS-PO-PREFILL
+              follow-up: /stock/receipts now reads ?po_id= on mount and locks
+              the supplier picker + prefills lines from the PO's OPEN/PARTIAL
+              lines per W4 cycle 8 spec §3.4. The CTA below feeds directly into
+              that prefill flow.
             */}
             {po && (po.status === "OPEN" || po.status === "PARTIAL") && (
               <Link
