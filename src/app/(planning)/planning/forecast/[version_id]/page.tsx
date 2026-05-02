@@ -347,16 +347,19 @@ export default function ForecastVersionDetailPage() {
   });
 
   // ----- KPI computation -----
-  // Find the next-unfrozen bucket (typical case: bucket[1] when bucket[0] is current month).
-  const nextUnfrozenBucket = useMemo(
-    () => buckets.find((b) => !b.frozen) ?? buckets[buckets.length - 1] ?? null,
+  // Tom-locked amendment 2026-05-02: every bucket is editable, so the KPI
+  // anchor is simply the first bucket in the horizon (the "current/active"
+  // month from the planner's POV — typically the month they just opened the
+  // forecast to edit).
+  const primaryBucket = useMemo(
+    () => buckets[0] ?? null,
     [buckets],
   );
 
   const totalDemandNextMonth = useMemo(() => {
-    if (!nextUnfrozenBucket) return 0;
+    if (!primaryBucket) return 0;
     return lines
-      .filter((l) => l.period_bucket_key === nextUnfrozenBucket.key)
+      .filter((l) => l.period_bucket_key === primaryBucket.key)
       .reduce((acc, l) => {
         // Prefer local cell value when present (planner is mid-edit).
         const localKey = `${l.item_id}|${l.period_bucket_key}`;
@@ -364,15 +367,14 @@ export default function ForecastVersionDetailPage() {
         const v = local !== undefined && local !== "" ? local : l.forecast_quantity;
         return acc + Number(v);
       }, 0);
-  }, [lines, nextUnfrozenBucket, localCells]);
+  }, [lines, primaryBucket, localCells]);
 
   const itemsInForecast = itemsForGrid.length;
   const totalEligibleItems = eligibleItems.length;
 
-  // Cells expected = items with lines × unfrozen buckets.
-  const unfrozenBucketCount = buckets.filter((b) => !b.frozen).length;
+  // Cells expected = items with lines × all buckets in horizon (no frozen skip).
   const expectedCells =
-    new Set(lines.map((l) => l.item_id)).size * unfrozenBucketCount;
+    new Set(lines.map((l) => l.item_id)).size * buckets.length;
   const filledCells = lines.filter(
     (l) => Number(l.forecast_quantity) > 0,
   ).length;
@@ -400,19 +402,19 @@ export default function ForecastVersionDetailPage() {
     staleTime: 5 * 60 * 1000,
   });
 
-  // Compute prev-month's "next-month" demand by aligning to the same bucket
-  // index in the prior version. Cheap heuristic; null if no prior or buckets
+  // Compute prev-month's same-month demand by aligning to the same bucket
+  // key in the prior version. Cheap heuristic; null if no prior or buckets
   // don't align.
   const totalDemandPrevMonth: number | null = useMemo(() => {
     const prior = priorPublishedQueryLines.data;
-    if (!prior || !nextUnfrozenBucket) return null;
+    if (!prior || !primaryBucket) return null;
     // Match by bucket key directly first (best case: same horizon_start_at).
     const sameKey = prior.lines
-      .filter((l) => l.period_bucket_key === nextUnfrozenBucket.key)
+      .filter((l) => l.period_bucket_key === primaryBucket.key)
       .reduce((acc, l) => acc + Number(l.forecast_quantity), 0);
     if (sameKey > 0) return sameKey;
     return null;
-  }, [priorPublishedQueryLines.data, nextUnfrozenBucket]);
+  }, [priorPublishedQueryLines.data, primaryBucket]);
 
   // ----- Mutations -----
   const publishMut = useMutation({
@@ -449,7 +451,6 @@ export default function ForecastVersionDetailPage() {
         const missing: PublishMissingCell[] = [];
         for (const itemId of itemsWithLines) {
           for (const b of buckets) {
-            if (b.frozen) continue;
             const v = linesByCell.get(`${itemId}|${b.key}`);
             if (v === undefined || v === "" || Number(v) <= 0) {
               missing.push({ item_id: itemId, period_bucket_key: b.key });
@@ -481,9 +482,9 @@ export default function ForecastVersionDetailPage() {
   // path; a true line-delete handler is W1 follow-on work if needed.
   const onItemRemove = useCallback(
     (itemId: string) => {
-      // Zero out every cell for this item via auto-save.
+      // Zero out every cell for this item via auto-save (every month is
+      // editable post-amendment 2026-05-02).
       for (const b of buckets) {
-        if (b.frozen) continue;
         autoSave.queueChange({
           item_id: itemId,
           period_bucket_key: b.key,
@@ -706,11 +707,11 @@ export default function ForecastVersionDetailPage() {
         totalEligibleItems={totalEligibleItems}
         totalDemandPrevMonth={totalDemandPrevMonth}
         percentProgress={percentProgress}
-        nextMonthLabel={nextUnfrozenBucket?.label ?? "—"}
+        nextMonthLabel={primaryBucket?.label ?? "—"}
         prevMonthLabel={
-          // Derive prev-month label from the next-unfrozen month minus 1.
-          nextUnfrozenBucket
-            ? prevMonthLabelFromKey(nextUnfrozenBucket.key, version.cadence)
+          // Derive prev-month label from the primary (first) bucket minus 1.
+          primaryBucket
+            ? prevMonthLabelFromKey(primaryBucket.key, version.cadence)
             : null
         }
       />
@@ -725,7 +726,7 @@ export default function ForecastVersionDetailPage() {
         }
         description={
           isEditable
-            ? "Add items via the search box. Edits auto-save after a brief pause. Frozen months (current period) are read-only."
+            ? "Add items via the search box. Edits auto-save after a brief pause."
             : isPublished
               ? "Read-only view of the published forecast."
               : "Read-only."
@@ -748,12 +749,12 @@ export default function ForecastVersionDetailPage() {
                   next.add(itemId);
                   return next;
                 });
-                // Pre-seed an empty-string local value for each unfrozen
-                // bucket so the editor renders editable inputs immediately.
+                // Pre-seed an empty-string local value for each bucket so
+                // the editor renders editable inputs immediately (every
+                // month is editable post-amendment 2026-05-02).
                 setLocalCells((prev) => {
                   const next = { ...prev };
                   for (const b of buckets) {
-                    if (b.frozen) continue;
                     next[`${itemId}|${b.key}`] = "";
                   }
                   return next;

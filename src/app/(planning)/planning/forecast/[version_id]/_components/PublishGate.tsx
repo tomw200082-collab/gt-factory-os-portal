@@ -73,10 +73,11 @@ export function PublishGate({
     );
 
     // Local F1 (sparse): for each item that has at least one line, every
-    // unfrozen bucket should have a non-zero (or at least non-null) entry.
-    // Wave 1 backend treats NULL forecast_quantity as the gate; client-side
-    // we mirror that for preview. Frozen buckets are exempt because the
-    // current-month freeze rule doesn't permit edits anyway.
+    // bucket in the horizon should have a non-zero (or at least non-null)
+    // entry. Wave 1 backend treats NULL forecast_quantity as the gate;
+    // client-side we mirror that for preview. Tom-locked amendment 2026-05-02:
+    // every month is editable, so every month is also F1-required (no frozen
+    // skip).
     const linesByCell = new Map<string, string>();
     for (const l of lines) {
       linesByCell.set(`${l.item_id}|${l.period_bucket_key}`, l.forecast_quantity);
@@ -85,7 +86,6 @@ export function PublishGate({
     const itemsWithLines = new Set(lines.map((l) => l.item_id));
     for (const itemId of itemsWithLines) {
       for (const b of buckets) {
-        if (b.frozen) continue;
         const v = linesByCell.get(`${itemId}|${b.key}`);
         if (v === undefined || v === "" || v === null) {
           localMissing.push({ item_id: itemId, period_bucket_key: b.key });
@@ -198,7 +198,7 @@ export function PublishGate({
                     </div>
                     <div className="mt-0.5 text-fg-muted">
                       Every item in the forecast must have a value for every
-                      unfrozen month.
+                      month.
                     </div>
                   </div>
                 </div>

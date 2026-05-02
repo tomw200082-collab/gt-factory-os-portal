@@ -83,21 +83,24 @@ export function formatInt(raw: number | null | undefined): string {
  * buckets per Tom-lock 2026-05-02):
  *   - bucket[0] = horizon_start_at (always first-of-month for monthly)
  *   - bucket[i] = horizon_start_at + i months (always first-of-month)
- *   - frozen rule: a bucket is frozen iff its month is on or before the
- *     current calendar month (current month = read-only, set last cycle).
  *
  * For cadence='weekly' (legacy 22 forecasts coexist per SC-F1):
  *   - bucket[0] = horizon_start_at (Monday)
  *   - bucket[i] = horizon_start_at + i*7 days
- *   - frozen rule: bucket Monday <= today + 7 days.
  *
  * For cadence='daily': not implemented in v1 wizard; returns daily buckets
  * for completeness only.
+ *
+ * Tom-locked amendment 2026-05-02 (post-Wave-2 click-through smoke):
+ * the frozen-month UX restriction is removed. Every bucket in the horizon
+ * is editable. The data-layer freeze (forecast_versions.published_at +
+ * frozen-via-publish gating in the publish handler) is unchanged — only the
+ * portal-side read-only UX is gone. Consequently, computeMonthBuckets no
+ * longer emits a `frozen` field; callers no longer branch on it.
  */
 export interface MonthBucket {
   key: string; // YYYY-MM-DD
   label: string; // "May 2026" (monthly) / "May 04" (weekly)
-  frozen: boolean;
   cadence: "monthly" | "weekly" | "daily";
 }
 
@@ -107,10 +110,6 @@ export function computeMonthBuckets(
   horizonCount: number,
 ): MonthBucket[] {
   const start = new Date(horizonStartAt + "T00:00:00.000Z");
-  const now = new Date();
-  const currentMonthFirst = new Date(
-    Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1),
-  );
 
   const out: MonthBucket[] = [];
   for (let i = 0; i < horizonCount; i++) {
@@ -125,33 +124,19 @@ export function computeMonthBuckets(
       d.setUTCDate(d.getUTCDate() + i);
     }
     const key = d.toISOString().substring(0, 10);
-    let frozen: boolean;
-    let label: string;
-    if (cadence === "monthly") {
-      frozen = d.getTime() <= currentMonthFirst.getTime();
-      label = d.toLocaleDateString("en-US", {
-        month: "short",
-        year: "numeric",
-        timeZone: "UTC",
-      });
-    } else if (cadence === "weekly") {
-      // Weekly freeze: ISO week-start <= today + 7 days (matches FORECAST_FREEZE_HORIZON_WEEKS=1).
-      const cutoff = new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000);
-      frozen = d.getTime() <= cutoff.getTime();
-      label = d.toLocaleDateString("en-US", {
-        month: "short",
-        day: "2-digit",
-        timeZone: "UTC",
-      });
-    } else {
-      frozen = d.getTime() <= now.getTime();
-      label = d.toLocaleDateString("en-US", {
-        month: "short",
-        day: "2-digit",
-        timeZone: "UTC",
-      });
-    }
-    out.push({ key, label, frozen, cadence });
+    const label =
+      cadence === "monthly"
+        ? d.toLocaleDateString("en-US", {
+            month: "short",
+            year: "numeric",
+            timeZone: "UTC",
+          })
+        : d.toLocaleDateString("en-US", {
+            month: "short",
+            day: "2-digit",
+            timeZone: "UTC",
+          });
+    out.push({ key, label, cadence });
   }
   return out;
 }

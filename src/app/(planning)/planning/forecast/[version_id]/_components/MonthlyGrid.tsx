@@ -8,17 +8,21 @@
 //
 // Sparse grid layout (only items the planner has added are rows):
 //
-//   | Item                  | May 2026 (frozen) | Jun 2026         |
-//   |-----------------------|-------------------|------------------|
-//   | DETOX 1L NO SUGAR     | 200 [lock icon]   | [50] [editable]  |
-//   | FRESH 1L              | —                 | [70] [editable]  |
+//   | Item                  | May 2026         | Jun 2026         |
+//   |-----------------------|------------------|------------------|
+//   | DETOX 1L NO SUGAR     | [200] [editable] | [50]  [editable] |
+//   | FRESH 1L              | —                | [70]  [editable] |
 //
-// Cell rules (Tom-locked):
-//   - Frozen → read-only span; integer display via formatQty (no .00000000);
-//     lock icon adjacent; muted styling
+// Cell rules (Tom-locked, post-amendment 2026-05-02):
+//   - Every month in the horizon is editable. No frozen-month UX. Data-layer
+//     freeze (publish_at) is unchanged — but the planner can edit any draft
+//     month (including current month) at any time per Tom verbatim:
+//     "צריך תמיד אפשרות לעדכן ולמטב את התחזית בכל זמן נתון של כל חודש."
 //   - Editable → numeric input, integer-only via min=0 step=1 + onChange
 //     normalization; right-aligned; tabular-nums; transparent bg until focus
 //   - Empty / zero → renders "—" when not focused
+//   - Read-only fallback only when isEditable=false (e.g., published or
+//     viewer role). No per-bucket read-only branch.
 //
 // Per-row trash icon → onItemRemove(item_id) — confirms via simple confirm()
 // dialog (operator-grade; can upgrade to portal modal later).
@@ -26,7 +30,7 @@
 // English LTR per Tom-locked global standard 2026-05-01.
 // ---------------------------------------------------------------------------
 
-import { Lock, Trash2 } from "lucide-react";
+import { Trash2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { formatQty } from "../_lib/format";
 import type { MonthBucket } from "../_lib/format";
@@ -55,7 +59,7 @@ interface MonthlyGridProps {
   freshlyAddedItemIds: Set<string>;
   /** Bucket columns. Pre-computed by parent (computeMonthBuckets). */
   buckets: MonthBucket[];
-  /** Author may edit (planner / admin on draft). Frozen buckets always read-only. */
+  /** Author may edit (planner / admin on draft). Every bucket is editable when this is true. */
   isEditable: boolean;
   /** Cell edit. value is the raw string (parent normalizes via auto-save). */
   onCellEdit: (itemId: string, bucketKey: string, value: string) => void;
@@ -96,24 +100,13 @@ export function MonthlyGrid(props: MonthlyGridProps) {
               <th
                 key={b.key}
                 scope="col"
-                className={cn(
-                  "min-w-[120px] px-3 py-2.5 text-right font-mono text-3xs font-semibold uppercase tracking-sops",
-                  b.frozen ? "text-fg-faint" : "text-fg-subtle",
-                )}
+                className="min-w-[120px] px-3 py-2.5 text-right font-mono text-3xs font-semibold uppercase tracking-sops text-fg-subtle"
                 data-testid="forecast-grid-bucket-header"
                 data-bucket={b.key}
-                data-frozen={b.frozen ? "1" : "0"}
-                title={b.frozen ? `${b.label} — frozen (current month)` : b.label}
+                title={b.label}
               >
                 <div className="flex items-center justify-end gap-1.5">
                   <span>{b.label}</span>
-                  {b.frozen ? (
-                    <Lock
-                      className="h-3 w-3 text-fg-faint"
-                      strokeWidth={2}
-                      aria-label="frozen"
-                    />
-                  ) : null}
                 </div>
               </th>
             ))}
@@ -154,7 +147,7 @@ export function MonthlyGrid(props: MonthlyGridProps) {
                   const persisted = linesByCell.get(cellKey) ?? "";
                   const local = localCells[cellKey];
                   const displayValue = local !== undefined ? local : persisted;
-                  const readonly = !isEditable || b.frozen;
+                  const readonly = !isEditable;
 
                   return (
                     <td
@@ -163,17 +156,9 @@ export function MonthlyGrid(props: MonthlyGridProps) {
                       data-testid="forecast-grid-cell"
                       data-item-id={item.item_id}
                       data-bucket={b.key}
-                      data-frozen={b.frozen ? "1" : "0"}
                     >
                       {readonly ? (
-                        <span
-                          className={cn(
-                            "block min-w-[100px] px-3 py-2 text-right font-mono text-sm tabular-nums transition-colors duration-150",
-                            b.frozen
-                              ? "bg-bg-subtle/40 text-fg-muted"
-                              : "text-fg",
-                          )}
-                        >
+                        <span className="block min-w-[100px] px-3 py-2 text-right font-mono text-sm tabular-nums text-fg transition-colors duration-150">
                           {formatQty(displayValue)}
                         </span>
                       ) : (
