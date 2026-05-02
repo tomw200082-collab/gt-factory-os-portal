@@ -392,16 +392,96 @@ function ManualPoFormInner(): JSX.Element {
     }
 
     if (res.status === 422) {
+      // Audit P0-2 closure — map structured Zod issues to per-field errors
+      // so the operator sees the offending field highlighted inline rather
+      // than a single generic "VALIDATION_ERROR" toast at the top. Backend
+      // returns issues[] with `path` arrays per Zod convention; we walk the
+      // path and write into the existing `errors` shape.
       const data = (await res.json().catch(() => ({}))) as {
         error?: string;
-        issues?: Array<{ path: string[]; message: string }>;
+        issues?: Array<{ path: Array<string | number>; message: string }>;
       };
-      setServerError(
-        data.error ??
-          (data.issues?.[0]?.message
-            ? `Validation error: ${data.issues[0].message}`
-            : "Validation error. Check the form and try again."),
-      );
+      const fieldErrors: ValidationErrors = {};
+      const lineFieldErrors: Record<
+        number,
+        { orderable_key?: string; quantity?: string; uom?: string }
+      > = {};
+      let mappedCount = 0;
+      let firstFocusId: string | null = null;
+      for (const issue of data.issues ?? []) {
+        const p = issue.path;
+        if (!Array.isArray(p) || p.length === 0) continue;
+        const head = String(p[0]);
+        if (head === "supplier_id") {
+          fieldErrors.supplier_id = issue.message;
+          mappedCount++;
+          if (!firstFocusId) firstFocusId = "po-new-supplier-trigger";
+        } else if (head === "expected_receive_date") {
+          fieldErrors.expected_receive_date = issue.message;
+          mappedCount++;
+          if (!firstFocusId) firstFocusId = "po-new-expected-date";
+        } else if (head === "manual_reason") {
+          fieldErrors.manual_reason = issue.message;
+          mappedCount++;
+          if (!firstFocusId) firstFocusId = "po-new-reason";
+        } else if (head === "lines") {
+          if (typeof p[1] === "number") {
+            const idx = p[1];
+            const sub = p.length > 2 ? String(p[2]) : null;
+            const slot = (lineFieldErrors[idx] ??= {});
+            if (sub === "qty_ordered") {
+              slot.quantity = issue.message;
+              if (!firstFocusId) firstFocusId = `po-new-line-qty-${idx}`;
+            } else if (sub === "uom_id") {
+              slot.uom = issue.message;
+              if (!firstFocusId) firstFocusId = `po-new-line-uom-${idx}`;
+            } else {
+              // catch-all for component_id/item_id constraints
+              slot.orderable_key = issue.message;
+              if (!firstFocusId) firstFocusId = `po-new-line-item-${idx}`;
+            }
+            mappedCount++;
+          } else {
+            fieldErrors.lines = issue.message;
+            mappedCount++;
+          }
+        }
+      }
+      if (Object.keys(lineFieldErrors).length > 0) {
+        fieldErrors.line_items = lineFieldErrors;
+      }
+      if (mappedCount > 0) {
+        setErrors(fieldErrors);
+        setServerError(
+          `Please fix ${mappedCount} field${mappedCount === 1 ? "" : "s"} below — see the highlighted error message${mappedCount === 1 ? "" : "s"}.`,
+        );
+        // Scroll the first invalid field into view + focus.
+        if (firstFocusId && typeof window !== "undefined") {
+          window.requestAnimationFrame(() => {
+            const el = document.getElementById(firstFocusId!);
+            if (el) {
+              el.scrollIntoView({ behavior: "smooth", block: "center" });
+              if ("focus" in el && typeof (el as HTMLElement).focus === "function") {
+                (el as HTMLElement).focus({ preventScroll: true });
+              }
+            }
+          });
+        }
+      } else {
+        // Fall back to a friendlier banner if the backend gave us only a
+        // generic `error` token like "VALIDATION_ERROR" with no issues[].
+        const genericToken = data.error ?? "";
+        const isOpaqueToken =
+          /^[A-Z_]+$/.test(genericToken) && genericToken.length > 0;
+        setServerError(
+          isOpaqueToken
+            ? "Validation failed on the server. Please re-check supplier, line items, and quantities, then try again."
+            : (genericToken ||
+                (data.issues?.[0]?.message
+                  ? `Validation error: ${data.issues[0].message}`
+                  : "Validation error. Check the form and try again.")),
+        );
+      }
       setPhase("idle");
       return;
     }

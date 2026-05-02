@@ -10,19 +10,89 @@ import type {
   RecommendationCandidatesResponse,
 } from "./types";
 
+// ---------------------------------------------------------------------------
+// FetchError — captures HTTP status + (optional) backend detail so the
+// page-level error-state component can render category-aware recovery copy
+// instead of a single canned "try again" line.
+// ---------------------------------------------------------------------------
+export class FetchError extends Error {
+  status: number;
+  detail: string | null;
+  category: "auth" | "permission" | "break_glass" | "server" | "network" | "other";
+  constructor(status: number, detail: string | null, message: string) {
+    super(message);
+    this.name = "FetchError";
+    this.status = status;
+    this.detail = detail;
+    this.category =
+      status === 401
+        ? "auth"
+        : status === 403
+          ? "permission"
+          : status === 503
+            ? "break_glass"
+            : status >= 500
+              ? "server"
+              : status === 0
+                ? "network"
+                : "other";
+  }
+}
+
+async function safeReadDetail(res: Response): Promise<string | null> {
+  try {
+    const txt = await res.text();
+    if (!txt) return null;
+    try {
+      const parsed = JSON.parse(txt) as { detail?: unknown; error?: unknown };
+      if (typeof parsed.detail === "string") return parsed.detail;
+      if (typeof parsed.error === "string") return parsed.error;
+    } catch {
+      // not JSON — return the first 200 chars of the raw body
+    }
+    return txt.slice(0, 200);
+  } catch {
+    return null;
+  }
+}
+
 export function usePlans(from: string, to: string) {
-  return useQuery<ListProductionPlanResponse>({
+  return useQuery<ListProductionPlanResponse, FetchError>({
     queryKey: ["production-plan", from, to],
     queryFn: async () => {
-      const res = await fetch(
-        `/api/production-plan?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
-      );
+      let res: Response;
+      try {
+        res = await fetch(
+          `/api/production-plan?from=${encodeURIComponent(from)}&to=${encodeURIComponent(to)}`,
+        );
+      } catch {
+        throw new FetchError(
+          0,
+          null,
+          "We couldn't reach the server. Check your connection.",
+        );
+      }
       if (!res.ok) {
-        throw new Error("We couldn't load the production plan. Check your connection and try again.");
+        const detail = await safeReadDetail(res);
+        throw new FetchError(
+          res.status,
+          detail,
+          `Could not load the production plan (HTTP ${res.status}).`,
+        );
       }
       return (await res.json()) as ListProductionPlanResponse;
     },
     staleTime: 30_000,
+    retry: (failureCount, err) => {
+      // Don't retry auth / permission / break-glass errors — those are
+      // operator-resolvable (re-login, escalate role, wait for unlock).
+      if (err instanceof FetchError) {
+        if (err.category === "auth" || err.category === "permission" || err.category === "break_glass") {
+          return false;
+        }
+      }
+      return failureCount < 2;
+    },
   });
 }
 

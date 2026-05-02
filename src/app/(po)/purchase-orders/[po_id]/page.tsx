@@ -1280,15 +1280,19 @@ export default function PurchaseOrderDetailPage({
   });
 
   // --- Manual PO banner (shown only when source_type='manual') ---------------
+  // 2026-05-02 — converted Hebrew → English per portal-wide 2026-05-01 English
+  // lock (closes audit P0-D).
   const manualBanner =
     po?.source_type === "manual" ? (
       <div
         className="rounded-md border border-border bg-bg-raised px-4 py-3 text-sm text-fg-muted mb-4"
         data-testid="po-manual-banner"
       >
-        <span className="font-medium text-fg">נוצר ידנית</span> — לא מתוך המלצת רכש
+        <span className="font-medium text-fg">Manual entry</span>
+        {" · "}
+        Not created from a planning recommendation
         {po.manual_reason && (
-          <div className="mt-1 text-fg-muted">סיבה: {po.manual_reason}</div>
+          <div className="mt-1 text-fg-muted">Reason: {po.manual_reason}</div>
         )}
       </div>
     ) : null;

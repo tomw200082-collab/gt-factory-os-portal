@@ -520,8 +520,15 @@ export default function ForecastVersionDetailPage() {
     <>
       <WorkflowHeader
         eyebrow="Planner workspace"
-        title={`Forecast — horizon starts ${fmtHorizonStart(version.horizon_start_at)}`}
-        description={`Horizon starts ${fmtHorizonStart(version.horizon_start_at)} · ${version.horizon_weeks} weeks · ${version.cadence} · site ${version.site_id}`}
+        title="Forecast"
+        description={
+          // "8-week planning horizon" per CLAUDE.md §Forecast lock when the
+          // version matches that horizon; otherwise be explicit about the
+          // actual horizon length so the planner sees the discrepancy.
+          version.horizon_weeks === 8
+            ? `8-week planning horizon · starts ${fmtHorizonStart(version.horizon_start_at)} · ${version.cadence}`
+            : `${version.horizon_weeks}-week horizon · starts ${fmtHorizonStart(version.horizon_start_at)} · ${version.cadence}`
+        }
         meta={
           <>
             <StatusBadge status={version.status} />
@@ -531,6 +538,11 @@ export default function ForecastVersionDetailPage() {
             {version.published_at ? (
               <Badge tone="neutral" dotted>
                 published {fmtDate(version.published_at)}
+              </Badge>
+            ) : null}
+            {version.updated_at && version.updated_at !== version.created_at ? (
+              <Badge tone="neutral" dotted>
+                updated {fmtDate(version.updated_at)}
               </Badge>
             ) : null}
           </>
@@ -603,13 +615,55 @@ export default function ForecastVersionDetailPage() {
       ) : null}
 
       {actionError ? (
-        <div
-          className="mb-3 flex items-center gap-2 rounded border border-danger/30 bg-danger-subtle/40 px-4 py-2 text-xs text-danger-fg"
-          data-testid="forecast-action-error"
-        >
-          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-          {actionError}
-        </div>
+        (() => {
+          // Detect the "expected N cells, found 0" backend leak — it's a
+          // shape-mismatch validation message (the backend wants the request
+          // body to carry one cell per (item × bucket)) that surfaces as a
+          // dead end if shown verbatim. Convert it into an actionable
+          // recovery: surface the seed-all-active-FG flow that's already in
+          // this page (lines below), which fills the grid with every active
+          // item so the planner can fill quantities and re-save.
+          const cellsPattern = /expected\s+\d+\s+cells.*found\s+0/i;
+          const isCellsShapeError = cellsPattern.test(actionError);
+          if (isCellsShapeError) {
+            return (
+              <div
+                className="mb-3 rounded border border-danger/30 bg-danger-subtle/40 px-4 py-3 text-xs text-danger-fg"
+                data-testid="forecast-action-error"
+                data-error-shape="cells-missing"
+              >
+                <div className="flex items-start gap-2">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0 mt-0.5" />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-semibold">
+                      This forecast is missing planning cells.
+                    </div>
+                    <div className="mt-0.5 leading-relaxed text-fg-muted">
+                      The save call expected one quantity per item × bucket but
+                      received none. Add items to the grid below using
+                      <span className="font-mono text-fg"> Seed all active</span>
+                      , fill in quantities, and try Save again. If this keeps
+                      happening on a previously-saved version, contact the
+                      system administrator.
+                    </div>
+                    <div className="mt-1 text-3xs text-fg-faint">
+                      Backend message: <span className="font-mono">{actionError}</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            );
+          }
+          return (
+            <div
+              className="mb-3 flex items-center gap-2 rounded border border-danger/30 bg-danger-subtle/40 px-4 py-2 text-xs text-danger-fg"
+              data-testid="forecast-action-error"
+            >
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+              {actionError}
+            </div>
+          );
+        })()
       ) : null}
 
       {isPublished ? (

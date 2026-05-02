@@ -53,6 +53,7 @@ import {
   useCreatePlan,
   usePatchPlan,
   useRecommendationCandidates,
+  FetchError,
 } from "./_lib/usePlans";
 import type {
   ProductionPlanRow,
@@ -1706,27 +1707,90 @@ export default function ProductionPlanPage() {
           </div>
         </SectionCard>
       ) : plansQuery.isError ? (
-        <SectionCard contentClassName="p-5">
-          <div
-            className="rounded border border-danger/40 bg-danger-softer p-4 text-sm text-danger-fg"
-            data-testid="production-plan-error"
-          >
-            <div className="font-semibold">
-              We couldn't load the production plan.
-            </div>
-            <div className="mt-1 text-xs">
-              Try refreshing the page. If the problem continues, contact the
-              system administrator.
-            </div>
-            <button
-              type="button"
-              onClick={() => void plansQuery.refetch()}
-              className="mt-3 text-xs font-medium underline hover:no-underline"
-            >
-              Try again
-            </button>
-          </div>
-        </SectionCard>
+        (() => {
+          // Category-aware error rendering — closes audit P0-0.
+          // The hook now throws a FetchError carrying status + a stable
+          // category string. We branch off that to show the operator the
+          // smallest concrete next action they can take, instead of a single
+          // canned "try again" line.
+          const err = plansQuery.error;
+          const category =
+            err instanceof FetchError ? err.category : "other";
+          const status = err instanceof FetchError ? err.status : null;
+          let title = "We couldn't load the production plan.";
+          let body =
+            "Check your connection and try again. If the problem continues, contact the system administrator.";
+          let primaryAction: { label: string; onClick: () => void } | null = {
+            label: "Try again",
+            onClick: () => void plansQuery.refetch(),
+          };
+          let secondary: { label: string; href: string } | null = null;
+          if (category === "auth") {
+            title = "Your session expired.";
+            body = "Sign in again and reopen the production plan.";
+            secondary = { label: "Sign in", href: "/login" };
+            primaryAction = null;
+          } else if (category === "permission") {
+            title = "You don't have permission to view this plan.";
+            body =
+              "Ask an admin to grant you the planner or admin role, or go back to the dashboard.";
+            secondary = { label: "Back to dashboard", href: "/dashboard" };
+            primaryAction = null;
+          } else if (category === "break_glass") {
+            title = "The system is in read-only mode (break-glass).";
+            body =
+              "Reads are paused while admins resolve a critical condition. Try again in a few minutes.";
+            secondary = {
+              label: "Open integrations",
+              href: "/admin/integrations#break-glass",
+            };
+          } else if (category === "server") {
+            title = "The server hit an error while loading the plan.";
+            body =
+              "If a release was just deployed, wait 30 seconds and try again. Otherwise contact the system administrator.";
+          } else if (category === "network") {
+            title = "We couldn't reach the server.";
+            body = "Check your network connection and try again.";
+          }
+          return (
+            <SectionCard contentClassName="p-5">
+              <div
+                className="rounded border border-danger/40 bg-danger-softer p-4 text-sm text-danger-fg"
+                data-testid="production-plan-error"
+                data-error-category={category}
+                data-error-status={status ?? "n/a"}
+              >
+                <div className="font-semibold">{title}</div>
+                <div className="mt-1 text-xs">{body}</div>
+                <div className="mt-3 flex flex-wrap items-center gap-3">
+                  {primaryAction ? (
+                    <button
+                      type="button"
+                      onClick={primaryAction.onClick}
+                      className="text-xs font-medium underline hover:no-underline"
+                      data-testid="production-plan-error-retry"
+                    >
+                      {primaryAction.label}
+                    </button>
+                  ) : null}
+                  {secondary ? (
+                    <Link
+                      href={secondary.href}
+                      className="text-xs font-medium underline hover:no-underline"
+                    >
+                      {secondary.label}
+                    </Link>
+                  ) : null}
+                  {status && status >= 500 ? (
+                    <span className="ml-auto text-3xs text-fg-faint">
+                      Reference: HTTP {status}
+                    </span>
+                  ) : null}
+                </div>
+              </div>
+            </SectionCard>
+          );
+        })()
       ) : allPlans.length === 0 ? (
         <SectionCard contentClassName="p-5">
           <div

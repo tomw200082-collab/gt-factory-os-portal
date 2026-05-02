@@ -20,6 +20,13 @@
 //   - DCT2-8 default: ships at NEW route /dashboard/v2; existing /dashboard
 //     7-block page remains untouched.
 //
+// 2026-05-02 P1-1 closure — placeholder dominance fix:
+//   - 7 placeholder cards moved below the two live blocks into a
+//     default-collapsed disclosure ("7 dashboard blocks awaiting read-model").
+//   - Above-the-fold real estate now belongs to: header + quick actions +
+//     break-glass banner (if any) + Critical Today + Slipped Plans.
+//   - Operator answers "what needs my attention today" in <5 seconds.
+//
 // English-only, LTR. Mobile usable @ 390px (vertical reflow; no horizontal
 // scroll except where authorized in §6.5).
 //
@@ -27,12 +34,14 @@
 // ---------------------------------------------------------------------------
 
 import Link from "next/link";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ArrowRight,
   CheckCircle2,
+  ChevronDown,
+  ChevronRight,
   CircleDashed,
   Clock,
   ExternalLink,
@@ -657,6 +666,11 @@ export default function DashboardV2Page() {
     authorizeCapability(role, a.capability),
   );
 
+  // P1-1 closure — placeholder grid is default-collapsed below the live
+  // blocks so above-the-fold belongs to Critical Today + Slipped Plans.
+  // Tom answers "what needs my attention today" in <5 seconds.
+  const [placeholderOpen, setPlaceholderOpen] = useState(false);
+
   // Universal break-glass surface (§5.12 + DCT2-2 dual-surface rule). Reads
   // the existing /api/system/break-glass proxy. The break-glass *row* in the
   // §4.1 block is the operational double-surface; this banner is the
@@ -741,55 +755,97 @@ export default function DashboardV2Page() {
         </div>
       ) : null}
 
-      {/* Live blocks. */}
+      {/* Live blocks — above the fold. */}
       <CriticalTodayBlock now={now} />
       <SlippedPlansBlock now={now} />
 
-      {/* Placeholder cards — kept honest. */}
-      <div className="grid grid-cols-1 gap-4 sm:gap-6 lg:grid-cols-2">
-        <PlaceholderBlock
-          section="§4.2"
-          title="This-week FG stock risk"
-          description="FG items that may run out in the next 7–14 days."
-          icon={<TrendingDown className="h-4 w-4" strokeWidth={2} />}
-        />
-        <PlaceholderBlock
-          section="§4.3"
-          title="This-week planned production"
-          description="Production planned for the next 7 days, by day."
-          icon={<Layers className="h-4 w-4" strokeWidth={2} />}
-        />
-        <PlaceholderBlock
-          section="§4.5"
-          title="Open POs due this week"
-          description="Incoming POs scheduled to receive in the next 7 days."
-          icon={<PackageOpen className="h-4 w-4" strokeWidth={2} />}
-        />
-        <PlaceholderBlock
-          section="§4.6"
-          title="Blocked production"
-          description="Items where production is blocked by master-data gaps."
-          icon={<ShieldAlert className="h-4 w-4" strokeWidth={2} />}
-        />
-        <PlaceholderBlock
-          section="§4.7"
-          title="Blocked purchase"
-          description="Items where purchase is blocked by supplier-mapping gaps."
-          icon={<ShieldAlert className="h-4 w-4" strokeWidth={2} />}
-        />
-        <PlaceholderBlock
-          section="§4.8"
-          title="Integration freshness"
-          description="Last successful pull/push per integration producer."
-          icon={<Plug className="h-4 w-4" strokeWidth={2} />}
-        />
-        <PlaceholderBlock
-          section="§4.9"
-          title="Top-5 exceptions"
-          description="Highest-severity unresolved exceptions, with deep links."
-          icon={<Clock className="h-4 w-4" strokeWidth={2} />}
-        />
-      </div>
+      {/* Placeholder cards — collapsed by default. P1-1 closure. */}
+      <section
+        className="rounded border border-border/60 bg-bg-raised"
+        data-testid="dashboard-v2-placeholders"
+        data-open={placeholderOpen ? "true" : "false"}
+      >
+        <button
+          type="button"
+          onClick={() => setPlaceholderOpen((v) => !v)}
+          className="flex w-full items-center justify-between gap-3 px-4 py-3 text-left hover:bg-bg-subtle/50"
+          aria-expanded={placeholderOpen}
+          aria-controls="dashboard-v2-placeholder-grid"
+          data-testid="dashboard-v2-placeholders-toggle"
+        >
+          <div className="flex items-center gap-2">
+            {placeholderOpen ? (
+              <ChevronDown
+                className="h-4 w-4 shrink-0 text-fg-muted"
+                strokeWidth={2}
+              />
+            ) : (
+              <ChevronRight
+                className="h-4 w-4 shrink-0 text-fg-muted"
+                strokeWidth={2}
+              />
+            )}
+            <span className="text-sm font-semibold text-fg-strong">
+              Coming next
+            </span>
+            <Badge tone="neutral" variant="outline">
+              7 blocks awaiting read-model
+            </Badge>
+          </div>
+          <span className="text-xs text-fg-muted">
+            {placeholderOpen ? "Hide" : "Show"}
+          </span>
+        </button>
+        {placeholderOpen ? (
+          <div
+            id="dashboard-v2-placeholder-grid"
+            className="grid grid-cols-1 gap-4 border-t border-border/40 p-4 sm:gap-6 lg:grid-cols-2"
+          >
+            <PlaceholderBlock
+              section="§4.2"
+              title="This-week FG stock risk"
+              description="FG items that may run out in the next 7–14 days."
+              icon={<TrendingDown className="h-4 w-4" strokeWidth={2} />}
+            />
+            <PlaceholderBlock
+              section="§4.3"
+              title="This-week planned production"
+              description="Production planned for the next 7 days, by day."
+              icon={<Layers className="h-4 w-4" strokeWidth={2} />}
+            />
+            <PlaceholderBlock
+              section="§4.5"
+              title="Open POs due this week"
+              description="Incoming POs scheduled to receive in the next 7 days."
+              icon={<PackageOpen className="h-4 w-4" strokeWidth={2} />}
+            />
+            <PlaceholderBlock
+              section="§4.6"
+              title="Blocked production"
+              description="Items where production is blocked by master-data gaps."
+              icon={<ShieldAlert className="h-4 w-4" strokeWidth={2} />}
+            />
+            <PlaceholderBlock
+              section="§4.7"
+              title="Blocked purchase"
+              description="Items where purchase is blocked by supplier-mapping gaps."
+              icon={<ShieldAlert className="h-4 w-4" strokeWidth={2} />}
+            />
+            <PlaceholderBlock
+              section="§4.8"
+              title="Integration freshness"
+              description="Last successful pull/push per integration producer."
+              icon={<Plug className="h-4 w-4" strokeWidth={2} />}
+            />
+            <PlaceholderBlock
+              section="§4.9"
+              title="Top-5 exceptions"
+              description="Highest-severity unresolved exceptions, with deep links."
+              icon={<Clock className="h-4 w-4" strokeWidth={2} />}
+            />
+          </div>
+        ) : null}
+      </section>
     </div>
   );
 }
