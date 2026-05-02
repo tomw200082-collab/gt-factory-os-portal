@@ -69,6 +69,11 @@ interface BomLineSnapshot {
   component_name: string;
   final_component_qty: string; // preserves precision
   component_uom: string | null;
+  // Per-row source tag added by the two-head BOM explosion (Tranche 2 of the
+  // 2026-05-02 two-head BOM repair). 'pack' = line came from the pack (or
+  // single-head MANUFACTURED/REPACK) BOM; 'base' = line came from the linked
+  // base liquid BOM. When the item has no linked base, every row is 'pack'.
+  source: "pack" | "base";
 }
 
 interface ProductionActualOpenResponse {
@@ -81,6 +86,17 @@ interface ProductionActualOpenResponse {
   bom_version_label: string;
   bom_final_output_qty: string;
   bom_final_output_uom: string;
+  // Two-head BOM fields (Tranche 2). All non-null only when the item has a
+  // linked base (liquid) BOM; null on single-head items (pure MANUFACTURED
+  // or REPACK with no linked base). When non-null, the preview renders the
+  // pack and base lines under separate sub-headings and a composition banner
+  // explains the per-unit base draw.
+  base_bom_version_id_pinned: string | null;
+  base_bom_head_id: string | null;
+  base_bom_version_label: string | null;
+  base_bom_final_output_qty: string | null;
+  base_bom_final_output_uom: string | null;
+  base_qty_per_pack_unit: string | null;
   bom_lines: BomLineSnapshot[];
 }
 
@@ -89,6 +105,11 @@ interface ProductionActualSubmit {
   event_at: string;
   item_id: string;
   bom_version_id_pinned: string;
+  // Two-head pin (Tranche 2). Pass through whatever the OPEN response
+  // returned: the linked base BOM version id when the item has a linked
+  // base, NULL when single-head. Backend uses this for STALE_BOM_VERSION
+  // detection on the base head (mirror semantics of bom_version_id_pinned).
+  base_bom_version_id_pinned: string | null;
   output_qty: number;
   scrap_qty: number;
   output_uom: string;
@@ -649,6 +670,12 @@ export default function ProductionActualPage() {
         event_at: new Date(eventAt).toISOString(),
         item_id: snapshot.item_id,
         bom_version_id_pinned: snapshot.bom_version_id_pinned,
+        // Two-head pin pass-through (Tranche 4). Forward exactly what the
+        // OPEN response returned — null on single-head items, an id on
+        // items with a linked base BOM. Backend stores this in
+        // production_actual.base_bom_version_id_pinned (Tranche 1 column)
+        // and uses it for base-side STALE_BOM_VERSION detection.
+        base_bom_version_id_pinned: snapshot.base_bom_version_id_pinned,
         output_qty: outNum,
         scrap_qty: scrapNum,
         output_uom: outputUom,
@@ -928,6 +955,13 @@ export default function ProductionActualPage() {
 
   // Preview panel — multiplies bom_lines × (output + scrap) / bom_final_output.
   // Server re-explodes authoritatively; this is informational only.
+  //
+  // Two-head note (Tranche 4): the per-row `source` ('pack' | 'base') is
+  // carried through verbatim so the rendering layer can group lines under
+  // the two operator-facing sub-headings (רכיבי אריזה / רכיבי נוזל). The
+  // client-side scaling math is the same for both sources because the
+  // backend already explodes BASE-line quantities to "per pack unit" on the
+  // OPEN response — every line scales linearly with (output + scrap).
   const previewRows = useMemo(() => {
     if (!snapshot)
       return [] as Array<{
@@ -935,6 +969,7 @@ export default function ProductionActualPage() {
         component_name: string;
         consumption_preview: string;
         component_uom: string | null;
+        source: "pack" | "base";
       }>;
     const productionQty = Number(outputQty || "0") + Number(scrapQty || "0");
     if (!Number.isFinite(productionQty) || productionQty <= 0) return [];
@@ -947,8 +982,20 @@ export default function ProductionActualPage() {
         productionQty,
       ),
       component_uom: bl.component_uom,
+      source: bl.source,
     }));
   }, [snapshot, outputQty, scrapQty]);
+
+  // Split the preview rows into pack vs base groups for the two-head
+  // rendering. Memoised so React only recomputes when the underlying
+  // previewRows list changes. When the item has no linked base BOM the
+  // baseRows list will be empty and the rendering layer hides the
+  // "רכיבי נוזל" sub-heading entirely.
+  const previewRowsByGroup = useMemo(() => {
+    const pack = previewRows.filter((r) => r.source === "pack");
+    const base = previewRows.filter((r) => r.source === "base");
+    return { pack, base };
+  }, [previewRows]);
 
   // Plan-link banner state derived from the live plan query. This is the
   // small chip at the top of the form that confirms "you are reporting
@@ -1572,55 +1619,134 @@ export default function ProductionActualPage() {
               {snapshot?.bom_lines.length ?? 0})
             </button>
             {previewExpanded && snapshot ? (
-              previewRows.length === 0 ? (
-                <div className="text-xs text-fg-muted">
-                  Enter an output or scrap quantity to see expected
-                  consumption.
-                </div>
-              ) : (
-                <div className="overflow-x-auto">
-                  <table className="w-full border-collapse text-xs">
-                    <thead>
-                      <tr className="border-b border-border/70 bg-bg-subtle/60">
-                        <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                          Component
-                        </th>
-                        <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                          Expected consumption
-                        </th>
-                        <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                          Unit
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {previewRows.map((r) => (
-                        <tr
-                          key={r.component_id}
-                          className="border-b border-border/40 last:border-b-0"
-                        >
-                          <td className="px-3 py-2">
-                            <div className="text-fg-strong">
-                              {r.component_name}
-                            </div>
-                            {isAdmin ? (
-                              <div className="font-mono text-3xs text-fg-muted">
-                                {r.component_id}
-                              </div>
-                            ) : null}
-                          </td>
-                          <td className="px-3 py-2 font-mono tabular-nums text-fg">
-                            {r.consumption_preview}
-                          </td>
-                          <td className="px-3 py-2 text-fg-muted">
-                            {r.component_uom ?? "—"}
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )
+              <>
+                {/* Two-head composition banner — rendered above the preview
+                    table when the item has a linked base liquid BOM. The
+                    operator-facing copy follows the Tom-locked Hebrew
+                    register: "מוצר זה מורכב מאריזה (label) ובסיס נוזל
+                    (label). כל יחידה צורכת qty uom בסיס." */}
+                {snapshot.base_bom_version_id_pinned ? (
+                  <div className="mb-3 text-sm text-fg-muted">
+                    מוצר זה מורכב מאריזה ({snapshot.bom_version_label}) ובסיס
+                    נוזל ({snapshot.base_bom_version_label}). כל יחידה צורכת{" "}
+                    {snapshot.base_qty_per_pack_unit}{" "}
+                    {snapshot.base_bom_final_output_uom} בסיס.
+                  </div>
+                ) : null}
+                {previewRows.length === 0 ? (
+                  <div className="text-xs text-fg-muted">
+                    Enter an output or scrap quantity to see expected
+                    consumption.
+                  </div>
+                ) : (
+                  <div className="space-y-4">
+                    {/* Pack / single-head sub-group. Always rendered when
+                        rows exist (single-head items put every line here). */}
+                    {previewRowsByGroup.pack.length > 0 ? (
+                      <div>
+                        <h3 className="mb-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                          רכיבי אריזה ({previewRowsByGroup.pack.length})
+                        </h3>
+                        <div className="overflow-x-auto">
+                          <table className="w-full border-collapse text-xs">
+                            <thead>
+                              <tr className="border-b border-border/70 bg-bg-subtle/60">
+                                <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                                  Component
+                                </th>
+                                <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                                  Expected consumption
+                                </th>
+                                <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                                  Unit
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {previewRowsByGroup.pack.map((r) => (
+                                <tr
+                                  key={r.component_id}
+                                  className="border-b border-border/40 last:border-b-0"
+                                >
+                                  <td className="px-3 py-2">
+                                    <div className="text-fg-strong">
+                                      {r.component_name}
+                                    </div>
+                                    {isAdmin ? (
+                                      <div className="font-mono text-3xs text-fg-muted">
+                                        {r.component_id}
+                                      </div>
+                                    ) : null}
+                                  </td>
+                                  <td className="px-3 py-2 font-mono tabular-nums text-fg">
+                                    {r.consumption_preview}
+                                  </td>
+                                  <td className="px-3 py-2 text-fg-muted">
+                                    {r.component_uom ?? "—"}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : null}
+
+                    {/* Base / liquid sub-group. Rendered ONLY when at least
+                        one base line exists (i.e. the item has a linked
+                        base BOM AND that BOM has component lines). */}
+                    {previewRowsByGroup.base.length > 0 ? (
+                      <div>
+                        <h3 className="mb-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                          רכיבי נוזל ({previewRowsByGroup.base.length})
+                        </h3>
+                        <div className="overflow-x-auto">
+                          <table className="w-full border-collapse text-xs">
+                            <thead>
+                              <tr className="border-b border-border/70 bg-bg-subtle/60">
+                                <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                                  Component
+                                </th>
+                                <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                                  Expected consumption
+                                </th>
+                                <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                                  Unit
+                                </th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {previewRowsByGroup.base.map((r) => (
+                                <tr
+                                  key={r.component_id}
+                                  className="border-b border-border/40 last:border-b-0"
+                                >
+                                  <td className="px-3 py-2">
+                                    <div className="text-fg-strong">
+                                      {r.component_name}
+                                    </div>
+                                    {isAdmin ? (
+                                      <div className="font-mono text-3xs text-fg-muted">
+                                        {r.component_id}
+                                      </div>
+                                    ) : null}
+                                  </td>
+                                  <td className="px-3 py-2 font-mono tabular-nums text-fg">
+                                    {r.consumption_preview}
+                                  </td>
+                                  <td className="px-3 py-2 text-fg-muted">
+                                    {r.component_uom ?? "—"}
+                                  </td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
+                )}
+              </>
             ) : null}
           </SectionCard>
 
