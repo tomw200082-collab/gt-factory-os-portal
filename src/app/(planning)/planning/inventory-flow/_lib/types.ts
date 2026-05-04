@@ -62,6 +62,12 @@ export interface FlowWeek {
   // hasn't shipped yet.
   min_on_hand_with_production?: number | null;
   stockout_day_with_production?: string | null;
+  // 2026-05-04 fix: server-computed 5-tier classifier for the week cell,
+  // keyed on days-from-week_start to next stockout (same Tom-locked
+  // thresholds as the per-day classifier). Replaces the front-end's
+  // coarse 4→5 mapping. Optional so the portal degrades gracefully if
+  // the API hasn't rolled forward yet.
+  cell_tier_with_production?: CellTierWithProduction | null;
 }
 
 export interface FlowItem {

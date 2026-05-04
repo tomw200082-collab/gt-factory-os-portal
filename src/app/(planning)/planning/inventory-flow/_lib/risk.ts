@@ -108,25 +108,27 @@ export function dayCellClassNameProduction(
 }
 
 /**
- * Map a week-level FlowWeek tier to the same 5-tier palette using the
- * production-aware stockout-day signal when present. Approximation:
- *   - tier === 'stockout' OR week has a stockout_day_with_production
- *     anywhere in the week  → critical_stockout
- *   - tier === 'critical'  → at_risk (one tick down — week-level
- *                           granularity is coarser than per-day)
- *   - tier === 'watch'     → low
- *   - tier === 'healthy'   → healthy
- * For full per-day fidelity prefer the day-cell classifier.
+ * Week-cell background using the server-computed 5-tier classifier
+ * (`cell_tier_with_production`). Falls back to the coarse 4→5 mapping
+ * below when the API hasn't shipped the new field yet (Vercel +
+ * Railway can roll forward independently).
  */
 export function weekCellClassNameProduction(
-  tier: RiskTier,
+  cellTierWithProduction: CellTierWithProduction | null | undefined,
+  fallbackTier: RiskTier,
   hasProductionAwareStockout: boolean,
 ): string {
-  if (tier === "stockout" || hasProductionAwareStockout) {
+  if (cellTierWithProduction) {
+    return DAY_CELL_BG_WITH_PRODUCTION[cellTierWithProduction];
+  }
+  // Legacy fallback — was the only path before the server-computed
+  // per-week classifier shipped. Kept so the portal degrades gracefully
+  // during deployment ordering.
+  if (fallbackTier === "stockout" || hasProductionAwareStockout) {
     return DAY_CELL_BG_WITH_PRODUCTION.critical_stockout;
   }
-  if (tier === "critical") return DAY_CELL_BG_WITH_PRODUCTION.at_risk;
-  if (tier === "watch") return DAY_CELL_BG_WITH_PRODUCTION.low;
+  if (fallbackTier === "critical") return DAY_CELL_BG_WITH_PRODUCTION.at_risk;
+  if (fallbackTier === "watch") return DAY_CELL_BG_WITH_PRODUCTION.low;
   return DAY_CELL_BG_WITH_PRODUCTION.healthy;
 }
 

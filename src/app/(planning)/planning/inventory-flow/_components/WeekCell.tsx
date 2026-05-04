@@ -64,7 +64,11 @@ function WeekCellInner({
     <div
       className={cn(
         "relative flex h-[52px] w-[96px] flex-col items-center justify-center gap-0.5 text-xs tabular-nums transition-colors hover:brightness-95",
-        weekCellClassNameProduction(week.tier, hasProductionAwareStockout),
+        weekCellClassNameProduction(
+          week.cell_tier_with_production,
+          week.tier,
+          hasProductionAwareStockout,
+        ),
       )}
       title={`Week of ${week.week_start} — min on-hand ${fmtQty(minOnHand)}`}
     >

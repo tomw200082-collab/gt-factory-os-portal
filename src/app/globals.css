@@ -77,21 +77,23 @@
     --info-fg: 210 40% 26%;
     --info-border: 210 26% 58%;
 
-    /* ——— Inventory Flow 5-tier gradient (red → orange → yellow →
-       yellow-green → green). Saturated thermal-map fills with high
-       lightness spread (≥10pt between tiers) so each tier reads
-       instantly even at xs/3xs cell sizes. Foregrounds tuned for
-       contrast (white on saturated dark bg; near-black on bright
-       amber). Tom-locked 2026-05-04 (deepened palette). ——— */
-    --tier-critical-bg: 0 75% 38%;          /* deep saturated red — critical_stockout */
-    --tier-critical-fg: 0 0% 98%;
-    --tier-at-risk-bg: 15 85% 48%;          /* hot red-orange — at_risk */
+    /* ——— Inventory Flow 5-tier gradient — refined Nordic / data-viz
+       palette (Stripe analytics, Apple Health). Saturation 28-50%,
+       lightness 35-50%: deep enough to read on dark theme without
+       grabbing attention. Replaces the previous saturated thermal-map
+       palette ("carnival") per Tom feedback 2026-05-04 — wants
+       elegant ("אלגנטיים"). Foregrounds tuned for contrast on each
+       muted background (near-white on muted brick / terracotta /
+       sage / forest; near-black on mustard amber). ——— */
+    --tier-critical-bg: 0 45% 38%;          /* muted brick / wine red — critical_stockout */
+    --tier-critical-fg: 0 0% 96%;
+    --tier-at-risk-bg: 15 50% 45%;          /* terracotta — at_risk */
     --tier-at-risk-fg: 0 0% 100%;
-    --tier-low-bg: 38 95% 50%;              /* vivid amber/yellow-orange — low */
-    --tier-low-fg: 0 0% 12%;
-    --tier-medium-bg: 75 70% 42%;           /* lime / yellow-green — medium */
+    --tier-low-bg: 40 45% 50%;              /* refined mustard amber — low */
+    --tier-low-fg: 30 30% 12%;
+    --tier-medium-bg: 90 28% 45%;           /* sage green — medium */
     --tier-medium-fg: 0 0% 100%;
-    --tier-healthy-bg: 145 65% 32%;         /* forest green — healthy */
+    --tier-healthy-bg: 150 35% 35%;         /* forest / pine green — healthy */
     --tier-healthy-fg: 0 0% 100%;
 
     /* ——— Surface effects ——— */
@@ -172,22 +174,22 @@
     --info-fg: 210 60% 80%;
     --info-border: 210 40% 38%;
 
-    /* ——— Inventory Flow 5-tier gradient (dark theme: vivid thermal-map
-       palette tuned to POP on warm graphite, not blend in). Same hue
-       ladder as light theme; lightness 38-52% with high saturation so
-       each tier is unmistakable at a glance. Foregrounds high-contrast
-       (white on saturated red/orange/green; near-black on bright amber).
-       Tom-locked 2026-05-04 (deepened palette: previous 16-18% read as
-       "5 shades of muddy" on dark theme). ——— */
-    --tier-critical-bg: 0 78% 42%;          /* deep saturated red — critical_stockout */
-    --tier-critical-fg: 0 0% 98%;
-    --tier-at-risk-bg: 15 88% 50%;          /* hot red-orange — at_risk */
+    /* ——— Inventory Flow 5-tier gradient (dark theme): same refined
+       Nordic / data-viz palette as light theme, lightness bumped ~+2-4
+       so the muted tones still read on warm graphite without losing
+       their restrained character. Tom feedback 2026-05-04: elegant,
+       not garish — when an item is fully covered the cell should say
+       "all good" without grabbing attention; when critical it should
+       say "broken" with dignity. ——— */
+    --tier-critical-bg: 0 45% 42%;          /* muted brick / wine red — critical_stockout */
+    --tier-critical-fg: 0 0% 96%;
+    --tier-at-risk-bg: 15 50% 49%;          /* terracotta — at_risk */
     --tier-at-risk-fg: 0 0% 100%;
-    --tier-low-bg: 38 95% 52%;              /* vivid amber/yellow-orange — low */
-    --tier-low-fg: 0 0% 12%;
-    --tier-medium-bg: 75 70% 44%;           /* lime / yellow-green — medium */
+    --tier-low-bg: 40 45% 54%;              /* refined mustard amber — low */
+    --tier-low-fg: 30 30% 12%;
+    --tier-medium-bg: 90 28% 49%;           /* sage green — medium */
     --tier-medium-fg: 0 0% 100%;
-    --tier-healthy-bg: 145 65% 36%;         /* forest green — healthy */
+    --tier-healthy-bg: 150 35% 39%;         /* forest / pine green — healthy */
     --tier-healthy-fg: 0 0% 100%;
 
     /* ——— Surface effects ——— */
