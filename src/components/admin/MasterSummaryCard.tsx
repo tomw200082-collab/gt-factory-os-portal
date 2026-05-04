@@ -7,6 +7,12 @@ export interface CompletenessItem {
   label: string;
   status: "ok" | "warn" | "error" | "na";
   detail?: string;
+  /**
+   * Optional inline fix-it action rendered next to the completeness row.
+   * Used for things like an "+ Assign primary supplier" CTA when the row is
+   * in error state, so the user can act without hunting through tabs.
+   */
+  fixAction?: ReactNode;
 }
 
 interface MasterSummaryCardProps {
@@ -15,6 +21,12 @@ interface MasterSummaryCardProps {
   entityType: string;
   status: string;
   completeness: CompletenessItem[];
+  /**
+   * Prominent call-to-action rendered before the secondary actions cluster.
+   * Use for one big primary action (e.g. "+ Assign primary supplier") when
+   * the entity is missing a critical link.
+   */
+  primaryAction?: ReactNode;
   actions?: ReactNode;
 }
 
@@ -44,6 +56,7 @@ export function MasterSummaryCard({
   entityType,
   status,
   completeness,
+  primaryAction,
   actions,
 }: MasterSummaryCardProps) {
   return (
@@ -59,8 +72,11 @@ export function MasterSummaryCard({
           <h2 className="text-lg font-semibold text-fg-strong leading-tight">{name}</h2>
           <p className="text-xs font-mono text-fg-muted mt-0.5">{code}</p>
         </div>
-        {actions ? (
-          <div className="flex flex-wrap items-center gap-2 shrink-0">{actions}</div>
+        {primaryAction || actions ? (
+          <div className="flex flex-wrap items-center gap-2 shrink-0">
+            {primaryAction}
+            {actions}
+          </div>
         ) : null}
       </div>
 
@@ -69,12 +85,15 @@ export function MasterSummaryCard({
           {completeness.map((item) => (
             <div key={item.label} className="flex items-start gap-2 text-sm">
               <CompletenessIcon status={item.status} />
-              <span className="text-fg-muted">
+              <span className="text-fg-muted flex-1 min-w-0">
                 {item.label}
                 {item.detail ? (
                   <span className="text-fg-subtle"> — {item.detail}</span>
                 ) : null}
               </span>
+              {item.fixAction ? (
+                <span className="shrink-0">{item.fixAction}</span>
+              ) : null}
             </div>
           ))}
         </div>

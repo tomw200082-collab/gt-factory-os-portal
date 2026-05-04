@@ -24,6 +24,7 @@ import { SectionCard } from "@/components/workflow/SectionCard";
 import { InlineEditCell } from "@/components/tables/InlineEditCell";
 import { QuickCreateSupplierItem } from "@/components/admin/quick-create/QuickCreateSupplierItem";
 import { MasterSummaryCard, type CompletenessItem } from "@/components/admin/MasterSummaryCard";
+import { AssignPrimarySupplierDrawer } from "@/components/admin/AssignPrimarySupplierDrawer";
 import { ClassWEditDrawer } from "@/components/admin/ClassWEditDrawer";
 import { UsedInRecipes } from "@/components/admin/UsedInRecipes";
 import type { EntityOption } from "@/components/fields/EntityPickerPlus";
@@ -152,6 +153,7 @@ export default function AdminComponentDetailPage({
   const queryClient = useQueryClient();
 
   const [showAddSupplier, setShowAddSupplier] = useState(false);
+  const [showAssignPrimary, setShowAssignPrimary] = useState(false);
   const [editBanner, setEditBanner] = useState<{ kind: "success" | "error"; message: string } | null>(null);
   const [showStatusDrawer, setShowStatusDrawer] = useState(false);
   const [drawerStatusTarget, setDrawerStatusTarget] = useState<string>("");
@@ -323,6 +325,16 @@ export default function AdminComponentDetailPage({
         label: "Primary supplier",
         status: primarySiItem ? "ok" : "error",
         detail: primarySiItem ? supplierNameOf(primarySiItem.supplier_id) : "No primary supplier set",
+        fixAction:
+          !primarySiItem && isAdmin ? (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => setShowAssignPrimary(true)}
+            >
+              Assign primary supplier
+            </button>
+          ) : undefined,
       },
       {
         label: "Standard cost",
@@ -330,7 +342,9 @@ export default function AdminComponentDetailPage({
         detail: hasCost ? undefined : "No cost set on any sourcing link",
       },
     ];
-  }, [row, allSi]);
+  }, [row, allSi, isAdmin]);
+
+  const noPrimarySupplier = !allSi.some((si) => si.is_primary);
 
   const headerMeta = row ? (
     <>
@@ -568,7 +582,21 @@ export default function AdminComponentDetailPage({
             </div>
           ) : null}
           {allSi.length === 0 ? (
-            <DetailTabEmpty message="No sourcing links for this component." />
+            <div className="space-y-3">
+              <DetailTabEmpty message="No sourcing links for this component." />
+              {isAdmin ? (
+                <div className="flex justify-center">
+                  <button
+                    type="button"
+                    className="btn-primary inline-flex items-center gap-1.5"
+                    onClick={() => setShowAssignPrimary(true)}
+                  >
+                    <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+                    Assign primary supplier
+                  </button>
+                </div>
+              ) : null}
+            </div>
           ) : (
             <SupplierItemsTable
               rows={allSi}
@@ -711,6 +739,18 @@ export default function AdminComponentDetailPage({
           entityType="Raw material / Packaging component"
           status={row.status}
           completeness={completenessItems}
+          primaryAction={
+            isAdmin && noPrimarySupplier ? (
+              <button
+                type="button"
+                className="btn-primary btn-sm inline-flex items-center gap-1.5"
+                onClick={() => setShowAssignPrimary(true)}
+              >
+                <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+                Assign primary supplier
+              </button>
+            ) : null
+          }
           actions={
             isAdmin ? (
               <button
@@ -773,18 +813,40 @@ export default function AdminComponentDetailPage({
         linkages={linkages}
       />
       {isAdmin ? (
-        <QuickCreateSupplierItem
-          open={showAddSupplier}
-          onClose={() => setShowAddSupplier(false)}
-          onCreated={() => {
-            setEditBanner({ kind: "success", message: "Sourcing link added." });
-            void queryClient.invalidateQueries({ queryKey: siQueryKey });
-          }}
-          suppliers={supplierOptions}
-          components={[]}
-          items={[]}
-          defaultComponentId={component_id}
-        />
+        <>
+          <QuickCreateSupplierItem
+            open={showAddSupplier}
+            onClose={() => setShowAddSupplier(false)}
+            onCreated={() => {
+              setEditBanner({ kind: "success", message: "Sourcing link added." });
+              void queryClient.invalidateQueries({ queryKey: siQueryKey });
+            }}
+            suppliers={supplierOptions}
+            components={[]}
+            items={[]}
+            defaultComponentId={component_id}
+          />
+          <AssignPrimarySupplierDrawer
+            open={showAssignPrimary}
+            onClose={() => setShowAssignPrimary(false)}
+            onAssigned={() => {
+              setEditBanner({ kind: "success", message: "Primary supplier assigned." });
+              void queryClient.invalidateQueries({ queryKey: siQueryKey });
+              void queryClient.invalidateQueries({
+                queryKey: ["admin", "masters", "component", component_id],
+              });
+            }}
+            suppliers={supplierOptions}
+            existingSupplierItems={allSi.map((si) => ({
+              supplier_item_id: si.supplier_item_id,
+              supplier_id: si.supplier_id,
+              is_primary: si.is_primary,
+              updated_at: si.updated_at,
+            }))}
+            componentId={component_id}
+            targetNoun="raw material"
+          />
+        </>
       ) : null}
     </>
   );

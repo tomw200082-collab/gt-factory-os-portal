@@ -24,6 +24,7 @@ import { use, useState, useMemo } from "react";
 import { fmtSupplyMethod } from "@/lib/display";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { Plus } from "lucide-react";
 import {
   DetailPage,
   DetailFieldGrid,
@@ -39,9 +40,11 @@ import { Badge } from "@/components/badges/StatusBadge";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { InlineEditCell } from "@/components/tables/InlineEditCell";
 import { MasterSummaryCard, type CompletenessItem } from "@/components/admin/MasterSummaryCard";
+import { AssignPrimarySupplierDrawer } from "@/components/admin/AssignPrimarySupplierDrawer";
 import { RecipeHealthCard } from "@/components/admin/recipe-health/RecipeHealthCard";
 import { VersionHistorySection } from "@/components/admin/recipe-health/VersionHistorySection";
 import { ClassWEditDrawer } from "@/components/admin/ClassWEditDrawer";
+import type { EntityOption } from "@/components/fields/EntityPickerPlus";
 import { AdminMutationError, patchEntity, postStatus } from "@/lib/admin/mutations";
 import { useSession } from "@/lib/auth/session-provider";
 
@@ -113,6 +116,7 @@ interface SupplierItemRow {
   order_uom: string | null;
   lead_time_days: number | null;
   approval_status: string | null;
+  updated_at: string;
 }
 
 interface SupplierItemsListResponse {
@@ -284,6 +288,25 @@ export default function AdminItemDetailPage({
 
   const [showStatusDrawer, setShowStatusDrawer] = useState(false);
   const [drawerStatusTarget, setDrawerStatusTarget] = useState<string>("");
+  const [showAssignPrimary, setShowAssignPrimary] = useState(false);
+
+  // Suppliers picker options — needed so the assign-primary drawer can show
+  // names (not IDs). Loaded for everyone so the rendered dropdown labels are
+  // the same name set the rest of the UI uses.
+  const supplierOptions: EntityOption[] = useMemo(
+    () =>
+      (suppliersQuery.data?.rows ?? []).map((s) => ({
+        id: s.supplier_id,
+        label: s.supplier_name_official,
+        sublabel: s.supplier_id,
+      })),
+    [suppliersQuery.data],
+  );
+
+  const itemSupplierItems = itemSupplierItemsQuery.data?.rows ?? [];
+  const itemHasPrimarySupplier = itemSupplierItems.some((si) => si.is_primary);
+  const isBoughtFinished = row?.supply_method === "BOUGHT_FINISHED";
+  const showAssignPrimaryCta = isAdmin && isBoughtFinished && !itemHasPrimarySupplier;
 
   const itemFieldMutation = useMutation({
     mutationFn: async (args: { field: string; value: unknown; updated_at: string }) =>
@@ -322,11 +345,25 @@ export default function AdminItemDetailPage({
         ? [{ label: "Active recipe (BOM)", status: hasActiveBom ? ("ok" as const) : ("error" as const), detail: hasActiveBom ? undefined : "No BOM linked — item cannot be planned" }]
         : []),
       ...(isBought
-        ? [{ label: "Primary supplier", status: primarySi.length > 0 ? ("ok" as const) : ("warn" as const), detail: primarySi.length > 0 ? supplierNameOf(primarySi[0]!.supplier_id) : "No primary supplier set" }]
+        ? [{
+            label: "Primary supplier",
+            status: primarySi.length > 0 ? ("ok" as const) : ("warn" as const),
+            detail: primarySi.length > 0 ? supplierNameOf(primarySi[0]!.supplier_id) : "No primary supplier set",
+            fixAction:
+              primarySi.length === 0 && isAdmin ? (
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={() => setShowAssignPrimary(true)}
+                >
+                  Assign primary supplier
+                </button>
+              ) : undefined,
+          }]
         : []),
       { label: "Name set", status: row.item_name ? ("ok" as const) : ("error" as const) },
     ];
-  }, [row, itemSupplierItemsQuery.data]);
+  }, [row, itemSupplierItemsQuery.data, isAdmin]);
 
   // --- Header meta ---------------------------------------------------------
   const headerMeta = row ? (
@@ -571,7 +608,21 @@ export default function AdminItemDetailPage({
         const rows = itemSupplierItemsQuery.data?.rows ?? [];
         if (rows.length === 0) {
           return (
-            <DetailTabEmpty message="No supplier linked to this purchased product. Use Admin → Supplier Items to add one." />
+            <div className="space-y-3">
+              <DetailTabEmpty message="No supplier linked to this purchased product." />
+              {isAdmin ? (
+                <div className="flex justify-center">
+                  <button
+                    type="button"
+                    className="btn-primary inline-flex items-center gap-1.5"
+                    onClick={() => setShowAssignPrimary(true)}
+                  >
+                    <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+                    Assign primary supplier
+                  </button>
+                </div>
+              ) : null}
+            </div>
           );
         }
         return <SupplierItemsTable rows={rows} supplierNameOf={supplierNameOf} />;
@@ -761,6 +812,18 @@ export default function AdminItemDetailPage({
             entityType={fmtSupplyMethod(row.supply_method)}
             status={row.status}
             completeness={completenessItems}
+            primaryAction={
+              showAssignPrimaryCta ? (
+                <button
+                  type="button"
+                  className="btn-primary btn-sm inline-flex items-center gap-1.5"
+                  onClick={() => setShowAssignPrimary(true)}
+                >
+                  <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+                  Assign primary supplier
+                </button>
+              ) : null
+            }
             actions={
               isAdmin ? (
                 <button
@@ -817,6 +880,30 @@ export default function AdminItemDetailPage({
         tabs={tabs}
         linkages={linkages}
       />
+
+      {isAdmin && isBoughtFinished ? (
+        <AssignPrimarySupplierDrawer
+          open={showAssignPrimary}
+          onClose={() => setShowAssignPrimary(false)}
+          onAssigned={() => {
+            void queryClient.invalidateQueries({
+              queryKey: ["admin", "masters", "item", item_id, "supplier-items"],
+            });
+            void queryClient.invalidateQueries({
+              queryKey: ["admin", "masters", "item", item_id],
+            });
+          }}
+          suppliers={supplierOptions}
+          existingSupplierItems={itemSupplierItems.map((si) => ({
+            supplier_item_id: si.supplier_item_id,
+            supplier_id: si.supplier_id,
+            is_primary: si.is_primary,
+            updated_at: si.updated_at,
+          }))}
+          itemId={item_id}
+          targetNoun="product"
+        />
+      ) : null}
     </>
   );
 }
