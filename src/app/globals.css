@@ -78,19 +78,21 @@
     --info-border: 210 26% 58%;
 
     /* ——— Inventory Flow 5-tier gradient (red → orange → yellow →
-       yellow-green → green). Soft fills tuned to read on the warm bone
-       background without screaming; foreground tones tuned to remain
-       legible at xs/3xs sizes. Tom-locked 2026-05-04. ——— */
-    --tier-critical-bg: 4 60% 90%;          /* red — critical_stockout */
-    --tier-critical-fg: 4 70% 30%;
-    --tier-at-risk-bg: 18 75% 88%;          /* red-orange — at_risk */
-    --tier-at-risk-fg: 18 70% 32%;
-    --tier-low-bg: 38 80% 88%;              /* yellow-orange — low */
-    --tier-low-fg: 28 70% 32%;
-    --tier-medium-bg: 62 60% 86%;           /* yellow-green — medium */
-    --tier-medium-fg: 80 40% 26%;
-    --tier-healthy-bg: 146 40% 88%;         /* green — healthy */
-    --tier-healthy-fg: 146 50% 22%;
+       yellow-green → green). Saturated thermal-map fills with high
+       lightness spread (≥10pt between tiers) so each tier reads
+       instantly even at xs/3xs cell sizes. Foregrounds tuned for
+       contrast (white on saturated dark bg; near-black on bright
+       amber). Tom-locked 2026-05-04 (deepened palette). ——— */
+    --tier-critical-bg: 0 75% 38%;          /* deep saturated red — critical_stockout */
+    --tier-critical-fg: 0 0% 98%;
+    --tier-at-risk-bg: 15 85% 48%;          /* hot red-orange — at_risk */
+    --tier-at-risk-fg: 0 0% 100%;
+    --tier-low-bg: 38 95% 50%;              /* vivid amber/yellow-orange — low */
+    --tier-low-fg: 0 0% 12%;
+    --tier-medium-bg: 75 70% 42%;           /* lime / yellow-green — medium */
+    --tier-medium-fg: 0 0% 100%;
+    --tier-healthy-bg: 145 65% 32%;         /* forest green — healthy */
+    --tier-healthy-fg: 0 0% 100%;
 
     /* ——— Surface effects ——— */
     --dot-grid: 30 10% 80% / 0.35;
@@ -170,19 +172,23 @@
     --info-fg: 210 60% 80%;
     --info-border: 210 40% 38%;
 
-    /* ——— Inventory Flow 5-tier gradient (dark theme: dark-with-hint
-       backgrounds, lifted foregrounds — same hierarchy as soft semantics).
-       Tom-locked 2026-05-04. ——— */
-    --tier-critical-bg: 4 40% 18%;
-    --tier-critical-fg: 4 70% 78%;
-    --tier-at-risk-bg: 18 40% 18%;
-    --tier-at-risk-fg: 18 70% 76%;
-    --tier-low-bg: 38 36% 18%;
-    --tier-low-fg: 38 75% 76%;
-    --tier-medium-bg: 62 28% 18%;
-    --tier-medium-fg: 70 50% 76%;
-    --tier-healthy-bg: 146 28% 16%;
-    --tier-healthy-fg: 146 50% 78%;
+    /* ——— Inventory Flow 5-tier gradient (dark theme: vivid thermal-map
+       palette tuned to POP on warm graphite, not blend in). Same hue
+       ladder as light theme; lightness 38-52% with high saturation so
+       each tier is unmistakable at a glance. Foregrounds high-contrast
+       (white on saturated red/orange/green; near-black on bright amber).
+       Tom-locked 2026-05-04 (deepened palette: previous 16-18% read as
+       "5 shades of muddy" on dark theme). ——— */
+    --tier-critical-bg: 0 78% 42%;          /* deep saturated red — critical_stockout */
+    --tier-critical-fg: 0 0% 98%;
+    --tier-at-risk-bg: 15 88% 50%;          /* hot red-orange — at_risk */
+    --tier-at-risk-fg: 0 0% 100%;
+    --tier-low-bg: 38 95% 52%;              /* vivid amber/yellow-orange — low */
+    --tier-low-fg: 0 0% 12%;
+    --tier-medium-bg: 75 70% 44%;           /* lime / yellow-green — medium */
+    --tier-medium-fg: 0 0% 100%;
+    --tier-healthy-bg: 145 65% 36%;         /* forest green — healthy */
+    --tier-healthy-fg: 0 0% 100%;
 
     /* ——— Surface effects ——— */
     --dot-grid: 30 8% 30% / 0.35;
