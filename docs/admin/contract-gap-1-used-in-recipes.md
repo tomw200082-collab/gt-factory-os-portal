@@ -1,12 +1,15 @@
 # Contract Gap #1 — GET /api/components/:id/used-in-recipes
 
 ## Status
-**Open.** The portal ships a client-side fallback (fan-out over all BOM heads) capped at 50 heads. Above that limit the tab shows this gap notice and becomes non-functional.
+**Closed (workaround shipped) / open as optimization.**
 
-## Why it exists
-The portal needs to show which active recipes contain a given component. There is no dedicated backend query for this — only `GET /api/boms/lines?bom_version_id=<uuid>` which requires knowing the version ID first, forcing a two-step fan-out.
+The portal previously capped the "Used in recipes" tab at 50 active BOM heads and showed a "Contract Gap #1" notice above that. With Tom's factory now running >50 active BOM heads, that cap made the tab non-functional in production.
 
-## Required endpoint
+The cap has been removed. `src/components/admin/UsedInRecipes.tsx` now fetches the full active-head list (`?limit=1000`, the same convention every other admin BOM page uses) and fans out per-version line queries via React Query's `useQueries`, which isolates per-version failures so one slow/failed version no longer blanks the whole tab. Partial-failure cases render whatever succeeded plus a soft warning.
+
+This is acceptable for v1: the factory has well under 1000 active heads and each per-version fetch is small. The dedicated server-side endpoint described below remains a nice-to-have optimization (one round-trip instead of N+1) but is no longer blocking factory operations.
+
+## Optional optimization endpoint
 
 ```
 GET /api/v1/queries/components/:component_id/used-in-recipes
@@ -59,6 +62,10 @@ WHERE bl.final_component_id = :component_id
 ORDER BY bh.parent_ref_id, bl.line_no;
 ```
 
+## Items symmetry
+
+The `UsedInRecipes` component accepts either `component_id` or `item_id` (discriminated union). Items are not referenced as inputs in `bom_lines.final_component_id` under the locked schema (REPACK BOMs consume a *component* as input, not an item), so the items path renders an honest empty state by design rather than fanning out. If a future schema change introduces item-as-BOM-line-input, only the items branch of `UsedInRecipes` needs to be updated.
+
 ## Portal consumer
 `src/components/admin/UsedInRecipes.tsx` — the `UsedInRecipes` component.
-When this endpoint ships, replace the fan-out queries with a single `useQuery` against the new URL and remove the `MAX_HEADS` cap.
+When/if the dedicated endpoint above ships, replace the per-version fan-out with a single `useQuery` against the new URL.

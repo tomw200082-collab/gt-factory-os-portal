@@ -9,16 +9,34 @@ import {
 } from "@/components/patterns/DetailPage";
 
 // ---------------------------------------------------------------------------
-// UsedInRecipes — client-side fallback for "which active recipes use this
-// component?". Works by fetching all BOM heads then all active-version lines
-// in parallel. Capped at MAX_HEADS; above that, shows Contract Gap #1 notice.
+// UsedInRecipes — "which active recipes use this master?" tab.
 //
-// Contract Gap #1: GET /api/components/:id/used-in-recipes is the backend
-// endpoint needed to replace this client-side fan-out. Until it ships, this
-// component provides functional (if slightly expensive) coverage.
+// Shape:
+//   <UsedInRecipes component_id={...} />   -> recipes that consume this component
+//   <UsedInRecipes item_id={...} />        -> recipes that consume this item
+//
+// Implementation: client-side fan-out across active BOM heads, parallelized
+// via useQueries. The previous 50-head cap (which surfaced as "Contract
+// Gap #1") has been removed — Tom now has >50 active BOM heads, and the
+// upstream /api/v1/queries/boms/lines endpoint requires `bom_version_id`
+// per call, so per-version fan-out is the only available path until a
+// dedicated `final_component_id` filter ships upstream. useQueries
+// isolates per-version failures, so one slow/failed version no longer
+// blocks the whole tab; partial results render with a soft warning.
+//
+// Items: the locked schema (`bom_lines.final_component_id`) only references
+// components, never items. REPACK BOMs consume a component as input. So
+// when called with `item_id`, this component renders an empty state by
+// design — it is a legitimate "this item is not used as an input in any
+// recipe", not a bug.
 // ---------------------------------------------------------------------------
 
-const MAX_HEADS = 50;
+// Heads list cap. Matches the limit used by other admin BOM pages
+// (/admin/boms, /admin/boms/[head_id]). Tom's factory has well under
+// 1000 active BOM heads, so this is effectively unbounded for v1.
+const HEAD_LIST_LIMIT = 1000;
+// Lines per version cap. Same convention as the BOM detail pages.
+const LINES_PER_VERSION_LIMIT = 1000;
 
 interface BomHeadRow {
   bom_head_id: string;
@@ -48,22 +66,30 @@ async function fetchJson<T>(url: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-interface UsedInRecipesProps {
-  component_id: string;
-}
+// Discriminated-union props: caller passes exactly one of component_id /
+// item_id. Both surfaces share the same fan-out scaffold; the items path
+// short-circuits to empty because the BOM line schema only carries
+// final_component_id.
+export type UsedInRecipesProps =
+  | { component_id: string; item_id?: never }
+  | { item_id: string; component_id?: never };
 
-export function UsedInRecipes({ component_id }: UsedInRecipesProps) {
+export function UsedInRecipes(props: UsedInRecipesProps): JSX.Element {
+  // Items are not referenced by bom_lines.final_component_id in the locked
+  // schema, so the answer for an item is always "none". We still call all
+  // hooks below (Rules of Hooks) but disable the network so React Query
+  // does no work, then short-circuit the render.
+  const isItemMode = "item_id" in props && props.item_id != null;
+  const componentId = "component_id" in props ? props.component_id : null;
+
   const headsQuery = useQuery<ListEnvelope<BomHeadRow>>({
     queryKey: ["admin", "bom_heads", "all-for-usage"],
-    queryFn: () =>
-      fetchJson(`/api/boms/heads?limit=${MAX_HEADS + 1}`),
+    queryFn: () => fetchJson(`/api/boms/heads?limit=${HEAD_LIST_LIMIT}`),
     staleTime: 5 * 60 * 1000,
+    enabled: !isItemMode,
   });
 
   const heads = headsQuery.data?.rows ?? [];
-  const totalHeads = headsQuery.data?.count ?? 0;
-  const tooMany = totalHeads > MAX_HEADS;
-
   const activeHeads = heads.filter((h) => h.active_version_id != null);
 
   const lineQueries = useQueries({
@@ -71,45 +97,53 @@ export function UsedInRecipes({ component_id }: UsedInRecipesProps) {
       queryKey: ["admin", "bom_lines", "by-version", h.active_version_id],
       queryFn: () =>
         fetchJson<ListEnvelope<BomLineRow>>(
-          `/api/boms/lines?bom_version_id=${encodeURIComponent(h.active_version_id!)}&limit=200`,
+          `/api/boms/lines?bom_version_id=${encodeURIComponent(h.active_version_id!)}&limit=${LINES_PER_VERSION_LIMIT}`,
         ),
       staleTime: 5 * 60 * 1000,
-      enabled: !tooMany,
+      enabled: !isItemMode,
     })),
   });
 
-  if (headsQuery.isLoading) return <DetailTabLoading />;
-  if (headsQuery.isError)
+  if (isItemMode) {
     return (
-      <DetailTabError message={(headsQuery.error as Error).message} />
-    );
-
-  if (tooMany) {
-    return (
-      <div className="space-y-2 p-3 text-sm text-fg-muted">
-        <p>
-          There are more than {MAX_HEADS} recipe definitions. A backend filter
-          endpoint is required to look up usage efficiently.
-        </p>
-        <p className="text-xs font-mono text-fg-subtle">Contract Gap #1 — GET /api/components/:id/used-in-recipes</p>
-      </div>
+      <DetailTabEmpty message="This item is not used as an input in any active recipe." />
     );
   }
 
-  if (lineQueries.some((q) => q.isLoading)) return <DetailTabLoading />;
+  if (headsQuery.isLoading) return <DetailTabLoading />;
+  if (headsQuery.isError) {
+    return <DetailTabError message={(headsQuery.error as Error).message} />;
+  }
+
+  // Wait for at least the first paint of every line query before deciding
+  // "no matches". Using `isPending` (not `isLoading`) so we don't block
+  // forever on retries.
+  const anyPending = lineQueries.some((q) => q.isPending);
+  if (anyPending) return <DetailTabLoading />;
+
+  // Collect partial-failure context. We render whatever succeeded plus a
+  // soft warning so a single failed version doesn't blank the whole tab.
+  const failedCount = lineQueries.filter((q) => q.isError).length;
 
   const matches: Array<{ head: BomHeadRow; line: BomLineRow }> = [];
   for (let i = 0; i < activeHeads.length; i++) {
     const head = activeHeads[i]!;
     const lines = lineQueries[i]?.data?.rows ?? [];
     for (const line of lines) {
-      if (line.final_component_id === component_id) {
+      if (line.final_component_id === componentId) {
         matches.push({ head, line });
       }
     }
   }
 
   if (matches.length === 0) {
+    if (failedCount > 0) {
+      return (
+        <DetailTabError
+          message={`Could not load lines for ${failedCount} of ${activeHeads.length} active recipes. No usage of this component was found in the recipes that did load.`}
+        />
+      );
+    }
     return (
       <DetailTabEmpty message="This component is not used in any active recipe." />
     );
@@ -117,6 +151,12 @@ export function UsedInRecipes({ component_id }: UsedInRecipesProps) {
 
   return (
     <div className="divide-y divide-border/40">
+      {failedCount > 0 ? (
+        <div className="px-1 py-2 text-xs text-warning-fg">
+          Note: lines for {failedCount} of {activeHeads.length} active recipes
+          could not be loaded. Results below may be incomplete.
+        </div>
+      ) : null}
       {matches.map(({ head, line }) => (
         <div
           key={`${head.bom_head_id}-${line.line_id}`}
