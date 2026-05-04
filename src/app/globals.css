@@ -77,26 +77,27 @@
     --info-fg: 210 40% 26%;
     --info-border: 210 26% 58%;
 
-    /* ——— Inventory Flow 5-tier gradient — modern ERP spectrum
-       (RdYlGn data-viz scale; SAP Fiori / Workday / Modern Treasury
-       inspired). Hues distributed across the full red→green band so
-       each tier reads as a distinct STEP of the spectrum, not a
-       neighboring shade: red 358° → orange 22° → yellow 45° →
-       lime 95° → emerald 152°. Saturation 70-90% for ERP-grade
-       confidence; lightness 45-58% on light, +3-5 on dark. Replaces
-       narrow rose-coral-honey-lime-emerald palette (felt outdated
-       per Tom 2026-05-04). Foregrounds: near-white on red/orange/
-       lime/emerald; near-black on yellow. ——— */
-    --tier-critical-bg: 358 72% 50%;        /* deep modern red — critical_stockout */
-    --tier-critical-fg: 0 0% 98%;
-    --tier-at-risk-bg: 22 88% 55%;          /* vibrant orange — at_risk */
-    --tier-at-risk-fg: 0 0% 100%;
-    --tier-low-bg: 45 92% 58%;              /* golden honey-yellow — low */
-    --tier-low-fg: 30 40% 10%;
-    --tier-medium-bg: 95 58% 48%;           /* lime / chartreuse — medium */
-    --tier-medium-fg: 0 0% 100%;
-    --tier-healthy-bg: 152 65% 38%;         /* modern emerald — healthy */
-    --tier-healthy-fg: 0 0% 100%;
+    /* ——— Inventory Flow 5-tier gradient — newspaper-grade refined
+       (Financial Times / Wall Street Journal data-graphics aesthetic).
+       Deep, slightly desaturated jewel tones: each cell feels weighty
+       and intentional, not poster-bright. Saturation 45-65% (vs
+       previous 70-90% which felt loud). Lightness 32-48% — depth and
+       gravitas. Same 5-step ladder across the spectrum (red 352° →
+       burnt-orange 22° → mustard 42° → olive-sage 95° → pine 152°)
+       but each step refined into a more editorial tone. Replaces
+       RdYlGn vivid palette (felt poster-y per Tom 2026-05-04 —
+       wants "elegant"). Foregrounds: near-white on every tier;
+       mustard tier uses high-contrast near-black. ——— */
+    --tier-critical-bg: 352 55% 38%;        /* deep wine — critical_stockout */
+    --tier-critical-fg: 0 0% 96%;
+    --tier-at-risk-bg: 22 60% 42%;          /* burnt orange — at_risk */
+    --tier-at-risk-fg: 0 0% 98%;
+    --tier-low-bg: 42 65% 50%;              /* mustard / antique gold — low */
+    --tier-low-fg: 30 50% 8%;
+    --tier-medium-bg: 95 38% 38%;           /* olive-sage — medium */
+    --tier-medium-fg: 0 0% 98%;
+    --tier-healthy-bg: 152 50% 28%;         /* deep pine — healthy */
+    --tier-healthy-fg: 0 0% 98%;
 
     /* ——— Inventory Flow family color accents — Operational Clarity
        redesign 2026-05-04. 3px left border on each item row hints at
@@ -197,24 +198,22 @@
     --info-fg: 210 60% 80%;
     --info-border: 210 40% 38%;
 
-    /* ——— Inventory Flow 5-tier gradient (dark theme): full RdYlGn
-       ERP spectrum (SAP Fiori / Workday / Modern Treasury inspired).
-       Same hue distribution as light theme; lightness bumped +3-5
-       so each step reads on warm graphite without losing definition.
-       The 5 hues are deliberately spaced (red 358° → orange 22° →
-       yellow 45° → lime 95° → emerald 152°) so the spectrum reads
-       as a clean ladder — modern ERP grade, not a narrow rose-to-
-       coral squeeze. ——— */
-    --tier-critical-bg: 358 72% 54%;        /* deep modern red — critical_stockout (dark) */
-    --tier-critical-fg: 0 0% 98%;
-    --tier-at-risk-bg: 22 88% 60%;          /* vibrant orange — at_risk (dark) */
-    --tier-at-risk-fg: 0 0% 100%;
-    --tier-low-bg: 45 92% 62%;              /* golden honey-yellow — low (dark) */
-    --tier-low-fg: 30 40% 10%;
-    --tier-medium-bg: 95 58% 52%;           /* lime / chartreuse — medium (dark) */
-    --tier-medium-fg: 0 0% 100%;
-    --tier-healthy-bg: 152 65% 42%;         /* modern emerald — healthy (dark) */
-    --tier-healthy-fg: 0 0% 100%;
+    /* ——— Inventory Flow 5-tier gradient (dark theme): newspaper-grade
+       refined palette, lightness bumped +4-6 so each step reads on warm
+       graphite without losing the deep editorial character. Same 5-step
+       ladder; saturation slightly lifted to compensate for dark surfaces
+       eating chroma. The result on dark theme is a refined Bloomberg /
+       FT graphics feel — confident depth, not poster brightness. ——— */
+    --tier-critical-bg: 352 58% 44%;        /* deep wine — critical_stockout (dark) */
+    --tier-critical-fg: 0 0% 96%;
+    --tier-at-risk-bg: 22 62% 48%;          /* burnt orange — at_risk (dark) */
+    --tier-at-risk-fg: 0 0% 98%;
+    --tier-low-bg: 42 65% 55%;              /* mustard / antique gold — low (dark) */
+    --tier-low-fg: 30 50% 8%;
+    --tier-medium-bg: 95 40% 42%;           /* olive-sage — medium (dark) */
+    --tier-medium-fg: 0 0% 98%;
+    --tier-healthy-bg: 152 52% 32%;         /* deep pine — healthy (dark) */
+    --tier-healthy-fg: 0 0% 98%;
 
     /* ——— Family color accents (dark theme): same hues, lightness bumped
        so the 3px row border reads on warm graphite. */
