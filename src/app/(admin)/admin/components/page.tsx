@@ -16,13 +16,14 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Plus, Power, X } from "lucide-react";
+import { ExternalLink, Plus, Power, X } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
 import { ReadinessPill } from "@/components/readiness/ReadinessPill";
 import { QuickCreateComponent } from "@/components/admin/quick-create/QuickCreateComponent";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
+import { InlineEditCell } from "@/components/tables/InlineEditCell";
 import { formatQty } from "@/lib/utils/format-quantity";
 import {
   AdminMutationError,
@@ -128,7 +129,6 @@ function ComponentsPageInner(): JSX.Element {
   const [statusFilter, setStatusFilter] = useState<string>("ACTIVE");
   const [showCreate, setShowCreate] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
   const [showSupplierPicker, setShowSupplierPicker] = useState(false);
   const [pendingSupplier, setPendingSupplier] = useState<string>("");
   const [banner, setBanner] = useState<
@@ -291,6 +291,32 @@ function ComponentsPageInner(): JSX.Element {
       return out;
     },
     enabled: !!selectedId && itemsList.isFetched,
+  });
+
+  // Component field mutation — PATCHes the component's own scalar fields.
+  // Mirrors the masters detail page pattern; live API → /api/v1/mutations/components/:id.
+  const componentFieldMutation = useMutation({
+    mutationFn: async (args: {
+      field: "component_name" | "component_class" | "component_group" | "criticality";
+      value: unknown;
+      updated_at: string;
+    }) =>
+      patchEntity({
+        url: `/api/components/${encodeURIComponent(selectedId ?? "")}`,
+        fields: { [args.field]: args.value },
+        ifMatchUpdatedAt: args.updated_at,
+      }),
+    onSuccess: () => {
+      setBanner({ kind: "success", message: "Saved." });
+      void queryClient.invalidateQueries({ queryKey: ["admin", "components"] });
+    },
+    onError: (err: Error) => {
+      const msg =
+        err instanceof AdminMutationError
+          ? `${err.status}${err.code ? ` ${err.code}` : ""}: ${err.message}`
+          : err.message;
+      setBanner({ kind: "error", message: `Update failed: ${msg}` });
+    },
   });
 
   const supplierAssignMutation = useMutation({
@@ -612,7 +638,6 @@ function ComponentsPageInner(): JSX.Element {
                     }`}
                     onClick={() => {
                       setSelectedId(r.component_id);
-                      setIsEditing(false);
                       setShowSupplierPicker(false);
                     }}
                   >
@@ -679,50 +704,28 @@ function ComponentsPageInner(): JSX.Element {
         <SectionCard
           eyebrow="Component detail"
           title={selectedComponent.component_name}
+          description={
+            isAdmin
+              ? "Click any editable field to change it. Saves immediately."
+              : "Read-only — sign in as admin to edit."
+          }
           actions={
             <div className="flex items-center gap-2">
-              {!isEditing ? (
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm inline-flex items-center gap-1"
-                  onClick={() => setIsEditing(true)}
-                  title="Edit component"
-                >
-                  <Pencil className="h-3 w-3" strokeWidth={2} />
-                  Edit
-                </button>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => setIsEditing(false)}
-                    title="Cancel edits"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-primary btn-sm"
-                    onClick={() => {
-                      setIsEditing(false);
-                      setBanner({
-                        kind: "success",
-                        message:
-                          "Edits saved (component fields are read-only in this view; deep edits live on the master detail page).",
-                      });
-                    }}
-                  >
-                    Save
-                  </button>
-                </>
-              )}
+              <Link
+                href={`/admin/masters/components/${encodeURIComponent(
+                  selectedComponent.component_id,
+                )}`}
+                className="btn btn-ghost btn-sm inline-flex items-center gap-1"
+                title="Open full detail page (recipes, sourcing, exceptions)"
+              >
+                <ExternalLink className="h-3 w-3" strokeWidth={2} />
+                Open full detail
+              </Link>
               <button
                 type="button"
                 className="btn btn-ghost btn-sm inline-flex items-center gap-1"
                 onClick={() => {
                   setSelectedId(null);
-                  setIsEditing(false);
                   setShowSupplierPicker(false);
                 }}
                 title="Close detail"
@@ -745,7 +748,30 @@ function ComponentsPageInner(): JSX.Element {
             <div className="grid grid-cols-1 gap-3 text-sm sm:grid-cols-2">
               <div>
                 <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Code
+                  Name
+                </span>
+                {isAdmin ? (
+                  <InlineEditCell
+                    value={selectedComponent.component_name}
+                    ifMatchUpdatedAt={selectedComponent.updated_at}
+                    ariaLabel="Edit component name"
+                    onSave={(val) =>
+                      componentFieldMutation.mutateAsync({
+                        field: "component_name",
+                        value: val,
+                        updated_at: selectedComponent.updated_at,
+                      }) as Promise<void>
+                    }
+                  />
+                ) : (
+                  <span className="text-fg-strong font-medium">
+                    {selectedComponent.component_name}
+                  </span>
+                )}
+              </div>
+              <div>
+                <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Code (locked)
                 </span>
                 <span className="font-mono text-fg">
                   {selectedComponent.component_id}
@@ -755,13 +781,74 @@ function ComponentsPageInner(): JSX.Element {
                 <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Category
                 </span>
-                <span className="text-fg">
-                  {selectedComponent.component_class ?? "—"}
-                </span>
+                {isAdmin ? (
+                  <InlineEditCell
+                    value={selectedComponent.component_class ?? ""}
+                    ifMatchUpdatedAt={selectedComponent.updated_at}
+                    ariaLabel="Edit category"
+                    onSave={(val) =>
+                      componentFieldMutation.mutateAsync({
+                        field: "component_class",
+                        value: (val as string) || null,
+                        updated_at: selectedComponent.updated_at,
+                      }) as Promise<void>
+                    }
+                  />
+                ) : (
+                  <span className="text-fg">
+                    {selectedComponent.component_class ?? "—"}
+                  </span>
+                )}
               </div>
               <div>
                 <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Stock unit
+                  Group
+                </span>
+                {isAdmin ? (
+                  <InlineEditCell
+                    value={selectedComponent.component_group ?? ""}
+                    ifMatchUpdatedAt={selectedComponent.updated_at}
+                    ariaLabel="Edit group"
+                    onSave={(val) =>
+                      componentFieldMutation.mutateAsync({
+                        field: "component_group",
+                        value: (val as string) || null,
+                        updated_at: selectedComponent.updated_at,
+                      }) as Promise<void>
+                    }
+                  />
+                ) : (
+                  <span className="text-fg">
+                    {selectedComponent.component_group ?? "—"}
+                  </span>
+                )}
+              </div>
+              <div>
+                <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Criticality
+                </span>
+                {isAdmin ? (
+                  <InlineEditCell
+                    value={selectedComponent.criticality ?? ""}
+                    ifMatchUpdatedAt={selectedComponent.updated_at}
+                    ariaLabel="Edit criticality"
+                    onSave={(val) =>
+                      componentFieldMutation.mutateAsync({
+                        field: "criticality",
+                        value: (val as string) || null,
+                        updated_at: selectedComponent.updated_at,
+                      }) as Promise<void>
+                    }
+                  />
+                ) : (
+                  <span className="text-fg">
+                    {selectedComponent.criticality ?? "—"}
+                  </span>
+                )}
+              </div>
+              <div>
+                <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Stock unit (locked)
                 </span>
                 <span className="text-fg">
                   {selectedComponent.inventory_uom ?? "—"}
@@ -769,7 +856,7 @@ function ComponentsPageInner(): JSX.Element {
               </div>
               <div>
                 <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Purchase unit
+                  Purchase unit (locked)
                 </span>
                 <span className="text-fg">
                   {selectedComponent.purchase_uom ?? "—"}
@@ -777,7 +864,7 @@ function ComponentsPageInner(): JSX.Element {
               </div>
               <div>
                 <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Purchase → stock factor
+                  Purchase → stock factor (locked)
                 </span>
                 <span className="text-fg">
                   {formatQty(
@@ -798,6 +885,9 @@ function ComponentsPageInner(): JSX.Element {
                       )
                     : "—"}
                 </span>
+                <span className="mt-0.5 block text-3xs text-fg-subtle">
+                  Edit on the primary supplier link.
+                </span>
               </div>
               <div>
                 <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
@@ -810,6 +900,9 @@ function ComponentsPageInner(): JSX.Element {
                         selectedComponent.purchase_uom ?? "UNIT",
                       )
                     : "—"}
+                </span>
+                <span className="mt-0.5 block text-3xs text-fg-subtle">
+                  Edit on the primary supplier link.
                 </span>
               </div>
               <div>
@@ -824,6 +917,9 @@ function ComponentsPageInner(): JSX.Element {
                       )
                     : "—"}
                 </span>
+                <span className="mt-0.5 block text-3xs text-fg-subtle">
+                  Edit on the primary supplier link.
+                </span>
               </div>
             </div>
 
@@ -833,7 +929,7 @@ function ComponentsPageInner(): JSX.Element {
                 <span className="text-sm font-medium text-fg-strong">
                   Primary supplier
                 </span>
-                {!isEditing && !showSupplierPicker ? (
+                {isAdmin && !showSupplierPicker ? (
                   <button
                     type="button"
                     className="btn btn-ghost btn-sm"
