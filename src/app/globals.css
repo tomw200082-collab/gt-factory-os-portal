@@ -77,24 +77,25 @@
     --info-fg: 210 40% 26%;
     --info-border: 210 26% 58%;
 
-    /* ——— Inventory Flow 5-tier gradient — modern data-viz palette
-       (Tailwind v3 / Linear / Vercel-inspired). Hues chosen from
-       contemporary tech-product systems: rose 350°, coral 12°,
-       honey 42°, lime 95°, emerald 162°. Saturation 45-75% for
-       confidence without aggression; lightness 40-55% so each tier
-       reads cleanly on dark theme. Replaces previous Nordic/earthy
-       palette per Tom feedback 2026-05-04 — wants modern/innovative
-       ("חדשניים") while keeping elegance. Foregrounds: near-white on
-       rose / coral / lime / emerald; near-black on honey amber. ——— */
-    --tier-critical-bg: 350 55% 48%;        /* modern rose-red — critical_stockout */
+    /* ——— Inventory Flow 5-tier gradient — modern ERP spectrum
+       (RdYlGn data-viz scale; SAP Fiori / Workday / Modern Treasury
+       inspired). Hues distributed across the full red→green band so
+       each tier reads as a distinct STEP of the spectrum, not a
+       neighboring shade: red 358° → orange 22° → yellow 45° →
+       lime 95° → emerald 152°. Saturation 70-90% for ERP-grade
+       confidence; lightness 45-58% on light, +3-5 on dark. Replaces
+       narrow rose-coral-honey-lime-emerald palette (felt outdated
+       per Tom 2026-05-04). Foregrounds: near-white on red/orange/
+       lime/emerald; near-black on yellow. ——— */
+    --tier-critical-bg: 358 72% 50%;        /* deep modern red — critical_stockout */
     --tier-critical-fg: 0 0% 98%;
-    --tier-at-risk-bg: 12 65% 54%;          /* modern coral / persimmon — at_risk */
+    --tier-at-risk-bg: 22 88% 55%;          /* vibrant orange — at_risk */
     --tier-at-risk-fg: 0 0% 100%;
-    --tier-low-bg: 42 75% 55%;              /* honey amber — low */
-    --tier-low-fg: 30 35% 10%;
-    --tier-medium-bg: 95 45% 48%;           /* fresh lime / chartreuse — medium */
+    --tier-low-bg: 45 92% 58%;              /* golden honey-yellow — low */
+    --tier-low-fg: 30 40% 10%;
+    --tier-medium-bg: 95 58% 48%;           /* lime / chartreuse — medium */
     --tier-medium-fg: 0 0% 100%;
-    --tier-healthy-bg: 162 55% 40%;         /* modern emerald — healthy */
+    --tier-healthy-bg: 152 65% 38%;         /* modern emerald — healthy */
     --tier-healthy-fg: 0 0% 100%;
 
     /* ——— Inventory Flow family color accents — Operational Clarity
@@ -196,22 +197,23 @@
     --info-fg: 210 60% 80%;
     --info-border: 210 40% 38%;
 
-    /* ——— Inventory Flow 5-tier gradient (dark theme): same refined
-       Nordic / data-viz palette as light theme, lightness bumped ~+2-4
-       so the muted tones still read on warm graphite without losing
-       their restrained character. Tom feedback 2026-05-04: elegant,
-       not garish — when an item is fully covered the cell should say
-       "all good" without grabbing attention; when critical it should
-       say "broken" with dignity. ——— */
-    --tier-critical-bg: 350 55% 52%;        /* modern rose-red — critical_stockout (dark theme) */
+    /* ——— Inventory Flow 5-tier gradient (dark theme): full RdYlGn
+       ERP spectrum (SAP Fiori / Workday / Modern Treasury inspired).
+       Same hue distribution as light theme; lightness bumped +3-5
+       so each step reads on warm graphite without losing definition.
+       The 5 hues are deliberately spaced (red 358° → orange 22° →
+       yellow 45° → lime 95° → emerald 152°) so the spectrum reads
+       as a clean ladder — modern ERP grade, not a narrow rose-to-
+       coral squeeze. ——— */
+    --tier-critical-bg: 358 72% 54%;        /* deep modern red — critical_stockout (dark) */
     --tier-critical-fg: 0 0% 98%;
-    --tier-at-risk-bg: 12 65% 58%;          /* modern coral / persimmon — at_risk (dark theme) */
+    --tier-at-risk-bg: 22 88% 60%;          /* vibrant orange — at_risk (dark) */
     --tier-at-risk-fg: 0 0% 100%;
-    --tier-low-bg: 42 75% 59%;              /* honey amber — low (dark theme) */
-    --tier-low-fg: 30 35% 10%;
-    --tier-medium-bg: 95 45% 52%;           /* fresh lime / chartreuse — medium (dark theme) */
+    --tier-low-bg: 45 92% 62%;              /* golden honey-yellow — low (dark) */
+    --tier-low-fg: 30 40% 10%;
+    --tier-medium-bg: 95 58% 52%;           /* lime / chartreuse — medium (dark) */
     --tier-medium-fg: 0 0% 100%;
-    --tier-healthy-bg: 162 55% 44%;         /* modern emerald — healthy (dark theme) */
+    --tier-healthy-bg: 152 65% 42%;         /* modern emerald — healthy (dark) */
     --tier-healthy-fg: 0 0% 100%;
 
     /* ——— Family color accents (dark theme): same hues, lightness bumped
