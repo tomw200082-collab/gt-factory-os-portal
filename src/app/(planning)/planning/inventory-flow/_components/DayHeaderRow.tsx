@@ -3,18 +3,17 @@
 // ---------------------------------------------------------------------------
 // DayHeaderRow — sticky header row for the desktop grid.
 //
-// Two visual rows:
-//   Row 1: week-of labels ("This week", "Next week", "+2", ...) spanning the
-//          7 day-columns each (text-2xs muted)
-//   Row 2: per-day labels — top weekday letter + bottom day-of-month
-//
-// Friday / Saturday / blocking-holiday columns get muted background.
-// Today column gets a soft accent background + tiny "Today" tag.
+// Operational Clarity redesign 2026-05-04:
+//   - Two visual rows: week-of labels (top) and per-day labels (bottom)
+//   - Per-day cell: line 1 weekday short uppercase ("MON", "TUE") in 9px
+//     muted; line 2 day-of-month integer in 13px medium-weight. For today,
+//     line 1 reads "TODAY" in accent tone.
+//   - Hatched (non-working) cells render an em-dash instead of weekday/day
+//   - Today column: vertical accent-band background + accent-toned numerals
 // ---------------------------------------------------------------------------
 
 import { cn } from "@/lib/cn";
-import { fmtDayHeader, todayIsoLocal } from "../_lib/format";
-import { NON_WORKING_STRIPE_STYLE } from "../_lib/risk";
+import { fmtDayHeader, formatDayHeader2, todayIsoLocal } from "../_lib/format";
 import type { FlowDay, FlowWeek } from "../_lib/types";
 
 interface DayHeaderRowProps {
@@ -60,34 +59,43 @@ export function DayHeaderRow({ days, weeks }: DayHeaderRowProps) {
           Item · cover
         </div>
         {days.map((d) => {
-          const { top, bottom } = fmtDayHeader(d.day);
           const isToday = d.day === today;
           const isNonWorking = d.tier === "non_working";
+          const { weekday, dom } = formatDayHeader2(d.day, isToday);
           return (
             <div
               key={d.day}
-              style={isNonWorking ? NON_WORKING_STRIPE_STYLE : undefined}
               className={cn(
-                "relative flex h-12 w-[64px] flex-col items-center justify-center border-r border-border/40 text-fg-subtle",
-                isNonWorking && "text-fg-faint",
-                isToday && "bg-accent-soft/40",
+                "relative flex h-12 w-[64px] flex-col items-center justify-center border-r border-border/40",
+                isNonWorking
+                  ? "bg-hatch-history text-fg-faint"
+                  : "text-fg-subtle",
+                isToday && "bg-today-band",
               )}
-              title={isNonWorking ? d.holiday_name_he ?? undefined : undefined}
+              title={isNonWorking ? d.holiday_name_he ?? "Non-working day" : undefined}
             >
-              <div className="text-3xs uppercase tracking-sops">{top}</div>
-              <div
-                className={cn(
-                  "mt-0.5 text-sm font-medium tabular-nums",
-                  isToday ? "text-accent" : "text-fg-strong",
-                )}
-              >
-                {bottom}
-              </div>
-              {isToday ? (
-                <div className="absolute -top-0.5 right-1 text-[8px] font-semibold uppercase tracking-sops text-accent">
-                  Today
-                </div>
-              ) : null}
+              {isNonWorking ? (
+                <span className="text-fg-faint">—</span>
+              ) : (
+                <>
+                  <div
+                    className={cn(
+                      "text-[9px] font-semibold uppercase tracking-sops leading-tight",
+                      isToday ? "text-accent" : "text-fg-subtle",
+                    )}
+                  >
+                    {weekday}
+                  </div>
+                  <div
+                    className={cn(
+                      "mt-0.5 text-[13px] font-medium leading-tight tabular-nums",
+                      isToday ? "text-accent" : "text-fg-strong",
+                    )}
+                  >
+                    {dom}
+                  </div>
+                </>
+              )}
             </div>
           );
         })}

@@ -169,3 +169,128 @@ export function todayIsoLocal(): string {
   const dd = String(d.getDate()).padStart(2, "0");
   return `${yyyy}-${mm}-${dd}`;
 }
+
+// ---------------------------------------------------------------------------
+// "Operational Clarity" redesign 2026-05-04 — additional formatters
+// ---------------------------------------------------------------------------
+
+/**
+ * Compact integer display — drops insignificant decimals, uses K / M for
+ * ≥ 1000 / ≥ 1_000_000.
+ *
+ *   1234   -> "1.2K"
+ *   1500   -> "1.5K"
+ *   12000  -> "12K"
+ *   42.0   -> "42"
+ *   -120.0 -> "−120"
+ *   0      -> "0"  (NOT em-dash; this is for chips like "+300" which need
+ *                   to render even when content is small)
+ */
+export function formatCompact(n: number | null | undefined): string {
+  if (n == null || !Number.isFinite(n)) return EM_DASH;
+  const abs = Math.abs(n);
+  const sign = n < 0 ? MINUS : "";
+
+  if (abs >= 1_000_000) {
+    const v = abs / 1_000_000;
+    return `${sign}${Number.isInteger(v) ? v.toFixed(0) : v.toFixed(1)}M`;
+  }
+  if (abs >= 10_000) {
+    return `${sign}${Math.round(abs / 1000).toString()}K`;
+  }
+  if (abs >= 1000) {
+    const v = abs / 1000;
+    return `${sign}${Number.isInteger(v) ? v.toFixed(0) : v.toFixed(1)}K`;
+  }
+  if (Number.isInteger(abs)) {
+    return `${sign}${abs.toString()}`;
+  }
+  // ≤ 1 decimal for sub-1000 fractional values
+  const rounded = Math.round(abs * 10) / 10;
+  return `${sign}${Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toString()}`;
+}
+
+/**
+ * Semantic days-cover label for the row hero in the sticky panel.
+ *
+ *   < 0   -> "STOCKOUT"
+ *   < 7   -> "Nd cover"      (e.g. "5d cover")
+ *   7-13  -> "1w cover"
+ *   14-20 -> "2w cover"
+ *   21-27 -> "3w cover"
+ *   ≥ 28  -> ">3w cover"
+ *
+ * Returned as { value, sub } so the caller can render the value larger
+ * than the trailing "cover" label.
+ */
+export function formatDaysCover(
+  n: number | null | undefined,
+): { value: string; sub: string } {
+  if (n == null || !Number.isFinite(n)) {
+    return { value: EM_DASH, sub: "" };
+  }
+  if (n < 0) {
+    return { value: "STOCKOUT", sub: "" };
+  }
+  if (n < 7) {
+    return { value: `${Math.max(0, Math.floor(n))}d`, sub: "cover" };
+  }
+  if (n < 14) {
+    return { value: "1w", sub: "cover" };
+  }
+  if (n < 21) {
+    return { value: "2w", sub: "cover" };
+  }
+  if (n < 28) {
+    return { value: "3w", sub: "cover" };
+  }
+  return { value: ">3w", sub: "cover" };
+}
+
+/**
+ * Two-line day-cell column header in the new "Operational Clarity" style.
+ *
+ *   Line 1: weekday short uppercase ("MON", "TUE", …) or "TODAY"
+ *   Line 2: day-of-month integer ("4", "12", …)
+ *
+ * Non-working days: caller should render an em-dash separately; this
+ * function returns the underlying weekday/day-of-month regardless.
+ */
+export function formatDayHeader2(
+  iso: string,
+  isToday: boolean,
+): { weekday: string; dom: string } {
+  try {
+    const d = new Date(`${iso}T00:00:00`);
+    const weekday = isToday
+      ? "TODAY"
+      : d.toLocaleDateString("en-US", { weekday: "short" }).toUpperCase();
+    const dom = d.getDate().toString();
+    return { weekday, dom };
+  } catch {
+    return { weekday: isToday ? "TODAY" : "?", dom: "?" };
+  }
+}
+
+/**
+ * Map a `days_cover_with_production` (or fallback) numeric to the same
+ * tier-fg text token used by the day cells. Used to color the days-cover
+ * hero in the sticky panel so the row's overall risk reads at a glance.
+ *
+ * Tom-locked thresholds (mirrors the server's `cell_tier_with_production`):
+ *   < 0   -> critical_stockout
+ *   < 7   -> at_risk
+ *   < 14  -> low
+ *   < 21  -> medium
+ *   ≥ 21  -> healthy
+ */
+export function daysCoverTierClass(
+  n: number | null | undefined,
+): string {
+  if (n == null || !Number.isFinite(n)) return "text-fg-muted";
+  if (n < 0) return "text-tier-critical-bg";
+  if (n < 7) return "text-tier-at-risk-bg";
+  if (n < 14) return "text-tier-low-bg";
+  if (n < 21) return "text-tier-medium-bg";
+  return "text-tier-healthy-bg";
+}

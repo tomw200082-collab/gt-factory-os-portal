@@ -1,25 +1,29 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// StickyItemPanel — 320px wide left panel for a single item in the desktop
-// grid. Contains:
-//   - 4px tier strip on the far-left (the only "loud" element when stockout)
+// StickyItemPanel — left-most 320px panel for an item row in the desktop
+// grid. Operational Clarity redesign 2026-05-04:
+//   - 3px family-color accent strip on the far left
 //   - Item name + family chip + risk badge
-//   - Days-of-cover hero (text-2xl tabular-nums)
+//   - Inline sparkline (14-day projected_on_hand_eod_with_production)
+//   - Days-of-cover hero with semantic label (STOCKOUT / Nd / Nw / >3w),
+//     colored by row tier
 //
 // `position: sticky; left: 0` keeps it pinned while the day columns scroll.
+// Background must remain opaque so scrolling content doesn't bleed through.
 //
 // Performance: wrapped in React.memo. 68 instances per render; FlowItem
-// reference is stable across TanStack Query refetches when data hasn't
-// changed, so memo skips re-render entirely on filter / search / hover.
+// reference is stable across TanStack Query refetches.
 // ---------------------------------------------------------------------------
 
 import { memo } from "react";
 import { Badge } from "@/components/badges/StatusBadge";
 import { cn } from "@/lib/cn";
-import { fmtDaysOfCover } from "../_lib/format";
+import { daysCoverTierClass, formatDaysCover } from "../_lib/format";
+import { familyAccent } from "../_lib/family";
 import { RISK_TIER_STYLE } from "../_lib/risk";
 import type { FlowItem } from "../_lib/types";
+import { Sparkline } from "./Sparkline";
 
 // Server-locked horizon length matches handler.flow.ts HORIZON_DAYS.
 const HORIZON_DAYS = 56;
@@ -31,12 +35,7 @@ interface StickyItemPanelProps {
 function StickyItemPanelInner({ item }: StickyItemPanelProps) {
   const style = RISK_TIER_STYLE[item.risk_tier];
 
-  // Polish A v3 review (2026-05-04) — prefer the production-aware
-  // days-cover hero. The server returns the horizon length (56 days =
-  // 8 weeks) when no production-aware stockout falls within the visible
-  // 8-week horizon, so we render ">8w cover" rather than a misleading
-  // exact "56 days". Falls back to the production-blind `days_of_cover`
-  // when the API hasn't shipped the new field yet.
+  // Production-aware days-cover with horizon-length sentinel handling.
   const cover =
     item.days_cover_with_production != null
       ? item.days_cover_with_production
@@ -45,12 +44,22 @@ function StickyItemPanelInner({ item }: StickyItemPanelProps) {
     item.days_cover_with_production != null &&
     item.days_cover_with_production >= HORIZON_DAYS;
 
+  const semantic = formatDaysCover(cover);
+  const heroValue = isFullHorizon ? ">8w" : semantic.value;
+  const heroSub = isFullHorizon ? "cover" : semantic.sub;
+  const heroToneClass = isFullHorizon
+    ? "text-tier-healthy-bg"
+    : daysCoverTierClass(cover);
+
+  const familyColor = familyAccent(item.family);
+
   return (
-    <div className="sticky left-0 z-10 flex h-[52px] w-[320px] items-stretch border-r border-border/40 bg-bg">
-      {/* tier strip */}
-      <div className={cn("w-1 shrink-0", style.stripClass)} aria-hidden />
-      <div className="flex flex-1 items-center justify-between gap-3 px-3">
-        <div className="min-w-0">
+    <div
+      className="sticky left-0 z-10 flex h-[52px] w-[320px] items-stretch border-r border-border/40 bg-bg-raised"
+      style={{ borderLeft: `3px solid ${familyColor}` }}
+    >
+      <div className="flex flex-1 items-center justify-between gap-2 px-3">
+        <div className="min-w-0 flex-1">
           <div className="truncate text-sm font-medium text-fg-strong">
             {item.item_name}
           </div>
@@ -65,13 +74,32 @@ function StickyItemPanelInner({ item }: StickyItemPanelProps) {
             </Badge>
           </div>
         </div>
+
+        {/* Sparkline — sits between the label and the hero numerals so the
+            slope reads naturally left-to-right alongside the days-cover. */}
+        <Sparkline
+          days={item.days.slice(0, 14)}
+          riskTier={item.risk_tier}
+          width={64}
+          height={18}
+          className="opacity-90"
+        />
+
         <div className="text-right">
-          <div className="text-2xl font-semibold leading-none tabular-nums text-fg-strong">
-            {isFullHorizon ? ">8w" : fmtDaysOfCover(cover)}
+          <div
+            className={cn(
+              "text-xl font-semibold leading-none tabular-nums",
+              heroToneClass,
+            )}
+            data-testid="row-days-cover-hero"
+          >
+            {heroValue}
           </div>
-          <div className="mt-1 text-3xs text-fg-subtle">
-            {isFullHorizon ? "cover" : "days cover"}
-          </div>
+          {heroSub ? (
+            <div className="mt-1 text-3xs uppercase tracking-sops text-fg-subtle">
+              {heroSub}
+            </div>
+          ) : null}
         </div>
       </div>
     </div>

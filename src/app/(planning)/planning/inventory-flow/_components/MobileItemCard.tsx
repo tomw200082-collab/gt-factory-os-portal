@@ -19,10 +19,18 @@ import { memo, useMemo } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/badges/StatusBadge";
 import { cn } from "@/lib/cn";
-import { fmtDateLong, fmtDayLetter, fmtDaysOfCover, fmtQty } from "../_lib/format";
+import {
+  daysCoverTierClass,
+  fmtDateLong,
+  fmtDayLetter,
+  formatCompact,
+  formatDaysCover,
+} from "../_lib/format";
+import { familyAccent } from "../_lib/family";
 import { dayCellClassName, RISK_TIER_STYLE } from "../_lib/risk";
 import type { FlowItem } from "../_lib/types";
 import type { PlannedInflowRow } from "../_lib/plannedInflow";
+import { Sparkline } from "./Sparkline";
 
 interface MobileItemCardProps {
   item: FlowItem;
@@ -63,12 +71,29 @@ function MobileItemCardInner({
     return null;
   }, [overlayEnabled, plannedByItemDate, item]);
 
+  const familyColor = familyAccent(item.family);
+  const cover =
+    item.days_cover_with_production != null
+      ? item.days_cover_with_production
+      : item.days_of_cover;
+  const isFullHorizon =
+    item.days_cover_with_production != null &&
+    item.days_cover_with_production >= 56;
+  const semantic = formatDaysCover(cover);
+  const heroValue = isFullHorizon ? ">8w" : semantic.value;
+  const heroSub = isFullHorizon ? "cover" : semantic.sub;
+  const heroToneClass = isFullHorizon
+    ? "text-tier-healthy-bg"
+    : daysCoverTierClass(cover);
+
   return (
     <Link
       href={`/planning/inventory-flow/${encodeURIComponent(item.item_id)}`}
       className="relative flex overflow-hidden rounded-md border border-border/40 bg-bg-raised shadow-raised transition-colors hover:border-accent/40"
+      style={{ borderLeft: `3px solid ${familyColor}` }}
     >
-      {/* Tier strip */}
+      {/* Tier strip (kept as a thin secondary cue inside the family-colored
+          left border so risk still reads at a glance). */}
       <div className={cn("w-1 shrink-0", style.stripClass)} aria-hidden />
       <div className="flex-1 px-4 py-4">
         {/* Header */}
@@ -90,37 +115,30 @@ function MobileItemCardInner({
           </div>
         </div>
 
-        {/* Hero days of cover */}
-        <div className="mt-4 flex items-baseline gap-2">
-          <div
-            className={cn(
-              "text-5xl font-semibold leading-none tabular-nums",
-              item.risk_tier === "stockout"
-                ? "text-danger-fg"
-                : item.risk_tier === "critical" || item.risk_tier === "watch"
-                  ? "text-warning-fg"
-                  : "text-fg-strong",
-            )}
-          >
-            {/* Polish A v3 review (2026-05-04) — production-aware
-                days-cover. ">8w" sentinel when no stockout in 8-week
-                horizon. Falls back to production-blind cover if the
-                API hasn't shipped the new field yet. */}
-            {item.days_cover_with_production != null &&
-            item.days_cover_with_production >= 56
-              ? ">8w"
-              : fmtDaysOfCover(
-                  item.days_cover_with_production != null
-                    ? item.days_cover_with_production
-                    : item.days_of_cover,
-                )}
+        {/* Hero days of cover (semantic — STOCKOUT / Nd / Nw / >3w) +
+            inline sparkline so the slope reads alongside the headline. */}
+        <div className="mt-4 flex items-end justify-between gap-3">
+          <div className="flex items-baseline gap-2">
+            <div
+              className={cn(
+                "text-4xl font-semibold leading-none tabular-nums",
+                heroToneClass,
+              )}
+            >
+              {heroValue}
+            </div>
+            {heroSub ? (
+              <div className="text-sm uppercase tracking-sops text-fg-subtle">
+                {heroSub}
+              </div>
+            ) : null}
           </div>
-          <div className="text-sm text-fg-subtle">
-            {item.days_cover_with_production != null &&
-            item.days_cover_with_production >= 56
-              ? "cover"
-              : "days cover"}
-          </div>
+          <Sparkline
+            days={item.days.slice(0, 14)}
+            riskTier={item.risk_tier}
+            width={96}
+            height={28}
+          />
         </div>
 
         {/* Insight sentence */}
@@ -138,11 +156,11 @@ function MobileItemCardInner({
             <span
               className="inline-flex items-center gap-1 rounded-sm border border-dashed border-info/60 bg-info-softer px-1.5 py-0.5 text-2xs font-semibold tabular-nums text-info-fg"
               data-testid="mobile-planned-summary"
-              aria-label={`Planned ${fmtQty(plannedSum)} this 14-day window, not yet posted to stock`}
+              aria-label={`Planned ${formatCompact(plannedSum)} this 14-day window, not yet posted to stock`}
             >
               <span aria-hidden>+</span>
               <span>
-                {fmtQty(plannedSum)}
+                {formatCompact(plannedSum)}
                 {plannedUom ? ` ${plannedUom}` : ""}
               </span>
               <span className="text-3xs font-normal text-info-fg/80">
@@ -169,7 +187,7 @@ function MobileItemCardInner({
                 )}
                 title={
                   hasPlanned
-                    ? `${fmtDateLong(d.day)} · planned ${fmtQty(
+                    ? `${fmtDateLong(d.day)} · planned ${formatCompact(
                         plannedRow!.planned_remaining_qty,
                       )} · not posted`
                     : fmtDateLong(d.day)

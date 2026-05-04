@@ -15,7 +15,7 @@ import * as Popover from "@radix-ui/react-popover";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { cn } from "@/lib/cn";
-import { fmtDateLong, fmtQty } from "../_lib/format";
+import { fmtDateLong, formatCompact } from "../_lib/format";
 import { RISK_TIER_STYLE } from "../_lib/risk";
 import type { FlowDay, FlowItem } from "../_lib/types";
 import type { PlannedInflowRow } from "../_lib/plannedInflow";
@@ -72,7 +72,7 @@ export function DayPopover({
                   : "Non-working day"
                 : isStockout
                   ? "Stockout"
-                  : `End of day: ${fmtQty(day.projected_on_hand_eod_with_production)}`}
+                  : `End of day: ${formatCompact(day.projected_on_hand_eod_with_production)}`}
             </div>
           </div>
 
@@ -138,7 +138,7 @@ export function DayPopover({
                       hasn't shipped the new fields yet. */}
                   {RISK_TIER_STYLE[item.risk_tier].label} · cover{" "}
                   <span className="tabular-nums">
-                    {fmtQty(
+                    {formatCompact(
                       item.days_cover_with_production != null
                         ? item.days_cover_with_production
                         : item.days_of_cover,
@@ -183,7 +183,7 @@ function Row({ label, value, valueClassName }: RowProps) {
     <div className="flex items-baseline justify-between gap-2">
       <dt className="text-3xs text-fg-muted">{label}</dt>
       <dd className={cn("text-xs tabular-nums text-fg-strong", valueClassName)}>
-        {fmtQty(value)}
+        {formatCompact(value)}
       </dd>
     </div>
   );

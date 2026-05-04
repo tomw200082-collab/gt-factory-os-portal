@@ -97,6 +97,27 @@
     --tier-healthy-bg: 162 55% 40%;         /* modern emerald — healthy */
     --tier-healthy-fg: 0 0% 100%;
 
+    /* ——— Inventory Flow family color accents — Operational Clarity
+       redesign 2026-05-04. 3px left border on each item row hints at
+       product family without dominating the cell color. Hue is the sole
+       variable — saturation/lightness chosen to read on both themes. */
+    --family-calm:           185 50% 50%;
+    --family-consciousness:  240 45% 55%;
+    --family-cosmo:          310 50% 55%;
+    --family-desertea:        35 40% 55%;
+    --family-detox:           60 65% 50%;
+    --family-energy:          25 80% 55%;
+    --family-fresh:          155 50% 50%;
+    --family-matcha:         140 50% 35%;
+    --family-muza:           265 45% 55%;
+    --family-namastea:       190 55% 50%;
+    --family-nonomimi:         5 65% 60%;
+    --family-odk:            345 55% 60%;
+    --family-pink-sangria:   330 60% 60%;
+    --family-red-sangria:      0 50% 45%;
+    --family-revive:         170 60% 50%;
+    --family-white-sangria:   45 30% 65%;
+
     /* ——— Surface effects ——— */
     --dot-grid: 30 10% 80% / 0.35;
     --selection-bg: 186 42% 24% / 0.2;
@@ -192,6 +213,25 @@
     --tier-medium-fg: 0 0% 100%;
     --tier-healthy-bg: 162 55% 44%;         /* modern emerald — healthy (dark theme) */
     --tier-healthy-fg: 0 0% 100%;
+
+    /* ——— Family color accents (dark theme): same hues, lightness bumped
+       so the 3px row border reads on warm graphite. */
+    --family-calm:           185 55% 58%;
+    --family-consciousness:  240 50% 65%;
+    --family-cosmo:          310 55% 65%;
+    --family-desertea:        35 50% 62%;
+    --family-detox:           60 70% 60%;
+    --family-energy:          25 80% 62%;
+    --family-fresh:          155 55% 58%;
+    --family-matcha:         140 50% 48%;
+    --family-muza:           265 55% 65%;
+    --family-namastea:       190 60% 58%;
+    --family-nonomimi:         5 70% 65%;
+    --family-odk:            345 60% 65%;
+    --family-pink-sangria:   330 65% 65%;
+    --family-red-sangria:      0 55% 55%;
+    --family-revive:         170 65% 55%;
+    --family-white-sangria:   45 40% 70%;
 
     /* ——— Surface effects ——— */
     --dot-grid: 30 8% 30% / 0.35;
@@ -514,6 +554,41 @@
       transparent 1px,
       transparent 6px
     );
+  }
+
+  /* History-not-data hatch — used for pre-today / non-working day cells in
+     the Inventory Flow grid. Diagonal stripes carry the "not actionable"
+     semantic ("not today; not actionable; just context"). */
+  .bg-hatch-history {
+    background-image: repeating-linear-gradient(
+      135deg,
+      hsl(var(--bg-subtle)) 0,
+      hsl(var(--bg-subtle)) 4px,
+      hsl(var(--bg-muted) / 0.5) 4px,
+      hsl(var(--bg-muted) / 0.5) 5px
+    );
+  }
+
+  /* Today vertical band — soft accent tint behind today's column in the
+     Inventory Flow grid. Layered with `mix-blend-multiply` would overdo it
+     on dark theme; the soft accent wash is enough to anchor the eye. */
+  .bg-today-band {
+    background-color: hsl(var(--accent) / 0.06);
+  }
+  :root.dark .bg-today-band {
+    background-color: hsl(var(--accent) / 0.12);
+  }
+
+  /* Sparkline first-render stroke animation. Caller must supply
+     pathLength via stroke-dasharray inline; here we just animate offset. */
+  @keyframes sparkline-draw {
+    from { stroke-dashoffset: 100; }
+    to   { stroke-dashoffset: 0; }
+  }
+  .sparkline-path {
+    stroke-dasharray: 100;
+    stroke-dashoffset: 100;
+    animation: sparkline-draw 600ms cubic-bezier(0.165, 0.84, 0.44, 1) forwards;
   }
 
   /* A subtle raised affordance for nav items and cards */

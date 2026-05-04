@@ -9,7 +9,7 @@
 //   - Decide between desktop FlowGridDesktop and mobile MobileCardStream
 //     based on viewport (useMediaQuery)
 //   - Render UnmappedSkusBanner when fraction >= 0.10 (replaces grid)
-//   - Render HeroBar + FilterBar always (when data is available)
+//   - Render InsightsHero + FilterBar always (when data is available)
 //   - SSR-safe: render skeleton until isMounted to avoid hydration mismatch
 // ---------------------------------------------------------------------------
 
@@ -26,7 +26,7 @@ import { FreshnessBadge } from "@/components/badges/FreshnessBadge";
 import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { FilterBar } from "./_components/FilterBar";
 import { FlowGridDesktop } from "./_components/FlowGridDesktop";
-import { HeroBar } from "./_components/HeroBar";
+import { InsightsHero } from "./_components/InsightsHero";
 import { MobileCardStream } from "./_components/MobileCardStream";
 import { PlannedFooterCaveat } from "./_components/PlannedFooterCaveat";
 import {
@@ -231,7 +231,7 @@ export function InventoryFlowClient() {
             should be instant.
           </div>
         </div>
-        <HeroBar summary={null} isLoading />
+        <InsightsHero items={[]} summary={null} isLoading />
         <SkeletonGrid />
       </>
     );
@@ -245,7 +245,7 @@ export function InventoryFlowClient() {
     <>
       {header}
       <div className="space-y-6">
-        <HeroBar summary={summary} isLoading={false} />
+        <InsightsHero items={data.items} summary={summary} isLoading={false} />
 
         {banner ? (
           <UnmappedSkusBanner fraction={fraction} />
