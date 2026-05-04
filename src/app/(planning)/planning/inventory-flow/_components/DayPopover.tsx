@@ -72,7 +72,7 @@ export function DayPopover({
                   : "Non-working day"
                 : isStockout
                   ? "Stockout"
-                  : `End of day: ${fmtQty(day.projected_on_hand_eod)}`}
+                  : `End of day: ${fmtQty(day.projected_on_hand_eod_with_production)}`}
             </div>
           </div>
 
@@ -82,15 +82,22 @@ export function DayPopover({
               <Row label="Demand (LionWheel)" value={day.demand_lionwheel} />
               <Row label="Demand (Forecast)" value={day.demand_forecast} />
               <Row
-                label="Incoming supply"
+                label="Incoming supply (PO)"
                 value={day.incoming_supply}
                 valueClassName={day.incoming_supply > 0 ? "text-info-fg" : ""}
               />
+              {day.inflow_from_production > 0 ? (
+                <Row
+                  label="From planned production"
+                  value={day.inflow_from_production}
+                  valueClassName="text-info-fg"
+                />
+              ) : null}
               <Row
                 label="Projected on-hand (eod)"
-                value={day.projected_on_hand_eod}
+                value={day.projected_on_hand_eod_with_production}
                 valueClassName={
-                  day.projected_on_hand_eod < 0
+                  day.projected_on_hand_eod_with_production < 0
                     ? "text-danger-fg font-semibold"
                     : ""
                 }

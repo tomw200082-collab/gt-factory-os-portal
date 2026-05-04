@@ -23,6 +23,15 @@ export interface FlowDay {
   demand_forecast: number;
   incoming_supply: number;
   projected_on_hand_eod: number;
+  // Migration 0144 (Polish A v3, 2026-05-04) — planned-production aware
+  // fields. `inflow_from_production` is per-day FG units arriving from
+  // planned production at +1 day lag. `incoming_supply_combined` =
+  // incoming_supply + inflow_from_production. `projected_on_hand_eod_with_production`
+  // is the production-aware counterpart of `projected_on_hand_eod` and is
+  // what the day cell tier (STOCKOUT) is computed against server-side.
+  inflow_from_production: number;
+  incoming_supply_combined: number;
+  projected_on_hand_eod_with_production: number;
   tier: DayCellTier;
 }
 

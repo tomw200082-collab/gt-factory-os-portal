@@ -56,11 +56,25 @@ function DayCellInner({
   const totalDemand = day.demand_lionwheel + day.demand_forecast;
   const spike = !isNonWorking && isDemandSpike(totalDemand, avgDailyDemand);
   const incoming = !isNonWorking && hasIncomingPo(day);
+  // Migration 0144: planned-production receipts land at +1 day from the
+  // production_plan plan_date. Surface them as a discreet "+N" chip so the
+  // operator can see WHERE the supply is coming from. This is independent
+  // of the toggle-driven planned-inflow overlay (`plannedRow` below) and
+  // always renders when the FG-level view reports inflow_from_production.
+  const productionInflow =
+    !isNonWorking && day.inflow_from_production > 0
+      ? day.inflow_from_production
+      : 0;
   const showPlannedChip =
     overlayEnabled &&
     !isNonWorking &&
     plannedRow != null &&
     plannedRow.planned_remaining_qty > 0;
+
+  // Render the production-aware EOD on the cell (was production-blind
+  // projected_on_hand_eod). The two only differ when planned production is
+  // scheduled in the visible 14-day band; otherwise both equal.
+  const cellEod = day.projected_on_hand_eod_with_production;
 
   const cellInner = (
     <div
@@ -78,7 +92,7 @@ function DayCellInner({
       {isNonWorking ? (
         <span className="text-fg-faint">—</span>
       ) : (
-        <span className="leading-none">{fmtQty(day.projected_on_hand_eod)}</span>
+        <span className="leading-none">{fmtQty(cellEod)}</span>
       )}
 
       {/* Top-right: demand spike */}
@@ -87,6 +101,23 @@ function DayCellInner({
           className="absolute right-1 top-1 h-2 w-2 fill-warning text-warning"
           strokeWidth={1}
         />
+      ) : null}
+
+      {/* Top-left: planned-production receipt (FG-level inflow_from_production
+          from view 0144). Visually distinct from the bottom-right PO arrow:
+          this is "+N units made" not "+N units bought-in". Production-aware
+          stockout cells already get the production-aware EOD number; this
+          chip tells the operator WHY the day is healthier than the PO-only
+          view would suggest. */}
+      {productionInflow > 0 ? (
+        <span
+          className="absolute left-0.5 top-0.5 inline-flex items-center rounded-sm bg-info-softer px-1 py-0 text-[9px] font-semibold leading-tight text-info-fg shadow-sm"
+          title={`+${fmtQty(productionInflow)} from planned production`}
+          aria-label={`Plus ${fmtQty(productionInflow)} from planned production`}
+          data-testid="day-cell-production-inflow"
+        >
+          +{fmtQty(productionInflow)}
+        </span>
       ) : null}
 
       {/* Bottom-right: incoming PO (truth) — top-most so the planned chip
