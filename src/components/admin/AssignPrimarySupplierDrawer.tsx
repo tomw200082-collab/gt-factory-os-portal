@@ -145,44 +145,63 @@ export function AssignPrimarySupplierDrawer({
           ifMatchUpdatedAt: currentPrimary.updated_at,
         });
       }
-      // Body mirrors the working QuickCreateSupplierItem shape exactly. The
-      // upstream Zod requires price / lead_time_days / moq / pack_conversion
-      // to be present and rejects unknown keys (so no `approval_status`).
-      // Defaults of 0 match QuickCreate's behaviour — operator can fill in
-      // commercial terms later via /admin/supplier-items.
+      // Upstream contract (api/src/supplier-items/mutations.ts):
+      //   - idempotency_key: REQUIRED string.
+      //   - supplier_id: REQUIRED.
+      //   - component_id XOR item_id: each is `z.string().optional()` — Zod
+      //     rejects `null` here ('Expected string, received null'), so we
+      //     OMIT the unused side instead of sending `{item_id: null}`.
+      //   - is_primary / approval_status / pack_conversion: optional, accepted.
+      //   - price / moq / lead_time_days etc.: optional; we omit them so the
+      //     upstream defaults / supplier-cascade triggers apply.
+      const postBody: Record<string, unknown> = {
+        idempotency_key:
+          typeof crypto !== "undefined" && "randomUUID" in crypto
+            ? crypto.randomUUID()
+            : `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}`,
+        supplier_id: supplierId,
+        is_primary: true,
+        approval_status: "approved",
+        pack_conversion: 1,
+      };
+      if (componentId) postBody.component_id = componentId;
+      if (itemId) postBody.item_id = itemId;
+
       const res = await fetch("/api/supplier-items", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           Accept: "application/json",
         },
-        body: JSON.stringify({
-          supplier_id: supplierId,
-          component_id: componentId ?? null,
-          item_id: itemId ?? null,
-          price: 0,
-          lead_time_days: 0,
-          moq: 0,
-          pack_conversion: 1,
-          is_primary: true,
-        }),
+        body: JSON.stringify(postBody),
       });
       const body = (await res.json().catch(() => null)) as
-        | { message?: string; code?: string; issues?: unknown }
+        | {
+            message?: string;
+            error?: string;
+            code?: string;
+            validation_errors?: unknown;
+          }
         | null;
       if (!res.ok) {
-        // Surface upstream Zod issues when present so we don't paper over
-        // contract drift with an opaque "HTTP 422" message.
-        const issuesText =
-          body && Array.isArray((body as { issues?: unknown }).issues)
-            ? " — " +
-              ((body as { issues: Array<{ path?: string[]; message?: string }> }).issues)
-                .map((i) => `${(i.path ?? []).join(".") || "(root)"}: ${i.message ?? "invalid"}`)
-                .join("; ")
-            : "";
+        // Upstream emits `validation_errors: [{path, code, message}]` on 422
+        // (Fastify route in api/src/supplier-items/mutations_route.ts).
+        const errs =
+          body && Array.isArray((body as { validation_errors?: unknown }).validation_errors)
+            ? (body as { validation_errors: Array<{ path?: unknown; message?: string }> }).validation_errors
+            : null;
+        const issuesText = errs
+          ? " — " +
+            errs
+              .map((i) => {
+                const path = Array.isArray(i.path) ? (i.path as unknown[]).join(".") : "";
+                return `${path || "(root)"}: ${i.message ?? "invalid"}`;
+              })
+              .join("; ")
+          : "";
         const msg =
-          (body && typeof body === "object" && body.message
-            ? body.message
+          (body && typeof body === "object" && (body.message || body.error)
+            ? (body.message ?? body.error ?? "")
             : `Could not assign supplier (HTTP ${res.status})`) + issuesText;
         const code =
           body && typeof body === "object" && body.code ? String(body.code) : undefined;
