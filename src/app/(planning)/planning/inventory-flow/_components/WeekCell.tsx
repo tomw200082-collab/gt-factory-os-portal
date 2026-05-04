@@ -15,7 +15,7 @@
 import { memo } from "react";
 import { cn } from "@/lib/cn";
 import { fmtQty } from "../_lib/format";
-import { dayCellClassName } from "../_lib/risk";
+import { weekCellClassNameProduction } from "../_lib/risk";
 import type { FlowWeek } from "../_lib/types";
 import { PlannedChip } from "./PlannedChip";
 
@@ -35,7 +35,14 @@ function WeekCellInner({
   plannedRemainingQty = 0,
   sales_uom = null,
 }: WeekCellProps) {
-  const stockoutDay = week.stockout_day;
+  // Polish A v3 review (2026-05-04) — prefer the production-aware
+  // stockout day. Falls back to the production-blind `stockout_day` when
+  // the API hasn't shipped the new field yet (defensive against
+  // deployment ordering).
+  const stockoutDay =
+    week.stockout_day_with_production !== undefined
+      ? week.stockout_day_with_production
+      : week.stockout_day;
   let stockoutDayNum: number | null = null;
   if (stockoutDay) {
     try {
@@ -44,6 +51,12 @@ function WeekCellInner({
       stockoutDayNum = null;
     }
   }
+  const minOnHand =
+    week.min_on_hand_with_production != null
+      ? week.min_on_hand_with_production
+      : week.min_on_hand;
+  const hasProductionAwareStockout =
+    week.stockout_day_with_production != null;
 
   const showPlannedChip = overlayEnabled && plannedRemainingQty > 0;
 
@@ -51,20 +64,21 @@ function WeekCellInner({
     <div
       className={cn(
         "relative flex h-[52px] w-[96px] flex-col items-center justify-center gap-0.5 text-xs tabular-nums transition-colors hover:brightness-95",
-        dayCellClassName(week.tier),
+        weekCellClassNameProduction(week.tier, hasProductionAwareStockout),
       )}
-      title={`Week of ${week.week_start} — min on-hand ${fmtQty(week.min_on_hand)}`}
+      title={`Week of ${week.week_start} — min on-hand ${fmtQty(minOnHand)}`}
     >
       <span
         className={cn(
           "leading-none",
-          week.tier === "stockout" && "font-semibold",
+          (week.tier === "stockout" || hasProductionAwareStockout) &&
+            "font-semibold",
         )}
       >
-        {fmtQty(week.min_on_hand)}
+        {fmtQty(minOnHand)}
       </span>
       {stockoutDayNum != null ? (
-        <span className="text-3xs text-danger-fg/80">
+        <span className="text-3xs opacity-80">
           Stockout day {stockoutDayNum}
         </span>
       ) : null}

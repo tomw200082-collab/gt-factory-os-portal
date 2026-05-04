@@ -102,9 +102,25 @@ function MobileItemCardInner({
                   : "text-fg-strong",
             )}
           >
-            {fmtDaysOfCover(item.days_of_cover)}
+            {/* Polish A v3 review (2026-05-04) — production-aware
+                days-cover. ">8w" sentinel when no stockout in 8-week
+                horizon. Falls back to production-blind cover if the
+                API hasn't shipped the new field yet. */}
+            {item.days_cover_with_production != null &&
+            item.days_cover_with_production >= 56
+              ? ">8w"
+              : fmtDaysOfCover(
+                  item.days_cover_with_production != null
+                    ? item.days_cover_with_production
+                    : item.days_of_cover,
+                )}
           </div>
-          <div className="text-sm text-fg-subtle">days cover</div>
+          <div className="text-sm text-fg-subtle">
+            {item.days_cover_with_production != null &&
+            item.days_cover_with_production >= 56
+              ? "cover"
+              : "days cover"}
+          </div>
         </div>
 
         {/* Insight sentence */}

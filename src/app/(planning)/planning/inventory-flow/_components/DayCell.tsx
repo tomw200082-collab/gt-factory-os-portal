@@ -23,7 +23,7 @@ import { ArrowDown, Triangle } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { fmtQty } from "../_lib/format";
 import {
-  dayCellClassName,
+  dayCellClassNameProduction,
   hasIncomingPo,
   isDemandSpike,
   NON_WORKING_STRIPE_STYLE,
@@ -83,7 +83,11 @@ function DayCellInner({
       style={isNonWorking ? NON_WORKING_STRIPE_STYLE : undefined}
       className={cn(
         "relative flex h-[52px] w-[64px] cursor-pointer items-center justify-center text-xs tabular-nums transition-colors",
-        dayCellClassName(day.tier),
+        // Polish A v3 review — 5-tier gradient via the production-aware
+        // classifier; falls back to the legacy 4-level tier when the API
+        // hasn't shipped the new field yet (Vercel + Railway can roll
+        // forward independently).
+        dayCellClassNameProduction(day.cell_tier_with_production, day.tier),
         isToday && "ring-1 ring-inset ring-accent/40",
         !isNonWorking && "hover:brightness-95",
       )}

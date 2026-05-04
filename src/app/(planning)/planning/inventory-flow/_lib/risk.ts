@@ -7,7 +7,12 @@
 // background ("פשוט ויפייפה ומהמם" — Tom 2026-04-26).
 // ---------------------------------------------------------------------------
 
-import type { DayCellTier, FlowItem, RiskTier } from "./types";
+import type {
+  CellTierWithProduction,
+  DayCellTier,
+  FlowItem,
+  RiskTier,
+} from "./types";
 
 // ----- Item-level tier classes (badge tone for StatusBadge, plus row strip) -----
 
@@ -62,6 +67,67 @@ const DAY_CELL_BG: Record<DayCellTier, string> = {
 
 export function dayCellClassName(tier: DayCellTier): string {
   return DAY_CELL_BG[tier];
+}
+
+// ----- Polish A v3 review (2026-05-04) — 5-tier production-aware gradient ----
+//
+// Tom-locked thresholds (server-computed via cell_tier_with_production):
+//   critical_stockout : projected_eod_with_production < 0  (RED)
+//   at_risk           : days_cover < 7                     (RED-ORANGE)
+//   low               : 7  <= days_cover < 14              (YELLOW-ORANGE)
+//   medium            : 14 <= days_cover < 21              (YELLOW-GREEN)
+//   healthy           : days_cover >= 21 (>3 weeks)        (GREEN)
+//   non_working       : Friday/Saturday/holiday — overrides (NEUTRAL stripe)
+//
+// Tokens defined in globals.css (:root + :root.dark) and registered in
+// tailwind.config.ts under colors.tier.{critical,at-risk,low,medium,healthy}-{bg,fg}.
+
+const DAY_CELL_BG_WITH_PRODUCTION: Record<CellTierWithProduction, string> = {
+  critical_stockout: "bg-tier-critical-bg text-tier-critical-fg font-semibold",
+  at_risk:           "bg-tier-at-risk-bg text-tier-at-risk-fg font-medium",
+  low:               "bg-tier-low-bg text-tier-low-fg",
+  medium:            "bg-tier-medium-bg text-tier-medium-fg",
+  healthy:           "bg-tier-healthy-bg text-tier-healthy-fg",
+  non_working:       "bg-bg-muted text-fg-subtle",
+};
+
+/**
+ * 5-tier production-aware cell background. Falls back to the
+ * production-blind `dayCellClassName` when the API hasn't shipped the
+ * new field yet (defensive against deployment ordering — Vercel and
+ * Railway can roll forward independently).
+ */
+export function dayCellClassNameProduction(
+  tierWithProduction: CellTierWithProduction | null | undefined,
+  fallbackTier: DayCellTier,
+): string {
+  if (tierWithProduction) {
+    return DAY_CELL_BG_WITH_PRODUCTION[tierWithProduction];
+  }
+  return dayCellClassName(fallbackTier);
+}
+
+/**
+ * Map a week-level FlowWeek tier to the same 5-tier palette using the
+ * production-aware stockout-day signal when present. Approximation:
+ *   - tier === 'stockout' OR week has a stockout_day_with_production
+ *     anywhere in the week  → critical_stockout
+ *   - tier === 'critical'  → at_risk (one tick down — week-level
+ *                           granularity is coarser than per-day)
+ *   - tier === 'watch'     → low
+ *   - tier === 'healthy'   → healthy
+ * For full per-day fidelity prefer the day-cell classifier.
+ */
+export function weekCellClassNameProduction(
+  tier: RiskTier,
+  hasProductionAwareStockout: boolean,
+): string {
+  if (tier === "stockout" || hasProductionAwareStockout) {
+    return DAY_CELL_BG_WITH_PRODUCTION.critical_stockout;
+  }
+  if (tier === "critical") return DAY_CELL_BG_WITH_PRODUCTION.at_risk;
+  if (tier === "watch") return DAY_CELL_BG_WITH_PRODUCTION.low;
+  return DAY_CELL_BG_WITH_PRODUCTION.healthy;
 }
 
 /** Inline stripe pattern for non-working day cells. */

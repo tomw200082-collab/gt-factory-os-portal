@@ -89,6 +89,23 @@ const config: Config = {
           fg:      "hsl(var(--info-fg) / <alpha-value>)",
           border:  "hsl(var(--info-border) / <alpha-value>)",
         },
+        // ——— Inventory Flow 5-tier gradient (Polish A v3 review,
+        // 2026-05-04). red → orange → yellow → yellow-green → green.
+        // Used by /planning/inventory-flow day & week cells; ratios tuned
+        // for the warm-bone light background and the warm-graphite dark
+        // background (see globals.css :root and :root.dark). ——————————
+        tier: {
+          "critical-bg": "hsl(var(--tier-critical-bg) / <alpha-value>)",
+          "critical-fg": "hsl(var(--tier-critical-fg) / <alpha-value>)",
+          "at-risk-bg":  "hsl(var(--tier-at-risk-bg) / <alpha-value>)",
+          "at-risk-fg":  "hsl(var(--tier-at-risk-fg) / <alpha-value>)",
+          "low-bg":      "hsl(var(--tier-low-bg) / <alpha-value>)",
+          "low-fg":      "hsl(var(--tier-low-fg) / <alpha-value>)",
+          "medium-bg":   "hsl(var(--tier-medium-bg) / <alpha-value>)",
+          "medium-fg":   "hsl(var(--tier-medium-fg) / <alpha-value>)",
+          "healthy-bg":  "hsl(var(--tier-healthy-bg) / <alpha-value>)",
+          "healthy-fg":  "hsl(var(--tier-healthy-fg) / <alpha-value>)",
+        },
       },
       fontFamily: {
         sans: [

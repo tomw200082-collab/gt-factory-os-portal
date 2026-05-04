@@ -132,8 +132,27 @@ export function DayPopover({
                   {item.item_name}
                 </div>
                 <div className="text-3xs text-fg-muted">
+                  {/* Polish A v3 review (2026-05-04) — surface the
+                      production-aware cover + first stockout day.
+                      Falls back to production-blind cover if the API
+                      hasn't shipped the new fields yet. */}
                   {RISK_TIER_STYLE[item.risk_tier].label} · cover{" "}
-                  <span className="tabular-nums">{fmtQty(item.days_of_cover)}d</span>
+                  <span className="tabular-nums">
+                    {fmtQty(
+                      item.days_cover_with_production != null
+                        ? item.days_cover_with_production
+                        : item.days_of_cover,
+                    )}
+                    d
+                  </span>
+                  {item.stockout_at_day_with_production ? (
+                    <>
+                      {" · stockout "}
+                      <span className="tabular-nums">
+                        {item.stockout_at_day_with_production.slice(5)}
+                      </span>
+                    </>
+                  ) : null}
                 </div>
               </div>
               <Link

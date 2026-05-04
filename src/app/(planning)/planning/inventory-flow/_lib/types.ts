@@ -15,6 +15,18 @@ export type RiskTier = "healthy" | "watch" | "critical" | "stockout";
 export type DayCellTier = RiskTier | "non_working";
 export type SupplyMethod = "MANUFACTURED" | "BOUGHT_FINISHED" | "REPACK";
 
+// Polish A v3 review (2026-05-04) — Tom-locked 5-level production-aware
+// cell tier (red → orange → yellow → yellow-green → green) keyed on
+// days-to-next-stockout under the production-aware projection. `non_working`
+// always overrides (Friday/Saturday/holiday).
+export type CellTierWithProduction =
+  | "critical_stockout"
+  | "at_risk"
+  | "low"
+  | "medium"
+  | "healthy"
+  | "non_working";
+
 export interface FlowDay {
   day: string; // YYYY-MM-DD
   is_working_day: boolean;
@@ -33,6 +45,10 @@ export interface FlowDay {
   incoming_supply_combined: number;
   projected_on_hand_eod_with_production: number;
   tier: DayCellTier;
+  // Polish A v3 review (2026-05-04) — server-computed 5-tier classifier.
+  // Optional/nullable so the portal can defensively fall back to `tier`
+  // during deployment ordering (API rollout before portal, or vice-versa).
+  cell_tier_with_production?: CellTierWithProduction | null;
 }
 
 export interface FlowWeek {
@@ -40,6 +56,12 @@ export interface FlowWeek {
   min_on_hand: number;
   stockout_day: string | null;
   tier: RiskTier;
+  // Polish A v3 review (2026-05-04) — production-aware counterparts
+  // (computed server-side by joining production_plan at +1 day lag for
+  // weeks 3..8). Optional so the portal degrades gracefully if the API
+  // hasn't shipped yet.
+  min_on_hand_with_production?: number | null;
+  stockout_day_with_production?: string | null;
 }
 
 export interface FlowItem {
@@ -52,6 +74,16 @@ export interface FlowItem {
   effective_lead_time_days: number;
   current_on_hand: number;
   earliest_stockout_date: string | null;
+  // Polish A v3 review (2026-05-04) — production-aware counterparts.
+  //   stockout_at_day_with_production : first horizon day where the
+  //     production-aware EOD goes negative (NULL = no stockout in horizon).
+  //   days_cover_with_production      : days from today to that stockout.
+  //     When no stockout in horizon, server returns the horizon length
+  //     (56 days = 8 weeks) as a "covered for the full window" sentinel.
+  // Both optional so the portal degrades gracefully if the API hasn't
+  // rolled forward yet.
+  stockout_at_day_with_production?: string | null;
+  days_cover_with_production?: number | null;
   days: FlowDay[];
   weeks: FlowWeek[];
 }

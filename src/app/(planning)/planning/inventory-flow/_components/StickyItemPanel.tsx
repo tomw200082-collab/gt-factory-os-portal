@@ -21,12 +21,29 @@ import { fmtDaysOfCover } from "../_lib/format";
 import { RISK_TIER_STYLE } from "../_lib/risk";
 import type { FlowItem } from "../_lib/types";
 
+// Server-locked horizon length matches handler.flow.ts HORIZON_DAYS.
+const HORIZON_DAYS = 56;
+
 interface StickyItemPanelProps {
   item: FlowItem;
 }
 
 function StickyItemPanelInner({ item }: StickyItemPanelProps) {
   const style = RISK_TIER_STYLE[item.risk_tier];
+
+  // Polish A v3 review (2026-05-04) — prefer the production-aware
+  // days-cover hero. The server returns the horizon length (56 days =
+  // 8 weeks) when no production-aware stockout falls within the visible
+  // 8-week horizon, so we render ">8w cover" rather than a misleading
+  // exact "56 days". Falls back to the production-blind `days_of_cover`
+  // when the API hasn't shipped the new field yet.
+  const cover =
+    item.days_cover_with_production != null
+      ? item.days_cover_with_production
+      : item.days_of_cover;
+  const isFullHorizon =
+    item.days_cover_with_production != null &&
+    item.days_cover_with_production >= HORIZON_DAYS;
 
   return (
     <div className="sticky left-0 z-10 flex h-[52px] w-[320px] items-stretch border-r border-border/40 bg-bg">
@@ -50,9 +67,11 @@ function StickyItemPanelInner({ item }: StickyItemPanelProps) {
         </div>
         <div className="text-right">
           <div className="text-2xl font-semibold leading-none tabular-nums text-fg-strong">
-            {fmtDaysOfCover(item.days_of_cover)}
+            {isFullHorizon ? ">8w" : fmtDaysOfCover(cover)}
           </div>
-          <div className="mt-1 text-3xs text-fg-subtle">days cover</div>
+          <div className="mt-1 text-3xs text-fg-subtle">
+            {isFullHorizon ? "cover" : "days cover"}
+          </div>
         </div>
       </div>
     </div>
