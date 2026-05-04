@@ -77,23 +77,24 @@
     --info-fg: 210 40% 26%;
     --info-border: 210 26% 58%;
 
-    /* ——— Inventory Flow 5-tier gradient — refined Nordic / data-viz
-       palette (Stripe analytics, Apple Health). Saturation 28-50%,
-       lightness 35-50%: deep enough to read on dark theme without
-       grabbing attention. Replaces the previous saturated thermal-map
-       palette ("carnival") per Tom feedback 2026-05-04 — wants
-       elegant ("אלגנטיים"). Foregrounds tuned for contrast on each
-       muted background (near-white on muted brick / terracotta /
-       sage / forest; near-black on mustard amber). ——— */
-    --tier-critical-bg: 0 45% 38%;          /* muted brick / wine red — critical_stockout */
-    --tier-critical-fg: 0 0% 96%;
-    --tier-at-risk-bg: 15 50% 45%;          /* terracotta — at_risk */
+    /* ——— Inventory Flow 5-tier gradient — modern data-viz palette
+       (Tailwind v3 / Linear / Vercel-inspired). Hues chosen from
+       contemporary tech-product systems: rose 350°, coral 12°,
+       honey 42°, lime 95°, emerald 162°. Saturation 45-75% for
+       confidence without aggression; lightness 40-55% so each tier
+       reads cleanly on dark theme. Replaces previous Nordic/earthy
+       palette per Tom feedback 2026-05-04 — wants modern/innovative
+       ("חדשניים") while keeping elegance. Foregrounds: near-white on
+       rose / coral / lime / emerald; near-black on honey amber. ——— */
+    --tier-critical-bg: 350 55% 48%;        /* modern rose-red — critical_stockout */
+    --tier-critical-fg: 0 0% 98%;
+    --tier-at-risk-bg: 12 65% 54%;          /* modern coral / persimmon — at_risk */
     --tier-at-risk-fg: 0 0% 100%;
-    --tier-low-bg: 40 45% 50%;              /* refined mustard amber — low */
-    --tier-low-fg: 30 30% 12%;
-    --tier-medium-bg: 90 28% 45%;           /* sage green — medium */
+    --tier-low-bg: 42 75% 55%;              /* honey amber — low */
+    --tier-low-fg: 30 35% 10%;
+    --tier-medium-bg: 95 45% 48%;           /* fresh lime / chartreuse — medium */
     --tier-medium-fg: 0 0% 100%;
-    --tier-healthy-bg: 150 35% 35%;         /* forest / pine green — healthy */
+    --tier-healthy-bg: 162 55% 40%;         /* modern emerald — healthy */
     --tier-healthy-fg: 0 0% 100%;
 
     /* ——— Surface effects ——— */
@@ -181,15 +182,15 @@
        not garish — when an item is fully covered the cell should say
        "all good" without grabbing attention; when critical it should
        say "broken" with dignity. ——— */
-    --tier-critical-bg: 0 45% 42%;          /* muted brick / wine red — critical_stockout */
-    --tier-critical-fg: 0 0% 96%;
-    --tier-at-risk-bg: 15 50% 49%;          /* terracotta — at_risk */
+    --tier-critical-bg: 350 55% 52%;        /* modern rose-red — critical_stockout (dark theme) */
+    --tier-critical-fg: 0 0% 98%;
+    --tier-at-risk-bg: 12 65% 58%;          /* modern coral / persimmon — at_risk (dark theme) */
     --tier-at-risk-fg: 0 0% 100%;
-    --tier-low-bg: 40 45% 54%;              /* refined mustard amber — low */
-    --tier-low-fg: 30 30% 12%;
-    --tier-medium-bg: 90 28% 49%;           /* sage green — medium */
+    --tier-low-bg: 42 75% 59%;              /* honey amber — low (dark theme) */
+    --tier-low-fg: 30 35% 10%;
+    --tier-medium-bg: 95 45% 52%;           /* fresh lime / chartreuse — medium (dark theme) */
     --tier-medium-fg: 0 0% 100%;
-    --tier-healthy-bg: 150 35% 39%;         /* forest / pine green — healthy */
+    --tier-healthy-bg: 162 55% 44%;         /* modern emerald — healthy (dark theme) */
     --tier-healthy-fg: 0 0% 100%;
 
     /* ——— Surface effects ——— */
