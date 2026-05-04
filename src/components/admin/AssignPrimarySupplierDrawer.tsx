@@ -145,6 +145,11 @@ export function AssignPrimarySupplierDrawer({
           ifMatchUpdatedAt: currentPrimary.updated_at,
         });
       }
+      // Body mirrors the working QuickCreateSupplierItem shape exactly. The
+      // upstream Zod requires price / lead_time_days / moq / pack_conversion
+      // to be present and rejects unknown keys (so no `approval_status`).
+      // Defaults of 0 match QuickCreate's behaviour — operator can fill in
+      // commercial terms later via /admin/supplier-items.
       const res = await fetch("/api/supplier-items", {
         method: "POST",
         headers: {
@@ -155,18 +160,30 @@ export function AssignPrimarySupplierDrawer({
           supplier_id: supplierId,
           component_id: componentId ?? null,
           item_id: itemId ?? null,
-          is_primary: true,
-          approval_status: "approved",
+          price: 0,
+          lead_time_days: 0,
+          moq: 0,
           pack_conversion: 1,
+          is_primary: true,
         }),
       });
       const body = (await res.json().catch(() => null)) as
-        | { message?: string; code?: string }
+        | { message?: string; code?: string; issues?: unknown }
         | null;
       if (!res.ok) {
+        // Surface upstream Zod issues when present so we don't paper over
+        // contract drift with an opaque "HTTP 422" message.
+        const issuesText =
+          body && Array.isArray((body as { issues?: unknown }).issues)
+            ? " — " +
+              ((body as { issues: Array<{ path?: string[]; message?: string }> }).issues)
+                .map((i) => `${(i.path ?? []).join(".") || "(root)"}: ${i.message ?? "invalid"}`)
+                .join("; ")
+            : "";
         const msg =
-          (body && typeof body === "object" && body.message) ||
-          `Could not assign supplier (HTTP ${res.status}).`;
+          (body && typeof body === "object" && body.message
+            ? body.message
+            : `Could not assign supplier (HTTP ${res.status})`) + issuesText;
         const code =
           body && typeof body === "object" && body.code ? String(body.code) : undefined;
         throw new AdminMutationError(res.status, msg, code, body);
