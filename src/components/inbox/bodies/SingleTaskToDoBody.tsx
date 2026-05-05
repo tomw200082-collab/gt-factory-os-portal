@@ -1,11 +1,9 @@
 // Single-task To-Do Body (variant 2) — one-click deep-link to elsewhere.
-//
-// Spec: docs/superpowers/specs/2026-05-04-inbox-typed-cards-and-price-proposals-design.md §1.8 (variant 2)
-// Plan: docs/superpowers/plans/2026-05-04-inbox-typed-cards-and-price-proposals.md Task 4.8
 
 "use client";
 
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 
 export interface SingleTaskToDoBodyData {
   why: string;
@@ -16,13 +14,16 @@ export interface SingleTaskToDoBodyData {
 export function SingleTaskToDoBody({ data }: { data: SingleTaskToDoBodyData }) {
   return (
     <div className="space-y-2">
-      <p>{data.why}</p>
-      {data.what ? <p className="text-slate-500 text-xs">{data.what}</p> : null}
+      <p className="text-slate-700 dark:text-slate-300">{data.why}</p>
+      {data.what ? (
+        <p className="text-slate-500 dark:text-slate-400 text-xs">{data.what}</p>
+      ) : null}
       <Link
         href={data.cta.href}
-        className="inline-flex items-center rounded-md bg-violet-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-violet-700"
+        className="inline-flex items-center gap-1.5 rounded-md bg-violet-600 px-2.5 py-1 text-sm font-medium text-white hover:bg-violet-700 dark:bg-violet-500 dark:hover:bg-violet-600 transition-colors"
       >
-        {data.cta.label} →
+        <span>{data.cta.label}</span>
+        <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
       </Link>
     </div>
   );

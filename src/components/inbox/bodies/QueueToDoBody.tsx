@@ -1,11 +1,9 @@
 // Queue To-Do Body (variant 1) — bulk-process queue with count breakdown.
-//
-// Spec: docs/superpowers/specs/2026-05-04-inbox-typed-cards-and-price-proposals-design.md §1.8 (variant 1)
-// Plan: docs/superpowers/plans/2026-05-04-inbox-typed-cards-and-price-proposals.md Task 4.9
 
 "use client";
 
 import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 
 export interface QueueToDoBodyData {
   why: string;
@@ -16,16 +14,18 @@ export interface QueueToDoBodyData {
 export function QueueToDoBody({ data }: { data: QueueToDoBodyData }) {
   return (
     <div className="space-y-2">
-      <p>{data.why}</p>
-      <ul className="flex flex-wrap gap-x-4 text-xs text-slate-600">
+      <p className="text-slate-700 dark:text-slate-300">{data.why}</p>
+      <ul className="flex flex-wrap gap-x-4 text-xs text-slate-600 dark:text-slate-400">
         <li>
-          <span className="text-slate-500">Pending: </span>
-          <span className="font-semibold tabular-nums">{data.counts.pending}</span>
+          <span>Pending: </span>
+          <span className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">
+            {data.counts.pending}
+          </span>
         </li>
         {data.counts.highConfidence !== undefined ? (
           <li>
-            <span className="text-slate-500">HIGH confidence: </span>
-            <span className="font-semibold tabular-nums">
+            <span>HIGH confidence: </span>
+            <span className="font-semibold tabular-nums text-slate-900 dark:text-slate-100">
               {data.counts.highConfidence}/{data.counts.pending}
             </span>
           </li>
@@ -33,9 +33,10 @@ export function QueueToDoBody({ data }: { data: QueueToDoBodyData }) {
       </ul>
       <Link
         href={data.cta.href}
-        className="inline-flex items-center rounded-md bg-violet-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-violet-700"
+        className="inline-flex items-center gap-1.5 rounded-md bg-violet-600 px-2.5 py-1 text-sm font-medium text-white hover:bg-violet-700 dark:bg-violet-500 dark:hover:bg-violet-600 transition-colors"
       >
-        {data.cta.label} →
+        <span>{data.cta.label}</span>
+        <ArrowLeft className="h-3.5 w-3.5" aria-hidden />
       </Link>
     </div>
   );
