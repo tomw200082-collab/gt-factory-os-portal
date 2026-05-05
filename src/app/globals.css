@@ -1018,4 +1018,686 @@
       animation: none !important;
     }
   }
+
+  /* ════════════════════════════════════════════════════════════════════
+     Forecast list + create polish (2026-05-05)
+
+     Additive utilities for /planning/forecast (list) and
+     /planning/forecast/new (create). All names are forecast-* prefixed
+     to avoid colliding with inventory-flow utilities. Sources:
+       - Linear UI refresh 2026-03-12 (grouped sections, hover actions)
+       - Stripe Apps List component (rich metadata + ListItem actions)
+       - NN/g progress indicators (multi-step form psychology)
+     ════════════════════════════════════════════════════════════════════ */
+
+  /* Insights strip — small, reads like a Bloomberg ticker. Sits under the
+     page header. Tabular nums + 9px uppercase labels. */
+  .forecast-insights-strip {
+    display: inline-flex;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 0.625rem;
+    padding: 0.375rem 0.75rem;
+    background-color: hsl(var(--bg-raised));
+    border: 1px solid hsl(var(--border) / 0.55);
+    border-radius: 4px;
+  }
+  .forecast-insights-strip .stat {
+    display: inline-flex;
+    align-items: baseline;
+    gap: 0.375rem;
+  }
+  .forecast-insights-strip .stat-value {
+    font-size: 13px;
+    font-weight: 600;
+    line-height: 1;
+    font-variant-numeric: tabular-nums;
+    color: hsl(var(--fg-strong));
+  }
+  .forecast-insights-strip .stat-label {
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    line-height: 1;
+    color: hsl(var(--fg-muted));
+  }
+  .forecast-insights-strip .stat-divider {
+    width: 1px;
+    height: 12px;
+    background-color: hsl(var(--border));
+  }
+
+  /* Active-pinned forecast row — stronger visual weight: 4px accent left
+     border, slightly raised bg, larger padding. Used for the published
+     "current" version. */
+  .forecast-row-active {
+    position: relative;
+    background-color: hsl(var(--success-soft) / 0.18);
+    border-left: 4px solid hsl(var(--success));
+    padding: 1rem 1.25rem 1rem calc(1.25rem - 4px);
+  }
+  .forecast-row-active:hover {
+    background-color: hsl(var(--success-soft) / 0.28);
+  }
+
+  /* Standard list row — hover lifts bg, action icons fade in via the
+     [data-show-on-hover] sibling. */
+  .forecast-row {
+    position: relative;
+    padding: 0.875rem 1.25rem;
+    transition: background-color 150ms ease-out;
+  }
+  .forecast-row:hover {
+    background-color: hsl(var(--bg-subtle) / 0.55);
+  }
+  .forecast-row [data-show-on-hover] {
+    opacity: 0;
+    transition: opacity 150ms ease-out;
+  }
+  .forecast-row:hover [data-show-on-hover],
+  .forecast-row:focus-within [data-show-on-hover] {
+    opacity: 1;
+  }
+  /* On touch / no-hover devices, always show the actions so they remain
+     reachable without a hover state. */
+  @media (hover: none) {
+    .forecast-row [data-show-on-hover] {
+      opacity: 1;
+    }
+  }
+
+  /* Section heading inside the list — small uppercase eyebrow with a
+     count chip. Linear-style "Status" group separator. */
+  .forecast-section-heading {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.625rem 1.25rem;
+    background-color: hsl(var(--bg-subtle) / 0.4);
+    border-bottom: 1px solid hsl(var(--border) / 0.5);
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: hsl(var(--fg-muted));
+  }
+
+  /* Stepper — 3-pill connected-by-hairline indicator at the top of
+     forecast/new. Current step accent-bg, completed muted-success,
+     future muted. NN/g: labelled steps perform best. */
+  .forecast-stepper {
+    display: inline-flex;
+    align-items: center;
+    gap: 0;
+  }
+  .forecast-stepper .step {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4375rem;
+    padding: 0.3125rem 0.625rem;
+    border-radius: 9999px;
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: hsl(var(--fg-muted));
+    background-color: hsl(var(--bg-subtle));
+    border: 1px solid hsl(var(--border) / 0.6);
+    transition: background-color 200ms ease-out, color 200ms ease-out,
+      border-color 200ms ease-out;
+  }
+  .forecast-stepper .step .step-num {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 14px;
+    height: 14px;
+    border-radius: 9999px;
+    font-size: 9px;
+    font-variant-numeric: tabular-nums;
+    background-color: hsl(var(--bg-raised));
+    border: 1px solid hsl(var(--border));
+    color: hsl(var(--fg-muted));
+  }
+  .forecast-stepper .step[data-state="current"] {
+    background-color: hsl(var(--accent-soft));
+    border-color: hsl(var(--accent) / 0.5);
+    color: hsl(var(--accent));
+  }
+  .forecast-stepper .step[data-state="current"] .step-num {
+    background-color: hsl(var(--accent));
+    border-color: hsl(var(--accent));
+    color: hsl(var(--accent-fg));
+  }
+  .forecast-stepper .step[data-state="done"] {
+    color: hsl(var(--success-fg));
+  }
+  .forecast-stepper .step[data-state="done"] .step-num {
+    background-color: hsl(var(--success-soft));
+    border-color: hsl(var(--success) / 0.5);
+    color: hsl(var(--success-fg));
+  }
+  .forecast-stepper .step-connector {
+    width: 18px;
+    height: 1px;
+    background-color: hsl(var(--border));
+  }
+
+  /* Form-field group — uppercase 9px label + helper-text rhythm.
+     Refactoring UI: helper text reads as supporting copy, never as
+     a primary signal. */
+  .forecast-field-label {
+    display: block;
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: hsl(var(--fg-muted));
+    margin-bottom: 0.375rem;
+  }
+  .forecast-field-helper {
+    font-size: 11px;
+    color: hsl(var(--fg-subtle));
+    margin-top: 0.375rem;
+    line-height: 1.4;
+  }
+  .forecast-field-error {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 11px;
+    color: hsl(var(--danger-fg));
+    margin-top: 0.375rem;
+    line-height: 1.4;
+  }
+
+  /* Smart-defaults hint — tiny banner above the form explaining that
+     fields are pre-filled. */
+  .forecast-defaults-hint {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4375rem;
+    padding: 0.375rem 0.625rem;
+    background-color: hsl(var(--accent-soft) / 0.6);
+    border: 1px solid hsl(var(--accent) / 0.25);
+    border-radius: 4px;
+    font-size: 11px;
+    color: hsl(var(--fg-muted));
+  }
+  .forecast-defaults-hint .label {
+    font-weight: 600;
+    color: hsl(var(--accent));
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    font-size: 9px;
+  }
+
+  /* Inline disclosure button — "What is a forecast?" expand/collapse.
+     Italic + muted to read as supporting copy. */
+  .forecast-disclosure-toggle {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3125rem;
+    font-size: 11px;
+    font-style: italic;
+    color: hsl(var(--fg-muted));
+    transition: color 150ms ease-out;
+    cursor: pointer;
+  }
+  .forecast-disclosure-toggle:hover {
+    color: hsl(var(--fg));
+  }
+
+  /* Reduce-motion: disable forecast transitions. */
+  @media (prefers-reduced-motion: reduce) {
+    .forecast-row,
+    .forecast-row [data-show-on-hover],
+    .forecast-stepper .step,
+    .forecast-disclosure-toggle {
+      transition: none !important;
+    }
+  }
+
+  /* ════════════════════════════════════════════════════════════════════
+     Forecast EDIT-CHROME polish (2026-05-05)
+
+     Additive utilities for the [version_id] page hero / chrome / publish
+     flow polish. Sources: Linear "How we redesigned the Linear UI" header
+     pattern, Stripe invoice "Review → Finalize" two-stage flow, GitLab
+     Pajamas + Primer "Saving" autosave 4-state pattern, NN/g indicators.
+     Do NOT modify above; only append new utilities here.
+     ════════════════════════════════════════════════════════════════════ */
+
+  /* Hero chrome — display-weight version label sits at the top of the edit
+     page. Slightly larger than WorkflowHeader's title to act as the page
+     identity, with status pill aligned to the baseline. */
+  .fc-edit-hero {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    animation: fade-in 200ms ease-out both;
+  }
+  .fc-edit-hero-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: baseline;
+    gap: 0.625rem 0.75rem;
+  }
+  .fc-edit-hero-title {
+    font-size: 1.625rem; /* 26px */
+    line-height: 1.15;
+    font-weight: 600;
+    letter-spacing: -0.02em;
+    color: hsl(var(--fg-strong));
+  }
+  @media (min-width: 640px) {
+    .fc-edit-hero-title { font-size: 1.75rem; line-height: 1.1; }
+  }
+  .fc-edit-hero-meta {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 0.375rem 0.75rem;
+    font-size: 11.5px;
+    color: hsl(var(--fg-muted));
+  }
+  .fc-edit-hero-meta-dot {
+    display: inline-block;
+    width: 3px;
+    height: 3px;
+    border-radius: 9999px;
+    background-color: hsl(var(--border-strong) / 0.7);
+  }
+
+  /* Status pill — Draft / Published / Archived. 9px uppercase, tier color. */
+  .fc-status-pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3125rem;
+    padding: 0.1875rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 9.5px;
+    font-weight: 700;
+    line-height: 1;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    border: 1px solid transparent;
+  }
+  .fc-status-pill[data-tone="draft"] {
+    background-color: hsl(var(--bg-subtle));
+    border-color: hsl(var(--border));
+    color: hsl(var(--fg));
+  }
+  .fc-status-pill[data-tone="published"] {
+    background-color: hsl(var(--success-soft));
+    border-color: hsl(var(--success) / 0.45);
+    color: hsl(var(--success-fg));
+  }
+  .fc-status-pill[data-tone="archived"] {
+    background-color: hsl(var(--bg-subtle) / 0.7);
+    border-color: hsl(var(--border) / 0.6);
+    color: hsl(var(--fg-faint));
+  }
+  .fc-status-pill[data-tone="superseded"] {
+    background-color: hsl(var(--bg-subtle) / 0.7);
+    border-color: hsl(var(--border) / 0.6);
+    color: hsl(var(--fg-muted));
+  }
+
+  /* Breadcrumb — small text rail above the hero. Sticks at top with
+     backdrop-blur when scrolled past. */
+  .fc-breadcrumb {
+    display: flex;
+    align-items: center;
+    gap: 0.375rem;
+    font-size: 10.5px;
+    color: hsl(var(--fg-muted));
+    line-height: 1;
+    padding: 0.375rem 0;
+  }
+  .fc-breadcrumb a {
+    color: hsl(var(--fg-muted));
+    text-decoration: none;
+    transition: color 150ms ease-out;
+  }
+  .fc-breadcrumb a:hover {
+    color: hsl(var(--fg));
+  }
+  .fc-breadcrumb-sep {
+    color: hsl(var(--fg-faint));
+    font-size: 10px;
+  }
+  .fc-breadcrumb-current {
+    color: hsl(var(--fg));
+    font-weight: 500;
+    max-width: 32ch;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .fc-breadcrumb-sticky {
+    position: sticky;
+    top: 0;
+    z-index: 25;
+    background-color: hsl(var(--bg) / 0);
+    border-bottom: 1px solid transparent;
+    transition: background-color 200ms ease-out, border-color 200ms ease-out,
+      backdrop-filter 200ms ease-out;
+  }
+  .fc-breadcrumb-sticky[data-stuck="true"] {
+    background-color: hsl(var(--bg) / 0.9);
+    backdrop-filter: saturate(140%) blur(8px);
+    -webkit-backdrop-filter: saturate(140%) blur(8px);
+    border-bottom-color: hsl(var(--border) / 0.5);
+  }
+
+  /* Hero + KPI band staggered fade-in. KPI lands ~100ms after hero so the
+     planner's eye lands on identity first, numbers second. */
+  .fc-hero-fade-in {
+    animation: fade-in 200ms ease-out both;
+  }
+  .fc-kpi-fade-in {
+    animation: fade-in 240ms ease-out both;
+    animation-delay: 100ms;
+  }
+
+  /* Forecast KPI micro-card — 5-up band on the edit page. Mirrors the
+     inventory-flow .kpi-microcard but vertically stacked (large value on
+     top, tiny uppercase label below) since this is the page-level KPI band
+     not a sub-row. */
+  .fc-kpi-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    padding: 0.625rem 0.75rem 0.6875rem 0.875rem;
+    background-color: hsl(var(--bg-raised));
+    border: 1px solid hsl(var(--border) / 0.55);
+    border-left: 2px solid hsl(var(--kpi-accent, var(--border-strong)));
+    border-radius: 5px;
+    box-shadow: 0 1px 0 0 hsl(var(--shadow-color) / 0.04);
+    transition: border-color 160ms ease-out, transform 160ms ease-out;
+    min-height: 58px;
+  }
+  .fc-kpi-card:hover {
+    border-color: hsl(var(--border-strong));
+  }
+  .fc-kpi-card-label {
+    font-size: 9px;
+    line-height: 1;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    font-weight: 600;
+    color: hsl(var(--fg-muted));
+  }
+  .fc-kpi-card-value {
+    font-size: 22px;
+    line-height: 1.05;
+    font-weight: 700;
+    letter-spacing: -0.02em;
+    color: hsl(var(--fg-strong));
+    font-variant-numeric: tabular-nums;
+  }
+  .fc-kpi-card-sub {
+    font-size: 10px;
+    line-height: 1.1;
+    color: hsl(var(--fg-faint));
+    font-weight: 500;
+  }
+
+  /* AutoSave indicator — refined 4 micro-states with smooth fade+slide. */
+  .fc-autosave {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    height: 26px;
+    padding: 0 0.5rem;
+    border-radius: 4px;
+    font-size: 11px;
+    font-weight: 500;
+    border: 1px solid transparent;
+    transition: background-color 200ms ease-out, color 200ms ease-out,
+      border-color 200ms ease-out;
+    animation: fc-autosave-slide-in 200ms ease-out both;
+  }
+  @keyframes fc-autosave-slide-in {
+    from { opacity: 0; transform: translateY(-2px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .fc-autosave[data-state="idle"] {
+    color: hsl(var(--fg-muted));
+    background-color: transparent;
+    border-color: hsl(var(--border) / 0.55);
+  }
+  .fc-autosave[data-state="saving"] {
+    color: hsl(var(--accent));
+    background-color: hsl(var(--accent-soft) / 0.7);
+    border-color: hsl(var(--accent) / 0.35);
+  }
+  .fc-autosave[data-state="saved"] {
+    color: hsl(var(--success-fg));
+    background-color: hsl(var(--success-softer));
+    border-color: hsl(var(--success) / 0.30);
+  }
+  .fc-autosave[data-state="error"] {
+    color: hsl(var(--danger-fg));
+    background-color: hsl(var(--danger-softer));
+    border-color: hsl(var(--danger) / 0.40);
+  }
+  .fc-autosave-dots {
+    display: inline-flex;
+    align-items: center;
+    gap: 2px;
+  }
+  .fc-autosave-dot {
+    width: 3px;
+    height: 3px;
+    border-radius: 9999px;
+    background-color: currentColor;
+    animation: fc-autosave-bounce 1.05s ease-in-out infinite;
+  }
+  .fc-autosave-dot:nth-child(2) { animation-delay: 140ms; }
+  .fc-autosave-dot:nth-child(3) { animation-delay: 280ms; }
+  @keyframes fc-autosave-bounce {
+    0%, 80%, 100% { opacity: 0.35; transform: translateY(0); }
+    40%           { opacity: 1; transform: translateY(-2px); }
+  }
+
+  /* Draft banner — thin info bar shown when status='draft' to set the
+     "your changes auto-save" mental model up front. */
+  .fc-draft-banner {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4375rem 0.75rem;
+    border-radius: 4px;
+    border: 1px solid hsl(var(--border) / 0.6);
+    background-color: hsl(var(--bg-subtle) / 0.55);
+    color: hsl(var(--fg-muted));
+    font-size: 11px;
+    line-height: 1.35;
+  }
+  .fc-draft-banner-label {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.0625rem 0.375rem;
+    border-radius: 3px;
+    background-color: hsl(var(--bg-raised));
+    border: 1px solid hsl(var(--border));
+    color: hsl(var(--fg));
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+  }
+  .fc-draft-banner-dismiss {
+    margin-left: auto;
+    color: hsl(var(--fg-faint));
+    background: none;
+    border: 0;
+    cursor: pointer;
+    padding: 2px;
+    border-radius: 3px;
+    line-height: 0;
+    transition: color 150ms ease-out, background-color 150ms ease-out;
+  }
+  .fc-draft-banner-dismiss:hover {
+    color: hsl(var(--fg));
+    background-color: hsl(var(--bg-raised));
+  }
+
+  /* Publish gate — checklist row (Stripe "Review → Finalize" pattern). */
+  .fc-publish-checklist {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    border: 1px solid hsl(var(--border) / 0.6);
+    border-radius: 5px;
+    overflow: hidden;
+    background-color: hsl(var(--bg-raised));
+  }
+  .fc-publish-checklist-row {
+    display: flex;
+    align-items: flex-start;
+    gap: 0.625rem;
+    padding: 0.625rem 0.75rem;
+    border-bottom: 1px solid hsl(var(--border) / 0.4);
+    font-size: 12px;
+    line-height: 1.35;
+  }
+  .fc-publish-checklist-row:last-child { border-bottom: 0; }
+  .fc-publish-checklist-row[data-pass="true"] {
+    color: hsl(var(--fg));
+  }
+  .fc-publish-checklist-row[data-pass="false"] {
+    color: hsl(var(--fg));
+    background-color: hsl(var(--warning-softer) / 0.45);
+  }
+  .fc-publish-checklist-icon {
+    flex-shrink: 0;
+    margin-top: 1px;
+  }
+  .fc-publish-checklist-row[data-pass="true"] .fc-publish-checklist-icon {
+    color: hsl(var(--success-fg));
+  }
+  .fc-publish-checklist-row[data-pass="false"] .fc-publish-checklist-icon {
+    color: hsl(var(--warning-fg));
+  }
+  .fc-publish-checklist-title {
+    font-weight: 600;
+    color: hsl(var(--fg-strong));
+  }
+  .fc-publish-checklist-detail {
+    color: hsl(var(--fg-muted));
+    font-size: 11px;
+    margin-top: 1px;
+  }
+
+  /* Item autocomplete — refined dropdown row. Family chip + supply chip
+     + at-risk inline indicator. */
+  .fc-autocomplete-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4375rem 0.75rem;
+    cursor: pointer;
+    transition: background-color 100ms ease-out;
+  }
+  .fc-autocomplete-row[data-active="true"] {
+    background-color: hsl(var(--accent-soft) / 0.55);
+  }
+  .fc-autocomplete-row:hover:not([data-active="true"]) {
+    background-color: hsl(var(--bg-subtle) / 0.6);
+  }
+  .fc-autocomplete-supply-chip {
+    display: inline-flex;
+    align-items: center;
+    height: 16px;
+    padding: 0 0.375rem;
+    border-radius: 3px;
+    border: 1px solid hsl(var(--border) / 0.7);
+    background-color: hsl(var(--bg-subtle) / 0.7);
+    color: hsl(var(--fg-muted));
+    font-size: 9px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    text-transform: uppercase;
+    line-height: 1;
+  }
+  .fc-autocomplete-supply-chip[data-method="BUY"] {
+    border-color: hsl(var(--info) / 0.4);
+    background-color: hsl(var(--info-softer) / 0.7);
+    color: hsl(var(--info-fg));
+  }
+  .fc-autocomplete-supply-chip[data-method="MAKE"] {
+    border-color: hsl(var(--accent) / 0.35);
+    background-color: hsl(var(--accent-soft) / 0.7);
+    color: hsl(var(--accent));
+  }
+  .fc-autocomplete-section-label {
+    padding: 0.375rem 0.75rem 0.25rem;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.08em;
+    text-transform: uppercase;
+    color: hsl(var(--fg-faint));
+    background-color: hsl(var(--bg-subtle) / 0.4);
+    border-bottom: 1px solid hsl(var(--border) / 0.4);
+  }
+  .fc-autocomplete-section-label + .fc-autocomplete-section-label,
+  ul + .fc-autocomplete-section-label {
+    border-top: 1px solid hsl(var(--border) / 0.4);
+  }
+
+  /* Sticky bottom action bar — slides up when unsaved changes are detected. */
+  .fc-bottom-bar {
+    position: fixed;
+    left: 50%;
+    bottom: 1rem;
+    z-index: 35;
+    display: inline-flex;
+    align-items: center;
+    gap: 0.625rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: 8px;
+    border: 1px solid hsl(var(--border));
+    background-color: hsl(var(--bg-raised));
+    box-shadow: 0 12px 32px -12px hsl(var(--shadow-color-deep) / 0.45),
+      0 2px 8px -3px hsl(var(--shadow-color) / 0.3);
+    transform: translate(-50%, calc(100% + 1.5rem));
+    opacity: 0;
+    pointer-events: none;
+    transition: transform 250ms cubic-bezier(0.165, 0.84, 0.44, 1),
+      opacity 200ms ease-out;
+  }
+  .fc-bottom-bar[data-visible="true"] {
+    transform: translate(-50%, 0);
+    opacity: 1;
+    pointer-events: auto;
+  }
+  .fc-bottom-bar-label {
+    font-size: 11px;
+    color: hsl(var(--fg-muted));
+    padding-right: 0.25rem;
+  }
+  .fc-bottom-bar-count {
+    color: hsl(var(--fg-strong));
+    font-weight: 600;
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* Reduce-motion: kill forecast-edit-chrome animations. */
+  @media (prefers-reduced-motion: reduce) {
+    .fc-edit-hero,
+    .fc-hero-fade-in,
+    .fc-kpi-fade-in,
+    .fc-autosave,
+    .fc-autosave-dot,
+    .fc-bottom-bar {
+      animation: none !important;
+      transition: none !important;
+    }
+  }
 }

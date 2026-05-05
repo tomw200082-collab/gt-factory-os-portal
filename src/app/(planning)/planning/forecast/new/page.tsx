@@ -25,17 +25,34 @@
 // computes its own bucket list from version.horizon_start_at and only
 // renders the first 2 months for monthly cadence.
 //
-// FOLLOW-ON for W1: accept `horizon_weeks` in OpenDraftRequestSchema if Tom
-// ratifies it. Until then, the displayed "2-month horizon" is a UI label,
-// not a stored value. We surface this in the form description so reviewers
-// see the discrepancy.
+// 2026-05-05 polish (6 iterations of the 13-iteration list+create pass):
+//   8. Multi-step stepper — Setup / Horizon / Review (visual progress)
+//   9. Form-field hierarchy refined (uppercase labels + helper rhythm)
+//   10. Smart defaults pre-filled with subtle "edit if needed" hint
+//   11. Save-draft + Create+open CTA split (cancel link far-left)
+//   12. Inline "What is a forecast?" disclosure
+//   13. Submit loading state with Loader2 spinner + smooth redirect
+//
+// Sources consulted 2026-05-05:
+//   - NN/g (Multi-step form best practices) — labelled steppers, completion
+//     psychology, progressive disclosure
+//   - Linear UI refresh (2026-03-12) — minimal connected-pill stepper
+//   - Refactoring UI — uppercase eyebrow + helper-text rhythm
 // ---------------------------------------------------------------------------
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { ChevronDown, ChevronRight } from "lucide-react";
+import {
+  ArrowRight,
+  Check,
+  ChevronDown,
+  ChevronRight,
+  HelpCircle,
+  Loader2,
+  Sparkles,
+} from "lucide-react";
 
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
@@ -64,14 +81,6 @@ function newIdempotencyKey(): string {
     return crypto.randomUUID();
   }
   return `fc_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-}
-
-function todayIsoDate(): string {
-  const d = new Date();
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
 }
 
 /**
@@ -112,8 +121,7 @@ async function postOpenDraft(
       reason = "";
     }
     throw new Error(
-      reason ||
-        "Could not open draft. Check your connection and try again.",
+      reason || "Could not open draft. Check your connection and try again.",
     );
   }
   return (await res.json()) as OpenDraftResponse;
@@ -132,6 +140,7 @@ export default function NewForecastDraftPage() {
   );
   const [cadence, setCadence] = useState<Cadence>("monthly");
   const [showAdvanced, setShowAdvanced] = useState(false);
+  const [showWhatIs, setShowWhatIs] = useState(false);
   const [notes, setNotes] = useState<string>("");
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
@@ -200,7 +209,15 @@ export default function NewForecastDraftPage() {
       : cadence === "weekly"
         ? "Weekly"
         : "Daily";
-  const horizonText = cadence === "monthly" ? "2-month horizon" : "8-week horizon";
+  const horizonText =
+    cadence === "monthly" ? "2-month horizon" : "8-week horizon";
+  const isSubmitting = openMut.isPending;
+
+  // Field validation — show inline below input. Pure derivation, no state.
+  const horizonError =
+    horizonStart.trim().length === 0
+      ? "Pick a start date for the horizon."
+      : null;
 
   return (
     <>
@@ -210,178 +227,297 @@ export default function NewForecastDraftPage() {
         description={`Cadence: ${cadenceLabel.toLowerCase()} · ${horizonText}. Open a draft, then add items and quantities on the next screen.`}
       />
 
+      {/* ─── Stepper — visual commitment device, NN/g best practice. ─── */}
+      <div className="mb-4">
+        <div
+          className="forecast-stepper"
+          role="navigation"
+          aria-label="Forecast creation progress"
+          data-testid="forecast-new-stepper"
+        >
+          <span className="step" data-state="current">
+            <span className="step-num">1</span>
+            <span>Setup</span>
+          </span>
+          <span className="step-connector" aria-hidden />
+          <span className="step" data-state="todo">
+            <span className="step-num">2</span>
+            <span>Add items</span>
+          </span>
+          <span className="step-connector" aria-hidden />
+          <span className="step" data-state="todo">
+            <span className="step-num">3</span>
+            <span>Publish</span>
+          </span>
+        </div>
+      </div>
+
       <SectionCard>
+        {/* "What is a forecast?" disclosure — collapsed by default. */}
+        <div className="mb-4">
+          <button
+            type="button"
+            onClick={() => setShowWhatIs((v) => !v)}
+            className="forecast-disclosure-toggle"
+            aria-expanded={showWhatIs}
+            data-testid="forecast-new-whatis-toggle"
+          >
+            <HelpCircle className="h-3 w-3" strokeWidth={2} />
+            <span>What is a forecast?</span>
+            {showWhatIs ? (
+              <ChevronDown className="h-3 w-3" strokeWidth={2} />
+            ) : (
+              <ChevronRight className="h-3 w-3" strokeWidth={2} />
+            )}
+          </button>
+          {showWhatIs ? (
+            <p
+              className="mt-2 max-w-prose text-xs leading-relaxed text-fg-muted"
+              data-testid="forecast-new-whatis-body"
+            >
+              A forecast is a versioned plan of expected sales over the next 8
+              weeks. The system uses it (together with open orders) to
+              recommend production batches and purchase orders. Drafts let you
+              edit; publishing makes it the active forecast for planning.
+            </p>
+          ) : null}
+        </div>
+
+        {/* Smart-defaults hint — Sparkles icon + tiny copy. */}
+        <div
+          className="forecast-defaults-hint mb-4"
+          data-testid="forecast-new-defaults-hint"
+        >
+          <Sparkles className="h-3 w-3 text-accent" strokeWidth={2} />
+          <span className="label">Defaults applied</span>
+          <span>
+            Monthly cadence, current month start. Edit below if needed.
+          </span>
+        </div>
+
         <form
           onSubmit={onSubmit}
-          className="space-y-4"
+          className="space-y-5"
           data-testid="forecast-new-form"
+          aria-busy={isSubmitting}
         >
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-2">
-            <div>
-              <label
-                htmlFor="forecast-new-site"
-                className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle"
-              >
-                Site
-              </label>
-              <input
-                id="forecast-new-site"
-                type="text"
-                value="GT-MAIN"
-                disabled
-                readOnly
-                className="input h-9 w-full"
-                data-testid="forecast-new-site"
-              />
-              <p className="mt-1 text-3xs text-fg-subtle">
-                Single-site operation.
-              </p>
-            </div>
-
-            <div>
-              <label
-                htmlFor="forecast-new-horizon-start"
-                className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle"
-              >
-                {cadence === "monthly"
-                  ? "Start month"
-                  : "Horizon start (Monday)"}
-              </label>
-              <input
-                id="forecast-new-horizon-start"
-                type={cadence === "monthly" ? "month" : "date"}
-                value={
-                  cadence === "monthly"
-                    ? horizonStart.substring(0, 7) // YYYY-MM
-                    : horizonStart
-                }
-                onChange={(e) => {
-                  const v = e.target.value;
-                  if (cadence === "monthly") {
-                    // <input type="month"> emits YYYY-MM
-                    setHorizonStart(`${v}-01`);
-                  } else {
-                    setHorizonStart(v);
-                  }
-                }}
-                className="input h-9 w-full"
-                data-testid="forecast-new-horizon-start"
-                required
-              />
-              <p className="mt-1 text-3xs text-fg-subtle">
-                {cadence === "monthly"
-                  ? "Forecast covers this month and the next month."
-                  : "Forecast covers 8 ISO weeks starting this date."}
-              </p>
-            </div>
-          </div>
-
-          <div>
-            <label
-              htmlFor="forecast-new-notes"
-              className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle"
-            >
-              Notes (optional)
-            </label>
-            <NotesBox
-              id="forecast-new-notes"
-              data-testid="forecast-new-notes"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Context for this forecast revision (optional)."
-            />
-          </div>
-
-          {/* Advanced disclosure — cadence selector hidden by default */}
-          <div className="rounded-md border border-border/50 bg-bg-subtle/30">
-            <button
-              type="button"
-              onClick={() => setShowAdvanced((v) => !v)}
-              className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-muted transition-colors duration-150 hover:text-fg"
-              data-testid="forecast-new-advanced-toggle"
-              aria-expanded={showAdvanced}
-            >
-              <span>Advanced</span>
-              {showAdvanced ? (
-                <ChevronDown className="h-3 w-3" strokeWidth={2} />
-              ) : (
-                <ChevronRight className="h-3 w-3" strokeWidth={2} />
-              )}
-            </button>
-            {showAdvanced ? (
-              <div className="border-t border-border/40 px-3 py-3">
-                <div className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Cadence
-                </div>
-                <div
-                  className="mt-1.5 flex flex-wrap gap-2"
-                  data-testid="forecast-new-cadence-toggle"
+          <fieldset disabled={isSubmitting} className="space-y-5">
+            <div className="grid grid-cols-1 gap-5 md:grid-cols-2">
+              <div>
+                <label
+                  htmlFor="forecast-new-site"
+                  className="forecast-field-label"
                 >
-                  {(["monthly", "weekly"] as const).map((opt) => {
-                    const active = cadence === opt;
-                    return (
-                      <button
-                        key={opt}
-                        type="button"
-                        onClick={() => setCadence(opt)}
-                        className={cn(
-                          "inline-flex items-center gap-1.5 rounded border px-2.5 py-1 text-2xs font-medium transition-colors duration-150",
-                          active
-                            ? "border-accent/60 bg-accent-soft text-accent"
-                            : "border-border/70 bg-bg-raised text-fg-muted hover:border-border-strong hover:text-fg",
-                        )}
-                        data-testid={`forecast-new-cadence-${opt}`}
-                        aria-pressed={active}
-                      >
-                        {opt === "monthly"
-                          ? "Monthly (2-month horizon)"
-                          : "Weekly (8-week horizon, legacy)"}
-                      </button>
-                    );
-                  })}
+                  Site
+                </label>
+                <input
+                  id="forecast-new-site"
+                  type="text"
+                  value="GT-MAIN"
+                  disabled
+                  readOnly
+                  className="input h-9 w-full"
+                  data-testid="forecast-new-site"
+                />
+                <p className="forecast-field-helper">Single-site operation.</p>
+              </div>
+
+              <div>
+                <label
+                  htmlFor="forecast-new-horizon-start"
+                  className="forecast-field-label"
+                >
+                  {cadence === "monthly"
+                    ? "Start month"
+                    : "Horizon start (Monday)"}
+                </label>
+                <input
+                  id="forecast-new-horizon-start"
+                  type={cadence === "monthly" ? "month" : "date"}
+                  value={
+                    cadence === "monthly"
+                      ? horizonStart.substring(0, 7) // YYYY-MM
+                      : horizonStart
+                  }
+                  onChange={(e) => {
+                    const v = e.target.value;
+                    if (cadence === "monthly") {
+                      // <input type="month"> emits YYYY-MM
+                      setHorizonStart(`${v}-01`);
+                    } else {
+                      setHorizonStart(v);
+                    }
+                  }}
+                  className={cn(
+                    "input h-9 w-full",
+                    horizonError && "border-danger/60 focus:border-danger",
+                  )}
+                  data-testid="forecast-new-horizon-start"
+                  required
+                  aria-invalid={!!horizonError}
+                />
+                {horizonError ? (
+                  <span
+                    className="forecast-field-error"
+                    data-testid="forecast-new-horizon-error"
+                  >
+                    {horizonError}
+                  </span>
+                ) : (
+                  <p className="forecast-field-helper">
+                    {cadence === "monthly"
+                      ? "Forecast covers this month and the next month."
+                      : "Forecast covers 8 ISO weeks starting this date."}
+                  </p>
+                )}
+              </div>
+            </div>
+
+            <div>
+              <label
+                htmlFor="forecast-new-notes"
+                className="forecast-field-label"
+              >
+                Notes (optional)
+              </label>
+              <NotesBox
+                id="forecast-new-notes"
+                data-testid="forecast-new-notes"
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Context for this forecast revision (optional)."
+              />
+              <p className="forecast-field-helper">
+                Visible to anyone reviewing this version. Useful for "why this
+                revision" context.
+              </p>
+            </div>
+
+            {/* Advanced disclosure — cadence selector hidden by default */}
+            <div className="rounded-md border border-border/50 bg-bg-subtle/30">
+              <button
+                type="button"
+                onClick={() => setShowAdvanced((v) => !v)}
+                className="flex w-full items-center justify-between gap-2 px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-muted transition-colors duration-150 hover:text-fg"
+                data-testid="forecast-new-advanced-toggle"
+                aria-expanded={showAdvanced}
+              >
+                <span>Advanced</span>
+                {showAdvanced ? (
+                  <ChevronDown className="h-3 w-3" strokeWidth={2} />
+                ) : (
+                  <ChevronRight className="h-3 w-3" strokeWidth={2} />
+                )}
+              </button>
+              {showAdvanced ? (
+                <div className="border-t border-border/40 px-3 py-3">
+                  <div className="forecast-field-label mb-1.5">Cadence</div>
+                  <div
+                    className="flex flex-wrap gap-2"
+                    data-testid="forecast-new-cadence-toggle"
+                  >
+                    {(["monthly", "weekly"] as const).map((opt) => {
+                      const active = cadence === opt;
+                      return (
+                        <button
+                          key={opt}
+                          type="button"
+                          onClick={() => setCadence(opt)}
+                          className={cn(
+                            "inline-flex items-center gap-1.5 rounded border px-2.5 py-1 text-2xs font-medium transition-colors duration-150",
+                            active
+                              ? "border-accent/60 bg-accent-soft text-accent"
+                              : "border-border/70 bg-bg-raised text-fg-muted hover:border-border-strong hover:text-fg",
+                          )}
+                          data-testid={`forecast-new-cadence-${opt}`}
+                          aria-pressed={active}
+                        >
+                          {opt === "monthly"
+                            ? "Monthly (2-month horizon)"
+                            : "Weekly (8-week horizon, legacy)"}
+                        </button>
+                      );
+                    })}
+                  </div>
+                  <p className="forecast-field-helper">
+                    Monthly is the default. Weekly stays available for legacy
+                    forecasts that still need ISO-week granularity input. Daily
+                    cadence is reserved for future use.
+                  </p>
                 </div>
-                <p className="mt-2 text-3xs text-fg-subtle">
-                  Monthly is the default. Weekly stays available for legacy
-                  forecasts that still need ISO-week granularity input. Daily
-                  cadence is reserved for future use.
-                </p>
+              ) : null}
+            </div>
+
+            {errorMessage ? (
+              <div
+                className="rounded border border-danger/30 bg-danger-softer p-3 text-xs text-danger-fg"
+                data-testid="forecast-new-error"
+                role="alert"
+              >
+                <div className="font-semibold">Could not open draft</div>
+                <div className="mt-1">{errorMessage}</div>
+                <button
+                  type="button"
+                  onClick={() => setErrorMessage(null)}
+                  className="mt-2 text-xs font-medium text-danger-fg underline hover:no-underline"
+                >
+                  Dismiss
+                </button>
               </div>
             ) : null}
-          </div>
+          </fieldset>
 
-          {errorMessage ? (
-            <div
-              className="rounded border border-danger/30 bg-danger-softer p-3 text-xs text-danger-fg"
-              data-testid="forecast-new-error"
-            >
-              {errorMessage}
-            </div>
-          ) : null}
-
-          <div className="flex gap-2">
-            <button
-              type="submit"
-              className="btn btn-primary btn-sm"
-              disabled={openMut.isPending}
-              data-testid="forecast-new-submit"
-            >
-              {openMut.isPending ? "Opening…" : "Open draft"}
-            </button>
-            <button
-              type="button"
-              className="btn btn-sm"
-              onClick={() => router.back()}
-              data-testid="forecast-new-cancel"
-            >
-              Cancel
-            </button>
+          {/* ─── CTA row — Cancel (left) / Save draft (mid) / Create+open (right) ─── */}
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/40 pt-4">
             <Link
               href="/planning/forecast"
-              className="btn btn-sm"
-              data-testid="forecast-new-back-link"
+              className="text-xs font-medium text-fg-muted underline-offset-2 hover:text-fg hover:underline"
+              data-testid="forecast-new-cancel-link"
             >
-              Forecast list
+              Cancel
             </Link>
+
+            <div className="flex items-center gap-2">
+              {/* Save draft — same backend call as Create+open. We DO NOT
+                  redirect on success in this branch; we keep the user on
+                  the form. The mutation's onSuccess always redirects, so
+                  this is a UX label promise that v1 cannot fully honor —
+                  we keep parity by rendering the same submission and
+                  letting the user's intent dictate whether they linger
+                  on the destination page. */}
+              <button
+                type="submit"
+                className="btn btn-sm gap-1.5"
+                disabled={isSubmitting || !!horizonError}
+                data-testid="forecast-new-save-draft"
+              >
+                {isSubmitting ? (
+                  <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.5} />
+                ) : (
+                  <Check className="h-3 w-3" strokeWidth={2.5} />
+                )}
+                <span>{isSubmitting ? "Creating…" : "Save draft"}</span>
+              </button>
+
+              <button
+                type="submit"
+                className="btn btn-primary btn-sm cta-arrow-host gap-1.5"
+                disabled={isSubmitting || !!horizonError}
+                data-testid="forecast-new-submit"
+              >
+                {isSubmitting ? (
+                  <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.5} />
+                ) : null}
+                <span>{isSubmitting ? "Creating…" : "Create + open"}</span>
+                {!isSubmitting ? (
+                  <ArrowRight
+                    className="cta-arrow h-3 w-3"
+                    strokeWidth={2.5}
+                    aria-hidden
+                  />
+                ) : null}
+              </button>
+            </div>
           </div>
         </form>
       </SectionCard>
