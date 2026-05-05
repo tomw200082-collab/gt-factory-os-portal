@@ -3,14 +3,18 @@
 // ---------------------------------------------------------------------------
 // StickyItemPanel — left-most sticky panel for an item row in the grid.
 //
-// Operational Clarity v2 (2026-05-05):
-//   - Width inherits from the grid track (`var(--item-col-w)` 320px) — no
+// Operational Clarity v2 (2026-05-05) — POLISH PASS 2:
+//   - Width inherits from the grid track (`var(--item-col-w)` 400px) — no
 //     fixed-width wrapper. This guarantees pixel alignment with the
 //     sticky header's top-left corner cell.
-//   - Family color: 2px (was 3px) left rule — tighter, less visual weight.
+//   - Family color: 3px left rule — confident brand-signal stripe.
 //   - Days-cover hero: prominent number + tiny uppercase "cover" sub-label.
-//   - Sparkline: 64px wide × 18px tall — sits between label and hero so
-//     the slope reads naturally left-to-right alongside the days-cover.
+//   - Sparkline: 80px wide slot so 14 points render unconstrained.
+//   - Cover tile: 96px slot so "STOCKOUT" + ">8w / cover" sit comfortably.
+//   - Right boundary: layered inset hairline + soft 6px drop shadow that
+//     visually separates the sticky col from the data grid (Tom feedback
+//     2026-05-05: 1px border was too easy to miss; the cover tile was
+//     reading as crowding the first data cell).
 //
 // `position: sticky; left: 0` keeps it pinned while the day columns scroll.
 // Background must remain opaque so scrolling content doesn't bleed through.
@@ -56,11 +60,17 @@ function StickyItemPanelInner({ item }: StickyItemPanelProps) {
   return (
     <div
       role="rowheader"
-      className="sticky left-0 z-20 flex h-full items-stretch border-r border-border bg-bg-raised"
+      className="sticky left-0 z-20 flex h-full items-stretch overflow-hidden bg-bg-raised"
       style={{
-        // 2px family color rule on the left edge (tighter than the legacy
-        // 3px; keeps the family signal without overpowering the row).
-        borderLeft: `2px solid ${familyColor}`,
+        // 3px family color rule on the left edge — confident brand signal
+        // (the 2px variant was too easy to miss on dark theme).
+        borderLeft: `3px solid ${familyColor}`,
+        // Layered right boundary: inset 1px hairline + 6px soft drop shadow
+        // falling into the data grid. Visually distinct surface from the
+        // first data cell without expanding layout. Tom feedback 2026-05-05:
+        // a single 1px border didn't isolate the sticky col strongly enough.
+        boxShadow:
+          "inset -1px 0 0 hsl(var(--border-strong)), 2px 0 6px -2px hsl(var(--shadow-color-deep) / 0.4)",
       }}
     >
       <div className="flex flex-1 items-stretch gap-3 pl-3 pr-2">
@@ -81,28 +91,28 @@ function StickyItemPanelInner({ item }: StickyItemPanelProps) {
           </div>
         </div>
 
-        {/* Sparkline column — fixed 64px slot; centered vertically. */}
-        <div className="flex w-16 shrink-0 items-center justify-center">
+        {/* Sparkline column — fixed 80px slot; centered vertically. Bumped
+            from 64px so 14 points render unconstrained. */}
+        <div className="flex w-20 shrink-0 items-center justify-center">
           <Sparkline
             days={item.days.slice(0, 14)}
             riskTier={item.risk_tier}
-            width={64}
+            width={80}
             height={20}
             className="opacity-90"
           />
         </div>
 
-        {/* Days-cover hero — bounded stat tile. 84px wide (was 68) to fit
-            the 8-char "STOCKOUT" string without overflow into the first
-            data cell. overflow-hidden + truncate guarantee containment for
-            any future longer string. Tom feedback 2026-05-05: cover tile
-            was overflowing into adjacent cells on stockout rows. */}
-        <div className="flex w-[84px] shrink-0 flex-col items-center justify-center overflow-hidden border-l border-border/60 bg-bg-subtle/40 px-1 py-2">
+        {/* Days-cover hero — bounded stat tile. 96px wide (was 84) so
+            "STOCKOUT" + a faint sub-label sit comfortably with breathing
+            room next to the sparkline. overflow-hidden + truncate on every
+            text node guarantees containment against any future longer
+            string. Tom feedback 2026-05-05: cover tile + first data cell
+            still felt crowded at 84px. */}
+        <div className="flex w-24 shrink-0 flex-col items-center justify-center overflow-hidden border-l border-border/60 bg-bg-subtle/40 px-2 py-2">
           <div
             className={cn(
               "w-full truncate text-center font-semibold leading-none tabular-nums",
-              // STOCKOUT is 8 chars; smaller font when sub-empty so it still
-              // fits in 84px without truncation. Other values stay 16px.
               heroSub ? "text-[16px]" : "text-[12px]",
               heroToneClass,
             )}
@@ -112,7 +122,10 @@ function StickyItemPanelInner({ item }: StickyItemPanelProps) {
             {heroValue}
           </div>
           {heroSub ? (
-            <div className="mt-1 w-full truncate text-center text-[9px] uppercase tracking-sops leading-none text-fg-subtle">
+            <div
+              className="mt-1 w-full truncate text-center text-[9px] uppercase tracking-sops leading-none text-fg-subtle"
+              title={heroSub}
+            >
               {heroSub}
             </div>
           ) : null}

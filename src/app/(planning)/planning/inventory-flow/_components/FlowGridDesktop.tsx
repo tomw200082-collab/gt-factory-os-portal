@@ -23,7 +23,7 @@
 //     every body row via the `--flow-grid-cols` custom property set on
 //     the wrapper.
 //   - Per-cell widths come from CSS variables (`--day-col-w` 80px,
-//     `--week-col-w` 96px, `--item-col-w` 320px). Constants exported
+//     `--week-col-w` 96px, `--item-col-w` 400px). Constants exported
 //     from this module so React siblings can reason about them.
 //   - Fixed-width tracks; cells set `width: var(...)` so min === max ===
 //     width — no flex-shrink drift.
@@ -32,7 +32,8 @@
 //     cross-hairs visible.
 //
 // Layout (left-to-right):
-//   Sticky item col:  320px  (StickyItemPanel)
+//   Sticky item col:  400px  (StickyItemPanel — 3px family + flex item +
+//                              80px trend + 96px cover + paddings)
 //   Daily band:       14 columns × 80px (DayCell)        ← was 64px
 //   Spacer:           16px
 //   Weekly band:      6 columns × 96px (WeekCell)
@@ -57,7 +58,7 @@ import { WeekCell } from "./WeekCell";
 // Tom locked: prefer fewer cells with crisp alignment over many narrow cells.
 // 80px daily column comfortably fits "1.5K" (cell number) AND a "▼ 517"
 // production-receipt chip stacked on top of it without clipping.
-export const ITEM_COL_W = 380; // px — sticky left column (was 320 → 360 → 380; the 380 bump 2026-05-05 fits the wider cover tile that holds "STOCKOUT" 8-char string without overflow)
+export const ITEM_COL_W = 400; // px — sticky left column (was 320 → 360 → 380 → 400; the 400 bump 2026-05-05 polish-pass-2 accommodates the 96px cover tile + 80px sparkline + breathing room next to the data grid)
 export const DAY_COL_W = 80; // px — daily band cell
 export const WEEK_COL_W = 96; // px — weekly band cell
 export const BAND_GAP_W = 16; // px — spacer between daily and weekly bands

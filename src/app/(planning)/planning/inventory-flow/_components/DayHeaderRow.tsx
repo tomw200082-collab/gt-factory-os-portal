@@ -62,7 +62,14 @@ export function DayHeaderRow({ days, weeks, gridStyle }: DayHeaderRowProps) {
       >
         <div
           role="columnheader"
-          className="sticky left-0 z-40 h-7 border-r border-border/40 bg-bg-raised"
+          className="sticky left-0 z-40 h-7 bg-bg-raised"
+          style={{
+            // Mirror the per-day header's right boundary so the sticky col
+            // edge reads as one continuous line through both header rows.
+            borderLeft: `3px solid hsl(var(--border))`,
+            boxShadow:
+              "inset -1px 0 0 hsl(var(--border-strong)), 2px 0 6px -2px hsl(var(--shadow-color-deep) / 0.4)",
+          }}
           aria-hidden
         />
         {dailyWeeks.map((w, idx) => (
@@ -97,15 +104,22 @@ export function DayHeaderRow({ days, weeks, gridStyle }: DayHeaderRowProps) {
         {/* Sticky item-col header — subdivided to mirror StickyItemPanel's
             3 slots: ITEM | TREND | COVER. Each sub-label sits exactly over
             its corresponding body slot for a "labeled stat tile" feel.
-            2px right border matches StickyItemPanel for consistent boundary. */}
+            Layered right boundary mirrors StickyItemPanel: inset 1px
+            hairline + 6px soft drop shadow falling into the data grid. */}
         <div
           role="columnheader"
           className="sticky left-0 z-40 flex h-12 items-stretch overflow-hidden bg-bg-raised text-3xs uppercase tracking-sops text-fg-subtle"
-          style={{ borderRight: `2px solid hsl(var(--border-strong))` }}
+          style={{
+            // 3px left rule (matches StickyItemPanel family stripe weight,
+            // generic neutral tone since the header has no family).
+            borderLeft: `3px solid hsl(var(--border))`,
+            boxShadow:
+              "inset -1px 0 0 hsl(var(--border-strong)), 2px 0 6px -2px hsl(var(--shadow-color-deep) / 0.4)",
+          }}
         >
           <div className="flex flex-1 items-center pl-3 pr-2 truncate">Item</div>
-          <div className="flex w-16 shrink-0 items-center justify-center">Trend</div>
-          <div className="flex w-[84px] shrink-0 items-center justify-center border-l border-border/60 bg-bg-subtle/40">
+          <div className="flex w-20 shrink-0 items-center justify-center">Trend</div>
+          <div className="flex w-24 shrink-0 items-center justify-center border-l border-border/60 bg-bg-subtle/40">
             Cover
           </div>
         </div>
