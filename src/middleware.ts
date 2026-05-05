@@ -63,6 +63,7 @@ function isPublicPath(pathname: string): boolean {
   if (pathname === "/") return true;
   if (pathname === "/login") return true;
   if (pathname.startsWith("/auth/callback")) return true;
+  if (pathname.startsWith("/auth/click-to-signin")) return true;
   if (pathname.startsWith("/_next")) return true;
   if (pathname === "/favicon.ico") return true;
   if (pathname.startsWith("/api/auth")) return true;
