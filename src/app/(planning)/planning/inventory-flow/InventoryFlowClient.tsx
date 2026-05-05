@@ -245,13 +245,18 @@ export function InventoryFlowClient() {
     <>
       {header}
       <div className="space-y-6">
-        <InsightsHero items={data.items} summary={summary} isLoading={false} />
+        <InsightsHero
+          items={data.items}
+          summary={summary}
+          isLoading={false}
+          asOf={data.as_of}
+        />
 
         {banner ? (
           <UnmappedSkusBanner fraction={fraction} />
         ) : (
           <>
-            <FilterBar families={families} />
+            <FilterBar families={families} items={data.items} />
             {plannedFailed ? (
               <div
                 className="rounded border border-info/30 bg-info-softer/60 px-3 py-2 text-2xs text-info-fg"
