@@ -38,19 +38,21 @@
 
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { useCallback, useMemo, useState, useRef } from "react";
+import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  Archive,
   CheckCircle2,
   ChevronLeft,
   ChevronRight,
+  PencilLine,
   Play,
+  X,
 } from "lucide-react";
 
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
-import { Badge } from "@/components/badges/StatusBadge";
 import { useSession } from "@/lib/auth/session-provider";
 import type { Session } from "@/lib/auth/fake-auth";
 
@@ -282,6 +284,24 @@ export default function ForecastVersionDetailPage() {
     autocompleteInputRef.current?.focus();
   }, []);
 
+  // Sticky breadcrumb-on-scroll: observe a sentinel above the hero so the
+  // breadcrumb pill grows a hairline + backdrop blur once it reaches the top.
+  const breadcrumbSentinelRef = useRef<HTMLDivElement | null>(null);
+  const [breadcrumbStuck, setBreadcrumbStuck] = useState(false);
+  useEffect(() => {
+    const el = breadcrumbSentinelRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const obs = new IntersectionObserver(
+      ([entry]) => setBreadcrumbStuck(!entry?.isIntersecting),
+      { threshold: 0, rootMargin: "0px 0px -100% 0px" },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  // Per-session dismissable draft banner.
+  const [draftBannerDismissed, setDraftBannerDismissed] = useState(false);
+
   // ----- Buckets + items derived -----
   const buckets = useMemo(() => {
     if (!version) return [];
@@ -368,6 +388,41 @@ export default function ForecastVersionDetailPage() {
         return acc + Number(v);
       }, 0);
   }, [lines, primaryBucket, localCells]);
+
+  // Total demand across the entire horizon (sum of every cell, with local
+  // overlays). Used by the new "Total horizon qty" KPI.
+  const totalDemandHorizon = useMemo(() => {
+    let sum = 0;
+    for (const l of lines) {
+      const localKey = `${l.item_id}|${l.period_bucket_key}`;
+      const local = localCells[localKey];
+      const v =
+        local !== undefined && local !== "" ? local : l.forecast_quantity;
+      const n = Number(v);
+      if (Number.isFinite(n) && n > 0) sum += n;
+    }
+    return sum;
+  }, [lines, localCells]);
+
+  // Largest item in the next-month bucket: the item_id with the highest
+  // forecast_quantity for that bucket. Used by the "Largest item" KPI.
+  const largestItem = useMemo<{ name: string; qty: number } | null>(() => {
+    if (!primaryBucket) return null;
+    let best: { id: string; qty: number } | null = null;
+    for (const l of lines) {
+      if (l.period_bucket_key !== primaryBucket.key) continue;
+      const localKey = `${l.item_id}|${l.period_bucket_key}`;
+      const local = localCells[localKey];
+      const v =
+        local !== undefined && local !== "" ? local : l.forecast_quantity;
+      const n = Number(v);
+      if (!Number.isFinite(n) || n <= 0) continue;
+      if (!best || n > best.qty) best = { id: l.item_id, qty: n };
+    }
+    if (!best) return null;
+    const meta = itemsById.get(best.id);
+    return { name: meta?.item_name ?? best.id, qty: best.qty };
+  }, [lines, localCells, primaryBucket, itemsById]);
 
   const itemsInForecast = itemsForGrid.length;
   const totalEligibleItems = eligibleItems.length;
@@ -579,32 +634,84 @@ export default function ForecastVersionDetailPage() {
         ? "Weekly"
         : "Daily";
 
+  // Compute version display name + breadcrumb tail.
+  const versionLabel = `Forecast ${horizonLabel}`;
+  const breadcrumbTail = horizonLabel === "—" ? "Version" : horizonLabel;
+
   return (
     <>
-      <WorkflowHeader
-        eyebrow="Planner workspace"
-        title="Forecast"
-        description={`${cadenceLabel} cadence · ${horizonLabel}`}
-        meta={
-          <>
-            <StatusBadge status={version.status} />
-            <Badge tone="neutral" dotted>
-              {cadenceLabel}
-            </Badge>
-            {version.published_at ? (
-              <Badge tone="neutral" dotted>
-                published {fmtDate(version.published_at)}
-              </Badge>
-            ) : null}
-            {version.updated_at && version.updated_at !== version.created_at ? (
-              <Badge tone="neutral" dotted>
-                updated {fmtDate(version.updated_at)}
-              </Badge>
-            ) : null}
-          </>
-        }
-        actions={
-          <div className="flex items-center gap-2">
+      {/* Sentinel for IntersectionObserver — breadcrumb sticks once it
+          scrolls out of view. */}
+      <div ref={breadcrumbSentinelRef} aria-hidden style={{ height: 1 }} />
+
+      {/* Sticky breadcrumb */}
+      <div
+        className="fc-breadcrumb-sticky"
+        data-stuck={breadcrumbStuck ? "true" : "false"}
+        data-testid="forecast-breadcrumb-sticky"
+      >
+        <nav className="fc-breadcrumb" aria-label="Breadcrumb">
+          <Link href="/planning">Planning</Link>
+          <span className="fc-breadcrumb-sep">/</span>
+          <Link href="/planning/forecast">Forecasts</Link>
+          <span className="fc-breadcrumb-sep">/</span>
+          <span className="fc-breadcrumb-current" title={breadcrumbTail}>
+            {breadcrumbTail}
+          </span>
+        </nav>
+      </div>
+
+      {/* Refined hero */}
+      <header
+        className="fc-edit-hero pb-5 pt-1 fc-hero-fade-in"
+        data-testid="forecast-detail-hero"
+      >
+        <div className="flex items-start justify-between gap-4">
+          <div className="min-w-0 flex-1">
+            <div className="mb-1.5 flex items-center gap-2">
+              <span className="dot bg-accent" aria-hidden />
+              <span className="text-2xs font-semibold uppercase tracking-[0.08em] text-fg-muted">
+                Planner workspace
+              </span>
+            </div>
+            <div className="fc-edit-hero-row">
+              <h1 className="fc-edit-hero-title" title={versionLabel}>
+                {versionLabel}
+              </h1>
+              <ForecastStatusPill status={version.status} />
+            </div>
+            <div className="fc-edit-hero-meta mt-2">
+              <span>{cadenceLabel} cadence</span>
+              <span className="fc-edit-hero-meta-dot" aria-hidden />
+              <span>
+                Created by{" "}
+                <span className="text-fg">
+                  {version.created_by_snapshot || "—"}
+                </span>{" "}
+                · {fmtDate(version.created_at)}
+              </span>
+              {version.updated_at &&
+              version.updated_at !== version.created_at ? (
+                <>
+                  <span className="fc-edit-hero-meta-dot" aria-hidden />
+                  <span>Updated {fmtRelativeShort(version.updated_at)}</span>
+                </>
+              ) : null}
+              {version.published_at ? (
+                <>
+                  <span className="fc-edit-hero-meta-dot" aria-hidden />
+                  <span>
+                    Published {fmtDate(version.published_at)}
+                    {version.published_by_snapshot
+                      ? ` by ${version.published_by_snapshot}`
+                      : ""}
+                  </span>
+                </>
+              ) : null}
+            </div>
+          </div>
+
+          <div className="flex shrink-0 items-center gap-2">
             {isEditable ? (
               <AutoSaveIndicator
                 state={autoSave.state}
@@ -641,8 +748,40 @@ export default function ForecastVersionDetailPage() {
               </button>
             ) : null}
           </div>
-        }
-      />
+        </div>
+
+        {/* Persistent draft banner (dismissable per session) */}
+        {isEditable && !draftBannerDismissed ? (
+          <div
+            className="fc-draft-banner mt-1"
+            data-testid="forecast-draft-banner"
+          >
+            <span className="fc-draft-banner-label">
+              <PencilLine className="h-2.5 w-2.5" strokeWidth={2.5} />
+              Draft
+            </span>
+            <span className="min-w-0 flex-1">
+              Changes save automatically. Click{" "}
+              <span className="text-fg font-semibold">Publish</span> when this
+              forecast is ready to feed the planning engine.
+            </span>
+            <button
+              type="button"
+              className="fc-draft-banner-dismiss"
+              aria-label="Dismiss draft banner"
+              onClick={() => setDraftBannerDismissed(true)}
+              data-testid="forecast-draft-banner-dismiss"
+            >
+              <X className="h-3 w-3" strokeWidth={2} />
+            </button>
+          </div>
+        ) : null}
+
+        <div
+          className="mt-1 h-px w-full bg-gradient-to-r from-border via-border/50 to-transparent"
+          aria-hidden
+        />
+      </header>
 
       {/* Inline success / error banners */}
       {publishSuccess ? (
@@ -714,6 +853,10 @@ export default function ForecastVersionDetailPage() {
             ? prevMonthLabelFromKey(primaryBucket.key, version.cadence)
             : null
         }
+        totalDemandHorizon={totalDemandHorizon}
+        horizonBucketCount={buckets.length}
+        largestItemName={largestItem?.name ?? null}
+        largestItemQty={largestItem?.qty ?? null}
       />
 
       {/* Grid section */}
@@ -812,6 +955,61 @@ export default function ForecastVersionDetailPage() {
           publishMut.mutate();
         }}
       />
+
+      {/* Sticky bottom action bar — appears when there are pending edits
+          mid-flight or queued. Slides out once everything is saved. */}
+      {isEditable ? (
+        <div
+          className="fc-bottom-bar"
+          data-visible={
+            autoSave.pendingCount > 0 || autoSave.state === "saving"
+              ? "true"
+              : "false"
+          }
+          data-testid="forecast-bottom-action-bar"
+          aria-live="polite"
+        >
+          <span className="fc-bottom-bar-label">
+            <span className="fc-bottom-bar-count">
+              {autoSave.pendingCount}
+            </span>{" "}
+            pending change
+            {autoSave.pendingCount === 1 ? "" : "s"}
+          </span>
+          <button
+            type="button"
+            className="btn btn-sm gap-1.5"
+            onClick={() => {
+              // "Discard" = drop local cell overlays for any unsaved edits;
+              // already-saved cells stay on disk untouched. We can only
+              // reliably clear local overlays since the autosave queue is
+              // private; clearing local cells is the right UX here.
+              setLocalCells((prev) => {
+                const next = { ...prev };
+                // Remove only entries that are in the pending count window:
+                // anything still queued. Since we don't expose the queue
+                // directly, the safest mass-undo is to clear all overlays;
+                // the next refetch will re-render server values.
+                for (const k of Object.keys(next)) delete next[k];
+                return next;
+              });
+            }}
+            data-testid="forecast-bottom-bar-discard"
+          >
+            Discard local edits
+          </button>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm gap-1.5"
+            onClick={() => void autoSave.flush()}
+            disabled={autoSave.state === "saving"}
+            data-testid="forecast-bottom-bar-save"
+          >
+            <CheckCircle2 className="h-3 w-3" strokeWidth={2.5} />
+            {autoSave.state === "saving" ? "Saving…" : "Save now"}
+          </button>
+        </div>
+      ) : null}
     </>
   );
 }
@@ -820,33 +1018,81 @@ export default function ForecastVersionDetailPage() {
 // Helpers
 // ---------------------------------------------------------------------------
 
-function StatusBadge({ status }: { status: ForecastStatus }) {
+/**
+ * Polished status pill for the refined hero — Lucide icon + 9px uppercase
+ * label + tier-coloured fill. Mirrors Linear / Stripe draft-published pill
+ * conventions.
+ */
+function ForecastStatusPill({ status }: { status: ForecastStatus }) {
   if (status === "published") {
     return (
-      <Badge tone="success" variant="solid">
+      <span
+        className="fc-status-pill"
+        data-tone="published"
+        data-testid="forecast-status-pill"
+      >
+        <CheckCircle2 className="h-2.5 w-2.5" strokeWidth={2.5} />
         Published
-      </Badge>
+      </span>
     );
   }
   if (status === "draft") {
     return (
-      <Badge tone="warning" dotted>
+      <span
+        className="fc-status-pill"
+        data-tone="draft"
+        data-testid="forecast-status-pill"
+      >
+        <PencilLine className="h-2.5 w-2.5" strokeWidth={2.5} />
         Draft
-      </Badge>
+      </span>
     );
   }
   if (status === "superseded") {
     return (
-      <Badge tone="neutral" dotted>
+      <span
+        className="fc-status-pill"
+        data-tone="superseded"
+        data-testid="forecast-status-pill"
+      >
+        <Archive className="h-2.5 w-2.5" strokeWidth={2} />
         Superseded
-      </Badge>
+      </span>
     );
   }
   return (
-    <Badge tone="neutral" dotted>
+    <span
+      className="fc-status-pill"
+      data-tone="archived"
+      data-testid="forecast-status-pill"
+    >
+      <Archive className="h-2.5 w-2.5" strokeWidth={2} />
       Discarded
-    </Badge>
+    </span>
   );
+}
+
+/**
+ * Short relative time ("3m ago", "2h ago", "yesterday", "5d ago"). Used in
+ * the hero meta line.
+ */
+function fmtRelativeShort(iso: string | null): string {
+  if (!iso) return "—";
+  try {
+    const then = new Date(iso).getTime();
+    const diff = Date.now() - then;
+    if (diff < 60_000) return "just now";
+    if (diff < 3_600_000) return `${Math.floor(diff / 60_000)}m ago`;
+    if (diff < 86_400_000) return `${Math.floor(diff / 3_600_000)}h ago`;
+    if (diff < 7 * 86_400_000)
+      return `${Math.floor(diff / 86_400_000)}d ago`;
+    return new Date(iso).toLocaleDateString("en-US", {
+      month: "short",
+      day: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
 }
 
 function fmtDate(iso: string | null): string {

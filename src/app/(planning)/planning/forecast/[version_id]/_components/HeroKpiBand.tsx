@@ -1,36 +1,46 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// Forecast version detail — Hero KPI band.
+// Forecast version detail — Hero KPI band (edit-chrome polish 2026-05-05).
 //
 // Owner: W2 Mode B-ForecastMonthly-Redesign (Wave 2 chunks 4 + 5, plan
 // §Task 4.1.1).
 //
-// Renders 4 KPI tiles in a horizontal band above the grid:
-//   1. "Demand next month"  — SUM of next-unfrozen-month bucket (units)
-//   2. "Items in forecast"  — distinct items with at least one line ("of N active")
-//   3. "Progress"           — percent of cells filled (filled / expected)
-//   4. "vs prev month"      — +/- % delta vs prev published version, or "—"
+// Sources consulted (2026-05-05 polish):
+//   - Linear "How we redesigned the Linear UI" — calm, consistent KPI rails
+//     where numbers carry the weight, not the chrome around them.
+//   - Inventory Flow InsightsHero (PRODUCTION/window2-portal-sandbox/src/.../
+//     InsightsHero.tsx) — established `.kpi-microcard` pattern with tier
+//     accent left border + tabular value + uppercase 9px label.
 //
-// All numbers render via formatInt (no .00000000 trailing-zero leakage).
-// English LTR per Tom-locked global standard 2026-05-01.
+// Layout: 5 micro-cards in a horizontal band. Each card has:
+//   - 2px tier-coloured left accent (--kpi-accent CSS var)
+//   - Large tabular value on top (22px, semibold, tight tracking)
+//   - 9px uppercase label below
+//   - Small sub-line for context ("units · Jun 2026", "of N active", etc.)
 //
-// Visual: 4 tiles with subtle gradient backgrounds (Tailwind tokens reused
-// from the design system — bg-gradient-to-br + token soft / softer surfaces),
-// large tabular-nums values, lucide icons. Mobile @ 390px collapses to 1 col.
+// The 5 KPIs (top→down priority):
+//   1. Demand next month   — sum of next-bucket forecast (units)
+//   2. Items in forecast   — distinct items with at least one line
+//   3. Total horizon qty   — 8-week (or N-month) sum across all cells
+//   4. Largest item        — name of item with biggest single-bucket cell
+//   5. vs prev month       — +/- % delta vs prev published, "—" if none
+//
+// All numbers render via a local int formatter (kept inline so we don't
+// reach into _lib/format.ts which the Grid agent owns).
 // ---------------------------------------------------------------------------
 
 import {
   ArrowDownRight,
   ArrowUpRight,
   CheckCircle2,
+  Crown,
+  Layers,
   Minus,
   Package,
   TrendingUp,
   type LucideIcon,
 } from "lucide-react";
-import { cn } from "@/lib/cn";
-import { formatInt } from "../_lib/format";
 
 interface HeroKpiBandProps {
   /** Total demand in the next-unfrozen month bucket (sum of qty across items). */
@@ -43,10 +53,24 @@ interface HeroKpiBandProps {
   totalDemandPrevMonth: number | null;
   /** Percent of cells filled, 0-100, integer. */
   percentProgress: number;
-  /** Label of the next month for tile 1 / 4 sub-line ("Jun 2026"). */
+  /** Label of the next month for tile 1 / 5 sub-line ("Jun 2026"). */
   nextMonthLabel: string;
-  /** Label of the previous month for tile 4 sub-line ("May 2026"), if any. */
+  /** Label of the previous month for tile 5 sub-line ("May 2026"), if any. */
   prevMonthLabel: string | null;
+  /** Total qty across full horizon (sum of all cells). */
+  totalDemandHorizon?: number;
+  /** Number of months/weeks in the horizon (for the horizon-sum sub-line). */
+  horizonBucketCount?: number;
+  /** Name of the highest-quantity item in the next-month bucket, if any. */
+  largestItemName?: string | null;
+  /** Quantity of the largest item in the next-month bucket. */
+  largestItemQty?: number | null;
+}
+
+function fmtIntLocal(raw: number | null | undefined): string {
+  if (raw === null || raw === undefined) return "—";
+  if (!Number.isFinite(raw)) return "—";
+  return Math.floor(raw).toLocaleString("en-US");
 }
 
 export function HeroKpiBand(props: HeroKpiBandProps) {
@@ -58,12 +82,18 @@ export function HeroKpiBand(props: HeroKpiBandProps) {
     percentProgress,
     nextMonthLabel,
     prevMonthLabel,
+    totalDemandHorizon,
+    horizonBucketCount,
+    largestItemName,
+    largestItemQty,
   } = props;
 
   // Trend % (positive number = growth, negative = decline). null when no prior.
   const trendPct: number | null =
     totalDemandPrevMonth && totalDemandPrevMonth > 0
-      ? ((totalDemandNextMonth - totalDemandPrevMonth) / totalDemandPrevMonth) * 100
+      ? ((totalDemandNextMonth - totalDemandPrevMonth) /
+          totalDemandPrevMonth) *
+        100
       : null;
 
   const progressTone: KpiTone =
@@ -75,57 +105,74 @@ export function HeroKpiBand(props: HeroKpiBandProps) {
 
   return (
     <div
-      className="mb-6 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4"
+      className="mb-5 grid grid-cols-2 gap-2 sm:grid-cols-3 lg:grid-cols-5 fc-kpi-fade-in"
       data-testid="forecast-hero-kpi-band"
     >
-      <KpiTile
+      <KpiMicroCard
         label="Demand next month"
-        value={formatInt(totalDemandNextMonth)}
-        subValue={`units · ${nextMonthLabel}`}
+        value={fmtIntLocal(totalDemandNextMonth)}
+        sub={`units · ${nextMonthLabel}`}
         icon={TrendingUp}
         tone="primary"
       />
 
-      <KpiTile
+      <KpiMicroCard
         label="Items in forecast"
-        value={formatInt(itemsInForecast)}
-        subValue={
-          totalEligibleItems > 0 ? `of ${totalEligibleItems} active FG` : "—"
+        value={fmtIntLocal(itemsInForecast)}
+        sub={
+          totalEligibleItems > 0
+            ? `of ${totalEligibleItems} active FG`
+            : "—"
         }
         icon={Package}
         tone="neutral"
       />
 
-      <KpiTile
-        label="Progress"
-        value={`${Math.round(percentProgress)}%`}
-        subValue="cells filled"
-        icon={CheckCircle2}
-        tone={progressTone}
+      <KpiMicroCard
+        label="Total horizon qty"
+        value={fmtIntLocal(totalDemandHorizon ?? 0)}
+        sub={
+          horizonBucketCount && horizonBucketCount > 0
+            ? `units · ${horizonBucketCount} month${horizonBucketCount === 1 ? "" : "s"}`
+            : "—"
+        }
+        icon={Layers}
+        tone="info"
       />
 
-      <KpiTile
-        label="vs prev month"
+      <KpiMicroCard
+        label="Largest item"
+        value={largestItemQty ? fmtIntLocal(largestItemQty) : "—"}
+        sub={largestItemName ?? "no items yet"}
+        subTruncate
+        icon={Crown}
+        tone="warning"
+      />
+
+      <KpiMicroCard
+        label={trendPct === null ? "Progress" : "vs prev month"}
         value={
           trendPct === null
-            ? "—"
+            ? `${Math.round(percentProgress)}%`
             : `${trendPct >= 0 ? "+" : ""}${trendPct.toFixed(1)}%`
         }
-        subValue={
-          prevMonthLabel
-            ? `${formatInt(totalDemandPrevMonth ?? 0)} in ${prevMonthLabel}`
-            : "no prior published"
+        sub={
+          trendPct === null
+            ? "cells filled"
+            : prevMonthLabel
+              ? `${fmtIntLocal(totalDemandPrevMonth ?? 0)} in ${prevMonthLabel}`
+              : "no prior published"
         }
         icon={
           trendPct === null
-            ? Minus
+            ? CheckCircle2
             : trendPct >= 0
               ? ArrowUpRight
               : ArrowDownRight
         }
         tone={
           trendPct === null
-            ? "neutral"
+            ? progressTone
             : trendPct >= 0
               ? "success"
               : "warning"
@@ -136,89 +183,70 @@ export function HeroKpiBand(props: HeroKpiBandProps) {
 }
 
 // ---------------------------------------------------------------------------
-// Single tile.
+// Single micro-card.
 // ---------------------------------------------------------------------------
 
 type KpiTone = "primary" | "neutral" | "info" | "success" | "warning" | "danger";
 
-interface KpiTileProps {
+interface KpiMicroCardProps {
   label: string;
   value: string;
-  subValue: string;
+  sub: string;
   icon: LucideIcon;
   tone: KpiTone;
+  /** When true, the sub line truncates with ellipsis instead of wrapping. */
+  subTruncate?: boolean;
 }
 
-const TONE_TILE_CLASSES: Record<KpiTone, { gradient: string; iconBg: string; icon: string; ring: string }> = {
-  primary: {
-    gradient: "from-accent-soft/40 via-bg-raised to-bg-raised",
-    iconBg: "bg-accent-soft",
-    icon: "text-accent",
-    ring: "border-accent/30",
-  },
-  neutral: {
-    gradient: "from-bg-raised via-bg-raised to-bg-subtle/40",
-    iconBg: "bg-bg-subtle",
-    icon: "text-fg-muted",
-    ring: "border-border/70",
-  },
-  info: {
-    gradient: "from-info-softer/40 via-bg-raised to-bg-raised",
-    iconBg: "bg-info-softer",
-    icon: "text-info-fg",
-    ring: "border-info/30",
-  },
-  success: {
-    gradient: "from-success-softer/40 via-bg-raised to-bg-raised",
-    iconBg: "bg-success-softer",
-    icon: "text-success-fg",
-    ring: "border-success/30",
-  },
-  warning: {
-    gradient: "from-warning-softer/40 via-bg-raised to-bg-raised",
-    iconBg: "bg-warning-softer",
-    icon: "text-warning-fg",
-    ring: "border-warning/30",
-  },
-  danger: {
-    gradient: "from-danger-softer/40 via-bg-raised to-bg-raised",
-    iconBg: "bg-danger-softer",
-    icon: "text-danger-fg",
-    ring: "border-danger/30",
-  },
+const TONE_ACCENT: Record<KpiTone, string> = {
+  primary: "var(--accent)",
+  neutral: "var(--border-strong)",
+  info: "var(--info)",
+  success: "var(--success)",
+  warning: "var(--warning)",
+  danger: "var(--danger)",
 };
 
-function KpiTile({ label, value, subValue, icon: Icon, tone }: KpiTileProps) {
-  const c = TONE_TILE_CLASSES[tone];
+const TONE_VALUE_CLASS: Record<KpiTone, string> = {
+  primary: "text-fg-strong",
+  neutral: "text-fg-strong",
+  info: "text-fg-strong",
+  success: "text-success-fg",
+  warning: "text-fg-strong",
+  danger: "text-danger-fg",
+};
+
+function KpiMicroCard({
+  label,
+  value,
+  sub,
+  icon: Icon,
+  tone,
+  subTruncate,
+}: KpiMicroCardProps) {
   return (
     <div
-      className={cn(
-        "relative overflow-hidden rounded-md border bg-gradient-to-br p-4 transition-colors duration-150 hover:border-border-strong",
-        c.gradient,
-        c.ring,
-      )}
-      data-testid="forecast-kpi-tile"
+      className="fc-kpi-card"
+      style={{ ["--kpi-accent" as string]: TONE_ACCENT[tone] } as React.CSSProperties}
+      data-testid="forecast-kpi-microcard"
       data-tone={tone}
     >
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
-          <div className="text-3xs font-semibold uppercase tracking-sops text-fg-muted">
-            {label}
-          </div>
-          <div className="mt-1.5 text-3xl font-bold tabular-nums tracking-tight text-fg-strong">
-            {value}
-          </div>
-          <div className="mt-0.5 text-2xs text-fg-muted">{subValue}</div>
-        </div>
-        <div
-          className={cn(
-            "flex h-9 w-9 shrink-0 items-center justify-center rounded-md border border-border/40",
-            c.iconBg,
-          )}
+      <div className="flex items-center justify-between gap-2">
+        <span className="fc-kpi-card-label">{label}</span>
+        <Icon
+          className="h-3 w-3 shrink-0 text-fg-faint"
+          strokeWidth={2}
           aria-hidden
-        >
-          <Icon className={cn("h-4 w-4", c.icon)} strokeWidth={2} />
-        </div>
+        />
+      </div>
+      <div className={`fc-kpi-card-value ${TONE_VALUE_CLASS[tone]}`}>
+        {value}
+      </div>
+      <div
+        className={`fc-kpi-card-sub${subTruncate ? " truncate" : ""}`}
+        title={subTruncate ? sub : undefined}
+      >
+        {sub}
       </div>
     </div>
   );
