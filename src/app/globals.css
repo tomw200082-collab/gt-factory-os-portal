@@ -609,4 +609,132 @@
   .reveal-delay-4 { animation-delay: 160ms; }
   .reveal-delay-5 { animation-delay: 200ms; }
   .reveal-delay-6 { animation-delay: 240ms; }
+
+  /* ──────────────────────────────────────────────────────────────────────
+     Branded loader animations — used by <GtLoader /> across all loading
+     fallbacks. Respects prefers-reduced-motion via the .gt-reduce-motion
+     fallback applied in JS at first paint.
+     ────────────────────────────────────────────────────────────────────── */
+
+  /* Logo breathing — gentle scale + opacity pulse, slow and confident. */
+  @keyframes gt-loader-breathe {
+    0%, 100% {
+      transform: scale(1);
+      opacity: 0.94;
+    }
+    50% {
+      transform: scale(1.05);
+      opacity: 1;
+    }
+  }
+  .gt-loader-breathe {
+    animation: gt-loader-breathe 2200ms cubic-bezier(0.4, 0, 0.2, 1) infinite;
+    transform-origin: center;
+    will-change: transform, opacity;
+  }
+
+  /* Single concentric ring expanding outward and fading — repeat with delay. */
+  @keyframes gt-loader-ripple {
+    0% {
+      transform: scale(0.8);
+      opacity: 0.6;
+    }
+    100% {
+      transform: scale(1.8);
+      opacity: 0;
+    }
+  }
+  .gt-loader-ripple {
+    animation: gt-loader-ripple 2200ms cubic-bezier(0, 0.55, 0.45, 1) infinite;
+  }
+  .gt-loader-ripple-2 {
+    animation-delay: 733ms;
+  }
+  .gt-loader-ripple-3 {
+    animation-delay: 1466ms;
+  }
+
+  /* Orbital ring — spins slowly behind the logo. */
+  @keyframes gt-loader-orbit {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+  }
+  .gt-loader-orbit {
+    animation: gt-loader-orbit 6000ms linear infinite;
+    transform-origin: center;
+  }
+
+  /* Top progress bar — indeterminate left-to-right shimmer. */
+  @keyframes gt-loader-progress {
+    0%   { transform: translateX(-100%); }
+    50%  { transform: translateX(0%); }
+    100% { transform: translateX(100%); }
+  }
+  .gt-loader-progress-bar {
+    animation: gt-loader-progress 1600ms cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  }
+
+  /* Skeleton shimmer — diagonal sweep using the accent token at low alpha. */
+  @keyframes gt-skeleton-shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+  }
+  .gt-skeleton {
+    background: linear-gradient(
+      110deg,
+      hsl(var(--bg-muted) / 0.7) 8%,
+      hsl(var(--bg-subtle) / 0.95) 18%,
+      hsl(var(--bg-muted) / 0.7) 33%
+    );
+    background-size: 200% 100%;
+    animation: gt-skeleton-shimmer 1400ms ease-in-out infinite;
+  }
+  :root.dark .gt-skeleton {
+    background: linear-gradient(
+      110deg,
+      hsl(var(--bg-muted) / 0.4) 8%,
+      hsl(var(--bg-raised) / 0.7) 18%,
+      hsl(var(--bg-muted) / 0.4) 33%
+    );
+    background-size: 200% 100%;
+    animation: gt-skeleton-shimmer 1400ms ease-in-out infinite;
+  }
+
+  /* Phase text crossfade — used for cycling status messages. */
+  @keyframes gt-phase-fade {
+    0%, 30%   { opacity: 0; transform: translateY(4px); }
+    40%, 90%  { opacity: 1; transform: translateY(0); }
+    100%      { opacity: 0; transform: translateY(-4px); }
+  }
+  .gt-phase-active {
+    animation: gt-phase-fade 2400ms ease-in-out forwards;
+  }
+
+  /* Grain texture — extremely faint dot-grid overlay for premium feel.
+     Only visible on the page-splash variant. */
+  .gt-grain {
+    background-image: radial-gradient(
+      hsl(var(--fg) / 0.04) 1px,
+      transparent 1px
+    );
+    background-size: 18px 18px;
+  }
+  :root.dark .gt-grain {
+    background-image: radial-gradient(
+      hsl(var(--fg-inverted) / 0.04) 1px,
+      transparent 1px
+    );
+  }
+
+  /* Reduced-motion override — disables all loader animations. */
+  @media (prefers-reduced-motion: reduce) {
+    .gt-loader-breathe,
+    .gt-loader-ripple,
+    .gt-loader-orbit,
+    .gt-loader-progress-bar,
+    .gt-skeleton,
+    .gt-phase-active {
+      animation: none !important;
+    }
+  }
 }

@@ -38,6 +38,7 @@ import {
   CheckCircle2,
   Inbox,
 } from "lucide-react";
+import { GtLoader } from "@/components/ui/GtLoader";
 import {
   InboxCard,
   PrimaryActionButton,
@@ -622,7 +623,7 @@ export default function InboxV2Page() {
           ) : null}
 
           {isLoading ? (
-            <SkeletonFeed />
+            <GtLoader.Feed rows={6} />
           ) : isError ? (
             <ErrorState
               error={error instanceof Error ? error.message : String(error)}
@@ -647,28 +648,6 @@ export default function InboxV2Page() {
         </section>
       </div>
     </main>
-  );
-}
-
-function SkeletonFeed() {
-  return (
-    <div className="space-y-1.5" aria-busy="true" aria-label="טוען רשימה">
-      {Array.from({ length: 5 }).map((_, i) => (
-        <div
-          key={i}
-          className="rounded-md border border-slate-200 dark:border-slate-700 border-l-4 border-l-slate-200 dark:border-l-slate-700 bg-white dark:bg-slate-900 px-3 py-2.5"
-        >
-          <div className="flex items-start gap-2">
-            <div className="h-4 w-4 rounded bg-slate-200 dark:bg-slate-700 animate-pulse mt-0.5" />
-            <div className="flex-1 space-y-1.5">
-              <div className="h-2.5 w-1/3 rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-              <div className="h-3.5 w-2/3 rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-              <div className="h-2.5 w-1/2 rounded bg-slate-200 dark:bg-slate-700 animate-pulse" />
-            </div>
-          </div>
-        </div>
-      ))}
-    </div>
   );
 }
 
