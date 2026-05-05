@@ -43,3 +43,21 @@ export function familyAccent(family: string | null | undefined): string {
   if (!variable) return "hsl(var(--border))";
   return `hsl(var(${variable}))`;
 }
+
+/**
+ * Resolve a family name to a CSS-var REFERENCE (e.g. `var(--family-calm)`)
+ * so callers can compose with alpha math like
+ *   `hsl(var(--family-calm) / 0.15)`.
+ *
+ * Returns `var(--border)` (a raw HSL triplet variable) for unmapped or null
+ * families. Pairs with the `family-pill` and `family-stripe` utilities in
+ * globals.css which read this through a `--family-tint` / `--stripe-color`
+ * inline custom property.
+ */
+export function familyVar(family: string | null | undefined): string {
+  if (!family) return "var(--border)";
+  const key = family.trim().toUpperCase();
+  const variable = FAMILY_VAR[key];
+  if (!variable) return "var(--border)";
+  return `var(${variable})`;
+}

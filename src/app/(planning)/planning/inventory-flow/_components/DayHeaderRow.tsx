@@ -3,8 +3,26 @@
 // ---------------------------------------------------------------------------
 // DayHeaderRow — sticky header for the desktop grid.
 //
-// Operational Clarity v2 (2026-05-05) — STRUCTURAL ALIGNMENT FIX
-// =============================================================
+// Operational Clarity v2 — POLISH PASS 3 (2026-05-05, sticky col + headers
+// expert UX iteration):
+//   - Day-of-month numerals bumped to 14px medium-bold (was 13px medium) —
+//     the DOM number is the primary anchor; deserves more presence.
+//   - TODAY pill gains a 2.5s soft-pulse motion + accent halo glow so the
+//     eye locks on today on first paint, then settles. Reduce-motion safe.
+//   - Holiday days (`tier === "non_working"` + a `holiday_name_he`) now
+//     show a small calendar-X icon above the em-dash; tooltip surfaces
+//     the holiday name. Non-holiday non-working days still show the em-
+//     dash alone (Friday/Saturday weekend).
+//   - Active week-band label (week 0 = "This week") gets a 1px accent
+//     underline; the others stay flat. Powerful low-noise orientation.
+//   - The whole sticky header carries a `sticky-header-shadow` utility
+//     so it reads as elevated when content scrolls beneath it. Hairline
+//     at the top, soft 4px falloff at the bottom.
+//
+// Sources consulted: MUI X Data Grid pinnedColumnsSectionSeparator
+// pattern; NN/g frozen-columns guidance; Bloomberg Terminal information-
+// density studies (color-led hierarchy, calibrated emphasis).
+//
 // This row consumes the SAME `grid-template-columns` template as every
 // body row (passed in via `gridStyle`). Header tracks therefore align
 // pixel-for-pixel with body tracks; there is zero drift between the
@@ -13,11 +31,6 @@
 // Visual rules:
 //   - Two header rows: week labels (top, 28px) + per-day labels (bottom,
 //     48px). Both rows feed cells into the SAME grid template.
-//   - Per-day cell: weekday short uppercase 9px muted; day-of-month 13px
-//     medium-weight. Today: small accent TODAY pill above the day number.
-//   - Hatched (non-working) cells render an em-dash.
-//   - Today column: vertical accent-band background + accent-toned numerals
-//     (visual cross-hair so the eye locks on today while scrolling).
 //   - Sticky:
 //       row container : position: sticky; top: 0; z-index: 30
 //       item-col cell : position: sticky; left: 0; z-index: 40 (top-left
@@ -25,6 +38,7 @@
 // ---------------------------------------------------------------------------
 
 import type { CSSProperties } from "react";
+import { CalendarX2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { fmtDayHeader, formatDayHeader2, todayIsoLocal } from "../_lib/format";
 import type { FlowDay, FlowWeek } from "../_lib/types";
@@ -47,12 +61,17 @@ export function DayHeaderRow({ days, weeks, gridStyle }: DayHeaderRowProps) {
   const dailyWeeks = weeks.slice(0, Math.ceil(days.length / 7));
   const weeklyOnly = weeks.slice(dailyWeeks.length);
 
-  // Detect index of today in the daily band so the week-row label can
-  // visually anchor "This week" if today is in week 0, etc. (Cosmetic; the
-  // dailyWeeks loop drives the actual cells.)
+  // The currently-active daily week is the one containing today. Used to
+  // highlight the corresponding week-band label with an accent underline.
+  const activeDailyWeekIdx = dailyWeeks.findIndex((w) => {
+    const start = new Date(`${w.week_start}T00:00:00`).getTime();
+    const end = start + 7 * 24 * 3600 * 1000;
+    const todayMs = new Date(`${today}T00:00:00`).getTime();
+    return todayMs >= start && todayMs < end;
+  });
 
   return (
-    <div className="sticky top-0 z-30 bg-bg-raised">
+    <div className="sticky-header-shadow sticky top-0 z-30 bg-bg-raised">
       {/* Row 1 — week labels. Each week-of-7 spans 7 daily tracks via
           `grid-column: span 7`. The sticky item-col cell occupies track 1. */}
       <div
@@ -76,7 +95,12 @@ export function DayHeaderRow({ days, weeks, gridStyle }: DayHeaderRowProps) {
           <div
             key={w.week_start}
             role="columnheader"
-            className="flex h-7 items-center justify-center border-r border-border/40 text-2xs font-semibold uppercase tracking-sops text-fg-subtle"
+            className={cn(
+              "flex h-7 items-center justify-center border-r border-border/40 text-2xs font-semibold uppercase tracking-sops",
+              idx === activeDailyWeekIdx
+                ? "week-band-active text-accent"
+                : "text-fg-subtle",
+            )}
             style={{ gridColumn: "span 7 / span 7" }}
           >
             {WEEK_LABEL(idx)}
@@ -126,6 +150,7 @@ export function DayHeaderRow({ days, weeks, gridStyle }: DayHeaderRowProps) {
         {days.map((d) => {
           const isToday = d.day === today;
           const isNonWorking = d.tier === "non_working";
+          const hasHolidayName = isNonWorking && Boolean(d.holiday_name_he);
           const { weekday, dom } = formatDayHeader2(d.day, false);
           return (
             <div
@@ -147,7 +172,19 @@ export function DayHeaderRow({ days, weeks, gridStyle }: DayHeaderRowProps) {
               title={isNonWorking ? d.holiday_name_he ?? "Non-working day" : undefined}
             >
               {isNonWorking ? (
-                <span className="text-fg-faint">—</span>
+                hasHolidayName ? (
+                  <>
+                    <CalendarX2
+                      size={11}
+                      strokeWidth={2}
+                      className="text-fg-faint"
+                      aria-hidden
+                    />
+                    <span className="mt-0.5 text-fg-faint leading-none">—</span>
+                  </>
+                ) : (
+                  <span className="text-fg-faint">—</span>
+                )
               ) : (
                 <>
                   <div
@@ -158,7 +195,7 @@ export function DayHeaderRow({ days, weeks, gridStyle }: DayHeaderRowProps) {
                   >
                     {isToday ? (
                       <span
-                        className="rounded-sm bg-accent px-1 py-px text-[8px] font-bold uppercase tracking-sops text-accent-fg"
+                        className="today-pill-pulse rounded-sm bg-accent px-1 py-px text-[8px] font-bold uppercase tracking-sops text-accent-fg"
                         data-testid="day-header-today-pill"
                       >
                         TODAY
@@ -169,7 +206,9 @@ export function DayHeaderRow({ days, weeks, gridStyle }: DayHeaderRowProps) {
                   </div>
                   <div
                     className={cn(
-                      "mt-1 text-[13px] font-medium leading-none tabular-nums",
+                      // Day-of-month — bumped from 13px medium to 14px
+                      // semibold so it reads as the primary anchor.
+                      "mt-1 text-[14px] font-semibold leading-none tabular-nums",
                       isToday ? "text-accent" : "text-fg-strong",
                     )}
                   >
@@ -190,7 +229,7 @@ export function DayHeaderRow({ days, weeks, gridStyle }: DayHeaderRowProps) {
             className="flex h-12 flex-col items-center justify-center border-r border-l border-border/40 text-3xs uppercase tracking-sops text-fg-subtle"
           >
             <div className="leading-none">Week of</div>
-            <div className="mt-1 text-xs font-medium leading-none tabular-nums text-fg-strong">
+            <div className="mt-1 text-xs font-semibold leading-none tabular-nums text-fg-strong">
               {fmtDayHeader(w.week_start).bottom}
             </div>
           </div>
