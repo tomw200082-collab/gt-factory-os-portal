@@ -170,7 +170,11 @@ function MobileItemCardInner({
           </div>
         ) : null}
 
-        {/* 14-day mini strip */}
+        {/* 14-day mini strip — polish 2026-05-05:
+            Tier color rendered as a 3px LEFT BORDER plus a softened bg
+            tint so the cell carries less visual weight while keeping the
+            risk signal at-a-glance. Reduces "wall of color" effect on
+            mobile where 14 cells render side-by-side. */}
         <div className="mt-4 flex gap-0.5">
           {item.days.slice(0, 14).map((d) => {
             const plannedRow =
@@ -195,10 +199,27 @@ function MobileItemCardInner({
               >
                 <div
                   className={cn(
-                    "relative h-6 w-full rounded-sm",
+                    // 3px LEFT BORDER in tier color + softened bg tint:
+                    // visual weight is concentrated on the border edge,
+                    // not the fill — so the row reads like a sequence of
+                    // sparkline ticks rather than a hot/cold heatmap.
+                    "relative h-6 w-full overflow-hidden rounded-sm",
+                    "border-l-[3px]",
                     dayCellClassName(d.tier),
+                    // Tier-color left border via class composition.
+                    d.tier === "stockout" && "border-l-danger",
+                    d.tier === "critical" && "border-l-warning",
+                    d.tier === "watch" && "border-l-warning/60",
+                    d.tier === "healthy" && "border-l-success/50",
+                    d.tier === "non_working" && "border-l-border",
                   )}
                 >
+                  {/* Subtle vertical depth gradient — same .cell-depth
+                      utility used on desktop cells for visual coherence. */}
+                  <span
+                    aria-hidden
+                    className="pointer-events-none absolute inset-0 cell-depth"
+                  />
                   {hasPlanned ? (
                     <span
                       aria-hidden

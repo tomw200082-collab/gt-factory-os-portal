@@ -3,36 +3,38 @@
 // ---------------------------------------------------------------------------
 // DayCell — single 80×56 cell for one item × one day in the desktop grid.
 //
-// Operational Clarity v2 (2026-05-05) — STRUCTURAL ALIGNMENT FIX
-// =============================================================
-// Tom feedback 2026-05-04:
-//   "המספרים מקוטעים מכיוון שעולים על המשבצות" — numbers cut off
-//   because the production-receipt chip (▼ +517.5) overlapped the cell
-//   number (1.5K) due to `position: absolute; top: 2px; left: 50%`.
+// Polish 2026-05-05 (grid body pass — Tom mandate "מהממים"):
+//   - Right-aligned tabular numerals (currency convention; Primer DataTable
+//     standard for quantitative cells).
+//   - Subtle vertical depth gradient overlay (`.cell-depth`) — 8% fade,
+//     not flat fill. Modern Stripe/Linear dashboard convention.
+//   - Today column: 1px inset accent glow + bg overlay (`.today-glow`).
+//   - Demand-spike marker → Lucide `TrendingUp` icon (was Triangle) for
+//     stronger semantic clarity at small sizes.
+//   - Production-receipt chip → ArrowDown icon + `var(--accent)` pill,
+//     hover scales 1.04 (`.production-chip`).
+//   - Cell hover: 1px inset accent ring with 80ms ease-out
+//     (`.cell-hover-ring`). Native title fires browser tooltip after the
+//     OS-default delay (300ms typical) per NN/g brevity guidance.
 //
-// Fix: production chip is now INLINE in a 2-row vertical stack:
+// Operational Clarity v2 layout (preserved):
+//   - Production-receipt chip is INLINE in a top row (16px) when present;
+//     number row owns the rest. No absolute-positioning collision with the
+//     main numeral.
 //
 //     ┌──────────────────────┐  ← 80px wide
-//     │  ▼ 517              │  ← chip row (16px) — only when inflow>0
+//     │  ↓ 517              │  ← chip row (16px) — only when inflow>0
 //     ├──────────────────────┤
-//     │       1.5K           │  ← number row (~28px) — always
+//     │             1.5K     │  ← number row (~28px), right-aligned
 //     │                      │
-//     │ ⚠            ⬇      │  ← spike-triangle (TL) and incoming-PO (BR)
-//     └──────────────────────┘     remain absolute but will never collide
-//                                  with the chip because chip is in its
-//                                  own row at the top.
-//
-// When there is NO production inflow, the number occupies the full cell
-// height and reads centered — no awkward empty top row.
-//
-// The cell width comes from `var(--day-col-w, 80px)` set on the parent
-// grid; min === max === width so flex-shrink can't drift the pixel grid.
+//     │ ↗            ⬇      │  ← spike (TL) and incoming-PO (BR) corners
+//     └──────────────────────┘
 //
 // Wrapped in DayPopover so click reveals demand/supply detail. Memoized.
 // ---------------------------------------------------------------------------
 
 import { memo } from "react";
-import { ArrowDown, Triangle } from "lucide-react";
+import { ArrowDown, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { fmtQty, formatCompact } from "../_lib/format";
 import {
@@ -83,6 +85,12 @@ function DayCellInner({
 
   const hasChipRow = productionInflow > 0;
 
+  // Compute spike % above average for the tooltip.
+  const spikePct =
+    spike && avgDailyDemand > 0
+      ? Math.round(((totalDemand - avgDailyDemand) / avgDailyDemand) * 100)
+      : 0;
+
   const cellInner = (
     <div
       role="gridcell"
@@ -96,31 +104,49 @@ function DayCellInner({
           : `${item.item_name} on ${day.day}: ${formatCompact(cellEod)} units, tier ${day.cell_tier_with_production ?? day.tier}`
       }
       className={cn(
-        "group relative flex h-full w-full cursor-pointer flex-col items-stretch border-r border-border/30 text-xs tabular-nums transition-colors duration-200 last:border-r-0",
+        "group relative flex h-full w-full cursor-pointer flex-col items-stretch",
+        "border-r border-border/30 text-xs tabular-nums last:border-r-0",
+        // Hover ring + 80ms ease-out (no transition-colors — handled in
+        // .cell-hover-ring so we get one declarative source).
+        !isNonWorking && "cell-hover-ring",
         // Tier color (5-tier production-aware classifier).
         isNonWorking
           ? "bg-hatch-history text-fg-faint"
           : dayCellClassNameProduction(day.cell_tier_with_production, day.tier),
-        // Today vertical band — inset shadows on left+right edges so the
-        // accent line is pixel-perfect aligned with the header pill above.
-        isToday && !isNonWorking && "shadow-[inset_1px_0_0_hsl(var(--accent)/0.55),inset_-1px_0_0_hsl(var(--accent)/0.55)]",
-        // Hover: 1px accent inset ring; doesn't affect layout.
-        !isNonWorking && "hover:shadow-[inset_0_0_0_1px_hsl(var(--accent)/0.7)]",
+        // Today vertical band — accent glow on left+right edges plus a
+        // soft bloom inward, so the today column reads "alive" relative
+        // to neighboring cells.
+        isToday && !isNonWorking && "today-glow",
       )}
       title={
         isNonWorking
           ? day.holiday_name_he ?? "Non-working day"
-          : productionInflow > 0
-            ? `+${formatCompact(productionInflow)} bottles arriving from planned production`
-            : undefined
+          : spike && productionInflow > 0
+            ? `Demand spike (${spikePct >= 0 ? "+" : ""}${spikePct}% vs avg) · +${formatCompact(productionInflow)} from planned production`
+            : spike
+              ? `Demand spike: ${formatCompact(totalDemand)} units (${spikePct >= 0 ? "+" : ""}${spikePct}% vs avg)`
+              : productionInflow > 0
+                ? `+${formatCompact(productionInflow)} bottles arriving from planned production`
+                : undefined
       }
     >
+      {/* Vertical depth gradient — sits above tier bg, below content.
+          Subtle modern dashboard depth (Stripe/Linear) without distracting
+          from the numeral. Skipped on non-working days because the hatch
+          pattern already carries texture. */}
+      {!isNonWorking ? (
+        <span
+          aria-hidden
+          className="pointer-events-none absolute inset-0 cell-depth"
+        />
+      ) : null}
+
       {/* Today column soft-tint overlay (drawn behind content; doesn't
           fight the tier background — uses accent at very low alpha). */}
       {isToday && !isNonWorking ? (
         <span
           aria-hidden
-          className="pointer-events-none absolute inset-0 bg-accent/[0.06]"
+          className="pointer-events-none absolute inset-0 bg-accent/[0.07]"
         />
       ) : null}
 
@@ -128,11 +154,19 @@ function DayCellInner({
       {hasChipRow ? (
         <div className="relative z-[1] flex h-[16px] items-center justify-center px-1 pt-[2px]">
           <span
-            className="inline-flex max-w-full items-center gap-0.5 truncate rounded-sm border border-dashed border-accent/60 bg-accent-soft/90 px-1 py-0 text-[9px] font-semibold leading-none text-accent shadow-sm"
+            className={cn(
+              "production-chip inline-flex max-w-full items-center gap-0.5 truncate",
+              "rounded-full border border-accent/45 bg-accent-soft/95",
+              "px-1.5 py-0 text-[9px] font-semibold leading-none text-accent shadow-sm",
+            )}
             aria-label={`Plus ${formatCompact(productionInflow)} from planned production`}
             data-testid="day-cell-production-inflow"
           >
-            <span aria-hidden>▼</span>
+            <ArrowDown
+              className="h-2 w-2 shrink-0"
+              strokeWidth={3}
+              aria-hidden
+            />
             <span className="tabular-nums">{formatCompact(productionInflow)}</span>
           </span>
         </div>
@@ -141,7 +175,7 @@ function DayCellInner({
       {/* ---------- Number row (always) ------------------------------------ */}
       <div
         className={cn(
-          "relative z-[1] flex flex-1 items-center justify-center px-1.5",
+          "relative z-[1] flex flex-1 items-center justify-end pr-2",
           // When there's no chip, give the number a tiny bit of top
           // breathing room so it doesn't kiss the cell border.
           !hasChipRow && "pt-1",
@@ -152,7 +186,7 @@ function DayCellInner({
         ) : (
           <span
             className={cn(
-              "leading-none",
+              "leading-none tabular-nums text-right",
               // 12px is the default; bump to 13px when the cell has no
               // chip so the number reads slightly heavier (Tom locked: a
               // production-marked cell is "louder" by virtue of the chip,
@@ -166,20 +200,20 @@ function DayCellInner({
         )}
       </div>
 
-      {/* Top-left: demand spike triangle (only when no chip — they share
-          the top-left zone). When chip is present the spike moves to
-          top-right. */}
+      {/* Top-left: demand spike — TrendingUp icon (was Triangle).
+          Stronger semantic at thumbnail size; warning-tinted but not too
+          loud. Repositions to top-right when chip row is occupied. */}
       {spike && !hasChipRow ? (
-        <Triangle
-          className="absolute left-1 top-1 h-2 w-2 fill-warning text-warning"
-          strokeWidth={1}
+        <TrendingUp
+          className="absolute left-1 top-1 h-2.5 w-2.5 text-warning"
+          strokeWidth={2.5}
           aria-label="Demand spike"
         />
       ) : null}
       {spike && hasChipRow ? (
-        <Triangle
-          className="absolute right-1 top-[18px] h-2 w-2 fill-warning text-warning"
-          strokeWidth={1}
+        <TrendingUp
+          className="absolute right-1 top-[18px] h-2.5 w-2.5 text-warning"
+          strokeWidth={2.5}
           aria-label="Demand spike"
         />
       ) : null}

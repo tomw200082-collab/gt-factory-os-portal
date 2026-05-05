@@ -3,12 +3,16 @@
 // ---------------------------------------------------------------------------
 // WeekCell — weekly cell for weeks 3..N in the desktop grid.
 //
-// Operational Clarity v2 (2026-05-05):
-//   - Width inherits from the grid track (`var(--week-col-w)` 96px) — no
-//     fixed-width wrapper. Pixel-aligns with the weekly column headers in
-//     DayHeaderRow.
-//   - Tabular numerics; min-on-hand line large + "Stockout day N" muted
-//     sub-label.
+// Polish 2026-05-05 (grid body pass):
+//   - Composite 2-row layout: top = EOD numeral (right-aligned, semibold);
+//     bottom = stockout indicator with calendar icon (more glanceable than
+//     plain "Stockout d{N}" text per Refactoring UI iconography guidance).
+//   - Vertical depth gradient overlay (`.cell-depth`) — Stripe/Linear-grade
+//     subtle 8% gradient instead of flat tier fill.
+//   - Hover ring matches DayCell exactly (1px inset accent, 80ms ease-out).
+//
+// Width inherits from the grid track (`var(--week-col-w)` 96px) — no fixed
+// wrapper. Pixel-aligns with the weekly column headers in DayHeaderRow.
 //
 // Performance: wrapped in React.memo. ~6 weekly cells × 68 items ≈ 408
 // instances; combined with 952 DayCells under the same tree, memoization
@@ -17,6 +21,7 @@
 // ---------------------------------------------------------------------------
 
 import { memo } from "react";
+import { Calendar } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { fmtQty } from "../_lib/format";
 import { weekCellClassNameProduction } from "../_lib/risk";
@@ -63,15 +68,19 @@ function WeekCellInner({
     week.stockout_day_with_production != null;
 
   const showPlannedChip = overlayEnabled && plannedRemainingQty > 0;
+  const isStockoutWeek =
+    week.tier === "stockout" || hasProductionAwareStockout;
 
   return (
     <div
       role="gridcell"
+      tabIndex={0}
       data-week={week.week_start}
       data-testid="week-cell"
       className={cn(
-        "relative flex h-full w-full flex-col items-center justify-center gap-0.5 border-l border-r border-border/30 px-1 text-xs tabular-nums transition-colors duration-200",
-        "hover:shadow-[inset_0_0_0_1px_hsl(var(--accent)/0.7)]",
+        "group relative flex h-full w-full flex-col items-stretch",
+        "border-l border-r border-border/30 px-1.5 text-xs tabular-nums",
+        "cell-hover-ring",
         weekCellClassNameProduction(
           week.cell_tier_with_production,
           week.tier,
@@ -80,20 +89,50 @@ function WeekCellInner({
       )}
       title={`Week of ${week.week_start} — min on-hand ${fmtQty(minOnHand)}`}
     >
+      {/* Depth gradient overlay — subtle 8% vertical fade for modern
+          dashboard depth without flattening the tier fill. */}
       <span
-        className={cn(
-          "text-[13px] leading-none",
-          (week.tier === "stockout" || hasProductionAwareStockout) &&
-            "font-semibold",
-        )}
-      >
-        {fmtQty(minOnHand)}
-      </span>
-      {stockoutDayNum != null ? (
-        <span className="text-[9px] uppercase tracking-sops leading-none opacity-80">
-          Stockout d{stockoutDayNum}
+        aria-hidden
+        className="pointer-events-none absolute inset-0 cell-depth"
+      />
+
+      {/* ---------- Top row: EOD numeral (right-aligned, semibold) -------- */}
+      <div className="relative z-[1] flex flex-1 items-end justify-end pt-1">
+        <span
+          className={cn(
+            "leading-none tabular-nums",
+            // The week reading should feel quietly authoritative — bigger
+            // than a day cell number, semibold so it anchors the cell.
+            isStockoutWeek ? "text-[14px] font-bold" : "text-[13px] font-semibold",
+          )}
+        >
+          {fmtQty(minOnHand)}
         </span>
-      ) : null}
+      </div>
+
+      {/* ---------- Bottom row: stockout day with calendar icon ----------- */}
+      <div className="relative z-[1] flex h-[14px] items-center justify-end gap-0.5 pb-0.5">
+        {stockoutDayNum != null ? (
+          <span
+            className={cn(
+              "inline-flex items-center gap-0.5 text-[9px] uppercase tracking-sops leading-none",
+              isStockoutWeek ? "opacity-90 font-medium" : "opacity-75",
+            )}
+            aria-label={`Stockout day ${stockoutDayNum}`}
+          >
+            <Calendar
+              className="h-2 w-2 shrink-0"
+              strokeWidth={2.5}
+              aria-hidden
+            />
+            <span className="tabular-nums">d{stockoutDayNum}</span>
+          </span>
+        ) : (
+          <span aria-hidden className="text-[9px] opacity-0">
+            &nbsp;
+          </span>
+        )}
+      </div>
 
       {/* Aggregated planned-inflow chip (week sum). Bottom-left so the
           existing center column visualization stays uncluttered. */}

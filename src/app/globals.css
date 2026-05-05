@@ -656,6 +656,14 @@
   .cell-hover-ring:hover {
     box-shadow: inset 0 0 0 1px hsl(var(--accent) / 0.7);
   }
+  /* When the today-glow cell is hovered, preserve the accent glow on
+     the side edges and add the full 4-side hover ring on top. Combined
+     box-shadow stacks left-to-right; the ring sits over the glow. */
+  .cell-hover-ring.today-glow:hover {
+    box-shadow:
+      inset 0 0 0 1px hsl(var(--accent) / 0.85),
+      inset 0 0 12px -4px hsl(var(--accent) / 0.30);
+  }
 
   /* Sparkline hover — scale subtly + dim siblings, gives the trend line a
      "pop into focus" feel. Caller adds `data-sparkline-hover` on the row. */

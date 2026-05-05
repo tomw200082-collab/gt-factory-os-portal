@@ -3,6 +3,15 @@
 // ---------------------------------------------------------------------------
 // DayPopover — Radix Popover content for a single day cell.
 //
+// Polish 2026-05-05 (grid body pass):
+//   - Hero sparkline at top (200×40) showing the full visible trajectory
+//     with the hovered day's tier color — turns the popover into a "story"
+//     of the item's flow rather than a flat list.
+//   - Refined two-column rows: label left, value right, separated by a
+//     faint hairline (.popover-row+.popover-row). Stripe charge-detail /
+//     Linear issue-detail pattern for scannability.
+//   - Width bumped 280→320 to accommodate the hero sparkline.
+//
 // Surfaces (per contract §4.3 + plan §Phase 8.5):
 //   - Header: weekday + date + status ("Stockout" or "X days cover")
 //   - Demand row: LionWheel + Forecast breakdown
@@ -20,6 +29,7 @@ import { RISK_TIER_STYLE } from "../_lib/risk";
 import type { FlowDay, FlowItem } from "../_lib/types";
 import type { PlannedInflowRow } from "../_lib/plannedInflow";
 import { PlannedTooltip } from "./PlannedTooltip";
+import { Sparkline } from "./Sparkline";
 
 interface DayPopoverProps {
   item: FlowItem;
@@ -41,6 +51,10 @@ export function DayPopover({
   const isStockout = day.tier === "stockout";
   const isNonWorking = day.tier === "non_working";
 
+  // Trim to the visible 14-day window for the hero sparkline. Mirrors the
+  // grid's display horizon so the user sees the same trajectory.
+  const heroDays = item.days.slice(0, 14);
+
   return (
     <Popover.Root>
       <Popover.Trigger asChild>{children}</Popover.Trigger>
@@ -49,7 +63,7 @@ export function DayPopover({
           align="center"
           sideOffset={6}
           collisionPadding={12}
-          className="z-50 w-[280px] rounded-md border border-border/70 bg-bg-raised p-3 text-xs shadow-pop animate-fade-in-up"
+          className="z-50 w-[320px] rounded-md border border-border/70 bg-bg-raised p-3 text-xs shadow-pop animate-fade-in-up"
         >
           {/* Header */}
           <div className="border-b border-border/40 pb-2">
@@ -76,9 +90,40 @@ export function DayPopover({
             </div>
           </div>
 
-          {/* Body rows */}
+          {/* Hero sparkline — only on working days. Shows the 14-day arc
+              of this item's projected on-hand so the day's number reads
+              in the context of the trend, not in isolation. */}
+          {!isNonWorking && heroDays.length > 0 ? (
+            <div
+              className="mt-2 flex flex-col gap-0.5 rounded-sm border border-border/30 bg-bg-subtle/60 px-2 py-1.5"
+              aria-hidden
+            >
+              <div className="flex items-center justify-between text-3xs uppercase tracking-sops text-fg-subtle">
+                <span>14-day trajectory</span>
+                <span className="tabular-nums opacity-80">
+                  {formatCompact(heroDays[0]!.projected_on_hand_eod_with_production)}
+                  {" → "}
+                  {formatCompact(
+                    heroDays[heroDays.length - 1]!
+                      .projected_on_hand_eod_with_production,
+                  )}
+                </span>
+              </div>
+              <Sparkline
+                days={heroDays}
+                riskTier={item.risk_tier}
+                width={296}
+                height={40}
+                className="w-full"
+              />
+            </div>
+          ) : null}
+
+          {/* Body rows — two-column layout with hairline dividers (Stripe /
+              Linear pattern). Label left, value right; .popover-row class
+              draws the hairline divider between siblings. */}
           {!isNonWorking ? (
-            <dl className="mt-2 space-y-1.5">
+            <dl className="mt-3 flex flex-col">
               <Row label="Demand (LionWheel)" value={day.demand_lionwheel} />
               <Row label="Demand (Forecast)" value={day.demand_forecast} />
               <Row
@@ -99,8 +144,9 @@ export function DayPopover({
                 valueClassName={
                   day.projected_on_hand_eod_with_production < 0
                     ? "text-danger-fg font-semibold"
-                    : ""
+                    : "font-semibold text-fg-strong"
                 }
+                emphasized
               />
             </dl>
           ) : (
@@ -176,13 +222,27 @@ interface RowProps {
   label: string;
   value: number;
   valueClassName?: string;
+  /** Render the row with a slightly heavier visual weight (used for the
+   *  bottom-line projected-on-hand row). */
+  emphasized?: boolean;
 }
 
-function Row({ label, value, valueClassName }: RowProps) {
+function Row({ label, value, valueClassName, emphasized = false }: RowProps) {
   return (
-    <div className="flex items-baseline justify-between gap-2">
+    <div
+      className={cn(
+        "popover-row flex items-baseline justify-between gap-2 py-1",
+        emphasized && "mt-0.5 border-t border-border/40 pt-1.5",
+      )}
+    >
       <dt className="text-3xs text-fg-muted">{label}</dt>
-      <dd className={cn("text-xs tabular-nums text-fg-strong", valueClassName)}>
+      <dd
+        className={cn(
+          "text-xs tabular-nums tracking-tight text-fg-strong",
+          "text-right",
+          valueClassName,
+        )}
+      >
         {formatCompact(value)}
       </dd>
     </div>
