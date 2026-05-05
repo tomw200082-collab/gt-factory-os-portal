@@ -53,12 +53,12 @@ import {
 import { WarningBody } from "@/components/inbox/bodies/WarningBody";
 import { InfoBody } from "@/components/inbox/bodies/InfoBody";
 import {
-  copyForAction,
-  ACTION_REJECT,
-  ACTION_DEFER,
   STATE_COPY,
   DIALOG_COPY,
+  actionsForSubtype,
   type CardType,
+  type SubtypeAction,
+  type ActionVerb,
 } from "@/lib/inbox-copy";
 
 interface ExceptionRow {
@@ -707,73 +707,161 @@ function InboxCardRow({
   const router = useRouter();
   const cardType = row.card_type as CardType;
 
-  const onAcknowledge = useCallback(async () => {
-    await fetch(`/api/v1/mutations/exceptions/${row.exception_id}/acknowledge`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({ idempotency_key: `ack:${row.exception_id}:${Date.now()}` }),
-    });
-    onMutate();
-  }, [row.exception_id, onMutate]);
+  // Per Tom 2026-05-04: button labels MUST match the "מה לעשות" guidance
+  // for this specific subtype (no generic card_type fallback when a
+  // subtype-specific contract exists). actionsForSubtype is the source of
+  // truth defined in @/lib/inbox-copy.ts.
+  const subtypeActions = actionsForSubtype(row.subtype, cardType);
 
-  const onDismiss = useCallback(async () => {
-    await fetch(`/api/v1/mutations/exceptions/${row.exception_id}/dismiss`, {
-      method: "POST",
-      credentials: "include",
-      headers: { "content-type": "application/json" },
-      body: JSON.stringify({
-        idempotency_key: `dismiss:${row.exception_id}:${Date.now()}`,
-      }),
-    });
-    onMutate();
-  }, [row.exception_id, onMutate]);
+  const dispatchVerb = useCallback(
+    async (verb: ActionVerb, action: SubtypeAction) => {
+      const id = row.exception_id;
+      const stamp = `${verb}:${id}:${Date.now()}`;
+      switch (verb) {
+        case "approve":
+          await fetch(`/api/v1/mutations/exceptions/${id}/approve`, {
+            method: "POST",
+            credentials: "include",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ idempotency_key: stamp }),
+          });
+          break;
+        case "reject": {
+          const reason = window.prompt("סיבת הדחייה (חובה):", "");
+          if (!reason || !reason.trim()) return;
+          await fetch(`/api/v1/mutations/exceptions/${id}/reject`, {
+            method: "POST",
+            credentials: "include",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({
+              idempotency_key: stamp,
+              rejection_reason: reason.trim(),
+            }),
+          });
+          break;
+        }
+        case "acknowledge":
+          await fetch(`/api/v1/mutations/exceptions/${id}/acknowledge`, {
+            method: "POST",
+            credentials: "include",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ idempotency_key: stamp }),
+          });
+          break;
+        case "dismiss":
+          await fetch(`/api/v1/mutations/exceptions/${id}/dismiss`, {
+            method: "POST",
+            credentials: "include",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ idempotency_key: stamp }),
+          });
+          break;
+        case "defer": {
+          // v1: client-side defer — set snoozed_until via the exception's
+          // snoozed_until column. Backend support requires a follow-up
+          // /snooze endpoint; for now we hide the row client-side and
+          // recommend the planner come back later.
+          // NOTE: minimal v1 fallback uses acknowledge so the card is
+          // visually muted but stays open.
+          await fetch(`/api/v1/mutations/exceptions/${id}/acknowledge`, {
+            method: "POST",
+            credentials: "include",
+            headers: { "content-type": "application/json" },
+            body: JSON.stringify({ idempotency_key: stamp }),
+          });
+          break;
+        }
+        case "credit_approve": {
+          // Existing credit_decisions handler endpoint.
+          await fetch(
+            `/api/v1/mutations/lionwheel/credit-needed/${id}/approve`,
+            {
+              method: "POST",
+              credentials: "include",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({ idempotency_key: stamp }),
+            },
+          );
+          break;
+        }
+        case "credit_reject": {
+          const reason = window.prompt("סיבת הדחייה (חובה):", "");
+          if (!reason || !reason.trim()) return;
+          await fetch(
+            `/api/v1/mutations/lionwheel/credit-needed/${id}/reject`,
+            {
+              method: "POST",
+              credentials: "include",
+              headers: { "content-type": "application/json" },
+              body: JSON.stringify({
+                idempotency_key: stamp,
+                rejection_reason: reason.trim(),
+              }),
+            },
+          );
+          break;
+        }
+        case "gi_price_approve":
+        case "gi_price_edit_approve":
+        case "gi_price_reject":
+          // These all require structured forms; route to the drawer.
+          navigateToDrawer(row, router);
+          return;
+        case "open_drawer":
+          navigateToDrawer(row, router);
+          return;
+        case "open_admin":
+        case "investigate":
+          if (action.href) router.push(action.href);
+          return;
+      }
+      onMutate();
+    },
+    [row, router, onMutate],
+  );
 
   const actions =
-    view === "history" ? null : (() => {
-      if (cardType === "decision") {
-        return (
-          <>
-            <PrimaryActionButton onClick={() => navigateToDrawer(row, router)}>
-              {copyForAction("decision", "primary")}
-            </PrimaryActionButton>
-            <SecondaryActionButton onClick={() => navigateToDrawer(row, router)}>
-              {ACTION_REJECT}
+    view === "history" ? null : (
+      <>
+        {subtypeActions.map((a, i) => {
+          const isPrimary = a.emphasis === "primary";
+          if (isPrimary) {
+            return (
+              <PrimaryActionButton
+                key={`${a.verb}-${i}`}
+                onClick={() => dispatchVerb(a.verb, a)}
+              >
+                {a.label}
+              </PrimaryActionButton>
+            );
+          }
+          // Destructive secondary buttons get a red tint.
+          if (a.destructive) {
+            return (
+              <button
+                key={`${a.verb}-${i}`}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  dispatchVerb(a.verb, a);
+                }}
+                className="inline-flex items-center rounded-md px-2.5 py-1 text-xs font-medium border border-red-300 bg-white text-red-700 hover:bg-red-50 active:scale-[0.98] dark:border-red-700 dark:bg-slate-900 dark:text-red-400 dark:hover:bg-red-950/40 transition-all"
+              >
+                {a.label}
+              </button>
+            );
+          }
+          return (
+            <SecondaryActionButton
+              key={`${a.verb}-${i}`}
+              onClick={() => dispatchVerb(a.verb, a)}
+            >
+              {a.label}
             </SecondaryActionButton>
-            <SecondaryActionButton onClick={() => navigateToDrawer(row, router)}>
-              {ACTION_DEFER}
-            </SecondaryActionButton>
-          </>
-        );
-      }
-      if (cardType === "to_do") {
-        return (
-          <PrimaryActionButton onClick={() => navigateToDrawer(row, router)}>
-            {copyForAction("to_do", "primary")}
-          </PrimaryActionButton>
-        );
-      }
-      if (cardType === "warning") {
-        return (
-          <>
-            <PrimaryActionButton onClick={onAcknowledge}>
-              {copyForAction("warning", "primary")}
-            </PrimaryActionButton>
-            <SecondaryActionButton onClick={() => navigateToDrawer(row, router)}>
-              {copyForAction("warning", "secondary")}
-            </SecondaryActionButton>
-          </>
-        );
-      }
-      if (cardType === "info") {
-        return (
-          <PrimaryActionButton onClick={onDismiss}>
-            {copyForAction("info", "primary")}
-          </PrimaryActionButton>
-        );
-      }
-      return null;
-    })();
+          );
+        })}
+      </>
+    );
 
   const body = (() => {
     if (cardType === "warning") {

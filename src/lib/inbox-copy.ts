@@ -232,3 +232,275 @@ export function colorForPriceDelta(pctDelta: number): 'green' | 'amber' | 'red' 
   if (pctDelta > 0.03) return 'amber';
   return 'neutral';
 }
+
+// ---------------------------------------------------------------------------
+// SUBTYPE_ACTIONS — explicit action set per subtype (Tom 2026-05-04).
+//
+// Per Tom: "the buttons displayed should always match what's written in
+// 'מה לעשות' per task type, so the action is immediate and accurate."
+//
+// Each subtype defines:
+//   - primary action button (label + action verb)
+//   - secondary action buttons (zero or more)
+//
+// Action verbs map to per-card-type backend handlers:
+//   approve         → POST /api/v1/mutations/exceptions/:id/approve
+//   reject          → POST /api/v1/mutations/exceptions/:id/reject (with reason)
+//   acknowledge     → POST /api/v1/mutations/exceptions/:id/acknowledge
+//   dismiss         → POST /api/v1/mutations/exceptions/:id/dismiss
+//   defer           → set snoozed_until (out-of-scope for v1; hides for 24h client-side)
+//   open_drawer     → router.push to subtype-specific drawer for full review
+//   open_admin      → router.push to admin surface (mapping queues etc.)
+//   credit_approve  → POST /api/v1/mutations/lionwheel/credit-needed/:id/approve
+//                     (existing credit_decisions handler; differs from generic approve)
+//   credit_reject   → POST /api/v1/mutations/lionwheel/credit-needed/:id/reject
+//   gi_price_approve / gi_price_edit_approve / gi_price_reject
+//                   → POST /api/v1/mutations/inbox/gi-price-proposal/:proposal_id/...
+//   investigate     → router.push to a diagnostic surface (admin/integrations,
+//                     admin/jobs, etc.)
+// ---------------------------------------------------------------------------
+
+export type ActionVerb =
+  | 'approve'
+  | 'reject'
+  | 'acknowledge'
+  | 'dismiss'
+  | 'defer'
+  | 'open_drawer'
+  | 'open_admin'
+  | 'credit_approve'
+  | 'credit_reject'
+  | 'gi_price_approve'
+  | 'gi_price_edit_approve'
+  | 'gi_price_reject'
+  | 'investigate';
+
+export interface SubtypeAction {
+  /** Visible button label (Hebrew). */
+  label: string;
+  /** Action verb dispatched on click. */
+  verb: ActionVerb;
+  /** When verb is 'open_admin' or 'investigate': the deep-link path. */
+  href?: string;
+  /** Visual emphasis: 'primary' = filled button; 'secondary' = ghost button. */
+  emphasis: 'primary' | 'secondary';
+  /** Destructive actions get a red tint. */
+  destructive?: boolean;
+}
+
+const SUBTYPE_ACTIONS: Record<string, SubtypeAction[]> = {
+  // ============================================================================
+  // DECISION subtypes — Approve / Reject + drawer-specific verbs
+  // ============================================================================
+  customer_credit: [
+    { label: 'אשר זיכוי', verb: 'credit_approve', emphasis: 'primary' },
+    { label: 'דחה', verb: 'credit_reject', emphasis: 'secondary', destructive: true },
+    { label: 'ראיתי', verb: 'defer', emphasis: 'secondary' },
+  ],
+  gi_price_proposal: [
+    { label: 'אשר מחיר', verb: 'gi_price_approve', emphasis: 'primary' },
+    { label: 'ערוך ואשר', verb: 'gi_price_edit_approve', emphasis: 'secondary' },
+    { label: 'דחה', verb: 'gi_price_reject', emphasis: 'secondary', destructive: true },
+  ],
+  count_large_variance: [
+    { label: 'אשר ספירה', verb: 'open_drawer', emphasis: 'primary' },
+    { label: 'דחה', verb: 'open_drawer', emphasis: 'secondary', destructive: true },
+  ],
+  positive_adjustment: [
+    { label: 'אשר התאמה', verb: 'open_drawer', emphasis: 'primary' },
+    { label: 'דחה', verb: 'open_drawer', emphasis: 'secondary', destructive: true },
+  ],
+  loss_above_threshold: [
+    { label: 'אשר פחת', verb: 'open_drawer', emphasis: 'primary' },
+    { label: 'דחה', verb: 'open_drawer', emphasis: 'secondary', destructive: true },
+  ],
+  po_line_over_receipt: [
+    { label: 'אשר עודף', verb: 'approve', emphasis: 'primary' },
+    { label: 'דחה', verb: 'reject', emphasis: 'secondary', destructive: true },
+  ],
+  manual_po_approval: [
+    { label: 'אשר הזמנה', verb: 'approve', emphasis: 'primary' },
+    { label: 'דחה', verb: 'reject', emphasis: 'secondary', destructive: true },
+  ],
+  purchase_recommendation_approval: [
+    { label: 'אשר המלצה', verb: 'approve', emphasis: 'primary' },
+    { label: 'דחה', verb: 'reject', emphasis: 'secondary', destructive: true },
+  ],
+  production_recommendation_approval: [
+    { label: 'אשר ייצור', verb: 'approve', emphasis: 'primary' },
+    { label: 'דחה', verb: 'reject', emphasis: 'secondary', destructive: true },
+  ],
+  lw_catalog_gap: [
+    { label: 'החלט קטלוג', verb: 'open_drawer', emphasis: 'primary' },
+    { label: 'דחה לזמן אחר', verb: 'defer', emphasis: 'secondary' },
+  ],
+  shopify_variant_gap: [
+    { label: 'פתור פער', verb: 'open_drawer', emphasis: 'primary' },
+    { label: 'דחה לזמן אחר', verb: 'defer', emphasis: 'secondary' },
+  ],
+
+  // ============================================================================
+  // TO-DO subtypes — Open queue / form (deep-link to mapping surface)
+  // ============================================================================
+  unmapped_fg_alias: [
+    { label: 'פתח את תור המיפוי', verb: 'open_admin', emphasis: 'primary', href: '/admin/integration-sku-map' },
+  ],
+  unmapped_lw_sku: [
+    { label: 'פתח את תור המיפוי', verb: 'open_admin', emphasis: 'primary', href: '/admin/integration-sku-map' },
+  ],
+  unmapped_gi_supplier: [
+    { label: 'פתח רשימת ספקים', verb: 'open_admin', emphasis: 'primary', href: '/admin/suppliers' },
+  ],
+  unmapped_gi_line: [
+    { label: 'פתח טופס מיפוי', verb: 'open_drawer', emphasis: 'primary' },
+  ],
+  ambiguous_supplier_mapping: [
+    { label: 'פתור מיפוי', verb: 'open_drawer', emphasis: 'primary' },
+  ],
+  gi_expense_review: [
+    { label: 'בדוק חשבונית', verb: 'open_drawer', emphasis: 'primary' },
+  ],
+
+  // ============================================================================
+  // WARNING subtypes — Acknowledge / Investigate
+  // ============================================================================
+  gi_stale: [
+    { label: 'ראיתי', verb: 'acknowledge', emphasis: 'primary' },
+    { label: 'בדוק חיבור', verb: 'investigate', emphasis: 'secondary', href: '/admin/integrations' },
+  ],
+  lionwheel_stale: [
+    { label: 'ראיתי', verb: 'acknowledge', emphasis: 'primary' },
+    { label: 'בדוק חיבור', verb: 'investigate', emphasis: 'secondary', href: '/admin/integrations' },
+  ],
+  shopify_stale: [
+    { label: 'ראיתי', verb: 'acknowledge', emphasis: 'primary' },
+    { label: 'בדוק חיבור', verb: 'investigate', emphasis: 'secondary', href: '/admin/integrations' },
+  ],
+  rebuild_stale: [
+    { label: 'ראיתי', verb: 'acknowledge', emphasis: 'primary' },
+    { label: 'בדוק jobs', verb: 'investigate', emphasis: 'secondary', href: '/admin/jobs' },
+  ],
+  export_stale: [
+    { label: 'ראיתי', verb: 'acknowledge', emphasis: 'primary' },
+    { label: 'בדוק jobs', verb: 'investigate', emphasis: 'secondary', href: '/admin/jobs' },
+  ],
+  forecast_stale: [
+    { label: 'ראיתי', verb: 'acknowledge', emphasis: 'primary' },
+    { label: 'עדכן תחזית', verb: 'investigate', emphasis: 'secondary', href: '/planning/forecast' },
+  ],
+  supplier_price_anomaly: [
+    { label: 'ראיתי', verb: 'acknowledge', emphasis: 'primary' },
+    { label: 'בדוק מחירים', verb: 'investigate', emphasis: 'secondary', href: '/admin/suppliers' },
+  ],
+  gi_price_activation_failed: [
+    { label: 'ראיתי', verb: 'acknowledge', emphasis: 'primary' },
+    { label: 'בדוק jobs', verb: 'investigate', emphasis: 'secondary', href: '/admin/jobs' },
+  ],
+  gi_api_failure: [
+    { label: 'ראיתי', verb: 'acknowledge', emphasis: 'primary' },
+    { label: 'בדוק חיבור', verb: 'investigate', emphasis: 'secondary', href: '/admin/integrations' },
+  ],
+  gi_auth_failure: [
+    { label: 'ראיתי', verb: 'acknowledge', emphasis: 'primary' },
+    { label: 'בדוק חיבור', verb: 'investigate', emphasis: 'secondary', href: '/admin/integrations' },
+  ],
+  gi_rate_limit_stuck: [
+    { label: 'ראיתי', verb: 'acknowledge', emphasis: 'primary' },
+    { label: 'בדוק jobs', verb: 'investigate', emphasis: 'secondary', href: '/admin/jobs' },
+  ],
+  gi_mirror_insert_failed: [
+    { label: 'ראיתי', verb: 'acknowledge', emphasis: 'primary' },
+    { label: 'בדוק jobs', verb: 'investigate', emphasis: 'secondary', href: '/admin/jobs' },
+  ],
+  lionwheel_auth_expired: [
+    { label: 'ראיתי', verb: 'acknowledge', emphasis: 'primary' },
+    { label: 'חדש אימות', verb: 'investigate', emphasis: 'secondary', href: '/admin/integrations' },
+  ],
+  lionwheel_auth_failure: [
+    { label: 'ראיתי', verb: 'acknowledge', emphasis: 'primary' },
+    { label: 'חדש אימות', verb: 'investigate', emphasis: 'secondary', href: '/admin/integrations' },
+  ],
+  lionwheel_rate_limit_stuck: [
+    { label: 'ראיתי', verb: 'acknowledge', emphasis: 'primary' },
+    { label: 'בדוק jobs', verb: 'investigate', emphasis: 'secondary', href: '/admin/jobs' },
+  ],
+  lionwheel_schema_drift: [
+    { label: 'ראיתי', verb: 'acknowledge', emphasis: 'primary' },
+    { label: 'בדוק', verb: 'investigate', emphasis: 'secondary', href: '/admin/integrations' },
+  ],
+  lw_pick_enrich_failed: [
+    { label: 'ראיתי', verb: 'acknowledge', emphasis: 'primary' },
+    { label: 'בדוק', verb: 'investigate', emphasis: 'secondary', href: '/admin/integrations' },
+  ],
+  shopify_auth_failure: [
+    { label: 'ראיתי', verb: 'acknowledge', emphasis: 'primary' },
+    { label: 'חדש אימות', verb: 'investigate', emphasis: 'secondary', href: '/admin/integrations' },
+  ],
+  shopify_rate_limit_stuck: [
+    { label: 'ראיתי', verb: 'acknowledge', emphasis: 'primary' },
+    { label: 'בדוק jobs', verb: 'investigate', emphasis: 'secondary', href: '/admin/jobs' },
+  ],
+  shopify_api_version_drift: [
+    { label: 'ראיתי', verb: 'acknowledge', emphasis: 'primary' },
+    { label: 'בדוק', verb: 'investigate', emphasis: 'secondary', href: '/admin/integrations' },
+  ],
+  shopify_network_failure: [
+    { label: 'ראיתי', verb: 'acknowledge', emphasis: 'primary' },
+  ],
+  shopify_drift: [
+    { label: 'ראיתי', verb: 'acknowledge', emphasis: 'primary' },
+    { label: 'בדוק', verb: 'investigate', emphasis: 'secondary', href: '/admin/integrations' },
+  ],
+  alias_revoked_with_dependencies: [
+    { label: 'ראיתי', verb: 'acknowledge', emphasis: 'primary' },
+    { label: 'בדוק aliases', verb: 'investigate', emphasis: 'secondary', href: '/admin/integration-sku-map' },
+  ],
+
+  // ============================================================================
+  // INFO subtypes — Dismiss
+  // ============================================================================
+  lw_capped_window: [{ label: 'סגור', verb: 'dismiss', emphasis: 'primary' }],
+  gi_non_ils_currency: [{ label: 'סגור', verb: 'dismiss', emphasis: 'primary' }],
+  lw_pick_data_missing: [{ label: 'סגור', verb: 'dismiss', emphasis: 'primary' }],
+  lionwheel_payload_invalid_sku: [{ label: 'סגור', verb: 'dismiss', emphasis: 'primary' }],
+  lionwheel_payload_invalid_picked_quantity: [
+    { label: 'סגור', verb: 'dismiss', emphasis: 'primary' },
+  ],
+  lionwheel_order_note: [{ label: 'סגור', verb: 'dismiss', emphasis: 'primary' }],
+  bom_version_published: [{ label: 'סגור', verb: 'dismiss', emphasis: 'primary' }],
+};
+
+/**
+ * Returns the action set for a given subtype. Falls back to a generic
+ * card_type-driven set when no subtype-specific entry exists (so new
+ * subtypes don't leave the UI without buttons).
+ */
+export function actionsForSubtype(
+  subtype: string | null | undefined,
+  cardType: CardType,
+): SubtypeAction[] {
+  if (subtype && SUBTYPE_ACTIONS[subtype]) {
+    return SUBTYPE_ACTIONS[subtype];
+  }
+  // Generic fallback per card_type.
+  if (cardType === 'decision') {
+    return [
+      { label: 'אשר', verb: 'approve', emphasis: 'primary' },
+      { label: 'דחה', verb: 'reject', emphasis: 'secondary', destructive: true },
+      { label: 'דחה לזמן אחר', verb: 'defer', emphasis: 'secondary' },
+    ];
+  }
+  if (cardType === 'to_do') {
+    return [{ label: 'פתח', verb: 'open_drawer', emphasis: 'primary' }];
+  }
+  if (cardType === 'warning') {
+    return [
+      { label: 'ראיתי', verb: 'acknowledge', emphasis: 'primary' },
+      { label: 'בדוק', verb: 'investigate', emphasis: 'secondary' },
+    ];
+  }
+  if (cardType === 'info') {
+    return [{ label: 'סגור', verb: 'dismiss', emphasis: 'primary' }];
+  }
+  return [];
+}
