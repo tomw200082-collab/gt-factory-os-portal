@@ -42,7 +42,7 @@
 // ---------------------------------------------------------------------------
 
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useQueries, useQuery } from "@tanstack/react-query";
 import {
   Activity,
   Archive,
@@ -65,6 +65,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import { MiniStats } from "./_components/MiniStats";
 import { SectionHeader } from "./_components/SectionHeader";
 import { ForecastRow, type ForecastRowVersion } from "./_components/ForecastRow";
+import type { ProductionLitersResponseApi } from "./_lib/production-liters";
 
 type ForecastStatus = "draft" | "published" | "superseded" | "discarded";
 type ForecastCadence = "monthly" | "weekly" | "daily";
@@ -130,6 +131,25 @@ async function fetchAllVersions(session: Session): Promise<ListResponse> {
     );
   }
   return (await res.json()) as ListResponse;
+}
+
+// 2026-05-05 list-card polish — fetch the per-month production-liters
+// summary for one version. Returns null on any failure (the row falls back
+// to the decorative-only horizon strip; it does not break the list).
+async function fetchProductionLiters(
+  session: Session,
+  versionId: string,
+): Promise<ProductionLitersResponseApi | null> {
+  try {
+    const res = await fetch(
+      `/api/forecasts/versions/${encodeURIComponent(versionId)}/production-liters`,
+      { method: "GET", headers: sessionHeaders(session) },
+    );
+    if (!res.ok) return null;
+    return (await res.json()) as ProductionLitersResponseApi;
+  } catch {
+    return null;
+  }
 }
 
 function fmtAgo(iso: string | null): string {
@@ -200,6 +220,32 @@ export default function ForecastListPage() {
     archived.sort((a, b) => b.updated_at.localeCompare(a.updated_at));
     return { active, drafts, archived };
   }, [baseFiltered]);
+
+  // 2026-05-05 list-card polish — fetch per-month production-liters for
+  // every visible row in parallel. Results feed the ForecastRow card so it
+  // can render real liters totals + MoM growth + a horizon summary cluster.
+  // Per-row fetch is small (≤ 8 rows × tiny payload) and TanStack caches
+  // for 5 minutes, so re-renders don't refetch.
+  const summariesQueries = useQueries({
+    queries: baseFiltered.map((v) => ({
+      queryKey: [
+        "forecast",
+        "production-liters",
+        v.version_id,
+        session.role,
+      ] as const,
+      queryFn: () => fetchProductionLiters(session, v.version_id),
+      staleTime: 5 * 60 * 1000,
+    })),
+  });
+  const summariesByVersionId = useMemo(() => {
+    const m = new Map<string, ProductionLitersResponseApi | null>();
+    baseFiltered.forEach((v, i) => {
+      const r = summariesQueries[i];
+      m.set(v.version_id, r?.data ?? null);
+    });
+    return m;
+  }, [baseFiltered, summariesQueries]);
 
   // Apply the segmented status filter on TOP of grouping.
   const showActive = statusFilter === "all" || statusFilter === "published";
@@ -571,6 +617,7 @@ export default function ForecastListPage() {
                         key={v.version_id}
                         v={v as ForecastRowVersion}
                         active
+                        productionLiters={summariesByVersionId.get(v.version_id) ?? null}
                       />
                     ))}
                   </ul>
@@ -599,6 +646,7 @@ export default function ForecastListPage() {
                       <ForecastRow
                         key={v.version_id}
                         v={v as ForecastRowVersion}
+                        productionLiters={summariesByVersionId.get(v.version_id) ?? null}
                       />
                     ))}
                   </ul>
@@ -678,6 +726,7 @@ export default function ForecastListPage() {
                           key={v.version_id}
                           v={v as ForecastRowVersion}
                           muted
+                          productionLiters={summariesByVersionId.get(v.version_id) ?? null}
                         />
                       ))}
                     </ul>

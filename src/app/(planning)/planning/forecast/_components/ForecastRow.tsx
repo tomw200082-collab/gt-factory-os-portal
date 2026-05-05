@@ -21,16 +21,29 @@
 // ---------------------------------------------------------------------------
 
 import Link from "next/link";
+import type { CSSProperties } from "react";
 import {
   Archive,
   ArrowRight,
+  ArrowDownRight,
+  ArrowUpRight,
   Check,
   Copy,
   Eye,
   FileText,
+  Minus,
   Pencil,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import {
+  alignMonthlyLiters,
+  barWidthFraction,
+  formatLiters,
+  formatMomPct,
+  shortMonthLabel,
+  summarizeHorizon,
+  type ProductionLitersResponseApi,
+} from "../_lib/production-liters";
 
 type ForecastStatus = "draft" | "published" | "superseded" | "discarded";
 type ForecastCadence = "monthly" | "weekly" | "daily";
@@ -58,6 +71,10 @@ interface ForecastRowProps {
   v: ForecastRowVersion;
   active?: boolean;
   muted?: boolean;
+  // 2026-05-05 list-card polish — per-month production-liters summary fetched
+  // by the parent page. `null` = not yet loaded (or fetch failed); the row
+  // gracefully degrades to month-name-only blocks in that case.
+  productionLiters?: ProductionLitersResponseApi | null;
 }
 
 function fmtFullDateTime(iso: string | null): string {
@@ -206,13 +223,34 @@ function horizonEndIso(
   }
 }
 
-export function ForecastRow({ v, active, muted }: ForecastRowProps) {
+export function ForecastRow({
+  v,
+  active,
+  muted,
+  productionLiters,
+}: ForecastRowProps) {
   const tone = statusToTone(v.status);
   const span = v.horizon_weeks;
   const hero = heroLabelFor(v.horizon_start_at, v.cadence);
   const blocks = horizonBlocks(v.horizon_start_at, v.cadence, span);
   const overflow = span > blocks.length ? span - blocks.length : 0;
   const endIso = horizonEndIso(v.horizon_start_at, v.cadence, span);
+
+  // 2026-05-05 list-card polish — align the API payload to the visible
+  // horizon blocks (so block i lines up with alignedLiters[i]) and derive
+  // the horizon-summary cluster shown next to the hero month label.
+  const alignedLiters = productionLiters
+    ? alignMonthlyLiters(
+        productionLiters.monthly_liters,
+        v.horizon_start_at,
+        v.cadence,
+        blocks.length,
+      )
+    : [];
+  const summary = summarizeHorizon(alignedLiters);
+  const peakLiters = summary.peakMonth?.liters ?? 0;
+  const hasLitersData =
+    productionLiters !== null && productionLiters !== undefined;
 
   const horizonSpanText =
     v.cadence === "monthly"
@@ -266,43 +304,161 @@ export function ForecastRow({ v, active, muted }: ForecastRowProps) {
           </span>
         </div>
 
-        {/* — Hero month label — DOMINATES the card. — */}
+        {/* — Hero month label — DOMINATES the card.
+            Beside it: a horizon-summary microcard cluster (total / avg /
+            peak) when production-liters data has loaded. The big month
+            label remains the visual anchor; the cluster sits to its right
+            as calmly secondary. — */}
         <div className="fc-list-row-hero-title-wrap">
-          <h3
-            className="fc-list-row-hero-title"
-            data-testid="forecast-version-title"
-            dir="auto"
-          >
-            <span className="fc-list-row-hero-month">{hero.primary}</span>
-            {hero.year ? (
-              <span className="fc-list-row-hero-year tabular-nums">
-                {hero.year}
-              </span>
+          <div className="fc-list-row-hero-title-line">
+            <h3
+              className="fc-list-row-hero-title"
+              data-testid="forecast-version-title"
+              dir="auto"
+            >
+              <span className="fc-list-row-hero-month">{hero.primary}</span>
+              {hero.year ? (
+                <span className="fc-list-row-hero-year tabular-nums">
+                  {hero.year}
+                </span>
+              ) : null}
+            </h3>
+            {hasLitersData && summary.monthCount > 0 ? (
+              <div
+                className="fc-list-row-hero-summary"
+                data-testid="forecast-row-horizon-summary"
+                aria-label="Horizon production summary"
+              >
+                <div className="fc-list-row-hero-summary-card" data-tone="total">
+                  <span className="fc-list-row-hero-summary-label">
+                    Total horizon
+                  </span>
+                  <span
+                    className="fc-list-row-hero-summary-value tabular-nums"
+                    title={`${summary.totalLiters.toLocaleString("en-US")} L total over ${summary.monthCount} month${summary.monthCount === 1 ? "" : "s"}`}
+                  >
+                    {formatLiters(summary.totalLiters)}
+                  </span>
+                  <span className="fc-list-row-hero-summary-sub tabular-nums">
+                    over {summary.monthCount} mo
+                  </span>
+                </div>
+                <div className="fc-list-row-hero-summary-card" data-tone="avg">
+                  <span className="fc-list-row-hero-summary-label">
+                    Avg / month
+                  </span>
+                  <span className="fc-list-row-hero-summary-value tabular-nums">
+                    {formatLiters(summary.avgLitersPerMonth)}
+                  </span>
+                  <span className="fc-list-row-hero-summary-sub tabular-nums">
+                    {summary.horizonGrowth === null
+                      ? "—"
+                      : (() => {
+                          const g = formatMomPct(summary.horizonGrowth);
+                          return `${g.label} across horizon`;
+                        })()}
+                  </span>
+                </div>
+                <div className="fc-list-row-hero-summary-card" data-tone="peak">
+                  <span className="fc-list-row-hero-summary-label">Peak</span>
+                  <span className="fc-list-row-hero-summary-value tabular-nums">
+                    {summary.peakMonth
+                      ? formatLiters(summary.peakMonth.liters)
+                      : "—"}
+                  </span>
+                  <span className="fc-list-row-hero-summary-sub tabular-nums">
+                    {summary.peakMonth
+                      ? shortMonthLabel(summary.peakMonth.monthStart)
+                      : "—"}
+                  </span>
+                </div>
+              </div>
             ) : null}
-          </h3>
+          </div>
           <div className="fc-list-row-hero-subhead tabular-nums">
             {subhead}
           </div>
         </div>
 
-        {/* — Horizon strip — decorative monthly blocks. — */}
+        {/* — Horizon strip — month-name + production-liters total + MoM
+            growth chip per block. The thin tier bar at the bottom is
+            data-scaled by liters/peakLiters so smaller months visibly read
+            as smaller. Falls back to the original decorative-only mode when
+            no productionLiters payload has loaded yet. — */}
         {blocks.length > 0 ? (
           <div
             className="fc-list-row-hero-strip"
-            aria-hidden
             data-cadence={v.cadence}
+            data-with-data={hasLitersData ? "true" : "false"}
           >
-            {blocks.map((b) => (
-              <div
-                key={b.key}
-                className="fc-list-row-hero-strip-block"
-                data-first={b.isFirst}
-                data-tone={tone}
-              >
-                <span className="fc-list-row-hero-strip-label">{b.label}</span>
-                <span className="fc-list-row-hero-strip-bar" />
-              </div>
-            ))}
+            {blocks.map((b, i) => {
+              const aligned = alignedLiters[i];
+              const liters = aligned?.liters ?? 0;
+              const mom = aligned?.mom ?? null;
+              const momView = formatMomPct(mom);
+              const barFrac = hasLitersData
+                ? barWidthFraction(liters, peakLiters)
+                : 0;
+              return (
+                <div
+                  key={b.key}
+                  className="fc-list-row-hero-strip-block"
+                  data-first={b.isFirst}
+                  data-tone={tone}
+                  data-has-data={hasLitersData ? "true" : "false"}
+                >
+                  <span className="fc-list-row-hero-strip-label">
+                    {b.label}
+                  </span>
+                  {hasLitersData ? (
+                    <>
+                      <span
+                        className="fc-list-row-hero-strip-liters tabular-nums"
+                        title={`${liters.toLocaleString("en-US")} L production`}
+                      >
+                        {formatLiters(liters)}
+                      </span>
+                      <span
+                        className="fc-list-row-hero-strip-mom"
+                        data-tone={momView.tone}
+                        aria-label={`Month-over-month change ${momView.label}`}
+                      >
+                        {momView.tone === "up" ? (
+                          <ArrowUpRight
+                            className="h-2.5 w-2.5"
+                            strokeWidth={2.5}
+                            aria-hidden
+                          />
+                        ) : momView.tone === "down" ? (
+                          <ArrowDownRight
+                            className="h-2.5 w-2.5"
+                            strokeWidth={2.5}
+                            aria-hidden
+                          />
+                        ) : momView.tone === "flat" ? (
+                          <Minus
+                            className="h-2.5 w-2.5"
+                            strokeWidth={2.5}
+                            aria-hidden
+                          />
+                        ) : null}
+                        <span className="tabular-nums">{momView.label}</span>
+                      </span>
+                    </>
+                  ) : null}
+                  <span
+                    className="fc-list-row-hero-strip-bar"
+                    style={
+                      hasLitersData
+                        ? ({
+                            ["--bar-frac" as string]: String(barFrac),
+                          } as CSSProperties)
+                        : undefined
+                    }
+                  />
+                </div>
+              );
+            })}
             {overflow > 0 ? (
               <div
                 className="fc-list-row-hero-strip-block fc-list-row-hero-strip-overflow"

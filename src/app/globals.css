@@ -2796,4 +2796,179 @@
     .fc-list-row-hero-month { font-size: 28px; }
     .fc-list-row-hero-year { font-size: 18px; }
   }
+
+  /* ========================================================================
+     2026-05-05 list-card polish — per-month liters + MoM growth + horizon
+     summary cluster. Newspaper-grade refined palette. Tier-tinted growth
+     chips: green (success-soft) / red (danger-soft) / neutral (fg-muted).
+     ======================================================================== */
+
+  /* — Title line lays the hero label on the left, summary cluster on the
+       right; wraps onto its own row on narrow widths. */
+  .fc-list-row-hero-title-line {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: flex-end;
+    gap: 0.875rem 1.5rem;
+    min-width: 0;
+  }
+
+  /* — Horizon summary microcard cluster (kpi-microcard pattern). Sits to
+       the right of the May-2026 hero label; Tom directive 2026-05-05. */
+  .fc-list-row-hero-summary {
+    display: inline-flex;
+    align-items: stretch;
+    gap: 0.5rem;
+    margin-bottom: 0.375rem; /* aligns baseline with the big year glyph */
+    flex-wrap: wrap;
+  }
+  .fc-list-row-hero-summary-card {
+    display: inline-flex;
+    flex-direction: column;
+    justify-content: center;
+    gap: 0.125rem;
+    padding: 0.4375rem 0.625rem;
+    border: 1px solid hsl(var(--border) / 0.7);
+    border-radius: 0.375rem;
+    background-color: hsl(var(--bg-base) / 0.65);
+    min-width: 0;
+    transition: border-color 220ms ease-out, background-color 220ms ease-out;
+  }
+  .fc-list-row-hero-summary-card[data-tone="total"] {
+    border-left: 2px solid hsl(var(--accent) / 0.55);
+  }
+  .fc-list-row-hero-summary-card[data-tone="avg"] {
+    border-left: 2px solid hsl(var(--border-strong) / 0.6);
+  }
+  .fc-list-row-hero-summary-card[data-tone="peak"] {
+    border-left: 2px solid hsl(var(--success) / 0.55);
+  }
+  .fc-list-row-hero:hover .fc-list-row-hero-summary-card {
+    background-color: hsl(var(--bg-base));
+    border-color: hsl(var(--border));
+  }
+  .fc-list-row-hero-summary-label {
+    font-size: 9.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    color: hsl(var(--fg-muted));
+    line-height: 1;
+  }
+  .fc-list-row-hero-summary-value {
+    font-size: 14.5px;
+    font-weight: 600;
+    color: hsl(var(--fg-strong));
+    line-height: 1.1;
+    font-variant-numeric: tabular-nums;
+  }
+  .fc-list-row-hero-summary-sub {
+    font-size: 10.5px;
+    font-weight: 500;
+    color: hsl(var(--fg-faint));
+    line-height: 1;
+  }
+
+  /* — Per-block augmentation. The block was originally [label · bar];
+       it now stacks [label · liters · mom-chip · bar]. The bar's WIDTH is
+       data-bound via --bar-frac so smaller months read smaller. */
+  .fc-list-row-hero-strip-block[data-has-data="true"] {
+    padding-top: 0.375rem;
+    padding-bottom: 0.4375rem;
+  }
+  .fc-list-row-hero-strip-liters {
+    display: block;
+    font-size: 13px;
+    font-weight: 600;
+    color: hsl(var(--fg-strong));
+    line-height: 1.15;
+    font-variant-numeric: tabular-nums;
+    overflow-wrap: anywhere;
+  }
+  .fc-list-row-hero-strip-mom {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.1875rem;
+    align-self: flex-start;
+    padding: 0.0625rem 0.3125rem;
+    border-radius: 0.25rem;
+    font-size: 10.5px;
+    font-weight: 600;
+    line-height: 1.15;
+    background-color: hsl(var(--bg-subtle) / 0.6);
+    color: hsl(var(--fg-muted));
+    border: 1px solid transparent;
+    font-variant-numeric: tabular-nums;
+  }
+  .fc-list-row-hero-strip-mom[data-tone="up"] {
+    background-color: hsl(var(--success-softer) / 0.85);
+    color: hsl(var(--success-fg));
+    border-color: hsl(var(--success) / 0.28);
+  }
+  .fc-list-row-hero-strip-mom[data-tone="down"] {
+    background-color: hsl(var(--danger-softer) / 0.85);
+    color: hsl(var(--danger-fg));
+    border-color: hsl(var(--danger) / 0.28);
+  }
+  .fc-list-row-hero-strip-mom[data-tone="flat"] {
+    background-color: hsl(var(--bg-subtle) / 0.7);
+    color: hsl(var(--fg-muted));
+  }
+  .fc-list-row-hero-strip-mom[data-tone="none"] {
+    background-color: transparent;
+    color: hsl(var(--fg-faint));
+  }
+
+  /* — Data-scaled tier bar. We use ::after to render the filled portion so
+       the existing track styling (background) keeps acting as the rail. */
+  .fc-list-row-hero-strip-block[data-has-data="true"] .fc-list-row-hero-strip-bar {
+    position: relative;
+    background-color: hsl(var(--border) / 0.45);
+    overflow: hidden;
+  }
+  .fc-list-row-hero-strip-block[data-has-data="true"] .fc-list-row-hero-strip-bar::after {
+    content: "";
+    position: absolute;
+    left: 0;
+    top: 0;
+    bottom: 0;
+    width: calc(var(--bar-frac, 0) * 100%);
+    border-radius: 1.5px;
+    background-color: hsl(var(--border-strong) / 0.65);
+    transition: width 320ms cubic-bezier(0.165, 0.84, 0.44, 1);
+  }
+  .fc-list-row-hero-strip-block[data-has-data="true"][data-tone="published"] .fc-list-row-hero-strip-bar::after {
+    background-color: hsl(var(--success) / 0.7);
+  }
+  .fc-list-row-hero-strip-block[data-has-data="true"][data-tone="draft"] .fc-list-row-hero-strip-bar::after {
+    background-color: hsl(var(--warning) / 0.75);
+  }
+  .fc-list-row-hero-strip-block[data-has-data="true"][data-tone="archived"] .fc-list-row-hero-strip-bar::after {
+    background-color: hsl(var(--border-strong) / 0.65);
+  }
+  .fc-list-row-hero-strip-block[data-has-data="true"][data-first="true"] .fc-list-row-hero-strip-bar::after {
+    background-color: hsl(var(--accent) / 0.6);
+  }
+
+  /* — Reduce-motion safety: kill the bar-fill animation. */
+  @media (prefers-reduced-motion: reduce) {
+    .fc-list-row-hero-strip-block[data-has-data="true"] .fc-list-row-hero-strip-bar::after {
+      transition: none !important;
+    }
+  }
+
+  /* — Mobile tightening for the augmented blocks + summary cluster. */
+  @media (max-width: 768px) {
+    .fc-list-row-hero-summary {
+      gap: 0.375rem;
+      width: 100%;
+    }
+    .fc-list-row-hero-summary-card {
+      padding: 0.375rem 0.5rem;
+      flex: 1 1 0;
+    }
+    .fc-list-row-hero-summary-value { font-size: 13px; }
+    .fc-list-row-hero-strip-liters { font-size: 12px; }
+    .fc-list-row-hero-strip-mom { font-size: 10px; padding: 0.0625rem 0.25rem; }
+  }
 }
