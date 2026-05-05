@@ -5,7 +5,8 @@
 //   - Tabular numerics in display (caller adds `tabular-nums` Tailwind class).
 //   - Em-dash for zero / null (visually quiet — "nothing here").
 //   - Proper minus sign for negatives.
-//   - Compact form for >= 10k.
+//   - EXACT integer display for quantities (Tom mandate 2026-05-05): never
+//     abbreviate to K / M; always print full digits with thousands separator.
 //   - Locale-aware date helpers.
 //
 // Pure module — no React, no Tanstack, no DOM.
@@ -17,13 +18,17 @@ const MINUS = "−"; // U+2212 — typographic minus, not hyphen
 /**
  * Quantity formatter for grid cells.
  *
- *   0     -> em-dash (visually quiet, signals "no qty")
- *   null  -> em-dash
- *  -3.5   -> "−3.5"  (proper minus)
- *   42    -> "42"
- *   1234  -> "1,234"
- *   12500 -> "12.5K"
- *   1.2M  -> "1.2M"
+ * Tom mandate 2026-05-05: "תמיד יהיה כתוב את המספר מלאי המדוייק. לא עיגול"
+ * — always show the EXACT stock number; never abbreviate to K/M.
+ *
+ *   0       -> em-dash (visually quiet, signals "no qty")
+ *   null    -> em-dash
+ *  -3.5     -> "−3.5"   (proper minus; small fractions kept as signal)
+ *   42      -> "42"
+ *   1234    -> "1,234"
+ *   12500   -> "12,500"
+ *   −42.75  -> "−43"    (rounded to integer for |n| ≥ 10)
+ *   −4.5    -> "−4.5"   (decimal preserved for |n| < 10)
  */
 export function fmtQty(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return EM_DASH;
@@ -32,27 +37,13 @@ export function fmtQty(n: number | null | undefined): string {
   const abs = Math.abs(n);
   const sign = n < 0 ? MINUS : "";
 
-  if (abs >= 1_000_000) {
-    return `${sign}${(abs / 1_000_000).toFixed(1)}M`;
+  // Preserve decimals when |n| < 10 (small fractional values are signal):
+  if (abs < 10 && !Number.isInteger(abs)) {
+    const rounded = Math.round(abs * 10) / 10;
+    return `${sign}${Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toFixed(1)}`;
   }
-  if (abs >= 10_000) {
-    // 12500 -> "12.5K"
-    return `${sign}${(abs / 1000).toFixed(1)}K`;
-  }
-  if (abs >= 1000) {
-    // 1234 -> "1,234"
-    return `${sign}${abs.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
-  }
-  // < 1000: 0–2 decimal places (drop trailing zeros)
-  if (Number.isInteger(abs)) {
-    return `${sign}${abs.toString()}`;
-  }
-  // 1 or 2 decimals
-  const rounded = Math.round(abs * 100) / 100;
-  if (Number.isInteger(rounded)) {
-    return `${sign}${rounded.toString()}`;
-  }
-  return `${sign}${rounded.toFixed(rounded * 10 % 1 === 0 ? 1 : 2)}`;
+  // Otherwise round to integer with thousands separator:
+  return `${sign}${Math.round(abs).toLocaleString("en-US")}`;
 }
 
 /** Formatter for the "days of cover" hero KPI (1 decimal). */
@@ -175,49 +166,29 @@ export function todayIsoLocal(): string {
 // ---------------------------------------------------------------------------
 
 /**
- * Compact integer display — drops insignificant decimals, uses K / M for
- * ≥ 1000 / ≥ 1_000_000.
+ * Exact integer display with thousands separator.
  *
- *   1234   -> "1.2K"
- *   1500   -> "1.5K"
- *   12000  -> "12K"
- *   42.0   -> "42"
- *   -120.0 -> "−120"
- *   -1158  -> "−1.2K"
- *   -389.75-> "−390" (no decimals when |n| ≥ 10)
- *   0      -> "0"  (NOT em-dash; this is for chips like "+300" which need
- *                   to render even when content is small)
+ * Tom mandate 2026-05-05: "תמיד יהיה כתוב את המספר מלאי המדוייק. לא עיגול"
+ * — every quantity number on the inventory-flow page must show the EXACT
+ * integer value, never rounded into K/M abbreviations.
  *
- * Operational Clarity v2 (2026-05-05): drop fractional output for any
- * |n| ≥ 10 — Tom's preference. Two-digit precision adds visual noise
- * without operational value at this scale (factory bottle counts).
+ * Function name preserved for caller compatibility; output is no longer
+ * "compact" in the K/M sense — it is exact (with thousands separator).
+ *
+ *   0        -> "0"
+ *   42       -> "42"
+ *   1234     -> "1,234"
+ *   12500    -> "12,500"
+ *   −389.75  -> "−390"   (rounded to integer for cell display)
+ *   −1158    -> "−1,158"
+ *   null     -> "—"      (em-dash)
  */
 export function formatCompact(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return EM_DASH;
   const abs = Math.abs(n);
   const sign = n < 0 ? MINUS : "";
-
-  if (abs >= 1_000_000) {
-    const v = abs / 1_000_000;
-    return `${sign}${Number.isInteger(v) ? v.toFixed(0) : v.toFixed(1)}M`;
-  }
-  if (abs >= 10_000) {
-    return `${sign}${Math.round(abs / 1000).toString()}K`;
-  }
-  if (abs >= 1000) {
-    const v = abs / 1000;
-    return `${sign}${Number.isInteger(v) ? v.toFixed(0) : v.toFixed(1)}K`;
-  }
-  // |n| in [10, 1000) — round to whole number, no decimals.
-  if (abs >= 10) {
-    return `${sign}${Math.round(abs).toString()}`;
-  }
-  if (Number.isInteger(abs)) {
-    return `${sign}${abs.toString()}`;
-  }
-  // |n| < 10 — keep one decimal of precision for legibility.
-  const rounded = Math.round(abs * 10) / 10;
-  return `${sign}${Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toString()}`;
+  const rounded = Math.round(abs);
+  return `${sign}${rounded.toLocaleString("en-US")}`;
 }
 
 /**
