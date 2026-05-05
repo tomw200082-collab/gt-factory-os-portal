@@ -1700,4 +1700,115 @@
       transition: none !important;
     }
   }
+
+  /* ════════════════════════════════════════════════════════════════════
+     Forecast MONTHLY-GRID polish (2026-05-05) — GRID PASS
+
+     Additive utilities for /planning/forecast/[version_id] MonthlyGrid.
+     All names are forecast-grid-* prefixed to avoid colliding with
+     inventory-flow utilities and the parallel forecast-list / forecast-
+     edit-chrome utility blocks above.
+
+     Sources consulted (10-min cap):
+       - Pencil & Paper / LogRocket enterprise data-table guides
+       - Airtable grid view design (sticky cols, hover row)
+       - Theresa Neil "Designing Web Interfaces" (Harvest-style live row
+         totals + grid data entry)
+     ════════════════════════════════════════════════════════════════════ */
+
+  /* Outer scroller — bg-raised so sticky cells blend in; relative anchor
+     for the right-edge fade-out indicator. */
+  .forecast-grid-scroller {
+    position: relative;
+    background-color: hsl(var(--bg-raised));
+    border-top: 1px solid hsl(var(--border) / 0.5);
+    border-bottom: 1px solid hsl(var(--border) / 0.5);
+  }
+
+  /* Right-edge fade — telegraphs "more content right". Same pattern as
+     the inventory-flow scroller, but scoped to the forecast grid. */
+  .forecast-grid-scroller::after {
+    content: "";
+    position: sticky;
+    top: 0;
+    right: 0;
+    float: right;
+    width: 24px;
+    height: 100%;
+    margin-left: -24px;
+    background: linear-gradient(
+      to right,
+      transparent,
+      hsl(var(--bg-raised)) 90%
+    );
+    pointer-events: none;
+    z-index: 35;
+    opacity: 0.55;
+    transition: opacity 200ms ease-out;
+  }
+  .forecast-grid-scroller:hover::after,
+  .forecast-grid-scroller:focus-within::after {
+    opacity: 0.9;
+  }
+
+  /* Row hover — subtle bg highlight across the full width. Helps Tom
+     track horizontally across many months for a single item. The 0.04
+     alpha plays well with the freshly-added accent-soft tint and the
+     today vertical band. */
+  .forecast-grid-row:hover {
+    background-color: hsl(var(--accent) / 0.04);
+  }
+  :root.dark .forecast-grid-row:hover {
+    background-color: hsl(var(--accent) / 0.08);
+  }
+
+  /* When the row is being hovered, lift the row's sticky-left + sticky-
+     right cells the same way so the row reads as one continuous band. */
+  .forecast-grid-row:hover > [role="rowheader"] {
+    background-color: color-mix(
+      in srgb,
+      hsl(var(--bg-raised)) 92%,
+      hsl(var(--accent)) 8%
+    );
+  }
+
+  /* Cell hover — column highlight: when any cell in a column is hovered,
+     the whole column gets a subtle accent wash. Implemented via the
+     :has() selector + a per-cell `data-bucket` so the same bucket key
+     matches in every row. Falls back to no-op on browsers without :has(). */
+  .forecast-grid-cell:hover {
+    background-color: hsl(var(--accent) / 0.05);
+  }
+
+  /* Reveal the remove icon on row hover (mirror of inventory-flow's
+     `row-quick-action` pattern but scoped to the forecast grid). */
+  .forecast-grid-row .row-quick-action {
+    opacity: 0;
+    transition: opacity 150ms ease-out;
+  }
+  .forecast-grid-row:hover .row-quick-action,
+  .forecast-grid-row:focus-within .row-quick-action {
+    opacity: 0.85;
+  }
+  .forecast-grid-row .row-quick-action:hover,
+  .forecast-grid-row .row-quick-action:focus-visible {
+    opacity: 1 !important;
+  }
+  /* Touch / no-hover devices: always show the remove handle so it stays
+     reachable without a hover state. */
+  @media (hover: none) {
+    .forecast-grid-row .row-quick-action {
+      opacity: 0.7;
+    }
+  }
+
+  /* Reduce-motion: kill forecast-grid transitions. */
+  @media (prefers-reduced-motion: reduce) {
+    .forecast-grid-scroller::after,
+    .forecast-grid-row,
+    .forecast-grid-cell,
+    .forecast-grid-row .row-quick-action {
+      transition: none !important;
+    }
+  }
 }

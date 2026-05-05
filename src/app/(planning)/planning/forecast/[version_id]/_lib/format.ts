@@ -45,9 +45,136 @@ export function formatMonth(bucketKey: string): {
 }
 
 /**
+ * Split a YYYY-MM-DD monthly bucket key into the two-line header layout used
+ * in the grid header: line 1 = "MAY" (uppercase, 9px tracking-wide); line 2
+ * = "2026" (year, 13px medium). For weekly cadence, returns "MAY" / "04".
+ *
+ * Tom-locked grid pass 2026-05-05: month header hierarchy is the primary
+ * column anchor; the two-line split lets the eye land on the month-name
+ * first and the year second without crowding either line.
+ *
+ * Pure UTC formatting — same rule as formatMonth so we never drift across
+ * tz boundaries when the planner travels.
+ */
+export function formatMonthHeader2(
+  bucketKey: string,
+  cadence: "monthly" | "weekly" | "daily" = "monthly",
+): { primary: string; secondary: string; year: number; month: number; day: number } {
+  const d = new Date(bucketKey + "T00:00:00.000Z");
+  const monthShort = d
+    .toLocaleDateString("en-US", { month: "short", timeZone: "UTC" })
+    .toUpperCase();
+  const year = d.getUTCFullYear();
+  const month = d.getUTCMonth() + 1;
+  const day = d.getUTCDate();
+  if (cadence === "weekly" || cadence === "daily") {
+    return {
+      primary: monthShort,
+      secondary: String(day).padStart(2, "0"),
+      year,
+      month,
+      day,
+    };
+  }
+  return {
+    primary: monthShort,
+    secondary: String(year),
+    year,
+    month,
+    day,
+  };
+}
+
+/**
+ * Compute the index of "today" in a bucket array — used to render the
+ * TODAY pill + accent vertical band in the header. Returns -1 when today
+ * doesn't fall in any bucket of the visible horizon.
+ *
+ * For monthly cadence: matches by year+month (any day of the bucket month
+ * = today). For weekly cadence: matches by 7-day window starting at the
+ * bucket key. For daily cadence: matches by exact YYYY-MM-DD.
+ */
+export function findTodayBucketIndex(
+  buckets: { key: string }[],
+  cadence: "monthly" | "weekly" | "daily",
+  now: Date = new Date(),
+): number {
+  // Use UTC components so we line up with the bucket-key UTC anchors.
+  const todayY = now.getUTCFullYear();
+  const todayM = now.getUTCMonth() + 1;
+  const todayD = now.getUTCDate();
+  const todayMs = Date.UTC(todayY, todayM - 1, todayD);
+  for (let i = 0; i < buckets.length; i++) {
+    const d = new Date(buckets[i]!.key + "T00:00:00.000Z");
+    const by = d.getUTCFullYear();
+    const bm = d.getUTCMonth() + 1;
+    if (cadence === "monthly") {
+      if (by === todayY && bm === todayM) return i;
+      continue;
+    }
+    if (cadence === "weekly") {
+      const startMs = d.getTime();
+      const endMs = startMs + 7 * 24 * 3600 * 1000;
+      if (todayMs >= startMs && todayMs < endMs) return i;
+      continue;
+    }
+    // daily
+    if (
+      by === todayY &&
+      bm === todayM &&
+      d.getUTCDate() === todayD
+    ) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+/**
+ * Frozen-past detection for a bucket — true when the bucket month / week /
+ * day ended strictly before today. Used to render the `bg-hatch-history`
+ * treatment in the grid header column.
+ *
+ * NOTE: this does NOT change editability — Tom-locked amendment 2026-05-02
+ * keeps every bucket editable. The hatch is a *visual* "this is past" cue
+ * only, layered behind a still-editable input.
+ */
+export function isFrozenPast(
+  bucketKey: string,
+  cadence: "monthly" | "weekly" | "daily",
+  now: Date = new Date(),
+): boolean {
+  const d = new Date(bucketKey + "T00:00:00.000Z");
+  const todayMs = Date.UTC(
+    now.getUTCFullYear(),
+    now.getUTCMonth(),
+    now.getUTCDate(),
+  );
+  if (cadence === "monthly") {
+    // Bucket "ended" once the calendar reaches the next month's day-1.
+    const nextMonth = new Date(d);
+    nextMonth.setUTCMonth(nextMonth.getUTCMonth() + 1);
+    nextMonth.setUTCDate(1);
+    return nextMonth.getTime() <= todayMs;
+  }
+  if (cadence === "weekly") {
+    return d.getTime() + 7 * 24 * 3600 * 1000 <= todayMs;
+  }
+  // daily
+  return d.getTime() < todayMs;
+}
+
+/**
  * Format a forecast quantity for display.
  *
- * Rules (Tom-locked):
+ * EXACT-NUMBER policy (Tom mandate, mirrored from inventory-flow):
+ *   - No rounding besides the floor at the integer boundary (the underlying
+ *     qty_8dp may carry .000…01 noise from prior weekly→monthly conversions).
+ *   - No "K" / "M" abbreviation. A 12,345 forecast renders as "12,345", never
+ *     "12K" — the planner needs the exact number she typed.
+ *   - Always en-US thousands separator.
+ *
+ * Rules:
  *   - null / undefined / non-finite / "" → "—"
  *   - 0 → "—" (sparse forecast UX: empty state hint, not literal zero)
  *   - positive → integer with thousands separator: 1234 → "1,234"
@@ -63,10 +190,30 @@ export function formatQty(raw: string | number | null | undefined): string {
 }
 
 /**
- * Stricter integer formatter — used inside KPI tiles where 0 is meaningful
- * (e.g., "Items in forecast: 0" should render as "0", not "—").
+ * Stricter integer formatter — used inside KPI tiles AND row-total / column-
+ * total hero cells where 0 is meaningful (e.g., "Items in forecast: 0" should
+ * render as "0", not "—"). Same exact-number policy as formatQty: no
+ * rounding, no abbreviation, en-US thousands separator.
  */
 export function formatInt(raw: number | null | undefined): string {
+  if (raw === null || raw === undefined) return "—";
+  if (!Number.isFinite(raw)) return "—";
+  return Math.floor(raw).toLocaleString("en-US");
+}
+
+/**
+ * Exact-number formatter that ALWAYS prints a thousands-separated integer,
+ * including 0. Unlike formatQty (which renders 0 as em-dash for sparse-cell
+ * UX), this is the right call for row totals and column totals where the
+ * sum semantic is "the actual integer value, including zero".
+ *
+ * Sources consulted (grid pass 2026-05-05):
+ *   - LogRocket / Pencil & Paper enterprise data-table guides — "summary
+ *     rows must show the exact number, never an abbreviation".
+ *   - Theresa Neil "Designing Web Interfaces" — Harvest-style live row
+ *     totals always print exactly.
+ */
+export function formatExactInt(raw: number | null | undefined): string {
   if (raw === null || raw === undefined) return "—";
   if (!Number.isFinite(raw)) return "—";
   return Math.floor(raw).toLocaleString("en-US");
