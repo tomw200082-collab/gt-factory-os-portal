@@ -3,18 +3,44 @@
 // ---------------------------------------------------------------------------
 // FlowGridDesktop — main desktop grid for Inventory Flow.
 //
-// Layout:
-//   Sticky left:  320px item panel (StickyItemPanel)
-//   Daily band:   14 columns × 64px (DayCell)
-//   Spacer:       16px
-//   Weekly band:  6 columns × 96px (WeekCell) covering weeks 3..8
+// Operational Clarity v2 (2026-05-05) — STRUCTURAL ALIGNMENT FIX
+// =============================================================
+// Tom feedback 2026-05-04:
+//   1. "המספרים מקוטעים מכיוון שעולים על המשבצות" — numbers cut off
+//      because they overflow cells. Production-receipt chip overlapped
+//      the cell number due to `position: absolute`.
+//   2. "הימים והתאריכים לא עומדים בדיוק מעל היום שלהם והעמודות לא
+//      ישרות" — day headers don't sit exactly above their column. Header
+//      and body used DIFFERENT layout systems (header: flex w-[64px];
+//      body: flex w-[64px]) and pixel widths drifted.
+//   3. "אני מעדיף שייראו פחות משבצות אבל כאשר אני אגלול הצידה אני
+//      אראה בבירור ובדיוק מה המשבצת של איזה יום" — prefer fewer
+//      visible cells, but when scrolling sideways the cell-to-day binding
+//      must be unambiguous.
+//
+// Fix:
+//   - Single CSS-Grid `grid-template-columns` shared between header and
+//     every body row via the `--flow-grid-cols` custom property set on
+//     the wrapper.
+//   - Per-cell widths come from CSS variables (`--day-col-w` 80px,
+//     `--week-col-w` 96px, `--item-col-w` 320px). Constants exported
+//     from this module so React siblings can reason about them.
+//   - Fixed-width tracks; cells set `width: var(...)` so min === max ===
+//     width — no flex-shrink drift.
+//   - Outer wrapper: `overflow-x: auto` + `overflow-y: visible` so Tom
+//     can scroll horizontally; sticky item col + sticky header keep the
+//     cross-hairs visible.
+//
+// Layout (left-to-right):
+//   Sticky item col:  320px  (StickyItemPanel)
+//   Daily band:       14 columns × 80px (DayCell)        ← was 64px
+//   Spacer:           16px
+//   Weekly band:      6 columns × 96px (WeekCell)
 //
 // Today column auto-scrolls into view on first mount.
-// Items pre-sorted by server (§6.4) but we re-apply client-side sort so
-// pagination / filter changes stay deterministic.
 // ---------------------------------------------------------------------------
 
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, type CSSProperties } from "react";
 import { compareItemsByRisk } from "../_lib/risk";
 import { todayIsoLocal } from "../_lib/format";
 import type { FlowItem } from "../_lib/types";
@@ -26,6 +52,33 @@ import { DayCell } from "./DayCell";
 import { DayHeaderRow } from "./DayHeaderRow";
 import { StickyItemPanel } from "./StickyItemPanel";
 import { WeekCell } from "./WeekCell";
+
+// ----- Grid track widths (shared between header + body) ---------------------
+// Tom locked: prefer fewer cells with crisp alignment over many narrow cells.
+// 80px daily column comfortably fits "1.5K" (cell number) AND a "▼ 517"
+// production-receipt chip stacked on top of it without clipping.
+export const ITEM_COL_W = 320; // px — sticky left column
+export const DAY_COL_W = 80; // px — daily band cell
+export const WEEK_COL_W = 96; // px — weekly band cell
+export const BAND_GAP_W = 16; // px — spacer between daily and weekly bands
+export const ROW_H = 56; // px — cell row height (was 52; +4px for chip stack)
+
+// ----- CSS-only constants (consumable via inline style) ---------------------
+function gridStyle(dayCount: number, weekCount: number): CSSProperties {
+  return {
+    // The shared template: sticky col + N daily + spacer + M weekly.
+    gridTemplateColumns:
+      `${ITEM_COL_W}px` +
+      ` repeat(${dayCount}, ${DAY_COL_W}px)` +
+      ` ${BAND_GAP_W}px` +
+      ` repeat(${weekCount}, ${WEEK_COL_W}px)`,
+    // Surface widths to children that don't use `display: contents`.
+    ["--item-col-w" as string]: `${ITEM_COL_W}px`,
+    ["--day-col-w" as string]: `${DAY_COL_W}px`,
+    ["--week-col-w" as string]: `${WEEK_COL_W}px`,
+    ["--row-h" as string]: `${ROW_H}px`,
+  };
+}
 
 interface FlowGridDesktopProps {
   items: FlowItem[];
@@ -66,8 +119,8 @@ export function FlowGridDesktop({
   useEffect(() => {
     if (!scrollerRef.current || todayIdx < 0) return;
     const el = scrollerRef.current;
-    // 320 sticky panel + idx*64 column - one column to give context
-    const target = 320 + Math.max(0, (todayIdx - 1) * 64);
+    // sticky item col + (idx-1) day cols → leave one column of context.
+    const target = ITEM_COL_W + Math.max(0, (todayIdx - 1) * DAY_COL_W);
     el.scrollTo({ left: target, behavior: "auto" });
   }, [todayIdx]);
 
@@ -91,27 +144,40 @@ export function FlowGridDesktop({
     return null;
   }
 
-  // weeklyOnly is recomputed per item below; suppress unused-var lint via void.
-  void weeklyOnly;
+  const dayCount = days.length;
+  const weekCount = weeklyOnly.length;
+  const sharedGridStyle = gridStyle(dayCount, weekCount);
 
   return (
     <div
       ref={scrollerRef}
-      className="overflow-x-auto overflow-y-visible rounded-md border border-border/40 bg-bg-raised"
+      className="flow-grid-scroller overflow-x-auto overflow-y-visible rounded-md border border-border/40 bg-bg-raised"
+      data-testid="flow-grid-scroller"
     >
-      <DayHeaderRow days={days} weeks={weeks} />
-      <div>
-        {sortedItems.map((item) => (
-          <ItemRow
-            key={item.item_id}
-            item={item}
-            avgDailyDemand={avgDailyDemand}
-            todayIso={todayIso}
-            overlayEnabled={overlayEnabled}
-            plannedByItemDate={plannedByItemDate}
-            plannedRows={plannedRows}
-          />
-        ))}
+      {/* min-w-fit ensures the inner grid keeps its full width even when the
+          viewport is narrower than the grid; combined with overflow-x-auto on
+          the parent this gives Tom horizontal scroll. */}
+      <div className="min-w-fit">
+        <DayHeaderRow
+          days={days}
+          weeks={weeks}
+          gridStyle={sharedGridStyle}
+        />
+        <div role="rowgroup">
+          {sortedItems.map((item, rowIdx) => (
+            <ItemRow
+              key={item.item_id}
+              item={item}
+              avgDailyDemand={avgDailyDemand}
+              todayIso={todayIso}
+              overlayEnabled={overlayEnabled}
+              plannedByItemDate={plannedByItemDate}
+              plannedRows={plannedRows}
+              rowIdx={rowIdx}
+              gridStyle={sharedGridStyle}
+            />
+          ))}
+        </div>
       </div>
     </div>
   );
@@ -124,6 +190,8 @@ interface ItemRowProps {
   overlayEnabled: boolean;
   plannedByItemDate?: Map<string, PlannedInflowRow>;
   plannedRows?: PlannedInflowRow[];
+  rowIdx: number;
+  gridStyle: CSSProperties;
 }
 
 function ItemRow({
@@ -133,6 +201,8 @@ function ItemRow({
   overlayEnabled,
   plannedByItemDate,
   plannedRows,
+  rowIdx,
+  gridStyle,
 }: ItemRowProps) {
   const dailyWeekCount = Math.ceil(item.days.length / 7);
   const weeklyOnly = item.weeks.slice(dailyWeekCount);
@@ -148,43 +218,47 @@ function ItemRow({
     [overlayEnabled, plannedRows, item.item_id],
   );
 
+  // Stagger-fade the first 8 rows so the eye lands on critical_stockout
+  // (always sorted to the top) first. Rows 9+ appear together.
+  const staggerDelay = rowIdx < 8 ? `${rowIdx * 40}ms` : "0ms";
+  const rowAnimStyle: CSSProperties = {
+    animationDelay: staggerDelay,
+  };
+
   return (
-    <div className="flex border-b border-border/30 last:border-b-0 hover:bg-bg-subtle/30">
+    <div
+      role="row"
+      className="grid border-b border-border/30 last:border-b-0 reveal hover:bg-bg-subtle/30"
+      style={{ ...gridStyle, ...rowAnimStyle }}
+    >
       <StickyItemPanel item={item} />
+      {/* Spacer cells — daily band */}
       {item.days.map((d) => {
         const plannedRow = overlayEnabled
           ? plannedByItemDate?.get(`${item.item_id}|${d.day}`)
           : undefined;
         return (
-          <div
+          <DayCell
             key={d.day}
-            className="border-r border-border/30 last:border-r-0"
-          >
-            <DayCell
-              item={item}
-              day={d}
-              avgDailyDemand={avgDailyDemand}
-              isToday={d.day === todayIso}
-              overlayEnabled={overlayEnabled}
-              plannedRow={plannedRow}
-            />
-          </div>
+            item={item}
+            day={d}
+            avgDailyDemand={avgDailyDemand}
+            isToday={d.day === todayIso}
+            overlayEnabled={overlayEnabled}
+            plannedRow={plannedRow}
+          />
         );
       })}
-      {/* spacer between daily and weekly bands */}
-      <div className="h-[52px] w-4 shrink-0" />
+      {/* Spacer between daily and weekly bands — occupies one grid track */}
+      <div aria-hidden className="h-full" />
       {weeklyOnly.map((w) => (
-        <div
+        <WeekCell
           key={w.week_start}
-          className="border-l border-r border-border/30"
-        >
-          <WeekCell
-            week={w}
-            overlayEnabled={overlayEnabled}
-            plannedRemainingQty={weeklySums.get(w.week_start) ?? 0}
-            sales_uom={null}
-          />
-        </div>
+          week={w}
+          overlayEnabled={overlayEnabled}
+          plannedRemainingQty={weeklySums.get(w.week_start) ?? 0}
+          sales_uom={null}
+        />
       ))}
     </div>
   );

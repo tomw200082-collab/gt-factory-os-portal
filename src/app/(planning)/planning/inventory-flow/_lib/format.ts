@@ -183,8 +183,14 @@ export function todayIsoLocal(): string {
  *   12000  -> "12K"
  *   42.0   -> "42"
  *   -120.0 -> "−120"
+ *   -1158  -> "−1.2K"
+ *   -389.75-> "−390" (no decimals when |n| ≥ 10)
  *   0      -> "0"  (NOT em-dash; this is for chips like "+300" which need
  *                   to render even when content is small)
+ *
+ * Operational Clarity v2 (2026-05-05): drop fractional output for any
+ * |n| ≥ 10 — Tom's preference. Two-digit precision adds visual noise
+ * without operational value at this scale (factory bottle counts).
  */
 export function formatCompact(n: number | null | undefined): string {
   if (n == null || !Number.isFinite(n)) return EM_DASH;
@@ -202,10 +208,14 @@ export function formatCompact(n: number | null | undefined): string {
     const v = abs / 1000;
     return `${sign}${Number.isInteger(v) ? v.toFixed(0) : v.toFixed(1)}K`;
   }
+  // |n| in [10, 1000) — round to whole number, no decimals.
+  if (abs >= 10) {
+    return `${sign}${Math.round(abs).toString()}`;
+  }
   if (Number.isInteger(abs)) {
     return `${sign}${abs.toString()}`;
   }
-  // ≤ 1 decimal for sub-1000 fractional values
+  // |n| < 10 — keep one decimal of precision for legibility.
   const rounded = Math.round(abs * 10) / 10;
   return `${sign}${Number.isInteger(rounded) ? rounded.toFixed(0) : rounded.toString()}`;
 }

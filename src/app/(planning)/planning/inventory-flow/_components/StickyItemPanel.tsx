@@ -1,19 +1,19 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// StickyItemPanel — left-most 320px panel for an item row in the desktop
-// grid. Operational Clarity redesign 2026-05-04:
-//   - 3px family-color accent strip on the far left
-//   - Item name + family chip + risk badge
-//   - Inline sparkline (14-day projected_on_hand_eod_with_production)
-//   - Days-of-cover hero with semantic label (STOCKOUT / Nd / Nw / >3w),
-//     colored by row tier
+// StickyItemPanel — left-most sticky panel for an item row in the grid.
+//
+// Operational Clarity v2 (2026-05-05):
+//   - Width inherits from the grid track (`var(--item-col-w)` 320px) — no
+//     fixed-width wrapper. This guarantees pixel alignment with the
+//     sticky header's top-left corner cell.
+//   - Family color: 2px (was 3px) left rule — tighter, less visual weight.
+//   - Days-cover hero: prominent number + tiny uppercase "cover" sub-label.
+//   - Sparkline: 64px wide × 18px tall — sits between label and hero so
+//     the slope reads naturally left-to-right alongside the days-cover.
 //
 // `position: sticky; left: 0` keeps it pinned while the day columns scroll.
 // Background must remain opaque so scrolling content doesn't bleed through.
-//
-// Performance: wrapped in React.memo. 68 instances per render; FlowItem
-// reference is stable across TanStack Query refetches.
 // ---------------------------------------------------------------------------
 
 import { memo } from "react";
@@ -55,17 +55,22 @@ function StickyItemPanelInner({ item }: StickyItemPanelProps) {
 
   return (
     <div
-      className="sticky left-0 z-10 flex h-[52px] w-[320px] items-stretch border-r border-border/40 bg-bg-raised"
-      style={{ borderLeft: `3px solid ${familyColor}` }}
+      role="rowheader"
+      className="sticky left-0 z-20 flex h-full items-stretch border-r border-border/40 bg-bg-raised"
+      style={{
+        // 2px family color rule on the left edge (tighter than the legacy
+        // 3px; keeps the family signal without overpowering the row).
+        borderLeft: `2px solid ${familyColor}`,
+      }}
     >
       <div className="flex flex-1 items-center justify-between gap-2 px-3">
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-medium text-fg-strong">
+          <div className="truncate text-[13px] font-medium leading-tight text-fg-strong">
             {item.item_name}
           </div>
-          <div className="mt-0.5 flex items-center gap-1.5 text-3xs text-fg-muted">
+          <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-fg-muted">
             {item.family ? (
-              <span className="rounded-sm bg-bg-muted px-1 py-0.5 uppercase tracking-sops">
+              <span className="rounded-sm bg-bg-muted px-1 py-0.5 uppercase tracking-sops leading-none">
                 {item.family}
               </span>
             ) : null}
@@ -75,8 +80,9 @@ function StickyItemPanelInner({ item }: StickyItemPanelProps) {
           </div>
         </div>
 
-        {/* Sparkline — sits between the label and the hero numerals so the
-            slope reads naturally left-to-right alongside the days-cover. */}
+        {/* Sparkline — 14 plotted points correspond to the 14 daily columns
+            in the grid. The aspect ratio is intentionally compressed so the
+            slope reads at a glance without dominating the row. */}
         <Sparkline
           days={item.days.slice(0, 14)}
           riskTier={item.risk_tier}
@@ -88,7 +94,7 @@ function StickyItemPanelInner({ item }: StickyItemPanelProps) {
         <div className="text-right">
           <div
             className={cn(
-              "text-xl font-semibold leading-none tabular-nums",
+              "text-[16px] font-semibold leading-none tabular-nums",
               heroToneClass,
             )}
             data-testid="row-days-cover-hero"
@@ -96,7 +102,7 @@ function StickyItemPanelInner({ item }: StickyItemPanelProps) {
             {heroValue}
           </div>
           {heroSub ? (
-            <div className="mt-1 text-3xs uppercase tracking-sops text-fg-subtle">
+            <div className="mt-1 text-[9px] uppercase tracking-sops leading-none text-fg-subtle">
               {heroSub}
             </div>
           ) : null}

@@ -1,12 +1,16 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// WeekCell — 96×52 weekly cell for weeks 3..N in the desktop grid.
+// WeekCell — weekly cell for weeks 3..N in the desktop grid.
 //
-// Shows min on-hand for that week + tier color + small "Stockout day N" label
-// when applicable.
+// Operational Clarity v2 (2026-05-05):
+//   - Width inherits from the grid track (`var(--week-col-w)` 96px) — no
+//     fixed-width wrapper. Pixel-aligns with the weekly column headers in
+//     DayHeaderRow.
+//   - Tabular numerics; min-on-hand line large + "Stockout day N" muted
+//     sub-label.
 //
-// Performance: wrapped in React.memo. 68 items × ~6 weekly cells = ~408
+// Performance: wrapped in React.memo. ~6 weekly cells × 68 items ≈ 408
 // instances; combined with 952 DayCells under the same tree, memoization
 // keeps the parent re-render cost near-zero when filter / search state
 // changes.
@@ -62,8 +66,12 @@ function WeekCellInner({
 
   return (
     <div
+      role="gridcell"
+      data-week={week.week_start}
+      data-testid="week-cell"
       className={cn(
-        "relative flex h-[52px] w-[96px] flex-col items-center justify-center gap-0.5 text-xs tabular-nums transition-colors hover:brightness-95",
+        "relative flex h-full w-full flex-col items-center justify-center gap-0.5 border-l border-r border-border/30 px-1 text-xs tabular-nums transition-colors duration-200",
+        "hover:shadow-[inset_0_0_0_1px_hsl(var(--accent)/0.7)]",
         weekCellClassNameProduction(
           week.cell_tier_with_production,
           week.tier,
@@ -74,7 +82,7 @@ function WeekCellInner({
     >
       <span
         className={cn(
-          "leading-none",
+          "text-[13px] leading-none",
           (week.tier === "stockout" || hasProductionAwareStockout) &&
             "font-semibold",
         )}
@@ -82,8 +90,8 @@ function WeekCellInner({
         {fmtQty(minOnHand)}
       </span>
       {stockoutDayNum != null ? (
-        <span className="text-3xs opacity-80">
-          Stockout day {stockoutDayNum}
+        <span className="text-[9px] uppercase tracking-sops leading-none opacity-80">
+          Stockout d{stockoutDayNum}
         </span>
       ) : null}
 

@@ -193,12 +193,22 @@ interface BannerProps {
 }
 
 function Banner({ tone, icon, headline, items, cta, testid }: BannerProps) {
-  const toneClasses =
+  // Operational Clarity v2: thin bg-raised banner with a 3px colored left rule,
+  // not a full softer-toned background. Reads more like a newspaper sidebar
+  // call-out than a coloured alert bar.
+  const ruleClass =
     tone === "danger"
-      ? "border-danger/30 bg-danger-softer/80 text-danger-fg"
+      ? "border-l-[3px] border-l-danger"
       : tone === "warning"
-        ? "border-warning/30 bg-warning-softer/80 text-warning-fg"
-        : "border-success/30 bg-success-softer/60 text-success-fg";
+        ? "border-l-[3px] border-l-warning"
+        : "border-l-[3px] border-l-success";
+
+  const headlineClass =
+    tone === "danger"
+      ? "text-danger-fg"
+      : tone === "warning"
+        ? "text-warning-fg"
+        : "text-success-fg";
 
   const ctaToneClasses =
     tone === "danger"
@@ -210,8 +220,8 @@ function Banner({ tone, icon, headline, items, cta, testid }: BannerProps) {
   return (
     <div
       className={cn(
-        "flex items-center gap-3 rounded-md border px-4 py-2.5",
-        toneClasses,
+        "flex items-center gap-3 rounded-md border border-border/40 bg-bg-raised px-4 py-3 shadow-raised animate-fade-in-up",
+        ruleClass,
       )}
       data-testid={testid}
     >
@@ -219,7 +229,9 @@ function Banner({ tone, icon, headline, items, cta, testid }: BannerProps) {
         {icon}
       </span>
       <div className="flex min-w-0 flex-1 items-baseline gap-3">
-        <span className="text-sm font-semibold tabular-nums">{headline}</span>
+        <span className={cn("text-sm font-semibold tabular-nums", headlineClass)}>
+          {headline}
+        </span>
         {items.length > 0 ? (
           <>
             <span aria-hidden className="text-fg-faint">

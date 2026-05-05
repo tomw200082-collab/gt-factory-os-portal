@@ -39,7 +39,7 @@ export function FilterBar({ families }: FilterBarProps) {
 
   return (
     <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
-      {/* Search */}
+      {/* Search — refined: bg-subtle, no shadow, accent border on focus */}
       <label className="relative block w-full lg:max-w-sm">
         <Search
           className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-faint"
@@ -50,7 +50,7 @@ export function FilterBar({ families }: FilterBarProps) {
           value={q}
           onChange={(e) => updateParam("q", e.target.value)}
           placeholder="Search items"
-          className="w-full rounded-sm border border-border/70 bg-bg-raised py-1.5 pl-8 pr-7 text-xs text-fg shadow-raised placeholder:text-fg-faint focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/20"
+          className="w-full rounded-sm border border-border bg-bg-subtle py-1.5 pl-8 pr-7 text-xs text-fg placeholder:text-fg-faint focus:border-accent-border focus:outline-none focus:ring-2 focus:ring-accent/20"
         />
         {q ? (
           <button
@@ -83,17 +83,35 @@ export function FilterBar({ families }: FilterBarProps) {
         </div>
       ) : null}
 
-      {/* At-risk-only toggle */}
-      <label className="inline-flex shrink-0 items-center gap-2 rounded-sm border border-border/70 bg-bg-raised px-2.5 py-1.5 text-xs font-medium text-fg">
-        <input
-          type="checkbox"
-          checked={atRiskOnly}
-          onChange={(e) =>
-            updateParam("at_risk_only", e.target.checked ? null : "false")
+      {/* At-risk-only toggle — refined as a switch, not a checkbox */}
+      <label
+        className="inline-flex shrink-0 cursor-pointer select-none items-center gap-2 text-xs font-medium text-fg"
+        title="Show only items that are not Healthy"
+      >
+        <span className="text-[11px] uppercase tracking-sops text-fg-muted">
+          Show only at-risk
+        </span>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={atRiskOnly}
+          onClick={() =>
+            updateParam("at_risk_only", atRiskOnly ? "false" : null)
           }
-          className="h-3.5 w-3.5 rounded-sm border-border accent-accent"
-        />
-        <span>Show only at-risk</span>
+          className={cn(
+            "relative inline-flex h-4 w-7 shrink-0 items-center rounded-full border transition-colors",
+            atRiskOnly
+              ? "border-accent-border bg-accent"
+              : "border-border bg-bg-subtle",
+          )}
+        >
+          <span
+            className={cn(
+              "inline-block h-3 w-3 transform rounded-full bg-bg-raised shadow-sm transition-transform",
+              atRiskOnly ? "translate-x-3.5" : "translate-x-0.5",
+            )}
+          />
+        </button>
       </label>
     </div>
   );
@@ -106,15 +124,20 @@ interface ChipButtonProps {
 }
 
 function ChipButton({ active, onClick, label }: ChipButtonProps) {
+  // Operational Clarity v2: refined toggle states. Active = soft accent
+  // wash + accent border; inactive = subtle bg + faint border. The active
+  // state no longer floods the chip with full accent — too heavy in a row
+  // of 17 chips.
   return (
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       className={cn(
-        "rounded-sm border px-2 py-1 text-2xs font-medium uppercase tracking-sops transition-colors",
+        "rounded-sm border px-2 py-1 text-[10px] font-medium uppercase tracking-sops transition-colors",
         active
-          ? "border-accent bg-accent text-accent-fg"
-          : "border-border/70 bg-bg-raised text-fg-muted hover:border-accent/40 hover:text-fg",
+          ? "border-accent-border bg-accent-soft text-accent"
+          : "border-border bg-bg-subtle text-fg-muted hover:border-accent/40 hover:text-fg",
       )}
     >
       {label}
