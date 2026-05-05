@@ -13,49 +13,58 @@
 // sees non-draft rows only (server-enforced per §A.3 and handler.reads.ts).
 // Operators are blocked by the planner layout already.
 //
-// 2026-05-05 polish (13 iterations — list pass of 40-iteration mandate):
-//   1. Insights strip (total versions + active + last-published)
-//   2. Status-grouped sections (active pinned / drafts / archived collapsed)
-//   3. Rich metadata per row (creator, dates, relative time)
-//   4. Inline action icons on hover (Pencil/Copy)
-//   5. Primary "New forecast" CTA top-right with arrow motion
-//   6. Empty state with friendly icon + CTA
-//   7. Search + segmented status filter (reused inventory-flow utilities)
+// 2026-05-05 list polish — 20-iteration mandate (Linear/Bloomberg/FT-WSJ
+// newspaper-grade refinement). Composes existing tokens; new utilities
+// live in globals.css under the .fc-list-* prefix. Sub-components extracted
+// into ./_components/{MiniStats,SectionHeader,ForecastRow}.tsx.
 //
-// Sources consulted 2026-05-05:
-//   - Linear UI refresh (2026-03-12) — grouped sections, hover actions,
-//     sticky group headers
-//   - Stripe Apps List component — title + secondary metadata + ListItem
-//     hover actions
-//   - Refactoring UI (Wathan/Schoger) — hierarchy via size + color
-//
-// Deferred to future cycles: Discard / Revise UI (no mutation endpoints
-// yet). Duplicate / Archive icons read-only for now.
+// Iteration map (1–20, see top-level brief):
+//   1. Refined eyebrow with calibrated dot + hairline underline.
+//   2. Mini-stats become 4 micro-cards w/ tier-relevant accents.
+//   3. Search input — icon prefix, ⌘K hint suffix, accent ring on focus.
+//   4. Segmented filter — sliding accent backdrop, count chip per segment.
+//   5. Cadence filter — segmented + label with vertical separator.
+//   6. CTA — cta-arrow-host pattern w/ accent-soft glow ring.
+//   7. Sticky filter bar — backdrop-blur + hairline shadow when stuck.
+//   8. Section headers — status icon, accent dot, count chip, fading rule.
+//   9. Drafts empty state — condensed inline soft-note.
+//  10. Archived empty state — condensed inline soft-note.
+//  11. Row card — 3-column grid (stripe / content / right meta col).
+//  12. Status pills — icon-led refined chips per tone.
+//  13. Title — 15px, 2-line clamp, dir="auto" for Hebrew.
+//  14. Meta row — User / Calendar / UserCheck micro-icons.
+//  15. Description — 2-line clamp + bottom-fade mask.
+//  16. Last-published — tabular-nums micro-pill w/ ISO tooltip.
+//  17. Card hover — accent ring inset + reveal action column.
+//  18. Open affordance — translating arrow on hover.
+//  19. Stagger reveal on first paint (40ms increments, reduce-motion safe).
+//  20. Sticky compact page header on scroll.
 // ---------------------------------------------------------------------------
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import {
+  Activity,
   Archive,
   ArrowRight,
   ChevronDown,
   ChevronRight,
-  Copy,
+  FileText,
   LineChart,
-  Pencil,
   Plus,
   Search,
+  Sparkles,
   X,
-  Zap,
 } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
-import { Badge } from "@/components/badges/StatusBadge";
 import { EmptyState } from "@/components/feedback/states";
 import { useSession } from "@/lib/auth/session-provider";
 import type { Session } from "@/lib/auth/fake-auth";
-import { useMemo, useState } from "react";
-import { cn } from "@/lib/cn";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { MiniStats } from "./_components/MiniStats";
+import { SectionHeader } from "./_components/SectionHeader";
+import { ForecastRow, type ForecastRowVersion } from "./_components/ForecastRow";
 
 type ForecastStatus = "draft" | "published" | "superseded" | "discarded";
 type ForecastCadence = "monthly" | "weekly" | "daily";
@@ -92,31 +101,13 @@ const STATUS_FILTERS: { id: StatusFilter; label: string }[] = [
   { id: "archived", label: "Archived" },
 ];
 
-// Wave 2: cadence filter chip group. "all" = no filter.
+// Cadence filter chip group. "all" = no filter.
 type CadenceFilter = "all" | "monthly" | "weekly";
-const CADENCE_OPTIONS: CadenceFilter[] = ["all", "monthly", "weekly"];
-
-function CadenceChip({ cadence }: { cadence: ForecastCadence }) {
-  if (cadence === "monthly") {
-    return (
-      <Badge tone="info" dotted>
-        Monthly
-      </Badge>
-    );
-  }
-  if (cadence === "weekly") {
-    return (
-      <Badge tone="neutral" dotted>
-        Weekly
-      </Badge>
-    );
-  }
-  return (
-    <Badge tone="neutral" dotted>
-      Daily
-    </Badge>
-  );
-}
+const CADENCE_OPTIONS: { id: CadenceFilter; label: string }[] = [
+  { id: "all", label: "All" },
+  { id: "monthly", label: "Monthly" },
+  { id: "weekly", label: "Weekly" },
+];
 
 function sessionHeaders(_session: Session): HeadersInit {
   return {
@@ -141,67 +132,6 @@ async function fetchAllVersions(session: Session): Promise<ListResponse> {
   return (await res.json()) as ListResponse;
 }
 
-function StatusBadge({ status }: { status: ForecastStatus }) {
-  if (status === "published") {
-    return (
-      <Badge tone="success" variant="solid">
-        Published
-      </Badge>
-    );
-  }
-  if (status === "draft") {
-    return (
-      <Badge tone="warning" dotted>
-        Draft
-      </Badge>
-    );
-  }
-  if (status === "superseded") {
-    return (
-      <Badge tone="neutral" dotted>
-        Superseded
-      </Badge>
-    );
-  }
-  return (
-    <Badge tone="neutral" dotted>
-      Discarded
-    </Badge>
-  );
-}
-
-function fmtDate(iso: string | null): string {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
-}
-
-function fmtHorizonStart(iso: string | null): string {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleDateString(undefined, {
-      year: "numeric",
-      month: "short",
-      day: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
-}
-
-/**
- * Relative time — "3d ago" / "2h ago" / "just now". Used in the row
- * secondary line where space is tight.
- */
 function fmtAgo(iso: string | null): string {
   if (!iso) return "—";
   try {
@@ -261,7 +191,6 @@ export default function ForecastListPage() {
     const archived = baseFiltered.filter(
       (v) => v.status === "superseded" || v.status === "discarded",
     );
-    // Active: most-recently-published first (stable for ties).
     active.sort((a, b) => {
       const ax = a.published_at ?? a.created_at;
       const bx = b.published_at ?? b.created_at;
@@ -272,86 +201,148 @@ export default function ForecastListPage() {
     return { active, drafts, archived };
   }, [baseFiltered]);
 
-  // Apply the segmented status filter on TOP of grouping (filter narrows
-  // which sections render, never reorders them).
+  // Apply the segmented status filter on TOP of grouping.
   const showActive = statusFilter === "all" || statusFilter === "published";
   const showDrafts = statusFilter === "all" || statusFilter === "draft";
   const showArchivedSection =
     statusFilter === "all" || statusFilter === "archived";
 
-  // Insights strip values — computed against the FULL unfiltered list so
-  // the operator always sees the true totals regardless of filter state.
+  // Insights computed against the FULL unfiltered list — the operator should
+  // always see the true totals regardless of filter state.
   const insights = useMemo(() => {
     const total = allVersions.length;
     const activePub = allVersions.find((v) => v.status === "published") ?? null;
     const lastPubAt = activePub?.published_at ?? null;
     const draftCount = allVersions.filter((v) => v.status === "draft").length;
-    return { total, activePub, lastPubAt, draftCount };
+    const activeCount = allVersions.filter(
+      (v) => v.status === "published",
+    ).length;
+    return { total, activePub, lastPubAt, draftCount, activeCount };
   }, [allVersions]);
+
+  // Counts per segment (for the count chip in each segmented option). Status
+  // segment counts ignore the active status filter so they're stable.
+  const statusCounts = useMemo(
+    () => ({
+      all: baseFiltered.length,
+      published: baseFiltered.filter((v) => v.status === "published").length,
+      draft: baseFiltered.filter((v) => v.status === "draft").length,
+      archived: baseFiltered.filter(
+        (v) => v.status === "superseded" || v.status === "discarded",
+      ).length,
+    }),
+    [baseFiltered],
+  );
+  const cadenceCounts = useMemo(() => {
+    const filtered = allVersions.filter((v) => {
+      if (!lowerQuery) return true;
+      const hay =
+        `${v.version_id} ${v.notes ?? ""} ${v.created_by_snapshot} ${v.published_by_snapshot ?? ""}`.toLowerCase();
+      return hay.includes(lowerQuery);
+    });
+    return {
+      all: filtered.length,
+      monthly: filtered.filter((v) => v.cadence === "monthly").length,
+      weekly: filtered.filter((v) => v.cadence === "weekly").length,
+    };
+  }, [allVersions, lowerQuery]);
 
   const totalVisible =
     (showActive ? grouped.active.length : 0) +
     (showDrafts ? grouped.drafts.length : 0) +
     (showArchivedSection ? grouped.archived.length : 0);
 
+  // Iter 7 + 20 — sticky observer. We watch a sentinel after the hero; when
+  // it leaves the viewport the filter bar + compact page header gain their
+  // "stuck" treatments simultaneously.
+  const sentinelRef = useRef<HTMLDivElement | null>(null);
+  const [stuck, setStuck] = useState(false);
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        const e = entries[0];
+        if (e) setStuck(!e.isIntersecting);
+      },
+      { threshold: 0, rootMargin: "0px 0px 0px 0px" },
+    );
+    obs.observe(el);
+    return () => obs.disconnect();
+  }, []);
+
+  // ⌘K / Ctrl+K focuses the search input (desk-class affordance).
+  const searchRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    function onKey(e: KeyboardEvent) {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        searchRef.current?.focus();
+      }
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, []);
+
   return (
     <>
+      {/* Iter 20 — sticky compact page header on scroll. */}
+      <div
+        className="fc-list-sticky-header"
+        data-stuck={stuck}
+        aria-hidden={!stuck}
+      >
+        <span className="fc-list-sticky-title">
+          <Sparkles className="h-3 w-3 text-accent" strokeWidth={2.5} />
+          Forecast
+        </span>
+        {query.data && !query.isLoading ? (
+          <span className="fc-list-sticky-stats">
+            <span>
+              <strong>{insights.total}</strong> versions
+            </span>
+            <span className="sep" aria-hidden />
+            <span>
+              <strong>{insights.activeCount}</strong> active
+            </span>
+            <span className="sep" aria-hidden />
+            <span>
+              <strong>{insights.draftCount}</strong> drafts
+            </span>
+            {insights.lastPubAt ? (
+              <>
+                <span className="sep" aria-hidden />
+                <span>
+                  last <strong>{fmtAgo(insights.lastPubAt)}</strong>
+                </span>
+              </>
+            ) : null}
+          </span>
+        ) : null}
+      </div>
+
       <WorkflowHeader
-        eyebrow="Planner workspace"
+        eyebrow={undefined}
         title="Forecast"
         description="Versioned demand forecast. Author a draft, save lines, and publish to make it the active forecast. All writes are audited; all publishes are atomic."
         meta={
           query.data && !query.isLoading ? (
-            <span
-              className="forecast-insights-strip"
-              data-testid="forecast-insights-strip"
-            >
-              <span className="stat">
-                <span className="stat-value tabular-nums">
-                  {insights.total}
-                </span>
-                <span className="stat-label">
-                  version{insights.total === 1 ? "" : "s"}
-                </span>
-              </span>
-              <span className="stat-divider" aria-hidden />
-              <span className="stat">
-                <span
-                  className={cn(
-                    "stat-value",
-                    insights.activePub ? "text-success-fg" : "text-fg-muted",
-                  )}
-                >
-                  {insights.activePub ? "1" : "0"}
-                </span>
-                <span className="stat-label">active</span>
-              </span>
-              <span className="stat-divider" aria-hidden />
-              <span className="stat">
-                <span className="stat-value tabular-nums">
-                  {insights.draftCount}
-                </span>
-                <span className="stat-label">draft{insights.draftCount === 1 ? "" : "s"}</span>
-              </span>
-              {insights.lastPubAt ? (
-                <>
-                  <span className="stat-divider" aria-hidden />
-                  <span className="stat">
-                    <span className="stat-value tabular-nums">
-                      {fmtAgo(insights.lastPubAt)}
-                    </span>
-                    <span className="stat-label">last published</span>
-                  </span>
-                </>
-              ) : null}
-            </span>
+            <MiniStats
+              total={insights.total}
+              active={insights.activeCount}
+              drafts={insights.draftCount}
+              lastPublishedRelative={
+                insights.lastPubAt ? fmtAgo(insights.lastPubAt) : null
+              }
+              lastPublishedISO={insights.lastPubAt}
+            />
           ) : null
         }
         actions={
           canAuthor ? (
             <Link
               href="/planning/forecast/new"
-              className="btn btn-primary btn-sm cta-arrow-host gap-1.5"
+              className="btn btn-primary btn-sm cta-arrow-host fc-list-cta-glow gap-1.5"
               data-testid="forecast-new-draft-link"
             >
               <Plus className="h-3 w-3" strokeWidth={2.5} />
@@ -364,50 +355,68 @@ export default function ForecastListPage() {
             </Link>
           ) : null
         }
-      />
+      >
+        {/* Iter 1 — refined eyebrow with calibrated dot + fading hairline. */}
+        <div className="fc-list-eyebrow" aria-hidden>
+          <span className="fc-list-eyebrow-dot" />
+          <span className="fc-list-eyebrow-text">Planner workspace</span>
+        </div>
+      </WorkflowHeader>
+
+      {/* Iter 7 sticky observer sentinel. */}
+      <div ref={sentinelRef} aria-hidden style={{ height: 1, marginTop: -1 }} />
 
       <SectionCard contentClassName="p-0">
-        {/* ─── Filter bar: search + segmented status + cadence chips ─── */}
+        {/* ─── Filter bar ─── */}
         <div
-          className="flex flex-col gap-3 border-b border-border/60 px-5 py-3 lg:flex-row lg:flex-wrap lg:items-center"
+          className="fc-list-filter-bar flex flex-col gap-3 px-5 py-3 lg:flex-row lg:flex-wrap lg:items-center"
           data-testid="forecast-filter-bar"
+          data-stuck={stuck}
         >
-          {/* Search input — reuses inventory-flow styling */}
-          <label className="relative block w-full lg:max-w-xs">
+          {/* Iter 3 — search input with icon prefix + ⌘K kbd hint suffix. */}
+          <label className="fc-list-search lg:max-w-xs">
             <Search
-              className="pointer-events-none absolute left-3 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-faint"
+              className="fc-list-search-icon h-3.5 w-3.5"
               strokeWidth={2}
               aria-hidden
             />
             <input
+              ref={searchRef}
               type="search"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="Search forecasts"
               aria-label="Search forecasts"
               data-testid="forecast-search-input"
-              className="w-full rounded-sm border border-border bg-bg-subtle py-1.5 pl-8 pr-8 text-xs text-fg placeholder:text-fg-faint focus:border-accent-border focus:outline-none focus:ring-2 focus:ring-accent/20"
+              className="fc-list-search-input"
             />
-            {searchQuery ? (
-              <button
-                type="button"
-                onClick={() => setSearchQuery("")}
-                className="absolute right-2 top-1/2 -translate-y-1/2 rounded-sm p-0.5 text-fg-faint hover:bg-bg-muted hover:text-fg"
-                aria-label="Clear search"
-              >
-                <X className="h-3 w-3" strokeWidth={2} />
-              </button>
-            ) : null}
+            <span className="fc-list-search-suffix">
+              {searchQuery ? (
+                <button
+                  type="button"
+                  onClick={() => setSearchQuery("")}
+                  className="rounded-sm p-0.5 text-fg-faint hover:bg-bg-muted hover:text-fg"
+                  aria-label="Clear search"
+                >
+                  <X className="h-3 w-3" strokeWidth={2} />
+                </button>
+              ) : (
+                <kbd className="kbd-hint" aria-hidden>
+                  ⌘K
+                </kbd>
+              )}
+            </span>
           </label>
 
-          {/* Segmented status filter — All / Active / Drafts / Archived */}
+          {/* Iter 4 — segmented status filter w/ count chip per option. */}
           <div
-            className="segmented shrink-0"
+            className="fc-list-segmented shrink-0"
             role="tablist"
             aria-label="Status filter"
           >
             {STATUS_FILTERS.map((opt) => {
               const active = statusFilter === opt.id;
+              const count = statusCounts[opt.id] ?? 0;
               return (
                 <button
                   key={opt.id}
@@ -415,42 +424,46 @@ export default function ForecastListPage() {
                   role="tab"
                   aria-selected={active}
                   onClick={() => setStatusFilter(opt.id)}
-                  className="segmented-option uppercase tracking-sops"
+                  className="fc-list-seg-option"
                   data-active={active}
                   data-testid={`forecast-filter-status-${opt.id}`}
                 >
-                  {opt.label}
+                  <span>{opt.label}</span>
+                  <span className="fc-list-seg-count">{count}</span>
                 </button>
               );
             })}
           </div>
 
-          {/* Cadence chip group (legacy weekly-vs-monthly distinction) */}
-          <span className="ml-auto inline-flex items-center gap-2">
-            <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              Cadence
-            </span>
-            {CADENCE_OPTIONS.map((opt) => {
-              const active = cadenceFilter === opt;
-              return (
-                <button
-                  key={opt}
-                  type="button"
-                  data-testid={`forecast-filter-cadence-${opt}`}
-                  aria-pressed={active}
-                  onClick={() => setCadenceFilter(opt)}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 rounded-sm border px-2 py-1 text-3xs font-semibold uppercase tracking-sops transition-colors duration-150",
-                    active
-                      ? "border-accent/50 bg-accent-soft text-accent"
-                      : "border-border/70 bg-bg-raised text-fg-muted hover:border-border-strong hover:text-fg",
-                  )}
-                >
-                  {opt === "all" ? "All" : opt}
-                </button>
-              );
-            })}
-          </span>
+          {/* Iter 5 — cadence segmented with label + vertical separator. */}
+          <div className="ml-auto inline-flex items-center gap-2">
+            <span className="fc-list-cadence-label">Cadence</span>
+            <div
+              className="fc-list-segmented shrink-0"
+              role="tablist"
+              aria-label="Cadence filter"
+            >
+              {CADENCE_OPTIONS.map((opt) => {
+                const active = cadenceFilter === opt.id;
+                const count = cadenceCounts[opt.id] ?? 0;
+                return (
+                  <button
+                    key={opt.id}
+                    type="button"
+                    role="tab"
+                    aria-selected={active}
+                    onClick={() => setCadenceFilter(opt.id)}
+                    className="fc-list-seg-option"
+                    data-active={active}
+                    data-testid={`forecast-filter-cadence-${opt.id}`}
+                  >
+                    <span>{opt.label}</span>
+                    <span className="fc-list-seg-count">{count}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
         </div>
 
         {/* ─── Content body ─── */}
@@ -519,7 +532,7 @@ export default function ForecastListPage() {
                 statusFilter === "all" ? (
                   <Link
                     href="/planning/forecast/new"
-                    className="btn btn-primary btn-sm cta-arrow-host gap-1.5"
+                    className="btn btn-primary btn-sm cta-arrow-host fc-list-cta-glow gap-1.5"
                     data-testid="forecast-empty-cta"
                   >
                     <Plus className="h-3 w-3" strokeWidth={2.5} />
@@ -535,243 +548,165 @@ export default function ForecastListPage() {
             />
           </div>
         ) : (
-          <div data-testid="forecast-versions-list">
-            {/* ── ACTIVE section (pinned, stronger weight) ── */}
-            {showActive && grouped.active.length > 0 ? (
-              <section>
-                <div className="forecast-section-heading">
-                  <Zap
-                    className="h-3 w-3 text-success-fg"
-                    strokeWidth={2.5}
-                    aria-hidden
+          <div data-testid="forecast-versions-list" className="fc-list-stagger">
+            {/* ── ACTIVE section ── */}
+            {showActive ? (
+              grouped.active.length > 0 ? (
+                <section>
+                  <SectionHeader
+                    tone="active"
+                    icon={
+                      <Activity
+                        className="h-3 w-3"
+                        strokeWidth={2.5}
+                        aria-hidden
+                      />
+                    }
+                    label="Active"
+                    count={grouped.active.length}
                   />
-                  <span>Active</span>
-                  <span className="text-fg-faint">·</span>
-                  <span className="tabular-nums normal-case font-medium text-fg">
-                    {grouped.active.length}
-                  </span>
-                </div>
-                <ul className="divide-y divide-border/40">
-                  {grouped.active.map((v) => (
-                    <ListRow key={v.version_id} v={v} active />
-                  ))}
-                </ul>
-              </section>
+                  <ul>
+                    {grouped.active.map((v) => (
+                      <ForecastRow
+                        key={v.version_id}
+                        v={v as ForecastRowVersion}
+                        active
+                      />
+                    ))}
+                  </ul>
+                </section>
+              ) : null
             ) : null}
 
             {/* ── DRAFTS section ── */}
-            {showDrafts && grouped.drafts.length > 0 ? (
-              <section>
-                <div className="forecast-section-heading">
-                  <Pencil
-                    className="h-3 w-3 text-warning-fg"
-                    strokeWidth={2.5}
-                    aria-hidden
+            {showDrafts ? (
+              grouped.drafts.length > 0 ? (
+                <section>
+                  <SectionHeader
+                    tone="drafts"
+                    icon={
+                      <FileText
+                        className="h-3 w-3"
+                        strokeWidth={2.5}
+                        aria-hidden
+                      />
+                    }
+                    label="Drafts"
+                    count={grouped.drafts.length}
                   />
-                  <span>Drafts</span>
-                  <span className="text-fg-faint">·</span>
-                  <span className="tabular-nums normal-case font-medium text-fg">
-                    {grouped.drafts.length}
-                  </span>
-                </div>
-                <ul className="divide-y divide-border/40">
-                  {grouped.drafts.map((v) => (
-                    <ListRow key={v.version_id} v={v} />
-                  ))}
-                </ul>
-              </section>
-            ) : null}
-
-            {/* ── ARCHIVED section (collapsed by default) ── */}
-            {showArchivedSection && grouped.archived.length > 0 ? (
-              <section>
-                <button
-                  type="button"
-                  onClick={() => setShowArchived((s) => !s)}
-                  className="forecast-section-heading w-full text-left transition-colors hover:bg-bg-subtle/60"
-                  aria-expanded={showArchived}
-                  data-testid="forecast-toggle-archived"
-                >
-                  {showArchived ? (
-                    <ChevronDown
-                      className="h-3 w-3 text-fg-muted"
-                      strokeWidth={2}
-                      aria-hidden
-                    />
-                  ) : (
-                    <ChevronRight
-                      className="h-3 w-3 text-fg-muted"
-                      strokeWidth={2}
-                      aria-hidden
-                    />
-                  )}
-                  <Archive
-                    className="h-3 w-3 text-fg-faint"
-                    strokeWidth={2.5}
-                    aria-hidden
-                  />
-                  <span>
-                    {showArchived ? "Hide archived" : "Show archived"}
-                  </span>
-                  <span className="text-fg-faint">·</span>
-                  <span className="tabular-nums normal-case font-medium text-fg">
-                    {grouped.archived.length}
-                  </span>
-                </button>
-                {showArchived ? (
-                  <ul className="divide-y divide-border/40">
-                    {grouped.archived.map((v) => (
-                      <ListRow key={v.version_id} v={v} muted />
+                  <ul>
+                    {grouped.drafts.map((v) => (
+                      <ForecastRow
+                        key={v.version_id}
+                        v={v as ForecastRowVersion}
+                      />
                     ))}
                   </ul>
-                ) : null}
-              </section>
+                </section>
+              ) : statusFilter === "all" ? (
+                /* Iter 9 — condensed empty-state for drafts. */
+                <section>
+                  <SectionHeader
+                    tone="drafts"
+                    icon={
+                      <FileText
+                        className="h-3 w-3"
+                        strokeWidth={2.5}
+                        aria-hidden
+                      />
+                    }
+                    label="Drafts"
+                    count={0}
+                  />
+                  <div className="fc-list-section-empty">
+                    <span>No drafts in flight.</span>
+                    {canAuthor ? (
+                      <Link href="/planning/forecast/new">
+                        Start a new forecast →
+                      </Link>
+                    ) : null}
+                  </div>
+                </section>
+              ) : null
+            ) : null}
+
+            {/* ── ARCHIVED section ── */}
+            {showArchivedSection ? (
+              grouped.archived.length > 0 ? (
+                <section>
+                  <SectionHeader
+                    tone="archived"
+                    icon={
+                      <Archive
+                        className="h-3 w-3"
+                        strokeWidth={2.5}
+                        aria-hidden
+                      />
+                    }
+                    label={showArchived ? "Archived" : "Archived"}
+                    count={grouped.archived.length}
+                    asButton
+                    onClick={() => setShowArchived((s) => !s)}
+                    ariaExpanded={showArchived}
+                    testId="forecast-toggle-archived"
+                    trailing={
+                      <span
+                        className="text-3xs font-semibold uppercase tracking-sops text-fg-muted inline-flex items-center gap-1"
+                        aria-hidden
+                      >
+                        {showArchived ? "Hide" : "Show"}
+                        {showArchived ? (
+                          <ChevronDown
+                            className="h-3 w-3"
+                            strokeWidth={2}
+                            aria-hidden
+                          />
+                        ) : (
+                          <ChevronRight
+                            className="h-3 w-3"
+                            strokeWidth={2}
+                            aria-hidden
+                          />
+                        )}
+                      </span>
+                    }
+                  />
+                  {showArchived ? (
+                    <ul>
+                      {grouped.archived.map((v) => (
+                        <ForecastRow
+                          key={v.version_id}
+                          v={v as ForecastRowVersion}
+                          muted
+                        />
+                      ))}
+                    </ul>
+                  ) : null}
+                </section>
+              ) : statusFilter === "all" ? (
+                /* Iter 10 — condensed empty-state for archived. */
+                <section>
+                  <SectionHeader
+                    tone="archived"
+                    icon={
+                      <Archive
+                        className="h-3 w-3"
+                        strokeWidth={2.5}
+                        aria-hidden
+                      />
+                    }
+                    label="Archived"
+                    count={0}
+                  />
+                  <div className="fc-list-section-empty">
+                    <span>Nothing archived yet.</span>
+                  </div>
+                </section>
+              ) : null
             ) : null}
           </div>
         )}
       </SectionCard>
     </>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// ListRow — a single forecast version row.
-//
-// Two-line layout:
-//   line 1 (primary, 16px): horizon span + cadence
-//   line 2 (secondary, 11px muted): created-by + relative time + line count
-//
-// Inline action icons appear on row hover (Linear pattern). Clicking the
-// row body navigates to the detail page; clicking an action icon stops
-// propagation and triggers its own intent.
-// ---------------------------------------------------------------------------
-
-interface ListRowProps {
-  v: VersionMetadata;
-  active?: boolean;
-  muted?: boolean;
-}
-
-function ListRow({ v, active, muted }: ListRowProps) {
-  const horizonText =
-    v.cadence === "monthly"
-      ? `${v.horizon_weeks} month${v.horizon_weeks === 1 ? "" : "s"}`
-      : `${v.horizon_weeks} week${v.horizon_weeks === 1 ? "" : "s"}`;
-
-  // Relative time: prefer published_at when available, else updated_at.
-  const relTime = v.published_at ?? v.updated_at ?? v.created_at;
-
-  return (
-    <li
-      className={cn(
-        "forecast-row",
-        active && "forecast-row-active",
-        muted && "opacity-80",
-      )}
-      data-testid="forecast-version-row"
-      data-version-id={v.version_id}
-      data-status={v.status}
-    >
-      <div className="flex items-start gap-4">
-        <Link
-          href={`/planning/forecast/${encodeURIComponent(v.version_id)}`}
-          className="block min-w-0 flex-1"
-          data-testid="forecast-version-link"
-        >
-          <div className="flex flex-wrap items-center gap-2">
-            <StatusBadge status={v.status} />
-            <CadenceChip cadence={v.cadence} />
-            <span className="chip">{v.site_id}</span>
-          </div>
-
-          <div
-            className={cn(
-              "mt-1.5 font-semibold tracking-tightish",
-              active
-                ? "text-base text-fg-strong"
-                : "text-base text-fg-strong",
-            )}
-            data-testid="forecast-version-title"
-          >
-            Horizon starts {fmtHorizonStart(v.horizon_start_at)} · {horizonText}
-          </div>
-
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-muted">
-            <span className="inline-flex items-center gap-1">
-              <span className="text-fg-faint">by</span>
-              <span className="font-medium text-fg">
-                {v.created_by_snapshot}
-              </span>
-            </span>
-            <span className="text-fg-faint">·</span>
-            <span
-              className="tabular-nums"
-              title={fmtDate(relTime)}
-              data-testid="forecast-version-rel-time"
-            >
-              {v.published_at ? "published " : "updated "}
-              {fmtAgo(relTime)}
-            </span>
-            {v.published_at && v.published_by_snapshot ? (
-              <>
-                <span className="text-fg-faint">·</span>
-                <span className="inline-flex items-center gap-1">
-                  <span className="text-fg-faint">by</span>
-                  <span className="font-medium text-fg">
-                    {v.published_by_snapshot}
-                  </span>
-                </span>
-              </>
-            ) : null}
-          </div>
-
-          {v.notes ? (
-            <div className="mt-1.5 text-sm leading-relaxed text-fg-muted line-clamp-2">
-              {v.notes}
-            </div>
-          ) : null}
-        </Link>
-
-        {/* Inline action icons — fade in on hover. Read-only for now
-            (Duplicate / Archive endpoints not in scope). */}
-        <div
-          className="flex shrink-0 items-center gap-1"
-          data-show-on-hover
-          data-testid="forecast-row-actions"
-        >
-          <Link
-            href={`/planning/forecast/${encodeURIComponent(v.version_id)}`}
-            className="btn btn-ghost btn-sm h-7 w-7 p-0"
-            title="Open forecast"
-            aria-label="Open forecast"
-            data-testid="forecast-row-action-open"
-          >
-            <Pencil className="h-3 w-3" strokeWidth={2} />
-          </Link>
-          <button
-            type="button"
-            disabled
-            title="Duplicate (coming soon)"
-            aria-label="Duplicate forecast"
-            className="btn btn-ghost btn-sm h-7 w-7 p-0 opacity-60"
-            data-testid="forecast-row-action-duplicate"
-          >
-            <Copy className="h-3 w-3" strokeWidth={2} />
-          </button>
-          {v.status === "draft" || v.status === "superseded" ? (
-            <button
-              type="button"
-              disabled
-              title="Archive (coming soon)"
-              aria-label="Archive forecast"
-              className="btn btn-ghost btn-sm h-7 w-7 p-0 opacity-60"
-              data-testid="forecast-row-action-archive"
-            >
-              <Archive className="h-3 w-3" strokeWidth={2} />
-            </button>
-          ) : null}
-        </div>
-      </div>
-    </li>
   );
 }
