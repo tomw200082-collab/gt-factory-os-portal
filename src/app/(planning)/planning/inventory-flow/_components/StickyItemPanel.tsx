@@ -92,22 +92,27 @@ function StickyItemPanelInner({ item }: StickyItemPanelProps) {
           />
         </div>
 
-        {/* Days-cover hero — its OWN bounded slot. The 1px left divider +
-            background tile + 64px fixed width + centered alignment makes it
-            read as a "stat tile" rather than floating text. Tom feedback
-            2026-05-05: needed a clear frame around the days-cover number. */}
-        <div className="flex w-[68px] shrink-0 flex-col items-center justify-center border-l border-border/60 bg-bg-subtle/40 py-2">
+        {/* Days-cover hero — bounded stat tile. 84px wide (was 68) to fit
+            the 8-char "STOCKOUT" string without overflow into the first
+            data cell. overflow-hidden + truncate guarantee containment for
+            any future longer string. Tom feedback 2026-05-05: cover tile
+            was overflowing into adjacent cells on stockout rows. */}
+        <div className="flex w-[84px] shrink-0 flex-col items-center justify-center overflow-hidden border-l border-border/60 bg-bg-subtle/40 px-1 py-2">
           <div
             className={cn(
-              "text-[16px] font-semibold leading-none tabular-nums",
+              "w-full truncate text-center font-semibold leading-none tabular-nums",
+              // STOCKOUT is 8 chars; smaller font when sub-empty so it still
+              // fits in 84px without truncation. Other values stay 16px.
+              heroSub ? "text-[16px]" : "text-[12px]",
               heroToneClass,
             )}
             data-testid="row-days-cover-hero"
+            title={heroValue}
           >
             {heroValue}
           </div>
           {heroSub ? (
-            <div className="mt-1 text-[9px] uppercase tracking-sops leading-none text-fg-subtle">
+            <div className="mt-1 w-full truncate text-center text-[9px] uppercase tracking-sops leading-none text-fg-subtle">
               {heroSub}
             </div>
           ) : null}

@@ -96,14 +96,16 @@ export function DayHeaderRow({ days, weeks, gridStyle }: DayHeaderRowProps) {
       >
         {/* Sticky item-col header — subdivided to mirror StickyItemPanel's
             3 slots: ITEM | TREND | COVER. Each sub-label sits exactly over
-            its corresponding body slot for a "labeled stat tile" feel. */}
+            its corresponding body slot for a "labeled stat tile" feel.
+            2px right border matches StickyItemPanel for consistent boundary. */}
         <div
           role="columnheader"
-          className="sticky left-0 z-40 flex h-12 items-stretch border-r border-border bg-bg-raised text-3xs uppercase tracking-sops text-fg-subtle"
+          className="sticky left-0 z-40 flex h-12 items-stretch overflow-hidden bg-bg-raised text-3xs uppercase tracking-sops text-fg-subtle"
+          style={{ borderRight: `2px solid hsl(var(--border-strong))` }}
         >
-          <div className="flex flex-1 items-center pl-3 pr-2">Item</div>
+          <div className="flex flex-1 items-center pl-3 pr-2 truncate">Item</div>
           <div className="flex w-16 shrink-0 items-center justify-center">Trend</div>
-          <div className="flex w-[68px] shrink-0 items-center justify-center border-l border-border/60 bg-bg-subtle/40">
+          <div className="flex w-[84px] shrink-0 items-center justify-center border-l border-border/60 bg-bg-subtle/40">
             Cover
           </div>
         </div>
