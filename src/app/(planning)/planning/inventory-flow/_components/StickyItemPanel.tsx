@@ -56,19 +56,20 @@ function StickyItemPanelInner({ item }: StickyItemPanelProps) {
   return (
     <div
       role="rowheader"
-      className="sticky left-0 z-20 flex h-full items-stretch border-r border-border/40 bg-bg-raised"
+      className="sticky left-0 z-20 flex h-full items-stretch border-r border-border bg-bg-raised"
       style={{
         // 2px family color rule on the left edge (tighter than the legacy
         // 3px; keeps the family signal without overpowering the row).
         borderLeft: `2px solid ${familyColor}`,
       }}
     >
-      <div className="flex flex-1 items-center justify-between gap-2 px-3">
-        <div className="min-w-0 flex-1">
+      <div className="flex flex-1 items-stretch gap-3 pl-3 pr-2">
+        {/* Item identity + family + status — primary column. */}
+        <div className="flex min-w-0 flex-1 flex-col justify-center gap-1 py-2">
           <div className="truncate text-[13px] font-medium leading-tight text-fg-strong">
             {item.item_name}
           </div>
-          <div className="mt-0.5 flex items-center gap-1.5 text-[10px] text-fg-muted">
+          <div className="flex items-center gap-1.5 text-[10px] text-fg-muted">
             {item.family ? (
               <span className="rounded-sm bg-bg-muted px-1 py-0.5 uppercase tracking-sops leading-none">
                 {item.family}
@@ -80,18 +81,22 @@ function StickyItemPanelInner({ item }: StickyItemPanelProps) {
           </div>
         </div>
 
-        {/* Sparkline — 14 plotted points correspond to the 14 daily columns
-            in the grid. The aspect ratio is intentionally compressed so the
-            slope reads at a glance without dominating the row. */}
-        <Sparkline
-          days={item.days.slice(0, 14)}
-          riskTier={item.risk_tier}
-          width={64}
-          height={18}
-          className="opacity-90"
-        />
+        {/* Sparkline column — fixed 64px slot; centered vertically. */}
+        <div className="flex w-16 shrink-0 items-center justify-center">
+          <Sparkline
+            days={item.days.slice(0, 14)}
+            riskTier={item.risk_tier}
+            width={64}
+            height={20}
+            className="opacity-90"
+          />
+        </div>
 
-        <div className="text-right">
+        {/* Days-cover hero — its OWN bounded slot. The 1px left divider +
+            background tile + 64px fixed width + centered alignment makes it
+            read as a "stat tile" rather than floating text. Tom feedback
+            2026-05-05: needed a clear frame around the days-cover number. */}
+        <div className="flex w-[68px] shrink-0 flex-col items-center justify-center border-l border-border/60 bg-bg-subtle/40 py-2">
           <div
             className={cn(
               "text-[16px] font-semibold leading-none tabular-nums",

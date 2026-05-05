@@ -57,7 +57,7 @@ import { WeekCell } from "./WeekCell";
 // Tom locked: prefer fewer cells with crisp alignment over many narrow cells.
 // 80px daily column comfortably fits "1.5K" (cell number) AND a "▼ 517"
 // production-receipt chip stacked on top of it without clipping.
-export const ITEM_COL_W = 320; // px — sticky left column
+export const ITEM_COL_W = 360; // px — sticky left column (was 320; bumped 2026-05-05 so days-cover hero has clear breathing room within its frame)
 export const DAY_COL_W = 80; // px — daily band cell
 export const WEEK_COL_W = 96; // px — weekly band cell
 export const BAND_GAP_W = 16; // px — spacer between daily and weekly bands

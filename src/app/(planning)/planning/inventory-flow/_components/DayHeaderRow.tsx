@@ -94,11 +94,18 @@ export function DayHeaderRow({ days, weeks, gridStyle }: DayHeaderRowProps) {
         className="grid h-12 border-b border-border/40 bg-bg-raised"
         style={gridStyle}
       >
+        {/* Sticky item-col header — subdivided to mirror StickyItemPanel's
+            3 slots: ITEM | TREND | COVER. Each sub-label sits exactly over
+            its corresponding body slot for a "labeled stat tile" feel. */}
         <div
           role="columnheader"
-          className="sticky left-0 z-40 flex h-12 items-center border-r border-border/40 bg-bg-raised px-3 text-3xs uppercase tracking-sops text-fg-subtle"
+          className="sticky left-0 z-40 flex h-12 items-stretch border-r border-border bg-bg-raised text-3xs uppercase tracking-sops text-fg-subtle"
         >
-          Item · cover
+          <div className="flex flex-1 items-center pl-3 pr-2">Item</div>
+          <div className="flex w-16 shrink-0 items-center justify-center">Trend</div>
+          <div className="flex w-[68px] shrink-0 items-center justify-center border-l border-border/60 bg-bg-subtle/40">
+            Cover
+          </div>
         </div>
         {days.map((d) => {
           const isToday = d.day === today;
