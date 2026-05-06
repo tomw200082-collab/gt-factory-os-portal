@@ -56,6 +56,11 @@ interface DayCellProps {
   overlayEnabled?: boolean;
   /** Aggregated planned-inflow row for this (item, day), if any. */
   plannedRow?: PlannedInflowRow;
+  /**
+   * When true, the popover's "Drill down" affordance is rendered
+   * non-clickable. Forwarded to `DayPopover`. Default `false`.
+   */
+  disableRowLink?: boolean;
 }
 
 function DayCellInner({
@@ -65,6 +70,7 @@ function DayCellInner({
   isToday,
   overlayEnabled = false,
   plannedRow,
+  disableRowLink = false,
 }: DayCellProps) {
   const isNonWorking = day.tier === "non_working";
   const totalDemand = day.demand_lionwheel + day.demand_forecast;
@@ -250,6 +256,7 @@ function DayCellInner({
       day={day}
       overlayEnabled={overlayEnabled}
       plannedRow={plannedRow}
+      disableRowLink={disableRowLink}
     >
       {cellInner}
     </DayPopover>

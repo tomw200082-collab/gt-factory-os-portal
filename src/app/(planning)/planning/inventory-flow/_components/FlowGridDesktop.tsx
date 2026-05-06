@@ -89,6 +89,13 @@ interface FlowGridDesktopProps {
   plannedByItemDate?: Map<string, PlannedInflowRow>;
   /** Full row array (used for client-side weekly aggregation per item). */
   plannedRows?: PlannedInflowRow[];
+  /**
+   * When true, the per-day popover's "Drill down" link is rendered as a
+   * non-clickable label. Used by the supply view, where the FG drill-down
+   * route does not yet handle component IDs. Default `false` keeps FG
+   * behaviour unchanged.
+   */
+  disableRowLink?: boolean;
 }
 
 export function FlowGridDesktop({
@@ -96,6 +103,7 @@ export function FlowGridDesktop({
   overlayEnabled = false,
   plannedByItemDate,
   plannedRows,
+  disableRowLink = false,
 }: FlowGridDesktopProps) {
   const sortedItems = useMemo(
     () => [...items].sort(compareItemsByRisk),
@@ -176,6 +184,7 @@ export function FlowGridDesktop({
               plannedRows={plannedRows}
               rowIdx={rowIdx}
               gridStyle={sharedGridStyle}
+              disableRowLink={disableRowLink}
             />
           ))}
         </div>
@@ -193,6 +202,8 @@ interface ItemRowProps {
   plannedRows?: PlannedInflowRow[];
   rowIdx: number;
   gridStyle: CSSProperties;
+  /** Forwarded to per-day popover; disables drill-down link when true. */
+  disableRowLink?: boolean;
 }
 
 function ItemRow({
@@ -204,6 +215,7 @@ function ItemRow({
   plannedRows,
   rowIdx,
   gridStyle,
+  disableRowLink = false,
 }: ItemRowProps) {
   const dailyWeekCount = Math.ceil(item.days.length / 7);
   const weeklyOnly = item.weeks.slice(dailyWeekCount);
@@ -247,6 +259,7 @@ function ItemRow({
             isToday={d.day === todayIso}
             overlayEnabled={overlayEnabled}
             plannedRow={plannedRow}
+            disableRowLink={disableRowLink}
           />
         );
       })}
