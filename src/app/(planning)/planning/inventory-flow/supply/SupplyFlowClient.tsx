@@ -40,6 +40,68 @@ import { cn } from "@/lib/cn";
 
 const UNMAPPED_GATE = 0.1;
 
+// Map raw fetcher errors (shaped as `supply_flow_<status>:<detail>`) into
+// human-readable diagnostics. The detail portion comes from the proxy's
+// JSON body when present.
+function describeSupplyFlowError(raw: string): {
+  title: string;
+  description: string;
+  hint: string | null;
+} {
+  const match = raw.match(/^supply_flow_(\d+)(?::(.*))?$/);
+  const status = match ? Number(match[1]) : 0;
+  const detail = match?.[2] ?? "";
+  switch (status) {
+    case 401:
+      return {
+        title: "Session expired",
+        description:
+          "Your sign-in expired. Sign out and sign back in to continue.",
+        hint: "If you just got back to this tab after a long break, this is the most common cause.",
+      };
+    case 403:
+      return {
+        title: "Not allowed",
+        description:
+          "Your role can't see this page. Operator + Planner + Admin only.",
+        hint: null,
+      };
+    case 404:
+      return {
+        title: "Endpoint missing",
+        description:
+          "The Supply API route was not found upstream. The backend may be mid-deploy.",
+        hint: "Wait ~30 seconds and click Reload. If it sticks, ping the backend deploy.",
+      };
+    case 502:
+      return {
+        title: "Upstream unreachable",
+        description:
+          "The portal could not reach the Factory OS API. Likely a transient network blip.",
+        hint: "Try Reload. If it persists, the API service may be down.",
+      };
+    case 504:
+      return {
+        title: "Upstream timeout",
+        description:
+          "The cold-start projection took longer than the proxy timeout. The next call should hit a warm cache.",
+        hint: "Reload — repeat calls run from a 30-min server cache and return instantly.",
+      };
+    case 500:
+      return {
+        title: "Server error",
+        description: detail || "The API threw an error while computing the supply projection.",
+        hint: "If this persists, check Railway logs for a stack trace.",
+      };
+    default:
+      return {
+        title: "Could not load Components Flow",
+        description: detail || raw,
+        hint: null,
+      };
+  }
+}
+
 export function SupplyFlowClient() {
   const searchParams = useSearchParams();
   const [isMounted, setIsMounted] = useState(false);
@@ -166,30 +228,41 @@ export function SupplyFlowClient() {
     );
   }
 
-  // Error state
-  if (flowQuery.isError) {
+  // Error state — only render when there is no data at all.
+  // If we have seeded data from a previous successful load, prefer to show
+  // that data with a small "couldn't refresh" banner above. Showing an empty
+  // ErrorState screen on top of usable data is worse than a stale-but-real
+  // grid.
+  if (flowQuery.isError && !data) {
+    const rawMessage = (flowQuery.error as Error)?.message ?? "Unknown error";
+    const { title, description, hint } = describeSupplyFlowError(rawMessage);
     return (
       <>
         {tabs}
         {header}
         <ErrorState
-          title="Could not load Components Flow"
-          description={(flowQuery.error as Error)?.message ?? "Unknown error"}
+          title={title}
+          description={description}
           action={
-            <button
-              type="button"
-              onClick={() => {
-                // Hard reload bypasses the browser HTTP cache for the proxy
-                // request and clears any TanStack Query in-memory state for
-                // this surface in one shot. Critical when an upstream error
-                // got cached client-side from a previous failed deploy state.
-                window.location.reload();
-              }}
-              className="inline-flex items-center gap-1.5 rounded border border-danger/40 bg-danger-soft px-3 py-1.5 text-xs font-medium text-danger-fg hover:bg-danger-softer"
-            >
-              <RefreshCw className="h-3.5 w-3.5" strokeWidth={2} />
-              Reload
-            </button>
+            <div className="flex flex-col items-center gap-2">
+              <button
+                type="button"
+                onClick={() => window.location.reload()}
+                className="inline-flex items-center gap-1.5 rounded border border-danger/40 bg-danger-soft px-3 py-1.5 text-xs font-medium text-danger-fg hover:bg-danger-softer"
+              >
+                <RefreshCw className="h-3.5 w-3.5" strokeWidth={2} />
+                Reload
+              </button>
+              {hint ? (
+                <div className="text-[11px] text-fg-muted max-w-md">{hint}</div>
+              ) : null}
+              <details className="text-[10px] text-fg-muted/80">
+                <summary className="cursor-pointer">Show technical detail</summary>
+                <code className="mt-1 block rounded border border-border bg-bg-elevated px-2 py-1 text-left">
+                  {rawMessage}
+                </code>
+              </details>
+            </div>
           }
         />
       </>
@@ -221,10 +294,29 @@ export function SupplyFlowClient() {
   const fraction = summary?.unknown_sku_pct_of_demand ?? 0;
   const banner = fraction >= UNMAPPED_GATE;
 
+  // Stale banner — render the (seeded) data we have, but tell the user the
+  // most-recent refresh failed so they don't act on numbers that may be old.
+  const staleBanner = flowQuery.isError ? (
+    <div className="rounded border border-warning/40 bg-warning-softer px-4 py-2 text-xs">
+      <span className="font-semibold text-warning-fg">Showing cached data — </span>
+      <span className="text-fg-muted">
+        the latest refresh failed. {describeSupplyFlowError((flowQuery.error as Error)?.message ?? "").description}
+      </span>
+      <button
+        type="button"
+        onClick={() => window.location.reload()}
+        className="ml-2 underline underline-offset-2 hover:text-warning-fg"
+      >
+        Reload
+      </button>
+    </div>
+  ) : null;
+
   return (
     <>
       {tabs}
       {header}
+      {staleBanner}
       <div className="space-y-6">
         <InsightsHero
           items={data.items}
