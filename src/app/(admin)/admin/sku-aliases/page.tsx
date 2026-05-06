@@ -25,7 +25,7 @@
 // Role gate: admin only.
 // ---------------------------------------------------------------------------
 
-import { useMemo, useState, Suspense } from "react";
+import { useEffect, useMemo, useState, Suspense, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
@@ -194,6 +194,13 @@ function AdminSkuAliasesPageInner(): JSX.Element {
     | { kind: "success" | "error"; message: string; detail?: string }
     | null
   >(null);
+
+  // Quick-create-item modal state. When non-null, the modal is open and
+  // pre-filled with the external_sku of the row that triggered it. On
+  // successful create, the new item_id is auto-assigned to that row's
+  // dropdown and the row checkbox is checked, so the planner can move
+  // straight to Approve.
+  const [quickCreateForSku, setQuickCreateForSku] = useState<string | null>(null);
 
   // Reset per-channel state when channel tab changes.
   const handleChannelSwitch = (ch: ChannelKey) => {
@@ -634,31 +641,46 @@ function AdminSkuAliasesPageInner(): JSX.Element {
                         {new Date(row.first_seen_at).toLocaleString()}
                       </td>
                       <td className="px-3 py-2">
-                        <select
-                          className="input min-w-[220px]"
-                          value={assigned}
-                          onChange={(e) => {
-                            const v = e.target.value;
-                            setAssignments((prev) => ({
-                              ...prev,
-                              [row.external_sku]: v,
-                            }));
-                            if (!v && isSelected) {
-                              setSelected((prev) => {
-                                const next = new Set(prev);
-                                next.delete(row.external_sku);
-                                return next;
-                              });
-                            }
-                          }}
-                        >
-                          <option value="">— choose item —</option>
-                          {filteredItems.map((it) => (
-                            <option key={it.item_id} value={it.item_id}>
-                              {it.item_id} · {it.item_name}
-                            </option>
-                          ))}
-                        </select>
+                        <div className="flex items-center gap-1.5">
+                          <select
+                            className="input min-w-[220px]"
+                            value={assigned}
+                            onChange={(e) => {
+                              const v = e.target.value;
+                              setAssignments((prev) => ({
+                                ...prev,
+                                [row.external_sku]: v,
+                              }));
+                              if (!v && isSelected) {
+                                setSelected((prev) => {
+                                  const next = new Set(prev);
+                                  next.delete(row.external_sku);
+                                  return next;
+                                });
+                              }
+                            }}
+                          >
+                            <option value="">— choose item —</option>
+                            {filteredItems.map((it) => (
+                              <option key={it.item_id} value={it.item_id}>
+                                {it.item_id} · {it.item_name}
+                              </option>
+                            ))}
+                          </select>
+                          {/* Quick-create item button — Tom 2026-05-04. When
+                              the unmapped SKU has no matching internal item,
+                              the planner clicks here to create one in-place
+                              and have it auto-mapped to this row. */}
+                          <button
+                            type="button"
+                            className="btn btn-sm shrink-0 px-2 text-base font-bold leading-none"
+                            title="צור פריט חדש ושייך לשורה זו"
+                            aria-label="צור פריט חדש"
+                            onClick={() => setQuickCreateForSku(row.external_sku)}
+                          >
+                            +
+                          </button>
+                        </div>
                       </td>
                       <td className="px-3 py-2">
                         <input
@@ -854,7 +876,301 @@ function AdminSkuAliasesPageInner(): JSX.Element {
           </div>
         )}
       </SectionCard>
+
+      {/* Quick-create item modal — Tom 2026-05-04. Opens when the planner
+          clicks the "+" button next to a row's "choose item" dropdown.
+          On success: invalidates itemsQuery (so dropdown refreshes with
+          the new item), auto-assigns the new item_id to the row, and
+          checks the row's checkbox so Approve is one click away. */}
+      {quickCreateForSku !== null ? (
+        <QuickCreateItemModal
+          externalSku={quickCreateForSku}
+          onClose={() => setQuickCreateForSku(null)}
+          onCreated={(newItemId) => {
+            setAssignments((prev) => ({
+              ...prev,
+              [quickCreateForSku]: newItemId,
+            }));
+            setSelected((prev) => {
+              const next = new Set(prev);
+              next.add(quickCreateForSku);
+              return next;
+            });
+            void queryClient.invalidateQueries({
+              queryKey: ["admin", "sku-aliases", "items"],
+            });
+            setQuickCreateForSku(null);
+            setBanner({
+              kind: "success",
+              message: `פריט ${newItemId} נוצר ושויך ל-${quickCreateForSku}. לחץ Approve כדי לאשר את המיפוי.`,
+            });
+          }}
+        />
+      ) : null}
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// QuickCreateItemModal — minimal-fields form for creating a new item from
+// the SKU-alias review surface. Tom 2026-05-04: lets the planner create a
+// missing item without leaving the page.
+//
+// POST /api/items expects: { item_id, item_name, supply_method, sales_uom,
+// optional family, case_pack }. Pre-fills item_id with the external SKU
+// (the planner can edit it before submit).
+// ---------------------------------------------------------------------------
+
+const SUPPLY_METHODS = ["BOUGHT_FINISHED", "MANUFACTURED", "REPACK"] as const;
+type SupplyMethod = (typeof SUPPLY_METHODS)[number];
+
+const COMMON_SALES_UOMS = ["EACH", "BOTTLE", "CAN", "BOX", "PACK"] as const;
+
+function QuickCreateItemModal({
+  externalSku,
+  onClose,
+  onCreated,
+}: {
+  externalSku: string;
+  onClose: () => void;
+  onCreated: (newItemId: string) => void;
+}): JSX.Element {
+  // Pre-fill item_id with the external SKU; planner can edit before submit.
+  const [itemId, setItemId] = useState<string>(externalSku);
+  const [itemName, setItemName] = useState<string>("");
+  const [supplyMethod, setSupplyMethod] =
+    useState<SupplyMethod>("BOUGHT_FINISHED");
+  const [salesUom, setSalesUom] = useState<string>("EACH");
+  const [family, setFamily] = useState<string>("");
+  const [casePack, setCasePack] = useState<string>("");
+  const [submitting, setSubmitting] = useState<boolean>(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const canSubmit =
+    !submitting
+    && itemId.trim().length > 0
+    && itemName.trim().length > 0
+    && salesUom.trim().length > 0;
+
+  const handleSubmit = async (e: FormEvent) => {
+    e.preventDefault();
+    if (!canSubmit) return;
+    setSubmitting(true);
+    setError(null);
+    try {
+      const body: Record<string, unknown> = {
+        item_id: itemId.trim(),
+        item_name: itemName.trim(),
+        supply_method: supplyMethod,
+        sales_uom: salesUom.trim(),
+      };
+      if (family.trim()) body.family = family.trim();
+      if (casePack.trim()) {
+        const n = Number(casePack);
+        if (Number.isFinite(n) && n > 0) body.case_pack = n;
+      }
+      const res = await fetch("/api/items", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) {
+        const text = await res.text();
+        let message = `שגיאה (HTTP ${res.status})`;
+        try {
+          const json = JSON.parse(text);
+          if (typeof json?.message === "string") message = json.message;
+          else if (typeof json?.error === "string") message = json.error;
+        } catch {
+          if (text) message = text;
+        }
+        throw new Error(message);
+      }
+      onCreated(itemId.trim());
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Esc closes the modal.
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !submitting) onClose();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [submitting, onClose]);
+
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
+      role="dialog"
+      aria-modal="true"
+      aria-label="צור פריט חדש"
+      onClick={(e) => {
+        if (e.target === e.currentTarget && !submitting) onClose();
+      }}
+    >
+      <div
+        className="card w-full max-w-md p-5"
+        dir="rtl"
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div className="mb-3 flex items-start justify-between gap-3">
+          <div>
+            <div className="text-base font-semibold text-fg-strong">
+              צור פריט חדש
+            </div>
+            <div className="mt-0.5 text-xs text-fg-muted">
+              ייווצר ב-items master וישויך אוטומטית ל-SKU{" "}
+              <span className="font-mono text-fg">{externalSku}</span>.
+            </div>
+          </div>
+          <button
+            type="button"
+            className="btn btn-sm"
+            onClick={onClose}
+            disabled={submitting}
+            aria-label="סגור"
+          >
+            ✕
+          </button>
+        </div>
+
+        <form className="space-y-3" onSubmit={handleSubmit}>
+          <label className="block">
+            <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+              item_id <span className="text-danger">*</span>
+            </span>
+            <input
+              className="input font-mono"
+              value={itemId}
+              onChange={(e) => setItemId(e.target.value.trim())}
+              placeholder="GT-XXX-YYY-ZZZ"
+              dir="ltr"
+              autoFocus
+              required
+            />
+            <span className="mt-1 block text-3xs text-fg-subtle">
+              מזהה ייחודי. ברירת המחדל היא ה-external SKU עצמו.
+            </span>
+          </label>
+
+          <label className="block">
+            <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+              שם פריט <span className="text-danger">*</span>
+            </span>
+            <input
+              className="input"
+              value={itemName}
+              onChange={(e) => setItemName(e.target.value)}
+              placeholder="למשל: כוס מאצה 600 מ״ל"
+              required
+            />
+          </label>
+
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                supply_method <span className="text-danger">*</span>
+              </span>
+              <select
+                className="input"
+                value={supplyMethod}
+                onChange={(e) => setSupplyMethod(e.target.value as SupplyMethod)}
+              >
+                {SUPPLY_METHODS.map((m) => (
+                  <option key={m} value={m}>
+                    {m}
+                  </option>
+                ))}
+              </select>
+              <span className="mt-1 block text-3xs text-fg-subtle">
+                BOUGHT_FINISHED לרוב הפריטים החיצוניים מ-LionWheel/Shopify.
+              </span>
+            </label>
+
+            <label className="block">
+              <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                sales_uom <span className="text-danger">*</span>
+              </span>
+              <input
+                className="input font-mono"
+                list="quick-create-uom-list"
+                value={salesUom}
+                onChange={(e) => setSalesUom(e.target.value.trim().toUpperCase())}
+                placeholder="EACH"
+                dir="ltr"
+                required
+              />
+              <datalist id="quick-create-uom-list">
+                {COMMON_SALES_UOMS.map((u) => (
+                  <option key={u} value={u} />
+                ))}
+              </datalist>
+            </label>
+          </div>
+
+          <div className="grid grid-cols-2 gap-3">
+            <label className="block">
+              <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                family
+              </span>
+              <input
+                className="input"
+                value={family}
+                onChange={(e) => setFamily(e.target.value)}
+                placeholder="אופציונלי"
+              />
+            </label>
+
+            <label className="block">
+              <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                case_pack
+              </span>
+              <input
+                className="input tabular-nums"
+                type="number"
+                min="1"
+                value={casePack}
+                onChange={(e) => setCasePack(e.target.value)}
+                placeholder="אופציונלי"
+                dir="ltr"
+              />
+            </label>
+          </div>
+
+          {error ? (
+            <div className="rounded-md border border-danger/40 bg-danger-softer p-2 text-xs text-danger">
+              {error}
+            </div>
+          ) : null}
+
+          <div className="flex items-center justify-end gap-2 pt-2">
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={onClose}
+              disabled={submitting}
+            >
+              ביטול
+            </button>
+            <button
+              type="submit"
+              className="btn btn-sm btn-primary"
+              disabled={!canSubmit}
+            >
+              {submitting ? "יוצר…" : "צור ושייך"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
   );
 }
 
