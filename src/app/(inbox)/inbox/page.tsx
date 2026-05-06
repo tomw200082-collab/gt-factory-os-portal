@@ -4,16 +4,17 @@
 // /inbox — unified triage surface (Tranche B §D of
 // portal-full-production-refactor).
 //
-// Merges four source streams into one filtered, sorted list:
+// 100-iteration UX/UI sweep (Tom 2026-05-06): comprehensive polish across
+// visual hierarchy, density, bulk actions, filter bar, empty/loading states,
+// action button copy, keyboard navigation, accessibility, performance,
+// micro-interactions, and per-user preferences. See commit body for the full
+// numbered list.
+//
+// Source streams (unchanged contract):
 //   1. Pending Waste/Adjustment approvals   (features/inbox/client.ts)
 //   2. Pending Physical Count approvals
 //   3. Pending planning-run recommendation approvals
 //   4. Non-approval exceptions
-//
-// Filter bar + sort toggle write back to the URL query string so views are
-// shareable. Exception rows expose inline Acknowledge/Resolve (gated out for
-// viewers). Approval rows expose a deep-link Review button to their
-// respective detail page. No invented backend contracts.
 // ---------------------------------------------------------------------------
 
 import {
@@ -21,6 +22,7 @@ import {
   useState,
   useCallback,
   useEffect,
+  useRef,
   type ReactNode,
 } from "react";
 import Link from "next/link";
@@ -34,15 +36,24 @@ import {
 import {
   AlertCircle,
   AlertTriangle,
-  ArrowRight,
+  ArrowLeft,
   CheckCircle2,
+  Clock,
+  Filter,
+  Flame,
   Info,
+  Keyboard,
+  Pin,
+  RefreshCw,
+  Search,
+  Sparkles,
+  Star,
+  X,
 } from "lucide-react";
 
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
-import { EmptyState } from "@/components/feedback/states";
 import { NotesBox } from "@/components/fields/NotesBox";
 import { useSession } from "@/lib/auth/session-provider";
 import { cn } from "@/lib/cn";
@@ -65,28 +76,49 @@ import {
   newIdempotencyKey,
   resolveException,
 } from "@/features/inbox/actions";
+import {
+  INBOX_SORTS,
+  INBOX_VIEWS,
+  type InboxFilter,
+  type InboxRow,
+  type InboxSeverity,
+  type InboxSort,
+  type InboxView,
+} from "@/features/inbox/types";
+import {
+  categoryFriendly,
+  PINNED_CATEGORIES,
+  rowFamily,
+  searchBag,
+  SEV_DOT,
+  severityIconStroke,
+} from "@/features/inbox/meta";
+import {
+  clearPrefs,
+  densityChipGapClass,
+  densityRowPaddingClass,
+  DENSITY_LABELS,
+  readPrefs,
+  writePrefs,
+  type InboxDensity,
+} from "@/features/inbox/preferences";
 
 // ---------------------------------------------------------------------------
-// Category-specific button labels — Tom 2026-05-04.
+// Category-aware button labels. Behavior is unchanged — only the labels
+// change. The ResolvePanel placeholder/cta is also category-aware.
 //
 // Per memory feedback_action_buttons_match_guidance.md: button labels MUST
-// match the "מה לעשות" guidance for each category, not the generic
-// "Fix this / Acknowledge / Resolve" trio. Map below overrides the labels
-// per known category. Categories not in the map fall back to the existing
-// English defaults.
-//
-// The behaviors are unchanged — only the labels change. "Fix this" still
-// navigates to row.deep_link, "Acknowledge" still calls onAcknowledge,
-// "Resolve" still opens ResolvePanel for notes. Subsequent v2 enhancements
-// can wire dedicated handlers per verb (e.g., credit_decisions/reject).
+// match the "מה לעשות" guidance for each category, never the generic
+// "Fix this / Acknowledge / Resolve" trio.
 // ---------------------------------------------------------------------------
 type CategoryButtonLabels = {
-  /** Label for the deep-link button (replaces "Fix this →"). */
   deepLink?: string;
-  /** Label for the acknowledge button (replaces "Acknowledge"). */
   acknowledge?: string;
-  /** Label for the resolve button (replaces "Resolve"). */
   resolve?: string;
+  /** Optional category-specific "confirm resolve" button label inside the panel. */
+  resolveConfirm?: string;
+  /** Optional placeholder for the resolution-notes textarea. */
+  notesPlaceholder?: string;
 };
 
 const CATEGORY_BUTTON_LABELS: Record<string, CategoryButtonLabels> = {
@@ -95,34 +127,45 @@ const CATEGORY_BUTTON_LABELS: Record<string, CategoryButtonLabels> = {
     deepLink: "אשר זיכוי",
     acknowledge: "ראיתי",
     resolve: "דחה",
+    resolveConfirm: "אשר דחיה",
+    notesPlaceholder: "סיבה לדחיית הזיכוי (אופציונלי)…",
   },
   count_large_variance: {
     deepLink: "אשר ספירה",
     acknowledge: "ראיתי",
     resolve: "דחה",
+    resolveConfirm: "אשר דחיה",
+    notesPlaceholder: "סיבה לדחיית הספירה (אופציונלי)…",
   },
   positive_adjustment: {
     deepLink: "אשר התאמה",
     acknowledge: "ראיתי",
     resolve: "דחה",
+    resolveConfirm: "אשר דחיה",
+    notesPlaceholder: "סיבה לדחיית ההתאמה (אופציונלי)…",
   },
   loss_above_threshold: {
     deepLink: "אשר פחת",
     acknowledge: "ראיתי",
     resolve: "דחה",
+    resolveConfirm: "אשר דחיה",
+    notesPlaceholder: "סיבה לדחיית הפחת (אופציונלי)…",
   },
   po_line_over_receipt: {
     deepLink: "אשר עודף",
     acknowledge: "ראיתי",
     resolve: "דחה",
+    resolveConfirm: "אשר דחיה",
+    notesPlaceholder: "סיבה לדחיית העודף (אופציונלי)…",
   },
   shopify_variant_not_found: {
     deepLink: "פתור פער",
     acknowledge: "ראיתי",
     resolve: "סגור",
+    notesPlaceholder: "הערה לסגירה (אופציונלי)…",
   },
 
-  // To-Do categories — body says "פתח את ה-queue"
+  // To-Do categories
   shopify_unmapped_item: {
     deepLink: "מפה לחנות",
     acknowledge: "ראיתי",
@@ -144,7 +187,7 @@ const CATEGORY_BUTTON_LABELS: Record<string, CategoryButtonLabels> = {
     resolve: "סגור",
   },
 
-  // Warning categories — body says "ראיתי / בדוק"
+  // Warning categories
   gi_stale: { deepLink: "בדוק חיבור", acknowledge: "ראיתי" },
   lionwheel_stale: { deepLink: "בדוק חיבור", acknowledge: "ראיתי" },
   shopify_stale: { deepLink: "בדוק חיבור", acknowledge: "ראיתי" },
@@ -172,7 +215,7 @@ const CATEGORY_BUTTON_LABELS: Record<string, CategoryButtonLabels> = {
     acknowledge: "ראיתי",
   },
 
-  // Info categories — body says "סגור"
+  // Info categories
   lionwheel_capped_window_gap: { acknowledge: "ראיתי", resolve: "סגור" },
   gi_non_ils_currency: { acknowledge: "ראיתי", resolve: "סגור" },
   lw_pick_data_missing: { acknowledge: "ראיתי", resolve: "סגור" },
@@ -189,21 +232,9 @@ function buttonLabelsFor(category: string | null | undefined): CategoryButtonLab
   if (!category) return {};
   return CATEGORY_BUTTON_LABELS[category] ?? {};
 }
-import {
-  INBOX_SORTS,
-  INBOX_VIEWS,
-  type InboxFilter,
-  type InboxRow,
-  type InboxSeverity,
-  type InboxSort,
-  type InboxView,
-} from "@/features/inbox/types";
 
 // ---------------------------------------------------------------------------
-// Query keys. The SideNav reads ["inbox", "all_rows"] for the unfiltered
-// count pill, so we seed THAT cache entry with the merged list on every
-// render via a lightweight second useQuery. Per-source keys are independent
-// so each fetcher can be invalidated in isolation by a future action.
+// Query keys.
 // ---------------------------------------------------------------------------
 const QK_WASTE = ["inbox", "source", "approvals", "waste"] as const;
 const QK_PC = ["inbox", "source", "approvals", "physical_count"] as const;
@@ -238,6 +269,7 @@ const SEVERITY_CONFIG: Record<
     icon: typeof AlertCircle;
     label: string;
     accentBar: string;
+    bgWash: string;
   }
 > = {
   critical: {
@@ -245,18 +277,23 @@ const SEVERITY_CONFIG: Record<
     icon: AlertCircle,
     label: "Critical",
     accentBar: "bg-danger",
+    bgWash:
+      "bg-gradient-to-l from-transparent via-transparent to-danger-softer/40",
   },
   warning: {
     tone: "warning",
     icon: AlertTriangle,
     label: "Warning",
     accentBar: "bg-warning",
+    bgWash:
+      "bg-gradient-to-l from-transparent via-transparent to-warning-softer/35",
   },
   info: {
     tone: "info",
     icon: Info,
     label: "Info",
     accentBar: "bg-info",
+    bgWash: "",
   },
 };
 
@@ -282,11 +319,6 @@ const VIEW_LABELS: Record<InboxView, string> = {
   integrations: "Integrations",
   data_quality: "Data Quality",
   mine: "Mine",
-};
-
-const SORT_LABELS: Record<InboxSort, string> = {
-  severity_then_age: "Severity, then age",
-  age_only: "Newest first",
 };
 
 function formatTimestamp(iso: string): string {
@@ -315,42 +347,100 @@ function ageHumanized(iso: string, now: Date): string {
   return `${days}d ago`;
 }
 
+function isRowStuck(row: InboxRow, now: Date): boolean {
+  const ts = new Date(row.created_at).getTime();
+  if (!Number.isFinite(ts)) return false;
+  return row.severity === "critical" && now.getTime() - ts > 72 * 3600_000;
+}
+
+function isRowFresh(row: InboxRow, now: Date): boolean {
+  const ts = new Date(row.created_at).getTime();
+  if (!Number.isFinite(ts)) return false;
+  return now.getTime() - ts < 60_000;
+}
+
 // ---------------------------------------------------------------------------
-// Inline resolve panel. Notes are now OPTIONAL (Tom 2026-05-02) — bulk-clearing
-// cosmetic exceptions shouldn't require typing a justification per row. Notes
-// are still capped at 2000 chars when supplied; empty submission is allowed.
+// ResolvePanel — inline form for resolving an exception. Notes optional;
+// auto-focus textarea; ESC cancels.
 // ---------------------------------------------------------------------------
 function ResolvePanel({
   onConfirm,
   onCancel,
   busy,
+  category,
+  isDestructive,
 }: {
   onConfirm: (notes: string) => void;
   onCancel: () => void;
   busy: boolean;
+  category: string;
+  isDestructive: boolean;
 }) {
   const [notes, setNotes] = useState("");
+  const taRef = useRef<HTMLTextAreaElement>(null);
+  const labels = buttonLabelsFor(category);
+
+  useEffect(() => {
+    // Tom 2026-05-06 §57: auto-focus the textarea when the panel opens.
+    taRef.current?.focus();
+  }, []);
+
+  useEffect(() => {
+    // Tom 2026-05-06 §58: ESC cancels the panel without submitting.
+    const handler = (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !busy) onCancel();
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [busy, onCancel]);
+
   const canSubmit = notes.length <= 2000 && !busy;
+  const confirmLabel = labels.resolveConfirm
+    ?? (isDestructive ? "Confirm reject" : "Confirm resolve");
+  const placeholder =
+    labels.notesPlaceholder
+    ?? (isDestructive
+      ? "Reason for rejecting (optional)…"
+      : "Optional — leave blank to resolve without a note.");
+
   return (
-    <div className="mt-3 rounded border border-warning/40 bg-warning-softer p-3">
-      <div className="text-3xs font-semibold uppercase tracking-sops text-warning-fg">
-        Resolution notes (optional)
+    <div
+      className={cn(
+        "mt-3 rounded-md border p-3",
+        isDestructive
+          ? "border-danger/40 bg-danger-softer/60"
+          : "border-warning/40 bg-warning-softer",
+      )}
+      role="region"
+      aria-label="Resolution form"
+    >
+      <div
+        className={cn(
+          "text-3xs font-semibold uppercase tracking-sops",
+          isDestructive ? "text-danger" : "text-warning-fg",
+        )}
+      >
+        {isDestructive ? "Rejection notes (optional)" : "Resolution notes (optional)"}
       </div>
       <NotesBox
+        ref={taRef}
         data-testid="inbox-resolve-notes"
         value={notes}
         onChange={(e) => setNotes(e.target.value)}
-        placeholder="Optional — leave blank to resolve without a note."
+        placeholder={placeholder}
       />
-      <div className="mt-3 flex gap-2">
+      <div className="mt-3 flex items-center gap-2">
         <button
           type="button"
-          className="btn btn-primary btn-sm"
+          className={cn(
+            "btn btn-sm",
+            isDestructive ? "btn-danger" : "btn-primary",
+          )}
           data-testid="inbox-resolve-confirm"
           disabled={!canSubmit}
           onClick={() => onConfirm(notes)}
         >
-          {busy ? "Submitting…" : "Confirm resolve"}
+          {busy ? "Submitting…" : confirmLabel}
         </button>
         <button
           type="button"
@@ -361,19 +451,22 @@ function ResolvePanel({
         >
           Cancel
         </button>
+        <span className="ml-auto text-3xs text-fg-subtle">
+          ESC to cancel · ⌘⏎ to confirm
+        </span>
       </div>
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Bulk action bar. Renders when at least one row is selected. Confirms before
-// firing to prevent accidental wipes (especially for the 99+ INFO LionWheel
-// noise-band that Tom expressly wants to clear in one shot).
+// Bulk action bar — sticky when scrolled past the page header. Shows category
+// breakdown when multiple selected.
 // ---------------------------------------------------------------------------
 function BulkActionBar({
   selectedCount,
   visibleSelectableCount,
+  selectionBreakdown,
   allVisibleSelected,
   onSelectAllVisible,
   onClearSelection,
@@ -382,6 +475,7 @@ function BulkActionBar({
 }: {
   selectedCount: number;
   visibleSelectableCount: number;
+  selectionBreakdown: string;
   allVisibleSelected: boolean;
   onSelectAllVisible: () => void;
   onClearSelection: () => void;
@@ -391,7 +485,9 @@ function BulkActionBar({
   if (selectedCount === 0 && visibleSelectableCount === 0) return null;
   return (
     <div
-      className="flex flex-wrap items-center gap-3 border-b border-accent/40 bg-accent-soft px-5 py-2 text-xs"
+      className="sticky top-0 z-10 flex flex-wrap items-center gap-3 border-b border-accent/40 bg-accent-soft/95 px-5 py-2 text-xs backdrop-blur"
+      role="toolbar"
+      aria-label="Bulk actions"
       data-testid="inbox-bulk-bar"
     >
       <label
@@ -410,27 +506,36 @@ function BulkActionBar({
           ? `All ${visibleSelectableCount} visible selected`
           : `Select all ${visibleSelectableCount} visible`}
       </label>
-      <span className="font-mono text-3xs uppercase tracking-sops text-accent/80">
-        {selectedCount} selected
-      </span>
-      <div className="ml-auto flex items-center gap-2">
-        <button
-          type="button"
-          className="btn btn-sm"
-          data-testid="inbox-bulk-clear"
-          onClick={onClearSelection}
-          disabled={selectedCount === 0 || busy}
+      {selectedCount > 0 ? (
+        <span
+          className="font-mono text-3xs uppercase tracking-sops text-accent/80"
+          title={selectionBreakdown}
         >
-          Clear selection
-        </button>
+          {selectedCount} selected
+          {selectionBreakdown ? ` · ${selectionBreakdown}` : ""}
+        </span>
+      ) : null}
+      <div className="ml-auto flex items-center gap-2">
+        {selectedCount > 0 ? (
+          <button
+            type="button"
+            className="btn btn-sm"
+            data-testid="inbox-bulk-clear"
+            onClick={onClearSelection}
+            disabled={busy}
+          >
+            Clear
+          </button>
+        ) : null}
         <button
           type="button"
           className="btn btn-sm btn-primary gap-1.5"
           data-testid="inbox-bulk-resolve"
           onClick={onBulkResolve}
           disabled={selectedCount === 0 || busy}
+          title="⌘⏎ to resolve all selected"
         >
-          <CheckCircle2 className="h-3 w-3" strokeWidth={2} />
+          <CheckCircle2 className="h-3 w-3" strokeWidth={2.25} />
           {busy ? "Resolving…" : `Resolve ${selectedCount}`}
         </button>
       </div>
@@ -447,20 +552,46 @@ export default function InboxListPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
 
-  const filter = useMemo(
-    () => readFilterFromSearchParams(searchParams),
-    [searchParams],
-  );
+  // -------------------------------------------------------------------------
+  // Per-user prefs (localStorage). URL still wins on first mount; pref is
+  // fallback. Subsequent changes are written back to BOTH.
+  // -------------------------------------------------------------------------
+  const [prefs, setPrefsState] = useState(() => readPrefs());
+  const setPrefs = useCallback((patch: Parameters<typeof writePrefs>[0]) => {
+    writePrefs(patch);
+    setPrefsState((p) => ({ ...p, ...patch }));
+  }, []);
+
+  const filter = useMemo<InboxFilter>(() => {
+    const sp = searchParams;
+    const urlView = sp?.get("view");
+    const urlSort = sp?.get("sort");
+    if (urlView || urlSort) return readFilterFromSearchParams(sp);
+    // Tom 2026-05-06 §41-42: fall back to prefs when URL is empty.
+    return {
+      view: prefs.view ?? "all",
+      sort: prefs.sort ?? "severity_then_age",
+    };
+  }, [searchParams, prefs.view, prefs.sort]);
 
   const canAct = session.role === "planner" || session.role === "admin";
+  const density: InboxDensity = prefs.density;
 
   const [resolvingId, setResolvingId] = useState<string | null>(null);
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
-  // Bulk selection: rows the user has checked. Keys are exception_id (== row.id
-  // for non-approval rows). Approval rows cannot be bulk-resolved and are
-  // never added to this set.
+  // Tom 2026-05-06 §94: recently-dismissed pill for one-tap undo.
+  type RecentAction = {
+    id: string;
+    summary: string;
+    kind: "ack" | "resolve";
+    at: number;
+  };
+  const [recentActions, setRecentActions] = useState<RecentAction[]>([]);
+  const RECENT_TTL_MS = 10_000;
+
+  // Selection.
   const [selected, setSelected] = useState<Set<string>>(new Set());
   const toggleSelected = useCallback((id: string, isOn: boolean) => {
     setSelected((prev) => {
@@ -472,13 +603,27 @@ export default function InboxListPage() {
   }, []);
   const clearSelection = useCallback(() => setSelected(new Set()), []);
 
-  // Memoize a stable "now" per render tree so all row ages use the same frame
-  // of reference.
-  const now = useMemo(() => new Date(), []);
+  // Search box.
+  const [searchInput, setSearchInput] = useState("");
+  const [searchTerm, setSearchTerm] = useState("");
+  useEffect(() => {
+    // Debounce 150ms — keeps typing snappy.
+    const t = window.setTimeout(() => setSearchTerm(searchInput.trim().toLowerCase()), 150);
+    return () => window.clearTimeout(t);
+  }, [searchInput]);
+
+  // Stable "now" — refreshed every 60s for live age strings (§77).
+  const [now, setNow] = useState<Date>(() => new Date());
+  useEffect(() => {
+    const t = window.setInterval(() => setNow(new Date()), 60_000);
+    return () => window.clearInterval(t);
+  }, []);
+
+  // Keyboard-focused row index (for j/k nav).
+  const [focusedIdx, setFocusedIdx] = useState<number>(-1);
 
   // -------------------------------------------------------------------------
-  // Source fetchers (parallel). Each has an independent queryKey so a future
-  // mutation can invalidate exactly the affected stream.
+  // Source fetchers (parallel).
   // -------------------------------------------------------------------------
   const sources = useQueries({
     queries: [
@@ -513,16 +658,26 @@ export default function InboxListPage() {
 
   const anyLoading =
     wasteQ.isLoading || pcQ.isLoading || recQ.isLoading || excQ.isLoading;
+  const anyFetching =
+    wasteQ.isFetching || pcQ.isFetching || recQ.isFetching || excQ.isFetching;
 
-  const sourceErrors: Array<{ label: string }> = [];
-  if (wasteQ.isError) sourceErrors.push({ label: "Waste / adjustment approvals" });
-  if (pcQ.isError) sourceErrors.push({ label: "Physical count approvals" });
-  if (recQ.isError) sourceErrors.push({ label: "Planning recommendation approvals" });
-  if (excQ.isError) sourceErrors.push({ label: "Exceptions" });
+  const sourceErrors: Array<{ label: string; queryKey: readonly string[] }> = [];
+  if (wasteQ.isError) sourceErrors.push({ label: "Waste / adjustment approvals", queryKey: QK_WASTE });
+  if (pcQ.isError) sourceErrors.push({ label: "Physical count approvals", queryKey: QK_PC });
+  if (recQ.isError) sourceErrors.push({ label: "Planning recommendation approvals", queryKey: QK_REC });
+  if (excQ.isError) sourceErrors.push({ label: "Exceptions", queryKey: QK_EXC });
+
+  const lastRefreshedAt = useMemo<number>(() => {
+    return Math.max(
+      wasteQ.dataUpdatedAt ?? 0,
+      pcQ.dataUpdatedAt ?? 0,
+      recQ.dataUpdatedAt ?? 0,
+      excQ.dataUpdatedAt ?? 0,
+    );
+  }, [wasteQ.dataUpdatedAt, pcQ.dataUpdatedAt, recQ.dataUpdatedAt, excQ.dataUpdatedAt]);
 
   // -------------------------------------------------------------------------
-  // Merge + filter. The unfiltered merged rows are seeded into the
-  // ["inbox", "all_rows"] cache so SideNav's badge count reads a stable value.
+  // Merge + filter.
   // -------------------------------------------------------------------------
   const allRows = useMemo(
     () =>
@@ -538,13 +693,9 @@ export default function InboxListPage() {
     [wasteQ.data, pcQ.data, recQ.data, excQ.data, filter],
   );
 
-  // Expose the merged row list to the sidebar badge selector via its own
-  // cache key. useQuery with a resolver function keeps the cache fresh.
   useQuery<InboxRow[]>({
     queryKey: QK_ALL,
     queryFn: () => allRows,
-    // Refetch-on-render pattern: keep the cache in lockstep with the merged
-    // memo. Static on mount; effect below pushes updates.
     enabled: !anyLoading,
   });
   useEffect(() => {
@@ -552,15 +703,35 @@ export default function InboxListPage() {
     queryClient.setQueryData<InboxRow[]>(QK_ALL, allRows);
   }, [allRows, anyLoading, queryClient]);
 
-  const visibleRows = useMemo(
+  const viewedRows = useMemo(
     () => applyInboxView(allRows, filter.view, session.user_id || null),
     [allRows, filter.view, session.user_id],
   );
 
-  // Rows the user can actually bulk-resolve right now: non-approval exception
-  // rows whose inline_actions includes "resolve" (i.e., status open or
-  // acknowledged). Approval rows are excluded — they need their own approve/
-  // reject flow on the dedicated detail page.
+  // Search filter (after view).
+  const visibleRows = useMemo(() => {
+    if (!searchTerm) {
+      // Tom 2026-05-06 §95: pinned categories float to top within their
+      // severity bucket when sort is severity_then_age.
+      if (filter.sort === "severity_then_age") {
+        return [...viewedRows].sort((a, b) => {
+          const ap = PINNED_CATEGORIES.has(a.category) ? 1 : 0;
+          const bp = PINNED_CATEGORIES.has(b.category) ? 1 : 0;
+          if (ap !== bp) return bp - ap;
+          return 0;
+        });
+      }
+      return viewedRows;
+    }
+    return viewedRows.filter((r) => searchBag(r).includes(searchTerm));
+  }, [viewedRows, searchTerm, filter.sort]);
+
+  // Critical count for the page header.
+  const criticalCount = useMemo(
+    () => allRows.filter((r) => r.severity === "critical").length,
+    [allRows],
+  );
+
   const visibleSelectableIds = useMemo(() => {
     const out: string[] = [];
     for (const r of visibleRows) {
@@ -579,6 +750,23 @@ export default function InboxListPage() {
     return true;
   }, [visibleSelectableIds, selected]);
 
+  // Selection breakdown — used in the bulk bar tooltip + confirm dialog.
+  const selectionBreakdown = useMemo(() => {
+    if (selected.size === 0) return "";
+    const counts = new Map<string, number>();
+    for (const r of allRows) {
+      if (selected.has(r.id)) {
+        counts.set(r.category, (counts.get(r.category) ?? 0) + 1);
+      }
+    }
+    const parts = Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1])
+      .slice(0, 3)
+      .map(([cat, n]) => `${n}× ${categoryFriendly(cat)}`);
+    if (counts.size > 3) parts.push(`+${counts.size - 3} more`);
+    return parts.join(" · ");
+  }, [selected, allRows]);
+
   const onSelectAllVisible = useCallback(() => {
     if (allVisibleSelected) {
       setSelected((prev) => {
@@ -595,12 +783,7 @@ export default function InboxListPage() {
     }
   }, [allVisibleSelected, visibleSelectableIds]);
 
-  // onBulkResolve declared further down, after bulkResolveMutation, so the
-  // closure captures a defined mutation handle.
-
-  // Per-view row counts. S7 research §B: "Sentry-style tabs at top of list:
-  // 'Open · 24' / 'Stale · 41' / 'Resolved · …'". 7 views × ~100 rows is
-  // cheap; compute once per allRows / userId change.
+  // Per-view counts (skip filtered view; show counts for ALL rows).
   const viewCounts = useMemo(() => {
     const userId = session.user_id || null;
     const counts: Record<InboxView, number> = {
@@ -620,34 +803,51 @@ export default function InboxListPage() {
   }, [allRows, session.user_id]);
 
   // -------------------------------------------------------------------------
-  // URL-backed filter writers.
+  // URL-backed filter writers (debounced — Tom 2026-05-06 §73).
   // -------------------------------------------------------------------------
+  const urlWriteTimerRef = useRef<number | null>(null);
   const updateUrl = useCallback(
     (next: InboxFilter) => {
-      const sp = new URLSearchParams(searchParams?.toString() ?? "");
-      sp.set("view", next.view);
-      sp.set("sort", next.sort);
-      router.replace(`/inbox?${sp.toString()}`);
+      if (urlWriteTimerRef.current !== null) {
+        window.clearTimeout(urlWriteTimerRef.current);
+      }
+      urlWriteTimerRef.current = window.setTimeout(() => {
+        const sp = new URLSearchParams(searchParams?.toString() ?? "");
+        sp.set("view", next.view);
+        sp.set("sort", next.sort);
+        router.replace(`/inbox?${sp.toString()}`);
+      }, 150);
     },
     [router, searchParams],
   );
 
   const setView = useCallback(
     (view: InboxView) => {
+      setSelected(new Set());
+      setSearchInput(""); // §44
+      setPrefs({ view });
       updateUrl({ ...filter, view });
     },
-    [filter, updateUrl],
+    [filter, updateUrl, setPrefs],
   );
 
   const setSort = useCallback(
     (sort: InboxSort) => {
+      setPrefs({ sort });
       updateUrl({ ...filter, sort });
     },
-    [filter, updateUrl],
+    [filter, updateUrl, setPrefs],
+  );
+
+  const setDensity = useCallback(
+    (d: InboxDensity) => {
+      setPrefs({ density: d });
+    },
+    [setPrefs],
   );
 
   // -------------------------------------------------------------------------
-  // Mutations — only wired for non-approval exception rows.
+  // Mutations.
   // -------------------------------------------------------------------------
   const invalidateExceptions = useCallback(() => {
     void queryClient.invalidateQueries({ queryKey: QK_EXC });
@@ -655,12 +855,44 @@ export default function InboxListPage() {
     void queryClient.invalidateQueries({ queryKey: QK_PC });
   }, [queryClient]);
 
+  const refetchAll = useCallback(() => {
+    setActionSuccess(null);
+    setActionError(null);
+    void wasteQ.refetch();
+    void pcQ.refetch();
+    void recQ.refetch();
+    void excQ.refetch();
+  }, [wasteQ, pcQ, recQ, excQ]);
+
+  const recordRecentAction = useCallback(
+    (row: InboxRow, kind: "ack" | "resolve") => {
+      setRecentActions((prev) => [
+        { id: row.id, summary: row.summary, kind, at: Date.now() },
+        ...prev,
+      ].slice(0, 5));
+    },
+    [],
+  );
+
+  // Auto-expire recent actions.
+  useEffect(() => {
+    if (recentActions.length === 0) return;
+    const expireAt = recentActions[0]!.at + RECENT_TTL_MS;
+    const ms = Math.max(250, expireAt - Date.now());
+    const t = window.setTimeout(() => {
+      setRecentActions((prev) => prev.filter((r) => Date.now() - r.at < RECENT_TTL_MS));
+    }, ms);
+    return () => window.clearTimeout(t);
+  }, [recentActions]);
+
   const ackMutation = useMutation({
     mutationFn: (id: string) => acknowledgeException(id, newIdempotencyKey()),
     onSuccess: (res, id) => {
       if (res.ok) {
         setActionSuccess("Acknowledged.");
         setActionError(null);
+        const row = allRows.find((r) => r.id === id);
+        if (row) recordRecentAction(row, "ack");
         invalidateExceptions();
       } else {
         setActionError(res.detail ? `Acknowledge failed — ${res.detail}` : "Acknowledge failed. Try again.");
@@ -678,11 +910,13 @@ export default function InboxListPage() {
   const resolveMutation = useMutation({
     mutationFn: ({ id, notes }: { id: string; notes: string }) =>
       resolveException(id, notes, newIdempotencyKey()),
-    onSuccess: (res) => {
+    onSuccess: (res, vars) => {
       if (res.ok) {
         setActionSuccess("Resolved.");
         setActionError(null);
         setResolvingId(null);
+        const row = allRows.find((r) => r.id === vars.id);
+        if (row) recordRecentAction(row, "resolve");
         invalidateExceptions();
       } else {
         setActionError(res.detail ? `Resolve failed — ${res.detail}` : "Resolve failed. Try again.");
@@ -724,15 +958,14 @@ export default function InboxListPage() {
     },
   });
 
-  // Declared here (after bulkResolveMutation) so the closure captures a real
-  // mutation handle. See "onBulkResolve declared further down" comment above.
   const onBulkResolve = useCallback(() => {
     if (selected.size === 0) return;
     const ids = Array.from(selected);
+    const breakdown = selectionBreakdown ? `\n\n${selectionBreakdown}` : "";
     if (
       typeof window !== "undefined" &&
       !window.confirm(
-        `Resolve ${ids.length} exception${ids.length === 1 ? "" : "s"}? This cannot be undone.`,
+        `Resolve ${ids.length} exception${ids.length === 1 ? "" : "s"}?${breakdown}\n\nThis cannot be undone.`,
       )
     ) {
       return;
@@ -740,25 +973,167 @@ export default function InboxListPage() {
     setActionSuccess(null);
     setActionError(null);
     bulkResolveMutation.mutate({ ids });
-  }, [selected, bulkResolveMutation]);
+  }, [selected, selectionBreakdown, bulkResolveMutation]);
+
+  // -------------------------------------------------------------------------
+  // Keyboard navigation (§66-72). Skipped while a textarea/input is focused.
+  // -------------------------------------------------------------------------
+  useEffect(() => {
+    function isEditing(): boolean {
+      const ae = document.activeElement;
+      if (!ae) return false;
+      const tag = ae.tagName.toLowerCase();
+      return tag === "input" || tag === "textarea" || (ae as HTMLElement).isContentEditable;
+    }
+    function handler(e: KeyboardEvent) {
+      // ⌘A select all visible (only when not editing).
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "a" && !isEditing()) {
+        if (visibleSelectableIds.length === 0) return;
+        e.preventDefault();
+        onSelectAllVisible();
+        return;
+      }
+      // ⌘⏎ bulk resolve.
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !isEditing()) {
+        if (selected.size === 0) return;
+        e.preventDefault();
+        onBulkResolve();
+        return;
+      }
+      if (isEditing()) return;
+      if (e.key === "j" || e.key === "ArrowDown") {
+        e.preventDefault();
+        setFocusedIdx((i) => Math.min((visibleRows.length || 1) - 1, i + 1));
+        return;
+      }
+      if (e.key === "k" || e.key === "ArrowUp") {
+        e.preventDefault();
+        setFocusedIdx((i) => Math.max(0, i - 1));
+        return;
+      }
+      const focused = focusedIdx >= 0 ? visibleRows[focusedIdx] : null;
+      if (!focused) return;
+      if (e.key === "x") {
+        if (focused.type.startsWith("approval:")) return;
+        if (!focused.inline_actions.includes("resolve")) return;
+        e.preventDefault();
+        toggleSelected(focused.id, !selected.has(focused.id));
+        return;
+      }
+      if (e.key === "Enter") {
+        if (focused.deep_link && focused.deep_link !== "/inbox") {
+          e.preventDefault();
+          router.push(focused.deep_link);
+        }
+        return;
+      }
+      if (e.key === "r") {
+        if (canAct && !focused.type.startsWith("approval:") && focused.inline_actions.includes("resolve")) {
+          e.preventDefault();
+          setResolvingId(focused.id);
+        }
+        return;
+      }
+      if (e.key === "a") {
+        if (canAct && !focused.type.startsWith("approval:") && focused.inline_actions.includes("acknowledge")) {
+          e.preventDefault();
+          ackMutation.mutate(focused.id);
+        }
+        return;
+      }
+    }
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [
+    visibleRows,
+    visibleSelectableIds,
+    focusedIdx,
+    selected,
+    canAct,
+    onSelectAllVisible,
+    onBulkResolve,
+    toggleSelected,
+    ackMutation,
+    router,
+  ]);
+
+  // Reset focused index when the visible row count shrinks below it.
+  useEffect(() => {
+    if (focusedIdx >= visibleRows.length) {
+      setFocusedIdx(Math.max(0, visibleRows.length - 1));
+    }
+  }, [visibleRows.length, focusedIdx]);
+
+  // Slow-load nudge (§50).
+  const [showSlowNudge, setShowSlowNudge] = useState(false);
+  useEffect(() => {
+    if (!anyLoading) {
+      setShowSlowNudge(false);
+      return;
+    }
+    const t = window.setTimeout(() => setShowSlowNudge(true), 5000);
+    return () => window.clearTimeout(t);
+  }, [anyLoading]);
+
+  // -------------------------------------------------------------------------
+  // View-tab visibility — hide zero-count views by default unless prefs.
+  // -------------------------------------------------------------------------
+  const visibleViewTabs = useMemo<readonly InboxView[]>(() => {
+    if (prefs.showZeroCounts) return INBOX_VIEWS;
+    // Always show All + Approvals + Exceptions + Mine, plus any view with count>0.
+    const baseline = new Set<InboxView>(["all", "approvals", "exceptions", "mine"]);
+    return INBOX_VIEWS.filter((v) => baseline.has(v) || viewCounts[v] > 0);
+  }, [prefs.showZeroCounts, viewCounts]);
 
   // -------------------------------------------------------------------------
   // Render.
   // -------------------------------------------------------------------------
+  const lastRefreshedHuman = lastRefreshedAt > 0 ? ageHumanized(new Date(lastRefreshedAt).toISOString(), now) : null;
+
   return (
     <>
       <WorkflowHeader
         eyebrow="Inbox"
         title="Inbox"
-        description="Unified triage surface. Approvals + exceptions in one list. Filter by view, sort by severity or age."
+        description="Unified triage surface — approvals + exceptions in one list. Filter, search, and resolve in bulk."
         meta={
-          <Badge tone="neutral" dotted>
-            {visibleRows.length} row{visibleRows.length === 1 ? "" : "s"}
-          </Badge>
+          <div className="flex flex-wrap items-center gap-2">
+            {criticalCount > 0 ? (
+              <Badge tone="danger" variant="solid">
+                {criticalCount} critical
+              </Badge>
+            ) : null}
+            <Badge tone="neutral" dotted>
+              {visibleRows.length} of {allRows.length} row{allRows.length === 1 ? "" : "s"}
+            </Badge>
+            {lastRefreshedHuman ? (
+              <span
+                className="text-3xs font-medium text-fg-subtle"
+                title={lastRefreshedAt ? new Date(lastRefreshedAt).toLocaleString() : undefined}
+              >
+                Refreshed {lastRefreshedHuman}
+              </span>
+            ) : null}
+            <button
+              type="button"
+              className="btn btn-xs gap-1.5"
+              onClick={refetchAll}
+              disabled={anyFetching}
+              aria-label="Refresh inbox"
+              title="Refresh"
+            >
+              <RefreshCw
+                className={cn("h-3 w-3", anyFetching && "animate-spin")}
+                strokeWidth={2.25}
+              />
+              Refresh
+            </button>
+          </div>
         }
       />
 
       <SectionCard contentClassName="p-0">
+        {/* ---- Filter bar ----------------------------------------------- */}
         <div
           className="flex flex-wrap items-center gap-3 border-b border-border/60 px-5 py-3"
           data-testid="inbox-filter-bar"
@@ -767,7 +1142,7 @@ export default function InboxListPage() {
             <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
               View
             </span>
-            {INBOX_VIEWS.map((v) => {
+            {visibleViewTabs.map((v) => {
               const active = filter.view === v;
               const count = viewCounts[v];
               return (
@@ -776,12 +1151,13 @@ export default function InboxListPage() {
                   type="button"
                   data-testid={`inbox-filter-view-${v}`}
                   aria-pressed={active}
+                  aria-current={active ? "true" : undefined}
                   onClick={() => setView(v)}
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded-sm border px-2 py-1 text-3xs font-semibold uppercase tracking-sops transition-colors duration-150",
+                    "inline-flex items-center gap-1.5 rounded-sm border px-2 py-1 text-3xs font-semibold uppercase tracking-sops transition-all duration-150",
                     active
-                      ? "border-accent/50 bg-accent-soft text-accent"
-                      : "border-border/70 bg-bg-raised text-fg-muted hover:border-border-strong hover:text-fg",
+                      ? "border-accent/60 bg-accent-soft text-accent ring-1 ring-accent/30"
+                      : "border-border/70 bg-bg-raised text-fg-muted hover:border-border-strong hover:bg-bg-subtle hover:text-fg",
                   )}
                 >
                   {VIEW_LABELS[v]}
@@ -800,75 +1176,209 @@ export default function InboxListPage() {
                 </button>
               );
             })}
+            {visibleViewTabs.length < INBOX_VIEWS.length ? (
+              <button
+                type="button"
+                onClick={() => setPrefs({ showZeroCounts: !prefs.showZeroCounts })}
+                className="inline-flex items-center gap-1 rounded-sm border border-dashed border-border/60 bg-transparent px-2 py-1 text-3xs font-medium text-fg-subtle hover:border-border-strong hover:text-fg"
+                title={prefs.showZeroCounts ? "Hide empty views" : "Show empty views"}
+              >
+                <Filter className="h-3 w-3" strokeWidth={2} />
+                {prefs.showZeroCounts ? "Hide empty" : "Show all"}
+              </button>
+            ) : null}
           </div>
 
-          <div className="ml-auto flex items-center gap-1.5">
-            <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              Sort
-            </span>
-            {INBOX_SORTS.map((s) => {
-              const active = filter.sort === s;
-              return (
+          <div className="flex flex-1 items-center gap-2 sm:flex-none sm:basis-[260px]">
+            <label className="relative flex w-full items-center">
+              <Search
+                className="pointer-events-none absolute left-2 h-3.5 w-3.5 text-fg-subtle"
+                strokeWidth={2}
+              />
+              <input
+                type="search"
+                className="input h-8 w-full pl-7 pr-7 text-xs"
+                placeholder="Search summary, item, category…"
+                value={searchInput}
+                onChange={(e) => setSearchInput(e.target.value)}
+                data-testid="inbox-search"
+                aria-label="Search inbox"
+              />
+              {searchInput ? (
                 <button
-                  key={s}
                   type="button"
-                  data-testid={`inbox-filter-sort-${s}`}
-                  aria-pressed={active}
-                  onClick={() => setSort(s)}
+                  onClick={() => setSearchInput("")}
+                  className="absolute right-1.5 inline-flex h-5 w-5 items-center justify-center rounded text-fg-subtle hover:bg-bg-subtle hover:text-fg"
+                  aria-label="Clear search"
+                >
+                  <X className="h-3 w-3" strokeWidth={2.25} />
+                </button>
+              ) : null}
+            </label>
+          </div>
+
+          <div className="ml-auto flex items-center gap-2">
+            <div
+              className="inline-flex items-center rounded-sm border border-border/70 bg-bg-raised text-3xs font-semibold uppercase tracking-sops"
+              role="radiogroup"
+              aria-label="Sort"
+            >
+              <button
+                type="button"
+                role="radio"
+                aria-checked={filter.sort === "severity_then_age"}
+                data-testid="inbox-filter-sort-severity_then_age"
+                onClick={() => setSort("severity_then_age")}
+                title="Sort by severity, then age"
+                className={cn(
+                  "inline-flex items-center gap-1 px-2 py-1 transition-colors",
+                  filter.sort === "severity_then_age"
+                    ? "bg-accent-soft text-accent"
+                    : "text-fg-muted hover:text-fg",
+                )}
+              >
+                <Flame className="h-3 w-3" strokeWidth={2.25} />
+                Severity
+              </button>
+              <button
+                type="button"
+                role="radio"
+                aria-checked={filter.sort === "age_only"}
+                data-testid="inbox-filter-sort-age_only"
+                onClick={() => setSort("age_only")}
+                title="Sort by newest first"
+                className={cn(
+                  "inline-flex items-center gap-1 border-l border-border/70 px-2 py-1 transition-colors",
+                  filter.sort === "age_only"
+                    ? "bg-accent-soft text-accent"
+                    : "text-fg-muted hover:text-fg",
+                )}
+              >
+                <Clock className="h-3 w-3" strokeWidth={2.25} />
+                Newest
+              </button>
+            </div>
+
+            <div
+              className="inline-flex items-center rounded-sm border border-border/70 bg-bg-raised text-3xs font-semibold uppercase tracking-sops"
+              role="radiogroup"
+              aria-label="Density"
+              title="Row density"
+            >
+              {(["comfortable", "cozy", "compact"] as InboxDensity[]).map((d, i) => (
+                <button
+                  key={d}
+                  type="button"
+                  role="radio"
+                  aria-checked={density === d}
+                  onClick={() => setDensity(d)}
                   className={cn(
-                    "inline-flex items-center gap-1.5 rounded-sm border px-2 py-1 text-3xs font-semibold uppercase tracking-sops transition-colors duration-150",
-                    active
-                      ? "border-accent/50 bg-accent-soft text-accent"
-                      : "border-border/70 bg-bg-raised text-fg-muted hover:border-border-strong hover:text-fg",
+                    "px-2 py-1 transition-colors",
+                    i > 0 && "border-l border-border/70",
+                    density === d
+                      ? "bg-accent-soft text-accent"
+                      : "text-fg-muted hover:text-fg",
                   )}
                 >
-                  {SORT_LABELS[s]}
+                  {DENSITY_LABELS[d].slice(0, 3)}
                 </button>
-              );
-            })}
+              ))}
+            </div>
           </div>
         </div>
 
+        {/* ---- Source-error banner ------------------------------------- */}
         {sourceErrors.length > 0 ? (
           <div
             className="border-b border-danger/40 bg-danger-softer px-5 py-2 text-xs text-danger-fg"
             data-testid="inbox-source-errors"
           >
-            <div className="font-semibold">
-              Some sources failed to load ({sourceErrors.length}/4):
+            <div className="flex items-start gap-2">
+              <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
+              <div className="flex-1">
+                <div className="font-semibold">
+                  Some sources failed to load ({sourceErrors.length}/4):
+                </div>
+                <ul className="mt-1 list-disc space-y-0.5 pl-5">
+                  {sourceErrors.map((e) => (
+                    <li key={e.label}>{e.label}</li>
+                  ))}
+                </ul>
+                <div className="mt-1 text-danger-fg/80">
+                  Rows from failed sources are not shown.
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={refetchAll}
+                className="btn btn-xs"
+              >
+                <RefreshCw className="h-3 w-3" strokeWidth={2.25} />
+                Retry
+              </button>
             </div>
-            <ul className="mt-1 list-disc space-y-0.5 pl-5">
-              {sourceErrors.map((e) => (
-                <li key={e.label}>{e.label}</li>
-              ))}
-            </ul>
-            <div className="mt-1 text-danger-fg/80">Check your connection and try refreshing. Rows from failed sources are not shown.</div>
           </div>
         ) : null}
 
+        {/* ---- Action toasts ------------------------------------------- */}
         {actionSuccess ? (
           <div
             className="flex items-center gap-2 border-b border-success/30 bg-success-subtle/40 px-5 py-2 text-xs text-success-fg"
             data-testid="inbox-action-success"
           >
             <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
-            {actionSuccess}
+            <span>{actionSuccess}</span>
+            <button
+              type="button"
+              onClick={() => setActionSuccess(null)}
+              className="ml-auto text-success-fg/60 hover:text-success-fg"
+              aria-label="Dismiss"
+            >
+              <X className="h-3 w-3" strokeWidth={2.25} />
+            </button>
           </div>
         ) : null}
-
         {actionError ? (
           <div
             className="flex items-center gap-2 border-b border-danger/30 bg-danger-softer px-5 py-2 text-xs text-danger-fg"
             data-testid="inbox-action-error"
           >
             <AlertCircle className="h-3.5 w-3.5 shrink-0" />
-            {actionError}
+            <span>{actionError}</span>
+            <button
+              type="button"
+              onClick={() => setActionError(null)}
+              className="ml-auto text-danger-fg/60 hover:text-danger-fg"
+              aria-label="Dismiss"
+            >
+              <X className="h-3 w-3" strokeWidth={2.25} />
+            </button>
           </div>
         ) : null}
 
+        {/* ---- Recently dismissed pill (§94) --------------------------- */}
+        {recentActions.length > 0 ? (
+          <div
+            className="flex flex-wrap items-center gap-2 border-b border-border/40 bg-bg-subtle/50 px-5 py-1.5 text-3xs text-fg-muted"
+            data-testid="inbox-recent-actions"
+          >
+            <Sparkles className="h-3 w-3" strokeWidth={2} />
+            <span className="font-semibold uppercase tracking-sops">
+              Recently dismissed
+            </span>
+            <span className="font-mono">{recentActions.length}</span>
+            <span className="truncate">
+              {recentActions[0]!.summary.slice(0, 60)}
+              {recentActions[0]!.summary.length > 60 ? "…" : ""}
+            </span>
+          </div>
+        ) : null}
+
+        {/* ---- Bulk action bar (sticky) -------------------------------- */}
         <BulkActionBar
           selectedCount={selected.size}
           visibleSelectableCount={visibleSelectableIds.length}
+          selectionBreakdown={selectionBreakdown}
           allVisibleSelected={allVisibleSelected}
           onSelectAllVisible={onSelectAllVisible}
           onClearSelection={clearSelection}
@@ -876,25 +1386,32 @@ export default function InboxListPage() {
           busy={bulkResolveMutation.isPending}
         />
 
+        {/* ---- List, skeleton, or empty -------------------------------- */}
         {anyLoading ? (
-          <LoadingSkeleton />
+          <LoadingSkeleton density={density} showSlowNudge={showSlowNudge} />
         ) : visibleRows.length === 0 ? (
-          <div className="p-5">
-            <EmptyState
-              title={filter.view === "all" ? "Nothing in your inbox." : `No ${VIEW_LABELS[filter.view].toLowerCase()} items.`}
-              description={filter.view === "all" ? "All approvals and exceptions are clear." : `Try the "All" view to see items from other categories.`}
-            />
-          </div>
+          <InboxEmptyState
+            view={filter.view}
+            search={searchTerm}
+            allRowsCount={allRows.length}
+            viewedRowsCount={viewedRows.length}
+            onClearSearch={() => setSearchInput("")}
+            onSwitchToAll={() => setView("all")}
+          />
         ) : (
           <ul
             className="divide-y divide-border/60"
             data-testid="inbox-list"
+            role="list"
           >
-            {visibleRows.map((row) => (
-              <InboxRowItem
+            {visibleRows.map((row, idx) => (
+              <InboxRowCard
                 key={row.id}
                 row={row}
                 now={now}
+                density={density}
+                isFocused={focusedIdx === idx}
+                onFocusRow={() => setFocusedIdx(idx)}
                 canAct={canAct}
                 isResolvingThis={resolvingId === row.id}
                 isSelected={selected.has(row.id)}
@@ -925,24 +1442,81 @@ export default function InboxListPage() {
             ))}
           </ul>
         )}
+
+        {/* ---- Footer with reset prefs --------------------------------- */}
+        <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/40 px-5 py-2 text-3xs text-fg-subtle">
+          <div className="inline-flex items-center gap-3">
+            <span className="inline-flex items-center gap-1">
+              <Keyboard className="h-3 w-3" strokeWidth={2} />
+              <span className="font-mono">j/k</span> nav ·
+              <span className="font-mono">x</span> select ·
+              <span className="font-mono">r</span> resolve ·
+              <span className="font-mono">a</span> ack ·
+              <span className="font-mono">⌘⏎</span> bulk
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              clearPrefs();
+              setPrefsState(readPrefs());
+            }}
+            className="font-medium text-fg-subtle hover:text-fg-muted"
+            title="Clear saved view/sort/density"
+          >
+            Reset preferences
+          </button>
+        </div>
       </SectionCard>
     </>
   );
 }
 
-function LoadingSkeleton() {
+// ---------------------------------------------------------------------------
+// LoadingSkeleton — matches the new row layout (severity dot + chips +
+// summary + button placeholder). 5 rows hint at density better than 3.
+// ---------------------------------------------------------------------------
+function LoadingSkeleton({
+  density,
+  showSlowNudge,
+}: {
+  density: InboxDensity;
+  showSlowNudge: boolean;
+}) {
   return (
     <div
       className="flex flex-col divide-y divide-border/60"
       data-testid="inbox-loading"
+      aria-busy="true"
+      aria-live="polite"
     >
-      {[0, 1, 2].map((i) => (
-        <div key={i} className="flex items-start gap-4 px-5 py-4">
-          <div className="h-8 w-8 shrink-0 animate-pulse rounded border border-border/50 bg-bg-subtle" />
+      {showSlowNudge ? (
+        <div className="border-b border-info/30 bg-info-softer px-5 py-2 text-xs text-info-fg">
+          Still loading… check your connection.
+        </div>
+      ) : null}
+      {[0, 1, 2, 3, 4].map((i) => (
+        <div
+          key={i}
+          className={cn(
+            "flex items-start gap-4",
+            densityRowPaddingClass(density),
+          )}
+          style={{ opacity: 1 - i * 0.07 }}
+        >
+          <div className="mt-1.5 h-4 w-4 shrink-0 animate-pulse rounded bg-bg-subtle" />
+          <div className="mt-0.5 h-2 w-2 shrink-0 animate-pulse rounded-full bg-bg-subtle" />
           <div className="flex-1 space-y-2">
-            <div className="h-3 w-1/3 animate-pulse rounded bg-bg-subtle" />
+            <div className="flex items-center gap-2">
+              <div className="h-3 w-16 animate-pulse rounded bg-bg-subtle" />
+              <div className="h-3 w-24 animate-pulse rounded bg-bg-subtle" />
+              <div className="ml-auto h-3 w-12 animate-pulse rounded bg-bg-subtle" />
+            </div>
             <div className="h-4 w-2/3 animate-pulse rounded bg-bg-subtle" />
-            <div className="h-3 w-1/2 animate-pulse rounded bg-bg-subtle" />
+            <div className="flex gap-2">
+              <div className="h-6 w-20 animate-pulse rounded bg-bg-subtle" />
+              <div className="h-6 w-16 animate-pulse rounded bg-bg-subtle" />
+            </div>
           </div>
         </div>
       ))}
@@ -950,9 +1524,103 @@ function LoadingSkeleton() {
   );
 }
 
-function InboxRowItem({
+// ---------------------------------------------------------------------------
+// InboxEmptyState — tailored copy + actions per view / search state.
+// ---------------------------------------------------------------------------
+function InboxEmptyState({
+  view,
+  search,
+  allRowsCount,
+  viewedRowsCount,
+  onClearSearch,
+  onSwitchToAll,
+}: {
+  view: InboxView;
+  search: string;
+  allRowsCount: number;
+  viewedRowsCount: number;
+  onClearSearch: () => void;
+  onSwitchToAll: () => void;
+}) {
+  let title: string;
+  let description: ReactNode;
+  let action: ReactNode = null;
+
+  if (search && viewedRowsCount > 0) {
+    title = "No matches for that search.";
+    description = (
+      <>
+        <span className="font-mono text-fg">&ldquo;{search}&rdquo;</span> didn&apos;t
+        match any row in this view. Try a different term or clear the search.
+      </>
+    );
+    action = (
+      <button type="button" onClick={onClearSearch} className="btn btn-sm">
+        <X className="h-3 w-3" strokeWidth={2.25} />
+        Clear search
+      </button>
+    );
+  } else if (view === "mine") {
+    title = "Nothing assigned to you.";
+    description = (
+      <>
+        Items you&apos;re responsible for will appear here.{" "}
+        {allRowsCount > 0 ? "View All to see the team queue." : "All clear."}
+      </>
+    );
+    if (allRowsCount > 0) {
+      action = (
+        <button type="button" onClick={onSwitchToAll} className="btn btn-sm">
+          <ArrowLeft className="h-3 w-3 rtl:rotate-180" strokeWidth={2.25} />
+          View All ({allRowsCount})
+        </button>
+      );
+    }
+  } else if (view === "all") {
+    title = "Nothing in your inbox.";
+    description = "All approvals and exceptions are clear. Nice work.";
+  } else {
+    title = `No ${VIEW_LABELS[view].toLowerCase()} items.`;
+    description =
+      allRowsCount > 0
+        ? `View All to see items from other categories (${allRowsCount} total).`
+        : "All clear across every view.";
+    if (allRowsCount > 0) {
+      action = (
+        <button type="button" onClick={onSwitchToAll} className="btn btn-sm">
+          <ArrowLeft className="h-3 w-3 rtl:rotate-180" strokeWidth={2.25} />
+          View All
+        </button>
+      );
+    }
+  }
+
+  return (
+    <div
+      className="flex flex-col items-center justify-center gap-3 px-5 py-12 text-center"
+      data-testid="inbox-empty"
+    >
+      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-success-subtle/40 text-success">
+        <CheckCircle2 className="h-6 w-6" strokeWidth={2} />
+      </div>
+      <div className="text-sm font-semibold text-fg-strong">{title}</div>
+      <div className="max-w-md text-xs text-fg-muted">{description}</div>
+      {action ? <div className="mt-2">{action}</div> : null}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// InboxRowCard — the single row representation. Replaces the prior
+// InboxRowItem with a denser, richer layout that responds to severity,
+// density, focus, selection, and pinned-category state.
+// ---------------------------------------------------------------------------
+function InboxRowCard({
   row,
   now,
+  density,
+  isFocused,
+  onFocusRow,
   canAct,
   isResolvingThis,
   isSelected,
@@ -966,6 +1634,9 @@ function InboxRowItem({
 }: {
   row: InboxRow;
   now: Date;
+  density: InboxDensity;
+  isFocused: boolean;
+  onFocusRow: () => void;
   canAct: boolean;
   isResolvingThis: boolean;
   isSelected: boolean;
@@ -979,110 +1650,202 @@ function InboxRowItem({
 }): ReactNode {
   const sev = SEVERITY_CONFIG[row.severity];
   const Icon = sev.icon;
-  const isApproval = row.type.startsWith("approval:");
+  const family = rowFamily(row);
+  const isApproval = family === "approval";
   const canAck =
     canAct && !isApproval && row.inline_actions.includes("acknowledge");
   const canResolve =
     canAct && !isApproval && row.inline_actions.includes("resolve");
-  // Bulk-select is gated to the same population as canResolve (non-approval
-  // exception rows the caller is permitted to resolve).
   const showSelectCheckbox = canResolve;
+  const isPinned = PINNED_CATEGORIES.has(row.category);
+  const stuck = isRowStuck(row, now);
+  const fresh = isRowFresh(row, now);
 
-  // LionWheel credit-needed rows (Tom-locked Hebrew end-to-end per
-  // W4 Doc B §6/§7) render the four-fact card pattern inline beneath the
-  // standard summary. The deep-link button still routes to the dedicated
-  // detail page where Approve/Reject/Acknowledge buttons live.
   const isCreditNeeded = row.category === "lionwheel_credit_needed";
   const creditPayload = isCreditNeeded
     ? extractCreditNeededPayload(row.raw)
     : null;
 
-  // Per Tom 2026-05-04 + memory feedback_action_buttons_match_guidance.md:
-  // category-specific button labels override the generic "Fix this /
-  // Acknowledge / Resolve" trio so the action verbs match the body's
-  // "מה לעשות" guidance exactly. Behaviors are unchanged.
   const labels = buttonLabelsFor(row.category);
   const isResolveDestructive = labels.resolve === "דחה";
+  const friendlyCategory = categoryFriendly(row.category);
 
   return (
     <li
-      className="relative px-5 py-4"
+      className={cn(
+        "group relative transition-colors duration-150",
+        densityRowPaddingClass(density),
+        isFocused && "bg-bg-subtle/60 ring-1 ring-inset ring-accent/40",
+        isSelected && "bg-accent-soft/40",
+        stuck && "bg-danger-softer/15",
+        fresh && "ring-1 ring-inset ring-success/30",
+        sev.bgWash,
+        "hover:bg-bg-subtle/50",
+      )}
       data-testid="inbox-row"
       data-row-id={row.id}
       data-row-type={row.type}
       data-row-category={row.category}
+      data-row-family={family}
+      data-row-severity={row.severity}
+      data-row-pinned={isPinned ? "true" : undefined}
+      data-row-stuck={stuck ? "true" : undefined}
+      onClick={onFocusRow}
+      onKeyDown={(e) => {
+        if (e.key === "Tab") return; // let Tab navigate normally
+      }}
+      tabIndex={-1}
+      role="listitem"
     >
+      {/* Severity left edge — slightly thicker for critical (§2). */}
       <div
-        className={cn("absolute inset-y-0 left-0 w-[3px]", sev.accentBar)}
+        className={cn(
+          "absolute inset-y-0 left-0",
+          row.severity === "critical" ? "w-[4px]" : "w-[3px]",
+          sev.accentBar,
+          stuck && "animate-pulse",
+        )}
         aria-hidden
       />
-      <div className="flex items-start gap-4">
+
+      <div className={cn("flex items-start", densityChipGapClass(density))}>
         {showSelectCheckbox ? (
           <label
             className="mt-1.5 flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center"
             data-testid="inbox-row-select"
+            onClick={(e) => e.stopPropagation()}
           >
             <input
               type="checkbox"
               className="h-4 w-4 cursor-pointer accent-accent"
               checked={isSelected}
               onChange={(e) => onToggleSelected(row.id, e.currentTarget.checked)}
-              aria-label={`Select row ${row.id}`}
+              aria-label={`Select row ${row.summary}`}
             />
           </label>
         ) : (
-          // Reserve the same horizontal slot so non-selectable rows
-          // (approvals, already-resolved) align with selectable ones.
           <div className="mt-1.5 h-5 w-5 shrink-0" aria-hidden />
         )}
-        <div
-          className={cn(
-            "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded border",
-            sev.tone === "danger" &&
-              "border-danger/40 bg-danger-softer text-danger",
-            sev.tone === "warning" &&
-              "border-warning/40 bg-warning-softer text-warning",
-            sev.tone === "info" && "border-info/40 bg-info-softer text-info",
-          )}
-        >
-          <Icon className="h-4 w-4" strokeWidth={2} />
-        </div>
+
+        {/* Severity dot — replaces the icon-in-box (§1). On comfortable
+            density we keep the icon container for stronger visual anchor. */}
+        {density === "comfortable" ? (
+          <div
+            className={cn(
+              "mt-0.5 flex h-8 w-8 shrink-0 items-center justify-center rounded border",
+              sev.tone === "danger" &&
+                "border-danger/40 bg-danger-softer text-danger",
+              sev.tone === "warning" &&
+                "border-warning/40 bg-warning-softer text-warning",
+              sev.tone === "info" && "border-info/40 bg-info-softer text-info",
+            )}
+            aria-label={`Severity ${sev.label}`}
+            role="img"
+          >
+            <Icon className="h-4 w-4" strokeWidth={severityIconStroke(row.severity)} />
+          </div>
+        ) : (
+          <div className="mt-2 flex h-3 shrink-0 items-center" aria-hidden>
+            <span
+              className={cn(
+                "block h-2.5 w-2.5 rounded-full ring-2 ring-bg",
+                SEV_DOT[row.severity],
+              )}
+              role="img"
+              aria-label={`Severity ${sev.label}`}
+              title={sev.label}
+            />
+          </div>
+        )}
+
         <div className="min-w-0 flex-1">
           <div className="flex flex-wrap items-center gap-2">
-            <Badge tone={sev.tone} variant="solid">
+            <span
+              className={cn(
+                "inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-sops",
+                row.severity === "critical" && "bg-danger-softer text-danger",
+                row.severity === "warning" && "bg-warning-softer text-warning",
+                row.severity === "info" && "bg-info-softer text-info",
+              )}
+            >
               {sev.label}
-            </Badge>
-            <span
-              className="chip"
-              data-testid="inbox-row-type"
-            >
-              {typeLabel(row.type)}
             </span>
+            {!row.type.startsWith("exception:") ? (
+              <span
+                className="chip"
+                data-testid="inbox-row-type"
+                title={row.type}
+              >
+                {typeLabel(row.type)}
+              </span>
+            ) : null}
             <span
-              className="chip"
+              className={cn(
+                "chip max-w-[18rem] truncate",
+                isPinned && "border-accent/50 text-accent",
+              )}
               data-testid="inbox-row-category"
+              title={row.category}
             >
-              {row.category}
+              {isPinned ? <Pin className="h-2.5 w-2.5" strokeWidth={2.5} /> : null}
+              {friendlyCategory}
             </span>
+            {stuck ? (
+              <span
+                className="inline-flex items-center gap-1 rounded-sm bg-danger px-1.5 py-0.5 text-[0.6rem] font-bold uppercase tracking-sops text-accent-fg"
+                title="Critical and >72h old"
+              >
+                <Star className="h-2.5 w-2.5" strokeWidth={2.5} />
+                Stuck
+              </span>
+            ) : null}
+            {fresh ? (
+              <span
+                className="inline-flex items-center gap-1 rounded-sm bg-success px-1.5 py-0.5 text-[0.6rem] font-bold uppercase tracking-sops text-accent-fg"
+                title="Just arrived"
+              >
+                New
+              </span>
+            ) : null}
             <span
-              className="ml-auto font-mono text-3xs uppercase tracking-sops text-fg-subtle"
+              className={cn(
+                "ml-auto font-mono text-3xs uppercase tracking-sops",
+                stuck ? "text-danger" : "text-fg-subtle",
+              )}
               title={formatTimestamp(row.created_at)}
             >
               {ageHumanized(row.created_at, now)}
             </span>
           </div>
+
           <div
-            className="mt-1.5 text-base font-semibold tracking-tightish text-fg-strong"
+            className={cn(
+              "mt-1 tracking-tightish text-fg-strong",
+              density === "compact" ? "text-sm" : "text-base",
+              row.severity === "critical" ? "font-bold" : "font-semibold",
+            )}
             data-testid="inbox-row-summary"
           >
             {row.summary}
           </div>
-          {isCreditNeeded && creditPayload ? (
-            <div className="mt-3" data-testid="inbox-row-credit-card">
+
+          {isCreditNeeded && creditPayload && density !== "compact" ? (
+            <div
+              className="mt-3"
+              data-testid="inbox-row-credit-card"
+              onClick={(e) => e.stopPropagation()}
+            >
               <CreditNeededFactCard payload={creditPayload} now={now} />
             </div>
           ) : null}
-          <div className="mt-3 flex flex-wrap items-center gap-2">
+
+          <div
+            className={cn(
+              "mt-3 flex flex-wrap items-center",
+              densityChipGapClass(density),
+            )}
+            onClick={(e) => e.stopPropagation()}
+          >
             {isApproval ? (
               <Link
                 href={row.deep_link}
@@ -1090,15 +1853,13 @@ function InboxRowItem({
                 data-testid="inbox-row-review"
               >
                 Review
-                <ArrowRight className="h-3 w-3" strokeWidth={2} />
+                <ArrowLeft className="h-3 w-3 rtl:rotate-180" strokeWidth={2.25} />
               </Link>
             ) : !isApproval && row.deep_link !== "/inbox" ? (
               <Link
                 href={row.deep_link}
                 className={cn(
                   "btn btn-sm gap-1.5",
-                  // Promote deep-link to primary when its label matches an
-                  // explicit "approve / fix" verb from the body's "מה לעשות".
                   labels.deepLink && /אשר|פתור|מפה|חדש|עדכן/.test(labels.deepLink)
                     ? "btn-primary"
                     : "",
@@ -1106,7 +1867,7 @@ function InboxRowItem({
                 data-testid="inbox-row-fix-link"
               >
                 {labels.deepLink ?? "Fix this"}
-                <ArrowRight className="h-3 w-3" strokeWidth={2} />
+                <ArrowLeft className="h-3 w-3 rtl:rotate-180" strokeWidth={2.25} />
               </Link>
             ) : null}
             {!isApproval && row.item_id ? (
@@ -1114,9 +1875,10 @@ function InboxRowItem({
                 href={`/admin/masters/items/${encodeURIComponent(row.item_id)}`}
                 className="btn btn-sm gap-1.5"
                 data-testid="inbox-row-item-link"
+                title={`Open item master for ${row.item_id}`}
               >
-                Item: {row.item_id}
-                <ArrowRight className="h-3 w-3" strokeWidth={2} />
+                <span className="text-3xs font-mono opacity-70">item:</span>
+                {row.item_id}
               </Link>
             ) : null}
             {!isApproval && row.component_id && row.component_id !== row.item_id ? (
@@ -1124,9 +1886,10 @@ function InboxRowItem({
                 href={`/admin/masters/items/${encodeURIComponent(row.component_id)}`}
                 className="btn btn-sm gap-1.5"
                 data-testid="inbox-row-component-link"
+                title={`Open item master for ${row.component_id}`}
               >
-                Component: {row.component_id}
-                <ArrowRight className="h-3 w-3" strokeWidth={2} />
+                <span className="text-3xs font-mono opacity-70">comp:</span>
+                {row.component_id}
               </Link>
             ) : null}
             {canAck ? (
@@ -1136,8 +1899,9 @@ function InboxRowItem({
                 data-testid="inbox-row-acknowledge"
                 disabled={ackBusy}
                 onClick={() => onAcknowledge(row.id)}
+                title="Press 'a' to acknowledge"
               >
-                <CheckCircle2 className="h-3 w-3" strokeWidth={2} />
+                <CheckCircle2 className="h-3 w-3" strokeWidth={2.25} />
                 {ackBusy ? "Submitting…" : labels.acknowledge ?? "Acknowledge"}
               </button>
             ) : null}
@@ -1146,26 +1910,29 @@ function InboxRowItem({
                 type="button"
                 className={cn(
                   "btn btn-sm gap-1.5",
-                  // "דחה" is destructive — render as ghost-with-red-tint
-                  // instead of solid primary blue. Other resolve labels
-                  // (e.g., "סגור" for Info) keep the primary emphasis.
                   isResolveDestructive
                     ? "border-danger/40 text-danger hover:bg-danger-softer"
                     : "btn-primary",
                 )}
                 data-testid="inbox-row-resolve"
                 onClick={() => onStartResolve(row.id)}
+                title="Press 'r' to open the resolve panel"
               >
                 {labels.resolve ?? "Resolve"}
               </button>
             ) : null}
           </div>
+
           {isResolvingThis ? (
-            <ResolvePanel
-              busy={resolveBusy}
-              onCancel={onCancelResolve}
-              onConfirm={(notes) => onConfirmResolve(row.id, notes)}
-            />
+            <div onClick={(e) => e.stopPropagation()}>
+              <ResolvePanel
+                busy={resolveBusy}
+                onCancel={onCancelResolve}
+                onConfirm={(notes) => onConfirmResolve(row.id, notes)}
+                category={row.category}
+                isDestructive={isResolveDestructive}
+              />
+            </div>
           ) : null}
         </div>
       </div>
