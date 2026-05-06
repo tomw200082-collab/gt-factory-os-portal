@@ -74,7 +74,15 @@ export interface FlowItem {
   item_id: string;
   item_name: string;
   family: string | null;
-  supply_method: string;
+  // Wave 3 (supply-side flow, 2026-05-06): the supply variant returns
+  // COMPONENT rows in addition to ITEM rows. `sku_kind` distinguishes them
+  // so a single FlowItem[] can carry either universe and shape-agnostic
+  // sub-components (DayCell, WeekCell, etc.) keep working.
+  sku_kind: 'ITEM' | 'COMPONENT';
+  // Relaxed to nullable + union for the supply variant: COMPONENT rows have
+  // no supply_method, and the FG variant continues to return one of the
+  // three legacy enum values. Call sites must defend with a fallback.
+  supply_method: 'MANUFACTURED' | 'BOUGHT_FINISHED' | 'REPACK' | null;
   risk_tier: RiskTier;
   days_of_cover: number;
   effective_lead_time_days: number;
