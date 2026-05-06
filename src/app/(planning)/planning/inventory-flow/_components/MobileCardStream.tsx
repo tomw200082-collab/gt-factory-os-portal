@@ -24,6 +24,13 @@ interface MobileCardStreamProps {
   overlayEnabled?: boolean;
   /** Pre-indexed `${item_id}|${plan_date}` → row map for O(1) lookup. */
   plannedByItemDate?: Map<string, PlannedInflowRow>;
+  /**
+   * When true, each card is rendered as a non-clickable wrapper instead
+   * of a `<Link>` to `/planning/inventory-flow/[itemId]`. Used by the
+   * supply view, where per-SKU drill-down for components is deferred to
+   * v2. Default `false` keeps FG behaviour unchanged.
+   */
+  disableRowLink?: boolean;
 }
 
 export function MobileCardStream({
@@ -32,6 +39,7 @@ export function MobileCardStream({
   onRefresh,
   overlayEnabled = false,
   plannedByItemDate,
+  disableRowLink = false,
 }: MobileCardStreamProps) {
   const sorted = useMemo(() => [...items].sort(compareItemsByRisk), [items]);
   const queryClient = useQueryClient();
@@ -102,6 +110,7 @@ export function MobileCardStream({
           item={item}
           overlayEnabled={overlayEnabled}
           plannedByItemDate={plannedByItemDate}
+          disableRowLink={disableRowLink}
         />
       ))}
     </div>

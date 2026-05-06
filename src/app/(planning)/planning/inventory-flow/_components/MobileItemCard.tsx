@@ -15,7 +15,7 @@
 // reference is stable across TanStack Query refetches.
 // ---------------------------------------------------------------------------
 
-import { memo, useMemo } from "react";
+import { memo, useMemo, type CSSProperties } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/badges/StatusBadge";
 import { cn } from "@/lib/cn";
@@ -38,12 +38,21 @@ interface MobileItemCardProps {
   overlayEnabled?: boolean;
   /** Pre-indexed `${item_id}|${plan_date}` → row map. */
   plannedByItemDate?: Map<string, PlannedInflowRow>;
+  /**
+   * When true, the card wrapper is a non-clickable `<div>` instead of a
+   * `<Link>` to the per-SKU drill-down route. Used by the supply view,
+   * where `/planning/inventory-flow/[itemId]` does not yet handle
+   * component IDs and would render broken/empty data on tap. Default
+   * `false` preserves the FG card behaviour exactly.
+   */
+  disableRowLink?: boolean;
 }
 
 function MobileItemCardInner({
   item,
   overlayEnabled = false,
   plannedByItemDate,
+  disableRowLink = false,
 }: MobileItemCardProps) {
   const style = RISK_TIER_STYLE[item.risk_tier];
   const insight = buildInsight(item);
@@ -86,12 +95,20 @@ function MobileItemCardInner({
     ? "text-tier-healthy-bg"
     : daysCoverTierClass(cover);
 
-  return (
-    <Link
-      href={`/planning/inventory-flow/${encodeURIComponent(item.item_id)}`}
-      className="relative flex overflow-hidden rounded-md border border-border/40 bg-bg-raised shadow-raised transition-colors hover:border-accent/40"
-      style={{ borderLeft: `3px solid ${familyColor}` }}
-    >
+  // Wrapper props are shared between the clickable and non-clickable
+  // variants. When `disableRowLink` is true we render a plain `<div>` and
+  // drop the hover-border affordance so the card visually reads as
+  // non-interactive — but the inner content stays identical.
+  const wrapperClassName = cn(
+    "relative flex overflow-hidden rounded-md border border-border/40 bg-bg-raised shadow-raised transition-colors",
+    disableRowLink ? "cursor-default" : "hover:border-accent/40",
+  );
+  const wrapperStyle: CSSProperties = {
+    borderLeft: `3px solid ${familyColor}`,
+  };
+
+  const cardBody = (
+    <>
       {/* Tier strip (kept as a thin secondary cue inside the family-colored
           left border so risk still reads at a glance). */}
       <div className={cn("w-1 shrink-0", style.stripClass)} aria-hidden />
@@ -236,6 +253,24 @@ function MobileItemCardInner({
           })}
         </div>
       </div>
+    </>
+  );
+
+  if (disableRowLink) {
+    return (
+      <div className={wrapperClassName} style={wrapperStyle}>
+        {cardBody}
+      </div>
+    );
+  }
+
+  return (
+    <Link
+      href={`/planning/inventory-flow/${encodeURIComponent(item.item_id)}`}
+      className={wrapperClassName}
+      style={wrapperStyle}
+    >
+      {cardBody}
     </Link>
   );
 }

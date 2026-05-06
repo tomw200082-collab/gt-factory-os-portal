@@ -233,9 +233,13 @@ export function SupplyFlowClient() {
                 }
               />
             ) : isMobile ? (
-              <MobileCardStream items={filteredItems} summary={summary} />
+              <MobileCardStream
+                items={filteredItems}
+                summary={summary}
+                disableRowLink
+              />
             ) : (
-              <FlowGridDesktop items={filteredItems} />
+              <FlowGridDesktop items={filteredItems} disableRowLink />
             )}
           </>
         )}
