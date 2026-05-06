@@ -27,6 +27,12 @@ export async function GET(req: Request): Promise<Response> {
       "Cache-Control",
       "private, max-age=30, stale-while-revalidate=60",
     );
+  } else {
+    // Failure responses must NEVER cache. A stale upstream 404 (e.g., from
+    // before Railway redeploys a new route) was sticking in the browser
+    // and surfacing as a phantom "supply_flow_404:Not Found" long after the
+    // upstream became healthy. Force a bypass on every retry.
+    res.headers.set("Cache-Control", "no-store, must-revalidate");
   }
   return res;
 }
