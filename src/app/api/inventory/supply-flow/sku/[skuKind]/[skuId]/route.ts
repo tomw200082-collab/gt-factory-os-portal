@@ -14,10 +14,14 @@ export async function GET(
   { params }: { params: Promise<{ skuKind: string; skuId: string }> },
 ): Promise<Response> {
   const { skuKind, skuId } = await params;
-  return proxyRequest(req, {
+  const res = await proxyRequest(req, {
     method: "GET",
     upstreamPath: `/api/v1/queries/inventory/supply-flow/sku/${encodeURIComponent(skuKind)}/${encodeURIComponent(skuId)}`,
     forwardQuery: false,
     errorLabel: "supply flow detail",
   });
+  if (!res.ok) {
+    res.headers.set("Cache-Control", "no-store, must-revalidate");
+  }
+  return res;
 }

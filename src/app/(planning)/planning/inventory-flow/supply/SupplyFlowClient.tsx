@@ -175,6 +175,22 @@ export function SupplyFlowClient() {
         <ErrorState
           title="Could not load Components Flow"
           description={(flowQuery.error as Error)?.message ?? "Unknown error"}
+          action={
+            <button
+              type="button"
+              onClick={() => {
+                // Hard reload bypasses the browser HTTP cache for the proxy
+                // request and clears any TanStack Query in-memory state for
+                // this surface in one shot. Critical when an upstream error
+                // got cached client-side from a previous failed deploy state.
+                window.location.reload();
+              }}
+              className="inline-flex items-center gap-1.5 rounded border border-danger/40 bg-danger-soft px-3 py-1.5 text-xs font-medium text-danger-fg hover:bg-danger-softer"
+            >
+              <RefreshCw className="h-3.5 w-3.5" strokeWidth={2} />
+              Reload
+            </button>
+          }
         />
       </>
     );
