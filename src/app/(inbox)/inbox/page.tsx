@@ -65,6 +65,130 @@ import {
   newIdempotencyKey,
   resolveException,
 } from "@/features/inbox/actions";
+
+// ---------------------------------------------------------------------------
+// Category-specific button labels — Tom 2026-05-04.
+//
+// Per memory feedback_action_buttons_match_guidance.md: button labels MUST
+// match the "מה לעשות" guidance for each category, not the generic
+// "Fix this / Acknowledge / Resolve" trio. Map below overrides the labels
+// per known category. Categories not in the map fall back to the existing
+// English defaults.
+//
+// The behaviors are unchanged — only the labels change. "Fix this" still
+// navigates to row.deep_link, "Acknowledge" still calls onAcknowledge,
+// "Resolve" still opens ResolvePanel for notes. Subsequent v2 enhancements
+// can wire dedicated handlers per verb (e.g., credit_decisions/reject).
+// ---------------------------------------------------------------------------
+type CategoryButtonLabels = {
+  /** Label for the deep-link button (replaces "Fix this →"). */
+  deepLink?: string;
+  /** Label for the acknowledge button (replaces "Acknowledge"). */
+  acknowledge?: string;
+  /** Label for the resolve button (replaces "Resolve"). */
+  resolve?: string;
+};
+
+const CATEGORY_BUTTON_LABELS: Record<string, CategoryButtonLabels> = {
+  // Decision categories — body says "אשר X / דחה / ראיתי"
+  lionwheel_credit_needed: {
+    deepLink: "אשר זיכוי",
+    acknowledge: "ראיתי",
+    resolve: "דחה",
+  },
+  count_large_variance: {
+    deepLink: "אשר ספירה",
+    acknowledge: "ראיתי",
+    resolve: "דחה",
+  },
+  positive_adjustment: {
+    deepLink: "אשר התאמה",
+    acknowledge: "ראיתי",
+    resolve: "דחה",
+  },
+  loss_above_threshold: {
+    deepLink: "אשר פחת",
+    acknowledge: "ראיתי",
+    resolve: "דחה",
+  },
+  po_line_over_receipt: {
+    deepLink: "אשר עודף",
+    acknowledge: "ראיתי",
+    resolve: "דחה",
+  },
+  shopify_variant_not_found: {
+    deepLink: "פתור פער",
+    acknowledge: "ראיתי",
+    resolve: "סגור",
+  },
+
+  // To-Do categories — body says "פתח את ה-queue"
+  shopify_unmapped_item: {
+    deepLink: "מפה לחנות",
+    acknowledge: "ראיתי",
+    resolve: "סגור",
+  },
+  lionwheel_unknown_sku: {
+    deepLink: "מפה SKU",
+    acknowledge: "ראיתי",
+    resolve: "סגור",
+  },
+  gi_unmapped_supplier: {
+    deepLink: "מפה ספק",
+    acknowledge: "ראיתי",
+    resolve: "סגור",
+  },
+  gi_expense_review: {
+    deepLink: "בדוק חשבונית",
+    acknowledge: "ראיתי",
+    resolve: "סגור",
+  },
+
+  // Warning categories — body says "ראיתי / בדוק"
+  gi_stale: { deepLink: "בדוק חיבור", acknowledge: "ראיתי" },
+  lionwheel_stale: { deepLink: "בדוק חיבור", acknowledge: "ראיתי" },
+  shopify_stale: { deepLink: "בדוק חיבור", acknowledge: "ראיתי" },
+  forecast_stale: { deepLink: "עדכן תחזית", acknowledge: "ראיתי" },
+  rebuild_stale: { deepLink: "בדוק jobs", acknowledge: "ראיתי" },
+  export_stale: { deepLink: "בדוק jobs", acknowledge: "ראיתי" },
+  supplier_price_anomaly: { deepLink: "בדוק מחירים", acknowledge: "ראיתי" },
+  gi_price_activation_failed: { deepLink: "בדוק jobs", acknowledge: "ראיתי" },
+  gi_api_failure: { deepLink: "בדוק חיבור", acknowledge: "ראיתי" },
+  gi_auth_failure: { deepLink: "חדש אימות", acknowledge: "ראיתי" },
+  gi_rate_limit_stuck: { deepLink: "בדוק jobs", acknowledge: "ראיתי" },
+  gi_mirror_insert_failed: { deepLink: "בדוק jobs", acknowledge: "ראיתי" },
+  lionwheel_auth_expired: { deepLink: "חדש אימות", acknowledge: "ראיתי" },
+  lionwheel_auth_failure: { deepLink: "חדש אימות", acknowledge: "ראיתי" },
+  lionwheel_rate_limit_stuck: { deepLink: "בדוק jobs", acknowledge: "ראיתי" },
+  lionwheel_schema_drift: { deepLink: "בדוק", acknowledge: "ראיתי" },
+  lw_pick_enrich_failed: { deepLink: "בדוק", acknowledge: "ראיתי" },
+  shopify_auth_failure: { deepLink: "חדש אימות", acknowledge: "ראיתי" },
+  shopify_rate_limit_stuck: { deepLink: "בדוק jobs", acknowledge: "ראיתי" },
+  shopify_api_version_drift: { deepLink: "בדוק", acknowledge: "ראיתי" },
+  shopify_drift: { deepLink: "בדוק", acknowledge: "ראיתי" },
+  shopify_network_failure: { acknowledge: "ראיתי", resolve: "סגור" },
+  alias_revoked_with_dependencies: {
+    deepLink: "בדוק aliases",
+    acknowledge: "ראיתי",
+  },
+
+  // Info categories — body says "סגור"
+  lionwheel_capped_window_gap: { acknowledge: "ראיתי", resolve: "סגור" },
+  gi_non_ils_currency: { acknowledge: "ראיתי", resolve: "סגור" },
+  lw_pick_data_missing: { acknowledge: "ראיתי", resolve: "סגור" },
+  lionwheel_payload_invalid_sku: { acknowledge: "ראיתי", resolve: "סגור" },
+  lionwheel_payload_invalid_picked_quantity: {
+    acknowledge: "ראיתי",
+    resolve: "סגור",
+  },
+  lionwheel_order_note: { acknowledge: "ראיתי", resolve: "סגור" },
+  bom_version_published: { acknowledge: "ראיתי", resolve: "סגור" },
+};
+
+function buttonLabelsFor(category: string | null | undefined): CategoryButtonLabels {
+  if (!category) return {};
+  return CATEGORY_BUTTON_LABELS[category] ?? {};
+}
 import {
   INBOX_SORTS,
   INBOX_VIEWS,
@@ -873,6 +997,13 @@ function InboxRowItem({
     ? extractCreditNeededPayload(row.raw)
     : null;
 
+  // Per Tom 2026-05-04 + memory feedback_action_buttons_match_guidance.md:
+  // category-specific button labels override the generic "Fix this /
+  // Acknowledge / Resolve" trio so the action verbs match the body's
+  // "מה לעשות" guidance exactly. Behaviors are unchanged.
+  const labels = buttonLabelsFor(row.category);
+  const isResolveDestructive = labels.resolve === "דחה";
+
   return (
     <li
       className="relative px-5 py-4"
@@ -964,10 +1095,17 @@ function InboxRowItem({
             ) : !isApproval && row.deep_link !== "/inbox" ? (
               <Link
                 href={row.deep_link}
-                className="btn btn-sm gap-1.5"
+                className={cn(
+                  "btn btn-sm gap-1.5",
+                  // Promote deep-link to primary when its label matches an
+                  // explicit "approve / fix" verb from the body's "מה לעשות".
+                  labels.deepLink && /אשר|פתור|מפה|חדש|עדכן/.test(labels.deepLink)
+                    ? "btn-primary"
+                    : "",
+                )}
                 data-testid="inbox-row-fix-link"
               >
-                Fix this
+                {labels.deepLink ?? "Fix this"}
                 <ArrowRight className="h-3 w-3" strokeWidth={2} />
               </Link>
             ) : null}
@@ -1000,17 +1138,25 @@ function InboxRowItem({
                 onClick={() => onAcknowledge(row.id)}
               >
                 <CheckCircle2 className="h-3 w-3" strokeWidth={2} />
-                {ackBusy ? "Submitting…" : "Acknowledge"}
+                {ackBusy ? "Submitting…" : labels.acknowledge ?? "Acknowledge"}
               </button>
             ) : null}
             {canResolve && !isResolvingThis ? (
               <button
                 type="button"
-                className="btn btn-sm btn-primary gap-1.5"
+                className={cn(
+                  "btn btn-sm gap-1.5",
+                  // "דחה" is destructive — render as ghost-with-red-tint
+                  // instead of solid primary blue. Other resolve labels
+                  // (e.g., "סגור" for Info) keep the primary emphasis.
+                  isResolveDestructive
+                    ? "border-danger/40 text-danger hover:bg-danger-softer"
+                    : "btn-primary",
+                )}
                 data-testid="inbox-row-resolve"
                 onClick={() => onStartResolve(row.id)}
               >
-                Resolve
+                {labels.resolve ?? "Resolve"}
               </button>
             ) : null}
           </div>
