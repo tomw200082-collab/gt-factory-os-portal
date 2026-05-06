@@ -916,15 +916,22 @@ function AdminSkuAliasesPageInner(): JSX.Element {
 // the SKU-alias review surface. Tom 2026-05-04: lets the planner create a
 // missing item without leaving the page.
 //
-// POST /api/items expects: { item_id, item_name, supply_method, sales_uom,
-// optional family, case_pack }. Pre-fills item_id with the external SKU
-// (the planner can edit it before submit).
+// POST /api/items expects: { idempotency_key, item_id, item_name,
+// supply_method, sales_uom, optional family, case_pack }. Pre-fills item_id
+// with the external SKU (the planner can edit it before submit).
 // ---------------------------------------------------------------------------
 
 const SUPPLY_METHODS = ["BOUGHT_FINISHED", "MANUFACTURED", "REPACK"] as const;
 type SupplyMethod = (typeof SUPPLY_METHODS)[number];
 
 const COMMON_SALES_UOMS = ["EACH", "BOTTLE", "CAN", "BOX", "PACK"] as const;
+
+function randomIdempotencyKey(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `idem-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 10)}`;
+}
 
 function QuickCreateItemModal({
   externalSku,
@@ -959,6 +966,7 @@ function QuickCreateItemModal({
     setError(null);
     try {
       const body: Record<string, unknown> = {
+        idempotency_key: randomIdempotencyKey(),
         item_id: itemId.trim(),
         item_name: itemName.trim(),
         supply_method: supplyMethod,
@@ -982,8 +990,24 @@ function QuickCreateItemModal({
         let message = `שגיאה (HTTP ${res.status})`;
         try {
           const json = JSON.parse(text);
-          if (typeof json?.message === "string") message = json.message;
-          else if (typeof json?.error === "string") message = json.error;
+          // Fastify Zod 422 shape: { validation_errors: [{ path, code, message }] }
+          if (Array.isArray(json?.validation_errors) && json.validation_errors.length > 0) {
+            message = json.validation_errors
+              .map((v: { path?: unknown[]; message?: string }) => {
+                const path = Array.isArray(v.path) ? v.path.join(".") : "";
+                return path ? `${path}: ${v.message ?? ""}`.trim() : (v.message ?? "");
+              })
+              .filter(Boolean)
+              .join(" · ");
+          } else if (typeof json?.detail === "string") {
+            message = json.detail;
+          } else if (typeof json?.message === "string") {
+            message = json.message;
+          } else if (typeof json?.error === "string") {
+            message = json.error;
+          } else if (typeof json?.reason_code === "string") {
+            message = `${json.reason_code}${json.detail ? `: ${json.detail}` : ""}`;
+          }
         } catch {
           if (text) message = text;
         }
