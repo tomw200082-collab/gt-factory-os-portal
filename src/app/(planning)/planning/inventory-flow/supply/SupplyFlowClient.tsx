@@ -4,17 +4,16 @@
 // SupplyFlowClient — client wrapper for /planning/inventory-flow/supply.
 //
 // Mirrors InventoryFlowClient (the FG flow page) with the planned-inflow
-// overlay machinery removed: the supply universe (RM + PKG components +
-// BOUGHT_FINISHED items) does NOT model planned production inflow in v1.
-// Tab nav across the top, otherwise identical layout — same FilterBar,
-// same FlowGridDesktop, same MobileCardStream, same UnmappedSkusBanner
-// gate, same EmptyState fallback.
+// overlay machinery removed: components do NOT model planned production
+// inflow in v1. Tab nav across the top, otherwise identical layout —
+// same FilterBar, same FlowGridDesktop, same MobileCardStream, same
+// UnmappedSkusBanner gate, same EmptyState fallback.
 //
 // The shared sub-components are deliberately shape-agnostic so a single
-// `FlowItem[]` carries either FG ITEM rows or supply COMPONENT/ITEM rows
-// (distinguished server-side by `sku_kind`).
-//
-// Wave 3 of the supply-side inventory flow plan (2026-05-06).
+// `FlowItem[]` carries either FG ITEM rows or COMPONENT rows
+// (distinguished server-side by `sku_kind`). The supply-side projection
+// (migration 0147) emits only `sku_kind='COMPONENT'`; BOUGHT_FINISHED
+// items live on the FG flow page.
 // ---------------------------------------------------------------------------
 
 import { useSearchParams } from "next/navigation";
@@ -103,8 +102,8 @@ export function SupplyFlowClient() {
   const header = (
     <WorkflowHeader
       eyebrow="Planning"
-      title="Supply Flow"
-      description="Raw materials + bought-finished daily projection"
+      title="Components Flow"
+      description="Raw materials + packaging daily projection (BOM-driven demand from production_plan)"
       meta={
         <>
           {flowQuery.isLoading ? (
@@ -174,7 +173,7 @@ export function SupplyFlowClient() {
         {tabs}
         {header}
         <ErrorState
-          title="Could not load Supply Flow"
+          title="Could not load Components Flow"
           description={(flowQuery.error as Error)?.message ?? "Unknown error"}
         />
       </>

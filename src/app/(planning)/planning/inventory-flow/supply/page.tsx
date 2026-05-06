@@ -15,9 +15,9 @@ import type { Metadata } from "next";
 import { SupplyFlowClient } from "./SupplyFlowClient";
 
 export const metadata: Metadata = {
-  title: "Supply Flow — GT Factory OS",
+  title: "Components Flow — GT Factory OS",
   description:
-    "Daily projection for raw materials, packaging, and bought-finished items.",
+    "Daily projection for raw materials and packaging components.",
 };
 
 export default function SupplyFlowPage() {
