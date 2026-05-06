@@ -27,6 +27,7 @@ import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { FilterBar } from "./_components/FilterBar";
 import { FlowGridDesktop } from "./_components/FlowGridDesktop";
 import { InsightsHero } from "./_components/InsightsHero";
+import { InventoryFlowTabs } from "./_components/InventoryFlowTabs";
 import { MobileCardStream } from "./_components/MobileCardStream";
 import { PlannedFooterCaveat } from "./_components/PlannedFooterCaveat";
 import {
@@ -132,6 +133,14 @@ export function InventoryFlowClient() {
     return [...seen].sort();
   }, [data]);
 
+  // Tab nav — sits above the header on both FG and Supply pages
+  // (Wave 3 of supply-side inventory flow, 2026-05-06).
+  const tabs = (
+    <div className="mb-3">
+      <InventoryFlowTabs activeTab="fg" />
+    </div>
+  );
+
   // Header element
   const header = (
     <WorkflowHeader
@@ -194,6 +203,7 @@ export function InventoryFlowClient() {
   if (!isMounted) {
     return (
       <>
+        {tabs}
         {header}
         <SkeletonGrid />
       </>
@@ -204,6 +214,7 @@ export function InventoryFlowClient() {
   if (flowQuery.isError) {
     return (
       <>
+        {tabs}
         {header}
         <ErrorState
           title="Could not load Inventory Flow"
@@ -221,6 +232,7 @@ export function InventoryFlowClient() {
   if (flowQuery.isLoading || !data) {
     return (
       <>
+        {tabs}
         {header}
         <div className="rounded border border-info/30 bg-info-softer px-4 py-3 text-xs text-info-fg">
           <div className="font-semibold">Calculating projection…</div>
@@ -243,6 +255,7 @@ export function InventoryFlowClient() {
 
   return (
     <>
+      {tabs}
       {header}
       <div className="space-y-6">
         <InsightsHero
