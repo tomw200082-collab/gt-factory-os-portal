@@ -46,7 +46,7 @@ export function InventoryFlowTabs({ activeTab }: { activeTab: Tab }) {
             : "text-muted-foreground hover:text-foreground",
         )}
       >
-        Supply (RM + Bought-Finished)
+        Components
       </Link>
     </nav>
   );
