@@ -173,12 +173,13 @@ export function DetailPage({
           <TabStrip tabs={tabs} active={active} setTab={setTab} />
 
           <div
+            key={active.key}
             id={`detail-tabpanel-${active.key}`}
             role="tabpanel"
             aria-labelledby={`detail-tab-${active.key}`}
             data-active-tab={active.key}
             tabIndex={0}
-            className="outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-sm"
+            className="animate-fade-in-up outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-sm"
           >
             {active.content}
           </div>

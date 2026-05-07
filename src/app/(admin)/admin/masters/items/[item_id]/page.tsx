@@ -185,6 +185,36 @@ function SeverityBadge({ severity }: { severity: string }): JSX.Element {
   return <Badge tone="info" dotted>info</Badge>;
 }
 
+// Iter 9 — Lead time visual chip: green ≤7d, amber ≤14d, red >14d.
+function LeadTimeChip({ days }: { days: number | null }): JSX.Element {
+  if (days === null)
+    return <span className="font-mono text-xs text-fg-faint">—</span>;
+  const cls =
+    days <= 7
+      ? "bg-success-softer text-success-fg border-success/30"
+      : days <= 14
+        ? "bg-warning-softer text-warning-fg border-warning/30"
+        : "bg-danger-softer text-danger-fg border-danger/30";
+  return (
+    <span
+      className={`inline-flex items-center rounded border px-1.5 py-0.5 font-mono text-xs font-semibold ${cls}`}
+      title={`Lead time: ${days} days`}
+    >
+      {days}d
+    </span>
+  );
+}
+
+// Approval status with contextual tone: approved=green, pending=amber, rejected=red.
+function ApprovalBadge({ status }: { status: string | null }): JSX.Element {
+  if (!status) return <span className="text-fg-faint">—</span>;
+  const upper = status.toUpperCase();
+  if (upper === "APPROVED") return <Badge tone="success">{status}</Badge>;
+  if (upper.includes("PENDING")) return <Badge tone="warning">{status}</Badge>;
+  if (upper === "REJECTED") return <Badge tone="danger">{status}</Badge>;
+  return <Badge tone="neutral">{status}</Badge>;
+}
+
 // EditableField — label + optional help tooltip + value slot.
 // Local helper so the Overview tab can render a consistent column without
 // repeating the label / spacing / aria scaffolding for every field. The
@@ -783,13 +813,22 @@ export default function AdminItemDetailPage({
             </div>
           </details>
 
-          {itemFieldMutation.isError ? (
-            <p className="text-xs text-danger-fg">
-              {itemFieldMutation.error instanceof AdminMutationError
-                ? itemFieldMutation.error.message
-                : "Save failed. Please try again."}
-            </p>
-          ) : null}
+          <div
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+            className="min-h-[1.25rem]"
+          >
+            {itemFieldMutation.isPending ? (
+              <p className="text-xs text-fg-muted">Saving…</p>
+            ) : itemFieldMutation.isError ? (
+              <p className="text-xs text-danger-fg">
+                {itemFieldMutation.error instanceof AdminMutationError
+                  ? itemFieldMutation.error.message
+                  : "Save failed. Please try again."}
+              </p>
+            ) : null}
+          </div>
         </div>
       );
     })(),
@@ -949,14 +988,57 @@ export default function AdminItemDetailPage({
         }
         return <SupplierItemsTable rows={rows} supplierNameOf={supplierNameOf} />;
       }
-      // MANUFACTURED / REPACK: per-component supplier fan-out requires a
-      // bom_line → component → supplier_item aggregation we will not
-      // compute client-side in this tranche (N+1 over BOM lines is an
-      // anti-pattern; a proper aggregate endpoint belongs to a later tranche).
+      // MANUFACTURED / REPACK: supplier coverage is at the component level.
+      // A fan-out aggregation (bom_line → component → supplier_item) belongs
+      // to a later tranche endpoint rather than N+1 client-side fetches.
       return (
-        <PendingTabPlaceholder
-          reason="Supplier coverage for manufactured items is per component. Open each component from the BOM tab to see its supplier items."
-        />
+        <div className="space-y-3">
+          <SectionCard
+            eyebrow="Component-level suppliers"
+            title={
+              row.supply_method === "MANUFACTURED"
+                ? "Supplier coverage is per ingredient"
+                : "Supplier coverage is per input component"
+            }
+            description={
+              row.supply_method === "MANUFACTURED"
+                ? "Manufactured products source their ingredients through component supplier links — not through a direct item-level supplier. Navigate to the BOM tab, then open each component to review its supplier coverage and lead times."
+                : "Repack products use an input component as their main supply. Navigate to the BOM tab to find the input component, then open it to review supplier links."
+            }
+            density="compact"
+          >
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href={`${detailPath}?tab=bom`}
+                className="inline-flex items-center gap-1 rounded border border-border/60 bg-bg-subtle/40 px-2.5 py-1.5 text-xs font-medium text-fg transition-colors hover:border-accent/60 hover:text-accent"
+              >
+                Go to BOM tab →
+              </Link>
+              <Link
+                href="/admin/masters/components"
+                className="inline-flex items-center gap-1 rounded border border-border/60 bg-bg-subtle/40 px-2.5 py-1.5 text-xs font-medium text-fg transition-colors hover:border-accent/60 hover:text-accent"
+              >
+                Browse all components →
+              </Link>
+            </div>
+          </SectionCard>
+          {row.primary_bom_head_id ? (
+            <div className="rounded-md border border-border/50 bg-bg-subtle/40 px-3 py-2.5 text-xs text-fg-muted">
+              Pack BOM{" "}
+              <Link
+                href={`/admin/masters/boms/${encodeURIComponent(row.primary_bom_head_id)}`}
+                className="font-mono text-accent hover:underline"
+              >
+                {row.primary_bom_head_id}
+              </Link>{" "}
+              is linked — open it to review per-component supplier coverage.
+            </div>
+          ) : (
+            <div className="rounded-md border border-warning/30 bg-warning-softer px-3 py-2.5 text-xs text-warning-fg">
+              No BOM linked yet — supplier coverage cannot be determined until a BOM is assigned.
+            </div>
+          )}
+        </div>
       );
     })(),
   };
@@ -965,9 +1047,56 @@ export default function AdminItemDetailPage({
     key: "anchors",
     label: "Anchors",
     content: (
-      <PendingTabPlaceholder
-        reason="Stock anchors for individual items are not yet available here. Check the stock movement log for balance history."
-      />
+      <div className="space-y-3">
+        <SectionCard
+          eyebrow="Balance checkpoints"
+          title="Count anchors"
+          description="A count anchor is a trusted balance snapshot created when an approved Physical Count is submitted. Current stock = latest anchor + all ledger events posted after the anchor date."
+          density="compact"
+        >
+          <div className="space-y-3">
+            <div className="rounded-md border border-info/30 bg-info-softer px-3 py-2.5 text-xs text-fg-muted">
+              <span className="font-semibold text-info-fg">
+                Per-item anchor history will appear here once the Physical Count workflow is live (Gate 3).
+              </span>{" "}
+              Until then, submit a Physical Count to establish a trusted baseline for this item.
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Link
+                href={`/stock/movements?item_id=${encodeURIComponent(item_id)}`}
+                className="inline-flex items-center gap-1 rounded border border-border/60 bg-bg-subtle/40 px-2.5 py-1.5 text-xs font-medium text-fg transition-colors hover:border-accent/60 hover:text-accent"
+              >
+                View stock movements →
+              </Link>
+              <Link
+                href="/forms/physical-count"
+                className="inline-flex items-center gap-1 rounded border border-border/60 bg-bg-subtle/40 px-2.5 py-1.5 text-xs font-medium text-fg transition-colors hover:border-accent/60 hover:text-accent"
+              >
+                Submit a Physical Count →
+              </Link>
+            </div>
+          </div>
+        </SectionCard>
+        <SectionCard
+          eyebrow="How anchor math works"
+          title="Why anchors keep stock trustworthy"
+          density="compact"
+        >
+          <ul className="space-y-2 text-xs text-fg-muted">
+            {([
+              "An anchor is created when a Physical Count is approved — verified physical observation replaces projections.",
+              "Stock = latest anchor + ledger events since that anchor date. Events before the anchor are already absorbed into it.",
+              "Large count discrepancies require approval before becoming an anchor (configurable threshold).",
+              "A monthly full count + anchor keeps projection drift in check and maintains operator confidence.",
+            ] as string[]).map((text, i) => (
+              <li key={i} className="flex items-start gap-2">
+                <span className="mt-1 inline-block h-1.5 w-1.5 shrink-0 rounded-full bg-accent/60" />
+                <span>{text}</span>
+              </li>
+            ))}
+          </ul>
+        </SectionCard>
+      </div>
     ),
   };
 
@@ -975,9 +1104,51 @@ export default function AdminItemDetailPage({
     key: "policy",
     label: "Policy",
     content: (
-      <PendingTabPlaceholder
-        reason="Per-item planning policy overrides are not yet available. Global planning policy is managed in Admin → Planning policy."
-      />
+      <div className="space-y-3">
+        <SectionCard
+          eyebrow="Per-item overrides"
+          title="Planning policy"
+          description="Planning policy controls when purchase recommendations fire, how much safety stock to hold, and how demand uncertainty is handled. Per-item overrides supersede the global defaults."
+          density="compact"
+        >
+          <div className="space-y-3">
+            <div className="rounded-md border border-info/30 bg-info-softer px-3 py-2.5 text-xs text-fg-muted">
+              <span className="font-semibold text-info-fg">
+                Per-item policy overrides are not yet available (Gate 5).
+              </span>{" "}
+              Global planning defaults apply. When per-item overrides land, this tab will show an editable form pinned to this product.
+            </div>
+            <Link
+              href="/admin/planning/policy"
+              className="inline-flex items-center gap-1 rounded border border-border/60 bg-bg-subtle/40 px-2.5 py-1.5 text-xs font-medium text-fg transition-colors hover:border-accent/60 hover:text-accent"
+            >
+              View global planning defaults →
+            </Link>
+          </div>
+        </SectionCard>
+        <SectionCard
+          eyebrow="Policy fields reference"
+          title="What each field controls"
+          density="compact"
+        >
+          <dl className="space-y-2.5 text-xs">
+            {(
+              [
+                ["Reorder point", "When projected stock falls below this, a purchase recommendation fires. Measured in sales units."],
+                ["Safety stock", "Minimum buffer held against demand uncertainty. Prevents recommendations cutting right to zero."],
+                ["MOQ override", "Per-item minimum order quantity that overrides the supplier default. Useful for contractual minimums."],
+                ["Planning horizon", "Days forward the engine looks when computing need. Longer = more conservative stock building."],
+                ["Uncertainty band", "Demand confidence interval. Wider band → more safety stock → fewer stock-outs at higher inventory cost."],
+              ] as [string, string][]
+            ).map(([term, def]) => (
+              <div key={term} className="flex items-start gap-2">
+                <dt className="w-36 shrink-0 font-semibold text-fg">{term}</dt>
+                <dd className="text-fg-muted">{def}</dd>
+              </div>
+            ))}
+          </dl>
+        </SectionCard>
+      </div>
     ),
   };
 
@@ -1004,39 +1175,85 @@ export default function AdminItemDetailPage({
       }
       if (relatedExceptions.length === 0) {
         return (
-          <DetailTabEmpty message="No open or acknowledged exceptions linked to this item." />
+          <SectionCard density="compact">
+            <div className="flex items-start gap-3">
+              <span
+                aria-hidden
+                className="mt-1 inline-block h-2 w-2 shrink-0 rounded-full bg-success"
+              />
+              <div>
+                <div className="text-sm font-semibold text-fg">All clear</div>
+                <div className="text-xs text-fg-muted">
+                  No open or acknowledged exceptions for this item.
+                </div>
+              </div>
+            </div>
+          </SectionCard>
         );
       }
+      const sortedExceptions = [...relatedExceptions].sort((a, b) => {
+        const order: Record<string, number> = { critical: 0, warning: 1, info: 2 };
+        return (order[a.severity] ?? 3) - (order[b.severity] ?? 3);
+      });
+      const criticalCount = sortedExceptions.filter((e) => e.severity === "critical").length;
       return (
-        <SectionCard
-          density="compact"
-          contentClassName="p-0"
-        >
-          <ul className="divide-y divide-border/40">
-            {relatedExceptions.map((e) => (
-              <li key={e.exception_id} className="flex items-start gap-3 px-4 py-2 text-xs">
-                <SeverityBadge severity={e.severity} />
-                <div className="min-w-0 flex-1">
-                  <div className="truncate font-semibold text-fg">{e.title}</div>
-                  {e.detail ? (
-                    <div className="truncate text-fg-muted">{e.detail}</div>
-                  ) : null}
-                  <div className="mt-0.5 text-3xs text-fg-faint">
-                    {e.category} · {e.status} · {fmtDateTime(e.created_at)}
-                  </div>
-                </div>
-                <Link
-                  href={`/inbox?view=exceptions&exception_id=${encodeURIComponent(
-                    e.exception_id,
-                  )}`}
-                  className="shrink-0 text-accent hover:underline"
+        <div className="space-y-2">
+          <div className="flex items-center justify-between gap-2 px-1">
+            <div className="flex flex-wrap items-center gap-2 text-xs text-fg-muted">
+              <span>
+                {sortedExceptions.length} exception{sortedExceptions.length === 1 ? "" : "s"}
+              </span>
+              {criticalCount > 0 ? (
+                <Badge tone="danger" dotted>
+                  {criticalCount} critical
+                </Badge>
+              ) : null}
+            </div>
+            <Link
+              href={`/inbox?view=exceptions&related_entity_id=${encodeURIComponent(item_id)}`}
+              className="text-xs text-accent hover:underline"
+            >
+              View all in Inbox →
+            </Link>
+          </div>
+          <SectionCard density="compact" contentClassName="p-0">
+            <ul className="divide-y divide-border/40">
+              {sortedExceptions.map((e) => (
+                <li
+                  key={e.exception_id}
+                  className={`flex items-start gap-3 px-4 py-3 text-xs ${
+                    e.severity === "critical" ? "bg-danger-softer/20" : ""
+                  }`}
                 >
-                  Open
-                </Link>
-              </li>
-            ))}
-          </ul>
-        </SectionCard>
+                  <SeverityBadge severity={e.severity} />
+                  <div className="min-w-0 flex-1">
+                    <div className="font-semibold text-fg">{e.title}</div>
+                    {e.detail ? (
+                      <div className="mt-0.5 text-fg-muted">{e.detail}</div>
+                    ) : null}
+                    <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-3xs text-fg-faint">
+                      <span>{e.category}</span>
+                      <span>·</span>
+                      <Badge tone={e.status === "open" ? "warning" : "neutral"} dotted>
+                        {e.status}
+                      </Badge>
+                      <span>·</span>
+                      <span>{fmtDateTime(e.created_at)}</span>
+                    </div>
+                  </div>
+                  <Link
+                    href={`/inbox?view=exceptions&exception_id=${encodeURIComponent(
+                      e.exception_id,
+                    )}`}
+                    className="shrink-0 rounded border border-border/60 px-2 py-1 text-3xs font-medium text-fg transition-colors hover:border-accent/60 hover:text-accent"
+                  >
+                    Triage →
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </SectionCard>
+        </div>
       );
     })(),
   };
@@ -1396,9 +1613,12 @@ function BomSection({
 }
 
 // ---------------------------------------------------------------------------
-// SupplierItemsTable — small inline helper used by the supplier-items tab.
-// Kept local to the page; promotes to a shared component in Tranche F if
-// other detail pages need the same table.
+// SupplierItemsTable — Iter 9 redesign.
+//
+// Shows a primary-supplier hero card at the top (the supplier planners care
+// most about) with at-a-glance lead time + approval chips.  The full table
+// below shows all links with enhanced row highlighting for the primary row.
+// Wrapped in overflow-x-auto for narrow / mobile viewports (iter 17).
 // ---------------------------------------------------------------------------
 
 function SupplierItemsTable({
@@ -1408,75 +1628,133 @@ function SupplierItemsTable({
   rows: SupplierItemRow[];
   supplierNameOf: (id: string) => string;
 }): JSX.Element {
+  const primary = rows.find((r) => r.is_primary);
+
   return (
-    <SectionCard density="compact" contentClassName="p-0">
-      <table className="w-full border-collapse text-xs">
-        <thead>
-          <tr className="border-b border-border/70 bg-bg-subtle/60">
-            <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              Supplier
-            </th>
-            <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              Relationship
-            </th>
-            <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              Primary
-            </th>
-            <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              Order UoM
-            </th>
-            <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              Lead (days)
-            </th>
-            <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              Approval
-            </th>
-          </tr>
-        </thead>
-        <tbody>
-          {rows.map((r) => (
-            <tr
-              key={r.supplier_item_id}
-              className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
-            >
-              <td className="px-3 py-2 text-xs text-fg">
-                <Link
-                  href={`/admin/masters/suppliers/${encodeURIComponent(r.supplier_id)}`}
-                  className="hover:text-accent"
-                  title={r.supplier_id}
+    <div className="space-y-3">
+      {/* Primary supplier hero -------------------------------------------- */}
+      {primary ? (
+        <SectionCard density="compact">
+          <div className="flex flex-wrap items-start justify-between gap-4">
+            <div className="min-w-0 flex-1">
+              <div className="mb-1 flex items-center gap-1.5">
+                <Badge tone="success" dotted>
+                  Primary supplier
+                </Badge>
+              </div>
+              <Link
+                href={`/admin/masters/suppliers/${encodeURIComponent(primary.supplier_id)}`}
+                className="text-base font-semibold text-fg-strong hover:text-accent"
+              >
+                {supplierNameOf(primary.supplier_id)}
+              </Link>
+              {primary.relationship ? (
+                <p className="mt-0.5 text-xs text-fg-muted">{primary.relationship}</p>
+              ) : null}
+            </div>
+            <div className="flex shrink-0 flex-wrap gap-5 text-xs">
+              <div className="flex flex-col gap-1">
+                <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Lead time
+                </span>
+                <LeadTimeChip days={primary.lead_time_days} />
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Order UoM
+                </span>
+                <span className="font-mono text-xs text-fg">
+                  {primary.order_uom ?? "—"}
+                </span>
+              </div>
+              <div className="flex flex-col gap-1">
+                <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Approval
+                </span>
+                <ApprovalBadge status={primary.approval_status} />
+              </div>
+            </div>
+          </div>
+        </SectionCard>
+      ) : null}
+
+      {/* Full supplier links table ---------------------------------------- */}
+      <SectionCard
+        eyebrow={rows.length === 1 ? "Supplier link" : "All supplier links"}
+        title={`${rows.length} supplier${rows.length === 1 ? "" : "s"} linked`}
+        density="compact"
+        contentClassName="p-0"
+      >
+        <div className="overflow-x-auto">
+          <table className="w-full border-collapse text-xs">
+            <thead>
+              <tr className="border-b border-border/70 bg-bg-subtle/60">
+                <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Supplier
+                </th>
+                <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Relationship
+                </th>
+                <th className="px-3 py-2 text-center text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Primary
+                </th>
+                <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Order UoM
+                </th>
+                <th className="px-3 py-2 text-center text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Lead time
+                </th>
+                <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Approval
+                </th>
+              </tr>
+            </thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr
+                  key={r.supplier_item_id}
+                  className={`border-b border-border/40 last:border-b-0 ${
+                    r.is_primary
+                      ? "bg-success-softer/20 hover:bg-success-softer/40"
+                      : "hover:bg-bg-subtle/40"
+                  }`}
                 >
-                  {supplierNameOf(r.supplier_id)}
-                </Link>
-              </td>
-              <td className="px-3 py-2 text-fg-muted">
-                {r.relationship ?? "—"}
-              </td>
-              <td className="px-3 py-2">
-                {r.is_primary ? (
-                  <Badge tone="success" dotted>
-                    primary
-                  </Badge>
-                ) : (
-                  <span className="text-fg-faint">—</span>
-                )}
-              </td>
-              <td className="px-3 py-2 text-fg-muted">
-                {r.order_uom ?? "—"}
-              </td>
-              <td className="px-3 py-2 text-right font-mono text-xs text-fg-muted">
-                {r.lead_time_days ?? "—"}
-              </td>
-              <td className="px-3 py-2">
-                {r.approval_status ? (
-                  <Badge tone="neutral">{r.approval_status}</Badge>
-                ) : (
-                  <span className="text-fg-faint">—</span>
-                )}
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </SectionCard>
+                  <td className="px-3 py-2">
+                    <Link
+                      href={`/admin/masters/suppliers/${encodeURIComponent(r.supplier_id)}`}
+                      className={`hover:text-accent ${r.is_primary ? "font-semibold text-fg-strong" : "text-fg"}`}
+                      title={r.supplier_id}
+                    >
+                      {supplierNameOf(r.supplier_id)}
+                    </Link>
+                  </td>
+                  <td className="px-3 py-2 text-fg-muted">
+                    {r.relationship ?? "—"}
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    {r.is_primary ? (
+                      <Badge tone="success" dotted>
+                        primary
+                      </Badge>
+                    ) : (
+                      <span className="text-fg-faint">—</span>
+                    )}
+                  </td>
+                  <td className="px-3 py-2 font-mono text-fg-muted">
+                    {r.order_uom ?? "—"}
+                  </td>
+                  <td className="px-3 py-2 text-center">
+                    <LeadTimeChip days={r.lead_time_days} />
+                  </td>
+                  <td className="px-3 py-2">
+                    <ApprovalBadge status={r.approval_status} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </SectionCard>
+    </div>
   );
 }
