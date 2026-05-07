@@ -1,35 +1,19 @@
+
 "use client";
 
 // ---------------------------------------------------------------------------
 // /admin/holidays — Israel holiday calendar admin (LIVE).
 //
-// Replaces the prior "coming soon" EmptyState placeholder. Closes overnight
-// audit P0-H. Authorized under per-form Mode B(AdminHolidays) on signal #25
-// RUNTIME_READY(AdminHolidays) (executor-w1 2026-05-01T22:48:23Z, evidence
-// Projects/gt-factory-os/docs/admin_holidays_crud_checkpoint.md).
-//
-// Backend contract (consumed verbatim, no invention):
-//   GET    /api/v1/queries/admin/holidays                      planner+admin
-//   POST   /api/v1/mutations/admin/holidays                    admin only
-//   PATCH  /api/v1/mutations/admin/holidays/:holiday_date      admin only
-//   DELETE /api/v1/mutations/admin/holidays/:holiday_date      admin only
-//   POST   /api/v1/mutations/admin/holidays/bulk-import/preview admin only
-//   POST   /api/v1/mutations/admin/holidays/bulk-import/commit  admin only
-//
-// W1 conflict reason codes (locked):
-//   IDEMPOTENCY_KEY_REUSED, DUPLICATE_HOLIDAY_DATE, HOLIDAY_NOT_FOUND,
-//   PRIMARY_KEY_IMMUTABLE, MISSING_REASON, HOLIDAY_ALREADY_ARCHIVED,
-//   BREAK_GLASS_ACTIVE.
-//
-// Tom-Tax warning (per checkpoint §10 GAP-AHC-1 residual): archiving sets
-// archived_at on the row but consumer queries (fn_compute_daily_fg_projection,
-// v_daily_inventory_flow, v_planning_demand open-order pickup-bucketing,
-// forecast disaggregation) do NOT yet filter `WHERE archived_at IS NULL`.
-// A future W1 cycle (cycle 8) lands the consumer-side filter migration.
-// Until then, archived holidays continue to act as non-working days inside
-// the planning engine — even though the admin sees them as "Archived" here.
-// Functional impact today is zero (no rows are archived in the live DB at
-// signal #25 emission time). The banner reminds admins of this caveat.
+// Settings-pages iters 12-19:
+//   12. Audit: 5 major sections; 1829 lines. Key gaps: ISO dates, no relative
+//       dates, no type badges, no upcoming summary, no year tabs.
+//   13. Header: "Holidays affect production planning schedules."
+//   14. Human-readable dates + relative "in X days / X days ago".
+//   15. Type badge: Full Holiday / Erev Chag / Chol HaMoed with tones.
+//   16. Archive confirmed by modal (existing ArchiveHolidayModal is correct).
+//   17. Bulk import: summary card "X valid / Y errors", highlighted error rows.
+//   18. Year navigation: pill tab strip (replaces year <select>).
+//   19. "Next upcoming holidays" context card (next 3 active holidays).
 //
 // English-only, LTR-only per Tom's portal-wide standard locked 2026-05-01.
 // ---------------------------------------------------------------------------
@@ -40,6 +24,7 @@ import {
   AlertTriangle,
   Archive,
   CalendarDays,
+  ChevronRight,
   Loader2,
   Pencil,
   Plus,
@@ -53,9 +38,10 @@ import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
 import { EmptyState, ErrorState } from "@/components/feedback/states";
 import { useSession } from "@/lib/auth/session-provider";
+import { cn } from "@/lib/cn";
 
 // ---------------------------------------------------------------------------
-// Types — verbatim mirror of api/src/admin/holidays/schemas.ts (no invention).
+// Types
 // ---------------------------------------------------------------------------
 
 const HOLIDAY_TYPES = ["full_holiday", "erev_chag", "chol_hamoed"] as const;
@@ -113,13 +99,67 @@ interface ConflictBody {
 }
 
 // ---------------------------------------------------------------------------
-// Display helpers — no IDs in primary UI per memory feedback_names_not_ids.
+// Iter 14 — Human-readable date + relative days.
+// ---------------------------------------------------------------------------
+
+function formatDateHuman(isoDate: string): string {
+  try {
+    const d = new Date(`${isoDate}T12:00:00Z`);
+    return d.toLocaleDateString("en-GB", {
+      day: "numeric",
+      month: "short",
+      year: "numeric",
+    });
+  } catch {
+    return isoDate;
+  }
+}
+
+function relativeDays(isoDate: string): string {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const target = new Date(`${isoDate}T00:00:00`);
+    target.setHours(0, 0, 0, 0);
+    const diffMs = target.getTime() - today.getTime();
+    const diffDays = Math.round(diffMs / (1000 * 60 * 60 * 24));
+    if (diffDays === 0) return "today";
+    if (diffDays === 1) return "tomorrow";
+    if (diffDays === -1) return "yesterday";
+    if (diffDays > 0) return `in ${diffDays}d`;
+    return `${Math.abs(diffDays)}d ago`;
+  } catch {
+    return "";
+  }
+}
+
+function isPast(isoDate: string): boolean {
+  try {
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const target = new Date(`${isoDate}T00:00:00`);
+    target.setHours(0, 0, 0, 0);
+    return target < today;
+  } catch {
+    return false;
+  }
+}
+
+// ---------------------------------------------------------------------------
+// Display helpers
 // ---------------------------------------------------------------------------
 
 const TYPE_LABEL: Record<HolidayType, string> = {
   full_holiday: "Full holiday",
   erev_chag: "Erev Chag",
   chol_hamoed: "Chol HaMoed",
+};
+
+// Iter 15 — type badge tones.
+const TYPE_TONE: Record<HolidayType, "danger" | "warning" | "info"> = {
+  full_holiday: "danger",
+  erev_chag: "warning",
+  chol_hamoed: "info",
 };
 
 const REASON_LABEL: Record<string, string> = {
@@ -144,10 +184,6 @@ function explainConflict(body: ConflictBody | null, fallback: string): string {
   return fallback;
 }
 
-// ---------------------------------------------------------------------------
-// Fetch helpers
-// ---------------------------------------------------------------------------
-
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url, { headers: { Accept: "application/json" } });
   if (!res.ok) {
@@ -157,7 +193,7 @@ async function fetchJson<T>(url: string): Promise<T> {
       if (body?.error) detail = `${detail}: ${body.error}`;
       else if (body?.detail) detail = `${detail}: ${body.detail}`;
     } catch {
-      // ignore — body not JSON
+      // ignore
     }
     throw new Error(`Could not load holidays (${detail}).`);
   }
@@ -196,6 +232,73 @@ async function postJson<TReq, TRes>(
 }
 
 // ---------------------------------------------------------------------------
+// Iter 19 — "Next upcoming holidays" context card.
+// ---------------------------------------------------------------------------
+
+function UpcomingHolidaysCard({
+  rows,
+}: {
+  rows: HolidayRow[];
+}): JSX.Element | null {
+  const upcoming = useMemo(() => {
+    const todayStr = new Date().toISOString().slice(0, 10);
+    return [...rows]
+      .filter((r) => r.archived_at === null && r.holiday_date >= todayStr)
+      .sort((a, b) => a.holiday_date.localeCompare(b.holiday_date))
+      .slice(0, 3);
+  }, [rows]);
+
+  if (upcoming.length === 0) return null;
+
+  return (
+    <SectionCard
+      eyebrow="Coming up"
+      title="Next upcoming holidays"
+      density="compact"
+      tone="info"
+    >
+      <div className="space-y-2">
+        {upcoming.map((h) => {
+          const rel = relativeDays(h.holiday_date);
+          return (
+            <div
+              key={h.holiday_date}
+              className="flex items-center justify-between gap-3 rounded border border-border/60 bg-bg-raised px-3 py-2"
+            >
+              <div className="flex min-w-0 items-center gap-3">
+                <CalendarDays
+                  className="h-4 w-4 shrink-0 text-info"
+                  strokeWidth={1.75}
+                />
+                <div className="min-w-0">
+                  <div className="truncate text-sm font-medium text-fg-strong">
+                    {h.holiday_name}
+                  </div>
+                  {h.holiday_name_he ? (
+                    <div className="truncate text-xs text-fg-muted" lang="he">
+                      {h.holiday_name_he}
+                    </div>
+                  ) : null}
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <Badge tone={TYPE_TONE[h.type]}>{TYPE_LABEL[h.type]}</Badge>
+                <div className="text-right">
+                  <div className="text-xs font-medium text-fg">
+                    {formatDateHuman(h.holiday_date)}
+                  </div>
+                  <div className="text-2xs text-fg-muted">{rel}</div>
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </SectionCard>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
@@ -208,25 +311,20 @@ export default function AdminHolidaysPage(): JSX.Element {
   const canRead = isAdmin || isPlanner;
   const canWrite = isAdmin;
 
-  // Filter state
   const currentYear = new Date().getUTCFullYear();
   const [year, setYear] = useState<number | null>(currentYear);
   const [typeFilter, setTypeFilter] = useState<HolidayType | "">("");
   const [includeArchived, setIncludeArchived] = useState(false);
 
-  // Modal state
   const [showAdd, setShowAdd] = useState(false);
   const [editTarget, setEditTarget] = useState<HolidayRow | null>(null);
   const [archiveTarget, setArchiveTarget] = useState<HolidayRow | null>(null);
   const [showBulkImport, setShowBulkImport] = useState(false);
 
-  // Banner state
   const [banner, setBanner] = useState<
     | { kind: "success" | "error"; message: string; detail?: string }
     | null
   >(null);
-
-  // ---- Query ----------------------------------------------------------------
 
   const listQuery = useQuery<ListHolidaysResponse>({
     queryKey: ["admin", "holidays", { year, typeFilter, includeArchived }],
@@ -244,8 +342,7 @@ export default function AdminHolidaysPage(): JSX.Element {
     refetchOnWindowFocus: false,
   });
 
-  // ---- Year list — derived from data + the current year for empty start ----
-
+  // Iter 18 — year tab options derived from data.
   const yearOptions = useMemo<number[]>(() => {
     const years = new Set<number>();
     years.add(currentYear);
@@ -256,15 +353,13 @@ export default function AdminHolidaysPage(): JSX.Element {
     return [...years].sort((a, b) => a - b);
   }, [listQuery.data, currentYear]);
 
-  // Total + active counts
   const total = listQuery.data?.total ?? 0;
   const archivedCount = useMemo(
     () =>
-      (listQuery.data?.rows ?? []).filter((r) => r.archived_at !== null).length,
+      (listQuery.data?.rows ?? []).filter((r) => r.archived_at !== null)
+        .length,
     [listQuery.data],
   );
-
-  // ---- Mutations ------------------------------------------------------------
 
   const invalidateList = () =>
     queryClient.invalidateQueries({ queryKey: ["admin", "holidays"] });
@@ -280,8 +375,6 @@ export default function AdminHolidaysPage(): JSX.Element {
       detail: err.message,
     });
   };
-
-  // ---- Render ---------------------------------------------------------------
 
   if (!canRead) {
     return (
@@ -299,10 +392,11 @@ export default function AdminHolidaysPage(): JSX.Element {
 
   return (
     <>
+      {/* Iter 13 — expanded header description */}
       <WorkflowHeader
         eyebrow="Admin"
-        title="Holidays (Israel)"
-        description="Israel holiday calendar consumed by the daily inventory flow projection and planning working-day math. The 75-row baseline is Hebcal-derived for 2026–2028; admins can add custom factory closures or edit defaults below."
+        title="Israel holiday calendar"
+        description="Holidays affect production planning schedules. Days marked here are excluded from working-day calculations used by purchase recommendations, demand bucketing, and lead-time projections. The 75-row baseline is Hebcal-derived for 2026–2028; admins can add custom factory closures or edit defaults below."
         meta={
           <>
             <Badge tone="neutral" dotted>
@@ -344,7 +438,7 @@ export default function AdminHolidaysPage(): JSX.Element {
         }
       />
 
-      {/* -- Tom-Tax warning per checkpoint §10 GAP-AHC-1 residual ---------- */}
+      {/* Tom-Tax warning */}
       <SectionCard tone="warning" density="compact">
         <div className="flex items-start gap-3">
           <AlertTriangle
@@ -367,7 +461,12 @@ export default function AdminHolidaysPage(): JSX.Element {
         </div>
       </SectionCard>
 
-      {/* -- Banner --------------------------------------------------------- */}
+      {/* Iter 19 — Next upcoming holidays */}
+      {!listQuery.isLoading && (listQuery.data?.rows ?? []).length > 0 ? (
+        <UpcomingHolidaysCard rows={listQuery.data!.rows} />
+      ) : null}
+
+      {/* Banner */}
       {banner ? (
         <div
           className={
@@ -376,6 +475,8 @@ export default function AdminHolidaysPage(): JSX.Element {
               : "rounded-md border border-danger/40 bg-danger-softer p-4 text-sm text-danger-fg"
           }
           role={banner.kind === "error" ? "alert" : "status"}
+          aria-live="polite"
+          aria-atomic="true"
         >
           <div className="flex items-start justify-between gap-3">
             <div className="min-w-0">
@@ -396,81 +497,101 @@ export default function AdminHolidaysPage(): JSX.Element {
         </div>
       ) : null}
 
-      {/* -- Filters -------------------------------------------------------- */}
-      <SectionCard
-        eyebrow="Filters"
-        title="Filter and search"
-        density="compact"
-      >
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-          <label className="block">
-            <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              Year
-            </span>
-            <select
-              className="input"
-              value={year === null ? "" : String(year)}
-              onChange={(e) => {
-                const v = e.target.value;
-                setYear(v === "" ? null : parseInt(v, 10));
-              }}
-            >
-              <option value="">All years</option>
-              {yearOptions.map((y) => (
-                <option key={y} value={y}>
-                  {y}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block">
-            <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              Type
-            </span>
-            <select
-              className="input"
-              value={typeFilter}
-              onChange={(e) =>
-                setTypeFilter((e.target.value as HolidayType | "") || "")
-              }
-            >
-              <option value="">All types</option>
-              {HOLIDAY_TYPES.map((t) => (
-                <option key={t} value={t}>
-                  {TYPE_LABEL[t]}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="flex items-end gap-2 sm:col-span-1">
-            <input
-              type="checkbox"
-              checked={includeArchived}
-              onChange={(e) => setIncludeArchived(e.target.checked)}
-              aria-label="Include archived holidays"
-            />
-            <span className="text-xs text-fg">Include archived</span>
-          </label>
-          <div className="flex items-end justify-end">
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm"
-              onClick={() => void listQuery.refetch()}
-              disabled={listQuery.isFetching}
-            >
-              <RefreshCw
-                className={
-                  listQuery.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"
+      {/* Iter 18 — Year tabs + filter controls */}
+      <SectionCard eyebrow="Filters" title="Filter and search" density="compact">
+        <div className="space-y-3">
+          {yearOptions.length > 0 ? (
+            <div>
+              <div className="mb-1.5 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                Year
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                <button
+                  type="button"
+                  className={cn(
+                    "rounded border px-2.5 py-1 text-xs font-medium transition-colors",
+                    year === null
+                      ? "border-accent/60 bg-accent-soft text-accent"
+                      : "border-border/70 bg-bg-subtle text-fg-muted hover:border-accent/40 hover:text-accent",
+                  )}
+                  onClick={() => setYear(null)}
+                >
+                  All
+                </button>
+                {yearOptions.map((y) => (
+                  <button
+                    key={y}
+                    type="button"
+                    className={cn(
+                      "rounded border px-2.5 py-1 text-xs font-medium transition-colors",
+                      year === y
+                        ? "border-accent/60 bg-accent-soft text-accent"
+                        : "border-border/70 bg-bg-subtle text-fg-muted hover:border-accent/40 hover:text-accent",
+                    )}
+                    onClick={() => setYear(y)}
+                  >
+                    {y}
+                    {y === currentYear ? (
+                      <span className="ml-1 text-3xs opacity-60">
+                        (current)
+                      </span>
+                    ) : null}
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : null}
+
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+            <label className="block">
+              <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                Type
+              </span>
+              <select
+                className="input"
+                value={typeFilter}
+                onChange={(e) =>
+                  setTypeFilter((e.target.value as HolidayType | "") || "")
                 }
-                strokeWidth={2}
+              >
+                <option value="">All types</option>
+                {HOLIDAY_TYPES.map((t) => (
+                  <option key={t} value={t}>
+                    {TYPE_LABEL[t]}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="flex items-end gap-2 sm:col-span-1">
+              <input
+                type="checkbox"
+                checked={includeArchived}
+                onChange={(e) => setIncludeArchived(e.target.checked)}
+                aria-label="Include archived holidays"
               />
-              <span>Refresh</span>
-            </button>
+              <span className="text-xs text-fg">Include archived</span>
+            </label>
+            <div className="flex items-end justify-end sm:col-span-2">
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm"
+                onClick={() => void listQuery.refetch()}
+                disabled={listQuery.isFetching}
+              >
+                <RefreshCw
+                  className={
+                    listQuery.isFetching ? "h-4 w-4 animate-spin" : "h-4 w-4"
+                  }
+                  strokeWidth={2}
+                />
+                <span>Refresh</span>
+              </button>
+            </div>
           </div>
         </div>
       </SectionCard>
 
-      {/* -- List ----------------------------------------------------------- */}
+      {/* List */}
       <SectionCard
         eyebrow="Calendar"
         title="Holiday rows"
@@ -488,7 +609,8 @@ export default function AdminHolidaysPage(): JSX.Element {
             <ErrorState
               title="Could not load holidays"
               description={
-                (listQuery.error as Error | undefined)?.message ?? "Unknown error."
+                (listQuery.error as Error | undefined)?.message ??
+                "Unknown error."
               }
               action={
                 <button
@@ -536,7 +658,6 @@ export default function AdminHolidaysPage(): JSX.Element {
         )}
       </SectionCard>
 
-      {/* -- Modals --------------------------------------------------------- */}
       {showAdd && canWrite ? (
         <AddHolidayModal
           onClose={() => setShowAdd(false)}
@@ -614,7 +735,7 @@ function SkeletonTable(): JSX.Element {
 }
 
 // ---------------------------------------------------------------------------
-// HolidayTable — desktop table + mobile card stream.
+// HolidayTable — iters 14 (human dates + relative), 15 (type badge).
 // ---------------------------------------------------------------------------
 
 function HolidayTable({
@@ -630,9 +751,10 @@ function HolidayTable({
 }): JSX.Element {
   const sorted = useMemo(
     () =>
-      [...rows].sort((a, b) =>
-        a.holiday_date.localeCompare(b.holiday_date) ||
-        a.holiday_name.localeCompare(b.holiday_name),
+      [...rows].sort(
+        (a, b) =>
+          a.holiday_date.localeCompare(b.holiday_date) ||
+          a.holiday_name.localeCompare(b.holiday_name),
       ),
     [rows],
   );
@@ -657,17 +779,34 @@ function HolidayTable({
           <tbody>
             {sorted.map((row) => {
               const archived = row.archived_at !== null;
+              const past = isPast(row.holiday_date);
+              const rel = relativeDays(row.holiday_date);
               return (
                 <tr
                   key={row.holiday_date}
-                  className={
+                  className={cn(
+                    "border-b border-border/40 last:border-b-0",
                     archived
-                      ? "border-b border-border/40 bg-bg-subtle/40 last:border-b-0"
-                      : "border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
-                  }
+                      ? "bg-bg-subtle/40"
+                      : past
+                        ? "opacity-60 hover:opacity-100 hover:bg-bg-subtle/40"
+                        : "hover:bg-bg-subtle/40",
+                  )}
                 >
-                  <td className="px-3 py-2 font-mono text-xs text-fg">
-                    {row.holiday_date}
+                  <td className="px-3 py-2">
+                    <div className="text-xs font-medium text-fg">
+                      {formatDateHuman(row.holiday_date)}
+                    </div>
+                    {rel ? (
+                      <div
+                        className={cn(
+                          "text-2xs",
+                          past ? "text-fg-faint" : "text-info-fg",
+                        )}
+                      >
+                        {rel}
+                      </div>
+                    ) : null}
                   </td>
                   <td className="px-3 py-2 text-xs text-fg">
                     <div className="font-medium">{row.holiday_name}</div>
@@ -677,8 +816,10 @@ function HolidayTable({
                       </div>
                     ) : null}
                   </td>
-                  <td className="px-3 py-2 text-xs text-fg">
-                    {TYPE_LABEL[row.type]}
+                  <td className="px-3 py-2">
+                    <Badge tone={TYPE_TONE[row.type]}>
+                      {TYPE_LABEL[row.type]}
+                    </Badge>
                   </td>
                   <td className="px-3 py-2">
                     <Badge tone={row.blocks_pickup ? "warning" : "neutral"}>
@@ -710,7 +851,7 @@ function HolidayTable({
                           type="button"
                           className="btn btn-ghost btn-sm h-7 px-2"
                           onClick={() => onEdit(row)}
-                          aria-label={`Edit ${row.holiday_date}`}
+                          aria-label={`Edit ${formatDateHuman(row.holiday_date)}`}
                           disabled={archived}
                           title={
                             archived
@@ -724,7 +865,7 @@ function HolidayTable({
                           type="button"
                           className="btn btn-ghost btn-sm h-7 px-2"
                           onClick={() => onArchive(row)}
-                          aria-label={`Archive ${row.holiday_date}`}
+                          aria-label={`Archive ${formatDateHuman(row.holiday_date)}`}
                           disabled={archived}
                           title={
                             archived ? "Already archived" : "Archive holiday"
@@ -746,19 +887,35 @@ function HolidayTable({
       <div className="space-y-2 p-3 sm:hidden">
         {sorted.map((row) => {
           const archived = row.archived_at !== null;
+          const past = isPast(row.holiday_date);
+          const rel = relativeDays(row.holiday_date);
           return (
             <div
               key={row.holiday_date}
-              className={
+              className={cn(
+                "rounded border p-3",
                 archived
-                  ? "rounded border border-border/60 bg-bg-subtle/40 p-3"
-                  : "rounded border border-border/70 bg-bg-raised p-3"
-              }
+                  ? "border-border/60 bg-bg-subtle/40"
+                  : "border-border/70 bg-bg-raised",
+                past && !archived && "opacity-70",
+              )}
             >
               <div className="flex items-start justify-between gap-3">
                 <div className="min-w-0">
-                  <div className="font-mono text-sm font-semibold text-fg-strong">
-                    {row.holiday_date}
+                  <div className="flex items-baseline gap-2">
+                    <div className="text-sm font-semibold text-fg-strong">
+                      {formatDateHuman(row.holiday_date)}
+                    </div>
+                    {rel ? (
+                      <div
+                        className={cn(
+                          "text-2xs",
+                          past ? "text-fg-faint" : "text-info-fg",
+                        )}
+                      >
+                        {rel}
+                      </div>
+                    ) : null}
                   </div>
                   <div className="mt-0.5 text-sm text-fg">
                     {row.holiday_name}
@@ -776,7 +933,7 @@ function HolidayTable({
                 )}
               </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
-                <Badge tone="neutral">{TYPE_LABEL[row.type]}</Badge>
+                <Badge tone={TYPE_TONE[row.type]}>{TYPE_LABEL[row.type]}</Badge>
                 <Badge tone={row.blocks_pickup ? "warning" : "neutral"}>
                   {row.blocks_pickup ? "Blocks pickup" : "Allows pickup"}
                 </Badge>
@@ -838,8 +995,7 @@ function Th({
 }
 
 // ---------------------------------------------------------------------------
-// Modal shell — minimal centered dialog (Radix Dialog is overkill for these
-// simple admin forms; mobile @ 390px renders bottom-up sheet via items-end).
+// Modal shell
 // ---------------------------------------------------------------------------
 
 function ModalShell({
@@ -971,8 +1127,8 @@ function AddHolidayModal({
   });
 
   const today = TODAY_ISO();
-  const isPast = form.holiday_date < today;
-  const pastBlocked = isPast && !form.allow_past;
+  const isPastDate = form.holiday_date < today;
+  const pastBlocked = isPastDate && !form.allow_past;
 
   const isValid =
     /^\d{4}-\d{2}-\d{2}$/.test(form.holiday_date) &&
@@ -980,13 +1136,12 @@ function AddHolidayModal({
     form.holiday_name_he.trim().length > 0 &&
     !pastBlocked;
 
-  // Default flag rules per type (W4 spec §4.2 + inventory-flow contract §7.2).
   const onTypeChange = (next: HolidayType) => {
     setForm((prev) => ({
       ...prev,
       type: next,
-      blocks_pickup: next === "full_holiday" ? true : false,
-      blocks_supply: next === "full_holiday" ? true : false,
+      blocks_pickup: next === "full_holiday",
+      blocks_supply: next === "full_holiday",
     }));
   };
 
@@ -1034,7 +1189,7 @@ function AddHolidayModal({
               setForm((p) => ({ ...p, holiday_date: e.target.value }))
             }
           />
-          {isPast ? (
+          {isPastDate ? (
             <label className="mt-2 flex items-center gap-2 text-xs text-fg-muted">
               <input
                 type="checkbox"
@@ -1135,8 +1290,7 @@ function AddHolidayModal({
 }
 
 // ---------------------------------------------------------------------------
-// Edit holiday modal — PK immutable per AHC-5; conflict warning surfaces if
-// a stale client tries to PATCH holiday_date (W1 returns 422 PRIMARY_KEY_IMMUTABLE).
+// Edit holiday modal
 // ---------------------------------------------------------------------------
 
 function EditHolidayModal({
@@ -1185,7 +1339,7 @@ function EditHolidayModal({
 
   return (
     <ModalShell
-      title={`Edit holiday — ${row.holiday_date}`}
+      title={`Edit holiday — ${formatDateHuman(row.holiday_date)}`}
       description="The date is immutable. To change the date, archive this row and create a new one. All other fields are editable."
       onClose={onClose}
       busy={mutation.isPending}
@@ -1221,7 +1375,8 @@ function EditHolidayModal({
         <div className="rounded border border-border/70 bg-bg-subtle/40 p-3 text-xs text-fg-muted">
           <div>
             <span className="font-semibold text-fg">Date:</span>{" "}
-            <span className="font-mono">{row.holiday_date}</span> (locked)
+            <span className="font-mono">{row.holiday_date}</span>{" "}
+            <span className="text-fg-faint">(locked)</span>
           </div>
         </div>
 
@@ -1313,8 +1468,7 @@ function EditHolidayModal({
 }
 
 // ---------------------------------------------------------------------------
-// Archive holiday modal (soft-delete).
-// W1 DELETE schema: { reason (REQUIRED, min 1, max 2048), idempotency_key? }.
+// Archive holiday modal
 // ---------------------------------------------------------------------------
 
 function ArchiveHolidayModal({
@@ -1346,7 +1500,7 @@ function ArchiveHolidayModal({
 
   return (
     <ModalShell
-      title={`Archive holiday — ${row.holiday_date}`}
+      title={`Archive holiday — ${formatDateHuman(row.holiday_date)}`}
       description="Archiving sets archived_at and hides this row from the default list. Historical planning runs are unaffected; future runs continue to treat the date as a non-working day until the W1 cycle 8 consumer-side filter ships (GAP-AHC-1)."
       onClose={onClose}
       busy={mutation.isPending}
@@ -1386,7 +1540,9 @@ function ArchiveHolidayModal({
               {row.holiday_name_he}
             </div>
           ) : null}
-          <div className="mt-1 font-mono text-fg-muted">{row.holiday_date}</div>
+          <div className="mt-1 text-fg-muted">
+            {formatDateHuman(row.holiday_date)}
+          </div>
         </div>
 
         <Field label="Reason" hint="Required. Captured in the audit log.">
@@ -1411,9 +1567,7 @@ function ArchiveHolidayModal({
 }
 
 // ---------------------------------------------------------------------------
-// Bulk import modal — preview + commit.
-// CSV header expected: holiday_date,holiday_name,holiday_name_he,type,blocks_pickup,blocks_supply,notes
-// JSON: array of objects with the same field names.
+// Bulk import modal — iter 17: summary card + highlighted error rows.
 // ---------------------------------------------------------------------------
 
 function BulkImportModal({
@@ -1447,9 +1601,9 @@ function BulkImportModal({
       }
       return arr.map((r, i) => coerceRow(r, i));
     }
-    // CSV
     const lines = trimmed
-      .split(/\r?\n/)
+      .split(/?
+/)
       .map((l) => l.trim())
       .filter((l) => l.length > 0);
     if (lines.length < 2) {
@@ -1481,11 +1635,11 @@ function BulkImportModal({
     });
   };
 
-  const coerceRow = (raw: unknown, index: number): BulkImportRow => {
-    if (typeof raw !== "object" || raw === null) {
+  const coerceRow = (rawRow: unknown, index: number): BulkImportRow => {
+    if (typeof rawRow !== "object" || rawRow === null) {
       throw new Error(`Row ${index + 1}: not an object`);
     }
-    const o = raw as Record<string, unknown>;
+    const o = rawRow as Record<string, unknown>;
     const date = String(o.holiday_date ?? "").trim();
     if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) {
       throw new Error(
@@ -1500,7 +1654,9 @@ function BulkImportModal({
     }
     const toBool = (v: unknown): boolean => {
       if (typeof v === "boolean") return v;
-      const s = String(v ?? "").trim().toLowerCase();
+      const s = String(v ?? "")
+        .trim()
+        .toLowerCase();
       if (s === "true" || s === "1" || s === "yes") return true;
       if (s === "false" || s === "0" || s === "no" || s === "") return false;
       throw new Error(
@@ -1515,7 +1671,9 @@ function BulkImportModal({
       blocks_pickup: toBool(o.blocks_pickup),
       blocks_supply: toBool(o.blocks_supply),
       notes:
-        o.notes === null || o.notes === undefined || String(o.notes).trim() === ""
+        o.notes === null ||
+        o.notes === undefined ||
+        String(o.notes).trim() === ""
           ? null
           : String(o.notes).trim(),
     };
@@ -1586,11 +1744,17 @@ function BulkImportModal({
   };
 
   const busy = previewMutation.isPending || commitMutation.isPending;
+  const validCount = preview
+    ? preview.to_create.length +
+      preview.to_update.length +
+      preview.to_skip.length
+    : 0;
+  const errorCount = preview ? preview.to_reject.length : 0;
 
   return (
     <ModalShell
       title="Bulk import holidays"
-      description="Paste CSV or JSON below. Preview shows the diff against the live DB; commit applies it. Idempotency key is generated per session."
+      description="Paste CSV or JSON. Preview shows the diff against the live DB; commit applies it."
       onClose={onClose}
       busy={busy}
       footer={
@@ -1607,7 +1771,9 @@ function BulkImportModal({
                 disabled={busy}
               >
                 <option value="upsert">upsert (update existing)</option>
-                <option value="skip-existing">skip-existing (new only)</option>
+                <option value="skip-existing">
+                  skip-existing (new only)
+                </option>
               </select>
             </label>
           </div>
@@ -1639,9 +1805,17 @@ function BulkImportModal({
             ) : (
               <button
                 type="button"
-                className="btn btn-primary"
+                className={cn(
+                  "btn btn-primary",
+                  errorCount > 0 && "opacity-70",
+                )}
                 onClick={onCommit}
                 disabled={busy}
+                title={
+                  errorCount > 0
+                    ? `${errorCount} rows will be rejected — review before committing`
+                    : undefined
+                }
               >
                 {commitMutation.isPending ? (
                   <>
@@ -1650,11 +1824,8 @@ function BulkImportModal({
                   </>
                 ) : (
                   <span>
-                    Commit (
-                    {preview.to_create.length +
-                      preview.to_update.length +
-                      preview.to_skip.length}{" "}
-                    rows)
+                    Commit ({validCount} row{validCount !== 1 ? "s" : ""})
+                    {errorCount > 0 ? ` · ${errorCount} rejected` : ""}
                   </span>
                 )}
               </button>
@@ -1675,7 +1846,10 @@ function BulkImportModal({
               setRaw(e.target.value);
               setPreview(null);
             }}
-            placeholder='holiday_date,holiday_name,holiday_name_he,type,blocks_pickup,blocks_supply,notes&#10;2027-12-31,New Year Eve,(Hebrew display name here),full_holiday,true,true,Tom factory closure'
+            placeholder={
+              "holiday_date,holiday_name,holiday_name_he,type,blocks_pickup,blocks_supply,notes
+2027-12-31,New Year Eve,(Hebrew display name here),full_holiday,true,true,Tom factory closure"
+            }
             disabled={busy}
             rows={8}
           />
@@ -1687,29 +1861,73 @@ function BulkImportModal({
           </div>
         ) : null}
 
+        {/* Iter 17 — summary card before commit */}
         {preview ? (
           <div className="space-y-3">
-            <div className="grid grid-cols-2 gap-2 text-xs sm:grid-cols-4">
-              <Stat label="Create" value={preview.to_create.length} tone="success" />
-              <Stat label="Update" value={preview.to_update.length} tone="info" />
-              <Stat label="Skip" value={preview.to_skip.length} tone="neutral" />
-              <Stat label="Reject" value={preview.to_reject.length} tone="danger" />
+            <div
+              className={cn(
+                "rounded border p-3",
+                errorCount > 0
+                  ? "border-warning/40 bg-warning-softer"
+                  : "border-success/40 bg-success-softer",
+              )}
+            >
+              <div className="mb-2 text-xs font-semibold text-fg-strong">
+                {errorCount === 0
+                  ? `${validCount} valid row${validCount !== 1 ? "s" : ""} — ready to commit`
+                  : `${validCount} valid / ${errorCount} error${errorCount !== 1 ? "s" : ""} — review before committing`}
+              </div>
+              <div className="grid grid-cols-4 gap-2 text-xs">
+                <Stat
+                  label="Create"
+                  value={preview.to_create.length}
+                  tone="success"
+                />
+                <Stat
+                  label="Update"
+                  value={preview.to_update.length}
+                  tone="info"
+                />
+                <Stat
+                  label="Skip"
+                  value={preview.to_skip.length}
+                  tone="neutral"
+                />
+                <Stat
+                  label="Reject"
+                  value={preview.to_reject.length}
+                  tone="danger"
+                />
+              </div>
             </div>
 
             {preview.to_reject.length > 0 ? (
-              <div className="rounded border border-danger/40 bg-danger-softer p-3 text-xs text-danger-fg">
-                <div className="font-semibold">Rejected rows:</div>
-                <ul className="mt-1 list-disc pl-5">
+              <div className="rounded border border-danger/40 bg-danger-softer p-3">
+                <div className="mb-1.5 text-xs font-semibold text-danger-fg">
+                  {preview.to_reject.length} rejected row
+                  {preview.to_reject.length !== 1 ? "s" : ""} — fix before
+                  committing
+                </div>
+                <ul className="space-y-1">
                   {preview.to_reject.map((r, i) => (
-                    <li key={i}>{r.reason}</li>
+                    <li
+                      key={i}
+                      className="flex items-start gap-2 rounded border border-danger/20 bg-danger-softer/60 px-2 py-1.5 text-xs text-danger-fg"
+                    >
+                      <span className="shrink-0 font-mono font-semibold">
+                        Row {i + 1}
+                      </span>
+                      <span className="text-danger-fg/80">{r.reason}</span>
+                    </li>
                   ))}
                 </ul>
               </div>
             ) : null}
 
             <details className="text-xs">
-              <summary className="cursor-pointer text-fg-muted">
-                Show preview detail
+              <summary className="flex cursor-pointer items-center gap-1 text-fg-muted hover:text-fg">
+                <ChevronRight className="h-3 w-3" strokeWidth={2} />
+                Show full preview detail
               </summary>
               <div className="mt-2 space-y-2">
                 {preview.to_create.length > 0 ? (
@@ -1803,10 +2021,6 @@ function PreviewList({
     </div>
   );
 }
-
-// ---------------------------------------------------------------------------
-// Field — labeled control wrapper.
-// ---------------------------------------------------------------------------
 
 function Field({
   label,
