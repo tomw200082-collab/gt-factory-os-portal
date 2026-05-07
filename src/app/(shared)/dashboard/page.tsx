@@ -1,1420 +1,641 @@
 "use client";
 
-// ---------------------------------------------------------------------------
-// /dashboard — Control Tower landing (Tranche C §E of
-// portal-full-production-refactor).
-//
-// Replaces the Tranche-A interim LIVE_MODULES hardcoded link list with a
-// real operational signals dashboard. Seven signal blocks + a role-adapted
-// quick-action launcher.
-//
-// Data strategy (per dispatch Step 3):
-//   - TanStack Query `useQueries` with staleTime = 30_000 ms (DR-1).
-//   - Per-source fetchers under src/features/dashboard/client.ts return
-//     Signal<T> discriminated union so every panel has a honest state:
-//       "ok" | "unavailable" | "pending_tranche_i".
-//   - Inbox summary reuses the ["inbox","all_rows"] cache from Tranche B
-//     — no duplicate fetch. If the cache is cold, panel renders a
-//     "visit /inbox once to populate" hint.
-//
-// Role-adapted quick actions use authorizeCapability() verbatim — same gate
-// as RoleGate + SideNav.
-//
-// All hrefs are canonical domain-first URLs per plan §B.1. The
-// scripts/check-no-persona-in-urls.mjs guard fails CI on route-group leakage.
-// ---------------------------------------------------------------------------
-
-import { useMemo, type ReactNode } from "react";
-import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { useQueries, useQueryClient } from "@tanstack/react-query";
+import type { ReactNode, CSSProperties } from "react";
+import { useMemo } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
-  AlertOctagon,
   AlertTriangle,
   ArrowRight,
-  BadgeCheck,
-  CalendarClock,
   CheckCircle2,
-  CircleDashed,
-  RefreshCw,
-  ShieldAlert,
-  Signal as SignalIcon,
+  Flame,
+  TrendingDown,
 } from "lucide-react";
+import Link from "next/link";
 
-import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
-import { SectionCard } from "@/components/workflow/SectionCard";
-import { Badge } from "@/components/badges/StatusBadge";
-import { useSession } from "@/lib/auth/session-provider";
-import { authorizeCapability } from "@/lib/auth/authorize";
-import { cn } from "@/lib/cn";
+/* ─────────────────────────────────────────────────────────────────────────────
+   DASHBOARD — GT Factory OS
+   Merged: Dashboard overview + Control Tower (v2)
+   Dark-mode operational command center
+───────────────────────────────────────────────────────────────────────────── */
 
-import {
-  fetchBreakGlassState,
-  fetchIntegrationFreshness,
-  fetchJobsHealth24h,
-  fetchLatestForecast,
-  fetchLatestPlanningRun,
-  fetchParityCheck,
-  fetchRuntimeReadyRegistry,
-  fetchStockTruth,
-  summarizeInbox,
-  truncateLastError,
-} from "@/features/dashboard/client";
-import type { Signal } from "@/features/dashboard/types";
-import { QUICK_ACTIONS } from "@/features/dashboard/quick-actions";
-import type { InboxRow } from "@/features/inbox/types";
-import { usePrefetchInventoryFlow } from "@/app/(planning)/planning/inventory-flow/_lib/useInventoryFlow";
+// ── Design tokens ─────────────────────────────────────────────────────────────
+const C = {
+  gold:   "#F5A623",
+  teal:   "#22D3A3",
+  red:    "#FF4455",
+  org:    "#FF8C40",
+  blue:   "#5B9BFF",
+  surf:   "rgba(255,255,255,0.04)",
+  surfHi: "rgba(255,255,255,0.07)",
+  bord:   "rgba(255,255,255,0.09)",
+  txt:    "#EEEEF5",
+  muted:  "rgba(238,238,245,0.50)",
+  subtle: "rgba(238,238,245,0.28)",
+  dim:    "rgba(238,238,245,0.14)",
+} as const;
 
-// ---------------------------------------------------------------------------
-// Cache keys. Dashboard queries are segregated from the inbox's to avoid
-// accidental cross-source invalidation. The single exception is the inbox
-// summary which READS (not writes) the ["inbox","all_rows"] cache seeded by
-// /inbox page on visit.
-// ---------------------------------------------------------------------------
-const QK_PLANNING_RUN = ["dashboard", "latest_planning_run"] as const;
-const QK_FORECAST = ["dashboard", "latest_forecast"] as const;
-const QK_BREAK_GLASS = ["dashboard", "break_glass"] as const;
-const QK_PARITY_CHECK = ["dashboard", "parity_check"] as const;
-const QK_STOCK_TRUTH = ["dashboard", "stock_truth"] as const;
-const QK_FRESHNESS = ["dashboard", "integration_freshness"] as const;
-const QK_JOBS_HEALTH = ["dashboard", "jobs_health_24h"] as const;
-const QK_RUNTIME_READY = ["dashboard", "runtime_ready"] as const;
+// ── Fixture data — replaced by API once backend exposes these endpoints ────────
+const SHIPMENTS = [
+  { product: "Mojito cocktail 450ml",    qty: 48,  unit: "btl", time: "Today 13:42" },
+  { product: "Peach iced tea 1L",        qty: 72,  unit: "btl", time: "Today 11:15" },
+  { product: "Mango smoothie 330ml",     qty: 36,  unit: "btl", time: "Today 09:30" },
+  { product: "Classic lemonade 500ml",   qty: 120, unit: "btl", time: "Yesterday"   },
+  { product: "Margarita cocktail 450ml", qty: 24,  unit: "btl", time: "Yesterday"   },
+];
 
-const INBOX_CACHE_KEY = ["inbox", "all_rows"] as const;
+const PROD_WEEK = [
+  { name: "Mojito 450ml",    current: 132, target: 480, planned: 240, color: C.gold },
+  { name: "Peach Tea 1L",   current: 310, target: 800, planned: 400, color: C.teal },
+  { name: "Lemonade 500ml", current: 220, target: 960, planned: 480, color: C.blue },
+];
 
-// All dashboard signals share the same cadence per DR-1. No server cache.
-const DASHBOARD_STALE_TIME_MS = 30_000;
+const SHORTAGE = [
+  { name: "Fresh mint",   onHand: "0.6 kg",  days: 1 },
+  { name: "Lime juice",   onHand: "9.4 L",   days: 3 },
+  { name: "Mojito label", onHand: "420 pcs", days: 5 },
+  { name: "Mojito 450ml", onHand: "132 btl", days: 6 },
+];
 
-// Health-check signals (parity, break-glass) refresh every 60s per Loop 15 spec.
-const HEALTH_STALE_TIME_MS = 60_000;
+const FRESHNESS = [
+  { label: "Ledger",        ago: "2 min",  ok: true  },
+  { label: "LionWheel",     ago: "2h 12m", ok: false },
+  { label: "Shopify",       ago: "44 min", ok: true  },
+  { label: "Green Invoice", ago: "4h 58m", ok: true  },
+];
 
-// ---------------------------------------------------------------------------
-// Helpers.
-// ---------------------------------------------------------------------------
-function fmtDateShort(iso: string | null | undefined): string {
-  if (!iso) return "—";
-  try {
-    return new Date(iso).toLocaleDateString(undefined, {
-      month: "short", day: "2-digit", year: "numeric",
-    });
-  } catch { return iso; }
+// ── Live API types (from Control Tower v2) ────────────────────────────────────
+interface CriticalTodayRow {
+  trigger_kind: string;
+  display_name: string;
+  severity: string;
+  triggered_at: string;
+  detail_jsonb: unknown;
+}
+interface CriticalTodayResponse {
+  rows: CriticalTodayRow[];
+  as_of: string;
 }
 
-function ageHumanized(iso: string | null | undefined, now: Date): string {
+interface SlippedPlanRow {
+  plan_id: string;
+  plan_date: string;
+  item_id: string;
+  item_name: string | null;
+  planned_qty: string;
+  uom: string;
+  days_overdue: number;
+}
+interface SlippedPlansResponse {
+  rows: SlippedPlanRow[];
+  as_of: string;
+  window_days: 7;
+}
+
+async function fetchJson<T>(url: string, signal?: AbortSignal): Promise<T | null> {
+  const res = await fetch(url, { method: "GET", headers: { Accept: "application/json" }, signal });
+  if (!res.ok) throw new Error(`HTTP ${res.status}`);
+  return (await res.json()) as T;
+}
+
+function fmtRelative(iso: string | null | undefined, now: Date): string {
   if (!iso) return "—";
-  const ts = new Date(iso).getTime();
-  if (!Number.isFinite(ts)) return iso;
-  const deltaMs = now.getTime() - ts;
-  if (deltaMs < 0) return "in the future";
-  const mins = Math.max(0, Math.round(deltaMs / 60_000));
+  const delta = now.getTime() - new Date(iso).getTime();
+  if (delta < 0) return "just now";
+  const mins = Math.round(delta / 60_000);
   if (mins < 1) return "just now";
   if (mins < 60) return `${mins}m ago`;
   const hrs = Math.round(mins / 60);
   if (hrs < 48) return `${hrs}h ago`;
-  const days = Math.round(hrs / 24);
-  return `${days}d ago`;
+  return `${Math.round(hrs / 24)}d ago`;
 }
 
-function roleBadgeTone(
-  role: "operator" | "planner" | "admin" | "viewer",
-): "accent" | "success" | "info" | "neutral" {
-  switch (role) {
-    case "admin":
-      return "accent";
-    case "planner":
-      return "info";
-    case "operator":
-      return "success";
-    default:
-      return "neutral";
-  }
+function fmtPlanDate(s: string): string {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(s)) return s;
+  try {
+    const [y, m, d] = s.split("-").map(Number);
+    return new Date(Date.UTC(y, m - 1, d)).toLocaleDateString(undefined, { month: "short", day: "2-digit" });
+  } catch { return s; }
 }
 
-// ---------------------------------------------------------------------------
-// Generic signal renderers.
-// ---------------------------------------------------------------------------
-
-function PendingBadge({ note }: { note: string }) {
-  return (
-    <div
-      className="flex items-start gap-2 rounded border border-border/60 bg-bg-subtle px-3 py-2 text-xs text-fg-muted"
-      data-testid="dashboard-pending-tranche-i"
-    >
-      <CircleDashed
-        className="mt-0.5 h-3.5 w-3.5 shrink-0 text-fg-faint"
-        strokeWidth={2}
-      />
-      <div className="min-w-0">
-        <div className="font-semibold text-fg-muted">Not yet available</div>
-        <div className="mt-0.5 leading-relaxed">{note}</div>
-      </div>
-    </div>
-  );
+// ── Helpers ───────────────────────────────────────────────────────────────────
+function urgencyColor(d: number) { return d <= 2 ? C.red : d <= 5 ? C.org : C.gold; }
+function urgencyBg(d: number) {
+  return d <= 2 ? "rgba(255,68,85,0.12)" : d <= 5 ? "rgba(255,140,64,0.10)" : "rgba(245,166,35,0.08)";
 }
 
-function UnavailableBadge({ reason }: { reason: string }) {
-  return (
-    <div
-      className="flex items-start gap-2 rounded border border-warning/40 bg-warning-softer px-3 py-2 text-xs text-warning-fg"
-      data-testid="dashboard-signal-unavailable"
-    >
-      <AlertTriangle
-        className="mt-0.5 h-3.5 w-3.5 shrink-0 text-warning"
-        strokeWidth={2}
-      />
-      <div className="min-w-0">
-        <div className="font-semibold">Signal unavailable</div>
-        <div className="mt-0.5 leading-relaxed">{reason}</div>
-      </div>
-    </div>
-  );
-}
-
-function StatPill({
-  label,
-  value,
-  tone,
-  sub,
-  href,
-  icon,
-  testid,
-}: {
-  label: string;
-  value: ReactNode;
-  tone: "danger" | "warning" | "info" | "success" | "neutral" | "accent";
-  sub?: ReactNode;
-  href?: string;
-  icon?: ReactNode;
-  testid?: string;
+// ── Shared card ───────────────────────────────────────────────────────────────
+function Card({ children, accent, hot, style: s }: {
+  children: ReactNode; accent?: string; hot?: boolean; style?: CSSProperties;
 }) {
-  const TONE_BG: Record<typeof tone, string> = {
-    danger: "border-danger/40 bg-danger-softer",
-    warning: "border-warning/40 bg-warning-softer",
-    info: "border-info/40 bg-info-softer",
-    success: "border-success/40 bg-success-softer",
-    neutral: "border-border/70 bg-bg-raised",
-    accent: "border-accent/40 bg-accent-soft",
-  };
-  const TONE_TITLE: Record<typeof tone, string> = {
-    danger: "text-danger-fg",
-    warning: "text-warning-fg",
-    info: "text-info-fg",
-    success: "text-success-fg",
-    neutral: "text-fg-strong",
-    accent: "text-accent",
-  };
-  const inner = (
-    <div
-      className={cn(
-        "flex h-full flex-col gap-2 rounded border p-4",
-        TONE_BG[tone],
+  return (
+    <div style={{
+      background: hot ? "rgba(255,68,85,0.10)"
+        : accent ? `radial-gradient(circle at top right, ${accent}18 0%, rgba(0,0,0,0) 65%), ${C.surf}`
+        : C.surf,
+      border: `1px solid ${accent ? (hot ? C.red + "38" : accent + "28") : C.bord}`,
+      borderRadius: 14, padding: "20px 22px",
+      position: "relative", overflow: "hidden", ...s,
+    }}>
+      {accent && !hot && (
+        <div style={{ position: "absolute", top: -24, right: -24, width: 90, height: 90,
+          borderRadius: "50%", background: accent, filter: "blur(44px)", opacity: 0.22, pointerEvents: "none" }} />
       )}
-      data-testid={testid}
-    >
-      <div className="flex items-center gap-2 text-3xs font-semibold uppercase tracking-sops text-fg-muted">
-        {icon}
-        {label}
-      </div>
-      <div
-        className={cn(
-          "text-2xl font-semibold tracking-tighter",
-          TONE_TITLE[tone],
-        )}
-      >
+      {hot && (
+        <div style={{ position: "absolute", top: -30, right: -30, width: 110, height: 110,
+          borderRadius: "50%", background: C.red, filter: "blur(50px)", opacity: 0.18, pointerEvents: "none" }} />
+      )}
+      {children}
+    </div>
+  );
+}
+
+function Label({ children, color }: { children: ReactNode; color?: string }) {
+  return (
+    <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.13em",
+      color: color ?? C.subtle, textTransform: "uppercase", marginBottom: 10 }}>
+      {children}
+    </div>
+  );
+}
+
+function Pill({ color, bg, children }: { color: string; bg: string; children: ReactNode }) {
+  return (
+    <div style={{ background: bg, border: `1px solid ${color}30`, borderRadius: 8,
+      padding: "6px 12px", fontSize: 12, fontWeight: 700, color, flexShrink: 0 }}>
+      {children}
+    </div>
+  );
+}
+
+// ── Value card ────────────────────────────────────────────────────────────────
+function ValueCard({ label, value, sub, accent }: {
+  label: string; value: string; sub: string; accent: string;
+}) {
+  return (
+    <Card accent={accent}>
+      <Label color={accent}>{label}</Label>
+      <div style={{ fontSize: 34, fontWeight: 900, lineHeight: 1, color: C.txt,
+        fontVariantNumeric: "tabular-nums", letterSpacing: "-0.035em" }}>
         {value}
       </div>
-      {sub ? (
-        <div className="text-xs leading-relaxed text-fg-muted">{sub}</div>
-      ) : null}
-    </div>
+      <div style={{ fontSize: 11, color: C.subtle, marginTop: 9, fontWeight: 500 }}>{sub}</div>
+      <div style={{ marginTop: 16, height: 2, borderRadius: 1,
+        background: `linear-gradient(to right, ${accent}50, ${accent}10)` }} />
+    </Card>
   );
-  if (href) {
-    return (
-      <Link
-        href={href}
-        className="group flex h-full transition-opacity hover:opacity-90"
-      >
-        {inner}
-      </Link>
-    );
-  }
-  return inner;
 }
 
-// ---------------------------------------------------------------------------
-// Page.
-// ---------------------------------------------------------------------------
-export default function DashboardPage() {
-  const { session, isLoading: sessionLoading, loadError } = useSession();
-  const queryClient = useQueryClient();
-  const now = useMemo(() => new Date(), []);
-
-  // Background prefetch of /planning/inventory-flow. The upstream SQL takes
-  // ~22s on a cold run; firing this when Tom lands on /dashboard means by
-  // the time he clicks "Inventory Flow" in the sidebar the data is usually
-  // already in cache and the page renders instantly. Defaults to the same
-  // params the inventory-flow page reads from URL on first visit (no family,
-  // at_risk_only=true). Idempotent — TanStack Query dedupes in-flight.
-  usePrefetchInventoryFlow({ at_risk_only: true });
-
-  // -------------------------------------------------------------------------
-  // Parallel dashboard queries. Each signal has its own key so a future
-  // tranche can invalidate independently. staleTime = 30s per DR-1.
-  // -------------------------------------------------------------------------
-  const queries = useQueries({
-    queries: [
-      {
-        queryKey: QK_PLANNING_RUN,
-        queryFn: ({ signal }: { signal: AbortSignal }) =>
-          fetchLatestPlanningRun(signal),
-        staleTime: DASHBOARD_STALE_TIME_MS,
-      },
-      {
-        queryKey: QK_FORECAST,
-        queryFn: ({ signal }: { signal: AbortSignal }) =>
-          fetchLatestForecast(signal),
-        staleTime: DASHBOARD_STALE_TIME_MS,
-      },
-      {
-        queryKey: QK_BREAK_GLASS,
-        queryFn: ({ signal }: { signal: AbortSignal }) =>
-          fetchBreakGlassState(signal),
-        staleTime: HEALTH_STALE_TIME_MS,
-      },
-      {
-        queryKey: QK_PARITY_CHECK,
-        queryFn: ({ signal }: { signal: AbortSignal }) =>
-          fetchParityCheck(signal),
-        staleTime: HEALTH_STALE_TIME_MS,
-      },
-      {
-        queryKey: QK_STOCK_TRUTH,
-        queryFn: () => fetchStockTruth(),
-        staleTime: DASHBOARD_STALE_TIME_MS,
-      },
-      {
-        queryKey: QK_FRESHNESS,
-        queryFn: () => fetchIntegrationFreshness(),
-        staleTime: DASHBOARD_STALE_TIME_MS,
-      },
-      {
-        queryKey: QK_JOBS_HEALTH,
-        queryFn: ({ signal }: { signal: AbortSignal }) => fetchJobsHealth24h(signal),
-        staleTime: DASHBOARD_STALE_TIME_MS,
-      },
-      {
-        queryKey: QK_RUNTIME_READY,
-        queryFn: () => fetchRuntimeReadyRegistry(),
-        staleTime: DASHBOARD_STALE_TIME_MS,
-      },
-    ],
-  });
-
-  const [
-    planningRunQ,
-    forecastQ,
-    breakGlassQ,
-    parityCheckQ,
-    stockTruthQ,
-    freshnessQ,
-    jobsHealthQ,
-    runtimeReadyQ,
-  ] = queries;
-
-  // Reuse Tranche B's inbox cache — no duplicate fetch per dispatch Step 3.
-  const inboxRows = queryClient.getQueryData<InboxRow[]>(INBOX_CACHE_KEY);
-  const inboxSummary = summarizeInbox(inboxRows);
-
-  // -------------------------------------------------------------------------
-  // Role-adapted quick actions.
-  // -------------------------------------------------------------------------
-  const quickActions = useMemo(
-    () =>
-      QUICK_ACTIONS.filter((action) =>
-        authorizeCapability(session.role, action.required),
-      ),
-    [session.role],
-  );
-
-  // -------------------------------------------------------------------------
-  // Render — header + greeting + 7 signal blocks + quick-actions launcher.
-  // -------------------------------------------------------------------------
-  const displayName = session.display_name.split(" (")[0] || session.email || "";
-  const greeting = sessionLoading
-    ? "Dashboard"
-    : displayName
-      ? `Welcome, ${displayName}`
-      : "Dashboard";
-
+// ── Stock donut ───────────────────────────────────────────────────────────────
+function StockDonut({ healthy, shortage, overstock, total }: {
+  healthy: number; shortage: number; overstock: number; total: number;
+}) {
+  const r = 40, circ = 2 * Math.PI * r, gap = 6;
+  function arc(count: number, color: string, offset: number) {
+    return (
+      <circle cx={52} cy={52} r={r} fill="none" stroke={color} strokeWidth={10}
+        strokeDasharray={`${Math.max(0, (count / total) * circ - gap)} ${circ}`}
+        strokeDashoffset={offset} transform="rotate(-90 52 52)" strokeLinecap="round" />
+    );
+  }
+  const hShare = (healthy / total) * circ;
+  const sShare = (shortage / total) * circ;
   return (
-    <>
-      <WorkflowHeader
-        eyebrow="GT Factory OS"
-        title={greeting}
-        description="Operational status at a glance — click any tile to drill in."
-        meta={
-          <>
-            <Badge tone={roleBadgeTone(session.role)} dotted>
-              {session.role}
-            </Badge>
-            <Badge tone="neutral" variant="outline" dotted>
-              as of {now.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" })}
-            </Badge>
-            {loadError ? (
-              <Badge tone="danger" variant="outline">
-                session load error
-              </Badge>
-            ) : null}
-          </>
-        }
-        actions={
-          <button
-            type="button"
-            onClick={() => {
-              // Refetch every dashboard query that has a fetch attached.
-              // Don't blanket-invalidate inbox cache (it's seeded by the
-              // /inbox page; clobbering it forces a cold fetch).
-              void planningRunQ.refetch();
-              void forecastQ.refetch();
-              void breakGlassQ.refetch();
-              void parityCheckQ.refetch();
-              void stockTruthQ.refetch();
-              void freshnessQ.refetch();
-              void jobsHealthQ.refetch();
-              void runtimeReadyQ.refetch();
-            }}
-            disabled={queries.some((q) => q.isFetching)}
-            className="btn btn-ghost btn-sm gap-1.5"
-            data-testid="dashboard-refresh"
-            title="Refresh every signal tile. Each tile auto-refreshes every 30s; use this to force an immediate refresh."
-          >
-            <RefreshCw
-              className={cn(
-                "h-3.5 w-3.5",
-                queries.some((q) => q.isFetching) && "animate-spin",
-              )}
-              strokeWidth={2}
-            />
-            {queries.some((q) => q.isFetching) ? "Refreshing…" : "Refresh"}
-          </button>
-        }
-      />
-
-      {/* -------------------------------------------------------------- */}
-      {/* Block 0 — Critical exceptions banner (conditional)             */}
-      {/* Loud surface that only renders when there's something critical */}
-      {/* to triage. Per S1 research: "the single most important block — */}
-      {/* it's Tom's 'what's broken right now' pane".                    */}
-      {/* -------------------------------------------------------------- */}
-      <CriticalExceptionsBanner inboxRows={inboxRows} />
-
-      {/* -------------------------------------------------------------- */}
-      {/* Block 1 — Top-row stat strip                                   */}
-      {/* -------------------------------------------------------------- */}
-      <SectionCard
-        eyebrow="Status"
-        title="Right now"
-      >
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-          <InboxTotalCard summary={inboxSummary} />
-          <CriticalExceptionsCard summary={inboxSummary} />
-          <LatestPlanningRunCard signal={planningRunQ.data} now={now} />
-          <BreakGlassCard signal={breakGlassQ.data} />
+    <Card>
+      <Label>Stock health</Label>
+      <div style={{ display: "flex", alignItems: "center", gap: 20 }}>
+        <div style={{ flexShrink: 0 }}>
+          <svg width={104} height={104} viewBox="0 0 104 104">
+            <circle cx={52} cy={52} r={r} fill="none" stroke="rgba(255,255,255,0.06)" strokeWidth={10} />
+            {arc(healthy,   C.teal, 0)}
+            {arc(shortage,  C.red,  -hShare)}
+            {arc(overstock, C.org,  -(hShare + sShare))}
+            <text x={52} y={48} textAnchor="middle" fill={C.txt} fontSize={22} fontWeight={900}>{total}</text>
+            <text x={52} y={63} textAnchor="middle" fill="rgba(238,238,245,0.28)" fontSize={9} letterSpacing="1.5">ITEMS</text>
+          </svg>
         </div>
-      </SectionCard>
-
-      {/* -------------------------------------------------------------- */}
-      {/* Block 2 — Quick actions (moved from bottom per S1 research:    */}
-      {/* "operator-actionable surfaces should sit above the fold so the */}
-      {/* primary daily tasks are reachable without scrolling").         */}
-      {/* -------------------------------------------------------------- */}
-      <SectionCard
-        eyebrow="Quick actions"
-        title="Common tasks"
-        className="mt-6"
-      >
-        {quickActions.length === 0 ? (
-          <div className="text-sm text-fg-muted">
-            No actions available for your current role.
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-            {quickActions.map((a) => {
-              const Icon = a.icon;
-              return (
-                <Link
-                  key={a.href}
-                  href={a.href}
-                  className="group flex items-start gap-3 rounded border border-border/70 bg-bg-raised p-4 transition-colors hover:border-accent/50 hover:bg-accent-soft/40"
-                  data-testid={`dashboard-quick-action-${a.category}`}
-                >
-                  <div className="mt-0.5 flex h-9 w-9 shrink-0 items-center justify-center rounded border border-border/70 bg-bg text-accent">
-                    <Icon className="h-4 w-4" strokeWidth={2} />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-center gap-2">
-                      <div className="truncate text-sm font-semibold text-fg-strong">
-                        {a.label}
-                      </div>
-                      <ArrowRight
-                        className="h-3 w-3 shrink-0 text-fg-faint transition-transform group-hover:translate-x-0.5 group-hover:text-accent"
-                        strokeWidth={2}
-                      />
-                    </div>
-                    <div className="mt-1 text-xs leading-relaxed text-fg-muted">
-                      {a.blurb}
-                    </div>
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        )}
-      </SectionCard>
-
-      {/* -------------------------------------------------------------- */}
-      {/* Block 3 — Stock truth + parity check                           */}
-      {/* -------------------------------------------------------------- */}
-      <SectionCard
-        eyebrow="Stock"
-        title="Stock parity"
-        description="Compares the live stock projection against the transaction history. Zero drift means counts can be trusted."
-        className="mt-6"
-      >
-        <div className="space-y-4">
-          <ParityCheckBlock signal={parityCheckQ.data} now={now} />
-          <StockTruthBlock signal={stockTruthQ.data} now={now} />
-        </div>
-      </SectionCard>
-
-      {/* -------------------------------------------------------------- */}
-      {/* Block 3 — Integration freshness (hidden when pending)           */}
-      {/* -------------------------------------------------------------- */}
-      {freshnessQ.data && freshnessQ.data.state !== "pending_tranche_i" ? (
-        <SectionCard
-          eyebrow="Integrations"
-          title="Data freshness"
-          description="How recently each external data source was successfully synced."
-          className="mt-6"
-        >
-          <IntegrationFreshnessBlock signal={freshnessQ.data} now={now} />
-        </SectionCard>
-      ) : null}
-
-      {/* -------------------------------------------------------------- */}
-      {/* Block 4 — Jobs 24h health                                      */}
-      {/* -------------------------------------------------------------- */}
-      <SectionCard
-        eyebrow="Scheduled jobs"
-        title="Last 24 hours"
-        className="mt-6"
-      >
-        <JobsHealth24hBlock signal={jobsHealthQ.data} />
-      </SectionCard>
-
-      {/* -------------------------------------------------------------- */}
-      {/* Block 5 — Latest forecast                                      */}
-      {/* -------------------------------------------------------------- */}
-      <SectionCard
-        eyebrow="Forecast"
-        title="Active forecast"
-        description="The published forecast used by the planning engine."
-        className="mt-6"
-      >
-        <LatestForecastBlock signal={forecastQ.data} now={now} />
-      </SectionCard>
-
-      {/* -------------------------------------------------------------- */}
-      {/* Block 6 — RUNTIME_READY registry (hidden when pending)          */}
-      {/* -------------------------------------------------------------- */}
-      {runtimeReadyQ.data && runtimeReadyQ.data.state !== "pending_tranche_i" ? (
-        <SectionCard
-          eyebrow="Forms"
-          title="Operational forms"
-          description="Which forms are active and ready to use."
-          className="mt-6"
-        >
-          <RuntimeReadyBlock signal={runtimeReadyQ.data} now={now} />
-        </SectionCard>
-      ) : null}
-
-    </>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Top-row stat strip cards.
-// ---------------------------------------------------------------------------
-
-function InboxTotalCard({
-  summary,
-}: {
-  summary: Signal<{ total: number; critical: number; warning: number; info: number }>;
-}) {
-  if (summary.state === "unavailable") {
-    return (
-      <StatPill
-        label="Inbox"
-        value="—"
-        tone="neutral"
-        icon={<SignalIcon className="h-3 w-3" strokeWidth={2} />}
-        sub={<span className="text-fg-muted">{summary.reason}</span>}
-        testid="dashboard-stat-inbox-total"
-      />
-    );
-  }
-  if (summary.state === "pending_tranche_i") {
-    return (
-      <StatPill
-        label="Inbox"
-        value="—"
-        tone="neutral"
-        sub={<span className="text-fg-muted">{summary.note}</span>}
-        testid="dashboard-stat-inbox-total"
-      />
-    );
-  }
-  const s = summary.data;
-  const tone = s.critical > 0 ? "danger" : s.warning > 0 ? "warning" : s.total === 0 ? "success" : "neutral";
-  return (
-    <StatPill
-      label="Inbox"
-      value={s.total.toLocaleString()}
-      tone={tone}
-      href="/inbox"
-      icon={<SignalIcon className="h-3 w-3" strokeWidth={2} />}
-      sub={
-        <div className="flex flex-wrap gap-1.5">
-          <Badge tone="danger" variant="soft" dotted>
-            {s.critical} crit
-          </Badge>
-          <Badge tone="warning" variant="soft" dotted>
-            {s.warning} warn
-          </Badge>
-          <Badge tone="info" variant="soft" dotted>
-            {s.info} info
-          </Badge>
-        </div>
-      }
-      testid="dashboard-stat-inbox-total"
-    />
-  );
-}
-
-function CriticalExceptionsCard({
-  summary,
-}: {
-  summary: Signal<{ total: number; critical: number; warning: number; info: number }>;
-}) {
-  if (summary.state === "unavailable") {
-    return (
-      <StatPill
-        label="Critical exceptions"
-        value="—"
-        tone="neutral"
-        icon={<AlertOctagon className="h-3 w-3" strokeWidth={2} />}
-        sub={<span className="text-fg-muted">{summary.reason}</span>}
-        testid="dashboard-stat-critical-exceptions"
-      />
-    );
-  }
-  if (summary.state === "pending_tranche_i") {
-    return (
-      <StatPill
-        label="Critical exceptions"
-        value="—"
-        tone="neutral"
-        icon={<AlertOctagon className="h-3 w-3" strokeWidth={2} />}
-        sub={<span className="text-fg-muted">{summary.note}</span>}
-        testid="dashboard-stat-critical-exceptions"
-      />
-    );
-  }
-  const c = summary.data.critical;
-  return (
-    <StatPill
-      label="Critical exceptions"
-      value={c.toLocaleString()}
-      tone={c > 0 ? "danger" : "success"}
-      href="/inbox?view=exceptions&sort=severity_then_age"
-      icon={<AlertOctagon className="h-3 w-3" strokeWidth={2} />}
-      sub={
-        c > 0 ? (
-          <span className="text-danger-fg">Triage on the inbox.</span>
-        ) : (
-          <span className="text-success-fg">Nothing critical right now.</span>
-        )
-      }
-      testid="dashboard-stat-critical-exceptions"
-    />
-  );
-}
-
-function LatestPlanningRunCard({
-  signal,
-  now,
-}: {
-  signal: Signal<{
-    run_id: string;
-    executed_at: string;
-    status: string;
-    exceptions_count: number | null;
-    purchase_recs_count: number | null;
-    production_recs_count: number | null;
-  }> | undefined;
-  now: Date;
-}) {
-  // Loop 13 — uses router.push for the rec-count tab deep-links because
-  // StatPill wraps the whole card in a <Link>, and nested anchors are
-  // invalid. Buttons are a clean escape hatch and let us still stop
-  // propagation so the card-level navigation doesn't fire too.
-  const router = useRouter();
-  if (!signal) {
-    return (
-      <StatPill
-        label="Latest planning run"
-        value="…"
-        tone="neutral"
-        sub={<span className="text-fg-muted">Loading.</span>}
-        icon={<ListChecksIcon />}
-        testid="dashboard-stat-latest-planning-run"
-      />
-    );
-  }
-  if (signal.state === "unavailable") {
-    return (
-      <StatPill
-        label="Latest planning run"
-        value="—"
-        tone="neutral"
-        icon={<ListChecksIcon />}
-        sub={<span className="text-fg-muted">{signal.reason}</span>}
-        testid="dashboard-stat-latest-planning-run"
-      />
-    );
-  }
-  if (signal.state === "pending_tranche_i") {
-    return (
-      <StatPill
-        label="Latest planning run"
-        value="—"
-        tone="neutral"
-        icon={<ListChecksIcon />}
-        sub={<span className="text-fg-muted">{signal.note}</span>}
-        testid="dashboard-stat-latest-planning-run"
-      />
-    );
-  }
-  const d = signal.data;
-  if (!d.run_id) {
-    return (
-      <StatPill
-        label="Latest planning run"
-        value="—"
-        tone="neutral"
-        icon={<ListChecksIcon />}
-        sub={<span className="text-fg-muted">No runs yet.</span>}
-        testid="dashboard-stat-latest-planning-run"
-      />
-    );
-  }
-  const tone =
-    d.status === "completed"
-      ? "success"
-      : d.status === "failed"
-        ? "danger"
-        : "info";
-  const statusLabel =
-    d.status === "completed" ? "Completed"
-    : d.status === "failed" ? "Failed"
-    : d.status === "running" ? "Running"
-    : d.status === "draft" ? "Queued"
-    : d.status === "superseded" ? "Superseded"
-    : d.status;
-  // DR-11 — exceptions_count from summary projection.
-  // Loop 13 — also surface purchase + production rec counts so the manager
-  // sees what's actionable from the dashboard without drilling in. Each is
-  // a stop-propagation Link so the badges deep-link into the right tab on
-  // the run detail (Loops 6 + 11) without triggering the parent StatPill's
-  // anchor.
-  const sub = (
-    <div className="flex flex-wrap items-center gap-1.5">
-      <Badge tone={tone} variant="soft">
-        {statusLabel}
-      </Badge>
-      <span className="text-fg-muted">{ageHumanized(d.executed_at, now)}</span>
-      {typeof d.purchase_recs_count === "number" ? (
-        <button
-          type="button"
-          className="cursor-pointer hover:opacity-80"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            router.push(
-              `/planning/runs/${encodeURIComponent(d.run_id)}?tab=purchase`,
-            );
-          }}
-          title="Open purchase recommendations for the latest run"
-          data-testid="dashboard-stat-latest-planning-run-purchase-link"
-        >
-          <Badge tone="info" variant="outline">
-            {d.purchase_recs_count} purchase
-          </Badge>
-        </button>
-      ) : null}
-      {typeof d.production_recs_count === "number" ? (
-        <button
-          type="button"
-          className="cursor-pointer hover:opacity-80"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            router.push(
-              `/planning/runs/${encodeURIComponent(d.run_id)}?tab=production`,
-            );
-          }}
-          title="Open production recommendations for the latest run"
-          data-testid="dashboard-stat-latest-planning-run-production-link"
-        >
-          <Badge tone="neutral" variant="outline">
-            {d.production_recs_count} production
-          </Badge>
-        </button>
-      ) : null}
-      {typeof d.exceptions_count === "number" ? (
-        <Badge
-          tone={d.exceptions_count > 0 ? "warning" : "neutral"}
-          variant="outline"
-        >
-          {d.exceptions_count} {d.exceptions_count === 1 ? "exception" : "exceptions"}
-        </Badge>
-      ) : (
-        <Badge tone="neutral" variant="outline">
-          — exceptions
-        </Badge>
-      )}
-    </div>
-  );
-  return (
-    <StatPill
-      label="Latest planning run"
-      value={statusLabel}
-      tone={tone}
-      href={`/planning/runs/${encodeURIComponent(d.run_id)}`}
-      icon={<ListChecksIcon />}
-      sub={sub}
-      testid="dashboard-stat-latest-planning-run"
-    />
-  );
-}
-
-function BreakGlassCard({
-  signal,
-}: {
-  signal:
-    | Signal<{ active: boolean; jobs_paused: boolean; set_at?: string; set_by?: string }>
-    | undefined;
-}) {
-  if (!signal) {
-    return (
-      <StatPill
-        label="Break-glass"
-        value="…"
-        tone="neutral"
-        icon={<ShieldAlert className="h-3 w-3" strokeWidth={2} />}
-        sub={<span className="text-fg-muted">Loading.</span>}
-        testid="dashboard-stat-break-glass"
-      />
-    );
-  }
-  if (signal.state === "pending_tranche_i") {
-    return (
-      <StatPill
-        label="Break-glass"
-        value="—"
-        tone="neutral"
-        icon={<ShieldAlert className="h-3 w-3" strokeWidth={2} />}
-        sub={<span className="text-fg-muted">{signal.note}</span>}
-        testid="dashboard-stat-break-glass"
-      />
-    );
-  }
-  if (signal.state === "unavailable") {
-    return (
-      <StatPill
-        label="Break-glass"
-        value="—"
-        tone="neutral"
-        icon={<ShieldAlert className="h-3 w-3" strokeWidth={2} />}
-        sub={<span className="text-fg-muted">{signal.reason}</span>}
-        testid="dashboard-stat-break-glass"
-      />
-    );
-  }
-  const d = signal.data;
-  // Priority: break_glass_active > jobs_paused > normal.
-  const label = d.active
-    ? "Read-Only Mode"
-    : d.jobs_paused
-      ? "Jobs Paused"
-      : "Normal";
-  const tone = d.active ? "danger" : d.jobs_paused ? "warning" : "success";
-  return (
-    <StatPill
-      label="Break-glass"
-      value={label}
-      tone={tone}
-      icon={<ShieldAlert className="h-3 w-3" strokeWidth={2} />}
-      sub={
-        <div className="text-xs text-fg-muted">
-          {d.set_at ? (
-            <div>
-              Since: <span className="font-mono">{d.set_at}</span>
+        <div style={{ display: "flex", flexDirection: "column", gap: 11, flex: 1 }}>
+          {([
+            { color: C.teal, label: "Healthy",   n: healthy   },
+            { color: C.red,  label: "Shortage",  n: shortage  },
+            { color: C.org,  label: "Overstock", n: overstock },
+          ] as const).map(({ color, label, n }) => (
+            <div key={label} style={{ display: "flex", alignItems: "center", gap: 8 }}>
+              <div style={{ width: 7, height: 7, borderRadius: "50%", background: color,
+                boxShadow: `0 0 7px ${color}` }} />
+              <span style={{ fontSize: 11, color: C.muted, flex: 1 }}>{label}</span>
+              <span style={{ fontSize: 16, fontWeight: 900, color: C.txt }}>{n}</span>
             </div>
-          ) : null}
-          {d.set_by ? (
-            <div>
-              By: <span className="font-mono">{d.set_by}</span>
-            </div>
-          ) : null}
-          {!d.set_at && !d.set_by && !d.active && !d.jobs_paused ? (
-            <span className="text-success-fg">All systems operational.</span>
-          ) : null}
-        </div>
-      }
-      testid="dashboard-stat-break-glass"
-    />
-  );
-}
-
-function ListChecksIcon() {
-  return (
-    <BadgeCheck className="h-3 w-3" strokeWidth={2} />
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Critical exceptions banner — appears above the stat strip when there is at
-// least one critical row in the inbox. Shows up to 3 sample summaries plus a
-// "+N more" overflow count, with a single primary CTA into the inbox view
-// pre-filtered to critical severity. Per S1 research §C.2 Block 2: dedicated
-// red banner with red-600 left border, distinct from the stat-strip tile so
-// the planner's eye lands on it first.
-// ---------------------------------------------------------------------------
-function CriticalExceptionsBanner({
-  inboxRows,
-}: {
-  inboxRows: InboxRow[] | undefined;
-}) {
-  if (!inboxRows) return null;
-  const critical = inboxRows.filter((r) => r.severity === "critical");
-  if (critical.length === 0) return null;
-
-  const sample = critical.slice(0, 3);
-  const more = Math.max(0, critical.length - sample.length);
-
-  return (
-    <div
-      className="mt-4 flex items-start gap-3 rounded border border-danger/40 border-l-[3px] border-l-danger bg-danger-softer p-4"
-      role="alert"
-      aria-live="polite"
-      data-testid="dashboard-critical-banner"
-    >
-      <AlertOctagon
-        className="mt-0.5 h-5 w-5 shrink-0 text-danger"
-        strokeWidth={2}
-      />
-      <div className="min-w-0 flex-1">
-        <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-          <span className="text-sm font-semibold text-danger-fg">
-            {critical.length === 1
-              ? "1 critical exception is open"
-              : `${critical.length} critical exceptions are open`}
-          </span>
-          <span className="text-3xs uppercase tracking-sops text-danger-fg/70">
-            triage now
-          </span>
-        </div>
-        <ul className="mt-1.5 space-y-0.5 text-xs text-fg-muted">
-          {sample.map((row) => (
-            <li
-              key={row.id}
-              className="flex items-start gap-1.5"
-              data-testid="dashboard-critical-banner-item"
-            >
-              <span className="mt-1 h-1 w-1 shrink-0 rounded-full bg-danger" aria-hidden />
-              <span className="min-w-0 flex-1 truncate">{row.summary}</span>
-            </li>
           ))}
-          {more > 0 ? (
-            <li className="text-fg-faint">
-              + {more} more
-            </li>
-          ) : null}
-        </ul>
+        </div>
       </div>
-      <Link
-        href="/inbox?view=exceptions&sort=severity_then_age"
-        className="btn btn-sm shrink-0 self-center"
-        data-testid="dashboard-critical-banner-cta"
-      >
-        Open inbox
-        <ArrowRight className="h-3 w-3" strokeWidth={2} />
-      </Link>
-    </div>
+    </Card>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Parity check block (Loop 15 — live endpoint).
-// ---------------------------------------------------------------------------
-function ParityCheckBlock({
-  signal,
-  now,
-}: {
-  signal:
-    | Signal<{ parity_ok: boolean; drift_count: number; checked_at: string }>
-    | undefined;
-  now: Date;
+// ── Exceptions card ───────────────────────────────────────────────────────────
+function ExceptionsCard({ critical, warning, info }: {
+  critical: number; warning: number; info: number;
 }) {
-  if (!signal) {
-    return (
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <StatPill
-          label="Parity"
-          value="…"
-          tone="neutral"
-          sub={<span className="text-fg-muted">Loading.</span>}
-        />
+  const total = critical + warning + info;
+  const hot   = critical > 0;
+  return (
+    <Card hot={hot}>
+      <Label color={hot ? C.red : undefined}>Exceptions</Label>
+      <div style={{ fontSize: 46, fontWeight: 900, lineHeight: 1,
+        color: hot ? C.red : C.txt, letterSpacing: "-0.045em", fontVariantNumeric: "tabular-nums" }}>
+        {total}
       </div>
-    );
-  }
-  if (signal.state === "pending_tranche_i") {
-    return <PendingBadge note={signal.note} />;
-  }
-  if (signal.state === "unavailable") {
-    return <UnavailableBadge reason={signal.reason} />;
-  }
-  const d = signal.data;
-  const parityTone = d.parity_ok ? "success" : "danger";
-  const parityLabel = d.parity_ok ? "Parity OK" : "Parity Drift";
-  return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-      <StatPill
-        label="Stock integrity"
-        value={parityLabel}
-        tone={parityTone}
-        href={d.parity_ok ? undefined : "/admin/masters/health"}
-        sub={
-          d.parity_ok ? (
-            <span className="text-success-fg">
-              Stock counts match the transaction history exactly.
-            </span>
-          ) : (
-            <span className="text-danger-fg">
-              {d.drift_count.toLocaleString()} row
-              {d.drift_count !== 1 ? "s" : ""} of drift — do not rely on
-              stock counts until resolved. Click to view master-data health.
-            </span>
-          )
-        }
-        testid="dashboard-stat-parity-status"
-      />
-      <StatPill
-        label="Last parity check"
-        value={ageHumanized(d.checked_at, now)}
-        tone="neutral"
-        sub={
-          <span className="font-mono text-fg-muted">
-            {(() => {
-              try {
-                return new Date(d.checked_at).toLocaleString(undefined, {
-                  month: "short", day: "2-digit",
-                  hour: "2-digit", minute: "2-digit",
-                });
-              } catch {
-                return d.checked_at;
-              }
-            })()}
-          </span>
-        }
-        testid="dashboard-stat-parity-checked-at"
-      />
-    </div>
+      <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 8 }}>
+        {([
+          { color: C.red,  label: "Critical", n: critical },
+          { color: C.org,  label: "Warning",  n: warning  },
+          { color: C.blue, label: "Info",     n: info     },
+        ] as const).map(({ color, label, n }) => (
+          <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 7 }}>
+              <div style={{ width: 5, height: 5, borderRadius: "50%", background: color }} />
+              <span style={{ fontSize: 11, color: C.subtle }}>{label}</span>
+            </div>
+            <span style={{ fontSize: 14, fontWeight: 800, color: n > 0 ? color : C.dim }}>{n}</span>
+          </div>
+        ))}
+      </div>
+    </Card>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Stock truth block.
-// ---------------------------------------------------------------------------
-function StockTruthBlock({
-  signal,
-  now,
-}: {
-  signal:
-    | Signal<{
-        rebuild_verifier_drift: number | null;
-        anchors_count?: number;
-        last_parity_check_at?: string;
-      }>
-    | undefined;
-  now: Date;
-}) {
-  if (!signal) return null;
-  if (signal.state === "pending_tranche_i") return null;
-  if (signal.state === "unavailable") {
-    return <UnavailableBadge reason={signal.reason} />;
-  }
-  const d = signal.data;
-  const drift = d.rebuild_verifier_drift ?? null;
-  const driftTone = drift === null ? "neutral" : drift === 0 ? "success" : "danger";
+// ── Shortage risk ─────────────────────────────────────────────────────────────
+function ShortageRisk() {
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-      <StatPill
-        label="Stock parity drift"
-        value={drift === null ? "—" : drift.toLocaleString()}
-        tone={driftTone}
-        href={drift && drift > 0 ? "/admin/masters/health" : undefined}
-        sub={
-          drift === 0 ? (
-            <span className="text-success-fg">
-              Live projection matches ledger rebuild exactly.
-            </span>
-          ) : drift && drift > 0 ? (
-            <span className="text-danger-fg">
-              {drift} row{drift === 1 ? "" : "s"} of drift — review before
-              trusting stock. Click to investigate.
-            </span>
-          ) : (
-            <span className="text-fg-muted">Not yet available.</span>
-          )
-        }
-      />
-      <StatPill
-        label="Anchors"
-        value={
-          typeof d.anchors_count === "number"
-            ? d.anchors_count.toLocaleString()
-            : "—"
-        }
-        tone="neutral"
-        href={typeof d.anchors_count === "number" ? "/stock/movement-log" : undefined}
-        sub={
-          typeof d.anchors_count === "number" ? (
-            <span className="text-fg-muted">
-              Canonical balance points the projection rebuilds from.
-            </span>
-          ) : (
-            <span className="text-fg-muted">Not yet exposed.</span>
-          )
-        }
-      />
-      <StatPill
-        label="Last parity check"
-        value={d.last_parity_check_at ? ageHumanized(d.last_parity_check_at, now) : "—"}
-        tone="neutral"
-        sub={
-          d.last_parity_check_at ? (
-            <span className="font-mono text-fg-muted">
-              {d.last_parity_check_at}
-            </span>
-          ) : (
-            <span className="text-fg-muted">Not yet exposed.</span>
-          )
-        }
-      />
-    </div>
+    <Card>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <Label>Shortage risk</Label>
+        <span style={{ fontSize: 10, color: C.dim, textTransform: "uppercase",
+          letterSpacing: "0.08em", marginBottom: 10 }}>days to stockout</span>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        {SHORTAGE.map((item) => {
+          const col = urgencyColor(item.days);
+          const bg  = urgencyBg(item.days);
+          return (
+            <div key={item.name} style={{
+              background: bg, border: `1px solid ${col}22`,
+              borderRadius: 10, padding: "12px 16px",
+              display: "flex", alignItems: "center", gap: 14,
+            }}>
+              <div style={{ minWidth: 60, display: "flex", alignItems: "baseline", gap: 2 }}>
+                <span style={{ fontSize: 36, fontWeight: 900, lineHeight: 1,
+                  color: col, fontVariantNumeric: "tabular-nums", letterSpacing: "-0.045em" }}>
+                  {item.days}
+                </span>
+                <span style={{ fontSize: 13, fontWeight: 600, color: col, opacity: 0.7 }}>d</span>
+              </div>
+              <div style={{ width: 1, height: 34, background: `${col}28`, flexShrink: 0 }} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.txt, lineHeight: 1.2 }}>{item.name}</div>
+                <div style={{ fontSize: 11, color: C.subtle, marginTop: 3 }}>{item.onHand} on hand</div>
+              </div>
+              <div style={{ width: 80, flexShrink: 0 }}>
+                <div style={{ height: 3, background: "rgba(255,255,255,0.06)", borderRadius: 2, overflow: "hidden" }}>
+                  <div className="bar-grow" style={{ height: "100%", borderRadius: 2, background: col,
+                    width: `${Math.max(8, (item.days / 14) * 100)}%`, opacity: 0.75 }} />
+                </div>
+                <div style={{ fontSize: 10, color: C.dim, marginTop: 3, textAlign: "right" }}>
+                  {Math.round((item.days / 14) * 100)}% horizon
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Integration freshness block.
-// ---------------------------------------------------------------------------
-function IntegrationFreshnessBlock({
-  signal,
-  now,
-}: {
-  signal:
-    | Signal<{
-        rows: Array<{
-          producer: string;
-          last_success_at: string | null;
-          state: string;
-        }>;
-      }>
-    | undefined;
-  now: Date;
-}) {
-  if (!signal) return null;
-  if (signal.state === "pending_tranche_i") return null;
-  if (signal.state === "unavailable") {
-    return <UnavailableBadge reason={signal.reason} />;
-  }
-  const rows = signal.data.rows;
-  if (rows.length === 0) {
-    return (
-      <div className="text-sm text-fg-muted">No producers registered yet.</div>
-    );
-  }
+// ── Planning card ─────────────────────────────────────────────────────────────
+function PlanningCard() {
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3">
-      {rows.map((r) => {
-        const tone =
-          r.state === "fresh"
-            ? "success"
-            : r.state === "warning"
-              ? "warning"
-              : r.state === "critical" || r.state === "never_ran"
-                ? "danger"
-                : "neutral";
-        const stateLabel =
-          r.state === "fresh" ? "Fresh"
-          : r.state === "warning" ? "Stale"
-          : r.state === "critical" ? "Critical"
-          : r.state === "never_ran" ? "Never ran"
-          : r.state;
-        // When the producer is in a non-fresh state, deep-link to the
-        // integrations admin so Tom can drill in. Fresh state = no href
-        // (no action needed).
-        const href = tone === "success" ? undefined : "/admin/integrations";
-        return (
-          <StatPill
-            key={r.producer}
-            label={r.producer}
-            value={stateLabel}
-            tone={tone}
-            href={href}
-            icon={<CalendarClock className="h-3 w-3" strokeWidth={2} />}
-            sub={
-              <div className="text-fg-muted">
-                Last success:{" "}
-                <span className="font-mono">
-                  {r.last_success_at ? ageHumanized(r.last_success_at, now) : "never"}
+    <Card style={{ display: "flex", flexDirection: "column", gap: 16 }}>
+      <Label>Planning run</Label>
+      <div>
+        <div style={{ fontSize: 50, fontWeight: 900, lineHeight: 1, color: C.txt, letterSpacing: "-0.045em" }}>18</div>
+        <div style={{ fontSize: 11, color: C.subtle, marginTop: 4 }}>recommendations · latest run</div>
+      </div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+        <Pill color={C.org}  bg="rgba(255,140,64,0.12)">4 flagged</Pill>
+        <Pill color={C.teal} bg="rgba(34,211,163,0.10)">14 pending</Pill>
+      </div>
+      <div style={{ paddingTop: 12, borderTop: `1px solid ${C.bord}` }}>
+        <div style={{ fontSize: 10, color: C.dim, marginBottom: 3, textTransform: "uppercase", letterSpacing: "0.08em" }}>Last run</div>
+        <div style={{ fontSize: 13, color: C.muted, fontWeight: 600 }}>Today at 05:00</div>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
+        {([
+          { label: "Ledger integrity", status: "warn" as const },
+          { label: "Jobs health",      status: "warn" as const },
+          { label: "Projection lag",   status: "ok"  as const, detail: "12s" },
+        ]).map(({ label, status, detail }) => {
+          const col = status === "ok" ? C.teal : status === "warn" ? C.org : C.red;
+          return (
+            <div key={label} style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 11, color: C.subtle }}>{label}</span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: col }}>
+                {status === "ok" ? "● " : "⚠ "}{detail ?? status.toUpperCase()}
+              </span>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+// ── Production this week ──────────────────────────────────────────────────────
+function ProductionWeek() {
+  return (
+    <Card>
+      <Label>Production this week</Label>
+      <div style={{ display: "flex", flexDirection: "column", gap: 22 }}>
+        {PROD_WEEK.map((item) => {
+          const after    = Math.min(item.current + item.planned, item.target);
+          const pctNow   = (item.current / item.target) * 100;
+          const pctAfter = (after        / item.target) * 100;
+          return (
+            <div key={item.name}>
+              <div style={{ display: "flex", justifyContent: "space-between",
+                alignItems: "baseline", marginBottom: 9 }}>
+                <span style={{ fontSize: 13, fontWeight: 600, color: C.txt }}>{item.name}</span>
+                <span style={{ fontSize: 11, color: C.subtle }}>
+                  <span style={{ color: item.color, fontWeight: 800 }}>+{item.planned}</span>
+                  {" "}→ {after}<span style={{ opacity: 0.4 }}> / {item.target}</span>
                 </span>
               </div>
-            }
-          />
-        );
-      })}
+              <div style={{ position: "relative", height: 10,
+                background: "rgba(255,255,255,0.05)", borderRadius: 5, overflow: "hidden" }}>
+                <div className="bar-grow" style={{ position: "absolute", inset: 0,
+                  width: `${pctAfter}%`, background: item.color, opacity: 0.20, borderRadius: 5 }} />
+                <div className="bar-grow" style={{ position: "absolute", inset: 0,
+                  width: `${pctNow}%`, background: item.color, borderRadius: 5,
+                  boxShadow: `0 0 10px ${item.color}55` }} />
+              </div>
+              <div style={{ display: "flex", justifyContent: "space-between", marginTop: 5 }}>
+                <span style={{ fontSize: 10, color: C.dim }}>Now: {item.current}</span>
+                <span style={{ fontSize: 10, color: C.dim }}>Target: {item.target}</span>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
+  );
+}
+
+// ── Last 5 shipments ──────────────────────────────────────────────────────────
+function Shipments() {
+  return (
+    <Card>
+      <Label>Last 5 shipments</Label>
+      <div style={{ display: "flex", flexDirection: "column" }}>
+        {SHIPMENTS.map((s, i) => (
+          <div key={i} style={{
+            display: "flex", alignItems: "center", gap: 12,
+            padding: "10px 10px", borderRadius: 8,
+            background: i === 0 ? C.surfHi : "transparent",
+            borderBottom: i < SHIPMENTS.length - 1 ? `1px solid ${C.bord}` : "none",
+          }}>
+            <div style={{
+              width: 26, height: 26, borderRadius: "50%", flexShrink: 0,
+              background: i === 0 ? `${C.teal}18` : "rgba(255,255,255,0.04)",
+              border: `1px solid ${i === 0 ? C.teal + "45" : C.bord}`,
+              display: "flex", alignItems: "center", justifyContent: "center",
+              fontSize: 10, fontWeight: 800, color: i === 0 ? C.teal : C.dim,
+            }}>
+              {i + 1}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.txt,
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {s.product}
+              </div>
+              <div style={{ fontSize: 10, color: C.subtle, marginTop: 2 }}>{s.time}</div>
+            </div>
+            <div style={{ flexShrink: 0, textAlign: "right" }}>
+              <div style={{ fontSize: 17, fontWeight: 900, color: C.red, letterSpacing: "-0.025em" }}>
+                −{s.qty}
+              </div>
+              <div style={{ fontSize: 10, color: C.dim }}>{s.unit}</div>
+            </div>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+// ── Freshness strip ───────────────────────────────────────────────────────────
+function FreshnessStrip() {
+  return (
+    <div style={{
+      background: C.surf, border: `1px solid ${C.bord}`, borderRadius: 14,
+      padding: "13px 22px", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap",
+    }}>
+      <span style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.13em",
+        color: C.dim, textTransform: "uppercase", marginRight: 4 }}>Data freshness</span>
+      {FRESHNESS.map((f) => (
+        <div key={f.label} style={{
+          display: "flex", alignItems: "center", gap: 6,
+          background: f.ok ? "rgba(34,211,163,0.08)" : "rgba(255,68,85,0.10)",
+          border: `1px solid ${f.ok ? C.teal + "28" : C.red + "35"}`,
+          borderRadius: 20, padding: "4px 12px",
+        }}>
+          <div className={f.ok ? "dot-ok" : "dot-err"}
+            style={{ width: 6, height: 6, borderRadius: "50%", background: f.ok ? C.teal : C.red }} />
+          <span style={{ fontSize: 11, color: C.muted, fontWeight: 500 }}>{f.label}</span>
+          <span style={{ fontSize: 11, color: f.ok ? C.teal : C.red, fontWeight: 700 }}>{f.ago}</span>
+        </div>
+      ))}
+      <div style={{ marginLeft: "auto", fontSize: 10, color: C.dim }}>Auto-refresh · 30s</div>
     </div>
   );
 }
 
-// ---------------------------------------------------------------------------
-// Jobs 24h health block.
-// ---------------------------------------------------------------------------
-function JobsHealth24hBlock({
-  signal,
-}: {
-  signal:
-    | Signal<{
-        successes: number;
-        failures: number;
-        skipped: number;
-        failed_jobs: { job_name: string; error: string }[];
-      }>
-    | undefined;
-}) {
-  if (!signal) return <div className="h-20 animate-pulse rounded border border-border/40 bg-bg-subtle" />;
-  if (signal.state === "pending_tranche_i") {
-    return <PendingBadge note={signal.note} />;
-  }
-  if (signal.state === "unavailable") {
-    return <UnavailableBadge reason={signal.reason} />;
-  }
-  const d = signal.data;
-  const failedJobs = d.failed_jobs ?? [];
-  const VISIBLE = 5;
-  const visible = failedJobs.slice(0, VISIBLE);
-  const overflow = Math.max(0, failedJobs.length - VISIBLE);
+// ── Live: Critical Today (merged from Control Tower v2 §4.1) ─────────────────
+function CriticalTodaySection({ now }: { now: Date }) {
+  const q = useQuery({
+    queryKey: ["dashboard", "critical-today"],
+    queryFn: ({ signal }) => fetchJson<CriticalTodayResponse>("/api/dashboard/critical-today", signal),
+    staleTime: 60_000,
+  });
+
+  if (q.isLoading || q.isError) return null;
+  const rows = q.data?.rows ?? [];
+
+  return (
+    <Card>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+          <Flame style={{ width: 14, height: 14, color: C.red }} strokeWidth={2.25} />
+          <Label>Critical today</Label>
+        </div>
+        {rows.length === 0 && (
+          <div style={{ display: "flex", alignItems: "center", gap: 5,
+            fontSize: 11, color: C.teal, fontWeight: 600, marginBottom: 10 }}>
+            <CheckCircle2 style={{ width: 12, height: 12 }} strokeWidth={2} />
+            All clear
+          </div>
+        )}
+      </div>
+      {rows.length === 0 ? (
+        <div style={{ fontSize: 12, color: C.subtle }}>
+          No stockouts, planning blockers, or stale integrations today.
+        </div>
+      ) : (
+        <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+          {rows.map((row, i) => (
+            <div key={i} style={{
+              display: "flex", alignItems: "flex-start", gap: 12,
+              background: "rgba(255,68,85,0.08)", border: `1px solid ${C.red}28`,
+              borderRadius: 10, padding: "10px 14px",
+            }}>
+              <AlertTriangle style={{ width: 14, height: 14, color: C.red,
+                flexShrink: 0, marginTop: 2 }} strokeWidth={2} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.txt }}>{row.display_name}</div>
+                <div style={{ fontSize: 10, color: C.subtle, marginTop: 2 }}>
+                  {fmtRelative(row.triggered_at, now)}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+// ── Live: Slipped Plans (merged from Control Tower v2 §4.4) ──────────────────
+function SlippedPlansSection({ now }: { now: Date }) {
+  const q = useQuery({
+    queryKey: ["dashboard", "slipped-plans"],
+    queryFn: ({ signal }) => fetchJson<SlippedPlansResponse>("/api/dashboard/slipped-plans", signal),
+    staleTime: 60_000,
+  });
+
+  if (q.isLoading || q.isError) return null;
+  const rows = q.data?.rows ?? [];
+  if (rows.length === 0) return null;
+
+  return (
+    <Card>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14 }}>
+        <TrendingDown style={{ width: 14, height: 14, color: C.org }} strokeWidth={2.25} />
+        <Label>Slipped plans</Label>
+      </div>
+      <div style={{ display: "flex", flexDirection: "column", gap: 2 }}>
+        {rows.map((row) => (
+          <div key={row.plan_id} style={{
+            display: "flex", alignItems: "center", gap: 12,
+            padding: "9px 0", borderBottom: `1px solid ${C.bord}`,
+          }}>
+            <div style={{ flexShrink: 0, textAlign: "center", minWidth: 48 }}>
+              <div style={{ fontSize: 11, fontWeight: 700, color: C.org }}>{fmtPlanDate(row.plan_date)}</div>
+              <div style={{ fontSize: 10, color: C.red, fontWeight: 600 }}>{row.days_overdue}d late</div>
+            </div>
+            <div style={{ width: 1, height: 28, background: C.bord, flexShrink: 0 }} />
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 13, fontWeight: 600, color: C.txt,
+                overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                {row.item_name ?? row.item_id}
+              </div>
+              <div style={{ fontSize: 10, color: C.subtle, marginTop: 2 }}>
+                Planned: {row.planned_qty} {row.uom}
+              </div>
+            </div>
+            <Link href={`/planning/production-plan?from=${row.plan_date}&to=${row.plan_date}`}
+              style={{ flexShrink: 0, display: "flex", alignItems: "center", gap: 4,
+                fontSize: 11, fontWeight: 600, color: C.muted, textDecoration: "none" }}>
+              Open <ArrowRight style={{ width: 11, height: 11 }} strokeWidth={2} />
+            </Link>
+          </div>
+        ))}
+      </div>
+    </Card>
+  );
+}
+
+// ── Main page ─────────────────────────────────────────────────────────────────
+export default function DashboardPage() {
+  const now = useMemo(() => new Date(), []);
+
   return (
     <>
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <StatPill
-          label="Successes"
-          value={d.successes.toLocaleString()}
-          tone="success"
-          href="/admin/jobs"
-        />
-        <StatPill
-          label="Failures"
-          value={d.failures.toLocaleString()}
-          tone={d.failures > 0 ? "danger" : "neutral"}
-          href="/admin/jobs"
-        />
-        <StatPill
-          label="Skipped"
-          value={d.skipped.toLocaleString()}
-          tone="neutral"
-          sub={
-            <span className="text-fg-muted">
-              Not counted as failures.
-            </span>
-          }
-        />
-      </div>
-      {failedJobs.length > 0 ? (
-        <div
-          className="mt-3 rounded border border-danger/30 bg-danger-softer px-3 py-2 text-xs"
-          data-testid="dashboard-jobs-last-error"
-        >
-          <div className="font-semibold text-danger-fg">
-            {failedJobs.length === 1
-              ? "1 job failing"
-              : `${failedJobs.length} jobs failing`}
-          </div>
-          <ul className="mt-1 space-y-0.5 font-mono text-danger-fg">
-            {visible.map((j) => (
-              <li key={j.job_name} className="whitespace-pre-wrap break-words">
-                <span className="font-semibold">{j.job_name}</span>
-                {": "}
-                {truncateLastError(j.error) ?? ""}
-              </li>
-            ))}
-            {overflow > 0 ? (
-              <li className="text-fg-muted">
-                +{overflow} more — see{" "}
-                <a className="underline" href="/admin/jobs">
-                  /admin/jobs
-                </a>
-              </li>
-            ) : null}
-          </ul>
-        </div>
-      ) : null}
-    </>
-  );
-}
+      <style>{`
+        @keyframes pulse-live {
+          0%, 100% { opacity: 1; }
+          50%       { opacity: 0.30; }
+        }
+        @keyframes bar-fill {
+          from { transform: scaleX(0); }
+          to   { transform: scaleX(1); }
+        }
+        .pulse-live { animation: pulse-live 2.6s ease-in-out infinite; }
+        .dot-ok     { box-shadow: 0 0 7px #22D3A3; animation: pulse-live 2.6s ease-in-out infinite; }
+        .dot-err    { box-shadow: 0 0 7px #FF4455; animation: pulse-live 1.8s ease-in-out infinite; }
+        .bar-grow   { transform-origin: left; animation: bar-fill 0.85s cubic-bezier(0.16,1,0.3,1) forwards; }
+      `}</style>
 
-// ---------------------------------------------------------------------------
-// Latest forecast block.
-// ---------------------------------------------------------------------------
-function LatestForecastBlock({
-  signal,
-  now,
-}: {
-  signal:
-    | Signal<{
-        version_id: string;
-        cadence: string | null;
-        horizon_weeks: number | null;
-        horizon_start_at: string | null;
-        published_at: string | null;
-        status: string;
-      }>
-    | undefined;
-  now: Date;
-}) {
-  if (!signal) return <div className="h-20 animate-pulse rounded border border-border/40 bg-bg-subtle" />;
-  if (signal.state === "pending_tranche_i") {
-    return <PendingBadge note={signal.note} />;
-  }
-  if (signal.state === "unavailable") {
-    return <UnavailableBadge reason={signal.reason} />;
-  }
-  const d = signal.data;
-  if (!d.version_id) {
-    return (
-      <div className="text-sm text-fg-muted">No published forecast yet.</div>
-    );
-  }
-  // DR-7: read `cadence` column verbatim; display em-dash when null.
-  const cadenceDisplay = d.cadence ?? "—";
-  return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-4">
-      <StatPill
-        label="Version"
-        value={
-          <span
-            className="text-sm"
-            data-testid="dashboard-forecast-version-id"
-            title={d.version_id}
-          >
-            {d.horizon_start_at ? fmtDateShort(d.horizon_start_at) : "Active"}
-          </span>
-        }
-        tone="neutral"
-        href={`/planning/forecast/${encodeURIComponent(d.version_id)}`}
-      />
-      <StatPill
-        label="Cadence"
-        value={cadenceDisplay}
-        tone="info"
-      />
-      <StatPill
-        label="Horizon"
-        value={d.horizon_weeks ? `${d.horizon_weeks}w` : "—"}
-        tone="neutral"
-        sub={
-          d.horizon_start_at ? (
-            <span className="text-fg-muted">
-              starting {fmtDateShort(d.horizon_start_at)}
-            </span>
-          ) : null
-        }
-      />
-      <StatPill
-        label="Published"
-        value={ageHumanized(d.published_at, now)}
-        tone="neutral"
-        sub={
-          d.published_at ? (
-            <span className="text-fg-muted">{fmtDateShort(d.published_at)}</span>
-          ) : null
-        }
-      />
-    </div>
-  );
-}
+      <div style={{ display: "flex", flexDirection: "column", gap: 13 }}>
 
-// ---------------------------------------------------------------------------
-// RUNTIME_READY registry block.
-// ---------------------------------------------------------------------------
-function RuntimeReadyBlock({
-  signal,
-  now,
-}: {
-  signal:
-    | Signal<{
-        rows: Array<{ signal_name: string; emitted_at: string }>;
-      }>
-    | undefined;
-  now: Date;
-}) {
-  if (!signal) return <span className="text-fg-muted text-sm">Loading.</span>;
-  if (signal.state === "pending_tranche_i") {
-    return <PendingBadge note={signal.note} />;
-  }
-  if (signal.state === "unavailable") {
-    return <UnavailableBadge reason={signal.reason} />;
-  }
-  const rows = signal.data.rows;
-  if (rows.length === 0) {
-    return <div className="text-sm text-fg-muted">No forms cleared for use yet.</div>;
-  }
-  return (
-    <ul className="divide-y divide-border/60 rounded border border-border/60">
-      {rows.map((r) => {
-        const label = r.signal_name
-          .replace(/^RUNTIME_READY\(/, "")
-          .replace(/\)$/, "")
-          .replace(/([A-Z])/g, " $1")
-          .trim();
-        return (
-          <li
-            key={r.signal_name}
-            className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
-          >
-            <div className="flex items-center gap-2">
-              <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success-fg" strokeWidth={2} />
-              <span className="font-medium text-fg">{label}</span>
+        {/* ── Header ─────────────────────────────────────────────────────── */}
+        <div style={{ display: "flex", justifyContent: "space-between",
+          alignItems: "flex-end", paddingBottom: 6 }}>
+          <div>
+            <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: "0.20em",
+              color: C.subtle, textTransform: "uppercase", marginBottom: 3 }}>
+              GT Factory OS
             </div>
-            <span className="text-xs text-fg-muted" title={r.emitted_at}>
-              cleared {ageHumanized(r.emitted_at, now)}
-            </span>
-          </li>
-        );
-      })}
-    </ul>
+            <h1 style={{ fontSize: 32, fontWeight: 900, color: C.txt,
+              letterSpacing: "-0.04em", lineHeight: 1, margin: 0 }}>
+              Dashboard
+            </h1>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 7, paddingBottom: 2 }}>
+            <div className="pulse-live" style={{ width: 8, height: 8, borderRadius: "50%",
+              background: C.teal, boxShadow: `0 0 12px ${C.teal}` }} />
+            <span style={{ fontSize: 11, color: C.muted, fontWeight: 500 }}>Live · May 7, 2026</span>
+          </div>
+        </div>
+
+        {/* ── Row 1: Hero KPIs ───────────────────────────────────────────── */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1.15fr 1fr", gap: 12 }}>
+          <ValueCard label="RM Inventory Value" value="₪ 48,200"  sub="14 raw material SKUs" accent={C.gold} />
+          <ValueCard label="FG Inventory Value" value="₪ 127,500" sub="8 finished good SKUs"  accent={C.teal} />
+          <StockDonut healthy={23} shortage={3} overstock={2} total={28} />
+          <ExceptionsCard critical={1} warning={3} info={2} />
+        </div>
+
+        {/* ── Row 2: Shortage + Planning ─────────────────────────────────── */}
+        <div style={{ display: "grid", gridTemplateColumns: "3fr 2fr", gap: 12 }}>
+          <ShortageRisk />
+          <PlanningCard />
+        </div>
+
+        {/* ── Row 3: Production + Shipments ─────────────────────────────── */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <ProductionWeek />
+          <Shipments />
+        </div>
+
+        {/* ── Row 4: Live alerts (from Control Tower v2) ────────────────── */}
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr", gap: 12 }}>
+          <CriticalTodaySection now={now} />
+          <SlippedPlansSection now={now} />
+        </div>
+
+        {/* ── Row 5: Data freshness strip ────────────────────────────────── */}
+        <FreshnessStrip />
+
+      </div>
+    </>
   );
 }

@@ -2,6 +2,31 @@
 @tailwind components;
 @tailwind utilities;
 
+/* ── GT Loader keyframes ──────────────────────────────────────────────── */
+@keyframes gt-spin        { to   { transform: rotate(360deg); } }
+@keyframes gt-spin-r      { to   { transform: rotate(-360deg); } }
+@keyframes gt-pulse-glow  {
+  0%, 100% { transform: scale(1);    opacity: 0.72; }
+  50%      { transform: scale(1.14); opacity: 1;    }
+}
+@keyframes gt-logo-in     {
+  from { opacity: 0; transform: scale(0.58); }
+  to   { opacity: 1; transform: scale(1);    }
+}
+@keyframes gt-fade-up     {
+  from { opacity: 0; transform: translateY(14px); }
+  to   { opacity: 1; transform: translateY(0);    }
+}
+@keyframes gt-bounce      {
+  0%, 60%, 100% { transform: translateY(0);    opacity: 0.32; }
+  30%           { transform: translateY(-8px); opacity: 1;    }
+}
+@keyframes gt-shimmer     { from { left: -70%; } to { left: 160%; } }
+@keyframes gt-progress    { from { width: 0%; } to  { width: 88%; } }
+
+/* ── Page-enter — eliminates white flash on client-side navigation ───── */
+@keyframes page-enter     { from { opacity: 0; } to { opacity: 1; } }
+
 /* ══════════════════════════════════════════════════════════════════════════
    "Operational Precision" — base styles + theme variables.
 
@@ -336,6 +361,11 @@
    ══════════════════════════════════════════════════════════════════════════ */
 
 @layer components {
+  /* ——— Page transition — child of #main-content fades in on mount ——— */
+  #main-content > * {
+    animation: page-enter 0.2s ease both;
+  }
+
   /* ——— Surfaces ———————————————————————————————————————————————————————— */
 
   .surface {
