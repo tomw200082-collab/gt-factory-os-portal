@@ -42,6 +42,8 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ArrowLeft, Plus, Trash2 } from "lucide-react";
+import { InlineEditSelectCell } from "@/components/tables/InlineEditSelectCell";
+import { useItemFieldOptions, type FieldDerivationItem } from "@/lib/admin/item-field-options";
 import { Wizard, type WizardStepProps } from "@/components/workflow/Wizard";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
@@ -117,7 +119,7 @@ interface SupplierRow {
   status: string;
 }
 
-interface ItemRow {
+interface ItemRow extends FieldDerivationItem {
   item_id: string;
   sku: string | null;
   item_name: string;
@@ -189,11 +191,37 @@ function Step1ItemBasics({
   state,
   patch,
 }: WizardStepProps<NewProductWizardState>): JSX.Element {
+  // Iter 12 -- load existing items to feed useItemFieldOptions
+  const itemsForOptsQuery = useQuery<ListEnvelope<ItemRow>>({
+    queryKey: ["admin", "items", "for-field-options"],
+    queryFn: () => fetchJson("/api/items?limit=1000"),
+    staleTime: 300_000,
+  });
+  const opts = useItemFieldOptions(itemsForOptsQuery.data?.rows ?? []);
+
+  // Iter 14 -- validation banner: show missing required fields if user has started filling in
+  const touched =
+    !!state.item_id?.trim() ||
+    !!state.item_name?.trim() ||
+    !!state.supply_method ||
+    !!state.sales_uom?.trim();
+  const missingRequired: string[] = [];
+  if (!state.item_id?.trim()) missingRequired.push("item_id");
+  if (!state.item_name?.trim()) missingRequired.push("item_name");
+  if (!state.supply_method) missingRequired.push("supply_method");
+  if (!state.sales_uom?.trim()) missingRequired.push("sales_uom");
+
   return (
     <SectionCard
       title="Item basics"
       description="The core identity of the new product. You can edit any of these later from the item detail page."
     >
+      {touched && missingRequired.length > 0 ? (
+        <div className="mb-3 rounded-md border border-warning/40 bg-warning-softer px-3 py-2 text-xs text-warning-fg">
+          Required fields missing: {missingRequired.join(", ")}. Fill these in before
+          moving to the next step.
+        </div>
+      ) : null}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
         <label className="block">
           <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
@@ -244,29 +272,40 @@ function Step1ItemBasics({
           </span>
         </label>
 
-        <label className="block">
+        {/* Iter 12 -- family as InlineEditSelectCell dropdown */}
+        <div className="block">
           <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
             family
           </span>
-          <input
-            className="input"
-            placeholder="e.g. COCKTAIL"
-            value={state.family ?? ""}
-            onChange={(e) => patch({ family: e.target.value })}
+          <InlineEditSelectCell
+            value={state.family ?? null}
+            options={opts.family}
+            fieldLabel="Family"
+            placeholder="Pick or type a family…"
+            allowAdHoc
+            allowClear
+            onSave={async (v) => {
+              patch({ family: v ?? "" });
+            }}
           />
-        </label>
+        </div>
 
-        <label className="block">
+        {/* Iter 12 -- sales_uom as InlineEditSelectCell dropdown */}
+        <div className="block">
           <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
             sales_uom <span className="text-danger">*</span>
           </span>
-          <input
-            className="input"
-            placeholder="e.g. BOTTLE"
-            value={state.sales_uom ?? ""}
-            onChange={(e) => patch({ sales_uom: e.target.value })}
+          <InlineEditSelectCell
+            value={state.sales_uom ?? null}
+            options={opts.sales_uom}
+            fieldLabel="Sales UOM"
+            placeholder="Pick a unit…"
+            allowClear={false}
+            onSave={async (v) => {
+              patch({ sales_uom: v ?? "" });
+            }}
           />
-        </label>
+        </div>
 
         <label className="block">
           <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
@@ -285,6 +324,7 @@ function Step1ItemBasics({
     </SectionCard>
   );
 }
+
 
 // ---------------------------------------------------------------------------
 // Step 2 — Aliases (optional)
@@ -977,11 +1017,11 @@ function Step7Review({
         eyebrow="Step 1"
       >
         <dl className="grid grid-cols-1 gap-x-6 gap-y-2 sm:grid-cols-2">
-          <Field label="Item ID" value={state.item_id ?? "(not set)"} />
-          <Field label="Name" value={state.item_name ?? "(not set)"} />
-          <Field label="Supply method" value={state.supply_method ?? "(not set)"} />
+          <Field label="Item ID" value={state.item_id ?? "(not set)"} tone={!state.item_id ? "warning" : "default"} />
+          <Field label="Name" value={state.item_name ?? "(not set)"} tone={!state.item_name ? "warning" : "default"} />
+          <Field label="Supply method" value={state.supply_method ?? "(not set)"} tone={!state.supply_method ? "warning" : "default"} />
           <Field label="Family" value={state.family ?? "—"} />
-          <Field label="Sales UOM" value={state.sales_uom ?? "(not set)"} />
+          <Field label="Sales UOM" value={state.sales_uom ?? "(not set)"} tone={!state.sales_uom ? "warning" : "default"} />
           <Field label="Case pack" value={state.case_pack ?? "—"} />
         </dl>
       </SectionCard>
@@ -1328,22 +1368,36 @@ export default function AdminNewProductWizardPage(): JSX.Element {
 }
 
 // ---------------------------------------------------------------------------
-// Field helper
+// Field helper -- iter 13: tone prop for review card warnings
 // ---------------------------------------------------------------------------
 
 function Field({
   label,
   value,
+  tone = "default",
 }: {
   label: string;
   value: string;
+  tone?: "default" | "warning";
 }): JSX.Element {
   return (
-    <div className="flex items-center justify-between gap-3 border-b border-border/30 py-1.5">
-      <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+    <div
+      className={`flex items-center justify-between gap-3 border-b border-border/30 py-1.5 ${
+        tone === "warning" ? "rounded bg-warning-softer/60 px-2" : ""
+      }`}
+    >
+      <span
+        className={`text-3xs font-semibold uppercase tracking-sops ${
+          tone === "warning" ? "text-warning-fg" : "text-fg-subtle"
+        }`}
+      >
         {label}
       </span>
-      <span className="text-sm text-fg">{value}</span>
+      <span
+        className={`text-sm ${tone === "warning" ? "font-medium text-warning-fg" : "text-fg"}`}
+      >
+        {value}
+      </span>
     </div>
   );
 }

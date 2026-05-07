@@ -748,6 +748,27 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
 
   return (
     <>
+      {/* iter 19 -- sticky draft banner */}
+      {isDraft ? (
+        <div className="sticky top-0 z-20 flex items-center justify-between gap-3 rounded-md border border-warning/40 bg-warning-softer px-4 py-2 text-sm text-warning-fg shadow-sm">
+          <div className="flex items-center gap-2">
+            <AlertTriangle className="h-4 w-4 shrink-0" />
+            <span>You are editing a draft — changes are not in production until published.</span>
+          </div>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm shrink-0 text-warning-fg hover:bg-warning/20"
+            onClick={() => {
+              if (window.confirm("Discard all changes to this draft? This cannot be undone.")) {
+                router.push(`/admin/boms/${encodeURIComponent(head_id)}`);
+              }
+            }}
+          >
+            Discard changes
+          </button>
+        </div>
+      ) : null}
+
       <Breadcrumbs
         items={[
           { label: "Admin", href: "/admin" },
@@ -846,18 +867,34 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
         </div>
       ) : null}
 
-      {/* Readiness card */}
+      {/* iter 17 — ReadinessCard with tone colors + component deep-links on blockers */}
       {readinessQuery.data ? (
         <ReadinessCard
           entity="bom_version"
           readiness={{
             is_ready: readinessQuery.data.is_ready ?? false,
             readiness_summary: readinessQuery.data.readiness_summary,
-            blockers: (readinessQuery.data.blockers ?? []).map((b) => ({
-              code: b.code,
-              label: b.label ?? b.code,
-              detail: b.detail,
-            })),
+            blockers: (readinessQuery.data.blockers ?? []).map((b) => {
+              // Derive a component link if the blocker detail mentions a component id
+              const componentMatch = lines.find(
+                (l) =>
+                  b.code.includes(l.final_component_id) ||
+                  b.detail?.includes(l.final_component_id),
+              );
+              return {
+                code: b.code,
+                label: b.label ?? b.code,
+                detail: b.detail,
+                fixAction: componentMatch
+                  ? {
+                      label: "Open component →",
+                      href: `/admin/masters/components/${encodeURIComponent(
+                        componentMatch.final_component_id,
+                      )}`,
+                    }
+                  : undefined,
+              };
+            }),
           }}
         />
       ) : null}
@@ -1196,10 +1233,14 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
             {(preview.warnings ?? []).length > 0 &&
             !preview.can_publish_clean &&
             preview.can_publish_with_override ? (
-              <div className="rounded-md border border-warning/40 bg-warning-softer p-3 text-sm text-warning-fg">
-                <div className="mb-1 flex items-center gap-2 font-semibold">
+              // iter 18 — override section clearly marked as risky
+              <div className="rounded-md border-2 border-warning/60 bg-warning-softer p-3 text-sm text-warning-fg">
+                <div className="mb-2 flex items-center gap-2 font-semibold">
                   <AlertTriangle className="h-4 w-4" strokeWidth={2} />
-                  Warnings
+                  <span>Override required — this is a risky action</span>
+                  <span className="ml-auto rounded bg-warning px-1.5 py-0.5 text-3xs font-bold uppercase tracking-wide">
+                    Override
+                  </span>
                 </div>
                 <ul className="list-disc pl-5 text-xs text-fg-muted">
                   {(preview.warnings ?? []).map((w) => (
@@ -1210,6 +1251,11 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
                     </li>
                   ))}
                 </ul>
+                <div className="mt-3 rounded-md border border-warning/40 bg-warning/10 px-3 py-2 text-xs text-warning-fg">
+                  <strong>Warning:</strong> Publishing with an override acknowledges these warnings and
+                  records your approval in the audit log. Only proceed if you have verified
+                  the above items are acceptable.
+                </div>
                 <label className="mt-3 flex items-start gap-2 text-xs">
                   <input
                     type="checkbox"
@@ -1220,7 +1266,7 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
                     }
                   />
                   <span>
-                    I understand — proceed anyway. The warnings above will be
+                    I understand the risks — proceed with override. The warnings above will be
                     acknowledged in the publish audit entry.
                   </span>
                 </label>
@@ -1337,6 +1383,7 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
 
 // --- Subcomponents --------------------------------------------------------
 
+// iter 18 — PublishButton: clear disabled explanation, active-version message
 function PublishButton({
   preview,
   loadingPreview,
@@ -1349,27 +1396,41 @@ function PublishButton({
   if (loadingPreview || !preview) {
     return (
       <button type="button" className="btn-primary" disabled>
-        Publish
+        Checking preflight…
       </button>
     );
   }
   const canProceed = !!preview.can_publish_with_override;
+  const isBlocked = !canProceed;
+  const hasWarnings =
+    !preview.can_publish_clean && !!preview.can_publish_with_override;
+
   return (
-    <button
-      type="button"
-      className="btn-primary"
-      disabled={!canProceed}
-      title={
-        canProceed
-          ? preview.can_publish_clean
-            ? "All preflight checks pass."
-            : "Warnings present — override required."
-          : "Blocked — resolve blocking issues first."
-      }
-      onClick={onOpen}
-    >
-      Publish
-    </button>
+    <div className="flex flex-col items-end gap-1">
+      {/* "This will become the active version" confirmation message */}
+      {canProceed ? (
+        <span className="text-3xs text-fg-subtle">
+          {preview.can_publish_clean
+            ? "This will become the active version."
+            : "Override required — see dialog for details."}
+        </span>
+      ) : null}
+      <button
+        type="button"
+        className={`btn-primary ${isBlocked ? "opacity-60 cursor-not-allowed" : ""} ${hasWarnings ? "bg-warning text-warning-fg hover:bg-warning/90" : ""}`}
+        disabled={isBlocked}
+        title={
+          isBlocked
+            ? "Blocked — resolve blocking issues first. See readiness card below."
+            : preview.can_publish_clean
+              ? "All preflight checks pass. Click to confirm."
+              : "Warnings present — an override acknowledgement is required in the dialog."
+        }
+        onClick={onOpen}
+      >
+        {isBlocked ? "Publish (blocked)" : hasWarnings ? "Publish with override…" : "Publish"}
+      </button>
+    </div>
   );
 }
 
@@ -1396,15 +1457,19 @@ function BomLineEditorRow({
       <td className="px-3 py-2 text-xs tabular-nums text-fg-muted">
         {line.line_no}
       </td>
+      {/* iter 16 — component name (linked to detail page) + ID as secondary */}
       <td className="px-3 py-2">
         <div className="flex items-start justify-between gap-2">
           <div className="min-w-0">
             <Link
-              href={`/admin/components?component=${encodeURIComponent(line.final_component_id)}`}
+              href={`/admin/masters/components/${encodeURIComponent(line.final_component_id)}`}
               className="font-medium text-primary hover:underline"
             >
               {componentName}
             </Link>
+            <div className="font-mono text-3xs text-fg-subtle">
+              {line.final_component_id}
+            </div>
           </div>
           {editMode ? (
             <button
