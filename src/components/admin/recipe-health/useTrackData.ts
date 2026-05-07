@@ -15,7 +15,7 @@
 import { useQuery } from "@tanstack/react-query";
 
 export interface BomLineRow {
-  bom_line_id: string;
+  line_id: string;
   final_component_id: string;
   final_component_name: string;
   final_component_qty: string;

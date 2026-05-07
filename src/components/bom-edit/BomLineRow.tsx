@@ -75,7 +75,7 @@ export function BomLineRow({
   const patch = useMutation({
     mutationFn: async (qty: string) =>
       patchEntity({
-        url: `/api/boms/versions/${encodeURIComponent(versionId)}/lines/${encodeURIComponent(line.bom_line_id)}`,
+        url: `/api/boms/versions/${encodeURIComponent(versionId)}/lines/${encodeURIComponent(line.line_id)}`,
         fields: { final_component_qty: qty },
         ifMatchUpdatedAt: line.updated_at,
       }),
@@ -103,7 +103,7 @@ export function BomLineRow({
   const del = useMutation({
     mutationFn: async () => {
       const res = await fetch(
-        `/api/boms/versions/${encodeURIComponent(versionId)}/lines/${encodeURIComponent(line.bom_line_id)}`,
+        `/api/boms/versions/${encodeURIComponent(versionId)}/lines/${encodeURIComponent(line.line_id)}`,
         {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
@@ -138,7 +138,7 @@ export function BomLineRow({
 
   return (
     <tr
-      data-testid={`bom-line-row-${line.bom_line_id}`}
+      data-testid={`bom-line-row-${line.line_id}`}
       className="border-b border-border last:border-b-0 hover:bg-bg-subtle/40"
     >
       <td className="px-4 py-2.5">
@@ -161,7 +161,7 @@ export function BomLineRow({
           ) : (
             <button
               type="button"
-              aria-label={`qty-edit-${line.bom_line_id}`}
+              aria-label={`qty-edit-${line.line_id}`}
               onClick={() => setEditing(true)}
               className="group inline-flex items-center gap-1.5 rounded-sm border border-dashed border-accent/40 px-1.5 py-0.5 font-mono tabular-nums text-sm text-fg hover:border-accent hover:bg-accent-softer"
             >
@@ -221,7 +221,7 @@ export function BomLineRow({
           <button
             type="button"
             onClick={() => setConfirmDelete(true)}
-            aria-label={`delete-${line.bom_line_id}`}
+            aria-label={`delete-${line.line_id}`}
             disabled={del.isPending}
             className="rounded-sm p-1 text-fg-muted hover:bg-danger-soft hover:text-danger-fg disabled:cursor-not-allowed disabled:opacity-40"
           >

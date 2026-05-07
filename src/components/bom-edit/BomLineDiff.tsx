@@ -76,7 +76,7 @@ export function BomLineDiff({
         <div className="mt-2 space-y-1 text-xs">
           {diff.added.map((l) => (
             <div
-              key={l.bom_line_id}
+              key={l.line_id}
               className="flex items-center gap-1.5 text-success-fg"
             >
               <span
@@ -95,7 +95,7 @@ export function BomLineDiff({
           ))}
           {diff.removed.map((l) => (
             <div
-              key={l.bom_line_id}
+              key={l.line_id}
               className="flex items-center gap-1.5 text-danger-fg"
             >
               <span

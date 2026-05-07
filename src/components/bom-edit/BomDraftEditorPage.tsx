@@ -415,7 +415,7 @@ export function BomDraftEditorPage({
                 <tbody>
                   {safeLines.map((line) => (
                     <BomLineRow
-                      key={line.bom_line_id}
+                      key={line.line_id}
                       line={line}
                       versionId={versionId}
                       readiness={
