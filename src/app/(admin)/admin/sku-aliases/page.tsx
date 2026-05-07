@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 // ---------------------------------------------------------------------------
 // Admin · SKU Aliases — external-SKU → item_id review + batch approval.
@@ -23,15 +23,32 @@
 //   api/src/integration-sku-map/schemas.ts IntegrationSkuMapApproveAliasSchema.
 //
 // Role gate: admin only.
+//
+// UX iterations (iters 1-12 of sku-management-redesign):
+//   1.  Audit: channel tabs, unmapped list, item picker, batch approve, audit list.
+//   2.  Channel tabs: count badge per channel; warning tone when pending > 0.
+//   3.  Unmapped summary card "X aliases need approval" with tone by count.
+//   4.  Exception row: monospace SKU chip, channel badge, relative timestamp.
+//   5.  Item picker: SearchableSelect with item_name + monospace id below.
+//   6.  Batch approve: "Approve N selected" button, prominent when selected.
+//   7.  Per-row Approve inline action button.
+//   8.  Audit list: item_name linked, approval status badge.
+//   9.  Client-side search on external_sku and item_name in both lists.
+//  10.  Green "All clear" empty state when no unmapped SKUs pending.
+//  11.  Channel-specific context note per tab.
+//  12.  Page header KPI row: Total / Approved / Pending / Rejected chips.
 // ---------------------------------------------------------------------------
 
 import { useEffect, useMemo, useState, Suspense, type FormEvent } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
+import { SearchableSelect } from "@/components/fields/SearchableSelect";
 import { useSession } from "@/lib/auth/session-provider";
+import { cn } from "@/lib/cn";
 
 // ---------------------------------------------------------------------------
 // Inline response shapes
@@ -89,12 +106,8 @@ interface ChannelConfig {
   label: string;
   exceptionCategory: string;
   externalSkuColumnLabel: string;
-  /**
-   * Extract the external SKU from the exception title.
-   * LionWheel: "Unknown SKU <sku>"    → sku
-   * Shopify:   "Unmapped FG item <id>" → id
-   */
   extractSku: (title: string | null | undefined) => string | null;
+  contextNote: string;
 }
 
 const CHANNEL_CONFIGS: Record<ChannelKey, ChannelConfig> = {
@@ -105,10 +118,11 @@ const CHANNEL_CONFIGS: Record<ChannelKey, ChannelConfig> = {
     externalSkuColumnLabel: "External SKU",
     extractSku: (title) => {
       if (!title) return null;
-      // title: "Unknown SKU <sku>"
       const match = title.match(/Unknown SKU (.+)$/);
       return match ? match[1].trim() : null;
     },
+    contextNote:
+      "LionWheel SKUs appear on order line items. Each unknown SKU here means a customer order contained a product identifier that has no canonical item mapping yet. Approving unblocks planning demand calculations for that product.",
   },
   shopify: {
     key: "shopify",
@@ -117,12 +131,11 @@ const CHANNEL_CONFIGS: Record<ChannelKey, ChannelConfig> = {
     externalSkuColumnLabel: "Item ID",
     extractSku: (title) => {
       if (!title) return null;
-      // title: "Unmapped FG item <item_id>"
-      // Verified against supabase/functions/factory_os_jobs/index.ts line ~1837:
-      //   title: `Unmapped FG item ${item_id}`
       const match = title.match(/Unmapped FG item (.+)$/);
       return match ? match[1].trim() : null;
     },
+    contextNote:
+      "Shopify SKUs / product handles appear during finished-goods stock sync. Each unmapped entry means Shopify reported stock for a product whose handle or SKU field doesn't match a canonical item. Approving lets the platform reconcile on-hand counts and detect drift.",
   },
 };
 
@@ -140,6 +153,27 @@ function extractSourceChannel(category: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Relative-time helper
+// ---------------------------------------------------------------------------
+
+function relativeTime(isoStr: string): string {
+  const now = Date.now();
+  const then = new Date(isoStr).getTime();
+  if (isNaN(then)) return isoStr;
+  const diffMs = now - then;
+  const diffMin = Math.floor(diffMs / 60_000);
+  if (diffMin < 2) return "just now";
+  if (diffMin < 60) return `${diffMin}m ago`;
+  const diffH = Math.floor(diffMin / 60);
+  if (diffH < 24) return `${diffH}h ago`;
+  const diffD = Math.floor(diffH / 24);
+  if (diffD < 30) return `${diffD}d ago`;
+  const diffW = Math.floor(diffD / 7);
+  if (diffD < 60) return `${diffW}w ago`;
+  return new Date(isoStr).toLocaleDateString();
+}
+
+// ---------------------------------------------------------------------------
 // Fetch helper
 // ---------------------------------------------------------------------------
 
@@ -149,6 +183,90 @@ async function fetchJson<T>(url: string): Promise<T> {
     throw new Error(`Could not load data (HTTP ${res.status}). Check your connection and try refreshing.`);
   }
   return (await res.json()) as T;
+}
+
+// ---------------------------------------------------------------------------
+// ApprovalBadge
+// ---------------------------------------------------------------------------
+
+function ApprovalBadge({
+  status,
+}: {
+  status: "approved" | "pending" | "rejected" | string;
+}): JSX.Element {
+  if (status === "approved")
+    return <Badge tone="success" dotted>Approved</Badge>;
+  if (status === "rejected")
+    return <Badge tone="danger" dotted>Rejected</Badge>;
+  if (status === "pending")
+    return <Badge tone="warning" dotted>Pending</Badge>;
+  return <Badge tone="neutral" dotted>{status}</Badge>;
+}
+
+// ---------------------------------------------------------------------------
+// ChannelBadge
+// ---------------------------------------------------------------------------
+
+function ChannelBadge({ channel }: { channel: string }): JSX.Element {
+  if (channel === "lionwheel") return <Badge tone="neutral">LionWheel</Badge>;
+  if (channel === "shopify") return <Badge tone="info">Shopify</Badge>;
+  if (channel === "green_invoice") return <Badge tone="neutral">Green Invoice</Badge>;
+  return <Badge tone="neutral">{channel}</Badge>;
+}
+
+// ---------------------------------------------------------------------------
+// MetricChip — iter 12
+// ---------------------------------------------------------------------------
+
+function MetricChip({
+  label,
+  value,
+  tone = "neutral",
+}: {
+  label: string;
+  value: number | string;
+  tone?: "neutral" | "warning" | "success" | "danger" | "info";
+}): JSX.Element {
+  const toneClasses: Record<string, string> = {
+    neutral: "border-border/60 bg-bg-subtle/60 text-fg-muted",
+    warning: "border-warning/40 bg-warning-softer text-warning-fg",
+    success: "border-success/40 bg-success-softer text-success-fg",
+    danger: "border-danger/40 bg-danger-softer text-danger-fg",
+    info: "border-info/40 bg-info-softer text-info-fg",
+  };
+  return (
+    <div
+      className={cn(
+        "inline-flex flex-col items-center gap-0.5 rounded-md border px-3 py-1.5",
+        toneClasses[tone],
+      )}
+    >
+      <span className="text-3xs font-semibold uppercase tracking-sops opacity-80">
+        {label}
+      </span>
+      <span className="text-base font-semibold tabular-nums leading-tight">
+        {value}
+      </span>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ClearIcon — small X svg for search clear buttons
+// ---------------------------------------------------------------------------
+
+function ClearIcon(): JSX.Element {
+  return (
+    <svg
+      className="h-3.5 w-3.5"
+      viewBox="0 0 16 16"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+    >
+      <path d="M4 4l8 8M12 4l-8 8" />
+    </svg>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -171,13 +289,10 @@ function AdminSkuAliasesPageInner(): JSX.Element {
   const activeChannel = parseChannel(searchParams.get("channel"));
   const channelCfg = CHANNEL_CONFIGS[activeChannel];
 
-  // Client-defense admin gate.
   if (session.role !== "admin") {
     return (
       <div className="card mx-auto mt-8 max-w-lg p-6 text-center">
-        <div className="text-sm font-semibold text-fg">
-          SKU alias admin surface
-        </div>
+        <div className="text-sm font-semibold text-fg">SKU alias admin surface</div>
         <div className="mt-2 text-xs text-fg-muted">
           This surface is restricted to admin. Current role:{" "}
           <span className="font-mono text-fg">{session.role}</span>.
@@ -189,26 +304,23 @@ function AdminSkuAliasesPageInner(): JSX.Element {
   const [assignments, setAssignments] = useState<AssignmentState>({});
   const [notes, setNotes] = useState<NotesState>({});
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  const [itemFilter, setItemFilter] = useState<string>("");
+  const [unmappedSearch, setUnmappedSearch] = useState<string>("");
+  const [auditSearch, setAuditSearch] = useState<string>("");
   const [banner, setBanner] = useState<
     | { kind: "success" | "error"; message: string; detail?: string }
     | null
   >(null);
+  const [quickCreateForSku, setQuickCreateForSku] = useState<string | null>(
+    null,
+  );
 
-  // Quick-create-item modal state. When non-null, the modal is open and
-  // pre-filled with the external_sku of the row that triggered it. On
-  // successful create, the new item_id is auto-assigned to that row's
-  // dropdown and the row checkbox is checked, so the planner can move
-  // straight to Approve.
-  const [quickCreateForSku, setQuickCreateForSku] = useState<string | null>(null);
-
-  // Reset per-channel state when channel tab changes.
   const handleChannelSwitch = (ch: ChannelKey) => {
     if (ch === activeChannel) return;
     setAssignments({});
     setNotes({});
     setSelected(new Set());
     setBanner(null);
+    setUnmappedSearch("");
     const params = new URLSearchParams(searchParams.toString());
     if (ch === "lionwheel") {
       params.delete("channel");
@@ -219,7 +331,7 @@ function AdminSkuAliasesPageInner(): JSX.Element {
     router.replace(`/admin/sku-aliases${qs ? `?${qs}` : ""}`);
   };
 
-  // ---- Queries --------------------------------------------------------------
+  // ---- Queries ---------------------------------------------------------------
 
   const exceptionsQuery = useQuery<ListEnvelope<ExceptionRow>>({
     queryKey: ["admin", "sku-aliases", "exceptions", activeChannel],
@@ -255,7 +367,30 @@ function AdminSkuAliasesPageInner(): JSX.Element {
     retry: false,
   });
 
-  // ---- Derived state --------------------------------------------------------
+  // iter 2: per-channel exception counts for tab badges
+  const lionwheelCountQuery = useQuery<ListEnvelope<ExceptionRow>>({
+    queryKey: ["admin", "sku-aliases", "exceptions-count", "lionwheel"],
+    queryFn: () =>
+      fetchJson(
+        `/api/exceptions?category=${CHANNEL_CONFIGS.lionwheel.exceptionCategory}&status=open&limit=1`,
+      ),
+    retry: false,
+  });
+  const shopifyCountQuery = useQuery<ListEnvelope<ExceptionRow>>({
+    queryKey: ["admin", "sku-aliases", "exceptions-count", "shopify"],
+    queryFn: () =>
+      fetchJson(
+        `/api/exceptions?category=${CHANNEL_CONFIGS.shopify.exceptionCategory}&status=open&limit=1`,
+      ),
+    retry: false,
+  });
+
+  const channelCounts: Record<ChannelKey, number> = {
+    lionwheel: lionwheelCountQuery.data?.count ?? 0,
+    shopify: shopifyCountQuery.data?.count ?? 0,
+  };
+
+  // ---- Derived state ---------------------------------------------------------
 
   const unmappedRows = useMemo<UnmappedSkuRow[]>(() => {
     const rows = exceptionsQuery.data?.rows ?? [];
@@ -287,25 +422,57 @@ function AdminSkuAliasesPageInner(): JSX.Element {
 
   const items = itemsQuery.data?.rows ?? [];
 
-  const filteredItems = useMemo(() => {
-    if (!itemFilter) return items;
-    const q = itemFilter.toLowerCase();
-    return items.filter(
-      (i) =>
-        i.item_id.toLowerCase().includes(q) ||
-        i.item_name.toLowerCase().includes(q),
-    );
-  }, [items, itemFilter]);
+  // iter 5: SearchableSelect options (name primary, id as meta)
+  const itemOptions = useMemo(
+    () =>
+      items.map((it) => ({
+        value: it.item_id,
+        label: it.item_name,
+        meta: it.item_id,
+      })),
+    [items],
+  );
 
   const approvedRows = approvedQuery.data?.rows ?? [];
   const pendingCount = pendingQuery.data?.count ?? 0;
   const approvedCount = approvedQuery.data?.count ?? approvedRows.length;
   const rejectedCount = rejectedQuery.data?.count ?? 0;
+  const totalCount = pendingCount + approvedCount + rejectedCount;
 
   const backendLive =
-    !approvedQuery.isError && !pendingQuery.isError && !rejectedQuery.isError;
+    !approvedQuery.isError &&
+    !pendingQuery.isError &&
+    !rejectedQuery.isError;
 
-  // ---- Mutation -------------------------------------------------------------
+  // iter 9: filtered unmapped rows (search on external_sku + assigned item name)
+  const filteredUnmapped = useMemo<UnmappedSkuRow[]>(() => {
+    if (!unmappedSearch.trim()) return unmappedRows;
+    const q = unmappedSearch.trim().toLowerCase();
+    return unmappedRows.filter((r) => {
+      if (r.external_sku.toLowerCase().includes(q)) return true;
+      const assignedId = assignments[r.external_sku];
+      if (assignedId) {
+        const item = items.find((i) => i.item_id === assignedId);
+        if (item && item.item_name.toLowerCase().includes(q)) return true;
+      }
+      return false;
+    });
+  }, [unmappedRows, unmappedSearch, assignments, items]);
+
+  // iter 9: filtered audit rows (search on external_sku + item_name)
+  const filteredAudit = useMemo<SkuAliasRow[]>(() => {
+    if (!auditSearch.trim()) return approvedRows;
+    const q = auditSearch.trim().toLowerCase();
+    return approvedRows.filter((r) => {
+      if (r.external_sku.toLowerCase().includes(q)) return true;
+      const item = items.find((i) => i.item_id === r.item_id);
+      if (item && item.item_name.toLowerCase().includes(q)) return true;
+      if (r.item_id.toLowerCase().includes(q)) return true;
+      return false;
+    });
+  }, [approvedRows, auditSearch, items]);
+
+  // ---- Mutation --------------------------------------------------------------
 
   interface ApproveResponse {
     approved_aliases: unknown[];
@@ -336,7 +503,8 @@ function AdminSkuAliasesPageInner(): JSX.Element {
       const body = await res.json().catch(() => null);
       if (!res.ok) {
         throw new Error(
-          (body as { error?: string } | null)?.error ?? "Could not approve aliases. Check your connection and try again.",
+          (body as { error?: string } | null)?.error ??
+            "Could not approve aliases. Check your connection and try again.",
         );
       }
       return body as ApproveResponse | null;
@@ -344,10 +512,9 @@ function AdminSkuAliasesPageInner(): JSX.Element {
     onSuccess: (data, rows) => {
       const resolvedCount = data?.resolved_exceptions_count ?? 0;
       const aliasWord = rows.length === 1 ? "alias" : "aliases";
-      const channelLabel = channelCfg.label;
       setBanner({
         kind: "success",
-        message: `${rows.length} ${aliasWord} approved. ${resolvedCount} ${channelLabel} exception${resolvedCount === 1 ? "" : "s"} resolved.`,
+        message: `${rows.length} ${aliasWord} approved. ${resolvedCount} ${channelCfg.label} exception${resolvedCount === 1 ? "" : "s"} resolved.`,
         detail:
           resolvedCount < rows.length
             ? "Remaining exceptions stay open if no matching records were found for those SKUs."
@@ -371,7 +538,7 @@ function AdminSkuAliasesPageInner(): JSX.Element {
 
   const queryClient = useQueryClient();
 
-  // ---- Handlers -------------------------------------------------------------
+  // ---- Handlers --------------------------------------------------------------
 
   const toggleRow = (externalSku: string) => {
     setSelected((prev) => {
@@ -415,19 +582,18 @@ function AdminSkuAliasesPageInner(): JSX.Element {
       setBanner({
         kind: "error",
         message:
-          "Select at least one row with an item_id assignment to approve.",
+          "Select at least one row with an item assignment to approve.",
       });
       return;
     }
     approveMutation.mutate(payload);
   };
 
-  // ---- Render ---------------------------------------------------------------
+  // ---- Render ----------------------------------------------------------------
 
   const loadingExceptions = exceptionsQuery.isLoading;
   const loadingItems = itemsQuery.isLoading;
   const exceptionsError = exceptionsQuery.error as Error | null;
-  const itemsError = itemsQuery.error as Error | null;
 
   const canApprove =
     selected.size > 0 &&
@@ -436,66 +602,93 @@ function AdminSkuAliasesPageInner(): JSX.Element {
 
   return (
     <>
+      {/* iter 12: page header KPI row */}
       <WorkflowHeader
         eyebrow="Admin · SKU aliases"
-        title="External SKU → item_id review"
-        description="Map external SKUs observed in LionWheel and Shopify to our canonical items. Approved aliases unblock planning demand and FG sync."
+        title="External SKU → Item mapping"
+        description="Map external SKUs observed in LionWheel and Shopify to canonical items. Approved aliases unblock planning demand calculations and FG stock sync."
         meta={
-          <>
-            <Badge tone="warning" dotted>
-              {unmappedRows.length} unmapped
-            </Badge>
-            <Badge tone="info" dotted>
-              {pendingCount} pending
-            </Badge>
-            <Badge tone="success" dotted>
-              {approvedCount} approved
-            </Badge>
-            <Badge tone="neutral" dotted>
-              {rejectedCount} rejected
-            </Badge>
-            {!backendLive ? (
-              <Badge tone="neutral" dotted>
-                endpoints pending
-              </Badge>
-            ) : (
-              <Badge tone="neutral" dotted>
-                live API
-              </Badge>
-            )}
-          </>
+          <div className="flex flex-wrap gap-2">
+            <MetricChip
+              label="Total aliases"
+              value={totalCount}
+              tone="neutral"
+            />
+            <MetricChip
+              label="Approved"
+              value={approvedCount}
+              tone="success"
+            />
+            <MetricChip
+              label="Pending"
+              value={pendingCount}
+              tone={pendingCount > 0 ? "warning" : "neutral"}
+            />
+            <MetricChip
+              label="Rejected"
+              value={rejectedCount}
+              tone={rejectedCount > 0 ? "danger" : "neutral"}
+            />
+            {unmappedRows.length > 0 ? (
+              <MetricChip
+                label="Unmapped (open)"
+                value={unmappedRows.length}
+                tone="warning"
+              />
+            ) : null}
+          </div>
         }
       />
 
-      {/* ---- Channel tabs ------------------------------------------------- */}
+      {/* iter 2: channel tabs with count badge */}
       <div className="flex gap-1 border-b border-border/60">
         {(["lionwheel", "shopify"] as ChannelKey[]).map((ch) => {
           const cfg = CHANNEL_CONFIGS[ch];
           const isActive = activeChannel === ch;
+          const pendingForChannel = channelCounts[ch];
           return (
             <button
               key={ch}
               type="button"
               onClick={() => handleChannelSwitch(ch)}
-              className={
+              className={cn(
+                "inline-flex items-center gap-2 border-b-2 px-4 py-2.5 text-sm font-semibold transition-colors duration-150 -mb-px outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-t-sm",
                 isActive
-                  ? "px-4 py-2 text-sm font-semibold text-accent border-b-2 border-accent -mb-px"
-                  : "px-4 py-2 text-sm text-fg-muted hover:text-fg border-b-2 border-transparent -mb-px"
-              }
+                  ? "border-accent text-accent"
+                  : "border-transparent text-fg-muted hover:text-fg",
+              )}
             >
-              {cfg.label}
+              <span>{cfg.label}</span>
+              <span
+                className={cn(
+                  "inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full border px-1.5 text-3xs font-semibold leading-none",
+                  pendingForChannel > 0
+                    ? "border-warning/40 bg-warning-softer text-warning-fg"
+                    : "border-border/40 bg-bg-subtle text-fg-muted",
+                )}
+                title={`${pendingForChannel} pending exceptions`}
+              >
+                {pendingForChannel}
+              </span>
             </button>
           );
         })}
       </div>
 
+      {/* iter 11: channel-specific context note */}
+      <div className="rounded-md border border-info/30 bg-info-softer/50 px-4 py-2.5 text-xs text-info-fg">
+        <span className="font-semibold">{channelCfg.label} — </span>
+        {channelCfg.contextNote}
+      </div>
+
       {banner ? (
         <div
-          className={
+          className={cn(
+            "rounded-md border p-4 text-sm",
             banner.kind === "success"
-              ? "rounded-md border border-success/40 bg-success-softer p-4 text-sm text-success-fg"
-              : "rounded-md border border-danger/40 bg-danger-softer p-4 text-sm text-danger-fg"
-          }
+              ? "border-success/40 bg-success-softer text-success-fg"
+              : "border-danger/40 bg-danger-softer text-danger-fg",
+          )}
         >
           <div className="font-semibold">{banner.message}</div>
           {banner.detail ? (
@@ -511,21 +704,110 @@ function AdminSkuAliasesPageInner(): JSX.Element {
           density="compact"
         >
           <p className="text-xs text-fg-muted">
-            The approved-alias list and approval submission are not yet live. The unmapped SKU view below is available and you can review exceptions, but approvals cannot be submitted yet.
+            The approved-alias list and approval submission are not yet live.
+            The unmapped SKU view below is available and you can review
+            exceptions, but approvals cannot be submitted yet.
           </p>
         </SectionCard>
       ) : null}
 
-      {/* --------- Left pane: unmapped external SKUs --------------- */}
+      {/* iter 3: unmapped summary card / iter 10: all-clear empty state */}
+      {!loadingExceptions && !exceptionsError ? (
+        unmappedRows.length === 0 ? (
+          <div className="rounded-md border border-success/40 bg-success-softer px-5 py-4">
+            <div className="flex items-center gap-3">
+              <span
+                className="inline-block h-2.5 w-2.5 rounded-full bg-success"
+                aria-hidden
+              />
+              <div>
+                <div className="text-sm font-semibold text-success-fg">
+                  All clear — no unmapped {channelCfg.label} SKUs pending
+                  approval.
+                </div>
+                <div className="mt-0.5 text-xs text-success-fg/80">
+                  Every {channelCfg.label} SKU observed so far has an approved
+                  alias.
+                </div>
+              </div>
+            </div>
+          </div>
+        ) : (
+          <div
+            className={cn(
+              "rounded-md border px-5 py-4",
+              unmappedRows.length >= 10
+                ? "border-danger/40 bg-danger-softer"
+                : "border-warning/40 bg-warning-softer",
+            )}
+          >
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-3">
+                <span
+                  className={cn(
+                    "inline-block h-2.5 w-2.5 rounded-full",
+                    unmappedRows.length >= 10 ? "bg-danger" : "bg-warning",
+                  )}
+                  aria-hidden
+                />
+                <div>
+                  <div
+                    className={cn(
+                      "text-sm font-semibold",
+                      unmappedRows.length >= 10
+                        ? "text-danger-fg"
+                        : "text-warning-fg",
+                    )}
+                  >
+                    {unmappedRows.length}{" "}
+                    {unmappedRows.length === 1 ? "alias needs" : "aliases need"}{" "}
+                    approval
+                  </div>
+                  <div className="mt-0.5 text-xs text-fg-muted">
+                    Assign each external SKU to an internal item, then select
+                    rows and click Approve.
+                  </div>
+                </div>
+              </div>
+              {selected.size > 0 ? (
+                <span className="text-xs text-fg-muted">
+                  {selected.size} selected
+                </span>
+              ) : null}
+            </div>
+          </div>
+        )
+      ) : null}
+
+      {/* Unmapped external SKUs table */}
       <SectionCard
         eyebrow={`Step 1 · ${channelCfg.label}`}
         title="Unmapped external SKUs"
-        description={
-          activeChannel === "lionwheel"
-            ? "Grouped by external_sku (multiple exceptions per SKU = same SKU seen on multiple orders). Assign each to an internal item, then select rows and click Approve."
-            : "Shopify FG items with no approved alias. Each exception corresponds to one FG item scanned during sync that has no integration_sku_map row. Assign a canonical item_id to each, then approve."
-        }
         contentClassName="p-0"
+        actions={
+          unmappedRows.length > 0 ? (
+            <div className="relative">
+              <input
+                type="text"
+                className="input h-8 pl-3 pr-8 text-xs w-48"
+                placeholder="Search SKU or item name…"
+                value={unmappedSearch}
+                onChange={(e) => setUnmappedSearch(e.target.value)}
+                aria-label="Search unmapped SKUs"
+              />
+              {unmappedSearch ? (
+                <button
+                  type="button"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-fg-muted hover:text-fg"
+                  onClick={() => setUnmappedSearch("")}
+                  aria-label="Clear search"
+                >
+                  <ClearIcon />
+                </button>
+              ) : null}
+            </div>
+          ) : undefined
+        }
       >
         {loadingExceptions ? (
           <div className="p-5">
@@ -546,7 +828,9 @@ function AdminSkuAliasesPageInner(): JSX.Element {
         ) : exceptionsError ? (
           <div className="p-5">
             <div className="rounded border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg">
-              <div className="font-semibold">Could not load {channelCfg.label} exceptions</div>
+              <div className="font-semibold">
+                Could not load {channelCfg.label} exceptions
+              </div>
               <div className="mt-1 text-xs">{exceptionsError.message}</div>
               <button
                 type="button"
@@ -557,11 +841,10 @@ function AdminSkuAliasesPageInner(): JSX.Element {
               </button>
             </div>
           </div>
-        ) : unmappedRows.length === 0 ? (
+        ) : unmappedRows.length === 0 ? null : filteredUnmapped.length ===
+          0 ? (
           <div className="p-5 text-sm text-fg-muted">
-            {activeChannel === "shopify"
-              ? "No unmapped Shopify FG item exceptions open. Either all items have approved aliases, or no sync cycle has run yet."
-              : "No unmapped SKU exceptions open. All LionWheel SKUs either resolve through an approved alias or have not been observed yet."}
+            No unmapped SKUs match &ldquo;{unmappedSearch}&rdquo;.
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -575,8 +858,9 @@ function AdminSkuAliasesPageInner(): JSX.Element {
                       checked={
                         selected.size > 0 &&
                         selected.size ===
-                          unmappedRows.filter((r) => assignments[r.external_sku])
-                            .length
+                          unmappedRows.filter(
+                            (r) => assignments[r.external_sku],
+                          ).length
                       }
                       onChange={(e) => {
                         if (e.target.checked) selectAllWithAssignment();
@@ -588,13 +872,13 @@ function AdminSkuAliasesPageInner(): JSX.Element {
                     {channelCfg.externalSkuColumnLabel}
                   </th>
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    Source
-                  </th>
-                  <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    Count
+                    Channel
                   </th>
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     First seen
+                  </th>
+                  <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    Occurrences
                   </th>
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Assign to item
@@ -602,10 +886,13 @@ function AdminSkuAliasesPageInner(): JSX.Element {
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Notes
                   </th>
+                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {unmappedRows.map((row) => {
+                {filteredUnmapped.map((row) => {
                   const assigned = assignments[row.external_sku] ?? "";
                   const note = notes[row.external_sku] ?? "";
                   const isSelected = selected.has(row.external_sku);
@@ -613,13 +900,14 @@ function AdminSkuAliasesPageInner(): JSX.Element {
                   return (
                     <tr
                       key={`${row.source_channel}::${row.external_sku}`}
-                      className={
+                      className={cn(
+                        "border-b border-border/40 last:border-b-0",
                         isSelected
-                          ? "border-b border-border/40 bg-accent-soft/30 last:border-b-0"
-                          : "border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
-                      }
+                          ? "bg-accent-soft/30"
+                          : "hover:bg-bg-subtle/40",
+                      )}
                     >
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-2.5">
                         <input
                           type="checkbox"
                           disabled={!canSelect}
@@ -628,64 +916,77 @@ function AdminSkuAliasesPageInner(): JSX.Element {
                           aria-label={`Select ${row.external_sku}`}
                         />
                       </td>
-                      <td className="px-3 py-2 font-mono text-xs text-fg">
-                        {row.external_sku}
+                      {/* iter 4: monospace SKU chip */}
+                      <td className="px-3 py-2.5">
+                        <span className="inline-flex items-center rounded-sm border border-border/60 bg-bg-subtle px-1.5 py-0.5 font-mono text-xs text-fg">
+                          {row.external_sku}
+                        </span>
                       </td>
-                      <td className="px-3 py-2 text-xs text-fg-muted">
-                        {row.source_channel}
+                      {/* iter 4: channel badge */}
+                      <td className="px-3 py-2.5">
+                        <ChannelBadge channel={row.source_channel} />
                       </td>
-                      <td className="px-3 py-2 text-right font-mono text-xs tabular-nums text-fg-muted">
+                      {/* iter 4: relative timestamp */}
+                      <td className="px-3 py-2.5">
+                        <span
+                          className="text-xs text-fg-muted"
+                          title={new Date(row.first_seen_at).toLocaleString()}
+                        >
+                          {relativeTime(row.first_seen_at)}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums text-fg-muted">
                         {row.count}
                       </td>
-                      <td className="px-3 py-2 text-xs text-fg-muted">
-                        {new Date(row.first_seen_at).toLocaleString()}
-                      </td>
-                      <td className="px-3 py-2">
+                      {/* iter 5: SearchableSelect with item_name + monospace id */}
+                      <td className="px-3 py-2.5">
                         <div className="flex items-center gap-1.5">
-                          <select
-                            className="input min-w-[220px]"
-                            value={assigned}
-                            onChange={(e) => {
-                              const v = e.target.value;
-                              setAssignments((prev) => ({
-                                ...prev,
-                                [row.external_sku]: v,
-                              }));
-                              if (!v && isSelected) {
-                                setSelected((prev) => {
-                                  const next = new Set(prev);
-                                  next.delete(row.external_sku);
-                                  return next;
-                                });
-                              }
-                            }}
-                          >
-                            <option value="">— choose item —</option>
-                            {filteredItems.map((it) => (
-                              <option key={it.item_id} value={it.item_id}>
-                                {it.item_id} · {it.item_name}
-                              </option>
-                            ))}
-                          </select>
-                          {/* Quick-create item button — Tom 2026-05-04. When
-                              the unmapped SKU has no matching internal item,
-                              the planner clicks here to create one in-place
-                              and have it auto-mapped to this row. */}
+                          {loadingItems ? (
+                            <div className="input flex h-9 min-w-[220px] items-center text-xs text-fg-muted opacity-60">
+                              Loading items…
+                            </div>
+                          ) : (
+                            <div className="min-w-[260px]">
+                              <SearchableSelect
+                                value={assigned}
+                                onChange={(v) => {
+                                  setAssignments((prev) => ({
+                                    ...prev,
+                                    [row.external_sku]: v,
+                                  }));
+                                  if (!v && isSelected) {
+                                    setSelected((prev) => {
+                                      const next = new Set(prev);
+                                      next.delete(row.external_sku);
+                                      return next;
+                                    });
+                                  }
+                                }}
+                                options={itemOptions}
+                                placeholder="— choose item —"
+                                searchPlaceholder="Search by name or ID…"
+                                emptyMessage="No items match"
+                                ariaLabel={`Assign item for ${row.external_sku}`}
+                              />
+                            </div>
+                          )}
                           <button
                             type="button"
                             className="btn btn-sm shrink-0 px-2 text-base font-bold leading-none"
-                            title="צור פריט חדש ושייך לשורה זו"
-                            aria-label="צור פריט חדש"
-                            onClick={() => setQuickCreateForSku(row.external_sku)}
+                            title="Create a new item and assign to this row"
+                            aria-label="Create new item"
+                            onClick={() =>
+                              setQuickCreateForSku(row.external_sku)
+                            }
                           >
                             +
                           </button>
                         </div>
                       </td>
-                      <td className="px-3 py-2">
+                      <td className="px-3 py-2.5">
                         <input
                           type="text"
-                          className="input min-w-[160px]"
+                          className="input min-w-[140px] text-xs"
                           placeholder="optional"
                           value={note}
                           onChange={(e) =>
@@ -696,6 +997,33 @@ function AdminSkuAliasesPageInner(): JSX.Element {
                           }
                         />
                       </td>
+                      {/* iter 7: per-row Approve action */}
+                      <td className="px-3 py-2.5">
+                        <button
+                          type="button"
+                          className="btn btn-sm btn-primary px-2.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
+                          disabled={!canSelect || approveMutation.isPending}
+                          onClick={() => {
+                            if (!canSelect) return;
+                            setBanner(null);
+                            approveMutation.mutate([
+                              {
+                                source_channel: row.source_channel,
+                                external_sku: row.external_sku,
+                                item_id: assigned,
+                                notes: note.trim() || null,
+                              },
+                            ]);
+                          }}
+                          title={
+                            canSelect
+                              ? "Approve this mapping"
+                              : "Assign an item first"
+                          }
+                        >
+                          Approve
+                        </button>
+                      </td>
                     </tr>
                   );
                 })}
@@ -705,86 +1033,85 @@ function AdminSkuAliasesPageInner(): JSX.Element {
         )}
       </SectionCard>
 
-      {/* --------- Right helper pane: items-master filter ----------- */}
-      <SectionCard
-        eyebrow="Step 1 · helper"
-        title="Items master filter"
-        description="Narrow the item dropdown choices above (client-side; filters every row's dropdown at once)."
-        density="compact"
-      >
-        {loadingItems ? (
-          <div className="text-xs text-fg-muted">Loading items…</div>
-        ) : itemsError ? (
-          <div className="text-xs text-danger-fg">
-            Items load failed: {itemsError.message}
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-            <label className="block sm:col-span-2">
-              <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                Search items (id / name)
-              </span>
-              <input
-                type="text"
-                className="input"
-                placeholder="e.g. GT-LUI-LOW or Lime"
-                value={itemFilter}
-                onChange={(e) => setItemFilter(e.target.value)}
-              />
-            </label>
-            <div className="flex items-end text-xs text-fg-muted">
-              {filteredItems.length} / {items.length} items visible in dropdowns
+      {/* iter 6: batch approve action bar */}
+      {unmappedRows.length > 0 ? (
+        <SectionCard
+          eyebrow="Step 2"
+          title={`Batch approve (${selected.size} selected)`}
+          description="Approval inserts an integration_sku_map row with approval_status='approved' for each selected SKU and auto-resolves matching open exceptions."
+          density="compact"
+        >
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              className={cn(
+                "btn-primary disabled:cursor-not-allowed disabled:opacity-50",
+                canApprove ? "ring-2 ring-accent/30 ring-offset-1" : "",
+              )}
+              disabled={!canApprove}
+              onClick={handleApprove}
+            >
+              {approveMutation.isPending
+                ? "Approving…"
+                : selected.size > 0
+                  ? `Approve ${selected.size} selected`
+                  : "Approve selected"}
+            </button>
+            <button
+              type="button"
+              className="btn-ghost text-sm"
+              onClick={selectAllWithAssignment}
+              disabled={unmappedRows.every(
+                (r) => !assignments[r.external_sku],
+              )}
+            >
+              Select all with assignment
+            </button>
+            <button
+              type="button"
+              className="btn-ghost text-sm"
+              onClick={clearSelection}
+              disabled={selected.size === 0}
+            >
+              Clear selection
+            </button>
+            <div className="text-xs text-fg-muted">
+              Rows without an item assignment cannot be selected.
             </div>
           </div>
-        )}
-      </SectionCard>
+        </SectionCard>
+      ) : null}
 
-      {/* --------- Step 2: approve action bar ---------------------- */}
-      <SectionCard
-        eyebrow="Step 2"
-        title={`Approve selected (${selected.size})`}
-        description="Approval inserts/updates an integration_sku_map row with approval_status='approved' for each selected external_sku and auto-resolves matching open exceptions."
-        density="compact"
-      >
-        <div className="flex flex-wrap items-center gap-3">
-          <button
-            type="button"
-            className="btn-primary disabled:cursor-not-allowed disabled:opacity-50"
-            disabled={!canApprove}
-            onClick={handleApprove}
-          >
-            {approveMutation.isPending
-              ? "Approving…"
-              : `Approve ${selected.size} alias${selected.size === 1 ? "" : "es"}`}
-          </button>
-          <button
-            type="button"
-            className="btn-ghost"
-            onClick={selectAllWithAssignment}
-            disabled={unmappedRows.every((r) => !assignments[r.external_sku])}
-          >
-            Select all with assignment
-          </button>
-          <button
-            type="button"
-            className="btn-ghost"
-            onClick={clearSelection}
-            disabled={selected.size === 0}
-          >
-            Clear selection
-          </button>
-          <div className="text-xs text-fg-muted">
-            Rows without an item_id assignment cannot be selected.
-          </div>
-        </div>
-      </SectionCard>
-
-      {/* --------- Bottom pane: already-approved audit ----------- */}
+      {/* iter 8: audit list with item_name + approval status badge */}
       <SectionCard
         eyebrow="Audit"
-        title={`Already approved (${approvedCount})`}
+        title={`Approved aliases (${approvedCount})`}
         description="Approved aliases are read-only. Contact your system administrator to reject or modify an existing alias."
         contentClassName="p-0"
+        actions={
+          approvedRows.length > 0 ? (
+            <div className="relative">
+              <input
+                type="text"
+                className="input h-8 pl-3 pr-8 text-xs w-48"
+                placeholder="Search SKU or item…"
+                value={auditSearch}
+                onChange={(e) => setAuditSearch(e.target.value)}
+                aria-label="Search approved aliases"
+              />
+              {auditSearch ? (
+                <button
+                  type="button"
+                  className="absolute right-2 top-1/2 -translate-y-1/2 text-fg-muted hover:text-fg"
+                  onClick={() => setAuditSearch("")}
+                  aria-label="Clear search"
+                >
+                  <ClearIcon />
+                </button>
+              ) : null}
+            </div>
+          ) : undefined
+        }
       >
         {approvedQuery.isLoading ? (
           <div className="p-5">
@@ -803,12 +1130,17 @@ function AdminSkuAliasesPageInner(): JSX.Element {
           </div>
         ) : approvedQuery.isError ? (
           <div className="p-5 text-sm text-fg-muted">
-            Approved aliases are not yet available. The alias list will appear here once the backend endpoint is live.
+            Approved aliases are not yet available. The alias list will appear
+            here once the backend endpoint is live.
           </div>
         ) : approvedRows.length === 0 ? (
           <div className="p-5 text-sm text-fg-muted">
             No approved aliases yet. Approve some rows above to populate this
             list.
+          </div>
+        ) : filteredAudit.length === 0 ? (
+          <div className="p-5 text-sm text-fg-muted">
+            No approved aliases match &ldquo;{auditSearch}&rdquo;.
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -819,13 +1151,16 @@ function AdminSkuAliasesPageInner(): JSX.Element {
                     External SKU
                   </th>
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    Source
+                    Channel
                   </th>
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Item
                   </th>
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    Approved at
+                    Status
+                  </th>
+                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    Approved
                   </th>
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Notes
@@ -833,55 +1168,69 @@ function AdminSkuAliasesPageInner(): JSX.Element {
                 </tr>
               </thead>
               <tbody>
-                {approvedRows.map((r) => (
-                  <tr
-                    key={r.alias_id}
-                    className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
-                  >
-                    <td className="px-3 py-2 font-mono text-xs text-fg">
-                      {r.external_sku}
-                    </td>
-                    <td className="px-3 py-2 text-xs text-fg-muted">
-                      {r.source_channel}
-                    </td>
-                    <td className="px-3 py-2 text-xs text-fg">
-                      {(() => {
-                        const item = itemsQuery.data?.rows.find(
-                          (i) => i.item_id === r.item_id,
-                        );
-                        return item ? (
-                          <>
-                            <span className="font-medium">{item.item_name}</span>
-                            <span className="ml-1 font-mono text-fg-muted">
-                              ({r.item_id})
-                            </span>
-                          </>
+                {filteredAudit.map((r) => {
+                  const item = items.find((i) => i.item_id === r.item_id);
+                  return (
+                    <tr
+                      key={r.alias_id}
+                      className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
+                    >
+                      <td className="px-3 py-2.5">
+                        <span className="inline-flex items-center rounded-sm border border-border/60 bg-bg-subtle px-1.5 py-0.5 font-mono text-xs text-fg">
+                          {r.external_sku}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <ChannelBadge channel={r.source_channel} />
+                      </td>
+                      {/* iter 8: item_name linked + monospace id */}
+                      <td className="px-3 py-2.5">
+                        {item ? (
+                          <div>
+                            <Link
+                              href={`/admin/masters/items/${r.item_id}`}
+                              className="text-xs font-medium text-fg hover:text-accent"
+                            >
+                              {item.item_name}
+                            </Link>
+                            <div className="mt-0.5 font-mono text-3xs text-fg-muted">
+                              {r.item_id}
+                            </div>
+                          </div>
                         ) : (
-                          <span className="font-mono">{r.item_id}</span>
-                        );
-                      })()}
-                    </td>
-                    <td className="px-3 py-2 text-xs text-fg-muted">
-                      {r.approved_at
-                        ? new Date(r.approved_at).toLocaleString()
-                        : "—"}
-                    </td>
-                    <td className="px-3 py-2 text-xs text-fg-muted">
-                      {r.notes ?? "—"}
-                    </td>
-                  </tr>
-                ))}
+                          <span className="font-mono text-xs text-fg-muted">
+                            {r.item_id}
+                          </span>
+                        )}
+                      </td>
+                      {/* iter 8: approval status badge */}
+                      <td className="px-3 py-2.5">
+                        <ApprovalBadge status={r.approval_status} />
+                      </td>
+                      <td className="px-3 py-2.5">
+                        <span
+                          className="text-xs text-fg-muted"
+                          title={
+                            r.approved_at
+                              ? new Date(r.approved_at).toLocaleString()
+                              : undefined
+                          }
+                        >
+                          {r.approved_at ? relativeTime(r.approved_at) : "—"}
+                        </span>
+                      </td>
+                      <td className="px-3 py-2.5 text-xs text-fg-muted">
+                        {r.notes ?? "—"}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
         )}
       </SectionCard>
 
-      {/* Quick-create item modal — Tom 2026-05-04. Opens when the planner
-          clicks the "+" button next to a row's "choose item" dropdown.
-          On success: invalidates itemsQuery (so dropdown refreshes with
-          the new item), auto-assigns the new item_id to the row, and
-          checks the row's checkbox so Approve is one click away. */}
       {quickCreateForSku !== null ? (
         <QuickCreateItemModal
           externalSku={quickCreateForSku}
@@ -902,7 +1251,7 @@ function AdminSkuAliasesPageInner(): JSX.Element {
             setQuickCreateForSku(null);
             setBanner({
               kind: "success",
-              message: `פריט ${newItemId} נוצר ושויך ל-${quickCreateForSku}. לחץ Approve כדי לאשר את המיפוי.`,
+              message: `Item ${newItemId} created and assigned to ${quickCreateForSku}. Click Approve to confirm the mapping.`,
             });
           }}
         />
@@ -912,13 +1261,7 @@ function AdminSkuAliasesPageInner(): JSX.Element {
 }
 
 // ---------------------------------------------------------------------------
-// QuickCreateItemModal — minimal-fields form for creating a new item from
-// the SKU-alias review surface. Tom 2026-05-04: lets the planner create a
-// missing item without leaving the page.
-//
-// POST /api/items expects: { idempotency_key, item_id, item_name,
-// supply_method, sales_uom, optional family, case_pack }. Pre-fills item_id
-// with the external SKU (the planner can edit it before submit).
+// QuickCreateItemModal
 // ---------------------------------------------------------------------------
 
 const SUPPLY_METHODS = ["BOUGHT_FINISHED", "MANUFACTURED", "REPACK"] as const;
@@ -942,7 +1285,6 @@ function QuickCreateItemModal({
   onClose: () => void;
   onCreated: (newItemId: string) => void;
 }): JSX.Element {
-  // Pre-fill item_id with the external SKU; planner can edit before submit.
   const [itemId, setItemId] = useState<string>(externalSku);
   const [itemName, setItemName] = useState<string>("");
   const [supplyMethod, setSupplyMethod] =
@@ -954,10 +1296,10 @@ function QuickCreateItemModal({
   const [error, setError] = useState<string | null>(null);
 
   const canSubmit =
-    !submitting
-    && itemId.trim().length > 0
-    && itemName.trim().length > 0
-    && salesUom.trim().length > 0;
+    !submitting &&
+    itemId.trim().length > 0 &&
+    itemName.trim().length > 0 &&
+    salesUom.trim().length > 0;
 
   const handleSubmit = async (e: FormEvent) => {
     e.preventDefault();
@@ -987,15 +1329,19 @@ function QuickCreateItemModal({
       });
       if (!res.ok) {
         const text = await res.text();
-        let message = `שגיאה (HTTP ${res.status})`;
+        let message = `Error (HTTP ${res.status})`;
         try {
           const json = JSON.parse(text);
-          // Fastify Zod 422 shape: { validation_errors: [{ path, code, message }] }
-          if (Array.isArray(json?.validation_errors) && json.validation_errors.length > 0) {
+          if (
+            Array.isArray(json?.validation_errors) &&
+            json.validation_errors.length > 0
+          ) {
             message = json.validation_errors
               .map((v: { path?: unknown[]; message?: string }) => {
                 const path = Array.isArray(v.path) ? v.path.join(".") : "";
-                return path ? `${path}: ${v.message ?? ""}`.trim() : (v.message ?? "");
+                return path
+                  ? `${path}: ${v.message ?? ""}`.trim()
+                  : (v.message ?? "");
               })
               .filter(Boolean)
               .join(" · ");
@@ -1021,7 +1367,6 @@ function QuickCreateItemModal({
     }
   };
 
-  // Esc closes the modal.
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if (e.key === "Escape" && !submitting) onClose();
@@ -1035,23 +1380,22 @@ function QuickCreateItemModal({
       className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4"
       role="dialog"
       aria-modal="true"
-      aria-label="צור פריט חדש"
+      aria-label="Create new item"
       onClick={(e) => {
         if (e.target === e.currentTarget && !submitting) onClose();
       }}
     >
       <div
         className="card w-full max-w-md p-5"
-        dir="rtl"
         onClick={(e) => e.stopPropagation()}
       >
         <div className="mb-3 flex items-start justify-between gap-3">
           <div>
             <div className="text-base font-semibold text-fg-strong">
-              צור פריט חדש
+              Create new item
             </div>
             <div className="mt-0.5 text-xs text-fg-muted">
-              ייווצר ב-items master וישויך אוטומטית ל-SKU{" "}
+              Will be created in the items master and auto-assigned to SKU{" "}
               <span className="font-mono text-fg">{externalSku}</span>.
             </div>
           </div>
@@ -1060,7 +1404,7 @@ function QuickCreateItemModal({
             className="btn btn-sm"
             onClick={onClose}
             disabled={submitting}
-            aria-label="סגור"
+            aria-label="Close"
           >
             ✕
           </button>
@@ -1081,19 +1425,19 @@ function QuickCreateItemModal({
               required
             />
             <span className="mt-1 block text-3xs text-fg-subtle">
-              מזהה ייחודי. ברירת המחדל היא ה-external SKU עצמו.
+              Unique identifier. Defaults to the external SKU value.
             </span>
           </label>
 
           <label className="block">
             <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              שם פריט <span className="text-danger">*</span>
+              Item name <span className="text-danger">*</span>
             </span>
             <input
               className="input"
               value={itemName}
               onChange={(e) => setItemName(e.target.value)}
-              placeholder="למשל: כוס מאצה 600 מ״ל"
+              placeholder="e.g. Matcha Cup 600ml"
               required
             />
           </label>
@@ -1106,7 +1450,9 @@ function QuickCreateItemModal({
               <select
                 className="input"
                 value={supplyMethod}
-                onChange={(e) => setSupplyMethod(e.target.value as SupplyMethod)}
+                onChange={(e) =>
+                  setSupplyMethod(e.target.value as SupplyMethod)
+                }
               >
                 {SUPPLY_METHODS.map((m) => (
                   <option key={m} value={m}>
@@ -1115,7 +1461,7 @@ function QuickCreateItemModal({
                 ))}
               </select>
               <span className="mt-1 block text-3xs text-fg-subtle">
-                BOUGHT_FINISHED לרוב הפריטים החיצוניים מ-LionWheel/Shopify.
+                BOUGHT_FINISHED for most external items.
               </span>
             </label>
 
@@ -1127,7 +1473,9 @@ function QuickCreateItemModal({
                 className="input font-mono"
                 list="quick-create-uom-list"
                 value={salesUom}
-                onChange={(e) => setSalesUom(e.target.value.trim().toUpperCase())}
+                onChange={(e) =>
+                  setSalesUom(e.target.value.trim().toUpperCase())
+                }
                 placeholder="EACH"
                 dir="ltr"
                 required
@@ -1149,7 +1497,7 @@ function QuickCreateItemModal({
                 className="input"
                 value={family}
                 onChange={(e) => setFamily(e.target.value)}
-                placeholder="אופציונלי"
+                placeholder="optional"
               />
             </label>
 
@@ -1163,7 +1511,7 @@ function QuickCreateItemModal({
                 min="1"
                 value={casePack}
                 onChange={(e) => setCasePack(e.target.value)}
-                placeholder="אופציונלי"
+                placeholder="optional"
                 dir="ltr"
               />
             </label>
@@ -1182,14 +1530,14 @@ function QuickCreateItemModal({
               onClick={onClose}
               disabled={submitting}
             >
-              ביטול
+              Cancel
             </button>
             <button
               type="submit"
               className="btn btn-sm btn-primary"
               disabled={!canSubmit}
             >
-              {submitting ? "יוצר…" : "צור ושייך"}
+              {submitting ? "Creating…" : "Create and assign"}
             </button>
           </div>
         </form>
