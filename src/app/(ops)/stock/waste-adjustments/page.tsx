@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 // ---------------------------------------------------------------------------
 // Waste / Adjustment — operator form (live API backed).
@@ -14,11 +14,12 @@
 // ---------------------------------------------------------------------------
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { UOMS, type Uom } from "@/lib/contracts/enums";
+import { cn } from "@/lib/cn";
 
 // ---------------------------------------------------------------------------
 // Waste / Adjustment contract — inlined.
@@ -142,6 +143,236 @@ interface DoneState {
   hrefLabel?: string;
 }
 
+// ---------------------------------------------------------------------------
+// Relative time helper
+// ---------------------------------------------------------------------------
+function getRelativeTime(dateStr: string): string {
+  const then = new Date(dateStr).getTime();
+  const now = Date.now();
+  const diffMs = now - then;
+  if (isNaN(diffMs) || diffMs < 0) return "";
+  const diffMin = Math.floor(diffMs / 60000);
+  if (diffMin < 1) return "just now";
+  if (diffMin === 1) return "1 minute ago";
+  if (diffMin < 60) return `${diffMin} minutes ago`;
+  const diffHr = Math.floor(diffMin / 60);
+  if (diffHr === 1) return "1 hour ago";
+  return `${diffHr} hours ago`;
+}
+
+// ---------------------------------------------------------------------------
+// Reason code labels
+// ---------------------------------------------------------------------------
+const REASON_LABELS: Record<WasteReasonCode, string> = {
+  breakage: "Breakage",
+  spoilage: "Spoilage",
+  production_waste: "Production waste",
+  sampling: "Sampling",
+  theft_loss: "Theft / loss",
+  found_stock: "Found stock",
+  correction: "Correction",
+  other: "Other",
+};
+
+// ---------------------------------------------------------------------------
+// SVG icons (inline, no extra dep)
+// ---------------------------------------------------------------------------
+function IconArrowDown() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path d="M10 4v12M4 10l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function IconArrowUp() {
+  return (
+    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+      <path d="M10 16V4M4 10l6-6 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function IconCheck() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="11" stroke="currentColor" strokeWidth="2" />
+      <path d="M7 12.5l3.5 3.5 6.5-7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function IconClock() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="11" stroke="currentColor" strokeWidth="2" />
+      <path d="M12 7v5l3.5 3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+function IconX() {
+  return (
+    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <circle cx="12" cy="12" r="11" stroke="currentColor" strokeWidth="2" />
+      <path d="M8.5 8.5l7 7M15.5 8.5l-7 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function IconSpinner() {
+  return (
+    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="animate-spin" aria-hidden="true">
+      <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" strokeOpacity="0.25" />
+      <path d="M14 8a6 6 0 0 1-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Searchable combobox
+// ---------------------------------------------------------------------------
+interface ComboboxProps {
+  options: AdjustableRow[];
+  value: string;
+  onChange: (key: string, row: AdjustableRow | undefined) => void;
+}
+
+function ItemCombobox({ options, value, onChange }: ComboboxProps) {
+  const [query, setQuery] = useState("");
+  const [open, setOpen] = useState(false);
+  const [activeIdx, setActiveIdx] = useState(0);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  const selectedRow = options.find((o) => `${o.kind}:${o.id}` === value);
+  const displayValue = selectedRow?.label ?? "";
+
+  const filtered = useMemo(() => {
+    const q = query.toLowerCase().trim();
+    if (!q) return options;
+    return options.filter((o) => o.label.toLowerCase().includes(q));
+  }, [options, query]);
+
+  // close on outside click
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
+    setQuery(e.target.value);
+    setOpen(true);
+    setActiveIdx(0);
+    if (!e.target.value) {
+      onChange("", undefined);
+    }
+  }
+
+  function handleSelect(row: AdjustableRow) {
+    const key = `${row.kind}:${row.id}`;
+    onChange(key, row);
+    setQuery("");
+    setOpen(false);
+    inputRef.current?.blur();
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!open && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
+      setOpen(true);
+      return;
+    }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setActiveIdx((i) => Math.min(i + 1, filtered.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setActiveIdx((i) => Math.max(i - 1, 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (filtered[activeIdx]) handleSelect(filtered[activeIdx]);
+    } else if (e.key === "Escape") {
+      setOpen(false);
+    }
+  }
+
+  // scroll active item into view
+  useEffect(() => {
+    if (listRef.current) {
+      const li = listRef.current.children[activeIdx] as HTMLElement | undefined;
+      li?.scrollIntoView({ block: "nearest" });
+    }
+  }, [activeIdx]);
+
+  return (
+    <div ref={containerRef} className="relative" data-testid="waste-item-select">
+      <input
+        ref={inputRef}
+        type="text"
+        className="input w-full transition-colors duration-150"
+        placeholder={displayValue || "Search items and components…"}
+        value={open ? query : displayValue}
+        onChange={handleInputChange}
+        onFocus={() => { setOpen(true); setQuery(""); }}
+        onKeyDown={handleKeyDown}
+        autoComplete="off"
+        aria-autocomplete="list"
+        aria-expanded={open}
+      />
+      {open && (
+        <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-white shadow-lg">
+          {query && (
+            <div className="border-b border-border px-3 py-1.5 text-xs text-fg-muted">
+              {filtered.length} match{filtered.length !== 1 ? "es" : ""}
+            </div>
+          )}
+          <ul
+            ref={listRef}
+            role="listbox"
+            className="max-h-60 overflow-y-auto py-1"
+          >
+            {filtered.length === 0 ? (
+              <li className="px-3 py-2 text-sm text-fg-muted">No results</li>
+            ) : (
+              filtered.map((row, i) => {
+                const key = `${row.kind}:${row.id}`;
+                return (
+                  <li
+                    key={key}
+                    role="option"
+                    aria-selected={value === key}
+                    className={cn(
+                      "cursor-pointer px-3 py-2 text-sm transition-colors duration-150",
+                      i === activeIdx ? "bg-accent/10 text-fg" : "text-fg hover:bg-bg-subtle",
+                      value === key && "font-medium"
+                    )}
+                    onMouseEnter={() => setActiveIdx(i)}
+                    onMouseDown={(e) => { e.preventDefault(); handleSelect(row); }}
+                  >
+                    <span className="text-xs text-fg-muted mr-2">
+                      {row.item_type}
+                    </span>
+                    {row.label}
+                  </li>
+                );
+              })
+            )}
+          </ul>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Page component
+// ---------------------------------------------------------------------------
 export default function WasteAdjustmentPage() {
   const itemsQuery = useQuery<ListEnvelope<ItemRow>>({
     queryKey: ["master", "items", "ACTIVE"],
@@ -189,55 +420,47 @@ export default function WasteAdjustmentPage() {
   const [phase, setPhase] = useState<SubmitPhase>("idle");
   const [done, setDone] = useState<DoneState | null>(null);
 
+  // New state — does NOT replace any existing state
+  const [confirmPending, setConfirmPending] = useState(false);
+  const [notesAttempted, setNotesAttempted] = useState(false);
+  const [relativeTime, setRelativeTime] = useState(() => getRelativeTime(nowLocalDateTime()));
+
   const loading = itemsQuery.isLoading || componentsQuery.isLoading;
   const loadErr = itemsQuery.error || componentsQuery.error;
 
   const allowedReasons = REASON_CODES_BY_DIRECTION[direction];
   const notesRequired =
     direction === "positive" ||
-    (reasonCode && REASON_CODES_REQUIRING_NOTES.includes(reasonCode));
+    (reasonCode !== "" && REASON_CODES_REQUIRING_NOTES.includes(reasonCode));
 
-  async function handleSubmit(e: React.FormEvent): Promise<void> {
-    e.preventDefault();
-    setDone(null);
-    const row = byKey.get(selKey);
-    if (!row) {
-      setDone({ kind: "error", message: "Choose an item or component." });
-      return;
-    }
-    const qtyNum = Number(quantity);
-    if (!Number.isFinite(qtyNum) || qtyNum <= 0) {
-      setDone({ kind: "error", message: "Quantity must be a positive number." });
-      return;
-    }
-    if (!reasonCode) {
-      setDone({ kind: "error", message: "Reason is required." });
-      return;
-    }
-    if (notesRequired && !notes.trim()) {
-      setDone({
-        kind: "error",
-        message:
-          direction === "positive"
-            ? "Notes are required for positive corrections."
-            : `Notes are required for reason '${reasonCode}'.`,
-      });
-      return;
-    }
-    if (direction === "positive") {
-      const ok = window.confirm(
-        `You are ADDING ${qtyNum} ${unit} of stock. Continue?`,
-      );
-      if (!ok) return;
-    }
+  const selectedRow = byKey.get(selKey);
+  const qtyNum = Number(quantity);
+  const qtyValid = Number.isFinite(qtyNum) && qtyNum > 0;
 
+  // Update relative time label every 30s
+  useEffect(() => {
+    const id = setInterval(() => {
+      setRelativeTime(getRelativeTime(eventAt));
+    }, 30000);
+    return () => clearInterval(id);
+  }, [eventAt]);
+
+  useEffect(() => {
+    setRelativeTime(getRelativeTime(eventAt));
+  }, [eventAt]);
+
+  // ---------------------------------------------------------------------------
+  // Actual API submission (separated from handleSubmit so the confirm panel
+  // can call it after user confirms).
+  // ---------------------------------------------------------------------------
+  async function doSubmit(row: AdjustableRow, qtyNumLocal: number): Promise<void> {
     const envelope: WasteAdjustmentRequest = {
       idempotency_key: newIdempotencyKey(),
       event_at: new Date(eventAt).toISOString(),
       direction,
       item_type: row.item_type,
       item_id: row.id,
-      quantity: qtyNum,
+      quantity: qtyNumLocal,
       unit,
       reason_code: reasonCode,
       notes: notes ? notes : null,
@@ -259,7 +482,7 @@ export default function WasteAdjustmentPage() {
           message: body.idempotent_replay
             ? "Adjustment already recorded."
             : "Adjustment posted successfully.",
-          itemSummary: `${row.label} · ${direction === "loss" ? "−" : "+"}${qtyNum} ${unit} · ${String(reasonCode).replace(/_/g, " ")}`,
+          itemSummary: `${row.label} · ${direction === "loss" ? "−" : "+"}${qtyNumLocal} ${unit} · ${String(reasonCode).replace(/_/g, " ")}`,
           detail: `ref: ${body.submission_id}`,
         });
         setQuantity("");
@@ -270,7 +493,7 @@ export default function WasteAdjustmentPage() {
         setDone({
           kind: "pending",
           message: "Adjustment submitted — held for planner approval.",
-          itemSummary: `${row.label} · ${direction === "loss" ? "−" : "+"}${qtyNum} ${unit} · ${String(reasonCode).replace(/_/g, " ")}`,
+          itemSummary: `${row.label} · ${direction === "loss" ? "−" : "+"}${qtyNumLocal} ${unit} · ${String(reasonCode).replace(/_/g, " ")}`,
           detail: `ref: ${sid}`,
           href: sid
             ? `/inbox/approvals/waste/${encodeURIComponent(sid)}`
@@ -299,6 +522,61 @@ export default function WasteAdjustmentPage() {
     }
   }
 
+  // ---------------------------------------------------------------------------
+  // handleSubmit — same validation logic as before; replaces window.confirm
+  // with inline confirmPending panel.
+  // ---------------------------------------------------------------------------
+  async function handleSubmit(e: React.FormEvent): Promise<void> {
+    e.preventDefault();
+    setDone(null);
+    const row = byKey.get(selKey);
+    if (!row) {
+      setDone({ kind: "error", message: "Choose an item or component." });
+      return;
+    }
+    const qtyNumLocal = Number(quantity);
+    if (!Number.isFinite(qtyNumLocal) || qtyNumLocal <= 0) {
+      setDone({ kind: "error", message: "Quantity must be a positive number." });
+      return;
+    }
+    if (!reasonCode) {
+      setDone({ kind: "error", message: "Reason is required." });
+      return;
+    }
+    if (notesRequired && !notes.trim()) {
+      setNotesAttempted(true);
+      setDone({
+        kind: "error",
+        message:
+          direction === "positive"
+            ? "Notes are required for positive corrections."
+            : `Notes are required for reason '${reasonCode}'.`,
+      });
+      return;
+    }
+
+    // Positive direction: show inline confirm panel instead of window.confirm
+    if (direction === "positive") {
+      setConfirmPending(true);
+      return;
+    }
+
+    await doSubmit(row, qtyNumLocal);
+  }
+
+  function handleReset() {
+    setSelKey("");
+    setQuantity("");
+    setNotes("");
+    setReasonCode("");
+    setDone(null);
+    setConfirmPending(false);
+    setNotesAttempted(false);
+  }
+
+  // ---------------------------------------------------------------------------
+  // Render
+  // ---------------------------------------------------------------------------
   return (
     <>
       <WorkflowHeader
@@ -307,40 +585,70 @@ export default function WasteAdjustmentPage() {
         description="Report a stock loss or positive correction. Positive corrections are held for planner approval before taking effect."
       />
 
+      {/* ------------------------------------------------------------------ */}
+      {/* Result banner                                                        */}
+      {/* ------------------------------------------------------------------ */}
       {done ? (
         <div
-          className={
-            "mb-4 rounded-md border px-4 py-3 text-sm " +
-            (done.kind === "success"
-              ? "border-success/40 bg-success-softer text-success-fg"
-              : done.kind === "pending"
-                ? "border-warning/40 bg-warning-softer text-warning-fg"
-                : "border-danger/40 bg-danger-softer text-danger-fg")
-          }
+          className={cn(
+            "mb-4 rounded-md border px-4 py-3 text-sm transition-colors duration-150",
+            done.kind === "success" && "border-success/40 bg-success-softer text-success-fg",
+            done.kind === "pending" && "border-warning/40 bg-warning-softer text-warning-fg",
+            done.kind === "error" && "border-l-4 border-danger bg-danger-softer text-danger-fg pl-4"
+          )}
           role="status"
         >
-          <div className="flex items-center justify-between gap-3">
-            <div className="font-medium">{done.message}</div>
-            {done.href ? (
-              <Link
-                href={done.href}
-                className="shrink-0 text-xs font-semibold underline underline-offset-2 hover:no-underline"
-                data-testid="waste-adjustment-banner-link"
-              >
-                {done.hrefLabel ?? "Open"}
-              </Link>
-            ) : null}
+          <div className="flex items-start gap-3">
+            {/* Icon */}
+            <span className="mt-0.5 shrink-0">
+              {done.kind === "success" && <IconCheck />}
+              {done.kind === "pending" && <IconClock />}
+              {done.kind === "error" && <IconX />}
+            </span>
+            <div className="flex-1 min-w-0">
+              <div className="flex items-center justify-between gap-3">
+                <div className="font-medium">{done.message}</div>
+                {done.href ? (
+                  <Link
+                    href={done.href}
+                    className="shrink-0 text-xs font-semibold underline underline-offset-2 hover:no-underline transition-colors duration-150"
+                    data-testid="waste-adjustment-banner-link"
+                  >
+                    {done.hrefLabel ?? "Open"}
+                  </Link>
+                ) : null}
+              </div>
+              {done.itemSummary ? (
+                <div className="mt-1 text-xs font-medium opacity-90">
+                  {done.itemSummary}
+                </div>
+              ) : null}
+              {done.detail ? (
+                <div className="mt-1 font-mono text-xs opacity-60">
+                  {done.detail}
+                </div>
+              ) : null}
+              {/* Pending callout */}
+              {done.kind === "pending" && (
+                <div className="mt-2 text-xs opacity-80">
+                  A planner will review this adjustment. You&apos;ll see it in Approvals when it&apos;s ready.
+                </div>
+              )}
+            </div>
           </div>
-          {done.itemSummary ? (
-            <div className="mt-1 text-xs font-medium opacity-90">
-              {done.itemSummary}
+
+          {/* Reset button on success/pending */}
+          {(done.kind === "success" || done.kind === "pending") && (
+            <div className="mt-3 border-t border-current/10 pt-3">
+              <button
+                type="button"
+                className="btn btn-sm transition-colors duration-150"
+                onClick={handleReset}
+              >
+                Submit another adjustment
+              </button>
             </div>
-          ) : null}
-          {done.detail ? (
-            <div className="mt-1 font-mono text-xs opacity-60">
-              {done.detail}
-            </div>
-          ) : null}
+          )}
         </div>
       ) : null}
 
@@ -363,132 +671,220 @@ export default function WasteAdjustmentPage() {
                 void itemsQuery.refetch();
                 void componentsQuery.refetch();
               }}
-              className="mt-2 text-xs font-medium text-danger-fg underline hover:no-underline"
+              className="mt-2 text-xs font-medium text-danger-fg underline hover:no-underline transition-colors duration-150"
             >
               Retry
             </button>
           </div>
         </SectionCard>
       ) : (
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-5 pb-24">
+
+          {/* ---------------------------------------------------------------- */}
+          {/* Direction selector                                                */}
+          {/* ---------------------------------------------------------------- */}
           <SectionCard
             title="Direction"
             description="Loss = breakage/spoilage/spillage (auto-posts below threshold). Positive = found stock / correction (always held for approval)."
           >
             <div className="flex gap-3">
-              {(["loss", "positive"] as const).map((d) => (
-                <label
-                  key={d}
-                  className={
-                    "flex flex-1 cursor-pointer items-center gap-2 rounded-md border px-3 py-2 text-sm " +
-                    (direction === d
-                      ? d === "positive"
-                        ? "border-warning bg-warning-softer"
-                        : "border-accent bg-accent-soft"
-                      : "border-border/80")
-                  }
-                >
-                  <input
-                    type="radio"
-                    name="direction"
-                    value={d}
-                    checked={direction === d}
-                    onChange={() => {
-                      setDirection(d);
-                      setReasonCode("");
-                    }}
-                    className="sr-only"
-                  />
-                  <span className="font-semibold">
-                    {d === "loss" ? "Loss / write-down" : "Positive correction"}
+              {/* Loss card */}
+              <label
+                data-testid="waste-direction-loss"
+                className={cn(
+                  "flex flex-1 cursor-pointer items-start gap-3 rounded-md border px-3 py-3 text-sm transition-all duration-200",
+                  direction === "loss"
+                    ? "border-accent bg-accent-soft"
+                    : "border-border/80 hover:border-fg-muted"
+                )}
+              >
+                <input
+                  type="radio"
+                  name="direction"
+                  value="loss"
+                  checked={direction === "loss"}
+                  onChange={() => {
+                    setDirection("loss");
+                    setReasonCode("");
+                  }}
+                  className="sr-only"
+                />
+                <span className="mt-0.5 text-danger-fg shrink-0">
+                  <IconArrowDown />
+                </span>
+                <span>
+                  <span className="block font-semibold">Loss / write-down</span>
+                  <span className="block text-xs text-fg-muted mt-0.5">
+                    breakage, spoilage, spillage
                   </span>
-                  {d === "positive" ? (
-                    <span className="ml-auto rounded-sm border border-warning/40 bg-warning-soft px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-sops text-warning-fg">
-                      Approval required
-                    </span>
-                  ) : null}
-                </label>
-              ))}
+                </span>
+              </label>
+
+              {/* Positive card */}
+              <label
+                data-testid="waste-direction-positive"
+                className={cn(
+                  "flex flex-1 cursor-pointer items-start gap-3 rounded-md border px-3 py-3 text-sm transition-all duration-200",
+                  direction === "positive"
+                    ? "border-warning bg-warning-softer"
+                    : "border-border/80 hover:border-fg-muted"
+                )}
+              >
+                <input
+                  type="radio"
+                  name="direction"
+                  value="positive"
+                  checked={direction === "positive"}
+                  onChange={() => {
+                    setDirection("positive");
+                    setReasonCode("");
+                  }}
+                  className="sr-only"
+                />
+                <span className="mt-0.5 text-warning-fg shrink-0">
+                  <IconArrowUp />
+                </span>
+                <span>
+                  <span className="block font-semibold">Positive correction</span>
+                  <span className="block text-xs text-fg-muted mt-0.5">
+                    found stock, correction
+                  </span>
+                  <span className="mt-1.5 inline-block rounded-sm border border-warning/40 bg-warning-soft px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-sops text-warning-fg">
+                    Approval required
+                  </span>
+                </span>
+              </label>
             </div>
           </SectionCard>
 
+          {/* ---------------------------------------------------------------- */}
+          {/* Approval required banner (positive only)                         */}
+          {/* ---------------------------------------------------------------- */}
+          {direction === "positive" && (
+            <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning-softer px-4 py-3 text-sm text-warning-fg transition-all duration-200">
+              <span className="shrink-0 text-base" aria-hidden="true">⚠️</span>
+              <span>
+                <span className="font-semibold">Approval required.</span>{" "}
+                Positive adjustments are held for planner approval before affecting stock.
+              </span>
+            </div>
+          )}
+
+          {/* ---------------------------------------------------------------- */}
+          {/* Adjustment fields                                                 */}
+          {/* ---------------------------------------------------------------- */}
           <SectionCard title="Adjustment">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+
+              {/* Event time */}
               <label className="block min-w-0">
-                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                <span className="mb-1 flex items-center gap-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Event time *
+                  {relativeTime && (
+                    <span className="font-normal lowercase normal-case tracking-normal text-fg-muted">
+                      — {relativeTime}
+                    </span>
+                  )}
                 </span>
                 <input
                   type="datetime-local"
-                  className="input"
+                  className="input transition-colors duration-150"
                   value={eventAt}
                   onChange={(e) => setEventAt(e.target.value)}
                   required
                 />
               </label>
-              <label className="block min-w-0">
+
+              {/* Item / component combobox */}
+              <div className="block min-w-0">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Item / component *
                 </span>
-                <select
-                  className="input"
+                <ItemCombobox
+                  options={adjustable}
                   value={selKey}
-                  onChange={(e) => {
-                    const key = e.target.value;
-                    const row = byKey.get(key);
+                  onChange={(key, row) => {
                     setSelKey(key);
                     if (row) setUnit(row.default_uom);
                   }}
-                  required
-                >
-                  <option value="">— select —</option>
-                  <optgroup label="Finished Goods (items)">
-                    {adjustable
-                      .filter((r) => r.kind === "item")
-                      .map((r) => (
-                        <option
-                          key={`${r.kind}:${r.id}`}
-                          value={`${r.kind}:${r.id}`}
-                        >
-                          {r.label}
-                        </option>
-                      ))}
-                  </optgroup>
-                  <optgroup label="Raw materials (components)">
-                    {adjustable
-                      .filter((r) => r.kind === "component")
-                      .map((r) => (
-                        <option
-                          key={`${r.kind}:${r.id}`}
-                          value={`${r.kind}:${r.id}`}
-                        >
-                          {r.label}
-                        </option>
-                      ))}
-                  </optgroup>
-                </select>
-              </label>
-              <label className="block min-w-0">
+                />
+                {/* Selected item chip */}
+                {selectedRow && (
+                  <div className="mt-1.5 inline-flex items-center gap-1 rounded-full border border-border/60 bg-bg-subtle px-2.5 py-0.5 text-xs text-fg-muted">
+                    <span className="font-semibold text-fg">{selectedRow.item_type}</span>
+                    <span>·</span>
+                    <span className="truncate max-w-[16rem]">{selectedRow.label}</span>
+                  </div>
+                )}
+              </div>
+
+              {/* Quantity */}
+              <div className="block min-w-0">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Quantity *
                 </span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  step="any"
-                  min="0"
-                  className="input"
-                  value={quantity}
-                  onChange={(e) => setQuantity(e.target.value)}
-                  required
-                />
-              </label>
+                <div className="flex items-center gap-2">
+                  <button
+                    type="button"
+                    className="btn btn-sm shrink-0 w-8 h-9 flex items-center justify-center transition-colors duration-150"
+                    aria-label="Decrease quantity by 1"
+                    onClick={() =>
+                      setQuantity((v) => {
+                        const n = Number(v);
+                        if (!Number.isFinite(n) || n <= 1) return "1";
+                        return String(n - 1);
+                      })
+                    }
+                  >
+                    −
+                  </button>
+                  <input
+                    type="number"
+                    inputMode="decimal"
+                    step="any"
+                    min="0"
+                    className="input flex-1 transition-colors duration-150"
+                    value={quantity}
+                    onChange={(e) => setQuantity(e.target.value)}
+                    required
+                    data-testid="waste-quantity"
+                  />
+                  <button
+                    type="button"
+                    className="btn btn-sm shrink-0 w-8 h-9 flex items-center justify-center transition-colors duration-150"
+                    aria-label="Increase quantity by 1"
+                    onClick={() =>
+                      setQuantity((v) => {
+                        const n = Number(v);
+                        if (!Number.isFinite(n) || n < 0) return "1";
+                        return String(n + 1);
+                      })
+                    }
+                  >
+                    +
+                  </button>
+                </div>
+                {/* Signed quantity preview */}
+                {qtyValid && (
+                  <div
+                    className={cn(
+                      "mt-1.5 text-xs font-semibold",
+                      direction === "loss" ? "text-danger-fg" : "text-success-fg"
+                    )}
+                  >
+                    {direction === "loss" ? "−" : "+"}
+                    {qtyNum} {unit}
+                  </div>
+                )}
+              </div>
+
+              {/* Unit */}
               <label className="block min-w-0">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Unit
                 </span>
                 <select
-                  className="input"
+                  className="input transition-colors duration-150"
                   value={unit}
                   onChange={(e) => setUnit(e.target.value as Uom)}
                 >
@@ -499,61 +895,159 @@ export default function WasteAdjustmentPage() {
                   ))}
                 </select>
               </label>
-              <label className="block min-w-0 sm:col-span-2">
-                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+
+              {/* Reason chips */}
+              <div className="block min-w-0 sm:col-span-2">
+                <span className="mb-2 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Reason *
                 </span>
-                <select
-                  className="input"
-                  value={reasonCode}
-                  onChange={(e) =>
-                    setReasonCode(e.target.value as WasteReasonCode | "")
-                  }
-                  required
+                <div
+                  className="flex flex-wrap gap-2"
+                  role="group"
+                  aria-label="Reason code"
+                  data-testid="waste-reason"
                 >
-                  <option value="">— select —</option>
                   {allowedReasons.map((r) => (
-                    <option key={r} value={r}>
-                      {r.replace(/_/g, " ")}
-                    </option>
+                    <button
+                      key={r}
+                      type="button"
+                      className={cn(
+                        "chip cursor-pointer px-3 py-1 text-xs font-medium rounded-full border transition-colors duration-150",
+                        reasonCode === r
+                          ? "bg-accent text-white border-accent"
+                          : "border-border/60 bg-bg-subtle text-fg hover:border-fg-muted"
+                      )}
+                      onClick={() => setReasonCode(r)}
+                      aria-pressed={reasonCode === r}
+                    >
+                      {REASON_LABELS[r]}
+                    </button>
                   ))}
-                </select>
-              </label>
-              <label className="block min-w-0 sm:col-span-2">
+                </div>
+                {/* Notes-required hint */}
+                {reasonCode && REASON_CODES_REQUIRING_NOTES.includes(reasonCode) && (
+                  <div className="mt-1.5 flex items-center gap-1 text-xs text-info-fg">
+                    <span aria-hidden="true">ℹ</span>
+                    Notes required for this reason
+                  </div>
+                )}
+              </div>
+
+              {/* Notes */}
+              <div className="block min-w-0 sm:col-span-2">
                 <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Notes {notesRequired ? "*" : ""}
                 </span>
-                <textarea
-                  className="input min-h-[3rem]"
-                  rows={2}
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  required={!!notesRequired}
-                />
-              </label>
+                <div className="relative">
+                  <textarea
+                    className={cn(
+                      "input min-h-[3rem] w-full transition-colors duration-150",
+                      notesRequired && notesAttempted && !notes.trim()
+                        ? "border-danger animate-pulse"
+                        : ""
+                    )}
+                    rows={2}
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                    placeholder={
+                      notesRequired
+                        ? "Required for this reason / direction"
+                        : "Optional — add context if needed"
+                    }
+                    required={!!notesRequired}
+                    data-testid="waste-notes"
+                  />
+                  {/* Character count */}
+                  <span className="pointer-events-none absolute bottom-1.5 right-2 text-xs text-fg-muted tabular-nums">
+                    {notes.length}
+                  </span>
+                </div>
+              </div>
             </div>
           </SectionCard>
 
-          <div className="flex items-center justify-end gap-2">
+          {/* ---------------------------------------------------------------- */}
+          {/* Inline confirm panel (replaces window.confirm for positive dir)  */}
+          {/* ---------------------------------------------------------------- */}
+          {confirmPending && (
+            <div
+              className="rounded-md border border-warning/50 bg-warning-softer px-4 py-4 text-sm text-warning-fg"
+              role="alertdialog"
+              aria-modal="false"
+              aria-label="Confirm positive adjustment"
+              data-testid="waste-confirm-panel"
+            >
+              <div className="flex items-start gap-2 mb-3">
+                <span className="text-base shrink-0" aria-hidden="true">⚠️</span>
+                <p className="font-medium">
+                  You are about to add{" "}
+                  <span className="font-bold">
+                    {qtyNum} {unit}
+                  </span>{" "}
+                  of{" "}
+                  <span className="font-bold">
+                    {selectedRow?.label ?? "the selected item"}
+                  </span>{" "}
+                  to stock. This will be held for planner approval.
+                </p>
+              </div>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm transition-colors duration-150"
+                  data-testid="waste-confirm-proceed"
+                  onClick={async () => {
+                    setConfirmPending(false);
+                    const row = byKey.get(selKey);
+                    if (row) await doSubmit(row, Number(quantity));
+                  }}
+                >
+                  Confirm
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm transition-colors duration-150"
+                  data-testid="waste-confirm-cancel"
+                  onClick={() => setConfirmPending(false)}
+                >
+                  Cancel
+                </button>
+              </div>
+            </div>
+          )}
+
+          {/* ---------------------------------------------------------------- */}
+          {/* Sticky submit bar                                                 */}
+          {/* ---------------------------------------------------------------- */}
+          <div
+            className="sticky bottom-0 z-40 -mx-4 px-4 py-3 backdrop-blur-sm bg-white/80 border-t border-border/50 shadow-[0_-2px_8px_rgba(0,0,0,0.06)] flex items-center justify-end gap-2"
+          >
             <button
               type="button"
-              className="btn"
-              onClick={() => {
-                setSelKey("");
-                setQuantity("");
-                setNotes("");
-                setReasonCode("");
-                setDone(null);
-              }}
+              className="btn btn-ghost transition-colors duration-150"
+              onClick={handleReset}
             >
               Reset
             </button>
             <button
               type="submit"
-              className="btn btn-primary"
-              disabled={phase === "submitting"}
+              className={cn(
+                "btn btn-primary transition-colors duration-150",
+                phase === "submitting" && "cursor-wait"
+              )}
+              disabled={phase === "submitting" || confirmPending}
+              data-testid="waste-submit"
             >
-              {phase === "submitting" ? "Submitting…" : "Submit adjustment"}
+              {phase === "submitting" ? (
+                <span className="flex items-center gap-2">
+                  <IconSpinner />
+                  Submitting…
+                </span>
+              ) : direction === "positive" ? (
+                "Review & submit"
+              ) : (
+                "Submit adjustment"
+              )}
             </button>
           </div>
         </form>

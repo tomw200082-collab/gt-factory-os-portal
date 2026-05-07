@@ -13,6 +13,7 @@ import type {
 } from "@/lib/admin/recipe-readiness.types";
 import { computeLinePipState } from "@/lib/admin/recipe-readiness";
 import { AdminMutationError, patchEntity } from "@/lib/admin/mutations";
+import { formatQty } from "@/lib/utils/format-quantity";
 
 interface BomLineRowProps {
   line: BomLineDataRow;
@@ -109,16 +110,31 @@ export function BomLineRow({
           body: JSON.stringify({ idempotency_key: randomKey() }),
         },
       );
-      if (!res.ok) throw new Error(`Delete failed: HTTP ${res.status}`);
+      if (!res.ok) {
+        const body = await res.json().catch(() => null);
+        const msg = (body as { message?: string } | null)?.message;
+        throw new Error(msg ?? `Delete failed (${res.status})`);
+      }
     },
-    onSuccess: () =>
-      qc.invalidateQueries({ queryKey: ["boms", "lines", versionId] }),
+    onSuccess: () => {
+      setConfirmDelete(false);
+      qc.invalidateQueries({ queryKey: ["boms", "lines", versionId] });
+    },
+    onError: (e: Error) => {
+      setError(e.message);
+      setConfirmDelete(false);
+    },
   });
 
   const componentDisplay =
     readiness?.component_name ??
     line.final_component_name ??
     line.final_component_id;
+
+  const formattedQty = formatQty(
+    parseFloat(line.final_component_qty) || 0,
+    line.component_uom ?? "UNIT",
+  );
 
   return (
     <tr
@@ -149,7 +165,7 @@ export function BomLineRow({
               onClick={() => setEditing(true)}
               className="group inline-flex items-center gap-1.5 rounded-sm border border-dashed border-accent/40 px-1.5 py-0.5 font-mono tabular-nums text-sm text-fg hover:border-accent hover:bg-accent-softer"
             >
-              {line.final_component_qty}
+              {formattedQty}
               <Pencil
                 className="h-3 w-3 text-accent/60 group-hover:text-accent"
                 strokeWidth={2}
@@ -158,7 +174,7 @@ export function BomLineRow({
           )
         ) : (
           <span className="font-mono tabular-nums text-sm text-fg">
-            {line.final_component_qty}
+            {formattedQty}
           </span>
         )}
         {error && (
@@ -206,7 +222,8 @@ export function BomLineRow({
             type="button"
             onClick={() => setConfirmDelete(true)}
             aria-label={`delete-${line.bom_line_id}`}
-            className="rounded-sm p-1 text-fg-muted hover:bg-danger-soft hover:text-danger-fg"
+            disabled={del.isPending}
+            className="rounded-sm p-1 text-fg-muted hover:bg-danger-soft hover:text-danger-fg disabled:cursor-not-allowed disabled:opacity-40"
           >
             <Trash2 className="h-3.5 w-3.5" strokeWidth={2} />
           </button>
@@ -216,14 +233,16 @@ export function BomLineRow({
             <button
               type="button"
               onClick={() => del.mutate()}
-              className="rounded-sm bg-danger px-2 py-0.5 text-3xs font-medium text-danger-soft hover:bg-danger/90"
+              disabled={del.isPending}
+              className="rounded-sm bg-danger px-2 py-0.5 text-3xs font-medium text-danger-soft hover:bg-danger/90 disabled:cursor-not-allowed disabled:opacity-60"
             >
-              Delete
+              {del.isPending ? "Removing…" : "Delete"}
             </button>
             <button
               type="button"
               onClick={() => setConfirmDelete(false)}
-              className="rounded-sm border border-border bg-bg-raised px-2 py-0.5 text-3xs text-fg hover:bg-bg-subtle"
+              disabled={del.isPending}
+              className="rounded-sm border border-border bg-bg-raised px-2 py-0.5 text-3xs text-fg hover:bg-bg-subtle disabled:cursor-not-allowed disabled:opacity-40"
             >
               Cancel
             </button>

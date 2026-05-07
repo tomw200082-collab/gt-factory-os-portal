@@ -275,6 +275,18 @@ export function BomDraftEditorPage({
   const trackLabel = head.bom_kind === "BASE" ? "Base formula" : "Pack BOM";
   const editable = version.status === "DRAFT";
   const itemName = head.parent_name ?? head.parent_ref_id ?? bomHeadId;
+
+  function fmtVersionLabel(label: string): string {
+    const iso = label.match(/\d{4}-\d{2}-\d{2}T[\d:.Z]+/)?.[0];
+    if (iso) {
+      return new Date(iso).toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+    }
+    return label;
+  }
   const safeLines = lines ?? [];
 
   // UI-only warnings (supplier/price gaps) projected from the readiness map.
@@ -299,7 +311,7 @@ export function BomDraftEditorPage({
         <div className="mx-auto flex max-w-7xl flex-wrap items-center gap-3">
           <div className="min-w-0 flex-1">
             <div className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              {trackLabel} · Version {version.version_label}
+              {trackLabel} · {fmtVersionLabel(version.version_label)}
             </div>
             <h1 className="truncate text-base font-semibold text-fg-strong">
               {itemName}
