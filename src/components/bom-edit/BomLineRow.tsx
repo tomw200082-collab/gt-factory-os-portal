@@ -107,7 +107,7 @@ export function BomLineRow({
         {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ idempotency_key: randomKey() }),
+          body: JSON.stringify({ idempotency_key: randomKey(), if_match_updated_at: line.updated_at }),
         },
       );
       if (!res.ok) {
