@@ -1,4 +1,4 @@
-﻿"use client";
+"use client";
 
 // ---------------------------------------------------------------------------
 // Goods Receipt — operator form (live API backed).
@@ -30,13 +30,14 @@
 // src/lib/contracts/goods-receipts.ts (mirror of API schemas.ts).
 // ---------------------------------------------------------------------------
 
-import { useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { UOMS, type Uom } from "@/lib/contracts/enums";
+import { cn } from "@/lib/cn";
 
 // ---------------------------------------------------------------------------
 // Goods Receipt contract — inlined.
@@ -236,6 +237,248 @@ interface DoneState {
   poId?: string;
   poNumber?: string;
   postedLines?: number;
+  // UX: posted line details for success display (improvement #19)
+  postedLineDetails?: Array<{ label: string; quantity: string; unit: Uom }>;
+}
+
+// ---------------------------------------------------------------------------
+// UI-only: Relative time helper (improvement #27)
+// ---------------------------------------------------------------------------
+function relativeTime(dateTimeLocal: string): string {
+  if (!dateTimeLocal) return "";
+  try {
+    const d = new Date(dateTimeLocal);
+    const diffMs = Date.now() - d.getTime();
+    const diffSec = Math.round(diffMs / 1000);
+    if (Math.abs(diffSec) < 60) return "just now";
+    const diffMin = Math.round(diffSec / 60);
+    if (Math.abs(diffMin) < 60) return `${Math.abs(diffMin)}m ${diffMin >= 0 ? "ago" : "from now"}`;
+    const diffHr = Math.round(diffMin / 60);
+    return `${Math.abs(diffHr)}h ${diffHr >= 0 ? "ago" : "from now"}`;
+  } catch {
+    return "";
+  }
+}
+
+// ---------------------------------------------------------------------------
+// UI-only: Searchable Combobox (improvements #5, #10)
+// Fully keyboard navigable (↑↓Enter, Esc closes). Closes on outside click.
+// All onChange/disabled/value logic is delegated to the caller — this is
+// purely a presentation wrapper.
+// ---------------------------------------------------------------------------
+interface ComboboxOption {
+  value: string;
+  label: string;
+  group?: string;
+}
+
+interface ComboboxProps {
+  options: ComboboxOption[];
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+  disabled?: boolean;
+  inputRef?: React.RefObject<HTMLInputElement | null>;
+  "data-testid"?: string;
+  required?: boolean;
+}
+
+function Combobox({ options, value, onChange, placeholder, disabled, inputRef, "data-testid": testId, required }: ComboboxProps) {
+  const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [highlightIdx, setHighlightIdx] = useState(0);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+
+  const selectedLabel = useMemo(
+    () => options.find((o) => o.value === value)?.label ?? "",
+    [options, value],
+  );
+
+  const filtered = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    if (!q) return options;
+    return options.filter((o) => o.label.toLowerCase().includes(q));
+  }, [options, query]);
+
+  // Close on outside click
+  useEffect(() => {
+    function handler(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+        setQuery("");
+      }
+    }
+    document.addEventListener("mousedown", handler);
+    return () => document.removeEventListener("mousedown", handler);
+  }, []);
+
+  function openList() {
+    if (!disabled) {
+      setOpen(true);
+      setHighlightIdx(0);
+    }
+  }
+
+  function selectOption(opt: ComboboxOption) {
+    onChange(opt.value);
+    setOpen(false);
+    setQuery("");
+  }
+
+  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
+    if (!open) {
+      if (e.key === "ArrowDown" || e.key === "Enter") openList();
+      return;
+    }
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      setHighlightIdx((i) => Math.min(i + 1, filtered.length - 1));
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      setHighlightIdx((i) => Math.max(i - 1, 0));
+    } else if (e.key === "Enter") {
+      e.preventDefault();
+      if (filtered[highlightIdx]) selectOption(filtered[highlightIdx]);
+    } else if (e.key === "Escape") {
+      setOpen(false);
+      setQuery("");
+    }
+  }
+
+  // Scroll highlighted item into view
+  useEffect(() => {
+    if (open && listRef.current) {
+      const item = listRef.current.children[highlightIdx] as HTMLLIElement | undefined;
+      item?.scrollIntoView({ block: "nearest" });
+    }
+  }, [highlightIdx, open]);
+
+  return (
+    <div ref={containerRef} className="relative w-full">
+      <input
+        ref={inputRef as React.RefObject<HTMLInputElement>}
+        type="text"
+        className={cn("input w-full transition-colors duration-150", disabled && "cursor-not-allowed opacity-60")}
+        placeholder={open ? "Search…" : (selectedLabel || placeholder || "— select —")}
+        value={open ? query : selectedLabel}
+        onFocus={openList}
+        onClick={openList}
+        onChange={(e) => {
+          setQuery(e.target.value);
+          setHighlightIdx(0);
+          if (!open) setOpen(true);
+        }}
+        onKeyDown={handleKeyDown}
+        disabled={disabled}
+        data-testid={testId}
+        required={required && !value}
+        autoComplete="off"
+        readOnly={disabled}
+      />
+      {open && !disabled && (
+        <ul
+          ref={listRef}
+          className="absolute z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-border bg-bg-raised shadow-lg"
+          role="listbox"
+        >
+          {filtered.length === 0 ? (
+            <li className="px-3 py-2 text-sm text-fg-muted">No results</li>
+          ) : (
+            filtered.map((opt, i) => (
+              <li
+                key={opt.value || `__empty_${i}`}
+                className={cn(
+                  "cursor-pointer px-3 py-2 text-sm transition-colors duration-150",
+                  i === highlightIdx ? "bg-accent-soft text-accent" : "text-fg hover:bg-bg-subtle",
+                )}
+                onMouseDown={(e) => {
+                  e.preventDefault();
+                  selectOption(opt);
+                }}
+                onMouseEnter={() => setHighlightIdx(i)}
+                role="option"
+                aria-selected={opt.value === value}
+              >
+                {opt.label}
+              </li>
+            ))
+          )}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// UI-only: Step progress indicator (improvement #1)
+// ---------------------------------------------------------------------------
+function StepIndicator({ steps, current }: { steps: string[]; current: number }) {
+  return (
+    <div className="mb-6 flex items-center gap-0">
+      {steps.map((step, i) => (
+        <div key={step} className="flex flex-1 items-center">
+          <div className="flex flex-col items-center">
+            <div
+              className={cn(
+                "flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold transition-colors duration-150",
+                i < current
+                  ? "bg-accent text-white"
+                  : i === current
+                    ? "bg-accent text-white ring-2 ring-accent ring-offset-2"
+                    : "bg-bg-subtle text-fg-muted",
+              )}
+            >
+              {i < current ? (
+                <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="currentColor">
+                  <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414L8 15.414l-4.707-4.707a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                </svg>
+              ) : (
+                i + 1
+              )}
+            </div>
+            <span
+              className={cn(
+                "mt-1 hidden text-3xs font-medium sm:block",
+                i === current ? "text-accent" : "text-fg-subtle",
+              )}
+            >
+              {step}
+            </span>
+          </div>
+          {i < steps.length - 1 && (
+            <div
+              className={cn(
+                "mx-1 h-px flex-1 transition-colors duration-150",
+                i < current ? "bg-accent" : "bg-border",
+              )}
+            />
+          )}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// UI-only: Spinner SVG (improvement #30)
+// ---------------------------------------------------------------------------
+function Spinner({ className }: { className?: string }) {
+  return (
+    <svg
+      className={cn("animate-spin", className)}
+      xmlns="http://www.w3.org/2000/svg"
+      fill="none"
+      viewBox="0 0 24 24"
+    >
+      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+      <path
+        className="opacity-75"
+        fill="currentColor"
+        d="M4 12a8 8 0 018-8V0C5.373 0 14.627 0 12 0v4a8 8 0 00-8 8H4z"
+      />
+    </svg>
+  );
 }
 
 export default function GoodsReceiptPage() {
@@ -548,6 +791,14 @@ export default function GoodsReceiptPage() {
           })
           .filter((s): s is string => s !== null);
         const itemSummary = [supplierName, ...lineParts].join(" · ");
+        // Capture per-line details for the bulleted list (improvement #19)
+        const postedLineDetails = lines
+          .map((l) => {
+            const row = receivableByKey.get(l.receivable_key);
+            if (!row || !l.quantity) return null;
+            return { label: row.label, quantity: l.quantity, unit: l.unit };
+          })
+          .filter((x): x is { label: string; quantity: string; unit: Uom } => x !== null);
         setDone({
           kind: "success",
           message: committed.idempotent_replay
@@ -561,6 +812,7 @@ export default function GoodsReceiptPage() {
           poId: committed.po_id ?? undefined,
           poNumber: urlPoHeader?.po_number ?? undefined,
           postedLines: committed.lines.length,
+          postedLineDetails,
         });
         // Reset form for a fresh submission
         setLines([emptyLine()]);
@@ -586,6 +838,126 @@ export default function GoodsReceiptPage() {
       setPhase("done");
     }
   }
+
+  // ---------------------------------------------------------------------------
+  // UI-only state (must not affect business logic)
+  // ---------------------------------------------------------------------------
+
+  // #27: Relative time label, updates every 30s
+  const [relLabel, setRelLabel] = useState(() => relativeTime(eventAt));
+  useEffect(() => {
+    setRelLabel(relativeTime(eventAt));
+    const id = setInterval(() => setRelLabel(relativeTime(eventAt)), 30_000);
+    return () => clearInterval(id);
+  }, [eventAt]);
+
+  // #22: Auto-focus supplier combobox on mount
+  const supplierInputRef = useRef<HTMLInputElement | null>(null);
+  useEffect(() => {
+    if (!loading && !urlPoLocked) {
+      supplierInputRef.current?.focus();
+    }
+  }, [loading, urlPoLocked]);
+
+  // #23: Keyboard shortcut ⌘↵ / Ctrl↵ to submit
+  const formRef = useRef<HTMLFormElement>(null);
+  const handleKeyboardSubmit = useCallback((e: KeyboardEvent) => {
+    if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+      if (phase !== "submitting" && formRef.current) {
+        formRef.current.requestSubmit();
+      }
+    }
+  }, [phase]);
+  useEffect(() => {
+    document.addEventListener("keydown", handleKeyboardSubmit);
+    return () => document.removeEventListener("keydown", handleKeyboardSubmit);
+  }, [handleKeyboardSubmit]);
+
+  // Derived UI state
+  const isMac = typeof navigator !== "undefined" && navigator.platform.toUpperCase().includes("MAC");
+  const shortcutHint = isMac ? "⌘↵ to submit" : "Ctrl+↵ to submit";
+
+  // #3: Live line count badge
+  const completeLinesCount = lines.filter(
+    (l) => l.receivable_key && Number(l.quantity) > 0,
+  ).length;
+
+  // #24: Green dot when at least one complete line
+  const hasCompleteLine = completeLinesCount > 0;
+
+  // #12: Duplicate line detection
+  const duplicateKeys = useMemo(() => {
+    const seen = new Map<string, number>();
+    const dupes = new Map<number, number>(); // idx → first-seen idx
+    lines.forEach((l, i) => {
+      if (!l.receivable_key) return;
+      if (seen.has(l.receivable_key)) {
+        dupes.set(i, seen.get(l.receivable_key)!);
+      } else {
+        seen.set(l.receivable_key, i);
+      }
+    });
+    return dupes;
+  }, [lines]);
+
+  // Supplier combobox options
+  const supplierOptions: ComboboxOption[] = useMemo(() => {
+    const rows = suppliersQuery.data?.rows ?? [];
+    return rows.map((s) => ({
+      value: s.supplier_id,
+      label: `${s.supplier_name_official} · ${s.supplier_id}`,
+    }));
+  }, [suppliersQuery.data]);
+
+  // Receivable combobox options per line (uses filteredReceivable for search)
+  function getReceivableOptions(): ComboboxOption[] {
+    const items = filteredReceivable
+      .filter((r) => r.kind === "item")
+      .map((r) => ({ value: `${r.kind}:${r.id}`, label: r.label, group: "Finished Goods" }));
+    const comps = filteredReceivable
+      .filter((r) => r.kind === "component")
+      .map((r) => ({ value: `${r.kind}:${r.id}`, label: r.label, group: "Raw materials" }));
+    return [...items, ...comps];
+  }
+
+  // PO combobox options
+  const poOptions: ComboboxOption[] = useMemo(() => {
+    const rows = openPosQuery.data?.rows ?? [];
+    const opts: ComboboxOption[] = rows.map((p) => ({
+      value: p.po_id,
+      label: `${p.po_number} · ${p.supplier_id} · ${p.status}${p.expected_receive_date ? ` · exp ${p.expected_receive_date}` : ""}`,
+    }));
+    // Cycle 16: synthetic option for URL-locked PO not in list
+    if (urlPoLocked && urlPoHeader && !rows.some((p) => p.po_id === urlPoHeader.po_id)) {
+      opts.unshift({
+        value: urlPoHeader.po_id,
+        label: `${urlPoHeader.po_number} · ${urlPoHeader.supplier_id} · ${urlPoHeader.status}`,
+      });
+    }
+    return opts;
+  }, [openPosQuery.data, urlPoLocked, urlPoHeader]);
+
+  // Selected supplier display name (improvement #6)
+  const selectedSupplierName = useMemo(() => {
+    return suppliersQuery.data?.rows.find((s) => s.supplier_id === supplierId)?.supplier_name_official ?? "";
+  }, [suppliersQuery.data, supplierId]);
+
+  // Selected PO display (improvement #8)
+  const selectedPo = useMemo(() => {
+    if (!poId) return null;
+    const fromList = openPosQuery.data?.rows.find((p) => p.po_id === poId);
+    if (fromList) return fromList;
+    if (urlPoLocked && urlPoHeader && urlPoHeader.po_id === poId) {
+      return {
+        po_id: urlPoHeader.po_id,
+        po_number: urlPoHeader.po_number,
+        supplier_id: urlPoHeader.supplier_id,
+        status: urlPoHeader.status,
+        expected_receive_date: urlPoHeader.expected_receive_date,
+      } satisfies PoOption;
+    }
+    return null;
+  }, [poId, openPosQuery.data, urlPoLocked, urlPoHeader]);
 
   return (
     <>
@@ -682,44 +1054,56 @@ export default function GoodsReceiptPage() {
           </div>
         </SectionCard>
       ) : null}
+
+      {/* #25: PO context strip with shimmer/gradient background */}
       {urlPoLocked && !urlPoTerminal && urlPoHeader ? (
         <div
-          className="mb-4 flex flex-wrap items-center gap-3 rounded-md border border-info/30 bg-info-softer/30 px-4 py-3 text-sm"
+          className="relative mb-4 overflow-hidden rounded-md border border-info/30 px-4 py-3 text-sm"
+          style={{
+            background: "linear-gradient(90deg, var(--color-info-softer,#eff6ff) 0%, var(--color-bg-raised,#fff) 50%, var(--color-info-softer,#eff6ff) 100%)",
+            backgroundSize: "200% 100%",
+            animation: "shimmer 3s ease-in-out infinite",
+          }}
           role="note"
           data-testid="receipts-po-context-strip"
         >
-          <span className="font-medium text-fg">
-            Receiving against PO{" "}
-            <span className="font-mono">{urlPoHeader.po_number}</span>
-          </span>
-          <span className="text-fg-muted">
-            {urlPoHeader.supplier_name ?? urlPoHeader.supplier_id}
-          </span>
-          {urlPoHeader.expected_receive_date ? (
-            <span className="text-fg-muted">
-              expected {urlPoHeader.expected_receive_date}
+          {/* Shimmer keyframes injected inline */}
+          <style>{`@keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }`}</style>
+          <div className="flex flex-wrap items-center gap-3">
+            <span className="font-medium text-fg">
+              Receiving against PO{" "}
+              <span className="font-mono">{urlPoHeader.po_number}</span>
             </span>
-          ) : null}
-          <span className="ml-auto flex items-center gap-2">
-            <Link
-              href={`/purchase-orders/${encodeURIComponent(urlPoHeader.po_id)}`}
-              className="btn btn-ghost btn-sm"
-              data-testid="receipts-po-back-to-po"
-            >
-              ← Back to PO
-            </Link>
-          </span>
+            <span className="text-fg-muted">
+              {urlPoHeader.supplier_name ?? urlPoHeader.supplier_id}
+            </span>
+            {urlPoHeader.expected_receive_date ? (
+              <span className="text-fg-muted">
+                expected {urlPoHeader.expected_receive_date}
+              </span>
+            ) : null}
+            <span className="ml-auto flex items-center gap-2">
+              <Link
+                href={`/purchase-orders/${encodeURIComponent(urlPoHeader.po_id)}`}
+                className="btn btn-ghost btn-sm transition-colors duration-150"
+                data-testid="receipts-po-back-to-po"
+              >
+                ← Back to PO
+              </Link>
+            </span>
+          </div>
         </div>
       ) : null}
 
+      {/* Success / error banner */}
       {done ? (
         <div
-          className={
-            "mb-4 rounded-md border px-4 py-3 text-sm " +
-            (done.kind === "success"
+          className={cn(
+            "mb-4 rounded-md border px-4 py-3 text-sm",
+            done.kind === "success"
               ? "border-success/40 bg-success-softer text-success-fg"
-              : "border-danger/40 bg-danger-softer text-danger-fg")
-          }
+              : "border-danger/40 bg-danger-softer text-danger-fg",
+          )}
           role="status"
           data-testid={
             done.kind === "success"
@@ -727,78 +1111,147 @@ export default function GoodsReceiptPage() {
               : "receipt-error-panel"
           }
         >
-          <div className="font-medium">{done.message}</div>
-          {done.itemSummary ? (
-            <div className="mt-1 text-xs font-medium opacity-90">
-              {done.itemSummary}
-            </div>
-          ) : null}
-          {done.detail ? (
-            <div className="mt-1 font-mono text-xs opacity-60">
-              {done.detail}
-            </div>
-          ) : null}
-          {/* Cycle 16: post-submit nav cluster for PO-attached receipts.
-              Renders verbatim links to PO detail + movement log so the
-              operator can verify the status flip + ledger movement
-              without re-navigating manually. Hidden on PO-less posts
-              and on errors. */}
-          {done.kind === "success" && done.poId ? (
-            <div className="mt-3 flex flex-wrap items-center gap-2">
-              <Link
-                href={`/purchase-orders/${encodeURIComponent(done.poId)}`}
-                className="btn btn-ghost btn-sm"
-                data-testid="receipt-success-back-to-po"
+          <div className="flex items-start gap-3">
+            {/* #18: Large green checkmark SVG on success */}
+            {done.kind === "success" && (
+              <svg
+                className="mt-0.5 h-5 w-5 shrink-0 text-success-fg"
+                viewBox="0 0 20 20"
+                fill="currentColor"
+                aria-hidden="true"
               >
-                Back to PO{done.poNumber ? ` ${done.poNumber}` : ""} →
-              </Link>
-              <Link
-                href={`/purchase-orders/${encodeURIComponent(done.poId)}?tab=attached-grs`}
-                className="btn btn-ghost btn-sm"
-                data-testid="receipt-success-view-attached-grs"
-              >
-                View receipts on this PO →
-              </Link>
-              {/*
-                Cycle 19 — Movement log link now resolves the ?po_id= filter
-                end-to-end. W1 cycle 18 Task C added the backend filter on
-                /api/v1/queries/stock/ledger; W2 cycle 19 wired the
-                /stock/movement-log page to read ?po_id= from URL, render an
-                active-filter chip with resolved po_number, and provide a
-                "Clear filter" affordance. Closes cycle 12
-                W1-FOLLOWUP-MOVEMENT-LOG-URL-PREFILL.
-              */}
-              <Link
-                href={`/stock/movement-log?po_id=${encodeURIComponent(done.poId)}`}
-                className="btn btn-ghost btn-sm"
-                data-testid="receipt-success-view-movement-log"
-                title="View ledger movements scoped to this PO."
-              >
-                View movement log →
-              </Link>
+                <path
+                  fillRule="evenodd"
+                  d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
+                  clipRule="evenodd"
+                />
+              </svg>
+            )}
+            <div className="flex-1">
+              <div className="font-medium">{done.message}</div>
+              {/* #19: Bulleted list of posted lines */}
+              {done.kind === "success" && done.postedLineDetails && done.postedLineDetails.length > 0 ? (
+                <ul className="mt-2 space-y-0.5">
+                  {done.postedLineDetails.map((ld, i) => (
+                    <li key={i} className="flex items-center gap-1 text-xs opacity-90">
+                      <span className="text-success-fg">•</span>
+                      <span>{ld.label} × {ld.quantity} {ld.unit}</span>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {done.itemSummary && !(done.postedLineDetails && done.postedLineDetails.length > 0) ? (
+                <div className="mt-1 text-xs font-medium opacity-90">
+                  {done.itemSummary}
+                </div>
+              ) : null}
+              {done.detail ? (
+                <div className="mt-1 font-mono text-xs opacity-60">
+                  {done.detail}
+                </div>
+              ) : null}
+              {/* Cycle 16: post-submit nav cluster for PO-attached receipts.
+                  Renders verbatim links to PO detail + movement log so the
+                  operator can verify the status flip + ledger movement
+                  without re-navigating manually. Hidden on PO-less posts
+                  and on errors. */}
+              {done.kind === "success" && done.poId ? (
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <Link
+                    href={`/purchase-orders/${encodeURIComponent(done.poId)}`}
+                    className="btn btn-ghost btn-sm transition-colors duration-150"
+                    data-testid="receipt-success-back-to-po"
+                  >
+                    Back to PO{done.poNumber ? ` ${done.poNumber}` : ""} →
+                  </Link>
+                  <Link
+                    href={`/purchase-orders/${encodeURIComponent(done.poId)}?tab=attached-grs`}
+                    className="btn btn-ghost btn-sm transition-colors duration-150"
+                    data-testid="receipt-success-view-attached-grs"
+                  >
+                    View receipts on this PO →
+                  </Link>
+                  {/*
+                    Cycle 19 — Movement log link now resolves the ?po_id= filter
+                    end-to-end. W1 cycle 18 Task C added the backend filter on
+                    /api/v1/queries/stock/ledger; W2 cycle 19 wired the
+                    /stock/movement-log page to read ?po_id= from URL, render an
+                    active-filter chip with resolved po_number, and provide a
+                    "Clear filter" affordance. Closes cycle 12
+                    W1-FOLLOWUP-MOVEMENT-LOG-URL-PREFILL.
+                  */}
+                  <Link
+                    href={`/stock/movement-log?po_id=${encodeURIComponent(done.poId)}`}
+                    className="btn btn-ghost btn-sm transition-colors duration-150"
+                    data-testid="receipt-success-view-movement-log"
+                    title="View ledger movements scoped to this PO."
+                  >
+                    View movement log →
+                  </Link>
+                </div>
+              ) : null}
+              {/* #20: Post another receipt button */}
+              {done.kind === "success" ? (
+                <div className="mt-3">
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm transition-colors duration-150"
+                    data-testid="receipt-reset"
+                    onClick={() => {
+                      setLines([emptyLine()]);
+                      setNotes("");
+                      setPoId("");
+                      setDone(null);
+                      setPhase("idle");
+                    }}
+                  >
+                    Post another receipt
+                  </button>
+                </div>
+              ) : null}
             </div>
-          ) : null}
+          </div>
         </div>
       ) : null}
 
       {loading ? (
+        /* #16: Staggered skeleton animation */
         <SectionCard title="Loading masters…">
           <div className="space-y-3" aria-busy="true" aria-live="polite">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <div className="h-9 w-full animate-pulse rounded bg-bg-subtle" />
-              <div className="h-9 w-full animate-pulse rounded bg-bg-subtle" />
+              <div
+                className="h-9 w-full animate-pulse rounded bg-bg-subtle"
+                style={{ animationDelay: "0ms" }}
+              />
+              <div
+                className="h-9 w-full animate-pulse rounded bg-bg-subtle"
+                style={{ animationDelay: "120ms" }}
+              />
             </div>
-            <div className="h-9 w-full animate-pulse rounded bg-bg-subtle" />
+            <div
+              className="h-9 w-full animate-pulse rounded bg-bg-subtle"
+              style={{ animationDelay: "240ms" }}
+            />
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-              <div className="h-9 w-full animate-pulse rounded bg-bg-subtle" />
-              <div className="h-9 w-full animate-pulse rounded bg-bg-subtle" />
-              <div className="h-9 w-full animate-pulse rounded bg-bg-subtle" />
+              <div
+                className="h-9 w-full animate-pulse rounded bg-bg-subtle"
+                style={{ animationDelay: "360ms" }}
+              />
+              <div
+                className="h-9 w-full animate-pulse rounded bg-bg-subtle"
+                style={{ animationDelay: "480ms" }}
+              />
+              <div
+                className="h-9 w-full animate-pulse rounded bg-bg-subtle"
+                style={{ animationDelay: "600ms" }}
+              />
             </div>
           </div>
         </SectionCard>
       ) : loadErr ? (
+        /* #17: Prominent error card with red left border and retry button */
         <SectionCard title="Could not load suppliers / items / components">
-          <div className="rounded border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg">
+          <div className="rounded border-l-4 border-danger bg-danger-softer p-4 text-sm text-danger-fg">
             <div className="font-semibold">Could not load masters</div>
             <div className="mt-1 text-xs">{(loadErr as Error).message}</div>
             <button
@@ -808,350 +1261,537 @@ export default function GoodsReceiptPage() {
                 void componentsQuery.refetch();
                 void suppliersQuery.refetch();
               }}
-              className="mt-2 text-xs font-medium text-danger-fg underline hover:no-underline"
+              className="mt-3 btn btn-sm btn-primary transition-colors duration-150"
             >
-              Retry
+              Retry all
             </button>
           </div>
         </SectionCard>
       ) : urlPoLocked && urlPoTerminal ? null : (
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <SectionCard title="Receipt context">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <label className="block min-w-0">
-                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Event time *
-                </span>
-                <input
-                  type="datetime-local"
-                  className="input"
-                  value={eventAt}
-                  onChange={(e) => setEventAt(e.target.value)}
-                  required
-                />
-              </label>
-              <label className="block min-w-0">
-                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Supplier *
-                </span>
-                <select
-                  className="input"
-                  value={supplierId}
-                  onChange={(e) => setSupplierId(e.target.value)}
-                  required
-                  disabled={urlPoLocked}
-                  data-testid="receipt-supplier-select"
-                  aria-describedby={urlPoLocked && urlPoHeader ? "receipt-supplier-locked-caption" : undefined}
-                >
-                  <option value="">— select —</option>
-                  {(suppliersQuery.data?.rows ?? []).map((s) => (
-                    <option key={s.supplier_id} value={s.supplier_id}>
-                      {s.supplier_name_official} · {s.supplier_id}
-                    </option>
-                  ))}
-                </select>
-                {urlPoLocked && urlPoHeader ? (
-                  <span
-                    id="receipt-supplier-locked-caption"
-                    className="mt-1 block text-3xs text-fg-muted"
-                  >
-                    From PO {urlPoHeader.po_number} — supplier locked.
-                  </span>
-                ) : null}
-              </label>
-              <label className="block min-w-0 sm:col-span-2">
-                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Reference PO (optional)
-                </span>
-                <select
-                  className="input"
-                  value={poId}
-                  onChange={(e) => handlePoChange(e.target.value)}
-                  data-testid="receipt-po-select"
-                  disabled={urlPoLocked}
-                >
-                  <option value="">— manual receipt (no PO) —</option>
-                  {(openPosQuery.data?.rows ?? []).map((p) => (
-                    <option key={p.po_id} value={p.po_id}>
-                      {p.po_number} · {p.supplier_id} · {p.status}
-                      {p.expected_receive_date
-                        ? ` · exp ${p.expected_receive_date}`
-                        : ""}
-                    </option>
-                  ))}
-                  {/* Cycle 16: when prefill is URL-driven, the PO may not be
-                      in the openPosQuery list (cycle 16 source uses a
-                      separate header fetch). Render a synthetic option so
-                      the disabled select shows the current selection. */}
-                  {urlPoLocked && urlPoHeader &&
-                    !(openPosQuery.data?.rows ?? []).some((p) => p.po_id === urlPoHeader.po_id) ? (
-                    <option key={urlPoHeader.po_id} value={urlPoHeader.po_id}>
-                      {urlPoHeader.po_number} · {urlPoHeader.supplier_id} · {urlPoHeader.status}
-                    </option>
-                  ) : null}
-                </select>
-                {poId && poDetailQuery.isError ? (
-                  <span className="mt-1 block text-3xs text-warning-fg">
-                    Couldn&apos;t load PO lines — picker will fall back to
-                    unmatched. Try refreshing if this persists.
-                  </span>
-                ) : null}
-                {poId && poDetailQuery.isLoading ? (
-                  <span className="mt-1 block text-3xs text-fg-muted">
-                    Loading PO lines…
-                  </span>
-                ) : null}
-                {poId && !poDetailQuery.isLoading && poLines.length === 0 ? (
-                  <span className="mt-1 block text-3xs text-warning-fg">
-                    Selected PO returned no lines — receipt will post with
-                    po_id but each line will be unmatched.
-                  </span>
-                ) : null}
-              </label>
-              <label className="block min-w-0 sm:col-span-2">
-                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Header notes
-                </span>
-                <textarea
-                  className="input min-h-[3rem]"
-                  rows={2}
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Optional header-level notes."
-                />
-              </label>
-            </div>
-          </SectionCard>
+        <>
+          {/* #1: 3-step progress indicator (client-side visual only) */}
+          <StepIndicator
+            steps={["Header", "Lines", "Review"]}
+            current={
+              !supplierId ? 0
+                : lines.every((l) => !l.receivable_key) ? 1
+                  : 2
+            }
+          />
 
-          <SectionCard
-            title="Lines"
-            description="At least one line is required. Quantities must be positive."
-          >
-            {/* Line search — filters the item/component picker only.
-                Does NOT affect lines state or the submit payload. */}
-            <div className="mb-3 flex items-center gap-2">
-              <input
-                type="search"
-                className="input flex-1"
-                placeholder="Search by name or SKU…"
-                value={lineSearch}
-                onChange={(e) => setLineSearch(e.target.value)}
-                aria-label="Search items and components"
-              />
-              {lineSearch ? (
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm shrink-0"
-                  onClick={() => setLineSearch("")}
-                >
-                  Clear
-                </button>
-              ) : null}
-            </div>
-            <div className="space-y-3">
-              {lines.map((line, idx) => (
-                <div
-                  key={idx}
-                  className="grid grid-cols-1 gap-3 rounded-md border border-border/60 p-3 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,2fr)_auto]"
-                >
-                  <label className="block min-w-0">
-                    <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle md:hidden">
-                      Item or component *
-                    </span>
-                    <select
-                      className="input"
-                      value={line.receivable_key}
-                      onChange={(e) => {
-                        const key = e.target.value;
-                        const row = receivableByKey.get(key);
-                        updateLine(idx, {
-                          receivable_key: key,
-                          unit: row ? row.default_uom : line.unit,
-                        });
-                      }}
-                      required
-                    >
-                      <option value="">— item or component —</option>
-                      <optgroup label="Finished Goods (items)">
-                        {filteredReceivable.filter((r) => r.kind === "item").length === 0 ? (
-                          <option value="" disabled>No items found</option>
-                        ) : (
-                          filteredReceivable
-                            .filter((r) => r.kind === "item")
-                            .map((r) => (
-                              <option
-                                key={`${r.kind}:${r.id}`}
-                                value={`${r.kind}:${r.id}`}
-                              >
-                                {r.label}
-                              </option>
-                            ))
-                        )}
-                      </optgroup>
-                      <optgroup label="Raw materials (components)">
-                        {filteredReceivable.filter((r) => r.kind === "component").length === 0 ? (
-                          <option value="" disabled>No items found</option>
-                        ) : (
-                          filteredReceivable
-                            .filter((r) => r.kind === "component")
-                            .map((r) => (
-                              <option
-                                key={`${r.kind}:${r.id}`}
-                                value={`${r.kind}:${r.id}`}
-                              >
-                                {r.label}
-                              </option>
-                            ))
-                        )}
-                      </optgroup>
-                    </select>
-                  </label>
-                  <label className="block min-w-0">
-                    <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle md:hidden">
-                      Quantity *
-                    </span>
+          <form ref={formRef} onSubmit={handleSubmit} className="space-y-5">
+            <SectionCard title="Receipt context">
+              <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                <label className="block min-w-0">
+                  <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    Event time *
+                  </span>
+                  <div className="flex items-center gap-2">
                     <input
-                      type="number"
-                      inputMode="decimal"
-                      step="any"
-                      min="0"
-                      className="input"
-                      placeholder="Quantity"
-                      value={line.quantity}
-                      onChange={(e) =>
-                        updateLine(idx, { quantity: e.target.value })
-                      }
+                      type="datetime-local"
+                      className="input flex-1 transition-colors duration-150"
+                      value={eventAt}
+                      onChange={(e) => setEventAt(e.target.value)}
                       required
+                      disabled={phase === "submitting"}
+                      data-testid="receipt-event-at"
                     />
-                  </label>
-                  <label className="block min-w-0">
-                    <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle md:hidden">
-                      Unit
+                    {/* #27: Relative time label */}
+                    {relLabel ? (
+                      <span className="shrink-0 text-3xs text-fg-muted">{relLabel}</span>
+                    ) : null}
+                  </div>
+                </label>
+                <label className="block min-w-0">
+                  <span className="mb-1 flex items-center gap-1 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    Supplier *
+                    {/* #7: Lock icon when urlPoLocked */}
+                    {urlPoLocked ? (
+                      <span title="Supplier locked to PO" aria-label="Supplier locked" className="ml-1">🔒</span>
+                    ) : null}
+                  </span>
+                  {/* #5: Searchable supplier combobox */}
+                  <Combobox
+                    options={supplierOptions}
+                    value={supplierId}
+                    onChange={setSupplierId}
+                    placeholder="— select supplier —"
+                    disabled={urlPoLocked || phase === "submitting"}
+                    inputRef={supplierInputRef}
+                    data-testid="receipt-supplier-select"
+                    required
+                  />
+                  {/* #6: Supplier chip when selected and not locked */}
+                  {supplierId && selectedSupplierName && !urlPoLocked ? (
+                    <span className="mt-1.5 inline-flex items-center rounded-full bg-accent-soft px-2 py-0.5 text-3xs font-medium text-accent">
+                      {selectedSupplierName}
                     </span>
-                    <select
-                      className="input"
-                      value={line.unit}
-                      onChange={(e) =>
-                        updateLine(idx, { unit: e.target.value as Uom })
-                      }
+                  ) : null}
+                  {urlPoLocked && urlPoHeader ? (
+                    <span
+                      id="receipt-supplier-locked-caption"
+                      className="mt-1 block text-3xs text-fg-muted"
                     >
-                      {UOMS.map((u) => (
-                        <option key={u} value={u}>
-                          {u}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="block min-w-0">
-                    <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle md:hidden">
-                      Line notes
+                      From PO {urlPoHeader.po_number} — supplier locked.
                     </span>
-                    <input
-                      className="input"
-                      placeholder="Line notes (optional)"
-                      value={line.notes}
-                      onChange={(e) =>
-                        updateLine(idx, { notes: e.target.value })
-                      }
-                    />
-                  </label>
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm md:self-end"
-                    onClick={() => removeLine(idx)}
-                    disabled={lines.length === 1}
-                  >
-                    Remove
-                  </button>
-                  {poId ? (
-                    <label
-                      className="block sm:col-span-5"
-                      data-testid={`receipt-line-${idx}-po-line`}
-                    >
-                      <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                        PO line (optional)
-                      </span>
-                      <select
-                        className="input"
-                        value={line.po_line_id}
-                        onChange={(e) => {
-                          const newPoLineId = e.target.value;
-                          const pl = poLines.find((l) => l.po_line_id === newPoLineId);
-                          const patch: Partial<LineDraft> = { po_line_id: newPoLineId };
-                          if (pl && Number(pl.open_qty) > 0) {
-                            patch.quantity = pl.open_qty;
-                            if ((UOMS as readonly string[]).includes(pl.uom)) {
-                              patch.unit = pl.uom as Uom;
-                            }
-                          }
-                          updateLine(idx, patch);
-                        }}
-                        disabled={poDetailQuery.isLoading || poLines.length === 0}
-                      >
-                        <option value="">— unmatched —</option>
-                        {poLines.map((pl) => {
-                          const nameLabel = pl.component_name ?? pl.item_name ?? pl.component_id ?? pl.item_id ?? "—";
-                          const statusNote = pl.line_status === "CLOSED" ? " [CLOSED]" : pl.line_status === "CANCELLED" ? " [CANCELLED]" : "";
-                          return (
-                            <option key={pl.po_line_id} value={pl.po_line_id}>
-                              #{pl.line_number} · {nameLabel} · {pl.open_qty} open / {pl.ordered_qty} ordered {pl.uom}{statusNote}
-                            </option>
-                          );
-                        })}
-                      </select>
-                      {(() => {
-                        if (!line.po_line_id) return null;
-                        const selectedPl = poLines.find((pl) => pl.po_line_id === line.po_line_id);
-                        if (!selectedPl) return null;
-                        if (Number(selectedPl.open_qty) <= 0) {
-                          return (
-                            <span className="mt-1 block text-3xs text-warning-fg">
-                              This line is fully received (open qty: 0) — posting will create an over-receipt.
-                            </span>
-                          );
-                        }
-                        return (
-                          <span className="mt-1 block text-3xs text-fg-muted">
-                            Still outstanding: {selectedPl.open_qty} {selectedPl.uom}
+                  ) : null}
+                </label>
+
+                {/* #8: PO reference — cleaner display */}
+                <div className="block min-w-0 sm:col-span-2">
+                  <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    Reference PO (optional)
+                  </span>
+                  {urlPoLocked ? (
+                    /* Locked path: show styled PO chip */
+                    <div className="flex items-center gap-2">
+                      {selectedPo ? (
+                        <span className="inline-flex items-center gap-1.5 rounded-md border border-accent/30 bg-accent-soft px-3 py-1.5 text-sm font-medium text-accent">
+                          <span className="font-mono">{selectedPo.po_number}</span>
+                          <span className={cn(
+                            "rounded-full px-1.5 py-0.5 text-3xs font-semibold uppercase",
+                            selectedPo.status === "OPEN"
+                              ? "bg-success-softer text-success-fg"
+                              : selectedPo.status === "PARTIAL"
+                                ? "bg-warning-softer text-warning-fg"
+                                : "bg-bg-subtle text-fg-muted",
+                          )}>
+                            {selectedPo.status}
                           </span>
-                        );
-                      })()}
-                    </label>
+                        </span>
+                      ) : (
+                        <span className="text-sm text-fg-muted">No PO reference</span>
+                      )}
+                    </div>
+                  ) : (
+                    /* Manual path: combobox with "no PO" option */
+                    <>
+                      <Combobox
+                        options={[
+                          { value: "", label: "— manual receipt (no PO) —" },
+                          ...poOptions,
+                        ]}
+                        value={poId}
+                        onChange={handlePoChange}
+                        placeholder="— manual receipt (no PO) —"
+                        disabled={phase === "submitting"}
+                        data-testid="receipt-po-select"
+                      />
+                      {/* Show PO chip if selected */}
+                      {poId && selectedPo ? (
+                        <div className="mt-1.5 flex items-center gap-1.5">
+                          <span className="inline-flex items-center gap-1.5 rounded-md border border-accent/30 bg-accent-soft px-2 py-1 text-xs font-medium text-accent">
+                            <span className="font-mono">{selectedPo.po_number}</span>
+                            <span className={cn(
+                              "rounded-full px-1.5 py-0.5 text-3xs font-semibold uppercase",
+                              selectedPo.status === "OPEN"
+                                ? "bg-success-softer text-success-fg"
+                                : selectedPo.status === "PARTIAL"
+                                  ? "bg-warning-softer text-warning-fg"
+                                  : "bg-bg-subtle text-fg-muted",
+                            )}>
+                              {selectedPo.status}
+                            </span>
+                          </span>
+                        </div>
+                      ) : !poId ? (
+                        <span className="mt-1 block text-3xs text-fg-muted">No PO reference</span>
+                      ) : null}
+                    </>
+                  )}
+                  {poId && poDetailQuery.isError ? (
+                    <span className="mt-1 block text-3xs text-warning-fg">
+                      Couldn&apos;t load PO lines — picker will fall back to
+                      unmatched. Try refreshing if this persists.
+                    </span>
+                  ) : null}
+                  {poId && poDetailQuery.isLoading ? (
+                    <span className="mt-1 block text-3xs text-fg-muted">
+                      Loading PO lines…
+                    </span>
+                  ) : null}
+                  {poId && !poDetailQuery.isLoading && poLines.length === 0 ? (
+                    <span className="mt-1 block text-3xs text-warning-fg">
+                      Selected PO returned no lines — receipt will post with
+                      po_id but each line will be unmatched.
+                    </span>
                   ) : null}
                 </div>
-              ))}
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm"
-                onClick={addLine}
-              >
-                + Add line
-              </button>
-            </div>
-          </SectionCard>
 
-          <div className="flex items-center justify-end gap-2">
-            <button
-              type="button"
-              className="btn"
-              onClick={() => {
-                setLines([emptyLine()]);
-                setNotes("");
-                setPoId("");
-                setDone(null);
-              }}
+                {/* #9: Prefill banner */}
+                {poId && prefillApplied && lines.some((l) => l.receivable_key) ? (
+                  <div className="sm:col-span-2 flex items-center gap-2 rounded-md border border-info/30 bg-info-softer px-3 py-2 text-xs text-info-fg">
+                    <svg className="h-4 w-4 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                      <path fillRule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clipRule="evenodd" />
+                    </svg>
+                    <span>
+                      {lines.filter((l) => l.receivable_key).length} line{lines.filter((l) => l.receivable_key).length !== 1 ? "s" : ""} prefilled from PO — quantities editable
+                    </span>
+                  </div>
+                ) : null}
+
+                <label className="block min-w-0 sm:col-span-2">
+                  <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    Header notes
+                  </span>
+                  <div className="relative">
+                    <textarea
+                      className="input min-h-[3rem] w-full transition-colors duration-150"
+                      rows={2}
+                      value={notes}
+                      onChange={(e) => setNotes(e.target.value)}
+                      placeholder="Optional header-level notes."
+                      disabled={phase === "submitting"}
+                      data-testid="receipt-notes"
+                    />
+                    {/* #21: Live character count */}
+                    <span className="pointer-events-none absolute bottom-1.5 right-2 text-3xs text-fg-subtle">
+                      {notes.length} chars
+                    </span>
+                  </div>
+                </label>
+              </div>
+            </SectionCard>
+
+            {/* #3: Live line count badge; #24: green dot when complete line exists */}
+            <SectionCard
+              title={
+                <span className="flex items-center gap-2">
+                  Lines
+                  {/* #24: Green dot */}
+                  {hasCompleteLine && (
+                    <span
+                      className="inline-block h-2 w-2 rounded-full bg-success-fg"
+                      title="At least one complete line"
+                      aria-label="At least one complete line"
+                    />
+                  )}
+                  {/* #3: Count badge */}
+                  <span className="ml-0.5 inline-flex items-center rounded-full bg-bg-subtle px-2 py-0.5 text-3xs font-medium text-fg-muted">
+                    {lines.length}
+                  </span>
+                </span>
+              }
+              description="At least one line is required. Quantities must be positive."
             >
-              Reset
-            </button>
-            <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={phase === "submitting"}
+              {/* Line search — filters the item/component picker only.
+                  Does NOT affect lines state or the submit payload. */}
+              <div className="mb-3 flex items-center gap-2">
+                <input
+                  type="search"
+                  className="input flex-1 transition-colors duration-150"
+                  placeholder="Search by name or SKU…"
+                  value={lineSearch}
+                  onChange={(e) => setLineSearch(e.target.value)}
+                  aria-label="Search items and components"
+                  disabled={phase === "submitting"}
+                />
+                {lineSearch ? (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm shrink-0 transition-colors duration-150"
+                    onClick={() => setLineSearch("")}
+                  >
+                    Clear
+                  </button>
+                ) : null}
+              </div>
+              <div className="space-y-3">
+                {lines.map((line, idx) => {
+                  const isComplete = !!(line.receivable_key && Number(line.quantity) > 0);
+                  const isDupe = duplicateKeys.has(idx);
+                  const dupeOfIdx = duplicateKeys.get(idx);
+                  const lineRow = receivableByKey.get(line.receivable_key);
+
+                  return (
+                    <div
+                      key={idx}
+                      className={cn(
+                        /* #13: accent left border when complete */
+                        "relative grid grid-cols-1 gap-3 rounded-md border border-border/60 p-3 transition-colors duration-150 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,2fr)_auto]",
+                        isComplete && "border-l-2 border-l-accent",
+                      )}
+                    >
+                      {/* #14: Line number badge */}
+                      <span
+                        className="absolute -left-3 -top-2.5 flex h-5 w-5 items-center justify-center rounded-full bg-bg-raised border border-border text-3xs font-semibold text-fg-muted shadow-sm"
+                        aria-label={`Line ${idx + 1}`}
+                      >
+                        {idx + 1}
+                      </span>
+
+                      {/* #12: Duplicate warning */}
+                      {isDupe ? (
+                        <div className="col-span-full flex items-center gap-1.5 rounded bg-warning-softer px-2 py-1.5 text-xs text-warning-fg">
+                          <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 20 20" fill="currentColor">
+                            <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clipRule="evenodd" />
+                          </svg>
+                          {lineRow?.label ?? "Item"} is already on line {(dupeOfIdx ?? 0) + 1}
+                        </div>
+                      ) : null}
+
+                      <label className="block min-w-0">
+                        <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle md:hidden">
+                          Item or component *
+                        </span>
+                        {/* #10: Searchable per-line combobox */}
+                        <Combobox
+                          options={getReceivableOptions()}
+                          value={line.receivable_key}
+                          onChange={(key) => {
+                            const row = receivableByKey.get(key);
+                            updateLine(idx, {
+                              receivable_key: key,
+                              unit: row ? row.default_uom : line.unit,
+                            });
+                          }}
+                          placeholder="— item or component —"
+                          disabled={phase === "submitting"}
+                          required
+                        />
+                      </label>
+
+                      <label className="block min-w-0">
+                        <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle md:hidden">
+                          Quantity *
+                        </span>
+                        {/* #11: +/- stepper alongside quantity input */}
+                        <div className="flex items-center gap-1">
+                          <button
+                            type="button"
+                            aria-label="Decrease quantity"
+                            className="flex h-9 w-8 shrink-0 items-center justify-center rounded border border-border text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors duration-150 disabled:opacity-40"
+                            disabled={phase === "submitting"}
+                            onClick={() => {
+                              const cur = Number(line.quantity) || 0;
+                              if (cur > 1) updateLine(idx, { quantity: String(cur - 1) });
+                            }}
+                          >
+                            −
+                          </button>
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            step="any"
+                            min="0"
+                            className="input flex-1 min-w-0 transition-colors duration-150"
+                            placeholder="Qty"
+                            value={line.quantity}
+                            onChange={(e) =>
+                              updateLine(idx, { quantity: e.target.value })
+                            }
+                            required
+                            disabled={phase === "submitting"}
+                          />
+                          <button
+                            type="button"
+                            aria-label="Increase quantity"
+                            className="flex h-9 w-8 shrink-0 items-center justify-center rounded border border-border text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors duration-150 disabled:opacity-40"
+                            disabled={phase === "submitting"}
+                            onClick={() => {
+                              const cur = Number(line.quantity) || 0;
+                              updateLine(idx, { quantity: String(cur + 1) });
+                            }}
+                          >
+                            +
+                          </button>
+                        </div>
+                      </label>
+
+                      <label className="block min-w-0">
+                        <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle md:hidden">
+                          Unit
+                        </span>
+                        <select
+                          className="input transition-colors duration-150"
+                          value={line.unit}
+                          onChange={(e) =>
+                            updateLine(idx, { unit: e.target.value as Uom })
+                          }
+                          disabled={phase === "submitting"}
+                        >
+                          {UOMS.map((u) => (
+                            <option key={u} value={u}>
+                              {u}
+                            </option>
+                          ))}
+                        </select>
+                        {/* #15: Default UOM hint */}
+                        {lineRow ? (
+                          <span className="mt-0.5 block text-3xs text-fg-muted">
+                            Default: {lineRow.default_uom}
+                          </span>
+                        ) : null}
+                      </label>
+
+                      <label className="block min-w-0">
+                        <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle md:hidden">
+                          Line notes
+                        </span>
+                        <input
+                          className="input transition-colors duration-150"
+                          placeholder="Line notes (optional)"
+                          value={line.notes}
+                          onChange={(e) =>
+                            updateLine(idx, { notes: e.target.value })
+                          }
+                          disabled={phase === "submitting"}
+                        />
+                      </label>
+
+                      {/* #29: Remove button with × SVG icon */}
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm group flex items-center gap-1 md:self-end transition-colors duration-150"
+                        onClick={() => removeLine(idx)}
+                        disabled={lines.length === 1 || phase === "submitting"}
+                        aria-label={`Remove line ${idx + 1}`}
+                      >
+                        <svg
+                          className="h-4 w-4 text-fg-muted transition-colors duration-150 group-hover:text-danger-fg group-enabled:group-hover:text-danger-fg"
+                          viewBox="0 0 20 20"
+                          fill="currentColor"
+                          aria-hidden="true"
+                        >
+                          <path
+                            fillRule="evenodd"
+                            d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z"
+                            clipRule="evenodd"
+                          />
+                        </svg>
+                        <span className="sr-only">Remove</span>
+                      </button>
+
+                      {poId ? (
+                        <label
+                          className="block sm:col-span-5"
+                          data-testid={`receipt-line-${idx}-po-line`}
+                        >
+                          <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                            PO line (optional)
+                          </span>
+                          <select
+                            className="input transition-colors duration-150"
+                            value={line.po_line_id}
+                            onChange={(e) => {
+                              const newPoLineId = e.target.value;
+                              const pl = poLines.find((l) => l.po_line_id === newPoLineId);
+                              const patch: Partial<LineDraft> = { po_line_id: newPoLineId };
+                              if (pl && Number(pl.open_qty) > 0) {
+                                patch.quantity = pl.open_qty;
+                                if ((UOMS as readonly string[]).includes(pl.uom)) {
+                                  patch.unit = pl.uom as Uom;
+                                }
+                              }
+                              updateLine(idx, patch);
+                            }}
+                            disabled={poDetailQuery.isLoading || poLines.length === 0 || phase === "submitting"}
+                          >
+                            <option value="">— unmatched —</option>
+                            {poLines.map((pl) => {
+                              const nameLabel = pl.component_name ?? pl.item_name ?? pl.component_id ?? pl.item_id ?? "—";
+                              const statusNote = pl.line_status === "CLOSED" ? " [CLOSED]" : pl.line_status === "CANCELLED" ? " [CANCELLED]" : "";
+                              return (
+                                <option key={pl.po_line_id} value={pl.po_line_id}>
+                                  #{pl.line_number} · {nameLabel} · {pl.open_qty} open / {pl.ordered_qty} ordered {pl.uom}{statusNote}
+                                </option>
+                              );
+                            })}
+                          </select>
+                          {(() => {
+                            if (!line.po_line_id) return null;
+                            const selectedPl = poLines.find((pl) => pl.po_line_id === line.po_line_id);
+                            if (!selectedPl) return null;
+                            if (Number(selectedPl.open_qty) <= 0) {
+                              return (
+                                <span className="mt-1 block text-3xs text-warning-fg">
+                                  This line is fully received (open qty: 0) — posting will create an over-receipt.
+                                </span>
+                              );
+                            }
+                            return (
+                              <span className="mt-1 block text-3xs text-fg-muted">
+                                Still outstanding: {selectedPl.open_qty} {selectedPl.uom}
+                              </span>
+                            );
+                          })()}
+                        </label>
+                      ) : null}
+                    </div>
+                  );
+                })}
+
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm transition-colors duration-150"
+                  onClick={addLine}
+                  disabled={phase === "submitting"}
+                  data-testid="receipt-add-line"
+                >
+                  + Add line
+                </button>
+              </div>
+            </SectionCard>
+
+            {/* #2: Sticky submit bar */}
+            <div
+              className="sticky bottom-0 z-10 -mx-4 border-t border-border bg-bg-raised/90 px-4 py-3 backdrop-blur-sm sm:-mx-6 sm:px-6"
             >
-              {phase === "submitting" ? "Submitting…" : "Submit receipt"}
-            </button>
-          </div>
-        </form>
+              {/* #4: Receipt summary preview */}
+              {(supplierId || lines.some((l) => l.receivable_key)) ? (
+                <div className="mb-2 flex items-center gap-2 text-xs text-fg-muted">
+                  <span>Summary:</span>
+                  {selectedSupplierName ? (
+                    <span className="font-medium text-fg">{selectedSupplierName}</span>
+                  ) : null}
+                  {lines.some((l) => l.receivable_key) ? (
+                    <>
+                      <span>·</span>
+                      <span>{lines.filter((l) => l.receivable_key).length} line{lines.filter((l) => l.receivable_key).length !== 1 ? "s" : ""}</span>
+                      <span>·</span>
+                      <span>{completeLinesCount} complete</span>
+                    </>
+                  ) : null}
+                </div>
+              ) : null}
+
+              <div className="flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  className="btn transition-colors duration-150"
+                  onClick={() => {
+                    setLines([emptyLine()]);
+                    setNotes("");
+                    setPoId("");
+                    setDone(null);
+                  }}
+                  disabled={phase === "submitting"}
+                  data-testid="receipt-reset"
+                >
+                  Reset
+                </button>
+                {/* #23: Keyboard shortcut hint */}
+                <span className="hidden text-3xs text-fg-subtle sm:block">{shortcutHint}</span>
+                <button
+                  type="submit"
+                  className="btn btn-primary flex items-center gap-2 transition-colors duration-150"
+                  disabled={phase === "submitting"}
+                  data-testid="receipt-submit"
+                >
+                  {/* #30: Spinner when submitting */}
+                  {phase === "submitting" ? (
+                    <>
+                      <Spinner className="h-4 w-4" />
+                      Submitting…
+                    </>
+                  ) : (
+                    "Submit receipt"
+                  )}
+                </button>
+              </div>
+            </div>
+          </form>
+        </>
       )}
     </>
   );

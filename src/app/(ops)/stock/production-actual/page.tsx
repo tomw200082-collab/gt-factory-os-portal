@@ -54,6 +54,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { useSession } from "@/lib/auth/session-provider";
+import { cn } from "@/lib/cn";
 
 // ---------------------------------------------------------------------------
 // Production Actual contract — inlined.
@@ -250,6 +251,26 @@ function supplyMethodLabel(sm: string | null | undefined): string {
 }
 
 // ---------------------------------------------------------------------------
+// Relative time helper — for event_at and history rows.
+// ---------------------------------------------------------------------------
+function fmtRelativeTime(iso: string): string {
+  try {
+    const diff = Date.now() - new Date(iso).getTime();
+    const seconds = Math.floor(diff / 1000);
+    if (seconds < 10) return "just now";
+    if (seconds < 60) return `${seconds}s ago`;
+    const minutes = Math.floor(seconds / 60);
+    if (minutes < 60) return `${minutes}m ago`;
+    const hours = Math.floor(minutes / 60);
+    if (hours < 24) return `${hours}h ago`;
+    const days = Math.floor(hours / 24);
+    return `${days}d ago`;
+  } catch {
+    return "";
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Variance display — implements W4 contract §3 / §4.1 (post-submit
 // confirmation panel). The contract's canonical formula is computed
 // client-side here because POST /api/v1/mutations/production-actuals does
@@ -405,6 +426,70 @@ function stringDiv(num: string, denom: string, prodQty: number): string {
   return r.toFixed(4);
 }
 
+// ---------------------------------------------------------------------------
+// Step indicator component — visual 2-step progress bar.
+// ---------------------------------------------------------------------------
+function StepIndicator({ phase }: { phase: Phase }) {
+  const step = phase === "pick" ? 1 : 2;
+  return (
+    <div className="mb-6 flex items-center gap-3" aria-label="Form progress">
+      {/* Step 1 */}
+      <div className="flex items-center gap-2">
+        <div
+          className={cn(
+            "flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold transition-colors",
+            step === 1
+              ? "bg-accent text-white"
+              : "bg-success text-white",
+          )}
+          aria-current={step === 1 ? "step" : undefined}
+        >
+          {step > 1 ? "✓" : "1"}
+        </div>
+        <span
+          className={cn(
+            "text-sm font-medium",
+            step === 1 ? "text-fg" : "text-fg-muted",
+          )}
+        >
+          Select product
+        </span>
+      </div>
+
+      {/* Connector */}
+      <div
+        className={cn(
+          "h-px flex-1 transition-colors",
+          step > 1 ? "bg-success/60" : "bg-border",
+        )}
+      />
+
+      {/* Step 2 */}
+      <div className="flex items-center gap-2">
+        <div
+          className={cn(
+            "flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold transition-colors",
+            step === 2
+              ? "bg-accent text-white"
+              : "border border-border bg-bg-subtle text-fg-muted",
+          )}
+          aria-current={step === 2 ? "step" : undefined}
+        >
+          2
+        </div>
+        <span
+          className={cn(
+            "text-sm font-medium",
+            step === 2 ? "text-fg" : "text-fg-muted",
+          )}
+        >
+          Enter quantities
+        </span>
+      </div>
+    </div>
+  );
+}
+
 export default function ProductionActualPage() {
   const { session } = useSession();
   const canSubmit = session.role === "operator" || session.role === "admin";
@@ -412,6 +497,37 @@ export default function ProductionActualPage() {
 
   const queryClient = useQueryClient();
   const router = useRouter();
+
+  // ---------------------------------------------------------------------------
+  // Item search state — for the searchable combobox in Step 1.
+  // ---------------------------------------------------------------------------
+  const [itemSearch, setItemSearch] = useState<string>("");
+  const [comboboxOpen, setComboboxOpen] = useState<boolean>(false);
+  const comboboxRef = useRef<HTMLDivElement>(null);
+  const comboboxInputRef = useRef<HTMLInputElement>(null);
+
+  // Close combobox when clicking outside.
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (
+        comboboxRef.current &&
+        !comboboxRef.current.contains(e.target as Node)
+      ) {
+        setComboboxOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  // ---------------------------------------------------------------------------
+  // Relative time ticker — refreshes the event_at relative label every 30s.
+  // ---------------------------------------------------------------------------
+  const [relTimeTick, setRelTimeTick] = useState(0);
+  useEffect(() => {
+    const id = setInterval(() => setRelTimeTick((n) => n + 1), 30_000);
+    return () => clearInterval(id);
+  }, []);
 
   const historyQuery = useQuery<ListEnvelope<ProductionActualListRow>>({
     queryKey: ["production-actuals", "history"],
@@ -446,6 +562,24 @@ export default function ProductionActualPage() {
       )
       .sort((a, b) => a.item_name.localeCompare(b.item_name));
   }, [itemsQuery.data]);
+
+  // Filtered items for combobox dropdown.
+  const filteredItems = useMemo<ItemRow[]>(() => {
+    if (!itemSearch.trim()) return producibleItems;
+    const q = itemSearch.toLowerCase();
+    return producibleItems.filter(
+      (r) =>
+        r.item_name.toLowerCase().includes(q) ||
+        (r.sku ?? "").toLowerCase().includes(q),
+    );
+  }, [producibleItems, itemSearch]);
+
+  const filteredManufactured = filteredItems.filter(
+    (r) => r.supply_method === "MANUFACTURED",
+  );
+  const filteredRepack = filteredItems.filter(
+    (r) => r.supply_method === "REPACK",
+  );
 
   // Query-string-driven deep-link prefill from planning recommendations OR
   // Daily Production Plan board. Read once on mount; do not stomp manually
@@ -596,6 +730,28 @@ export default function ProductionActualPage() {
   // resolved we don't need items anymore.
   const isLoadingItems = itemsQuery.isLoading;
   const itemsLoadErr = itemsQuery.error;
+
+  // Keyboard shortcut: Cmd+Enter / Ctrl+Enter triggers submit in step 2.
+  const handleKeyDown = useCallback(
+    (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
+        if (
+          (phase === "entering" || phase === "submitting") &&
+          canSubmit &&
+          phase !== "submitting"
+        ) {
+          void submitProductionActual(fromPlanId);
+        }
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [phase, canSubmit, fromPlanId],
+  );
+
+  useEffect(() => {
+    document.addEventListener("keydown", handleKeyDown);
+    return () => document.removeEventListener("keydown", handleKeyDown);
+  }, [handleKeyDown]);
 
   async function handleOpen(e: React.FormEvent): Promise<void> {
     e.preventDefault();
@@ -934,6 +1090,7 @@ export default function ProductionActualPage() {
     setOutputUom("");
     setNotes("");
     setSelectedItemId("");
+    setItemSearch("");
     setPhase("pick");
     setEventAt(nowLocalDateTime());
     setPreviewExpanded(false);
@@ -948,6 +1105,7 @@ export default function ProductionActualPage() {
     setOutputUom("");
     setNotes("");
     setSelectedItemId("");
+    setItemSearch("");
     setPhase("pick");
     setEventAt(nowLocalDateTime());
     setPreviewExpanded(false);
@@ -1005,6 +1163,31 @@ export default function ProductionActualPage() {
     !planQuery.isLoading &&
     (planQuery.isError || (!linkedPlan && (planQuery.data?.rows ?? []).length >= 0 && !planQuery.isLoading));
 
+  // Derived selected item row for the selected-item card display.
+  const selectedItem = useMemo<ItemRow | null>(
+    () => producibleItems.find((r) => r.item_id === selectedItemId) ?? null,
+    [producibleItems, selectedItemId],
+  );
+
+  // Live "Total processed" calculation.
+  const totalProcessed = useMemo(() => {
+    const out = Number(outputQty || "0");
+    const scrap = Number(scrapQty || "0");
+    if (!Number.isFinite(out) || !Number.isFinite(scrap)) return null;
+    return out + scrap;
+  }, [outputQty, scrapQty]);
+
+  // Stepper helpers.
+  function stepNum(
+    value: string,
+    delta: number,
+    setter: (v: string) => void,
+  ): void {
+    const current = Number(value || "0");
+    const next = Math.max(0, current + delta);
+    setter(Number.isInteger(next) ? String(next) : next.toFixed(2));
+  }
+
   return (
     <div dir="ltr">
       <WorkflowHeader
@@ -1029,19 +1212,43 @@ export default function ProductionActualPage() {
             </div>
           ) : linkedPlan ? (
             <div>
-              <div className="font-medium">
-                Linked to plan {fmtPlanDate(linkedPlan.plan_date)} ·{" "}
-                {linkedPlan.item_name ?? linkedPlan.item_id}
+              <div className="flex flex-wrap items-start gap-4">
+                <div>
+                  <div className="text-xs uppercase tracking-wide opacity-70">
+                    Plan date
+                  </div>
+                  <div className="mt-0.5 text-base font-semibold">
+                    {fmtPlanDate(linkedPlan.plan_date)}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs uppercase tracking-wide opacity-70">
+                    Target
+                  </div>
+                  <div className="mt-0.5 text-base font-mono font-bold tabular-nums">
+                    {linkedPlan.planned_qty}{" "}
+                    <span className="text-sm font-normal">{linkedPlan.uom}</span>
+                  </div>
+                </div>
+                <div>
+                  <div className="text-xs uppercase tracking-wide opacity-70">
+                    Item
+                  </div>
+                  <div className="mt-0.5 font-medium">
+                    {linkedPlan.item_name ?? linkedPlan.item_id}
+                  </div>
+                </div>
               </div>
-              <div className="mt-1 text-xs opacity-90">
-                Plan target:{" "}
-                <span className="font-mono tabular-nums">
-                  {linkedPlan.planned_qty} {linkedPlan.uom}
+              <div className="mt-2 flex items-center gap-3 text-xs">
+                <span className="opacity-80">
+                  Progress: target{" "}
+                  <span className="font-mono tabular-nums font-semibold">
+                    {linkedPlan.planned_qty} {linkedPlan.uom}
+                  </span>
                 </span>
-                {" · "}
                 <Link
                   href="/planning/production-plan"
-                  className="underline underline-offset-2 hover:no-underline"
+                  className="btn btn-ghost btn-sm"
                 >
                   View on the daily plan board
                 </Link>
@@ -1138,24 +1345,28 @@ export default function ProductionActualPage() {
           className="mb-4 rounded-md border border-warning/40 bg-warning-softer px-4 py-3 text-sm text-warning-fg"
           role="status"
         >
-          <div className="font-medium">Read-only.</div>
+          <div className="font-medium">Read-only view.</div>
           <div className="mt-1 text-xs opacity-80">
-            Your role is {session.role}. Only operator or admin can submit a
-            production report.
+            You can view the form and BOM preview, but only operators and admins
+            can submit production reports. Your current role is{" "}
+            <span className="font-semibold">{session.role}</span>.{" "}
+            <span className="opacity-70">
+              Contact your administrator to request the operator role.
+            </span>
           </div>
         </div>
       ) : null}
 
       {done ? (
         <div
-          className={
-            "mb-4 rounded-md border px-4 py-3 text-sm " +
-            (done.kind === "success"
+          className={cn(
+            "mb-4 rounded-md border px-4 py-3 text-sm",
+            done.kind === "success"
               ? "border-success/40 bg-success-softer text-success-fg"
               : done.kind === "stale"
                 ? "border-warning/40 bg-warning-softer text-warning-fg"
-                : "border-danger/40 bg-danger-softer text-danger-fg")
-          }
+                : "border-danger/40 bg-danger-softer text-danger-fg",
+          )}
           role="status"
         >
           <div className="font-medium">{done.message}</div>
@@ -1163,24 +1374,74 @@ export default function ProductionActualPage() {
           {/* Success-panel detail — show what was posted, plus contextual
               follow-up links. */}
           {done.kind === "success" && done.committed ? (
-            <div className="mt-2 space-y-1 text-xs">
-              <div>
-                Output:{" "}
-                <span className="font-mono tabular-nums">
-                  {done.committed.output_qty} {done.committed.output_uom}
-                </span>
-                {Number(done.committed.scrap_qty) > 0 ? (
-                  <>
-                    {" · scrap "}
-                    <span className="font-mono tabular-nums">
-                      {done.committed.scrap_qty} {done.committed.output_uom}
+            <div className="mt-3 space-y-3 text-xs">
+              {/* Large output qty display */}
+              <div className="flex flex-wrap items-baseline gap-3">
+                <div>
+                  <div className="text-xs uppercase opacity-70">Output</div>
+                  <div className="mt-0.5 font-mono text-3xl font-bold tabular-nums">
+                    {done.committed.output_qty}
+                    <span className="ml-1 text-base font-normal">
+                      {done.committed.output_uom}
                     </span>
-                  </>
+                  </div>
+                </div>
+                {Number(done.committed.scrap_qty) > 0 ? (
+                  <div>
+                    <div className="text-xs uppercase opacity-70">Scrap</div>
+                    <div className="mt-0.5 font-mono text-lg tabular-nums">
+                      {done.committed.scrap_qty}
+                      <span className="ml-1 text-sm font-normal">
+                        {done.committed.output_uom}
+                      </span>
+                    </div>
+                  </div>
                 ) : null}
-                {" · "}
-                {done.committed.consumption.length} component
-                {done.committed.consumption.length !== 1 ? "s" : ""} consumed
               </div>
+
+              {/* Consumption breakdown table */}
+              {done.committed.consumption.length > 0 ? (
+                <div className="overflow-x-auto rounded border border-success/20 bg-success-softer/20">
+                  <table className="w-full border-collapse text-xs">
+                    <thead>
+                      <tr className="border-b border-success/20">
+                        <th className="px-3 py-1.5 text-left text-3xs font-semibold uppercase tracking-wide opacity-70">
+                          Component
+                        </th>
+                        <th className="px-3 py-1.5 text-right text-3xs font-semibold uppercase tracking-wide opacity-70">
+                          Consumed
+                        </th>
+                        <th className="px-3 py-1.5 text-left text-3xs font-semibold uppercase tracking-wide opacity-70">
+                          Unit
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {done.committed.consumption.map((c) => (
+                        <tr
+                          key={c.stock_ledger_movement_id}
+                          className="border-b border-success/10 last:border-b-0"
+                        >
+                          <td className="px-3 py-1.5 font-mono text-3xs opacity-80">
+                            {c.component_id}
+                          </td>
+                          <td className="px-3 py-1.5 text-right font-mono tabular-nums">
+                            {c.consumption_qty}
+                          </td>
+                          <td className="px-3 py-1.5 opacity-70">
+                            {c.component_uom ?? "—"}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              ) : (
+                <div className="opacity-70">
+                  {done.committed.consumption.length} components consumed
+                </div>
+              )}
+
               {done.committed.linked_plan_id ? (
                 <div>
                   Linked plan:{" "}
@@ -1208,14 +1469,21 @@ export default function ProductionActualPage() {
                     linkedPlan.planned_qty,
                   );
                   const isOnTarget = v.variance_sign === "on_target";
+                  const borderColor =
+                    v.variance_sign === "on_target"
+                      ? "border-l-success"
+                      : v.variance_sign === "over"
+                        ? "border-l-warning"
+                        : "border-l-warning";
                   return (
                     <div
-                      className={
-                        "mt-2 rounded border px-3 py-2 " +
-                        (isOnTarget
+                      className={cn(
+                        "mt-2 rounded border border-l-4 px-3 py-2",
+                        borderColor,
+                        isOnTarget
                           ? "border-success/30 bg-success-softer/30"
-                          : "border-warning/40 bg-warning-softer/30")
-                      }
+                          : "border-warning/40 bg-warning-softer/30",
+                      )}
                       data-testid="production-actual-variance"
                       data-variance-sign={v.variance_sign}
                     >
@@ -1250,12 +1518,12 @@ export default function ProductionActualPage() {
                           </span>
                         </span>
                         <span
-                          className={
-                            "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-3xs font-semibold uppercase " +
-                            (isOnTarget
+                          className={cn(
+                            "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-3xs font-semibold uppercase",
+                            isOnTarget
                               ? "bg-success-softer text-success-fg"
-                              : "bg-warning-softer text-warning-fg")
-                          }
+                              : "bg-warning-softer text-warning-fg",
+                          )}
                         >
                           <span aria-hidden>
                             {VARIANCE_SIGN_ICON[v.variance_sign]}
@@ -1449,322 +1717,599 @@ export default function ProductionActualPage() {
           </div>
         </SectionCard>
       ) : phase === "pick" ? (
-        <form onSubmit={handleOpen} className="space-y-5">
-          <SectionCard
-            title="Step 1 — Pick the item being produced"
-            description="Only manufactured or repacked items are listed. If the BOM is updated after this form opens, you will need to reopen before submitting."
-          >
-            <div className="grid grid-cols-1 gap-3">
-              <label className="block min-w-0">
-                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Item *
-                </span>
-                <select
-                  className="input"
-                  value={selectedItemId}
-                  onChange={(e) => setSelectedItemId(e.target.value)}
-                  required
-                >
-                  <option value="">— Pick —</option>
-                  <optgroup label="Manufactured">
-                    {producibleItems
-                      .filter((r) => r.supply_method === "MANUFACTURED")
-                      .map((r) => (
-                        <option key={r.item_id} value={r.item_id}>
-                          {r.item_name} · {r.sku ?? r.item_id}
-                        </option>
-                      ))}
-                  </optgroup>
-                  <optgroup label="Repack">
-                    {producibleItems
-                      .filter((r) => r.supply_method === "REPACK")
-                      .map((r) => (
-                        <option key={r.item_id} value={r.item_id}>
-                          {r.item_name} · {r.sku ?? r.item_id}
-                        </option>
-                      ))}
-                  </optgroup>
-                </select>
-              </label>
-              <div className="text-xs text-fg-muted">
-                {`${producibleItems.length} producible items · ${producibleItems.filter((r) => r.supply_method === "MANUFACTURED").length} manufactured · ${producibleItems.filter((r) => r.supply_method === "REPACK").length} repack`}
-              </div>
-            </div>
-          </SectionCard>
-          <div className="flex items-center justify-end gap-2">
-            <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={!selectedItemId}
+        <div data-testid="production-actual-step-1">
+          {/* Step indicator */}
+          <StepIndicator phase={phase} />
+
+          <form onSubmit={handleOpen} className="space-y-5">
+            <SectionCard
+              title="Step 1 — Pick the item being produced"
+              description="Only manufactured or repacked items are listed. If the BOM is updated after this form opens, you will need to reopen before submitting."
             >
-              Continue to entry
-            </button>
-          </div>
-        </form>
-      ) : phase === "entering" || phase === "submitting" ? (
-        <form onSubmit={handleSubmit} className="space-y-5">
-          <SectionCard
-            title="Step 2 — Enter the produced quantity"
-            description="Output = good units produced. Scrap = material consumed but not usable as finished goods. Both are required; scrap defaults to 0."
-          >
-            {snapshot ? (
-              <div className="mb-3 rounded-md border border-border/60 bg-bg-subtle/40 p-3 text-xs">
+              <div className="grid grid-cols-1 gap-4">
+                {/* Searchable combobox */}
                 <div>
-                  <span className="text-fg-subtle">Producing:</span>{" "}
-                  <span className="text-fg font-medium">
-                    {snapshot.item_name}
+                  <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    Item *
                   </span>
-                  {isAdmin ? (
-                    <span className="text-fg-muted"> ({snapshot.item_id})</span>
-                  ) : null}
-                  <span className="ml-2 rounded-sm border border-info/40 bg-info-soft px-1.5 py-0.5 text-3xs text-info-fg">
-                    {supplyMethodLabel(snapshot.supply_method)}
-                  </span>
+                  <div className="relative" ref={comboboxRef}>
+                    <input
+                      ref={comboboxInputRef}
+                      type="text"
+                      className="input"
+                      placeholder="Search by name or SKU…"
+                      value={itemSearch}
+                      data-testid="production-actual-item-combobox"
+                      onChange={(e) => {
+                        setItemSearch(e.target.value);
+                        setComboboxOpen(true);
+                        // Clear selected item if the user starts typing something new.
+                        if (selectedItemId) setSelectedItemId("");
+                      }}
+                      onFocus={() => setComboboxOpen(true)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Escape") setComboboxOpen(false);
+                      }}
+                      autoComplete="off"
+                    />
+                    {comboboxOpen && filteredItems.length > 0 ? (
+                      <div className="absolute z-20 mt-1 max-h-72 w-full overflow-y-auto rounded-md border border-border bg-white shadow-lg dark:bg-gray-900">
+                        {filteredManufactured.length > 0 ? (
+                          <div>
+                            <div className="px-3 py-1.5 text-3xs font-semibold uppercase tracking-sops text-fg-subtle bg-bg-subtle/60 border-b border-border/40">
+                              Manufactured ({filteredManufactured.length})
+                            </div>
+                            {filteredManufactured.map((r) => (
+                              <button
+                                key={r.item_id}
+                                type="button"
+                                className={cn(
+                                  "flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-bg-subtle/60 transition-colors",
+                                  selectedItemId === r.item_id && "bg-accent/10",
+                                )}
+                                onClick={() => {
+                                  setSelectedItemId(r.item_id);
+                                  setItemSearch(r.item_name);
+                                  setComboboxOpen(false);
+                                }}
+                              >
+                                <span className="font-medium text-fg">
+                                  {r.item_name}
+                                </span>
+                                {r.sku ? (
+                                  <span className="ml-2 font-mono text-xs text-fg-muted">
+                                    {r.sku}
+                                  </span>
+                                ) : null}
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                        {filteredRepack.length > 0 ? (
+                          <div>
+                            <div className="px-3 py-1.5 text-3xs font-semibold uppercase tracking-sops text-fg-subtle bg-bg-subtle/60 border-b border-border/40">
+                              Repack ({filteredRepack.length})
+                            </div>
+                            {filteredRepack.map((r) => (
+                              <button
+                                key={r.item_id}
+                                type="button"
+                                className={cn(
+                                  "flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-bg-subtle/60 transition-colors",
+                                  selectedItemId === r.item_id && "bg-accent/10",
+                                )}
+                                onClick={() => {
+                                  setSelectedItemId(r.item_id);
+                                  setItemSearch(r.item_name);
+                                  setComboboxOpen(false);
+                                }}
+                              >
+                                <span className="font-medium text-fg">
+                                  {r.item_name}
+                                </span>
+                                {r.sku ? (
+                                  <span className="ml-2 font-mono text-xs text-fg-muted">
+                                    {r.sku}
+                                  </span>
+                                ) : null}
+                              </button>
+                            ))}
+                          </div>
+                        ) : null}
+                        {filteredItems.length === 0 ? (
+                          <div className="px-3 py-3 text-sm text-fg-muted">
+                            No items match "{itemSearch}"
+                          </div>
+                        ) : null}
+                      </div>
+                    ) : comboboxOpen && itemSearch && filteredItems.length === 0 ? (
+                      <div className="absolute z-20 mt-1 w-full rounded-md border border-border bg-white shadow-lg dark:bg-gray-900">
+                        <div className="px-3 py-3 text-sm text-fg-muted">
+                          No items match "{itemSearch}"
+                        </div>
+                      </div>
+                    ) : null}
+                  </div>
                 </div>
-                <div className="mt-1">
-                  <span className="text-fg-subtle">Pinned BOM:</span>{" "}
-                  <span className="font-mono text-fg">
-                    {snapshot.bom_version_label}
-                  </span>
-                </div>
-                <div className="mt-1">
-                  <span className="text-fg-subtle">BOM produces</span>{" "}
-                  <span className="font-mono text-fg">
-                    {snapshot.bom_final_output_qty}{" "}
-                    {snapshot.bom_final_output_uom}
-                  </span>{" "}
-                  <span className="text-fg-subtle">per batch</span>
-                </div>
-              </div>
-            ) : null}
 
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-              <label className="block min-w-0">
-                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Event time *
-                </span>
-                <input
-                  type="datetime-local"
-                  className="input"
-                  value={eventAt}
-                  onChange={(e) => setEventAt(e.target.value)}
-                  required
-                />
-              </label>
-              <label className="block min-w-0">
-                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Unit of measure *
-                </span>
-                <input
-                  className="input"
-                  value={outputUom}
-                  onChange={(e) => setOutputUom(e.target.value)}
-                  required
-                />
-              </label>
-              <label className="block min-w-0">
-                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Output quantity *
-                </span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  step="any"
-                  min="0"
-                  className="input"
-                  value={outputQty}
-                  onChange={(e) => setOutputQty(e.target.value)}
-                  required
-                />
-              </label>
-              <label className="block min-w-0">
-                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Scrap quantity
-                </span>
-                <input
-                  type="number"
-                  inputMode="decimal"
-                  step="any"
-                  min="0"
-                  className="input"
-                  value={scrapQty}
-                  onChange={(e) => setScrapQty(e.target.value)}
-                />
-              </label>
-              <label className="block min-w-0 sm:col-span-2">
-                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Notes
-                </span>
-                <textarea
-                  className="input min-h-[3rem]"
-                  rows={2}
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                  placeholder="Notes (shift, operator comments, etc.)."
-                />
-              </label>
-            </div>
-          </SectionCard>
-
-          <SectionCard
-            title="Preview — expected component consumption"
-            description="Estimated component consumption from the BOM and quantities entered. The final value is computed at submit time."
-          >
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm mb-3"
-              onClick={() => setPreviewExpanded((v) => !v)}
-            >
-              {previewExpanded ? "Hide components" : "Show components"} (
-              {snapshot?.bom_lines.length ?? 0})
-            </button>
-            {previewExpanded && snapshot ? (
-              <>
-                {/* Two-head composition banner — rendered above the preview
-                    table when the item has a linked base liquid BOM. The
-                    operator-facing copy follows the Tom-locked Hebrew
-                    register: "מוצר זה מורכב מאריזה (label) ובסיס נוזל
-                    (label). כל יחידה צורכת qty uom בסיס." */}
-                {snapshot.base_bom_version_id_pinned ? (
-                  <div className="mb-3 text-sm text-fg-muted">
-                    מוצר זה מורכב מאריזה ({snapshot.bom_version_label}) ובסיס
-                    נוזל ({snapshot.base_bom_version_label}). כל יחידה צורכת{" "}
-                    {snapshot.base_qty_per_pack_unit}{" "}
-                    {snapshot.base_bom_final_output_uom} בסיס.
+                {/* Selected item card */}
+                {selectedItem ? (
+                  <div className="rounded-lg border border-accent/30 bg-accent/5 px-4 py-3">
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0">
+                        <div className="text-lg font-semibold text-fg leading-tight">
+                          {selectedItem.item_name}
+                        </div>
+                        {selectedItem.sku ? (
+                          <div className="mt-0.5 font-mono text-xs text-fg-muted">
+                            SKU: {selectedItem.sku}
+                          </div>
+                        ) : null}
+                      </div>
+                      <span className="chip shrink-0 border border-info/30 bg-info-softer text-info-fg text-3xs">
+                        {supplyMethodLabel(selectedItem.supply_method)}
+                      </span>
+                    </div>
                   </div>
                 ) : null}
-                {previewRows.length === 0 ? (
-                  <div className="text-xs text-fg-muted">
-                    Enter an output or scrap quantity to see expected
-                    consumption.
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {/* Pack / single-head sub-group. Always rendered when
-                        rows exist (single-head items put every line here). */}
-                    {previewRowsByGroup.pack.length > 0 ? (
-                      <div>
-                        <h3 className="mb-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                          רכיבי אריזה ({previewRowsByGroup.pack.length})
-                        </h3>
-                        <div className="overflow-x-auto">
-                          <table className="w-full border-collapse text-xs">
-                            <thead>
-                              <tr className="border-b border-border/70 bg-bg-subtle/60">
-                                <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                                  Component
-                                </th>
-                                <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                                  Expected consumption
-                                </th>
-                                <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                                  Unit
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {previewRowsByGroup.pack.map((r) => (
-                                <tr
-                                  key={r.component_id}
-                                  className="border-b border-border/40 last:border-b-0"
-                                >
-                                  <td className="px-3 py-2">
-                                    <div className="text-fg-strong">
-                                      {r.component_name}
-                                    </div>
-                                    {isAdmin ? (
-                                      <div className="font-mono text-3xs text-fg-muted">
-                                        {r.component_id}
-                                      </div>
-                                    ) : null}
-                                  </td>
-                                  <td className="px-3 py-2 font-mono tabular-nums text-fg">
-                                    {r.consumption_preview}
-                                  </td>
-                                  <td className="px-3 py-2 text-fg-muted">
-                                    {r.component_uom ?? "—"}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    ) : null}
 
-                    {/* Base / liquid sub-group. Rendered ONLY when at least
-                        one base line exists (i.e. the item has a linked
-                        base BOM AND that BOM has component lines). */}
-                    {previewRowsByGroup.base.length > 0 ? (
-                      <div>
-                        <h3 className="mb-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                          רכיבי נוזל ({previewRowsByGroup.base.length})
-                        </h3>
-                        <div className="overflow-x-auto">
-                          <table className="w-full border-collapse text-xs">
-                            <thead>
-                              <tr className="border-b border-border/70 bg-bg-subtle/60">
-                                <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                                  Component
-                                </th>
-                                <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                                  Expected consumption
-                                </th>
-                                <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                                  Unit
-                                </th>
-                              </tr>
-                            </thead>
-                            <tbody>
-                              {previewRowsByGroup.base.map((r) => (
-                                <tr
-                                  key={r.component_id}
-                                  className="border-b border-border/40 last:border-b-0"
-                                >
-                                  <td className="px-3 py-2">
-                                    <div className="text-fg-strong">
-                                      {r.component_name}
-                                    </div>
-                                    {isAdmin ? (
-                                      <div className="font-mono text-3xs text-fg-muted">
-                                        {r.component_id}
-                                      </div>
-                                    ) : null}
-                                  </td>
-                                  <td className="px-3 py-2 font-mono tabular-nums text-fg">
-                                    {r.consumption_preview}
-                                  </td>
-                                  <td className="px-3 py-2 text-fg-muted">
-                                    {r.component_uom ?? "—"}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
-                      </div>
-                    ) : null}
-                  </div>
-                )}
-              </>
-            ) : null}
-          </SectionCard>
+                {/* Item count hint */}
+                <div className="flex items-center gap-3 text-xs">
+                  <span className="font-semibold text-fg">
+                    {producibleItems.length} producible items
+                  </span>
+                  <span className="text-fg-muted">·</span>
+                  <span className="text-fg-muted">
+                    {producibleItems.filter((r) => r.supply_method === "MANUFACTURED").length} manufactured
+                  </span>
+                  <span className="text-fg-muted">·</span>
+                  <span className="text-fg-muted">
+                    {producibleItems.filter((r) => r.supply_method === "REPACK").length} repack
+                  </span>
+                </div>
+              </div>
+            </SectionCard>
+            <div className="flex items-center justify-end gap-2">
+              <button
+                type="submit"
+                className="btn btn-primary"
+                disabled={!selectedItemId}
+              >
+                Open production form →
+              </button>
+            </div>
+          </form>
+        </div>
+      ) : phase === "entering" || phase === "submitting" ? (
+        <div data-testid="production-actual-step-2">
+          {/* Step indicator */}
+          <StepIndicator phase={phase} />
 
-          <div className="flex items-center justify-end gap-2">
-            <button type="button" className="btn" onClick={resetFlow}>
-              Cancel and start over
-            </button>
-            <button
-              type="submit"
-              className="btn btn-primary"
-              disabled={phase === "submitting" || !canSubmit}
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <SectionCard
+              title="Step 2 — Enter the produced quantity"
+              description="Output = good units produced. Scrap = material consumed but not usable as finished goods. Both are required; scrap defaults to 0."
             >
-              {phase === "submitting"
-                ? "Submitting…"
-                : "Submit production report"}
-            </button>
-          </div>
-        </form>
+              {snapshot ? (
+                <div className="mb-4 rounded-md border border-border/60 bg-bg-subtle/40 p-4">
+                  <div className="flex flex-wrap items-start gap-3">
+                    <div className="min-w-0 flex-1">
+                      <div className="text-lg font-semibold text-fg leading-tight">
+                        {snapshot.item_name}
+                      </div>
+                      {isAdmin ? (
+                        <div className="mt-0.5 font-mono text-xs text-fg-muted">
+                          {snapshot.item_id}
+                        </div>
+                      ) : null}
+                    </div>
+                    <span className="chip shrink-0 border border-info/30 bg-info-softer text-info-fg text-3xs">
+                      {supplyMethodLabel(snapshot.supply_method)}
+                    </span>
+                  </div>
+                  <div className="mt-3 flex flex-wrap gap-4 text-xs">
+                    <div>
+                      <div className="text-fg-subtle">Pinned BOM</div>
+                      <div className="mt-0.5 flex items-center gap-1 font-mono text-fg">
+                        <span aria-label="Locked">🔒</span>
+                        {snapshot.bom_version_label}
+                      </div>
+                    </div>
+                    <div>
+                      <div className="text-fg-subtle">BOM batch size</div>
+                      <div className="mt-0.5">
+                        <span className="inline-block rounded bg-accent/10 px-2 py-0.5 font-mono text-xs font-semibold text-accent">
+                          {snapshot.bom_final_output_qty}{" "}
+                          {snapshot.bom_final_output_uom} per batch
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : null}
+
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                {/* Event time */}
+                <label className="block min-w-0">
+                  <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    Event time *
+                  </span>
+                  <input
+                    type="datetime-local"
+                    className="input"
+                    value={eventAt}
+                    onChange={(e) => setEventAt(e.target.value)}
+                    required
+                  />
+                  {/* Relative time label — refreshes every 30s via relTimeTick */}
+                  {eventAt ? (
+                    <div
+                      className="mt-1 text-xs text-fg-muted"
+                      key={relTimeTick}
+                    >
+                      {fmtRelativeTime(new Date(eventAt).toISOString())}
+                    </div>
+                  ) : null}
+                </label>
+
+                {/* Unit of measure — readonly display with pinned label */}
+                <label className="block min-w-0">
+                  <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    Unit of measure *
+                  </span>
+                  <input
+                    className="input"
+                    value={outputUom}
+                    onChange={(e) => setOutputUom(e.target.value)}
+                    required
+                  />
+                  <div className="mt-1 flex items-center gap-1 text-xs text-fg-muted">
+                    <span aria-label="Locked">🔒</span>
+                    <span>Pinned from BOM</span>
+                  </div>
+                </label>
+
+                {/* Output quantity — hero-sized with steppers */}
+                <div className="block min-w-0">
+                  <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    Output quantity *
+                  </span>
+                  <div className="flex items-stretch gap-0">
+                    <button
+                      type="button"
+                      className="btn btn-sm rounded-r-none border-r-0 px-3 font-mono text-base leading-none"
+                      data-testid="production-actual-output-stepper-minus"
+                      onClick={() => stepNum(outputQty, -1, setOutputQty)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          stepNum(outputQty, -1, setOutputQty);
+                        }
+                      }}
+                      aria-label="Decrease output quantity by 1"
+                    >
+                      −
+                    </button>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="any"
+                      min="0"
+                      className="input rounded-none text-3xl font-mono tabular-nums text-center flex-1 min-w-0"
+                      value={outputQty}
+                      data-testid="production-actual-output-qty"
+                      onChange={(e) => setOutputQty(e.target.value)}
+                      required
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-sm rounded-l-none border-l-0 px-3 font-mono text-base leading-none"
+                      data-testid="production-actual-output-stepper-plus"
+                      onClick={() => stepNum(outputQty, 1, setOutputQty)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          stepNum(outputQty, 1, setOutputQty);
+                        }
+                      }}
+                      aria-label="Increase output quantity by 1"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+
+                {/* Scrap quantity — with steppers */}
+                <div className="block min-w-0">
+                  <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    Scrap quantity
+                  </span>
+                  <div className="flex items-stretch gap-0">
+                    <button
+                      type="button"
+                      className="btn btn-sm rounded-r-none border-r-0 px-3 font-mono text-base leading-none"
+                      onClick={() => stepNum(scrapQty, -1, setScrapQty)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          stepNum(scrapQty, -1, setScrapQty);
+                        }
+                      }}
+                      aria-label="Decrease scrap quantity by 1"
+                    >
+                      −
+                    </button>
+                    <input
+                      type="number"
+                      inputMode="decimal"
+                      step="any"
+                      min="0"
+                      className="input rounded-none font-mono tabular-nums text-center flex-1 min-w-0"
+                      value={scrapQty}
+                      data-testid="production-actual-scrap-qty"
+                      onChange={(e) => setScrapQty(e.target.value)}
+                    />
+                    <button
+                      type="button"
+                      className="btn btn-sm rounded-l-none border-l-0 px-3 font-mono text-base leading-none"
+                      onClick={() => stepNum(scrapQty, 1, setScrapQty)}
+                      onKeyDown={(e) => {
+                        if (e.key === "Enter") {
+                          e.preventDefault();
+                          stepNum(scrapQty, 1, setScrapQty);
+                        }
+                      }}
+                      aria-label="Increase scrap quantity by 1"
+                    >
+                      +
+                    </button>
+                  </div>
+                </div>
+
+                {/* Live total processed */}
+                {totalProcessed !== null && (outputQty || scrapQty) ? (
+                  <div className="sm:col-span-2 rounded bg-bg-subtle/60 border border-border/50 px-3 py-2 text-sm">
+                    <span className="text-fg-muted">Total processed: </span>
+                    <span className="font-mono font-semibold tabular-nums text-fg">
+                      {outputQty || "0"} + {scrapQty || "0"} ={" "}
+                      {totalProcessed.toFixed(
+                        totalProcessed % 1 === 0 ? 0 : 2,
+                      )}
+                    </span>
+                    {outputUom ? (
+                      <span className="ml-1 text-fg-muted">{outputUom}</span>
+                    ) : null}
+                  </div>
+                ) : null}
+
+                {/* Notes with live character count */}
+                <div className="block min-w-0 sm:col-span-2">
+                  <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    Notes
+                  </span>
+                  <div className="relative">
+                    <textarea
+                      className="input min-h-[3rem] w-full"
+                      rows={2}
+                      value={notes}
+                      data-testid="production-actual-notes"
+                      onChange={(e) => setNotes(e.target.value)}
+                      placeholder="Notes (shift, operator comments, etc.)."
+                    />
+                    <div className="absolute bottom-1.5 right-2 text-3xs text-fg-muted tabular-nums pointer-events-none">
+                      {notes.length}
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </SectionCard>
+
+            <SectionCard
+              title="Preview — expected component consumption"
+              description="Estimated component consumption from the BOM and quantities entered. The final value is computed at submit time."
+            >
+              {/* Toggle button styled as a tab with arrow indicator and count badge */}
+              <button
+                type="button"
+                className={cn(
+                  "mb-3 flex items-center gap-2 rounded-md border px-3 py-1.5 text-sm font-medium transition-colors",
+                  previewExpanded
+                    ? "border-accent/30 bg-accent/10 text-accent"
+                    : "border-border bg-bg-subtle text-fg-muted hover:bg-bg-subtle/80",
+                )}
+                onClick={() => setPreviewExpanded((v) => !v)}
+              >
+                <span>{previewExpanded ? "▾" : "▸"}</span>
+                <span>
+                  {previewExpanded ? "Hide" : "Show"} components
+                </span>
+                <span
+                  className={cn(
+                    "rounded-full px-1.5 py-0.5 text-3xs font-semibold",
+                    previewExpanded
+                      ? "bg-accent/20 text-accent"
+                      : "bg-bg-subtle/80 text-fg-muted border border-border/60",
+                  )}
+                >
+                  {snapshot?.bom_lines.length ?? 0}
+                </span>
+              </button>
+
+              {previewExpanded && snapshot ? (
+                <>
+                  {/* Two-head composition banner — rendered above the preview
+                      table when the item has a linked base liquid BOM. The
+                      operator-facing copy follows the Tom-locked Hebrew
+                      register: "מוצר זה מורכב מאריזה (label) ובסיס נוזל
+                      (label). כל יחידה צורכת qty uom בסיס." */}
+                  {snapshot.base_bom_version_id_pinned ? (
+                    <div className="mb-3 text-sm text-fg-muted">
+                      מוצר זה מורכב מאריזה ({snapshot.bom_version_label}) ובסיס
+                      נוזל ({snapshot.base_bom_version_label}). כל יחידה צורכת{" "}
+                      {snapshot.base_qty_per_pack_unit}{" "}
+                      {snapshot.base_bom_final_output_uom} בסיס.
+                    </div>
+                  ) : null}
+                  {previewRows.length === 0 ? (
+                    <div className="text-xs text-fg-muted">
+                      Enter an output or scrap quantity to see expected
+                      consumption.
+                    </div>
+                  ) : (
+                    <div className="space-y-4">
+                      {/* Pack / single-head sub-group. Always rendered when
+                          rows exist (single-head items put every line here). */}
+                      {previewRowsByGroup.pack.length > 0 ? (
+                        <div>
+                          <h3 className="mb-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                            רכיבי אריזה ({previewRowsByGroup.pack.length})
+                          </h3>
+                          <div className="overflow-x-auto">
+                            <table className="w-full border-collapse text-xs">
+                              <thead>
+                                <tr className="border-b border-border/70 bg-bg-subtle/60">
+                                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                                    Component
+                                  </th>
+                                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                                    Expected consumption
+                                  </th>
+                                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                                    Unit
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {previewRowsByGroup.pack.map((r) => (
+                                  <tr
+                                    key={r.component_id}
+                                    className="border-b border-border/40 last:border-b-0 even:bg-bg-subtle/30"
+                                  >
+                                    <td className="px-3 py-2">
+                                      <div className="text-fg-strong">
+                                        {r.component_name}
+                                      </div>
+                                      {isAdmin ? (
+                                        <div className="font-mono text-3xs text-fg-muted">
+                                          {r.component_id}
+                                        </div>
+                                      ) : null}
+                                    </td>
+                                    <td className="px-3 py-2 font-mono tabular-nums text-fg">
+                                      {r.consumption_preview}
+                                    </td>
+                                    <td className="px-3 py-2 text-fg-muted">
+                                      {r.component_uom ?? "—"}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                          <div className="mt-1 px-3 text-right text-3xs text-fg-muted">
+                            Total {previewRowsByGroup.pack.length} component
+                            {previewRowsByGroup.pack.length !== 1 ? "s" : ""}
+                          </div>
+                        </div>
+                      ) : null}
+
+                      {/* Base / liquid sub-group. Rendered ONLY when at least
+                          one base line exists (i.e. the item has a linked
+                          base BOM AND that BOM has component lines). */}
+                      {previewRowsByGroup.base.length > 0 ? (
+                        <div>
+                          <h3 className="mb-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                            רכיבי נוזל ({previewRowsByGroup.base.length})
+                          </h3>
+                          <div className="overflow-x-auto">
+                            <table className="w-full border-collapse text-xs">
+                              <thead>
+                                <tr className="border-b border-border/70 bg-bg-subtle/60">
+                                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                                    Component
+                                  </th>
+                                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                                    Expected consumption
+                                  </th>
+                                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                                    Unit
+                                  </th>
+                                </tr>
+                              </thead>
+                              <tbody>
+                                {previewRowsByGroup.base.map((r) => (
+                                  <tr
+                                    key={r.component_id}
+                                    className="border-b border-border/40 last:border-b-0 even:bg-bg-subtle/30"
+                                  >
+                                    <td className="px-3 py-2">
+                                      <div className="text-fg-strong">
+                                        {r.component_name}
+                                      </div>
+                                      {isAdmin ? (
+                                        <div className="font-mono text-3xs text-fg-muted">
+                                          {r.component_id}
+                                        </div>
+                                      ) : null}
+                                    </td>
+                                    <td className="px-3 py-2 font-mono tabular-nums text-fg">
+                                      {r.consumption_preview}
+                                    </td>
+                                    <td className="px-3 py-2 text-fg-muted">
+                                      {r.component_uom ?? "—"}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                          <div className="mt-1 px-3 text-right text-3xs text-fg-muted">
+                            Total {previewRowsByGroup.base.length} component
+                            {previewRowsByGroup.base.length !== 1 ? "s" : ""}
+                          </div>
+                        </div>
+                      ) : null}
+                    </div>
+                  )}
+                </>
+              ) : null}
+            </SectionCard>
+
+            {/* Sticky submit area with backdrop blur */}
+            <div className="sticky bottom-0 z-10 flex items-center justify-end gap-2 border-t border-border/60 bg-white/80 py-3 backdrop-blur-sm dark:bg-gray-950/80">
+              <button type="button" className="btn" onClick={resetFlow}>
+                Cancel and start over
+              </button>
+              <button
+                type="submit"
+                className={cn(
+                  "btn btn-primary gap-1.5",
+                  (!canSubmit || phase === "submitting") && "cursor-not-allowed opacity-60",
+                )}
+                disabled={phase === "submitting" || !canSubmit}
+                data-testid="production-actual-submit"
+                title={
+                  !canSubmit
+                    ? "Operator or admin role required to submit"
+                    : phase === "submitting"
+                      ? "Submitting…"
+                      : "Submit (⌘+Enter)"
+                }
+              >
+                {phase === "submitting" ? (
+                  "Submitting…"
+                ) : !canSubmit ? (
+                  <>
+                    <span aria-hidden>🔒</span>
+                    Read-only — operator role required
+                  </>
+                ) : (
+                  "Submit production report"
+                )}
+              </button>
+            </div>
+          </form>
+        </div>
       ) : null}
 
       {/* ---------------------------------------------------------------------------
@@ -1807,7 +2352,7 @@ export default function ProductionActualPage() {
                   {historyRows.map((r) => (
                     <tr
                       key={r.submission_id}
-                      className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
+                      className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40 even:bg-bg-subtle/30"
                     >
                       <td className="px-3 py-2">
                         <div className="font-medium text-fg">{r.item_name}</div>
@@ -1822,7 +2367,12 @@ export default function ProductionActualPage() {
                         {r.bom_version_label}
                       </td>
                       <td className="px-3 py-2 text-fg-muted">
-                        {fmtDate(r.event_at)}
+                        <time
+                          dateTime={r.event_at}
+                          title={r.event_at}
+                        >
+                          {fmtRelativeTime(r.event_at)}
+                        </time>
                       </td>
                       <td className="px-3 py-2 text-right text-fg-muted">
                         {r.consumption_count}
