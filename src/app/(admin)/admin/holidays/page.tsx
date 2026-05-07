@@ -1602,8 +1602,7 @@ function BulkImportModal({
       return arr.map((r, i) => coerceRow(r, i));
     }
     const lines = trimmed
-      .split(/?
-/)
+      .split(/\r?\n/)
       .map((l) => l.trim())
       .filter((l) => l.length > 0);
     if (lines.length < 2) {
@@ -1847,8 +1846,7 @@ function BulkImportModal({
               setPreview(null);
             }}
             placeholder={
-              "holiday_date,holiday_name,holiday_name_he,type,blocks_pickup,blocks_supply,notes
-2027-12-31,New Year Eve,(Hebrew display name here),full_holiday,true,true,Tom factory closure"
+              "holiday_date,holiday_name,holiday_name_he,type,blocks_pickup,blocks_supply,notes\n2027-12-31,New Year Eve,(Hebrew display name here),full_holiday,true,true,Tom factory closure"
             }
             disabled={busy}
             rows={8}
