@@ -43,11 +43,27 @@ interface LedgerRow {
   qty_delta: string;
   uom: string;
   event_at: string;
+  posted_at?: string | null;
   post_status: string;
   reported_by_user_id: string | null;
   reported_by_snapshot: string | null;
   source_event_id: string | null;
+  source_channel?: string | null;
   notes: string | null;
+  // Tranche 1 enrichment (additive 2026-05-07).
+  item_name?: string | null;
+  lw_task_id?: string | null;
+  wp_order_id?: string | null;
+  lw_destination_city?: string | null;
+  lw_destination_recipient_name?: string | null;
+  recipient_hidden_reason?: "unauthorized_role" | "source_unavailable" | null;
+  related_po_line_id?: string | null;
+  po_id?: string | null;
+  po_number?: string | null;
+  supplier_name?: string | null;
+  related_movement_id?: string | null;
+  original_event_at?: string | null;
+  original_movement_type?: string | null;
 }
 
 interface LedgerResponse {
@@ -394,9 +410,87 @@ function DetailsDrawer({
             <h3 className="mb-1.5 text-2xs font-semibold uppercase tracking-sops text-fg-subtle">
               Item
             </h3>
-            <div className="font-mono text-sm text-fg">{row.item_id}</div>
+            {row.item_name ? (
+              <div className="text-sm font-medium text-fg">{row.item_name}</div>
+            ) : null}
+            <div className="font-mono text-xs text-fg-muted">{row.item_id}</div>
             <div className="mt-1 text-xs text-fg-muted">Type: {row.item_type}</div>
           </section>
+
+          {/* Iteration 25 — Order / Source section */}
+          {(row.wp_order_id ||
+            row.lw_task_id ||
+            row.po_number ||
+            row.supplier_name ||
+            row.original_event_at) ? (
+            <section>
+              <h3 className="mb-1.5 text-2xs font-semibold uppercase tracking-sops text-fg-subtle">
+                Order / Source
+              </h3>
+              <dl className="space-y-1.5 text-xs">
+                {row.wp_order_id ? (
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-fg-muted">Order</dt>
+                    <dd className="font-mono text-fg">{row.wp_order_id}</dd>
+                  </div>
+                ) : null}
+                {row.lw_task_id ? (
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-fg-muted">LionWheel task</dt>
+                    <dd className="font-mono text-fg">#{row.lw_task_id}</dd>
+                  </div>
+                ) : null}
+                {row.lw_destination_recipient_name ? (
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-fg-muted">Recipient</dt>
+                    <dd className="text-fg">
+                      {row.lw_destination_recipient_name}
+                    </dd>
+                  </div>
+                ) : row.recipient_hidden_reason === "unauthorized_role" ? (
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-fg-muted">Recipient</dt>
+                    <dd className="text-fg-subtle">
+                      hidden by your role
+                    </dd>
+                  </div>
+                ) : null}
+                {row.lw_destination_city ? (
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-fg-muted">City</dt>
+                    <dd className="text-fg">{row.lw_destination_city}</dd>
+                  </div>
+                ) : null}
+                {row.po_number ? (
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-fg-muted">Purchase order</dt>
+                    <dd className="font-mono text-fg">{row.po_number}</dd>
+                  </div>
+                ) : null}
+                {row.supplier_name ? (
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-fg-muted">Supplier</dt>
+                    <dd className="text-fg">{row.supplier_name}</dd>
+                  </div>
+                ) : null}
+                {row.original_event_at ? (
+                  <div className="flex justify-between gap-4">
+                    <dt className="text-fg-muted">Reverses</dt>
+                    <dd className="text-fg">
+                      {formatFullDateTime(row.original_event_at)}
+                      {row.original_movement_type ? (
+                        <span className="ml-1 text-fg-subtle">
+                          (
+                          {mvMeta(row.original_movement_type).label}
+                          )
+                        </span>
+                      ) : null}
+                    </dd>
+                  </div>
+                ) : null}
+              </dl>
+            </section>
+          ) : null}
 
           <section>
             <h3 className="mb-1.5 text-2xs font-semibold uppercase tracking-sops text-fg-subtle">
@@ -471,6 +565,76 @@ function DetailsDrawer({
   );
 }
 
+// === Iteration 21 — Business-context line =================================
+// One line per row that captures "which business event this movement
+// belongs to". Server-enriched fields (Tranche 1 API) drive this; older
+// rows whose enrichment is null fall back to a neutral "—".
+function businessContext(row: LedgerRow): {
+  primary: string | null;
+  secondary: string | null;
+} {
+  // Shipment context (LW pick/unpick, future FG_OUT_PICK)
+  if (row.wp_order_id || row.lw_task_id) {
+    const pieces: string[] = [];
+    if (row.wp_order_id) pieces.push(row.wp_order_id);
+    else if (row.lw_task_id) pieces.push(`Task #${row.lw_task_id}`);
+    const recipient = row.lw_destination_recipient_name;
+    const city = row.lw_destination_city;
+    if (recipient) pieces.push(recipient);
+    else if (row.recipient_hidden_reason === "unauthorized_role")
+      pieces.push("(recipient hidden)");
+    if (city) pieces.push(city);
+    return {
+      primary: pieces[0] ?? null,
+      secondary: pieces.slice(1).join(" · ") || null,
+    };
+  }
+  // PO context (GR / GR reversal)
+  if (row.po_number || row.supplier_name) {
+    const pieces: string[] = [];
+    if (row.po_number) pieces.push(row.po_number);
+    if (row.supplier_name) pieces.push(row.supplier_name);
+    return {
+      primary: pieces[0] ?? null,
+      secondary: pieces.slice(1).join(" · ") || null,
+    };
+  }
+  // Reversal pointing back at an original
+  if (row.original_event_at) {
+    const d = new Date(row.original_event_at);
+    return {
+      primary: `↶ Reversal of ${d.toLocaleDateString("en-GB", { day: "2-digit", month: "short" })} ${d.toLocaleTimeString("en-GB", { hour: "2-digit", minute: "2-digit" })}`,
+      secondary: row.original_movement_type ? mvMeta(row.original_movement_type).label : null,
+    };
+  }
+  return { primary: null, secondary: null };
+}
+
+function ItemDisplay({ row, mono = false }: { row: LedgerRow; mono?: boolean }) {
+  const name = row.item_name ?? null;
+  const sku = row.item_id;
+  return (
+    <span
+      className="inline-flex flex-col items-start"
+      title={`${name ? name + " · " : ""}${sku} (${row.item_type})`}
+    >
+      {name ? (
+        <span className="text-sm leading-tight text-fg">{name}</span>
+      ) : null}
+      <span
+        className={cn(
+          "leading-tight text-2xs",
+          mono ? "font-mono" : "font-mono",
+          name ? "text-fg-subtle" : "text-fg",
+        )}
+      >
+        {sku}
+        <span className="ml-1.5 uppercase text-fg-subtle">{row.item_type}</span>
+      </span>
+    </span>
+  );
+}
+
 // === Iteration 19 — Mobile card ===========================================
 function MovementCardMobile({
   row,
@@ -481,15 +645,18 @@ function MovementCardMobile({
 }) {
   const meta = mvMeta(row.movement_type);
   const isReversal = meta.kind === "reversal";
+  const ctx = businessContext(row);
   return (
     <button
       type="button"
       onClick={onOpen}
       className={cn(
         "flex w-full flex-col gap-1.5 rounded-lg border bg-bg px-3 py-3 text-left transition hover:bg-bg-subtle/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
-        isReversal ? "border-l-4 border-l-info/60 border-y-border/70 border-r-border/70" : "border-border/70",
+        isReversal
+          ? "border-l-4 border-l-info/60 border-y-border/70 border-r-border/70"
+          : "border-border/70",
       )}
-      aria-label={`Open details for ${meta.label} on ${row.item_id}`}
+      aria-label={`Open details for ${meta.label} on ${row.item_name ?? row.item_id}`}
     >
       <div className="flex items-center justify-between gap-2">
         <MovementPill raw={row.movement_type} />
@@ -497,16 +664,16 @@ function MovementCardMobile({
           {formatTimeOnly(row.event_at)}
         </span>
       </div>
+      {ctx.primary ? (
+        <div className="flex flex-wrap items-baseline gap-1.5 text-2xs">
+          <span className="font-medium text-fg">{ctx.primary}</span>
+          {ctx.secondary ? (
+            <span className="text-fg-subtle">{ctx.secondary}</span>
+          ) : null}
+        </div>
+      ) : null}
       <div className="flex items-baseline justify-between gap-3">
-        <span
-          className="truncate font-mono text-xs text-fg"
-          title={`SKU: ${row.item_id} (${row.item_type})`}
-        >
-          {row.item_id}
-          <span className="ml-1.5 text-2xs uppercase text-fg-subtle">
-            {row.item_type}
-          </span>
-        </span>
+        <ItemDisplay row={row} />
         <QtyDeltaCell
           value={row.qty_delta}
           uom={row.uom}
@@ -514,9 +681,7 @@ function MovementCardMobile({
         />
       </div>
       <div className="flex items-center justify-between gap-2 text-2xs text-fg-subtle">
-        <span className="truncate">
-          {row.reported_by_snapshot ?? "—"}
-        </span>
+        <span className="truncate">{row.reported_by_snapshot ?? "—"}</span>
         <StatusPill status={row.post_status} />
       </div>
     </button>
@@ -655,19 +820,29 @@ export default function MovementLogPage() {
   const total =
     data?.total_matching ?? data?.total ?? data?.count ?? allRows.length;
 
-  // Iteration 10 — client-side search across loaded rows.
+  // Iteration 10 + 24 — client-side search across loaded rows.
+  // Now searches across enrichment fields too (item_name, wp_order_id,
+  // lw_task_id, recipient, city, supplier, po_number) so a planner can
+  // type "GT12651" or "WHITE SANGRIA" or "PO-2026" and find rows.
   const rows = useMemo(() => {
     if (!filters.search.trim()) return allRows;
     const q = filters.search.trim().toLowerCase();
     return allRows.filter((r) =>
       [
         r.item_id,
+        r.item_name ?? "",
         r.item_type,
         r.movement_type,
         r.uom,
         r.notes ?? "",
         r.reported_by_snapshot ?? "",
         r.source_event_id ?? "",
+        r.wp_order_id ?? "",
+        r.lw_task_id ?? "",
+        r.lw_destination_recipient_name ?? "",
+        r.lw_destination_city ?? "",
+        r.po_number ?? "",
+        r.supplier_name ?? "",
         mvMeta(r.movement_type).label,
       ]
         .join(" ")
@@ -721,6 +896,20 @@ export default function MovementLogPage() {
 
   function handleFieldChange(field: keyof Filters, value: string) {
     setFilters((prev) => ({ ...prev, [field]: value }));
+  }
+
+  // Iteration 22 — date filters auto-apply.
+  // The original UX hid date inputs inside collapsed Advanced Filters and
+  // required Apply; users (Tom 2026-05-07) reported "changing date does
+  // nothing." This handler updates state AND re-applies immediately, with
+  // no Apply click required.
+  function handleDateChange(field: "from_date" | "to_date", value: string) {
+    setFilters((prev) => {
+      const next = { ...prev, [field]: value };
+      setAppliedFilters(next);
+      setOffset(0);
+      return next;
+    });
   }
 
   function toggleKind(value: string) {
@@ -839,7 +1028,7 @@ export default function MovementLogPage() {
               type="search"
               value={filters.search}
               onChange={(e) => handleFieldChange("search", e.target.value)}
-              placeholder="SKU, type, reporter, notes…"
+              placeholder="Item, order #, customer, city, supplier, PO…"
               className="w-full rounded border border-border bg-bg px-3 py-2 pl-9 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40"
               aria-describedby="ml-search-hint"
             />
@@ -959,9 +1148,7 @@ export default function MovementLogPage() {
               <input
                 type="date"
                 value={filters.from_date}
-                onChange={(e) =>
-                  handleFieldChange("from_date", e.target.value)
-                }
+                onChange={(e) => handleDateChange("from_date", e.target.value)}
                 className="w-full rounded border border-border bg-bg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40"
               />
             </div>
@@ -972,12 +1159,53 @@ export default function MovementLogPage() {
               <input
                 type="date"
                 value={filters.to_date}
-                onChange={(e) => handleFieldChange("to_date", e.target.value)}
+                onChange={(e) => handleDateChange("to_date", e.target.value)}
                 className="w-full rounded border border-border bg-bg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40"
               />
             </div>
           </div>
         </details>
+
+        {/* Iteration 23 — quick date range up front (no Advanced unfold needed) */}
+        <div className="mt-3 flex flex-wrap items-end gap-3">
+          <div>
+            <label className="mb-1 block text-xs font-medium text-fg-muted" htmlFor="ml-from-quick">
+              From date
+            </label>
+            <input
+              id="ml-from-quick"
+              type="date"
+              value={filters.from_date}
+              onChange={(e) => handleDateChange("from_date", e.target.value)}
+              className="rounded border border-border bg-bg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40"
+            />
+          </div>
+          <div>
+            <label className="mb-1 block text-xs font-medium text-fg-muted" htmlFor="ml-to-quick">
+              To date
+            </label>
+            <input
+              id="ml-to-quick"
+              type="date"
+              value={filters.to_date}
+              onChange={(e) => handleDateChange("to_date", e.target.value)}
+              className="rounded border border-border bg-bg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40"
+            />
+          </div>
+          {(filters.from_date || filters.to_date) ? (
+            <button
+              type="button"
+              onClick={() => {
+                handleDateChange("from_date", "");
+                handleDateChange("to_date", "");
+              }}
+              className="btn btn-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+            >
+              Clear dates
+            </button>
+          ) : null}
+          <span className="text-2xs text-fg-subtle">Date filters apply automatically.</span>
+        </div>
 
         <div className="mt-4 flex flex-wrap items-center gap-2">
           <button
@@ -1106,33 +1334,34 @@ export default function MovementLogPage() {
                     count={dayRows.length}
                   />
                   <table className="min-w-full text-sm">
-                    <thead className="sr-only">
-                      <tr>
-                        <th>Time</th>
-                        <th>Type</th>
-                        <th>Item</th>
-                        <th>Quantity</th>
-                        <th>Submitted by</th>
-                        <th>Status</th>
+                    <thead>
+                      <tr className="border-b border-border/40 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                        <th className="py-2 pr-4">Time</th>
+                        <th className="py-2 pr-4">Type</th>
+                        <th className="py-2 pr-4">Item</th>
+                        <th className="py-2 pr-4">Order / Source</th>
+                        <th className="py-2 pr-4 text-right">Qty Δ</th>
+                        <th className="py-2 pr-4">Submitted by</th>
+                        <th className="py-2">Status</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/40">
                       {dayRows.map((row) => {
                         const meta = mvMeta(row.movement_type);
                         const isReversal = meta.kind === "reversal";
+                        const ctx = businessContext(row);
                         return (
                           <tr
                             key={row.movement_id}
                             className={cn(
                               "group cursor-pointer transition hover:bg-bg-subtle/40 focus-within:bg-bg-subtle/40",
-                              isReversal &&
-                                "border-l-4 border-l-info/40",
-                              density === "compact" ? "h-9" : "h-12",
+                              isReversal && "border-l-4 border-l-info/40",
+                              density === "compact" ? "h-10" : "h-14",
                             )}
                             onClick={() => setDrawerRow(row)}
                             tabIndex={0}
                             role="button"
-                            aria-label={`Open details for ${meta.label} on ${row.item_id}`}
+                            aria-label={`Open details for ${meta.label} on ${row.item_name ?? row.item_id}`}
                             onKeyDown={(e) => {
                               if (e.key === "Enter" || e.key === " ") {
                                 e.preventDefault();
@@ -1147,17 +1376,23 @@ export default function MovementLogPage() {
                               <MovementPill raw={row.movement_type} />
                             </td>
                             <td className="pr-4">
-                              <span
-                                className="inline-flex items-baseline gap-1.5"
-                                title={`SKU: ${row.item_id} (${row.item_type})`}
-                              >
-                                <span className="font-mono text-xs text-fg">
-                                  {row.item_id}
+                              <ItemDisplay row={row} />
+                            </td>
+                            <td className="pr-4 text-xs">
+                              {ctx.primary ? (
+                                <span className="inline-flex flex-col items-start leading-tight">
+                                  <span className="font-medium text-fg">
+                                    {ctx.primary}
+                                  </span>
+                                  {ctx.secondary ? (
+                                    <span className="text-2xs text-fg-subtle">
+                                      {ctx.secondary}
+                                    </span>
+                                  ) : null}
                                 </span>
-                                <span className="text-2xs uppercase text-fg-subtle">
-                                  {row.item_type}
-                                </span>
-                              </span>
+                              ) : (
+                                <span className="text-fg-subtle">—</span>
+                              )}
                             </td>
                             <td className="pr-4 text-right">
                               <QtyDeltaCell
