@@ -10,7 +10,9 @@ function stripTrailingZeros(s: string): string {
 export function formatQty(value: number, uom: string): string {
   const u = uom.toUpperCase()
   if (['UNIT', 'PCS', 'BAG', 'CASE', 'BOX', 'BOTTLE', 'TIN'].includes(u)) {
-    return Math.round(value).toLocaleString()
+    return Number.isInteger(value)
+      ? value.toLocaleString()
+      : stripTrailingZeros(value.toFixed(3))
   }
   if (['L', 'ML', 'KG', 'G', 'MG', 'TON'].includes(u)) {
     return stripTrailingZeros(value.toFixed(3))
