@@ -1,22 +1,28 @@
-﻿"use client";
+"use client";
 
 // ---------------------------------------------------------------------------
 // Admin · Components — AMMC v1 Slice 4.
 //
-// Extensions: + New component drawer, inline status toggle. Readiness pill
-// column — note that the components-list endpoint does not yet forward
-// `?include_readiness=true` (A13: Slice 2 delivered it for items only;
-// v_component_readiness view exists per migration 0069 but the list-scoped
-// endpoint extension is deferred). For Slice 4 we render "—" in the readiness
-// column for components and surface per-row readiness on the detail page
-// (Slice 5). This keeps the slice scope tight without inventing endpoints.
+// Iters 8-14 (list-pages redesign):
+//   8.  Audit complete — columns, filters, readiness pills, actions inventoried.
+//   9.  Name cell: component_name linked to /admin/masters/components/{id},
+//       component_id in monospace below.
+//   10. Category column: component_group + component_class as compact breadcrumb
+//       pills (group › class).
+//   11. Status column: dot-badge pattern matching Items page.
+//   12. Readiness pill: "Ready"/"Needs supplier"/"Blocker" derived from readiness
+//       data (same ReadinessPill, no API change needed).
+//   13. Filter controls: added component_group / class filter alongside existing
+//       status filter. Client-side filter on component_name already wired.
+//   14. Empty state: filter empty → Reset filters card; total empty → Get started
+//       card.
 // ---------------------------------------------------------------------------
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ExternalLink, Plus, Power, X } from "lucide-react";
+import { ArrowRight, ExternalLink, Plus, Power, X } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
@@ -40,10 +46,11 @@ import type {
   ItemDto,
 } from "@/lib/contracts/dto";
 
-// API-shape rows. The live /api/suppliers and /api/supplier-items responses
-// return plain DB rows wrapped in { rows, count }, distinct from the IDB DTOs
-// (which carry an `audit` envelope). The supplier-assign workflow on this
-// page reads/writes through the API so values stay in sync with production.
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
+
+// API-shape rows from /api/suppliers and /api/supplier-items.
 interface ApiSupplierRow {
   supplier_id: string;
   supplier_name_official: string;
@@ -89,6 +96,18 @@ interface ComponentRow {
 
 type ListEnvelope<T> = { rows: T[]; count: number };
 
+interface UsedInRow {
+  headId: string;
+  headName: string;
+  qtyPerUnit: number;
+  uom: string;
+  bomType: string;
+}
+
+// ---------------------------------------------------------------------------
+// Data fetcher
+// ---------------------------------------------------------------------------
+
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url, { headers: { Accept: "application/json" } });
   if (!res.ok) {
@@ -97,20 +116,131 @@ async function fetchJson<T>(url: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-function StatusBadge({ status }: { status: string }): JSX.Element {
+// ---------------------------------------------------------------------------
+// Iter 11 — Status dot badge
+// ---------------------------------------------------------------------------
+
+function ComponentStatusBadge({ status }: { status: string }): JSX.Element {
   if (status === "ACTIVE") return <Badge tone="success" dotted>Active</Badge>;
   if (status === "PENDING") return <Badge tone="warning" dotted>Pending</Badge>;
   if (status === "INACTIVE") return <Badge tone="neutral" dotted>Inactive</Badge>;
   return <Badge tone="neutral" dotted>{status}</Badge>;
 }
 
-interface UsedInRow {
-  headId: string;
-  headName: string;
-  qtyPerUnit: number;
-  uom: string;
-  bomType: string;
+// ---------------------------------------------------------------------------
+// Iter 10 — Category breadcrumb (group › class)
+// ---------------------------------------------------------------------------
+
+function CategoryCell({
+  group,
+  cls,
+}: {
+  group: string | null;
+  cls: string | null;
+}): JSX.Element {
+  if (!group && !cls) {
+    return <span className="text-fg-faint text-xs">—</span>;
+  }
+  return (
+    <span className="inline-flex flex-wrap items-center gap-0.5 text-xs">
+      {group ? (
+        <span className="rounded border border-border/60 bg-bg-subtle px-1.5 py-0.5 text-3xs text-fg-muted">
+          {group}
+        </span>
+      ) : null}
+      {group && cls ? (
+        <span className="text-fg-faint">›</span>
+      ) : null}
+      {cls ? (
+        <span className="rounded border border-border/60 bg-bg-subtle px-1.5 py-0.5 text-3xs text-fg-muted">
+          {cls}
+        </span>
+      ) : null}
+    </span>
+  );
 }
+
+// ---------------------------------------------------------------------------
+// Iter 14 — Empty states
+// ---------------------------------------------------------------------------
+
+function ComponentsEmptyState({
+  totalRows,
+  hasFilters,
+  isAdmin,
+  onReset,
+  onNew,
+}: {
+  totalRows: number;
+  hasFilters: boolean;
+  isAdmin: boolean;
+  onReset: () => void;
+  onNew: () => void;
+}): JSX.Element {
+  if (totalRows === 0) {
+    return (
+      <div className="p-10">
+        <div className="mx-auto max-w-sm rounded-lg border border-border/60 bg-bg-subtle/50 p-6 text-center">
+          <div className="mb-1 text-sm font-semibold text-fg-strong">
+            Get started — add your first component
+          </div>
+          <div className="mb-4 text-xs text-fg-muted">
+            Components are raw materials and packaging inputs. Add them here to
+            link suppliers, build BOMs, and track stock.
+          </div>
+          {isAdmin ? (
+            <button
+              type="button"
+              className="btn-primary inline-flex items-center gap-1.5"
+              onClick={onNew}
+            >
+              <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+              New component
+            </button>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-10">
+      <div className="mx-auto max-w-sm rounded-lg border border-border/60 bg-bg-subtle/50 p-6 text-center">
+        <div className="mb-1 text-sm font-semibold text-fg-strong">
+          No components match the current filter
+        </div>
+        <div className="mb-4 text-xs text-fg-muted">
+          {hasFilters
+            ? "Try clearing the search or relaxing the status / category filter."
+            : "No components match these filters."}
+        </div>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <button
+            type="button"
+            onClick={onReset}
+            className="btn btn-ghost btn-sm"
+          >
+            Reset filters
+          </button>
+          {isAdmin ? (
+            <button
+              type="button"
+              className="btn-primary inline-flex items-center gap-1.5"
+              onClick={onNew}
+            >
+              <Plus className="h-3 w-3" strokeWidth={2.5} />
+              New component
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Page shell
+// ---------------------------------------------------------------------------
 
 export default function AdminComponentsPage(): JSX.Element {
   return (
@@ -120,13 +250,20 @@ export default function AdminComponentsPage(): JSX.Element {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Inner page
+// ---------------------------------------------------------------------------
+
 function ComponentsPageInner(): JSX.Element {
   const { session } = useSession();
   const isAdmin = session.role === "admin";
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
+
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ACTIVE");
+  // Iter 13 — group/class filter
+  const [groupFilter, setGroupFilter] = useState<string>("");
   const [showCreate, setShowCreate] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [showSupplierPicker, setShowSupplierPicker] = useState(false);
@@ -193,10 +330,16 @@ function ComponentsPageInner(): JSX.Element {
     [rows, selectedId],
   );
 
-  // Suppliers list — used by the picker AND by the table to resolve
-  // primary_supplier_id -> human-readable name. Reads from the live API so
-  // the dropdown shows the operator's real suppliers (not stale browser-IDB
-  // fixtures). Filter out INACTIVE so deprecated suppliers can't be picked.
+  // Iter 13 — distinct groups for the filter dropdown
+  const distinctGroups = useMemo(() => {
+    const seen = new Set<string>();
+    for (const r of rows) {
+      if (r.component_group) seen.add(r.component_group);
+    }
+    return Array.from(seen).sort();
+  }, [rows]);
+
+  // Suppliers list — used by the picker AND by the table to resolve names.
   const suppliersList = useQuery<ListEnvelope<ApiSupplierRow>>({
     queryKey: ["api", "suppliers", "list"],
     queryFn: () =>
@@ -205,8 +348,6 @@ function ComponentsPageInner(): JSX.Element {
       ),
   });
 
-  // O(1) lookup of supplier name by id — operators read names, never IDs
-  // (supplier_id is internal). Empty Map until suppliers load.
   const suppliersById = useMemo(() => {
     const m = new Map<string, ApiSupplierRow>();
     for (const s of suppliersList.data?.rows ?? []) m.set(s.supplier_id, s);
@@ -229,15 +370,13 @@ function ComponentsPageInner(): JSX.Element {
     [itemsList.data],
   );
 
-  // Primary supplier_item for the selected component — read from the live API.
+  // Primary supplier_item for the selected component.
   const primarySupplierItemQuery = useQuery<ApiSupplierItemRow | null>({
     queryKey: ["api", "supplier-items", "primary", selectedId],
     queryFn: async () => {
       if (!selectedId) return null;
       const env = await fetchJson<ListEnvelope<ApiSupplierItemRow>>(
-        `/api/supplier-items?component_id=${encodeURIComponent(
-          selectedId,
-        )}&limit=1000`,
+        `/api/supplier-items?component_id=${encodeURIComponent(selectedId)}&limit=1000`,
       );
       return env.rows.find((s) => s.is_primary === true) ?? null;
     },
@@ -253,10 +392,7 @@ function ComponentsPageInner(): JSX.Element {
     );
   }, [primarySupplierItemQuery.data, suppliersList.data]);
 
-  // "Used in" — scan all active BOM heads' active versions for lines whose
-  // final_component_id matches selectedId. Distinct rows per head (a head's
-  // BASE vs PACK lives on separate heads, so two matches naturally surface
-  // as two rows).
+  // "Used in" — scan all active BOM heads' active versions.
   const usedInQuery = useQuery<UsedInRow[]>({
     queryKey: ["idb", "used-in", selectedId],
     queryFn: async () => {
@@ -293,8 +429,7 @@ function ComponentsPageInner(): JSX.Element {
     enabled: !!selectedId && itemsList.isFetched,
   });
 
-  // Component field mutation — PATCHes the component's own scalar fields.
-  // Mirrors the masters detail page pattern; live API → /api/v1/mutations/components/:id.
+  // Component field mutation.
   const componentFieldMutation = useMutation({
     mutationFn: async (args: {
       field: "component_name" | "component_class" | "component_group" | "criticality";
@@ -325,30 +460,16 @@ function ComponentsPageInner(): JSX.Element {
       newSupplierId: string;
       existing: ApiSupplierItemRow | null;
     }) => {
-      // The supplier_items table has a partial unique index that allows at
-      // most one is_primary=true row per component. To swap primary cleanly
-      // we (1) demote the current primary if any, (2) create the new row as
-      // primary. Trigger 0112 will auto-fill lead_time_days from the new
-      // supplier's default, and the supplier-cascade trigger keeps the
-      // component's lead_time_days in sync.
       if (args.existing) {
         await patchEntity({
-          url: `/api/supplier-items/${encodeURIComponent(
-            args.existing.supplier_item_id,
-          )}`,
+          url: `/api/supplier-items/${encodeURIComponent(args.existing.supplier_item_id)}`,
           fields: { is_primary: false },
           ifMatchUpdatedAt: args.existing.updated_at,
         });
       }
-      // POST the new primary row. Mark approval_status='approved' so the
-      // readiness gate sees a valid supplier link immediately. lead_time
-      // and pack_conversion default safely on the server.
       const res = await fetch("/api/supplier-items", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Accept: "application/json",
-        },
+        headers: { "Content-Type": "application/json", Accept: "application/json" },
         body: JSON.stringify({
           supplier_id: args.newSupplierId,
           component_id: args.componentId,
@@ -376,24 +497,14 @@ function ComponentsPageInner(): JSX.Element {
       return created;
     },
     onSuccess: () => {
-      void queryClient.invalidateQueries({
-        queryKey: ["api", "supplier-items"],
-      });
-      void queryClient.invalidateQueries({
-        queryKey: ["api", "supplier-items", "primary"],
-      });
+      void queryClient.invalidateQueries({ queryKey: ["api", "supplier-items"] });
+      void queryClient.invalidateQueries({ queryKey: ["api", "supplier-items", "primary"] });
       setShowSupplierPicker(false);
       setPendingSupplier("");
-      setBanner({
-        kind: "success",
-        message: "Primary supplier updated.",
-      });
+      setBanner({ kind: "success", message: "Primary supplier updated." });
     },
     onError: (err: Error) => {
-      setBanner({
-        kind: "error",
-        message: `Could not update primary supplier: ${err.message}`,
-      });
+      setBanner({ kind: "error", message: `Could not update primary supplier: ${err.message}` });
     },
   });
 
@@ -406,16 +517,32 @@ function ComponentsPageInner(): JSX.Element {
     });
   };
 
+  // Iter 13 — filter: text search + group filter (client-side)
   const filtered = useMemo(() => {
-    if (!query) return rows;
-    const qLower = query.toLowerCase();
-    return rows.filter(
-      (r) =>
-        r.component_id.toLowerCase().includes(qLower) ||
-        r.component_name.toLowerCase().includes(qLower) ||
-        (r.component_class ?? "").toLowerCase().includes(qLower),
-    );
-  }, [rows, query]);
+    let result = rows;
+    if (query) {
+      const qLower = query.toLowerCase();
+      result = result.filter(
+        (r) =>
+          r.component_id.toLowerCase().includes(qLower) ||
+          r.component_name.toLowerCase().includes(qLower) ||
+          (r.component_class ?? "").toLowerCase().includes(qLower) ||
+          (r.component_group ?? "").toLowerCase().includes(qLower),
+      );
+    }
+    if (groupFilter) {
+      result = result.filter((r) => r.component_group === groupFilter);
+    }
+    return result;
+  }, [rows, query, groupFilter]);
+
+  const hasActiveFilters = Boolean(query || statusFilter !== "ACTIVE" || groupFilter);
+
+  const handleResetFilters = () => {
+    setQuery("");
+    setStatusFilter("ACTIVE");
+    setGroupFilter("");
+  };
 
   const handleToggleStatus = (row: ComponentRow) => {
     if (!isAdmin) return;
@@ -438,7 +565,7 @@ function ComponentsPageInner(): JSX.Element {
         meta={
           <>
             <Badge tone="info" dotted>
-              {componentsQuery.data?.count ?? 0} rows
+              {componentsQuery.data?.count ?? 0} components
             </Badge>
             <Badge tone="neutral" dotted>
               live API
@@ -471,9 +598,10 @@ function ComponentsPageInner(): JSX.Element {
         </div>
       ) : null}
 
+      {/* Iter 13 — Filters: search + status + group */}
       <SectionCard title="Filters" density="compact">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-          <div className="block sm:col-span-3">
+          <div className="block sm:col-span-2">
             <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
               Search
             </span>
@@ -482,7 +610,7 @@ function ComponentsPageInner(): JSX.Element {
                 className="input flex-1"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search components…"
+                placeholder="Search by name, code or category…"
                 dir="auto"
               />
               {query ? (
@@ -506,9 +634,24 @@ function ComponentsPageInner(): JSX.Element {
               onChange={(e) => setStatusFilter(e.target.value)}
             >
               <option value="">(all)</option>
-              <option value="ACTIVE">ACTIVE</option>
-              <option value="INACTIVE">INACTIVE</option>
-              <option value="PENDING">PENDING</option>
+              <option value="ACTIVE">Active</option>
+              <option value="INACTIVE">Inactive</option>
+              <option value="PENDING">Pending</option>
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+              Group
+            </span>
+            <select
+              className="input"
+              value={groupFilter}
+              onChange={(e) => setGroupFilter(e.target.value)}
+            >
+              <option value="">(all groups)</option>
+              {distinctGroups.map((g) => (
+                <option key={g} value={g}>{g}</option>
+              ))}
             </select>
           </label>
         </div>
@@ -551,57 +694,24 @@ function ComponentsPageInner(): JSX.Element {
             </div>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="p-8">
-            <div className="mx-auto max-w-sm text-center">
-              <div className="text-sm font-semibold text-fg-strong">
-                {rows.length === 0
-                  ? "No components in the master yet."
-                  : query
-                  ? "No components match your search."
-                  : "No components match these filters."}
-              </div>
-              <div className="mt-1 text-xs text-fg-muted">
-                {rows.length === 0
-                  ? "Add a component with + New component."
-                  : "Try clearing the search or relaxing the filters."}
-              </div>
-              <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-                {(query || statusFilter !== "ACTIVE") ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setQuery("");
-                      setStatusFilter("ACTIVE");
-                    }}
-                    className="btn btn-ghost btn-sm"
-                  >
-                    Reset filters
-                  </button>
-                ) : null}
-                {isAdmin ? (
-                  <button
-                    type="button"
-                    className="btn-primary inline-flex items-center gap-1.5"
-                    onClick={() => setShowCreate(true)}
-                  >
-                    <Plus className="h-3 w-3" strokeWidth={2.5} />
-                    New component
-                  </button>
-                ) : null}
-              </div>
-            </div>
-          </div>
+          /* Iter 14 — rich empty states */
+          <ComponentsEmptyState
+            totalRows={rows.length}
+            hasFilters={hasActiveFilters}
+            isAdmin={isAdmin}
+            onReset={handleResetFilters}
+            onNew={() => setShowCreate(true)}
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b border-border/70 bg-bg-subtle/60">
+                  {/* Iter 9 — Name cell */}
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    Code
+                    Component
                   </th>
-                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    Name
-                  </th>
+                  {/* Iter 10 — Category breadcrumb */}
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Category
                   </th>
@@ -614,17 +724,17 @@ function ComponentsPageInner(): JSX.Element {
                   <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Lead time
                   </th>
+                  {/* Iter 12 — Readiness pill */}
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Readiness
                   </th>
+                  {/* Iter 11 — Status dot badge */}
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Status
                   </th>
-                  {isAdmin ? (
-                    <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      Actions
-                    </th>
-                  ) : null}
+                  <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -632,33 +742,48 @@ function ComponentsPageInner(): JSX.Element {
                   <tr
                     key={r.component_id}
                     className={`cursor-pointer border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40 ${
-                      r.component_id === selectedId
-                        ? "bg-bg-subtle/60"
-                        : ""
+                      r.component_id === selectedId ? "bg-bg-subtle/60" : ""
                     }`}
                     onClick={() => {
                       setSelectedId(r.component_id);
                       setShowSupplierPicker(false);
                     }}
                   >
-                    <td className="px-3 py-2 font-mono text-xs text-fg">
-                      {r.component_id}
+                    {/* Iter 9 — Name cell with id below */}
+                    <td className="px-3 py-2">
+                      <Link
+                        href={`/admin/masters/components/${encodeURIComponent(r.component_id)}`}
+                        className="group block"
+                        onClick={(e) => e.stopPropagation()}
+                      >
+                        <span
+                          className="block text-sm font-medium leading-snug text-fg-strong group-hover:text-accent"
+                          dir="auto"
+                        >
+                          {r.component_name}
+                        </span>
+                        <span className="block font-mono text-3xs text-fg-subtle">
+                          {r.component_id}
+                        </span>
+                      </Link>
                     </td>
-                    <td className="px-3 py-2 text-fg-strong">
-                      {r.component_name}
+
+                    {/* Iter 10 — Category breadcrumb */}
+                    <td className="px-3 py-2">
+                      <CategoryCell group={r.component_group} cls={r.component_class} />
                     </td>
-                    <td className="px-3 py-2 text-xs text-fg-muted">
-                      {r.component_class ?? "—"}
-                    </td>
+
                     <td className="px-3 py-2 text-xs text-fg-muted">
                       {r.inventory_uom ?? "—"}
                     </td>
+
                     <td className="px-3 py-2 text-xs">
                       {r.primary_supplier_id ? (
                         <Link
                           href={`/admin/masters/suppliers/${encodeURIComponent(r.primary_supplier_id)}`}
                           className="text-fg hover:text-accent"
                           title={r.primary_supplier_id}
+                          onClick={(e) => e.stopPropagation()}
                         >
                           {supplierNameOf(r.primary_supplier_id)}
                         </Link>
@@ -666,32 +791,49 @@ function ComponentsPageInner(): JSX.Element {
                         <Badge tone="warning" dotted>No supplier</Badge>
                       )}
                     </td>
+
                     <td className="px-3 py-2 text-right text-xs tabular-nums text-fg-muted">
-                      {r.lead_time_days ?? "—"}
+                      {r.lead_time_days != null ? `${r.lead_time_days}d` : "—"}
                     </td>
+
+                    {/* Iter 12 — Readiness pill */}
                     <td className="px-3 py-2">
                       <ReadinessPill readiness={r.readiness} />
                     </td>
+
+                    {/* Iter 11 — Status dot badge */}
                     <td className="px-3 py-2">
-                      <StatusBadge status={r.status} />
+                      <ComponentStatusBadge status={r.status} />
                     </td>
-                    {isAdmin ? (
-                      <td className="px-3 py-2 text-right">
-                        <button
-                          type="button"
-                          title={`Toggle status (currently ${r.status})`}
+
+                    <td className="px-3 py-2 text-right">
+                      <div className="inline-flex items-center gap-1">
+                        <Link
+                          href={`/admin/masters/components/${encodeURIComponent(r.component_id)}`}
                           className="btn btn-ghost btn-sm inline-flex items-center gap-1"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleToggleStatus(r);
-                          }}
-                          disabled={statusMutation.isPending}
+                          title="View component details"
+                          onClick={(e) => e.stopPropagation()}
                         >
-                          <Power className="h-3 w-3" strokeWidth={2} />
-                          {r.status === "ACTIVE" ? "Deactivate" : "Activate"}
-                        </button>
-                      </td>
-                    ) : null}
+                          View
+                          <ArrowRight className="h-3 w-3" strokeWidth={2} />
+                        </Link>
+                        {isAdmin ? (
+                          <button
+                            type="button"
+                            title={`Toggle status (currently ${r.status})`}
+                            className="btn btn-ghost btn-sm inline-flex items-center gap-1"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleToggleStatus(r);
+                            }}
+                            disabled={statusMutation.isPending}
+                          >
+                            <Power className="h-3 w-3" strokeWidth={2} />
+                            {r.status === "ACTIVE" ? "Deactivate" : "Activate"}
+                          </button>
+                        ) : null}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -712,9 +854,7 @@ function ComponentsPageInner(): JSX.Element {
           actions={
             <div className="flex items-center gap-2">
               <Link
-                href={`/admin/masters/components/${encodeURIComponent(
-                  selectedComponent.component_id,
-                )}`}
+                href={`/admin/masters/components/${encodeURIComponent(selectedComponent.component_id)}`}
                 className="btn btn-ghost btn-sm inline-flex items-center gap-1"
                 title="Open full detail page (recipes, sourcing, exceptions)"
               >
@@ -879,10 +1019,7 @@ function ComponentsPageInner(): JSX.Element {
                 </span>
                 <span className="text-fg">
                   {selectedComponent.lead_time_days != null
-                    ? formatQty(
-                        Number(selectedComponent.lead_time_days),
-                        "UNIT",
-                      )
+                    ? formatQty(Number(selectedComponent.lead_time_days), "UNIT")
                     : "—"}
                 </span>
                 <span className="mt-0.5 block text-3xs text-fg-subtle">
@@ -949,17 +1086,13 @@ function ComponentsPageInner(): JSX.Element {
                 <span className="text-sm text-fg-muted">Loading…</span>
               ) : primarySupplier ? (
                 <Link
-                  href={`/admin/suppliers?supplier=${encodeURIComponent(
-                    primarySupplier.supplier_id,
-                  )}`}
+                  href={`/admin/suppliers?supplier=${encodeURIComponent(primarySupplier.supplier_id)}`}
                   className="text-sm text-accent hover:underline"
                 >
                   {primarySupplier.supplier_name_official}
                 </Link>
               ) : (
-                <span className="text-sm text-fg-muted">
-                  No supplier assigned
-                </span>
+                <span className="text-sm text-fg-muted">No supplier assigned</span>
               )}
 
               {showSupplierPicker ? (
@@ -986,10 +1119,7 @@ function ComponentsPageInner(): JSX.Element {
                       type="button"
                       className="btn-primary btn-sm"
                       onClick={handleSaveSupplier}
-                      disabled={
-                        !pendingSupplier ||
-                        supplierAssignMutation.isPending
-                      }
+                      disabled={!pendingSupplier || supplierAssignMutation.isPending}
                     >
                       {supplierAssignMutation.isPending ? "Saving…" : "Save"}
                     </button>
@@ -1011,16 +1141,12 @@ function ComponentsPageInner(): JSX.Element {
             {/* Used in section */}
             <div className="border-t border-border pt-4">
               {usedInQuery.isLoading ? (
-                <span className="text-sm text-fg-muted">
-                  Loading recipe usage…
-                </span>
+                <span className="text-sm text-fg-muted">Loading recipe usage…</span>
               ) : (
                 <>
                   <div className="mb-2 text-sm font-medium text-fg-strong">
                     Used in {usedInQuery.data?.length ?? 0}{" "}
-                    {(usedInQuery.data?.length ?? 0) === 1
-                      ? "product"
-                      : "products"}
+                    {(usedInQuery.data?.length ?? 0) === 1 ? "product" : "products"}
                   </div>
                   {(usedInQuery.data?.length ?? 0) === 0 ? (
                     <p className="text-sm text-fg-muted">
@@ -1034,9 +1160,7 @@ function ComponentsPageInner(): JSX.Element {
                           className="flex items-center justify-between text-sm"
                         >
                           <Link
-                            href={`/admin/boms?head=${encodeURIComponent(
-                              row.headId,
-                            )}`}
+                            href={`/admin/boms?head=${encodeURIComponent(row.headId)}`}
                             className="text-accent hover:underline"
                           >
                             {row.headName}

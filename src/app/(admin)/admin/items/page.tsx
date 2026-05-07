@@ -1,24 +1,31 @@
-﻿"use client";
+"use client";
 
 // ---------------------------------------------------------------------------
-// Admin · Items — AMMC v1 Slice 4 (crystalline-drifting-dusk §G Slice 4).
+// Admin · Items — list page.
 //
-// Extensions over the prior read-only list:
-//   - Readiness pill column (consumes ?include_readiness=true from list GET)
-//   - "+ New item" button in the header → opens <QuickCreateItem> drawer
-//   - Inline status toggle action per row (POST /api/items/[id]/status)
-//   - List query invalidation on every create / status change
+// Iters 1-7 (list-pages redesign):
+//   1. Audit complete — columns, filters, status badges, actions inventoried.
+//   2. Name cell: item_name (large, dir="auto") + item_id in monospace below,
+//      both linked to /admin/masters/items/{item_id}.
+//   3. Supply method column: styled Badge (info=MANUFACTURED, neutral=BOUGHT_FINISHED,
+//      warning=REPACK) instead of raw fmtSupplyMethod text.
+//   4. Status column: dot badge — ACTIVE=success, PENDING=warning, INACTIVE=neutral.
+//   5. Health column: compact completeness signal — Ready / Needs BOM /
+//      Missing supplier / Blocker derived from existing readiness payload.
+//   6. Empty state: filter empty → card with "Reset filters" CTA; total empty →
+//      "Get started — create your first item."
+//   7. Action column: "View →" link per row; "+ New item" in header. Status
+//      toggle labelled clearly.
 // ---------------------------------------------------------------------------
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Plus, Power, ScrollText } from "lucide-react";
+import { ArrowRight, Plus, Power } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
-import { ReadinessPill } from "@/components/readiness/ReadinessPill";
 import { QuickCreateItem } from "@/components/admin/quick-create/QuickCreateItem";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { formatQty } from "@/lib/utils/format-quantity";
@@ -27,7 +34,10 @@ import {
   postStatus,
 } from "@/lib/admin/mutations";
 import { useSession } from "@/lib/auth/session-provider";
-import { fmtSupplyMethod } from "@/lib/display";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 interface ReadinessPayload {
   is_ready: boolean;
@@ -59,6 +69,10 @@ interface ItemRow {
 
 type ListEnvelope<T> = { rows: T[]; count: number };
 
+// ---------------------------------------------------------------------------
+// Data fetcher
+// ---------------------------------------------------------------------------
+
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url, { headers: { Accept: "application/json" } });
   if (!res.ok) {
@@ -67,12 +81,79 @@ async function fetchJson<T>(url: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-function StatusBadge({ status }: { status: string }): JSX.Element {
+// ---------------------------------------------------------------------------
+// Iter 4 — Status dot badge
+// ---------------------------------------------------------------------------
+
+function ItemStatusBadge({ status }: { status: string }): JSX.Element {
   if (status === "ACTIVE") return <Badge tone="success" dotted>Active</Badge>;
   if (status === "PENDING") return <Badge tone="warning" dotted>Pending</Badge>;
   if (status === "INACTIVE") return <Badge tone="neutral" dotted>Inactive</Badge>;
   return <Badge tone="neutral" dotted>{status}</Badge>;
 }
+
+// ---------------------------------------------------------------------------
+// Iter 3 — Supply method styled badge
+// ---------------------------------------------------------------------------
+
+function SupplyMethodBadge({ method }: { method: string }): JSX.Element {
+  if (method === "MANUFACTURED") {
+    return <Badge tone="info">Manufactured</Badge>;
+  }
+  if (method === "REPACK") {
+    return <Badge tone="warning">Repack</Badge>;
+  }
+  if (method === "BOUGHT_FINISHED") {
+    return <Badge tone="neutral">Purchased finished</Badge>;
+  }
+  return <Badge tone="neutral">{method}</Badge>;
+}
+
+// ---------------------------------------------------------------------------
+// Iter 5 — Health signal pill derived from readiness payload
+// ---------------------------------------------------------------------------
+
+function HealthPill({
+  readiness,
+  supplyMethod,
+  primaryBomHeadId,
+}: {
+  readiness?: ReadinessPayload | null;
+  supplyMethod: string;
+  primaryBomHeadId: string | null;
+}): JSX.Element {
+  // If we have real readiness data from the API, use it.
+  if (readiness != null) {
+    const blockers = readiness.blockers ?? [];
+    if (blockers.length > 0) {
+      return <Badge tone="danger" dotted>Blocker</Badge>;
+    }
+    if (readiness.is_ready) {
+      return <Badge tone="success" dotted>Ready</Badge>;
+    }
+    // Not blocked, not ready — check what the summary says.
+    const summary = (readiness.readiness_summary ?? "").toLowerCase();
+    if (summary.includes("supplier")) {
+      return <Badge tone="warning" dotted>Missing supplier</Badge>;
+    }
+    return <Badge tone="warning" dotted>Needs setup</Badge>;
+  }
+
+  // Fallback: derive cheaply from what the list row carries.
+  if (
+    supplyMethod === "MANUFACTURED" ||
+    supplyMethod === "REPACK"
+  ) {
+    if (!primaryBomHeadId) {
+      return <Badge tone="warning" dotted>Needs BOM</Badge>;
+    }
+  }
+  return <Badge tone="neutral" dotted>—</Badge>;
+}
+
+// ---------------------------------------------------------------------------
+// Page shell
+// ---------------------------------------------------------------------------
 
 export default function AdminItemsPage(): JSX.Element {
   return (
@@ -82,15 +163,93 @@ export default function AdminItemsPage(): JSX.Element {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Iter 6 — Empty states (filter + total)
+// ---------------------------------------------------------------------------
+
+function ItemsEmptyState({
+  totalRows,
+  hasFilters,
+  isAdmin,
+  onReset,
+}: {
+  totalRows: number;
+  hasFilters: boolean;
+  isAdmin: boolean;
+  onReset: () => void;
+}): JSX.Element {
+  if (totalRows === 0) {
+    // Total empty — no items at all.
+    return (
+      <div className="p-10">
+        <div className="mx-auto max-w-sm rounded-lg border border-border/60 bg-bg-subtle/50 p-6 text-center">
+          <div className="mb-1 text-sm font-semibold text-fg-strong">
+            Get started — create your first item
+          </div>
+          <div className="mb-4 text-xs text-fg-muted">
+            Items are finished goods or bought-finished products. Add them here
+            to unlock stock tracking, BOM links, and planning.
+          </div>
+          {isAdmin ? (
+            <Link
+              href="/admin/products/new"
+              className="btn-primary inline-flex items-center gap-1.5"
+            >
+              <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+              New product
+            </Link>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  // Filter empty.
+  return (
+    <div className="p-10">
+      <div className="mx-auto max-w-sm rounded-lg border border-border/60 bg-bg-subtle/50 p-6 text-center">
+        <div className="mb-1 text-sm font-semibold text-fg-strong">
+          No items match the current filter
+        </div>
+        <div className="mb-4 text-xs text-fg-muted">
+          {hasFilters
+            ? "Try clearing the search or relaxing the status / supply method filter."
+            : "No items match these filters."}
+        </div>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <button
+            type="button"
+            onClick={onReset}
+            className="btn btn-ghost btn-sm"
+          >
+            Reset filters
+          </button>
+          {isAdmin ? (
+            <Link
+              href="/admin/products/new"
+              className="btn-primary inline-flex items-center gap-1.5"
+            >
+              <Plus className="h-3 w-3" strokeWidth={2.5} />
+              New product
+            </Link>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Inner page
+// ---------------------------------------------------------------------------
+
 function ItemsPageInner(): JSX.Element {
   const { session } = useSession();
   const isAdmin = session.role === "admin";
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
   const preselectId = searchParams?.get("item") ?? null;
-  // Do NOT pre-fill the search filter from the URL — that hides every
-  // other row. The URL param is only a scroll/highlight target; the
-  // highlightedId state below handles that.
+
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ACTIVE");
   const [supplyFilter, setSupplyFilter] = useState<string>("");
@@ -169,6 +328,14 @@ function ItemsPageInner(): JSX.Element {
     );
   }, [rows, query]);
 
+  const hasActiveFilters = Boolean(query || statusFilter !== "ACTIVE" || supplyFilter);
+
+  const handleResetFilters = () => {
+    setQuery("");
+    setStatusFilter("ACTIVE");
+    setSupplyFilter("");
+  };
+
   const handleToggleStatus = (row: ItemRow) => {
     if (!isAdmin) return;
     const next = row.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
@@ -194,14 +361,16 @@ function ItemsPageInner(): JSX.Element {
           ...(selectedItem ? [{ label: selectedItem.item_name }] : []),
         ]}
       />
+
+      {/* Iter 7 — "+ New item" in header */}
       <WorkflowHeader
         eyebrow="Admin · items"
         title="Items"
-        description="Finished goods and bought-finished item master. Click a row for details or use + New Item to add an item."
+        description="Finished goods and bought-finished item master. Click a row to open details."
         meta={
           <>
             <Badge tone="info" dotted>
-              {itemsQuery.data?.count ?? 0} rows
+              {itemsQuery.data?.count ?? 0} items
             </Badge>
             <Badge tone="neutral" dotted>
               live API
@@ -215,7 +384,7 @@ function ItemsPageInner(): JSX.Element {
                 type="button"
                 className="btn btn-ghost btn-sm"
                 onClick={() => setShowCreate(true)}
-                title="Quick create — minimum fields only. The wizard is the guided flow."
+                title="Quick create — minimum fields only."
               >
                 Quick create
               </button>
@@ -224,7 +393,7 @@ function ItemsPageInner(): JSX.Element {
                 className="btn-primary inline-flex items-center gap-1.5"
               >
                 <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
-                New product
+                New item
               </Link>
             </div>
           ) : null
@@ -254,7 +423,7 @@ function ItemsPageInner(): JSX.Element {
                 className="input flex-1"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search items…"
+                placeholder="Search by name, SKU or ID…"
                 dir="auto"
               />
               {query ? (
@@ -278,9 +447,9 @@ function ItemsPageInner(): JSX.Element {
               onChange={(e) => setStatusFilter(e.target.value)}
             >
               <option value="">(all)</option>
-              <option value="ACTIVE">ACTIVE</option>
-              <option value="INACTIVE">INACTIVE</option>
-              <option value="PENDING">PENDING</option>
+              <option value="ACTIVE">Active</option>
+              <option value="INACTIVE">Inactive</option>
+              <option value="PENDING">Pending</option>
             </select>
           </label>
           <label className="block">
@@ -293,9 +462,9 @@ function ItemsPageInner(): JSX.Element {
               onChange={(e) => setSupplyFilter(e.target.value)}
             >
               <option value="">(all)</option>
-              <option value="MANUFACTURED">MANUFACTURED</option>
-              <option value="BOUGHT_FINISHED">BOUGHT_FINISHED</option>
-              <option value="REPACK">REPACK</option>
+              <option value="MANUFACTURED">Manufactured</option>
+              <option value="BOUGHT_FINISHED">Purchased finished</option>
+              <option value="REPACK">Repack</option>
             </select>
           </label>
         </div>
@@ -308,8 +477,6 @@ function ItemsPageInner(): JSX.Element {
       >
         {itemsQuery.isLoading ? (
           <div className="p-5">
-            {/* Skeleton rows — 6 placeholder rows that approximate the
-                table columns so the layout doesn't jump in on data arrival. */}
             <div className="space-y-2" aria-busy="true" aria-live="polite">
               {Array.from({ length: 6 }).map((_, i) => (
                 <div
@@ -341,60 +508,26 @@ function ItemsPageInner(): JSX.Element {
             </div>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="p-8">
-            <div className="mx-auto max-w-sm text-center">
-              <div className="text-sm font-semibold text-fg-strong">
-                {rows.length === 0
-                  ? "No items in the master yet."
-                  : query
-                  ? "No items match your search."
-                  : "No items match these filters."}
-              </div>
-              <div className="mt-1 text-xs text-fg-muted">
-                {rows.length === 0
-                  ? "Add the first item with + New product."
-                  : "Try clearing the search or relaxing the filters."}
-              </div>
-              <div className="mt-3 flex flex-wrap items-center justify-center gap-2">
-                {(query || statusFilter !== "ACTIVE" || supplyFilter) ? (
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setQuery("");
-                      setStatusFilter("ACTIVE");
-                      setSupplyFilter("");
-                    }}
-                    className="btn btn-ghost btn-sm"
-                  >
-                    Reset filters
-                  </button>
-                ) : null}
-                {isAdmin ? (
-                  <Link
-                    href="/admin/products/new"
-                    className="btn-primary inline-flex items-center gap-1.5"
-                  >
-                    <Plus className="h-3 w-3" strokeWidth={2.5} />
-                    New product
-                  </Link>
-                ) : null}
-              </div>
-            </div>
-          </div>
+          /* Iter 6 — rich empty states */
+          <ItemsEmptyState
+            totalRows={rows.length}
+            hasFilters={hasActiveFilters}
+            isAdmin={isAdmin}
+            onReset={handleResetFilters}
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b border-border/70 bg-bg-subtle/60">
+                  {/* Iter 2 — Name cell (item_name + id) */}
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    SKU
-                  </th>
-                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    Name
+                    Item
                   </th>
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Family
                   </th>
+                  {/* Iter 3 — Supply method badge */}
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Supply method
                   </th>
@@ -404,20 +537,18 @@ function ItemsPageInner(): JSX.Element {
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Case pack
                   </th>
+                  {/* Iter 5 — Health column */}
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    Recipes
+                    Health
                   </th>
-                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    Readiness
-                  </th>
+                  {/* Iter 4 — Status dot badge */}
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Status
                   </th>
-                  {isAdmin ? (
-                    <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      Actions
-                    </th>
-                  ) : null}
+                  {/* Iter 7 — Action column */}
+                  <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -433,31 +564,40 @@ function ItemsPageInner(): JSX.Element {
                       (highlightedId === r.item_id ? "bg-accent-softer/60" : "")
                     }
                   >
-                    <td className="px-3 py-2 font-mono text-xs text-fg">
+                    {/* Iter 2 — Rich name cell */}
+                    <td className="px-3 py-2">
                       <Link
                         href={`/admin/masters/items/${encodeURIComponent(r.item_id)}`}
-                        className="hover:text-accent"
+                        className="group block"
                       >
-                        {r.sku ?? r.item_id}
+                        <span
+                          className="block text-sm font-medium leading-snug text-fg-strong group-hover:text-accent"
+                          dir="auto"
+                        >
+                          {r.item_name}
+                        </span>
+                        <span className="block font-mono text-3xs text-fg-subtle">
+                          {r.item_id}
+                          {r.sku && r.sku !== r.item_id ? (
+                            <span className="ml-1.5 text-fg-faint">· {r.sku}</span>
+                          ) : null}
+                        </span>
                       </Link>
                     </td>
-                    <td className="px-3 py-2 text-fg-strong">
-                      <Link
-                        href={`/admin/masters/items/${encodeURIComponent(r.item_id)}`}
-                        className="hover:text-accent"
-                      >
-                        {r.item_name}
-                      </Link>
-                    </td>
+
                     <td className="px-3 py-2 text-xs text-fg-muted">
                       {r.family ?? "—"}
                     </td>
-                    <td className="px-3 py-2 text-xs font-mono text-fg-muted">
-                      {r.supply_method ? fmtSupplyMethod(r.supply_method) : "—"}
+
+                    {/* Iter 3 — Supply method badge */}
+                    <td className="px-3 py-2">
+                      <SupplyMethodBadge method={r.supply_method} />
                     </td>
+
                     <td className="px-3 py-2 text-xs text-fg-muted">
                       {r.sales_uom ?? "—"}
                     </td>
+
                     <td className="px-3 py-2 text-xs text-fg-muted">
                       {r.case_pack != null && r.sales_uom
                         ? formatQty(r.case_pack, r.sales_uom)
@@ -465,50 +605,33 @@ function ItemsPageInner(): JSX.Element {
                         ? r.case_pack
                         : "—"}
                     </td>
+
+                    {/* Iter 5 — Health pill */}
                     <td className="px-3 py-2">
-                      <div className="flex items-center gap-1.5 text-xs">
-                        {r.primary_bom_head_id ? (
-                          <Link
-                            href={`/admin/boms/${encodeURIComponent(r.primary_bom_head_id)}`}
-                            className="inline-flex items-center gap-1 rounded border border-border/60 px-1.5 py-0.5 text-fg-muted hover:text-accent"
-                            title="Pack recipe"
-                          >
-                            <ScrollText className="h-3 w-3" strokeWidth={2} />
-                            Pack
-                          </Link>
-                        ) : null}
-                        {r.base_bom_head_id ? (
-                          <Link
-                            href={`/admin/boms/${encodeURIComponent(r.base_bom_head_id)}`}
-                            className="inline-flex items-center gap-1 rounded border border-border/60 px-1.5 py-0.5 text-fg-muted hover:text-accent"
-                            title="Liquid recipe"
-                          >
-                            <ScrollText className="h-3 w-3" strokeWidth={2} />
-                            Liquid
-                          </Link>
-                        ) : null}
-                        {!r.primary_bom_head_id && !r.base_bom_head_id ? (
-                          <span className="text-fg-subtle">—</span>
-                        ) : null}
-                      </div>
+                      <HealthPill
+                        readiness={r.readiness}
+                        supplyMethod={r.supply_method}
+                        primaryBomHeadId={r.primary_bom_head_id}
+                      />
                     </td>
+
+                    {/* Iter 4 — Status dot badge */}
                     <td className="px-3 py-2">
-                      <ReadinessPill readiness={r.readiness} />
+                      <ItemStatusBadge status={r.status} />
                     </td>
-                    <td className="px-3 py-2">
-                      <StatusBadge status={r.status} />
-                    </td>
-                    {isAdmin ? (
-                      <td className="px-3 py-2 text-right">
-                        <div className="inline-flex items-center gap-1">
-                          <Link
-                            href={`/admin/masters/items/${encodeURIComponent(r.item_id)}`}
-                            className="btn btn-ghost btn-sm inline-flex items-center gap-1"
-                            title="Edit item"
-                          >
-                            <Pencil className="h-3 w-3" strokeWidth={2} />
-                            Edit
-                          </Link>
+
+                    {/* Iter 7 — Action column */}
+                    <td className="px-3 py-2 text-right">
+                      <div className="inline-flex items-center gap-1">
+                        <Link
+                          href={`/admin/masters/items/${encodeURIComponent(r.item_id)}`}
+                          className="btn btn-ghost btn-sm inline-flex items-center gap-1"
+                          title="View item details"
+                        >
+                          View
+                          <ArrowRight className="h-3 w-3" strokeWidth={2} />
+                        </Link>
+                        {isAdmin ? (
                           <button
                             type="button"
                             title={`Toggle status (currently ${r.status})`}
@@ -519,9 +642,9 @@ function ItemsPageInner(): JSX.Element {
                             <Power className="h-3 w-3" strokeWidth={2} />
                             {r.status === "ACTIVE" ? "Deactivate" : "Activate"}
                           </button>
-                        </div>
-                      </td>
-                    ) : null}
+                        ) : null}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>

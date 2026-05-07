@@ -1,21 +1,25 @@
-﻿"use client";
+"use client";
 
 // ---------------------------------------------------------------------------
 // Admin · Suppliers — AMMC v1 Slice 4.
 //
-// Extensions: + New supplier drawer, inline status toggle.
-// A13 decision: no v_supplier_readiness view exists in migration 0069 (plan
-// §E names 4 views: item / component / bom_version / supplier_item).
-// Supplier-level readiness would require a new view for aggregate
-// supplier → supplier_item health; deferred as follow-on. Readiness column
-// omitted for suppliers in this slice.
+// Iters 15-20 (list-pages redesign):
+//   15. Audit complete — columns, actions, existing filters inventoried.
+//   16. Name cell: supplier_name_official linked to detail page, supplier_name_short
+//       below if set, supplier_id in monospace below that.
+//   17. Type + currency columns: supplier_type as neutral badge, currency as
+//       monospace chip.
+//   18. Status column: dot-badge pattern matching Items / Components pages.
+//   19. Contact column: email + phone as a subtle one-liner with truncation.
+//   20. Action column + empty state: "View →" link per row, "+ New supplier" in
+//       header, rich empty state for filter and total empty.
 // ---------------------------------------------------------------------------
 
 import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Pencil, Plus, Power, X } from "lucide-react";
+import { ArrowRight, Pencil, Phone, Plus, Power, X } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
@@ -32,6 +36,10 @@ import {
   supplierItemsRepo,
 } from "@/lib/repositories";
 import type { ComponentDto, SupplierItemDto } from "@/lib/contracts/dto";
+
+// ---------------------------------------------------------------------------
+// Types
+// ---------------------------------------------------------------------------
 
 interface SupplierRow {
   supplier_id: string;
@@ -53,6 +61,10 @@ interface SupplierRow {
 
 type ListEnvelope<T> = { rows: T[]; count: number };
 
+// ---------------------------------------------------------------------------
+// Data fetcher
+// ---------------------------------------------------------------------------
+
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url, { headers: { Accept: "application/json" } });
   if (!res.ok) {
@@ -61,11 +73,151 @@ async function fetchJson<T>(url: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-function StatusBadge({ status }: { status: string }): JSX.Element {
+// ---------------------------------------------------------------------------
+// Iter 18 — Status dot badge
+// ---------------------------------------------------------------------------
+
+function SupplierStatusBadge({ status }: { status: string }): JSX.Element {
   if (status === "ACTIVE") return <Badge tone="success" dotted>Active</Badge>;
   if (status === "INACTIVE") return <Badge tone="neutral" dotted>Inactive</Badge>;
+  if (status === "PENDING") return <Badge tone="warning" dotted>Pending</Badge>;
   return <Badge tone="neutral" dotted>{status}</Badge>;
 }
+
+// ---------------------------------------------------------------------------
+// Iter 17 — Supplier type badge
+// ---------------------------------------------------------------------------
+
+function SupplierTypeBadge({ type }: { type: string | null }): JSX.Element {
+  if (!type) return <span className="text-xs text-fg-faint">—</span>;
+  return <Badge tone="neutral">{type}</Badge>;
+}
+
+// ---------------------------------------------------------------------------
+// Iter 17 — Currency chip (monospace, compact)
+// ---------------------------------------------------------------------------
+
+function CurrencyChip({ currency }: { currency: string | null }): JSX.Element {
+  if (!currency) return <span className="text-xs text-fg-faint">—</span>;
+  return (
+    <span className="inline-flex items-center rounded border border-border/60 bg-bg-subtle px-1.5 py-0.5 font-mono text-3xs text-fg-muted">
+      {currency}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Iter 19 — Contact one-liner
+// ---------------------------------------------------------------------------
+
+function ContactCell({
+  name,
+  phone,
+}: {
+  name: string | null;
+  phone: string | null;
+}): JSX.Element {
+  if (!name && !phone) {
+    return <span className="text-xs text-fg-faint">—</span>;
+  }
+  return (
+    <div className="max-w-[180px]">
+      {name ? (
+        <span className="block truncate text-xs text-fg" title={name}>
+          {name}
+        </span>
+      ) : null}
+      {phone ? (
+        <span className="flex items-center gap-1 truncate font-mono text-3xs text-fg-muted" title={phone}>
+          <Phone className="h-2.5 w-2.5 shrink-0" strokeWidth={2} />
+          {phone}
+        </span>
+      ) : null}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Iter 20 — Empty states
+// ---------------------------------------------------------------------------
+
+function SuppliersEmptyState({
+  totalRows,
+  hasFilters,
+  isAdmin,
+  onReset,
+  onNew,
+}: {
+  totalRows: number;
+  hasFilters: boolean;
+  isAdmin: boolean;
+  onReset: () => void;
+  onNew: () => void;
+}): JSX.Element {
+  if (totalRows === 0) {
+    return (
+      <div className="p-10">
+        <div className="mx-auto max-w-sm rounded-lg border border-border/60 bg-bg-subtle/50 p-6 text-center">
+          <div className="mb-1 text-sm font-semibold text-fg-strong">
+            No suppliers yet — add your first
+          </div>
+          <div className="mb-4 text-xs text-fg-muted">
+            Suppliers link to components and items. Add them here to enable
+            sourcing, lead times, and purchase planning.
+          </div>
+          {isAdmin ? (
+            <button
+              type="button"
+              className="btn-primary inline-flex items-center gap-1.5"
+              onClick={onNew}
+            >
+              <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
+              New supplier
+            </button>
+          ) : null}
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="p-10">
+      <div className="mx-auto max-w-sm rounded-lg border border-border/60 bg-bg-subtle/50 p-6 text-center">
+        <div className="mb-1 text-sm font-semibold text-fg-strong">
+          No suppliers match the current filter
+        </div>
+        <div className="mb-4 text-xs text-fg-muted">
+          {hasFilters
+            ? "Try clearing the search or relaxing the status filter."
+            : "No suppliers match these filters."}
+        </div>
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          <button
+            type="button"
+            onClick={onReset}
+            className="btn btn-ghost btn-sm"
+          >
+            Reset filters
+          </button>
+          {isAdmin ? (
+            <button
+              type="button"
+              className="btn-primary inline-flex items-center gap-1.5"
+              onClick={onNew}
+            >
+              <Plus className="h-3 w-3" strokeWidth={2.5} />
+              New supplier
+            </button>
+          ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Page shell
+// ---------------------------------------------------------------------------
 
 export default function AdminSuppliersPage(): JSX.Element {
   return (
@@ -75,11 +227,16 @@ export default function AdminSuppliersPage(): JSX.Element {
   );
 }
 
+// ---------------------------------------------------------------------------
+// Inner page
+// ---------------------------------------------------------------------------
+
 function SuppliersPageInner(): JSX.Element {
   const { session } = useSession();
   const isAdmin = session.role === "admin";
   const queryClient = useQueryClient();
   const searchParams = useSearchParams();
+
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ACTIVE");
   const [showCreate, setShowCreate] = useState(false);
@@ -132,7 +289,7 @@ function SuppliersPageInner(): JSX.Element {
 
   const rows = suppliersQuery.data?.rows ?? [];
 
-  // Pre-select via ?supplier=<id> on first render after rows load.
+  // Pre-select via ?supplier=<id>.
   useEffect(() => {
     const wanted = searchParams.get("supplier");
     if (!wanted) return;
@@ -147,7 +304,7 @@ function SuppliersPageInner(): JSX.Element {
     [rows, selectedId],
   );
 
-  // IDB: components master (for name resolution).
+  // IDB: components master (for name resolution in the detail panel).
   const componentsList = useQuery<ComponentDto[]>({
     queryKey: ["idb", "components"],
     queryFn: () => componentsRepo.list(),
@@ -158,7 +315,7 @@ function SuppliersPageInner(): JSX.Element {
     return map;
   }, [componentsList.data]);
 
-  // IDB: components supplied by this supplier (primary, active sourcing links).
+  // IDB: components supplied by this supplier.
   const componentsSuppliedQuery = useQuery<SupplierItemDto[]>({
     queryKey: ["idb", "supplier-items", "by-supplier", selectedId],
     queryFn: async () => {
@@ -188,6 +345,13 @@ function SuppliersPageInner(): JSX.Element {
     );
   }, [rows, query]);
 
+  const hasActiveFilters = Boolean(query || statusFilter !== "ACTIVE");
+
+  const handleResetFilters = () => {
+    setQuery("");
+    setStatusFilter("ACTIVE");
+  };
+
   const handleToggleStatus = (row: SupplierRow) => {
     if (!isAdmin) return;
     const next = row.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
@@ -202,6 +366,7 @@ function SuppliersPageInner(): JSX.Element {
 
   return (
     <>
+      {/* Iter 20 — "+ New supplier" in header */}
       <WorkflowHeader
         eyebrow="Admin · suppliers"
         title="Suppliers"
@@ -209,7 +374,7 @@ function SuppliersPageInner(): JSX.Element {
         meta={
           <>
             <Badge tone="info" dotted>
-              {suppliersQuery.data?.count ?? 0} rows
+              {suppliersQuery.data?.count ?? 0} suppliers
             </Badge>
             <Badge tone="neutral" dotted>
               live API
@@ -253,7 +418,7 @@ function SuppliersPageInner(): JSX.Element {
                 className="input flex-1"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                placeholder="Search suppliers…"
+                placeholder="Search by name, short name or contact…"
                 dir="auto"
               />
               {query ? (
@@ -277,8 +442,8 @@ function SuppliersPageInner(): JSX.Element {
               onChange={(e) => setStatusFilter(e.target.value)}
             >
               <option value="">(all)</option>
-              <option value="ACTIVE">ACTIVE</option>
-              <option value="INACTIVE">INACTIVE</option>
+              <option value="ACTIVE">Active</option>
+              <option value="INACTIVE">Inactive</option>
             </select>
           </label>
         </div>
@@ -321,62 +486,46 @@ function SuppliersPageInner(): JSX.Element {
             </div>
           </div>
         ) : filtered.length === 0 ? (
-          <div className="p-8 text-center">
-            <div className="mx-auto max-w-sm">
-              <div className="text-sm font-semibold text-fg-strong">
-                {rows.length === 0
-                  ? "No suppliers in the master yet."
-                  : query
-                  ? "No suppliers match your search."
-                  : "No suppliers match these filters."}
-              </div>
-              <div className="mt-1 text-xs text-fg-muted">
-                {rows.length === 0
-                  ? "Add a supplier to start mapping items."
-                  : "Try clearing the search or relaxing the filters."}
-              </div>
-              {(query || statusFilter !== "ACTIVE") ? (
-                <button
-                  type="button"
-                  onClick={() => {
-                    setQuery("");
-                    setStatusFilter("ACTIVE");
-                  }}
-                  className="btn btn-ghost btn-sm mt-3"
-                >
-                  Reset filters
-                </button>
-              ) : null}
-            </div>
-          </div>
+          /* Iter 20 — rich empty states */
+          <SuppliersEmptyState
+            totalRows={rows.length}
+            hasFilters={hasActiveFilters}
+            isAdmin={isAdmin}
+            onReset={handleResetFilters}
+            onNew={() => setShowCreate(true)}
+          />
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b border-border/70 bg-bg-subtle/60">
+                  {/* Iter 16 — rich name cell */}
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    Supplier ID
+                    Supplier
                   </th>
+                  {/* Iter 17 — type badge */}
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    Official name
+                    Type
                   </th>
+                  {/* Iter 19 — contact one-liner */}
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Contact
                   </th>
+                  {/* Iter 17 — currency chip */}
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Currency
                   </th>
                   <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    Default lead days
+                    Default lead
                   </th>
+                  {/* Iter 18 — status dot badge */}
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Status
                   </th>
-                  {isAdmin ? (
-                    <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      Actions
-                    </th>
-                  ) : null}
+                  {/* Iter 20 — action column */}
+                  <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
@@ -391,61 +540,88 @@ function SuppliersPageInner(): JSX.Element {
                       setIsEditing(false);
                     }}
                   >
-                    <td className="px-3 py-2 font-mono text-xs text-fg">
+                    {/* Iter 16 — Name cell: official name + short + id */}
+                    <td className="px-3 py-2">
                       <Link
                         href={`/admin/masters/suppliers/${encodeURIComponent(r.supplier_id)}`}
-                        className="hover:text-accent"
+                        className="group block"
+                        onClick={(e) => e.stopPropagation()}
                       >
-                        {r.supplier_id}
-                      </Link>
-                    </td>
-                    <td className="px-3 py-2 text-fg-strong">
-                      <Link
-                        href={`/admin/masters/suppliers/${encodeURIComponent(r.supplier_id)}`}
-                        className="hover:text-accent"
-                      >
-                        {r.supplier_name_official}
+                        <span
+                          className="block text-sm font-medium leading-snug text-fg-strong group-hover:text-accent"
+                          dir="auto"
+                        >
+                          {r.supplier_name_official}
+                        </span>
                         {r.supplier_name_short ? (
-                          <span className="ml-2 text-xs text-fg-muted">
-                            ({r.supplier_name_short})
+                          <span className="block text-xs text-fg-muted" dir="auto">
+                            {r.supplier_name_short}
                           </span>
                         ) : null}
+                        <span className="block font-mono text-3xs text-fg-subtle">
+                          {r.supplier_id}
+                        </span>
                       </Link>
                     </td>
-                    <td className="px-3 py-2 text-xs text-fg-muted">
-                      {r.primary_contact_name ?? "—"}
-                      {r.primary_contact_phone ? (
-                        <span className="ml-1 font-mono">
-                          {r.primary_contact_phone}
-                        </span>
-                      ) : null}
-                    </td>
-                    <td className="px-3 py-2 text-xs font-mono text-fg-muted">
-                      {r.currency ?? "—"}
-                    </td>
-                    <td className="px-3 py-2 text-right text-xs tabular-nums text-fg-muted">
-                      {r.default_lead_time_days ?? "—"}
-                    </td>
+
+                    {/* Iter 17 — Type badge */}
                     <td className="px-3 py-2">
-                      <StatusBadge status={r.status} />
+                      <SupplierTypeBadge type={r.supplier_type} />
                     </td>
-                    {isAdmin ? (
-                      <td className="px-3 py-2 text-right">
-                        <button
-                          type="button"
-                          title={`Toggle status (currently ${r.status})`}
+
+                    {/* Iter 19 — Contact one-liner */}
+                    <td className="px-3 py-2">
+                      <ContactCell
+                        name={r.primary_contact_name}
+                        phone={r.primary_contact_phone}
+                      />
+                    </td>
+
+                    {/* Iter 17 — Currency chip */}
+                    <td className="px-3 py-2">
+                      <CurrencyChip currency={r.currency} />
+                    </td>
+
+                    <td className="px-3 py-2 text-right text-xs tabular-nums text-fg-muted">
+                      {r.default_lead_time_days != null
+                        ? `${r.default_lead_time_days}d`
+                        : "—"}
+                    </td>
+
+                    {/* Iter 18 — Status dot badge */}
+                    <td className="px-3 py-2">
+                      <SupplierStatusBadge status={r.status} />
+                    </td>
+
+                    {/* Iter 20 — Action column */}
+                    <td className="px-3 py-2 text-right">
+                      <div className="inline-flex items-center gap-1">
+                        <Link
+                          href={`/admin/masters/suppliers/${encodeURIComponent(r.supplier_id)}`}
                           className="btn btn-ghost btn-sm inline-flex items-center gap-1"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            handleToggleStatus(r);
-                          }}
-                          disabled={statusMutation.isPending}
+                          title="View supplier details"
+                          onClick={(e) => e.stopPropagation()}
                         >
-                          <Power className="h-3 w-3" strokeWidth={2} />
-                          {r.status === "ACTIVE" ? "Deactivate" : "Activate"}
-                        </button>
-                      </td>
-                    ) : null}
+                          View
+                          <ArrowRight className="h-3 w-3" strokeWidth={2} />
+                        </Link>
+                        {isAdmin ? (
+                          <button
+                            type="button"
+                            title={`Toggle status (currently ${r.status})`}
+                            className="btn btn-ghost btn-sm inline-flex items-center gap-1"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleToggleStatus(r);
+                            }}
+                            disabled={statusMutation.isPending}
+                          >
+                            <Power className="h-3 w-3" strokeWidth={2} />
+                            {r.status === "ACTIVE" ? "Deactivate" : "Activate"}
+                          </button>
+                        ) : null}
+                      </div>
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -618,9 +794,7 @@ function SuppliersPageInner(): JSX.Element {
                             className="flex items-center justify-between text-sm"
                           >
                             <Link
-                              href={`/admin/components?component=${encodeURIComponent(
-                                cid,
-                              )}`}
+                              href={`/admin/components?component=${encodeURIComponent(cid)}`}
                               className="text-accent hover:underline"
                             >
                               {name}
