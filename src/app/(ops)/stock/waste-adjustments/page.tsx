@@ -326,7 +326,7 @@ function ItemCombobox({ options, value, onChange }: ComboboxProps) {
         aria-expanded={open}
       />
       {open && (
-        <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-white shadow-lg">
+        <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-bg shadow-lg">
           {query && (
             <div className="border-b border-border px-3 py-1.5 text-xs text-fg-muted">
               {filtered.length} match{filtered.length !== 1 ? "es" : ""}
@@ -687,7 +687,7 @@ export default function WasteAdjustmentPage() {
             title="Direction"
             description="Loss = breakage/spoilage/spillage (auto-posts below threshold). Positive = found stock / correction (always held for approval)."
           >
-            <div className="flex gap-3">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {/* Loss card */}
               <label
                 data-testid="waste-direction-loss"
@@ -826,7 +826,7 @@ export default function WasteAdjustmentPage() {
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    className="btn btn-sm shrink-0 w-8 h-9 flex items-center justify-center transition-colors duration-150"
+                    className="btn btn-sm shrink-0 h-11 w-11 min-w-[2.75rem] flex items-center justify-center transition-colors duration-150"
                     aria-label="Decrease quantity by 1"
                     onClick={() =>
                       setQuantity((v) => {
@@ -851,7 +851,7 @@ export default function WasteAdjustmentPage() {
                   />
                   <button
                     type="button"
-                    className="btn btn-sm shrink-0 w-8 h-9 flex items-center justify-center transition-colors duration-150"
+                    className="btn btn-sm shrink-0 h-11 w-11 min-w-[2.75rem] flex items-center justify-center transition-colors duration-150"
                     aria-label="Increase quantity by 1"
                     onClick={() =>
                       setQuantity((v) => {
@@ -1020,7 +1020,7 @@ export default function WasteAdjustmentPage() {
           {/* Sticky submit bar                                                 */}
           {/* ---------------------------------------------------------------- */}
           <div
-            className="sticky bottom-0 z-40 -mx-4 px-4 py-3 backdrop-blur-sm bg-white/80 border-t border-border/50 shadow-[0_-2px_8px_rgba(0,0,0,0.06)] flex items-center justify-end gap-2"
+            className="sticky bottom-0 z-40 -mx-4 px-4 py-3 backdrop-blur-sm bg-bg-raised/90 border-t border-border/50 shadow-[0_-2px_8px_rgba(0,0,0,0.06)] flex items-center justify-end gap-2 sm:-mx-6 sm:px-6"
           >
             <button
               type="button"

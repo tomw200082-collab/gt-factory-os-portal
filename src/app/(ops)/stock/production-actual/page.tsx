@@ -1721,7 +1721,7 @@ export default function ProductionActualPage() {
           {/* Step indicator */}
           <StepIndicator phase={phase} />
 
-          <form onSubmit={handleOpen} className="space-y-5">
+          <form onSubmit={handleOpen} className="space-y-5 pb-20">
             <SectionCard
               title="Step 1 — Pick the item being produced"
               description="Only manufactured or repacked items are listed. If the BOM is updated after this form opens, you will need to reopen before submitting."
@@ -1753,7 +1753,7 @@ export default function ProductionActualPage() {
                       autoComplete="off"
                     />
                     {comboboxOpen && filteredItems.length > 0 ? (
-                      <div className="absolute z-20 mt-1 max-h-72 w-full overflow-y-auto rounded-md border border-border bg-white shadow-lg dark:bg-gray-900">
+                      <div className="absolute z-20 mt-1 max-h-72 w-full overflow-y-auto rounded-md border border-border bg-bg shadow-lg">
                         {filteredManufactured.length > 0 ? (
                           <div>
                             <div className="px-3 py-1.5 text-3xs font-semibold uppercase tracking-sops text-fg-subtle bg-bg-subtle/60 border-b border-border/40">
@@ -1823,7 +1823,7 @@ export default function ProductionActualPage() {
                         ) : null}
                       </div>
                     ) : comboboxOpen && itemSearch && filteredItems.length === 0 ? (
-                      <div className="absolute z-20 mt-1 w-full rounded-md border border-border bg-white shadow-lg dark:bg-gray-900">
+                      <div className="absolute z-20 mt-1 w-full rounded-md border border-border bg-bg shadow-lg">
                         <div className="px-3 py-3 text-sm text-fg-muted">
                           No items match "{itemSearch}"
                         </div>
@@ -1854,7 +1854,7 @@ export default function ProductionActualPage() {
                 ) : null}
 
                 {/* Item count hint */}
-                <div className="flex items-center gap-3 text-xs">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
                   <span className="font-semibold text-fg">
                     {producibleItems.length} producible items
                   </span>
@@ -1869,7 +1869,7 @@ export default function ProductionActualPage() {
                 </div>
               </div>
             </SectionCard>
-            <div className="flex items-center justify-end gap-2">
+            <div className="sticky bottom-0 z-10 -mx-4 flex items-center justify-end gap-2 border-t border-border bg-bg-raised/90 px-4 py-3 backdrop-blur-sm sm:-mx-6 sm:px-6">
               <button
                 type="submit"
                 className="btn btn-primary"
@@ -1885,7 +1885,7 @@ export default function ProductionActualPage() {
           {/* Step indicator */}
           <StepIndicator phase={phase} />
 
-          <form onSubmit={handleSubmit} className="space-y-5">
+          <form onSubmit={handleSubmit} className="space-y-5 pb-20">
             <SectionCard
               title="Step 2 — Enter the produced quantity"
               description="Output = good units produced. Scrap = material consumed but not usable as finished goods. Both are required; scrap defaults to 0."
@@ -2276,7 +2276,7 @@ export default function ProductionActualPage() {
             </SectionCard>
 
             {/* Sticky submit area with backdrop blur */}
-            <div className="sticky bottom-0 z-10 flex items-center justify-end gap-2 border-t border-border/60 bg-white/80 py-3 backdrop-blur-sm dark:bg-gray-950/80">
+            <div className="sticky bottom-0 z-10 -mx-4 flex items-center justify-end gap-2 border-t border-border bg-bg-raised/90 px-4 py-3 backdrop-blur-sm sm:-mx-6 sm:px-6">
               <button type="button" className="btn" onClick={resetFlow}>
                 Cancel and start over
               </button>

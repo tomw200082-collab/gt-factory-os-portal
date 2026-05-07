@@ -1436,7 +1436,7 @@ export default function GoodsReceiptPage() {
                   </span>
                   <div className="relative">
                     <textarea
-                      className="input min-h-[3rem] w-full transition-colors duration-150"
+                      className="input min-h-[3rem] w-full resize-y transition-colors duration-150"
                       rows={2}
                       value={notes}
                       onChange={(e) => setNotes(e.target.value)}
@@ -1508,7 +1508,7 @@ export default function GoodsReceiptPage() {
                       key={idx}
                       className={cn(
                         /* #13: accent left border when complete */
-                        "relative grid grid-cols-1 gap-3 rounded-md border border-border/60 p-3 transition-colors duration-150 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,2fr)_auto]",
+                        "relative grid grid-cols-1 gap-3 rounded-md border border-border/60 p-3 pl-6 transition-colors duration-150 md:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)_minmax(0,2fr)_auto] md:pl-3",
                         isComplete && "border-l-2 border-l-accent",
                       )}
                     >
@@ -1560,7 +1560,7 @@ export default function GoodsReceiptPage() {
                           <button
                             type="button"
                             aria-label="Decrease quantity"
-                            className="flex h-9 w-8 shrink-0 items-center justify-center rounded border border-border text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors duration-150 disabled:opacity-40"
+                            className="flex h-11 w-11 shrink-0 items-center justify-center rounded border border-border text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors duration-150 disabled:opacity-40"
                             disabled={phase === "submitting"}
                             onClick={() => {
                               const cur = Number(line.quantity) || 0;
@@ -1586,7 +1586,7 @@ export default function GoodsReceiptPage() {
                           <button
                             type="button"
                             aria-label="Increase quantity"
-                            className="flex h-9 w-8 shrink-0 items-center justify-center rounded border border-border text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors duration-150 disabled:opacity-40"
+                            className="flex h-11 w-11 shrink-0 items-center justify-center rounded border border-border text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors duration-150 disabled:opacity-40"
                             disabled={phase === "submitting"}
                             onClick={() => {
                               const cur = Number(line.quantity) || 0;
@@ -1664,7 +1664,7 @@ export default function GoodsReceiptPage() {
 
                       {poId ? (
                         <label
-                          className="block sm:col-span-5"
+                          className="block col-span-full"
                           data-testid={`receipt-line-${idx}-po-line`}
                         >
                           <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">

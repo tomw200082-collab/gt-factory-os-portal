@@ -705,7 +705,7 @@ export default function PhysicalCountPage() {
         /* ----------------------------------------------------------------
            STEP 1 — Pick item
            ---------------------------------------------------------------- */
-        <form onSubmit={handleOpen} className="space-y-5" data-testid="physical-count-step-1">
+        <form onSubmit={handleOpen} className="space-y-5 pb-20" data-testid="physical-count-step-1">
           <StepIndicator step={1} />
           <BlindCountBanner />
 
@@ -925,7 +925,7 @@ export default function PhysicalCountPage() {
             </div>
           </SectionCard>
 
-          <div className="flex items-center justify-end gap-2">
+          <div className="sticky bottom-0 z-10 -mx-4 flex items-center justify-end gap-2 border-t border-border bg-bg-raised/90 px-4 py-3 backdrop-blur-sm sm:-mx-6 sm:px-6">
             <button
               type="submit"
               className={cn(
@@ -957,14 +957,14 @@ export default function PhysicalCountPage() {
         /* ----------------------------------------------------------------
            STEP 2 — Enter counted quantity
            ---------------------------------------------------------------- */
-        <form onSubmit={handleSubmit} className="space-y-5" data-testid="physical-count-step-2">
+        <form onSubmit={handleSubmit} className="space-y-5 pb-20" data-testid="physical-count-step-2">
           <StepIndicator step={2} />
           <BlindCountBanner compact />
 
           {/* Hero snapshot context card */}
           {snapshot ? (
             <div className="rounded-xl border border-border bg-bg-raised px-5 py-4 transition-all duration-150">
-              <div className="flex flex-wrap items-start justify-between gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className={cn(
@@ -1160,7 +1160,7 @@ export default function PhysicalCountPage() {
             </div>
           ) : null}
 
-          <div className="flex items-center justify-between gap-2">
+          <div className="sticky bottom-0 z-10 -mx-4 flex items-center justify-between gap-2 border-t border-border bg-bg-raised/90 px-4 py-3 backdrop-blur-sm sm:-mx-6 sm:px-6">
             {/* Cancel — ghost/danger, shows confirm prompt */}
             <button
               type="button"
