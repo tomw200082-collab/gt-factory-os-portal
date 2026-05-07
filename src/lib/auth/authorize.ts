@@ -53,10 +53,7 @@ export const ROLE_CAPABILITY_LATTICE: Record<Role, CapabilityGrants> = {
     admin: null,
   },
   planner: {
-    // NOTE: planner does NOT have stock:execute. This is a hard lock from
-    // the plan to prevent cross-role privilege creep. Admin is the only
-    // role that can execute stock forms on behalf of an operator.
-    stock: "read",
+    stock: "execute",
     planning: "execute+override",
     admin: null,
   },
