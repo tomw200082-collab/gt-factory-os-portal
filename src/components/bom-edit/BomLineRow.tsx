@@ -76,8 +76,8 @@ export function BomLineRow({
     mutationFn: async (qty: string) =>
       patchEntity({
         url: `/api/boms/versions/${encodeURIComponent(versionId)}/lines/${encodeURIComponent(line.line_id)}`,
-        fields: { final_component_qty: qty },
-        ifMatchUpdatedAt: line.updated_at,
+        fields: { quantity_per: parseFloat(qty) },
+        ifMatchUpdatedAt: new Date(line.updated_at).toISOString(),
       }),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ["boms", "lines", versionId] });
@@ -107,13 +107,20 @@ export function BomLineRow({
         {
           method: "DELETE",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ idempotency_key: randomKey(), if_match_updated_at: line.updated_at }),
+          body: JSON.stringify({
+            idempotency_key: randomKey(),
+            if_match_updated_at: new Date(line.updated_at).toISOString(),
+          }),
         },
       );
       if (!res.ok) {
         const body = await res.json().catch(() => null);
-        const msg = (body as { message?: string } | null)?.message;
-        throw new Error(msg ?? `Delete failed (${res.status})`);
+        type ErrBody = { validation_errors?: Array<{ path: string[]; message: string }>; message?: string; error?: string } | null;
+        const b = body as ErrBody;
+        if (b?.validation_errors?.length) {
+          throw new Error(b.validation_errors.map((e) => `${e.path.join(".")}: ${e.message}`).join("; "));
+        }
+        throw new Error(b?.message ?? b?.error ?? `Delete failed (${res.status})`);
       }
     },
     onSuccess: () => {
