@@ -21,6 +21,7 @@
 // ---------------------------------------------------------------------------
 
 import { use, useState, useMemo, type ReactNode } from "react";
+import * as Popover from "@radix-ui/react-popover";
 import { fmtSupplyMethod } from "@/lib/display";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -182,6 +183,78 @@ function SeverityBadge({ severity }: { severity: string }): JSX.Element {
   if (severity === "critical") return <Badge tone="danger" dotted>critical</Badge>;
   if (severity === "warning") return <Badge tone="warning" dotted>warning</Badge>;
   return <Badge tone="info" dotted>info</Badge>;
+}
+
+// EditableField — label + optional help tooltip + value slot.
+// Local helper so the Overview tab can render a consistent column without
+// repeating the label / spacing / aria scaffolding for every field. The
+// `help` text appears as a small (?) icon next to the label; click to
+// reveal a Radix popover so the user gets context without leaving the page.
+// `strict` adds a small lock chip indicating this field is enum-locked
+// (currently only sales_uom).
+function EditableField({
+  label,
+  help,
+  strict,
+  emptyHint: _emptyHint,
+  children,
+}: {
+  label: string;
+  help?: string;
+  strict?: boolean;
+  emptyHint?: string;
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <div className="min-w-0">
+      <div className="mb-1 flex items-center gap-1.5">
+        <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+          {label}
+        </span>
+        {help ? <FieldHelp label={label} help={help} /> : null}
+        {strict ? (
+          <span
+            className="rounded-full bg-info-softer px-1.5 py-0.5 text-[9px] font-semibold uppercase tracking-sops text-info-fg"
+            title="Enum-locked: values come from a server-enforced list."
+          >
+            enum
+          </span>
+        ) : null}
+      </div>
+      <div className="min-w-0">{children}</div>
+    </div>
+  );
+}
+
+function FieldHelp({ label, help }: { label: string; help: string }): JSX.Element {
+  return (
+    <Popover.Root>
+      <Popover.Trigger asChild>
+        <button
+          type="button"
+          aria-label={`Help: ${label}`}
+          className="inline-flex h-3.5 w-3.5 shrink-0 items-center justify-center rounded-full border border-border/60 text-[9px] font-semibold leading-none text-fg-faint transition-colors hover:border-accent/60 hover:text-accent"
+        >
+          ?
+        </button>
+      </Popover.Trigger>
+      <Popover.Portal>
+        <Popover.Content
+          side="top"
+          align="start"
+          sideOffset={6}
+          collisionPadding={12}
+          className="z-50 max-w-xs rounded-md border border-border/70 bg-bg-raised p-2 text-xs leading-relaxed text-fg-muted shadow-pop animate-fade-in-up"
+        >
+          <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+            {label}
+          </span>
+          <span className="mt-1 block text-fg">{help}</span>
+          <Popover.Arrow className="fill-bg-raised" />
+        </Popover.Content>
+      </Popover.Portal>
+    </Popover.Root>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -522,42 +595,47 @@ export default function AdminItemDetailPage({
         { label: "Created", value: fmtDateTime(row.created_at) },
         { label: "Last updated", value: fmtDateTime(row.updated_at) },
       ];
+      const saveField = (field: string) => (val: unknown) =>
+        itemFieldMutation.mutateAsync({
+          field,
+          value: val,
+          updated_at: row.updated_at,
+        }) as Promise<void>;
+
       return (
         <div className="space-y-4 p-1">
+          {/* --- Identity & category ----------------------------------------
+              The fields a planner / admin curates to keep the catalogue
+              navigable. Categorized fields use a dropdown so every product
+              shares the same vocabulary; the Name is free-text because each
+              product has a unique label. */}
           <SectionCard
-            title="Details"
-            description="Click any field to edit. Categorized fields use a dropdown so all products stay consistent across the system."
+            eyebrow="Section 1 of 2"
+            title="Identity & category"
+            description="What this product is called and how it's classified. Click any field to edit."
             density="compact"
           >
-            <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
-              {/* Name — free text by design (every product has a unique label). */}
-              <div>
-                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Name
-                </span>
+            <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-2">
+              <EditableField
+                label="Name"
+                help="What operators see in pickers and forms. Hebrew is fine — picker labels render with auto-direction."
+              >
                 {isAdmin ? (
                   <InlineEditCell
                     value={row.item_name}
-                    onSave={(val) =>
-                      itemFieldMutation.mutateAsync({
-                        field: "item_name",
-                        value: val,
-                        updated_at: row.updated_at,
-                      }) as Promise<void>
-                    }
+                    onSave={saveField("item_name")}
                     ariaLabel="Edit item name"
                   />
                 ) : (
-                  <span className="font-medium text-fg-strong">{row.item_name}</span>
+                  <span className="font-medium text-fg-strong" dir="auto">{row.item_name}</span>
                 )}
-              </div>
+              </EditableField>
 
-              {/* Family — soft dropdown over the union of family values currently
-                  in use. Admins can curate the vocabulary inline via +Add. */}
-              <div>
-                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Family
-                </span>
+              <EditableField
+                label="Family"
+                help="High-level operational family (e.g. MATCHA, COCKTAIL). Drives planning groupings and dashboard rollups. Pick from the existing set so all products in a line share the same value."
+                emptyHint="Picks the dashboard rollup bucket."
+              >
                 {isAdmin ? (
                   <InlineEditSelectCell
                     fieldLabel="Family"
@@ -565,24 +643,17 @@ export default function AdminItemDetailPage({
                     options={fieldOptions.family}
                     placeholder="— Choose family —"
                     allowAdHoc
-                    onSave={(val) =>
-                      itemFieldMutation.mutateAsync({
-                        field: "family",
-                        value: val,
-                        updated_at: row.updated_at,
-                      }) as Promise<void>
-                    }
+                    onSave={saveField("family")}
                   />
                 ) : (
-                  <span className="text-fg">{row.family ?? "—"}</span>
+                  <span className="text-fg" dir="auto">{row.family ?? "—"}</span>
                 )}
-              </div>
+              </EditableField>
 
-              {/* Product group */}
-              <div>
-                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Product group
-                </span>
+              <EditableField
+                label="Product group"
+                help="Sub-grouping inside the family — used by purchase recommendations and forecast cohorts."
+              >
                 {isAdmin ? (
                   <InlineEditSelectCell
                     fieldLabel="Product group"
@@ -590,24 +661,17 @@ export default function AdminItemDetailPage({
                     options={fieldOptions.product_group}
                     placeholder="— Choose product group —"
                     allowAdHoc
-                    onSave={(val) =>
-                      itemFieldMutation.mutateAsync({
-                        field: "product_group",
-                        value: val,
-                        updated_at: row.updated_at,
-                      }) as Promise<void>
-                    }
+                    onSave={saveField("product_group")}
                   />
                 ) : (
-                  <span className="text-fg">{row.product_group ?? "—"}</span>
+                  <span className="text-fg" dir="auto">{row.product_group ?? "—"}</span>
                 )}
-              </div>
+              </EditableField>
 
-              {/* Item type */}
-              <div>
-                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Item type
-                </span>
+              <EditableField
+                label="Item type"
+                help="Free-form tag layered on top of family / supply_method (e.g. KIT, SINGLE, GIFT). Optional."
+              >
                 {isAdmin ? (
                   <InlineEditSelectCell
                     fieldLabel="Item type"
@@ -615,24 +679,30 @@ export default function AdminItemDetailPage({
                     options={fieldOptions.item_type}
                     placeholder="— Choose item type —"
                     allowAdHoc
-                    onSave={(val) =>
-                      itemFieldMutation.mutateAsync({
-                        field: "item_type",
-                        value: val,
-                        updated_at: row.updated_at,
-                      }) as Promise<void>
-                    }
+                    onSave={saveField("item_type")}
                   />
                 ) : (
-                  <span className="text-fg">{row.item_type ?? "—"}</span>
+                  <span className="text-fg" dir="auto">{row.item_type ?? "—"}</span>
                 )}
-              </div>
+              </EditableField>
+            </div>
+          </SectionCard>
 
-              {/* Pack size */}
-              <div>
-                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Pack size
-                </span>
+          {/* --- Packaging & units ------------------------------------------
+              The numbers that drive Goods Receipt, Production Output, and the
+              Shopify on-hand sync. Sales unit is the only strict enum here
+              (FK to private_core.uom). */}
+          <SectionCard
+            eyebrow="Section 2 of 2"
+            title="Packaging & units"
+            description="How the product is packaged and counted. Sales unit is shared with production output, GR, and the Shopify sync."
+            density="compact"
+          >
+            <div className="grid grid-cols-1 gap-x-8 gap-y-5 sm:grid-cols-3">
+              <EditableField
+                label="Pack size"
+                help="Volume / mass per pack (e.g. 250ML, 100G). Stored as text — pick from the existing set, or admins can add a new value."
+              >
                 {isAdmin ? (
                   <InlineEditSelectCell
                     fieldLabel="Pack size"
@@ -640,52 +710,40 @@ export default function AdminItemDetailPage({
                     options={fieldOptions.pack_size}
                     placeholder="— Choose pack size —"
                     allowAdHoc
-                    onSave={(val) =>
-                      itemFieldMutation.mutateAsync({
-                        field: "pack_size",
-                        value: val,
-                        updated_at: row.updated_at,
-                      }) as Promise<void>
-                    }
+                    onSave={saveField("pack_size")}
                   />
                 ) : (
                   <span className="text-fg">{row.pack_size ?? "—"}</span>
                 )}
-              </div>
+              </EditableField>
 
-              {/* Sales unit — strict enum from private_core.uom.
-                  No ad-hoc; new UoMs require a DB migration. */}
-              <div>
-                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Sales unit
-                </span>
+              <EditableField
+                label="Sales unit"
+                help="Strict enum (UOM table). Production Output rejects on submit if its UoM does not match. New UoMs require a DB migration."
+                strict
+              >
                 {isAdmin ? (
                   <InlineEditSelectCell
                     fieldLabel="Sales unit"
                     value={row.sales_uom}
                     options={fieldOptions.sales_uom}
                     placeholder="— Choose sales unit —"
-                    onSave={(val) =>
-                      itemFieldMutation.mutateAsync({
-                        field: "sales_uom",
-                        value: val,
-                        updated_at: row.updated_at,
-                      }) as Promise<void>
-                    }
+                    onSave={saveField("sales_uom")}
                   />
                 ) : (
                   <span className="text-fg">{row.sales_uom ?? "—"}</span>
                 )}
-              </div>
+              </EditableField>
 
-              {/* Case pack — numeric, free input. */}
-              <div>
-                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Case pack
-                </span>
+              <EditableField
+                label="Case pack"
+                help="Units per shipping case. Used by purchase recommendations to round MOQs and by LionWheel route planning."
+              >
                 {isAdmin ? (
                   <InlineEditCell
                     value={row.case_pack !== null ? String(row.case_pack) : ""}
+                    type="number"
+                    inputMode="numeric"
                     onSave={(val) =>
                       itemFieldMutation.mutateAsync({
                         field: "case_pack",
@@ -698,16 +756,29 @@ export default function AdminItemDetailPage({
                 ) : (
                   <span className="text-fg">{row.case_pack ?? "—"}</span>
                 )}
-              </div>
+              </EditableField>
             </div>
           </SectionCard>
 
-          <details className="group rounded-md border border-border/50 bg-bg-subtle">
-            <summary className="cursor-pointer select-none px-3 py-2 text-xs text-fg-muted group-open:border-b group-open:border-border/50">
-              Technical details (locked fields)
+          {/* --- Technical details (locked) --------------------------------
+              These fields are either system identifiers (item_id, sku),
+              schema-locked once referenced (supply_method), or maintained
+              elsewhere via a workflow (BOM links). Rendered in a plain
+              card with a muted heading so admins know they are reference,
+              not actions. */}
+          <details className="group rounded-md border border-border/50 bg-bg-subtle/40 open:bg-bg-subtle/60 transition-colors">
+            <summary className="flex cursor-pointer select-none items-center justify-between gap-2 px-3 py-2 text-xs font-semibold text-fg-muted group-open:border-b group-open:border-border/50">
+              <span>Technical details — system fields</span>
+              <span className="text-3xs font-normal text-fg-faint">
+                read-only · changing these requires a migration or workflow
+              </span>
             </summary>
-            <div className="px-3 py-2">
-              <p className="mb-2 text-xs text-fg-subtle">Supply method, BOM links, and identifiers require a migration or BOM workflow to change safely.</p>
+            <div className="px-3 py-3">
+              <p className="mb-2 text-xs text-fg-subtle">
+                Supply method, BOM links, and the item code itself are locked
+                here. To change a supply method, archive existing BOM
+                references first; to swap a BOM head, use the BOM editor.
+              </p>
               <DetailFieldGrid rows={classLFields} />
             </div>
           </details>
@@ -750,17 +821,39 @@ export default function AdminItemDetailPage({
       const hasBase = Boolean(row.base_bom_head_id);
       if (!hasPack && !hasBase) {
         return (
-          <div className="space-y-3 p-4">
-            <p className="text-sm text-fg-muted">
-              No recipe linked to this item. A {row.supply_method === "MANUFACTURED" ? "manufactured" : "repack"} item needs an active BOM before it can be planned or produced.
-            </p>
-            <Link
-              href="/admin/masters/boms"
-              className="btn-primary inline-flex items-center gap-1.5"
-            >
-              Go to BOMs →
-            </Link>
-          </div>
+          <SectionCard tone="warning" density="compact">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div className="min-w-0 max-w-xl">
+                <div className="mb-1 flex items-center gap-2">
+                  <Badge tone="warning" dotted>Setup blocker</Badge>
+                  <span className="text-3xs uppercase tracking-sops text-fg-subtle">
+                    {fmtSupplyMethod(row.supply_method)}
+                  </span>
+                </div>
+                <h3 className="text-base font-semibold text-fg-strong">
+                  No recipe linked to this product
+                </h3>
+                <p className="mt-1 text-sm text-fg-muted">
+                  {row.supply_method === "MANUFACTURED"
+                    ? "Manufactured products need an active BOM before they can be planned, produced, or appear on the daily production plan. Link a BOM head with at least one active version."
+                    : "Repack products need an active BOM that defines the input component(s) so production can deduct stock correctly."}
+                </p>
+                <ul className="mt-2 space-y-0.5 text-xs text-fg-subtle">
+                  <li>· Planning will skip this item until a BOM is linked.</li>
+                  <li>· Production Output rejects on submit (`UNRESOLVED_BOM`).</li>
+                  <li>· Purchase recommendations cannot net it.</li>
+                </ul>
+              </div>
+              <div className="flex shrink-0 gap-2">
+                <Link
+                  href="/admin/masters/boms"
+                  className="btn-primary inline-flex items-center gap-1.5"
+                >
+                  Open BOM editor
+                </Link>
+              </div>
+            </div>
+          </SectionCard>
         );
       }
       if (
@@ -1028,8 +1121,11 @@ export default function AdminItemDetailPage({
         <>
           {/* Single hero card for every product — manufactured, repack, or
               purchased finished. The RecipeHealthCard below is the BOM-
-              specific drill-down for manufactured items only. */}
-          <MasterSummaryCard
+              specific drill-down for manufactured items only. The hero is
+              wrapped in a reveal-on-mount class so the whole detail page
+              feels intentional on first paint. */}
+          <div className="reveal-on-mount">
+            <MasterSummaryCard
             name={row.item_name}
             code={row.item_id}
             entityType={fmtSupplyMethod(row.supply_method)}
@@ -1072,6 +1168,7 @@ export default function AdminItemDetailPage({
               ) : undefined
             }
           />
+          </div>
           {row.supply_method === "MANUFACTURED" ? (
             <>
               <RecipeHealthCard
