@@ -23,13 +23,20 @@ const T = {
   staticRing: "hsl(186 50% 50% / 0.14)",
 };
 
-export function GTLoader({ message }: { message?: string }) {
-  const [mounted, setMounted] = useState(false);
+export function GTLoader({
+  message,
+  instant = false,
+}: {
+  message?: string;
+  instant?: boolean;
+}) {
+  const [mounted, setMounted] = useState(instant);
 
   useEffect(() => {
+    if (instant) return;
     const id = requestAnimationFrame(() => setMounted(true));
     return () => cancelAnimationFrame(id);
-  }, []);
+  }, [instant]);
 
   return (
     <div

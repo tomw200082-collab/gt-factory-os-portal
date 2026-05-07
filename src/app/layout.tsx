@@ -7,6 +7,7 @@ import { ReviewModeProvider } from "@/lib/review-mode/store";
 import { QueryProvider } from "@/lib/query/query-provider";
 import { ReviewModePanel } from "@/components/review/ReviewModePanel";
 import { ThemeProvider } from "@/lib/theme";
+import { NavigationLoader } from "@/components/ui/NavigationLoader";
 
 const publicSans = Public_Sans({
   subsets: ["latin"],
@@ -50,7 +51,21 @@ const DEV_SHIM_ENABLED =
 
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
-    <html lang="en" className={`${publicSans.variable} ${plexMono.variable}`}>
+    <html
+      lang="en"
+      className={`${publicSans.variable} ${plexMono.variable}`}
+      suppressHydrationWarning
+    >
+      {/* Blocking inline script — runs before React hydrates.
+          Reads localStorage('gt-theme') and applies .dark to <html>
+          immediately, eliminating the white flash on first paint. */}
+      <head>
+        <script
+          dangerouslySetInnerHTML={{
+            __html: `try{var t=localStorage.getItem('gt-theme');if(t==='dark')document.documentElement.classList.add('dark')}catch(e){}`,
+          }}
+        />
+      </head>
       <body className="font-sans">
         <QueryProvider>
           <SessionProvider>
@@ -62,6 +77,11 @@ export default function RootLayout({ children }: { children: ReactNode }) {
             </ThemeProvider>
           </SessionProvider>
         </QueryProvider>
+        {/* NavigationLoader lives outside the provider tree so it is always
+            mounted. It intercepts <a> clicks and shows GTLoader during the
+            navigation gap — the window where client-side routing has started
+            but the new page has not yet committed to the DOM. */}
+        <NavigationLoader />
       </body>
     </html>
   );
