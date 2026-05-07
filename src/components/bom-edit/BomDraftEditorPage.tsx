@@ -6,6 +6,10 @@
 //   - useQuery for the active version's lines (for the Changes-from diff)
 //   - useComponentReadinessMap for per-line pips
 // Edit affordances are gated on version.status === "DRAFT".
+//
+// When onClose is provided, renders in "panel mode" — no full-page scaffold,
+// compact inline action bar instead of a sticky page header. Used by the item
+// detail BOM tab so the user can edit without navigating to a separate route.
 
 "use client";
 
@@ -29,6 +33,9 @@ interface BomDraftEditorPageProps {
   versionId: string;
   /** Injectable navigator for tests. Defaults to next/navigation router.push. */
   onNavigate?: (href: string) => void;
+  /** When provided, renders in embedded panel mode (no full-page scaffolding).
+   *  Cancel calls onClose; publish success also calls onClose. */
+  onClose?: () => void;
 }
 
 interface VersionRow {
@@ -58,9 +65,12 @@ export function BomDraftEditorPage({
   bomHeadId,
   versionId,
   onNavigate,
+  onClose,
 }: BomDraftEditorPageProps): JSX.Element {
   const router = useRouter();
   const navigate = onNavigate ?? ((href: string) => router.push(href));
+  const isPanel = Boolean(onClose);
+
   const versionListQuery = useQuery({
     queryKey: ["boms", "versions", bomHeadId],
     queryFn: async (): Promise<VersionRow[]> => {
@@ -190,11 +200,16 @@ export function BomDraftEditorPage({
       return res.json();
     },
     onSuccess: () => {
-      const itemId = headQuery.data?.parent_ref_id;
-      if (itemId) {
-        navigate(`/admin/masters/items/${itemId}`);
+      if (onClose) {
+        // Panel mode: return to the item detail view.
+        onClose();
       } else {
-        navigate(`/admin/masters/boms/${bomHeadId}`);
+        const itemId = headQuery.data?.parent_ref_id;
+        if (itemId) {
+          navigate(`/admin/masters/items/${itemId}`);
+        } else {
+          navigate(`/admin/masters/boms/${bomHeadId}`);
+        }
       }
     },
   });
@@ -205,8 +220,8 @@ export function BomDraftEditorPage({
     versionListQuery.isLoading || headQuery.isLoading || linesQuery.isLoading;
   if (anyLoading) {
     return (
-      <div className="mx-auto max-w-5xl p-8">
-        <div className="rounded-md border border-border bg-bg-raised p-6 text-sm text-fg-muted">
+      <div className={isPanel ? "rounded-md border border-border bg-bg-raised p-6 text-sm text-fg-muted" : "mx-auto max-w-5xl p-8"}>
+        <div className={isPanel ? "" : "rounded-md border border-border bg-bg-raised p-6 text-sm text-fg-muted"}>
           Loading recipe…
         </div>
       </div>
@@ -216,8 +231,8 @@ export function BomDraftEditorPage({
     versionListQuery.error?.message || headQuery.error?.message || null;
   if (errMsg) {
     return (
-      <div className="mx-auto max-w-5xl p-8">
-        <div className="rounded-md border border-danger-border bg-danger-soft p-5">
+      <div className={isPanel ? "rounded-md border border-danger-border bg-danger-soft p-5" : "mx-auto max-w-5xl p-8"}>
+        <div className={isPanel ? "" : "rounded-md border border-danger-border bg-danger-soft p-5"}>
           <p className="text-sm font-semibold text-danger-fg">
             Could not load recipe
           </p>
@@ -236,6 +251,15 @@ export function BomDraftEditorPage({
             >
               Retry
             </button>
+            {onClose && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-sm border border-border bg-bg-raised px-3 py-1.5 text-sm text-fg hover:bg-bg-subtle"
+              >
+                Close
+              </button>
+            )}
           </div>
         </div>
       </div>
@@ -243,8 +267,8 @@ export function BomDraftEditorPage({
   }
   if (!version) {
     return (
-      <div className="mx-auto max-w-5xl p-8">
-        <div className="rounded-md border border-warning-border bg-warning-soft p-5 text-sm">
+      <div className={isPanel ? "rounded-md border border-warning-border bg-warning-soft p-5 text-sm" : "mx-auto max-w-5xl p-8"}>
+        <div className={isPanel ? "" : "rounded-md border border-warning-border bg-warning-soft p-5 text-sm"}>
           <p className="font-semibold text-warning-fg">
             Version not found in list
           </p>
@@ -252,21 +276,37 @@ export function BomDraftEditorPage({
             The draft may have just been created. Refresh to retry, or
             return to the product page and click <em>Edit recipe</em> again.
           </p>
-          <button
-            type="button"
-            onClick={() => versionListQuery.refetch()}
-            className="mt-3 rounded-sm border border-border bg-bg-raised px-3 py-1.5 text-fg hover:bg-bg-subtle"
-          >
-            Refresh
-          </button>
+          <div className="mt-3 flex gap-2">
+            <button
+              type="button"
+              onClick={() => versionListQuery.refetch()}
+              className="rounded-sm border border-border bg-bg-raised px-3 py-1.5 text-fg hover:bg-bg-subtle"
+            >
+              Refresh
+            </button>
+            {onClose && (
+              <button
+                type="button"
+                onClick={onClose}
+                className="rounded-sm border border-border bg-bg-raised px-3 py-1.5 text-fg hover:bg-bg-subtle"
+              >
+                Close
+              </button>
+            )}
+          </div>
         </div>
       </div>
     );
   }
   if (!headQuery.data) {
     return (
-      <div className="mx-auto max-w-5xl p-8 text-sm text-fg-muted">
+      <div className={isPanel ? "p-4 text-sm text-fg-muted" : "mx-auto max-w-5xl p-8 text-sm text-fg-muted"}>
         BOM head not found.
+        {onClose && (
+          <button type="button" onClick={onClose} className="ml-3 text-accent underline hover:no-underline">
+            Close
+          </button>
+        )}
       </div>
     );
   }
@@ -305,6 +345,192 @@ export function BomDraftEditorPage({
     SUPERSEDED: "bg-bg-subtle text-fg-muted border-border",
   };
 
+  // The editor grid — shared between panel and full-page modes.
+  const editorGrid = (
+    <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
+      <section className="rounded-md border border-border bg-bg-raised">
+        <div className="flex items-center justify-between border-b border-border px-4 py-3">
+          <h2 className="text-sm font-semibold text-fg-strong">
+            Components
+          </h2>
+          {editable && (
+            <button
+              type="button"
+              onClick={() => setAddOpen(true)}
+              className="rounded-sm border border-border bg-bg px-2.5 py-1 text-xs text-fg hover:bg-bg-subtle"
+            >
+              + Add component
+            </button>
+          )}
+        </div>
+        {activeVersion && activeVersion.bom_version_id !== versionId && (
+          <div className="border-b border-border px-4 py-3">
+            <BomLineDiff
+              draftLines={safeLines}
+              activeLines={activeLinesQuery.data ?? []}
+              activeVersionLabel={activeVersion.version_label}
+            />
+          </div>
+        )}
+        {safeLines.length === 0 ? (
+          <div className="px-4 py-12 text-center">
+            <p className="text-sm text-fg-muted">
+              {linesWarning
+                ? "Lines could not be loaded. See banner above."
+                : "No components on this version yet."}
+            </p>
+            {editable && !linesWarning && (
+              <button
+                type="button"
+                onClick={() => setAddOpen(true)}
+                className="mt-3 rounded-sm border border-accent-border bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:bg-accent-hover"
+              >
+                Add the first component
+              </button>
+            )}
+          </div>
+        ) : (
+          <table className="w-full border-collapse text-sm">
+            <thead>
+              <tr className="border-b border-border bg-bg-subtle/60 text-3xs uppercase tracking-sops text-fg-subtle">
+                <th className="px-4 py-2 text-left font-semibold">
+                  Component
+                </th>
+                <th className="px-2 py-2 text-left font-semibold">Qty</th>
+                <th className="px-2 py-2 text-left font-semibold">UOM</th>
+                <th className="px-2 py-2 text-left font-semibold">
+                  Readiness
+                </th>
+                <th className="px-2 py-2"></th>
+              </tr>
+            </thead>
+            <tbody>
+              {safeLines.map((line) => (
+                <BomLineRow
+                  key={line.line_id}
+                  line={line}
+                  versionId={versionId}
+                  readiness={
+                    readiness.map.get(line.final_component_id) ?? null
+                  }
+                  editable={editable}
+                  onOpenQuickFix={(cid) => setFixComponentId(cid)}
+                />
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+      <aside className="hidden lg:block">
+        <ReadinessPanel
+          readinessMap={readiness.map}
+          nowMs={Date.now()}
+          onFix={setFixComponentId}
+        />
+      </aside>
+    </div>
+  );
+
+  // Drawers and modals — same in both modes.
+  const overlays = (
+    <>
+      <BomLineAddDrawer
+        versionId={versionId}
+        open={addOpen}
+        onClose={() => setAddOpen(false)}
+      />
+      {fixComponentId && (
+        <QuickFixDrawer
+          componentId={fixComponentId}
+          open
+          onClose={() => setFixComponentId(null)}
+        />
+      )}
+      {previewOpen && previewQuery.data && (
+        <PublishConfirmModal
+          preview={previewQuery.data}
+          uiWarnings={uiWarnings}
+          nextVersionLabel={version.version_label}
+          onCancel={() => setPreviewOpen(false)}
+          onConfirm={(confirmOverride) =>
+            publishMutation.mutate({ confirmOverride })
+          }
+        />
+      )}
+    </>
+  );
+
+  // Mobile readiness panel — same in both modes.
+  const mobileReadiness = (
+    <div className="lg:hidden">
+      <ReadinessPanel
+        readinessMap={readiness.map}
+        nowMs={Date.now()}
+        onFix={setFixComponentId}
+        mobileMode
+      />
+    </div>
+  );
+
+  // --- Panel mode (embedded in item detail BOM tab) ---
+  if (isPanel) {
+    return (
+      <div className="space-y-3">
+        {/* Compact inline action bar */}
+        <div className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-bg-raised px-4 py-3">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="text-sm font-semibold text-fg-strong">
+              {trackLabel}
+            </span>
+            <span
+              className={`rounded-sm border px-2 py-0.5 text-3xs font-semibold uppercase tracking-sops ${STATUS_PILL_CLASS[version.status]}`}
+            >
+              {version.status}
+            </span>
+            <span className="text-xs text-fg-muted">
+              {fmtVersionLabel(version.version_label)}
+            </span>
+          </div>
+          <div className="flex gap-2">
+            <button
+              type="button"
+              onClick={onClose}
+              className="rounded-sm border border-border bg-bg px-3 py-1.5 text-sm text-fg hover:bg-bg-subtle"
+            >
+              Cancel
+            </button>
+            <button
+              type="button"
+              disabled={!editable}
+              onClick={() => setPreviewOpen(true)}
+              className="rounded-sm border border-accent-border bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
+            >
+              Publish
+            </button>
+          </div>
+        </div>
+
+        {/* Banners */}
+        {!editable && (
+          <div className="rounded-md border border-warning-border bg-warning-soft px-4 py-2 text-sm text-warning-fg">
+            This version is {version.status} — read-only. Only DRAFT versions can be edited.
+          </div>
+        )}
+        {linesWarning && (
+          <div className="rounded-md border border-danger-border bg-danger-soft px-4 py-2 text-sm">
+            <span className="font-semibold text-danger-fg">Lines unavailable. </span>
+            <span className="text-danger-fg/90">{linesWarning}</span>
+          </div>
+        )}
+
+        {editorGrid}
+        {mobileReadiness}
+        {overlays}
+      </div>
+    );
+  }
+
+  // --- Full-page mode (standalone route) ---
   return (
     <div className="flex min-h-screen flex-col bg-bg">
       <header className="sticky top-0 z-10 border-b border-border bg-bg-raised/95 px-6 py-3 backdrop-blur">
@@ -355,120 +581,9 @@ export function BomDraftEditorPage({
       )}
 
       <main className="mx-auto w-full max-w-7xl flex-1 px-6 py-6">
-        <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_320px]">
-          <section className="rounded-md border border-border bg-bg-raised">
-            <div className="flex items-center justify-between border-b border-border px-4 py-3">
-              <h2 className="text-sm font-semibold text-fg-strong">
-                Components
-              </h2>
-              {editable && (
-                <button
-                  type="button"
-                  onClick={() => setAddOpen(true)}
-                  className="rounded-sm border border-border bg-bg px-2.5 py-1 text-xs text-fg hover:bg-bg-subtle"
-                >
-                  + Add component
-                </button>
-              )}
-            </div>
-            {activeVersion && activeVersion.bom_version_id !== versionId && (
-              <div className="border-b border-border px-4 py-3">
-                <BomLineDiff
-                  draftLines={safeLines}
-                  activeLines={activeLinesQuery.data ?? []}
-                  activeVersionLabel={activeVersion.version_label}
-                />
-              </div>
-            )}
-            {safeLines.length === 0 ? (
-              <div className="px-4 py-12 text-center">
-                <p className="text-sm text-fg-muted">
-                  {linesWarning
-                    ? "Lines could not be loaded. See banner above."
-                    : "No components on this version yet."}
-                </p>
-                {editable && !linesWarning && (
-                  <button
-                    type="button"
-                    onClick={() => setAddOpen(true)}
-                    className="mt-3 rounded-sm border border-accent-border bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:bg-accent-hover"
-                  >
-                    Add the first component
-                  </button>
-                )}
-              </div>
-            ) : (
-              <table className="w-full border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-border bg-bg-subtle/60 text-3xs uppercase tracking-sops text-fg-subtle">
-                    <th className="px-4 py-2 text-left font-semibold">
-                      Component
-                    </th>
-                    <th className="px-2 py-2 text-left font-semibold">Qty</th>
-                    <th className="px-2 py-2 text-left font-semibold">UOM</th>
-                    <th className="px-2 py-2 text-left font-semibold">
-                      Readiness
-                    </th>
-                    <th className="px-2 py-2"></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {safeLines.map((line) => (
-                    <BomLineRow
-                      key={line.line_id}
-                      line={line}
-                      versionId={versionId}
-                      readiness={
-                        readiness.map.get(line.final_component_id) ?? null
-                      }
-                      editable={editable}
-                      onOpenQuickFix={(cid) => setFixComponentId(cid)}
-                    />
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </section>
-          <aside className="hidden lg:block">
-            <ReadinessPanel
-              readinessMap={readiness.map}
-              nowMs={Date.now()}
-              onFix={setFixComponentId}
-            />
-          </aside>
-        </div>
-        {/* Mobile-only bottom drawer with the same readiness data. */}
-        <div className="lg:hidden">
-          <ReadinessPanel
-            readinessMap={readiness.map}
-            nowMs={Date.now()}
-            onFix={setFixComponentId}
-            mobileMode
-          />
-        </div>
-        <BomLineAddDrawer
-          versionId={versionId}
-          open={addOpen}
-          onClose={() => setAddOpen(false)}
-        />
-        {fixComponentId && (
-          <QuickFixDrawer
-            componentId={fixComponentId}
-            open
-            onClose={() => setFixComponentId(null)}
-          />
-        )}
-        {previewOpen && previewQuery.data && (
-          <PublishConfirmModal
-            preview={previewQuery.data}
-            uiWarnings={uiWarnings}
-            nextVersionLabel={version.version_label}
-            onCancel={() => setPreviewOpen(false)}
-            onConfirm={(confirmOverride) =>
-              publishMutation.mutate({ confirmOverride })
-            }
-          />
-        )}
+        {editorGrid}
+        {mobileReadiness}
+        {overlays}
       </main>
     </div>
   );

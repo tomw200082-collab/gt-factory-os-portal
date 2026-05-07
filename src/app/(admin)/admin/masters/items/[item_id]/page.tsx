@@ -50,6 +50,7 @@ import { ClassWEditDrawer } from "@/components/admin/ClassWEditDrawer";
 import type { EntityOption } from "@/components/fields/EntityPickerPlus";
 import { AdminMutationError, patchEntity, postStatus } from "@/lib/admin/mutations";
 import { useSession } from "@/lib/auth/session-provider";
+import { BomDraftEditorPage } from "@/components/bom-edit/BomDraftEditorPage";
 
 // --- Types (mirrored from upstream schemas) ------------------------------
 
@@ -401,6 +402,7 @@ export default function AdminItemDetailPage({
   const [showStatusDrawer, setShowStatusDrawer] = useState(false);
   const [drawerStatusTarget, setDrawerStatusTarget] = useState<string>("");
   const [showAssignPrimary, setShowAssignPrimary] = useState(false);
+  const [editingBomState, setEditingBomState] = useState<{ headId: string; versionId: string } | null>(null);
 
   // Suppliers picker options — needed so the assign-primary drawer can show
   // names (not IDs). Loaded for everyone so the rendered dropdown labels are
@@ -850,6 +852,21 @@ export default function AdminItemDetailPage({
         ? "danger"
         : "neutral",
     content: (() => {
+      // Inline BOM editor — activated when user clicks "Edit draft" on a version.
+      if (editingBomState) {
+        return (
+          <BomDraftEditorPage
+            bomHeadId={editingBomState.headId}
+            versionId={editingBomState.versionId}
+            onClose={() => {
+              setEditingBomState(null);
+              void queryClient.invalidateQueries({ queryKey: ["admin", "masters", "item", item_id, "bom-versions"] });
+              void queryClient.invalidateQueries({ queryKey: ["admin", "masters", "item", item_id, "base-bom-versions"] });
+              void queryClient.invalidateQueries({ queryKey: ["admin", "masters", "item", item_id, "bom-head"] });
+            }}
+          />
+        );
+      }
       if (!row) return <DetailTabEmpty message="Item row not loaded yet." />;
       if (row.supply_method === "BOUGHT_FINISHED") {
         return (
@@ -917,6 +934,7 @@ export default function AdminItemDetailPage({
               head={bomHead ?? null}
               versions={bomVersionsQuery.data?.rows ?? []}
               versionsLoading={bomVersionsQuery.isLoading}
+              onEditVersion={(hId, vId) => setEditingBomState({ headId: hId, versionId: vId })}
             />
           )}
 
@@ -935,6 +953,7 @@ export default function AdminItemDetailPage({
               head={baseBomHead ?? null}
               versions={baseBomVersionsQuery.data?.rows ?? []}
               versionsLoading={baseBomVersionsQuery.isLoading}
+              onEditVersion={(hId, vId) => setEditingBomState({ headId: hId, versionId: vId })}
             />
           )}
         </div>
@@ -1475,6 +1494,44 @@ export default function AdminItemDetailPage({
 // Shared by both primary_bom_head_id and base_bom_head_id paths.
 // ---------------------------------------------------------------------------
 
+// Human-readable version label — replaces raw UUIDs and ISO timestamps with
+// contextual labels like "Current (activated 3 Nov 2025)" or "Draft — edited 2d ago".
+function humanVersionLabel(v: BomVersionRow): string {
+  if (v.status === "ACTIVE") {
+    const dateStr = v.activated_at ?? v.created_at;
+    try {
+      const label = new Date(dateStr).toLocaleDateString("en-GB", {
+        day: "numeric",
+        month: "short",
+        year: "numeric",
+      });
+      return `Current (activated ${label})`;
+    } catch {
+      return "Current version";
+    }
+  }
+  if (v.status === "DRAFT") {
+    try {
+      const ageDays = Math.round((Date.now() - new Date(v.created_at).getTime()) / 86_400_000);
+      if (ageDays <= 0) return "Draft — created today";
+      if (ageDays === 1) return "Draft — edited yesterday";
+      return `Draft — edited ${ageDays}d ago`;
+    } catch {
+      return "Draft version";
+    }
+  }
+  // SUPERSEDED
+  try {
+    const label = new Date(v.created_at).toLocaleDateString("en-GB", {
+      month: "short",
+      year: "numeric",
+    });
+    return `Archived — ${label}`;
+  } catch {
+    return "Archived version";
+  }
+}
+
 function BomSection({
   sectionLabel,
   sectionDescription,
@@ -1482,6 +1539,7 @@ function BomSection({
   head,
   versions,
   versionsLoading,
+  onEditVersion,
 }: {
   sectionLabel: string;
   sectionDescription: string;
@@ -1489,6 +1547,7 @@ function BomSection({
   head: BomHeadRow | null;
   versions: BomVersionRow[];
   versionsLoading: boolean;
+  onEditVersion?: (headId: string, versionId: string) => void;
 }): JSX.Element {
   if (!head) {
     return (
@@ -1508,6 +1567,8 @@ function BomSection({
   const activeVersion = head.active_version_id
     ? versions.find((v) => v.bom_version_id === head.active_version_id)
     : undefined;
+
+  const draftVersion = versions.find((v) => v.status === "DRAFT");
 
   const fields: FieldRow[] = [
     {
@@ -1533,12 +1594,9 @@ function BomSection({
     {
       label: "Active version",
       value: head.active_version_id ? (
-        <Link
-          href={`/admin/masters/boms/${encodeURIComponent(headId)}/${encodeURIComponent(head.active_version_id)}`}
-          className="font-mono text-success-fg hover:underline"
-        >
-          {activeVersion?.version_label ?? "Active version"}
-        </Link>
+        <span className="text-success-fg font-medium">
+          {activeVersion ? humanVersionLabel(activeVersion) : "Current version"}
+        </span>
       ) : (
         <Badge tone="warning" dotted>None</Badge>
       ),
@@ -1553,9 +1611,31 @@ function BomSection({
       density="compact"
       contentClassName="space-y-3 p-3"
     >
+      {/* Edit action row — shown when a draft exists or as a link to create one */}
+      {onEditVersion && (
+        <div className="flex flex-wrap items-center gap-2">
+          {draftVersion ? (
+            <button
+              type="button"
+              onClick={() => onEditVersion(headId, draftVersion.bom_version_id)}
+              className="inline-flex items-center gap-1.5 rounded border border-warning/50 bg-warning-softer px-3 py-1.5 text-xs font-medium text-warning-fg transition-colors hover:border-warning hover:bg-warning-soft"
+            >
+              Edit draft in-page →
+            </button>
+          ) : (
+            <Link
+              href={`/admin/masters/boms/${encodeURIComponent(headId)}`}
+              className="inline-flex items-center gap-1.5 rounded border border-border/60 bg-bg-subtle/40 px-3 py-1.5 text-xs font-medium text-fg transition-colors hover:border-accent/60 hover:text-accent"
+            >
+              Open BOM editor to create a new draft →
+            </Link>
+          )}
+        </div>
+      )}
+
       <DetailFieldGrid rows={fields} />
       <SectionCard
-        eyebrow="Versions"
+        eyebrow="Version history"
         title={
           versionsLoading
             ? "Loading…"
@@ -1579,32 +1659,52 @@ function BomSection({
             </div>
           </div>
         ) : versions.length === 0 ? (
-          <div className="p-3 text-xs text-fg-muted">No versions.</div>
+          <div className="p-3 text-xs text-fg-muted">No versions yet.</div>
         ) : (
           <ul className="divide-y divide-border/40">
-            {versions.map((v) => (
-              <li
-                key={v.bom_version_id}
-                className="flex items-center justify-between gap-3 px-3 py-2 text-xs"
-              >
-                <Link
-                  href={`/admin/masters/boms/${encodeURIComponent(
-                    v.bom_head_id,
-                  )}/${encodeURIComponent(v.bom_version_id)}`}
-                  className="font-mono text-fg hover:text-accent"
+            {versions.map((v) => {
+              const statusTone =
+                v.status === "ACTIVE"
+                  ? "success"
+                  : v.status === "DRAFT"
+                    ? "warning"
+                    : "neutral";
+              return (
+                <li
+                  key={v.bom_version_id}
+                  className={`flex items-center justify-between gap-3 px-3 py-2 text-xs ${
+                    v.status === "ACTIVE" ? "bg-success-softer/20" : ""
+                  }`}
                 >
-                  {v.version_label}
-                </Link>
-                <div className="flex items-center gap-2">
-                  <Badge tone="neutral" dotted>
-                    {v.status}
-                  </Badge>
-                  <span className="text-fg-faint">
-                    {fmtDateTime(v.activated_at ?? v.created_at)}
-                  </span>
-                </div>
-              </li>
-            ))}
+                  <div className="min-w-0 flex-1">
+                    <span className="font-medium text-fg">
+                      {humanVersionLabel(v)}
+                    </span>
+                  </div>
+                  <div className="flex shrink-0 items-center gap-2">
+                    <Badge tone={statusTone} dotted>
+                      {v.status}
+                    </Badge>
+                    {v.status === "DRAFT" && onEditVersion ? (
+                      <button
+                        type="button"
+                        onClick={() => onEditVersion(headId, v.bom_version_id)}
+                        className="rounded border border-warning/50 bg-warning-softer px-2 py-0.5 text-3xs font-medium text-warning-fg hover:bg-warning-soft"
+                      >
+                        Edit in-page
+                      </button>
+                    ) : (
+                      <Link
+                        href={`/admin/masters/boms/${encodeURIComponent(v.bom_head_id)}/${encodeURIComponent(v.bom_version_id)}`}
+                        className="text-3xs text-fg-faint hover:text-accent"
+                      >
+                        View →
+                      </Link>
+                    )}
+                  </div>
+                </li>
+              );
+            })}
           </ul>
         )}
       </SectionCard>
