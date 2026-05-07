@@ -805,7 +805,7 @@ export default function PhysicalCountPage() {
 
                   {/* Dropdown */}
                   {comboOpen && (
-                    <div className="absolute z-20 mt-1 max-h-72 w-full overflow-auto rounded-lg border border-border bg-bg shadow-lg">
+                    <div className="absolute z-50 mt-1 max-h-72 w-full overflow-auto rounded-lg border border-border bg-bg shadow-lg">
                       {filteredCountable.length === 0 ? (
                         <div className="px-4 py-3 text-sm text-fg-muted">
                           {searchQuery.trim() ? "No items match your search." : "No items available."}
@@ -925,7 +925,7 @@ export default function PhysicalCountPage() {
             </div>
           </SectionCard>
 
-          <div className="sticky bottom-0 z-10 -mx-4 flex items-center justify-end gap-2 border-t border-border bg-bg-raised/90 px-4 py-3 backdrop-blur-sm sm:-mx-6 sm:px-6">
+          <div className="flex items-center justify-end gap-2 py-3">
             <button
               type="submit"
               className={cn(
