@@ -1,46 +1,26 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// Admin · SKU Health
+// Admin · SKU Health (iters 11-16)
 //
-// Operational view of canonical SKU coverage on active finished-goods items
-// and Shopify alignment. Powered entirely by existing endpoints — no new
-// backend SQL or migration required.
-//
-// Sections:
-//   1. Header tiles — Active FG total, With SKU, Missing SKU, Duplicate SKU
-//      groups, Last Shopify FG sync.
-//   2. Coverage table — every active FG item with sku / item_id / name /
-//      supply_method / has_sku / shopify_variant_match (v1: unknown — see
-//      TODO below).
-//   3. SKU exceptions — recent rows in shopify_variant_not_found,
-//      sku_collision, sku_alias_pending_approval categories.
-//
-// Data sources:
-//   - GET /api/items?status=ACTIVE&limit=1000&include_readiness=false
-//     (recently extended to return `sku`). Counts and coverage table both
-//     derive from this single fetch — fine for ~70 rows.
-//   - GET /api/admin/jobs (returns last_started_at / last_status per
-//     job_name). The "Last Shopify FG sync" tile picks the most recent
-//     succeeded run from any job whose name contains "shopify".
-//   - GET /api/exceptions?statuses=open,acknowledged for the bottom panel,
-//     filtered client-side to the three SKU-relevant categories.
-//
-// TODO(future-tranche): the "shopify_variant_match" column is currently
-// "unknown" for every item with a SKU. Powering it correctly requires a
-// backend join against integration_sku_map (or an equivalent
-// v_sku_health view) so the portal can ask "is this canonical SKU present
-// as a Shopify variant?" without a per-row Shopify API call. Add when that
-// query lands; the column header and helper are already in place.
+//  11. Audit — header tiles, coverage table, exceptions panel.
+//  12. Header tiles — KPI cards matching MasterSummaryCard KPI strip pattern.
+//  13. Coverage table — item_name linked to detail; SKU monospace chip; dot badges.
+//  14. Missing SKU rows — bg-warning-softer/20 + "Add SKU →" CTA per row.
+//  15. Duplicates section — separate danger card listing conflicting aliases.
+//  16. Empty state — "No SKU coverage issues" with CheckCircle.
 // ---------------------------------------------------------------------------
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import { AlertTriangle, CheckCircle2, Copy } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
+import { EmptyState } from "@/components/feedback/states";
 import { fmtSupplyMethod } from "@/lib/display";
+import { cn } from "@/lib/cn";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -124,6 +104,136 @@ function fmtTs(iso: string | null): string {
 }
 
 // ---------------------------------------------------------------------------
+// Iter 12 — KPI tile (matches MasterSummaryCard KPI strip pattern)
+// ---------------------------------------------------------------------------
+
+interface KpiTileProps {
+  label: string;
+  value: string;
+  sub?: string;
+  tone: "neutral" | "success" | "warning" | "danger";
+  loading?: boolean;
+}
+
+function KpiTile({ label, value, sub, tone, loading }: KpiTileProps): JSX.Element {
+  const valueClass =
+    tone === "success"
+      ? "text-success-fg"
+      : tone === "warning"
+        ? "text-warning-fg"
+        : tone === "danger"
+          ? "text-danger-fg"
+          : "text-fg-strong";
+
+  const borderClass =
+    tone === "danger"
+      ? "border-danger/30"
+      : tone === "warning"
+        ? "border-warning/30"
+        : tone === "success"
+          ? "border-success/30"
+          : "border-border/40";
+
+  const bgClass =
+    tone === "danger"
+      ? "bg-danger-softer/40"
+      : tone === "warning"
+        ? "bg-warning-softer/40"
+        : "bg-bg-subtle/40";
+
+  return (
+    <div
+      className={cn(
+        "flex min-w-[8rem] flex-1 flex-col gap-0.5 rounded-md border px-3 py-2",
+        borderClass,
+        bgClass,
+      )}
+    >
+      <span className="text-3xs uppercase tracking-sops text-fg-subtle">{label}</span>
+      <span className={cn("text-xl font-semibold leading-tight tabular-nums", valueClass)}>
+        {loading ? "…" : value}
+      </span>
+      {sub ? <span className="text-xs text-fg-muted">{sub}</span> : null}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Iter 13 — SKU monospace chip
+// ---------------------------------------------------------------------------
+
+function SkuChip({ sku }: { sku: string }): JSX.Element {
+  return (
+    <span className="inline-flex items-center gap-1 rounded-sm border border-border/50 bg-bg-subtle/60 px-1.5 py-0.5 font-mono text-xs text-fg">
+      {sku}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Iter 15 — Duplicates card
+// ---------------------------------------------------------------------------
+
+function DuplicatesCard({ fgItems }: { fgItems: ItemRow[] }): JSX.Element | null {
+  const duplicates = useMemo(() => {
+    const skuToItems = new Map<string, ItemRow[]>();
+    for (const r of fgItems) {
+      if (!r.sku || r.sku.trim().length === 0) continue;
+      const key = r.sku.trim().toLowerCase();
+      const existing = skuToItems.get(key) ?? [];
+      existing.push(r);
+      skuToItems.set(key, existing);
+    }
+    return Array.from(skuToItems.entries())
+      .filter(([, items]) => items.length > 1)
+      .map(([sku, items]) => ({ sku, items }));
+  }, [fgItems]);
+
+  if (duplicates.length === 0) return null;
+
+  return (
+    <SectionCard
+      eyebrow="Conflicts"
+      title={`Duplicate SKUs detected (${duplicates.length} group${duplicates.length === 1 ? "" : "s"})`}
+      description="Multiple active items share the same SKU. Resolve conflicts in SKU aliases before the next Shopify sync."
+      tone="danger"
+      actions={
+        <Link href="/admin/sku-aliases" className="btn btn-ghost btn-sm text-danger-fg">
+          Resolve in aliases →
+        </Link>
+      }
+    >
+      <div className="space-y-3">
+        {duplicates.map(({ sku, items }) => (
+          <div key={sku} className="rounded-md border border-danger/20 bg-danger-softer/20 p-3">
+            <div className="mb-2 flex items-center gap-2">
+              <Copy className="h-3.5 w-3.5 text-danger-fg" strokeWidth={2} />
+              <SkuChip sku={sku} />
+              <span className="text-xs font-semibold text-danger-fg">
+                {items.length} items with this SKU
+              </span>
+            </div>
+            <ul className="space-y-1">
+              {items.map((item) => (
+                <li key={item.item_id} className="flex items-center gap-2 text-xs">
+                  <Link
+                    href={`/admin/masters/items/${encodeURIComponent(item.item_id)}`}
+                    className="font-medium text-fg-strong hover:text-accent hover:underline"
+                  >
+                    {item.item_name}
+                  </Link>
+                  <span className="font-mono text-fg-faint">{item.item_id}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </SectionCard>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
@@ -192,28 +302,20 @@ export default function AdminSkuHealthPage(): JSX.Element {
     for (const r of rows) {
       const name = (r.job_name ?? "").toLowerCase();
       if (!name.includes("shopify")) continue;
-      // Prefer succeeded runs; the upstream "succeeded" string matches the
-      // jobs page convention. Treat "success" as a synonym for resilience.
       const ok = r.last_status === "succeeded" || r.last_status === "success";
       if (!ok) continue;
       const ts = r.last_ended_at ?? r.last_started_at;
       if (!ts) continue;
-      if (!best) {
-        best = r;
-        continue;
-      }
+      if (!best) { best = r; continue; }
       const bestTs = best.last_ended_at ?? best.last_started_at;
-      if (!bestTs) {
-        best = r;
-        continue;
-      }
+      if (!bestTs) { best = r; continue; }
       if (new Date(ts).getTime() > new Date(bestTs).getTime()) best = r;
     }
     return best;
   }, [jobsQuery.data]);
 
   const lastSyncIso = lastShopifySync
-    ? lastShopifySync.last_ended_at ?? lastShopifySync.last_started_at
+    ? (lastShopifySync.last_ended_at ?? lastShopifySync.last_started_at)
     : null;
 
   const filteredCoverage = useMemo(() => {
@@ -224,12 +326,8 @@ export default function AdminSkuHealthPage(): JSX.Element {
         if (!hay.includes(qLower)) return false;
       }
       if (supplyFilter && r.supply_method !== supplyFilter) return false;
-      if (hasSkuFilter === "yes" && !(r.sku && r.sku.trim().length > 0)) {
-        return false;
-      }
-      if (hasSkuFilter === "no" && r.sku && r.sku.trim().length > 0) {
-        return false;
-      }
+      if (hasSkuFilter === "yes" && !(r.sku && r.sku.trim().length > 0)) return false;
+      if (hasSkuFilter === "no" && r.sku && r.sku.trim().length > 0) return false;
       return true;
     });
   }, [fgItems, query, supplyFilter, hasSkuFilter]);
@@ -238,12 +336,17 @@ export default function AdminSkuHealthPage(): JSX.Element {
     const rows = exceptionsQuery.data?.rows ?? [];
     return rows
       .filter((r) => SKU_EXCEPTION_CATEGORIES.has(r.category))
-      .sort(
-        (a, b) =>
-          new Date(b.created_at).getTime() - new Date(a.created_at).getTime(),
-      )
+      .sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())
       .slice(0, 20);
   }, [exceptionsQuery.data]);
+
+  // Iter 16: all-clear check
+  const allClear =
+    !itemsQuery.isLoading &&
+    !exceptionsQuery.isLoading &&
+    stats.missingSku === 0 &&
+    stats.duplicateGroups === 0 &&
+    skuExceptions.length === 0;
 
   return (
     <>
@@ -253,49 +356,37 @@ export default function AdminSkuHealthPage(): JSX.Element {
         description="Canonical SKU coverage on active finished goods and Shopify alignment. Read-only."
         meta={
           <>
-            <Badge tone="info" dotted>
-              {stats.total} active FG
-            </Badge>
-            <Badge tone="neutral" dotted>
-              live API
-            </Badge>
+            <Badge tone="info" dotted>{stats.total} active FG</Badge>
+            <Badge tone="neutral" dotted>live API</Badge>
           </>
         }
       />
 
-      {/* -------------------------------------------------------------- */}
-      {/* Header tiles                                                    */}
-      {/* -------------------------------------------------------------- */}
+      {/* Iter 12 — KPI strip */}
       <SectionCard eyebrow="Coverage" title="At a glance" density="compact">
         {itemsQuery.isLoading ? (
-          <div className="text-sm text-fg-muted">Loading…</div>
-        ) : itemsQuery.isError ? (
-          <div className="text-sm text-danger-fg">
-            {(itemsQuery.error as Error).message}
+          <div className="flex flex-wrap gap-2">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="h-16 flex-1 animate-pulse rounded-md bg-bg-subtle min-w-[8rem]" />
+            ))}
           </div>
+        ) : itemsQuery.isError ? (
+          <div className="text-sm text-danger-fg">{(itemsQuery.error as Error).message}</div>
         ) : (
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-            <Tile
-              label="Active FG total"
-              value={stats.total.toString()}
-              tone="neutral"
-            />
-            <Tile
-              label="With SKU"
-              value={stats.withSku.toString()}
-              tone="success"
-            />
-            <Tile
+          <div className="flex flex-wrap gap-2">
+            <KpiTile label="Active FG total" value={stats.total.toString()} tone="neutral" />
+            <KpiTile label="With SKU" value={stats.withSku.toString()} tone="success" />
+            <KpiTile
               label="Missing SKU"
               value={stats.missingSku.toString()}
               tone={stats.missingSku > 0 ? "warning" : "neutral"}
             />
-            <Tile
+            <KpiTile
               label="Duplicate SKU groups"
               value={stats.duplicateGroups.toString()}
               tone={stats.duplicateGroups > 0 ? "danger" : "success"}
             />
-            <Tile
+            <KpiTile
               label="Last Shopify FG sync"
               value={timeAgo(lastSyncIso)}
               sub={lastSyncIso ? fmtTs(lastSyncIso) : undefined}
@@ -306,9 +397,12 @@ export default function AdminSkuHealthPage(): JSX.Element {
         )}
       </SectionCard>
 
-      {/* -------------------------------------------------------------- */}
-      {/* Coverage table                                                  */}
-      {/* -------------------------------------------------------------- */}
+      {/* Iter 15 — Duplicates card (only when duplicates exist) */}
+      {!itemsQuery.isLoading && stats.duplicateGroups > 0 && (
+        <DuplicatesCard fgItems={fgItems} />
+      )}
+
+      {/* Filters */}
       <SectionCard title="Filters" density="compact">
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
           <div className="block sm:col-span-2">
@@ -365,6 +459,7 @@ export default function AdminSkuHealthPage(): JSX.Element {
         </div>
       </SectionCard>
 
+      {/* Iter 13/14 — Coverage table */}
       <SectionCard
         eyebrow="Coverage"
         title={`Showing ${filteredCoverage.length} of ${fgItems.length}`}
@@ -374,10 +469,7 @@ export default function AdminSkuHealthPage(): JSX.Element {
           <div className="p-5">
             <div className="space-y-2" aria-busy="true" aria-live="polite">
               {Array.from({ length: 5 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="flex animate-pulse gap-3 border-b border-border/30 pb-2"
-                >
+                <div key={i} className="flex animate-pulse gap-3 border-b border-border/30 pb-2">
                   <div className="h-4 w-32 shrink-0 rounded bg-bg-subtle" />
                   <div className="h-4 flex-1 rounded bg-bg-subtle" />
                   <div className="h-4 w-16 shrink-0 rounded bg-bg-subtle" />
@@ -401,22 +493,18 @@ export default function AdminSkuHealthPage(): JSX.Element {
             </div>
           </div>
         ) : filteredCoverage.length === 0 ? (
-          <div className="p-5 text-sm text-fg-muted">
-            No items match these filters.
-          </div>
+          <div className="p-5 text-sm text-fg-muted">No items match these filters.</div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b border-border/70 bg-bg-subtle/60">
+                  {/* Iter 13: item name first, linked */}
+                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    Item
+                  </th>
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     SKU
-                  </th>
-                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    Item ID
-                  </th>
-                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    Name
                   </th>
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Supply method
@@ -432,50 +520,52 @@ export default function AdminSkuHealthPage(): JSX.Element {
               <tbody>
                 {filteredCoverage.map((r) => {
                   const hasSku = !!(r.sku && r.sku.trim().length > 0);
+                  // Iter 14: warn row for missing SKU
+                  const rowClass = !hasSku
+                    ? "border-b border-border/40 last:border-b-0 bg-warning-softer/20 hover:bg-warning-softer/30"
+                    : "border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40";
                   return (
-                    <tr
-                      key={r.item_id}
-                      className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
-                    >
-                      <td className="px-3 py-2 font-mono text-xs text-fg">
-                        {hasSku ? (
-                          r.sku
-                        ) : (
-                          <span className="text-fg-faint">—</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2 font-mono text-xs text-fg-muted">
+                    <tr key={r.item_id} className={rowClass}>
+                      {/* Iter 13: item name linked to detail page */}
+                      <td className="px-3 py-2">
                         <Link
-                          href={`/admin/masters/items/${encodeURIComponent(
-                            r.item_id,
-                          )}`}
-                          className="hover:text-accent"
+                          href={`/admin/masters/items/${encodeURIComponent(r.item_id)}`}
+                          className="font-medium text-fg-strong hover:text-accent hover:underline"
                         >
-                          {r.item_id}
+                          {r.item_name}
                         </Link>
+                        <div className="font-mono text-xs text-fg-faint">{r.item_id}</div>
                       </td>
-                      <td className="px-3 py-2 text-fg-strong">
-                        {r.item_name}
+                      {/* Iter 13: monospace SKU chip */}
+                      <td className="px-3 py-2">
+                        {hasSku ? (
+                          <SkuChip sku={r.sku!} />
+                        ) : (
+                          <span className="text-fg-faint text-xs">—</span>
+                        )}
                       </td>
                       <td className="px-3 py-2 text-xs font-mono text-fg-muted">
                         {fmtSupplyMethod(r.supply_method)}
                       </td>
+                      {/* Iter 13: dot-pattern badge */}
                       <td className="px-3 py-2">
                         {hasSku ? (
-                          <Badge tone="success" dotted>
-                            yes
-                          </Badge>
+                          <Badge tone="success" dotted>yes</Badge>
                         ) : (
-                          <Badge tone="warning" dotted>
-                            no
-                          </Badge>
+                          <Badge tone="warning" dotted>no</Badge>
                         )}
                       </td>
                       <td className="px-3 py-2">
                         {hasSku ? (
                           <Badge tone="neutral">unknown</Badge>
                         ) : (
-                          <span className="text-fg-faint text-xs">—</span>
+                          // Iter 14: "Add SKU →" CTA for missing rows
+                          <Link
+                            href={`/admin/sku-aliases?item_id=${encodeURIComponent(r.item_id)}`}
+                            className="text-xs font-medium text-warning-fg underline-offset-2 hover:underline"
+                          >
+                            Add SKU →
+                          </Link>
                         )}
                       </td>
                     </tr>
@@ -487,23 +577,18 @@ export default function AdminSkuHealthPage(): JSX.Element {
         )}
       </SectionCard>
 
-      {/* -------------------------------------------------------------- */}
-      {/* SKU exceptions                                                  */}
-      {/* -------------------------------------------------------------- */}
+      {/* SKU exceptions + iter 16 empty state */}
       <SectionCard
         eyebrow="Exceptions"
         title="Recent SKU exceptions"
         description="Open or acknowledged exceptions in the SKU-related categories."
-        contentClassName="p-0"
+        contentClassName={skuExceptions.length === 0 ? "p-4 sm:p-5" : "p-0"}
       >
         {exceptionsQuery.isLoading ? (
           <div className="p-5">
             <div className="space-y-2" aria-busy="true" aria-live="polite">
               {Array.from({ length: 3 }).map((_, i) => (
-                <div
-                  key={i}
-                  className="flex animate-pulse gap-3 border-b border-border/30 pb-2"
-                >
+                <div key={i} className="flex animate-pulse gap-3 border-b border-border/30 pb-2">
                   <div className="h-4 w-24 shrink-0 rounded bg-bg-subtle" />
                   <div className="h-4 flex-1 rounded bg-bg-subtle" />
                   <div className="h-4 w-16 shrink-0 rounded bg-bg-subtle" />
@@ -526,9 +611,24 @@ export default function AdminSkuHealthPage(): JSX.Element {
             </div>
           </div>
         ) : skuExceptions.length === 0 ? (
-          <div className="p-5 text-sm text-fg-muted">
-            No open SKU exceptions. Nothing to see here.
-          </div>
+          /* Iter 16: meaningful empty state */
+          allClear ? (
+            <div className="flex items-center gap-3 rounded-lg border border-success/40 bg-success-softer px-4 py-3">
+              <CheckCircle2 className="h-5 w-5 shrink-0 text-success" strokeWidth={2} />
+              <div>
+                <div className="text-sm font-semibold text-success-fg">No SKU coverage issues</div>
+                <div className="text-xs text-fg-muted">
+                  All active items have a unique SKU mapping.
+                </div>
+              </div>
+            </div>
+          ) : (
+            <EmptyState
+              title="No open SKU exceptions"
+              description="No open or acknowledged exceptions in the SKU-related categories."
+              icon={<AlertTriangle className="h-5 w-5 text-fg-faint" strokeWidth={1.5} />}
+            />
+          )
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
@@ -555,15 +655,21 @@ export default function AdminSkuHealthPage(): JSX.Element {
                     className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
                   >
                     <td className="px-3 py-2 text-fg-strong">{e.title}</td>
+                    {/* Iter 13: item linked to detail */}
                     <td className="px-3 py-2 font-mono text-xs text-fg-muted">
-                      {e.item_id ?? "—"}
+                      {e.item_id ? (
+                        <Link
+                          href={`/admin/masters/items/${encodeURIComponent(e.item_id)}`}
+                          className="hover:text-accent hover:underline"
+                        >
+                          {e.item_id}
+                        </Link>
+                      ) : (
+                        "—"
+                      )}
                     </td>
-                    <td className="px-3 py-2 font-mono text-xs text-fg-muted">
-                      {e.category}
-                    </td>
-                    <td className="px-3 py-2 text-xs text-fg-muted">
-                      {timeAgo(e.created_at)}
-                    </td>
+                    <td className="px-3 py-2 font-mono text-xs text-fg-muted">{e.category}</td>
+                    <td className="px-3 py-2 text-xs text-fg-muted">{timeAgo(e.created_at)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -572,41 +678,5 @@ export default function AdminSkuHealthPage(): JSX.Element {
         )}
       </SectionCard>
     </>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Tile (lightweight inline component)
-// ---------------------------------------------------------------------------
-
-interface TileProps {
-  label: string;
-  value: string;
-  sub?: string;
-  tone: "neutral" | "success" | "warning" | "danger";
-  loading?: boolean;
-}
-
-function Tile({ label, value, sub, tone, loading }: TileProps): JSX.Element {
-  const toneText =
-    tone === "success"
-      ? "text-success-fg"
-      : tone === "warning"
-        ? "text-warning-fg"
-        : tone === "danger"
-          ? "text-danger-fg"
-          : "text-fg-strong";
-  return (
-    <div className="rounded-md border border-border/70 bg-bg-subtle/40 p-3">
-      <div className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-        {label}
-      </div>
-      <div className={`mt-1 text-xl font-semibold tabular-nums ${toneText}`}>
-        {loading ? "…" : value}
-      </div>
-      {sub ? (
-        <div className="mt-0.5 text-xs text-fg-muted">{sub}</div>
-      ) : null}
-    </div>
   );
 }
