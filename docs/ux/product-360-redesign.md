@@ -41,9 +41,10 @@ text. Applies to **all** products (MANUFACTURED, BOUGHT_FINISHED, REPACK).
 | 3 | done | Wired Overview tab: family / product_group / item_type / pack_size / sales_uom now use the dropdown; item_name + case_pack remain free-text. |
 | 4 | done | Header redesign: MasterSummaryCard now carries an optional KPI strip + subtitle; status / completion-% pill in title row; richer typography. Items page populates 3 KPI pills (open exceptions, supplier coverage / pack BOM, last update). MANUFACTURED items also keep their RecipeHealthCard + VersionHistorySection below. |
 | 5 | done | Health checklist deep-links: every completeness item now carries an `href` so clicking the row routes to the right tab; counts surface ("Setup 60%", blocker emphasis). Fix-action buttons stop event propagation so a one-tap drawer wins over the row navigation. Added Family + Sales unit checks for every product kind. |
-| 6 | pending | Tab system polish — sticky tabs, count badges already present, keyboard arrow nav, hash routing fallback. |
-| 7 | pending | Overview tab KPI strip — on-hand, reorder point, lead time, last activity. |
-| 8 | pending | BOM tab polish — version pin badge, attach BOM CTA, base-formula split visibility. |
+| 6 | done | DetailPage tab strip extracted to TabStrip with full ARIA tablist semantics — Left/Right/Home/End keyboard nav, aria-controls, sticky-on-scroll with translucent backdrop. Tab badges gained `badgeTone` (info/success/warning/danger/neutral) and render as small coloured pills. Items page wires badgeTone for BOM (! danger when missing on manufactured), Supplier items (warn on no link, success on primary set), Exceptions (danger on critical, warn on any). |
+| 7 | done | Overview tab restructure — split into "Identity & category" + "Packaging & units" cards. New EditableField helper renders label + (?) help popover + slot. Per-field help copy explains each field's role downstream (sales_uom drives Production Output rejection, family drives planning rollups, etc). sales_uom marked with an `enum` chip. Technical-details collapsible re-skinned with explanatory blurb. |
+| 8 | done | BOM tab "no recipe linked" empty state replaced with a `tone="warning"` SectionCard hero — supply-method badge, supply-method-aware copy, downstream-consequence bullet list, primary "Open BOM editor" action. |
+| 18 | partial | Hero MasterSummaryCard wrapped in `reveal-on-mount` for first-paint polish. Remaining: motion across tab switching, dark/light parity sweep. |
 | 9 | pending | Supplier items tab — primary supplier badge, lead time, last cost, drift indicators. |
 | 10 | pending | Anchors tab — timeline of count anchors, current anchor highlight, rebuild parity badge. |
 | 11 | pending | Policy tab — planning policy form with explanations, uncertainty bands, freshness. |
@@ -53,7 +54,6 @@ text. Applies to **all** products (MANUFACTURED, BOUGHT_FINISHED, REPACK).
 | 15 | pending | Activity drawer — recent ledger events, recent submissions, recent edits. |
 | 16 | pending | Accessibility pass — focus order, aria, contrast, keyboard, Hebrew/RTL safety. |
 | 17 | pending | Mobile / narrow viewport responsive layout. |
-| 18 | pending | Visual polish — spacing, typography rhythm, motion, dark/light parity. |
 | 19 | pending | Cross-product generalization — verify every supply_method × status combination. |
 | 20 | pending | Acceptance pass — typecheck, build, screenshots, before/after, regression list, handoff note. |
 
