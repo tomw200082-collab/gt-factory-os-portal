@@ -265,6 +265,9 @@ interface AdminJobRow {
  * Reads /api/admin/jobs (proxied to GET /api/v1/queries/admin/jobs).
  * Aggregates run_count_24h / failed_count_24h / skipped_count_24h across all
  * jobs. DR-6: skipped counts separately, not merged into failures or successes.
+ *
+ * Every job whose latest run is `failed` is included in `failed_jobs`. Sorted
+ * by failed_count_24h DESC so the noisiest job lists first.
  */
 export async function fetchJobsHealth24h(
   signal?: AbortSignal,
@@ -275,7 +278,7 @@ export async function fetchJobsHealth24h(
   let successes = 0;
   let failures = 0;
   let skipped = 0;
-  let lastErr: string | null = null;
+  const failedJobs: { job_name: string; error: string; failed_count: number }[] = [];
   for (const row of rows) {
     failures += Number(row.failed_count_24h ?? 0);
     skipped += Number(row.skipped_count_24h ?? 0);
@@ -285,17 +288,22 @@ export async function fetchJobsHealth24h(
         Number(row.failed_count_24h ?? 0) -
         Number(row.skipped_count_24h ?? 0),
     );
-    if (row.last_status === "failed" && row.last_error && !lastErr) {
-      lastErr = `${row.job_name}: ${row.last_error}`;
+    if (row.last_status === "failed" && row.last_error) {
+      failedJobs.push({
+        job_name: row.job_name,
+        error: row.last_error,
+        failed_count: Number(row.failed_count_24h ?? 0),
+      });
     }
   }
+  failedJobs.sort((a, b) => b.failed_count - a.failed_count);
   return {
     state: "ok",
     data: {
       successes,
       failures,
       skipped,
-      last_failure_reason: lastErr ?? undefined,
+      failed_jobs: failedJobs.map(({ job_name, error }) => ({ job_name, error })),
     },
   };
 }

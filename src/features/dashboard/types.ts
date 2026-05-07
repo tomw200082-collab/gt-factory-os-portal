@@ -109,12 +109,22 @@ export interface IntegrationFreshnessSummary {
 
 // ---------------------------------------------------------------------------
 // Jobs 24h health block (DR-6).
+//
+// `failed_jobs` lists every job whose latest run is `failed`, with its name
+// and last error. Aggregating only the alphabetically-first failed job hid
+// concurrent failures (e.g. integration.lionwheel auth break-glass behind
+// alert_digest's missing secret).
 // ---------------------------------------------------------------------------
+export interface FailedJobEntry {
+  job_name: string;
+  error: string;
+}
+
 export interface JobsHealth24h {
   successes: number;
   failures: number;
   skipped: number;
-  last_failure_reason?: string;
+  failed_jobs: FailedJobEntry[];
 }
 
 // ---------------------------------------------------------------------------

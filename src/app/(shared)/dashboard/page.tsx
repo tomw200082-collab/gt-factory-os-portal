@@ -1211,7 +1211,7 @@ function JobsHealth24hBlock({
         successes: number;
         failures: number;
         skipped: number;
-        last_failure_reason?: string;
+        failed_jobs: { job_name: string; error: string }[];
       }>
     | undefined;
 }) {
@@ -1223,8 +1223,10 @@ function JobsHealth24hBlock({
     return <UnavailableBadge reason={signal.reason} />;
   }
   const d = signal.data;
-  // DR-12 truncation applied on the last_failure_reason string.
-  const lastErr = truncateLastError(d.last_failure_reason ?? null);
+  const failedJobs = d.failed_jobs ?? [];
+  const VISIBLE = 5;
+  const visible = failedJobs.slice(0, VISIBLE);
+  const overflow = Math.max(0, failedJobs.length - VISIBLE);
   return (
     <>
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -1251,17 +1253,33 @@ function JobsHealth24hBlock({
           }
         />
       </div>
-      {lastErr ? (
-        <div className="mt-3 rounded border border-danger/30 bg-danger-softer px-3 py-2 text-xs">
+      {failedJobs.length > 0 ? (
+        <div
+          className="mt-3 rounded border border-danger/30 bg-danger-softer px-3 py-2 text-xs"
+          data-testid="dashboard-jobs-last-error"
+        >
           <div className="font-semibold text-danger-fg">
-            Last failure reason
+            {failedJobs.length === 1
+              ? "1 job failing"
+              : `${failedJobs.length} jobs failing`}
           </div>
-          <div
-            className="mt-1 whitespace-pre-wrap break-words font-mono text-danger-fg"
-            data-testid="dashboard-jobs-last-error"
-          >
-            {lastErr}
-          </div>
+          <ul className="mt-1 space-y-0.5 font-mono text-danger-fg">
+            {visible.map((j) => (
+              <li key={j.job_name} className="whitespace-pre-wrap break-words">
+                <span className="font-semibold">{j.job_name}</span>
+                {": "}
+                {truncateLastError(j.error) ?? ""}
+              </li>
+            ))}
+            {overflow > 0 ? (
+              <li className="text-fg-muted">
+                +{overflow} more — see{" "}
+                <a className="underline" href="/admin/jobs">
+                  /admin/jobs
+                </a>
+              </li>
+            ) : null}
+          </ul>
         </div>
       ) : null}
     </>
