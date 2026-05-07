@@ -20,7 +20,7 @@
 // View-only. Inline edit is Tranche F (approval queue coupled).
 // ---------------------------------------------------------------------------
 
-import { use, useState, useMemo } from "react";
+import { use, useState, useMemo, type ReactNode } from "react";
 import { fmtSupplyMethod } from "@/lib/display";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -39,6 +39,8 @@ import {
 import { Badge } from "@/components/badges/StatusBadge";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { InlineEditCell } from "@/components/tables/InlineEditCell";
+import { InlineEditSelectCell } from "@/components/tables/InlineEditSelectCell";
+import { useItemFieldOptions } from "@/lib/admin/item-field-options";
 import { MasterSummaryCard, type CompletenessItem } from "@/components/admin/MasterSummaryCard";
 import { AssignPrimarySupplierDrawer } from "@/components/admin/AssignPrimarySupplierDrawer";
 import { RecipeHealthCard } from "@/components/admin/recipe-health/RecipeHealthCard";
@@ -201,6 +203,13 @@ export default function AdminItemDetailPage({
 
   const row = itemQuery.data?.rows.find((r) => r.item_id === item_id);
 
+  // Derive option sets for the controlled dropdown fields from the items list
+  // we already loaded above. Free-text fields (family, product_group, item_type,
+  // pack_size) become "soft" dropdowns over the union of values currently in
+  // use; sales_uom and supply_method use the locked enums in
+  // src/lib/contracts/enums.ts. See lib/admin/item-field-options.ts.
+  const fieldOptions = useItemFieldOptions(itemQuery.data?.rows);
+
   // --- Data: BOM heads (shared query for both pack and base) ---------------
   // Enabled whenever either BOM head ID is present so both can be derived
   // from a single /api/boms/heads?limit=1000 call.
@@ -334,36 +343,145 @@ export default function AdminItemDetailPage({
     },
   });
 
+  // Setup-completeness checklist. Each row carries an optional href for
+  // deep-linking to the relevant tab (so a planner clicking "No BOM linked"
+  // lands on the BOM tab instead of hunting through the surface). The "fix"
+  // button on the right edge is reserved for one-tap actions that don't need
+  // a navigation (e.g. opening the assign-primary-supplier drawer in place).
+  const detailPath = `/admin/masters/items/${encodeURIComponent(item_id)}`;
   const completenessItems = useMemo((): CompletenessItem[] => {
     if (!row) return [];
     const isBought = row.supply_method === "BOUGHT_FINISHED";
     const isManufactured = row.supply_method === "MANUFACTURED" || row.supply_method === "REPACK";
     const hasActiveBom = !!(row.primary_bom_head_id || row.base_bom_head_id);
     const primarySi = (itemSupplierItemsQuery.data?.rows ?? []).filter((si) => si.is_primary);
+    const items: CompletenessItem[] = [];
+
+    items.push({
+      label: "Name set",
+      status: row.item_name ? "ok" : "error",
+      detail: row.item_name ? undefined : "Operators see the SKU, not a name.",
+      href: `${detailPath}?tab=overview`,
+    });
+
+    items.push({
+      label: "Family",
+      status: row.family ? "ok" : "warn",
+      detail: row.family ?? "Not categorised — planning groupings will treat it as Other.",
+      href: `${detailPath}?tab=overview`,
+    });
+
+    items.push({
+      label: "Sales unit",
+      status: row.sales_uom ? "ok" : "warn",
+      detail: row.sales_uom ?? "No sales unit — production output rejects on submit.",
+      href: `${detailPath}?tab=overview`,
+    });
+
+    if (isManufactured) {
+      items.push({
+        label: "Active recipe (BOM)",
+        status: hasActiveBom ? "ok" : "error",
+        detail: hasActiveBom
+          ? "Linked — production can derive consumption."
+          : "No BOM linked — item cannot be planned or produced.",
+        href: `${detailPath}?tab=bom`,
+      });
+    }
+
+    if (isBought) {
+      items.push({
+        label: "Primary supplier",
+        status: primarySi.length > 0 ? "ok" : "warn",
+        detail:
+          primarySi.length > 0
+            ? supplierNameOf(primarySi[0]!.supplier_id)
+            : "No primary supplier set — purchase recommendations will skip this item.",
+        href: `${detailPath}?tab=supplier-items`,
+        fixAction:
+          primarySi.length === 0 && isAdmin ? (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={(e) => {
+                // The whole row is also a deep link; intercept so a one-tap
+                // assign drawer wins over the navigation.
+                e.preventDefault();
+                e.stopPropagation();
+                setShowAssignPrimary(true);
+              }}
+            >
+              Assign primary supplier
+            </button>
+          ) : undefined,
+      });
+    }
+
+    return items;
+  }, [row, itemSupplierItemsQuery.data, isAdmin, detailPath, supplierNameOf]);
+
+  // KPI strip — at-a-glance numeric summary of operational health for this
+  // product. Each pill deep-links to the tab where the user can drill in.
+  const kpis = useMemo(() => {
+    if (!row) return [] as { label: string; value: ReactNode; hint?: string; href?: string; tone?: "default" | "success" | "warning" | "danger" | "muted" }[];
+    const exceptionsCount = relatedExceptions.length;
+    const isBought = row.supply_method === "BOUGHT_FINISHED";
+    const supplierCount = itemSupplierItems.length;
+    const lastUpdate = (() => {
+      try {
+        const d = new Date(row.updated_at);
+        const days = Math.round((Date.now() - d.getTime()) / 86_400_000);
+        if (days <= 0) return "today";
+        if (days === 1) return "yesterday";
+        return `${days}d ago`;
+      } catch {
+        return "—";
+      }
+    })();
     return [
-      ...(isManufactured
-        ? [{ label: "Active recipe (BOM)", status: hasActiveBom ? ("ok" as const) : ("error" as const), detail: hasActiveBom ? undefined : "No BOM linked — item cannot be planned" }]
-        : []),
+      {
+        label: "Open exceptions",
+        value: exceptionsCount,
+        hint: exceptionsCount === 0 ? "Clean" : "Tap to triage",
+        href: `${detailPath}?tab=exceptions`,
+        tone: (exceptionsCount === 0 ? "success" : exceptionsCount > 2 ? "danger" : "warning") as "success" | "danger" | "warning",
+      },
       ...(isBought
-        ? [{
-            label: "Primary supplier",
-            status: primarySi.length > 0 ? ("ok" as const) : ("warn" as const),
-            detail: primarySi.length > 0 ? supplierNameOf(primarySi[0]!.supplier_id) : "No primary supplier set",
-            fixAction:
-              primarySi.length === 0 && isAdmin ? (
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm"
-                  onClick={() => setShowAssignPrimary(true)}
-                >
-                  Assign primary supplier
-                </button>
-              ) : undefined,
-          }]
-        : []),
-      { label: "Name set", status: row.item_name ? ("ok" as const) : ("error" as const) },
+        ? [
+            {
+              label: "Supplier links",
+              value: supplierCount,
+              hint:
+                supplierCount === 0
+                  ? "Add at least one"
+                  : `${itemHasPrimarySupplier ? "primary set" : "no primary"}`,
+              href: `${detailPath}?tab=supplier-items`,
+              tone: (supplierCount === 0
+                ? "warning"
+                : itemHasPrimarySupplier
+                  ? "success"
+                  : "warning") as "success" | "warning",
+            },
+          ]
+        : [
+            {
+              label: "Pack BOM",
+              value: row.primary_bom_head_id ? "Linked" : "—",
+              hint: row.primary_bom_head_id ?? "No pack BOM linked",
+              href: row.primary_bom_head_id
+                ? `/admin/masters/boms/${encodeURIComponent(row.primary_bom_head_id)}`
+                : `${detailPath}?tab=bom`,
+              tone: (row.primary_bom_head_id ? "success" : "warning") as "success" | "warning",
+            },
+          ]),
+      {
+        label: "Last update",
+        value: lastUpdate,
+        hint: fmtDateTime(row.updated_at),
+        tone: "muted" as const,
+      },
     ];
-  }, [row, itemSupplierItemsQuery.data, isAdmin]);
+  }, [row, relatedExceptions, itemSupplierItems, itemHasPrimarySupplier, detailPath]);
 
   // --- Header meta ---------------------------------------------------------
   const headerMeta = row ? (
@@ -406,86 +524,175 @@ export default function AdminItemDetailPage({
       ];
       return (
         <div className="space-y-4 p-1">
-          <SectionCard title="Details" density="compact">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <SectionCard
+            title="Details"
+            description="Click any field to edit. Categorized fields use a dropdown so all products stay consistent across the system."
+            density="compact"
+          >
+            <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+              {/* Name — free text by design (every product has a unique label). */}
               <div>
-                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Name</span>
+                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Name
+                </span>
                 {isAdmin ? (
                   <InlineEditCell
                     value={row.item_name}
-                    onSave={(val) => itemFieldMutation.mutateAsync({ field: "item_name", value: val, updated_at: row.updated_at }) as Promise<void>}
+                    onSave={(val) =>
+                      itemFieldMutation.mutateAsync({
+                        field: "item_name",
+                        value: val,
+                        updated_at: row.updated_at,
+                      }) as Promise<void>
+                    }
                     ariaLabel="Edit item name"
                   />
                 ) : (
-                  <span className="text-fg-strong font-medium">{row.item_name}</span>
+                  <span className="font-medium text-fg-strong">{row.item_name}</span>
                 )}
               </div>
+
+              {/* Family — soft dropdown over the union of family values currently
+                  in use. Admins can curate the vocabulary inline via +Add. */}
               <div>
-                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Family</span>
+                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Family
+                </span>
                 {isAdmin ? (
-                  <InlineEditCell
-                    value={row.family ?? ""}
-                    onSave={(val) => itemFieldMutation.mutateAsync({ field: "family", value: (val as string) || null, updated_at: row.updated_at }) as Promise<void>}
-                    ariaLabel="Edit family"
+                  <InlineEditSelectCell
+                    fieldLabel="Family"
+                    value={row.family}
+                    options={fieldOptions.family}
+                    placeholder="— Choose family —"
+                    allowAdHoc
+                    onSave={(val) =>
+                      itemFieldMutation.mutateAsync({
+                        field: "family",
+                        value: val,
+                        updated_at: row.updated_at,
+                      }) as Promise<void>
+                    }
                   />
                 ) : (
                   <span className="text-fg">{row.family ?? "—"}</span>
                 )}
               </div>
+
+              {/* Product group */}
               <div>
-                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Product group</span>
+                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Product group
+                </span>
                 {isAdmin ? (
-                  <InlineEditCell
-                    value={row.product_group ?? ""}
-                    onSave={(val) => itemFieldMutation.mutateAsync({ field: "product_group", value: (val as string) || null, updated_at: row.updated_at }) as Promise<void>}
-                    ariaLabel="Edit product group"
+                  <InlineEditSelectCell
+                    fieldLabel="Product group"
+                    value={row.product_group}
+                    options={fieldOptions.product_group}
+                    placeholder="— Choose product group —"
+                    allowAdHoc
+                    onSave={(val) =>
+                      itemFieldMutation.mutateAsync({
+                        field: "product_group",
+                        value: val,
+                        updated_at: row.updated_at,
+                      }) as Promise<void>
+                    }
                   />
                 ) : (
                   <span className="text-fg">{row.product_group ?? "—"}</span>
                 )}
               </div>
+
+              {/* Item type */}
               <div>
-                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Item type</span>
+                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Item type
+                </span>
                 {isAdmin ? (
-                  <InlineEditCell
-                    value={row.item_type ?? ""}
-                    onSave={(val) => itemFieldMutation.mutateAsync({ field: "item_type", value: (val as string) || null, updated_at: row.updated_at }) as Promise<void>}
-                    ariaLabel="Edit item type"
+                  <InlineEditSelectCell
+                    fieldLabel="Item type"
+                    value={row.item_type}
+                    options={fieldOptions.item_type}
+                    placeholder="— Choose item type —"
+                    allowAdHoc
+                    onSave={(val) =>
+                      itemFieldMutation.mutateAsync({
+                        field: "item_type",
+                        value: val,
+                        updated_at: row.updated_at,
+                      }) as Promise<void>
+                    }
                   />
                 ) : (
                   <span className="text-fg">{row.item_type ?? "—"}</span>
                 )}
               </div>
+
+              {/* Pack size */}
               <div>
-                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Pack size</span>
+                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Pack size
+                </span>
                 {isAdmin ? (
-                  <InlineEditCell
-                    value={row.pack_size ?? ""}
-                    onSave={(val) => itemFieldMutation.mutateAsync({ field: "pack_size", value: (val as string) || null, updated_at: row.updated_at }) as Promise<void>}
-                    ariaLabel="Edit pack size"
+                  <InlineEditSelectCell
+                    fieldLabel="Pack size"
+                    value={row.pack_size}
+                    options={fieldOptions.pack_size}
+                    placeholder="— Choose pack size —"
+                    allowAdHoc
+                    onSave={(val) =>
+                      itemFieldMutation.mutateAsync({
+                        field: "pack_size",
+                        value: val,
+                        updated_at: row.updated_at,
+                      }) as Promise<void>
+                    }
                   />
                 ) : (
                   <span className="text-fg">{row.pack_size ?? "—"}</span>
                 )}
               </div>
+
+              {/* Sales unit — strict enum from private_core.uom.
+                  No ad-hoc; new UoMs require a DB migration. */}
               <div>
-                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Sales unit</span>
+                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Sales unit
+                </span>
                 {isAdmin ? (
-                  <InlineEditCell
-                    value={row.sales_uom ?? ""}
-                    onSave={(val) => itemFieldMutation.mutateAsync({ field: "sales_uom", value: (val as string) || null, updated_at: row.updated_at }) as Promise<void>}
-                    ariaLabel="Edit sales unit"
+                  <InlineEditSelectCell
+                    fieldLabel="Sales unit"
+                    value={row.sales_uom}
+                    options={fieldOptions.sales_uom}
+                    placeholder="— Choose sales unit —"
+                    onSave={(val) =>
+                      itemFieldMutation.mutateAsync({
+                        field: "sales_uom",
+                        value: val,
+                        updated_at: row.updated_at,
+                      }) as Promise<void>
+                    }
                   />
                 ) : (
                   <span className="text-fg">{row.sales_uom ?? "—"}</span>
                 )}
               </div>
+
+              {/* Case pack — numeric, free input. */}
               <div>
-                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Case pack</span>
+                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Case pack
+                </span>
                 {isAdmin ? (
                   <InlineEditCell
                     value={row.case_pack !== null ? String(row.case_pack) : ""}
-                    onSave={(val) => itemFieldMutation.mutateAsync({ field: "case_pack", value: val ? Number(val) : null, updated_at: row.updated_at }) as Promise<void>}
+                    onSave={(val) =>
+                      itemFieldMutation.mutateAsync({
+                        field: "case_pack",
+                        value: val ? Number(val) : null,
+                        updated_at: row.updated_at,
+                      }) as Promise<void>
+                    }
                     ariaLabel="Edit case pack"
                   />
                 ) : (
@@ -520,6 +727,18 @@ export default function AdminItemDetailPage({
   const bomTab: TabDescriptor = {
     key: "bom",
     label: "BOM",
+    badge: row && row.supply_method !== "BOUGHT_FINISHED"
+      ? row.primary_bom_head_id || row.base_bom_head_id
+        ? undefined
+        : "!"
+      : undefined,
+    badgeTone:
+      row &&
+      row.supply_method !== "BOUGHT_FINISHED" &&
+      !row.primary_bom_head_id &&
+      !row.base_bom_head_id
+        ? "danger"
+        : "neutral",
     content: (() => {
       if (!row) return <DetailTabEmpty message="Item row not loaded yet." />;
       if (row.supply_method === "BOUGHT_FINISHED") {
@@ -594,6 +813,16 @@ export default function AdminItemDetailPage({
   const supplierItemsTab: TabDescriptor = {
     key: "supplier-items",
     label: "Supplier items",
+    badge:
+      row?.supply_method === "BOUGHT_FINISHED" && itemSupplierItems.length > 0
+        ? `${itemSupplierItems.length}`
+        : undefined,
+    badgeTone:
+      row?.supply_method === "BOUGHT_FINISHED" && itemSupplierItems.length === 0
+        ? "warning"
+        : itemHasPrimarySupplier
+          ? "success"
+          : "neutral",
     content: (() => {
       if (!row) return <DetailTabEmpty message="Item row not loaded yet." />;
       if (row.supply_method === "BOUGHT_FINISHED") {
@@ -666,6 +895,11 @@ export default function AdminItemDetailPage({
       relatedExceptions.length > 0
         ? `${relatedExceptions.length}`
         : undefined,
+    badgeTone: relatedExceptions.some((e) => e.severity === "critical")
+      ? "danger"
+      : relatedExceptions.length > 0
+        ? "warning"
+        : "neutral",
     content: (() => {
       if (exceptionsQuery.isLoading) return <DetailTabLoading />;
       if (exceptionsQuery.isError) {
@@ -791,27 +1025,26 @@ export default function AdminItemDetailPage({
   return (
     <>
       {row ? (
-        row.supply_method === "MANUFACTURED" ? (
-          <>
-            <RecipeHealthCard
-              itemName={row.item_name ?? row.item_id}
-              baseBomHeadId={row.base_bom_head_id ?? null}
-              packBomHeadId={row.primary_bom_head_id ?? null}
-              isAdmin={isAdmin}
-            />
-            <VersionHistorySection
-              baseBomHeadId={row.base_bom_head_id ?? null}
-              packBomHeadId={row.primary_bom_head_id ?? null}
-              isAdmin={isAdmin}
-            />
-          </>
-        ) : (
+        <>
+          {/* Single hero card for every product — manufactured, repack, or
+              purchased finished. The RecipeHealthCard below is the BOM-
+              specific drill-down for manufactured items only. */}
           <MasterSummaryCard
             name={row.item_name}
             code={row.item_id}
             entityType={fmtSupplyMethod(row.supply_method)}
             status={row.status}
             completeness={completenessItems}
+            kpis={kpis}
+            subtitle={
+              row.family || row.product_group ? (
+                <span>
+                  {[row.family, row.product_group]
+                    .filter((v): v is string => Boolean(v))
+                    .join(" · ")}
+                </span>
+              ) : undefined
+            }
             primaryAction={
               showAssignPrimaryCta ? (
                 <button
@@ -839,7 +1072,22 @@ export default function AdminItemDetailPage({
               ) : undefined
             }
           />
-        )
+          {row.supply_method === "MANUFACTURED" ? (
+            <>
+              <RecipeHealthCard
+                itemName={row.item_name ?? row.item_id}
+                baseBomHeadId={row.base_bom_head_id ?? null}
+                packBomHeadId={row.primary_bom_head_id ?? null}
+                isAdmin={isAdmin}
+              />
+              <VersionHistorySection
+                baseBomHeadId={row.base_bom_head_id ?? null}
+                packBomHeadId={row.primary_bom_head_id ?? null}
+                isAdmin={isAdmin}
+              />
+            </>
+          ) : null}
+        </>
       ) : null}
 
       <ClassWEditDrawer

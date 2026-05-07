@@ -23,7 +23,7 @@
 // Badge. Authors no new styling convention.
 // ---------------------------------------------------------------------------
 
-import { useCallback, useMemo } from "react";
+import { useCallback, useMemo, useRef } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
@@ -49,6 +49,13 @@ export interface TabDescriptor {
   label: string;
   // Optional small count / state pill on the tab label (e.g. "3" rows).
   badge?: ReactNode;
+  /**
+   * Optional tone hint for the badge pill. When set, the pill renders in a
+   * coloured background (info=blue, warn=amber, danger=red, success=green).
+   * Defaults to a subtle neutral so unknown tones don't shout. The badge
+   * itself can still be a fully-custom <ReactNode> to override the styling.
+   */
+  badgeTone?: "neutral" | "info" | "success" | "warning" | "danger";
   // Tab content. Authors supply loading / error / empty states as needed.
   content: ReactNode;
 }
@@ -163,44 +170,15 @@ export function DetailPage({
       >
         {/* Main column — tabs + content */}
         <div className="min-w-0 space-y-4">
-          <div
-            role="tablist"
-            aria-label="Detail sections"
-            className="flex flex-wrap items-center gap-1 border-b border-border/70"
-          >
-            {tabs.map((t) => {
-              const isActive = t.key === active.key;
-              return (
-                <button
-                  key={t.key}
-                  type="button"
-                  role="tab"
-                  aria-selected={isActive}
-                  data-testid={`detail-tab-${t.key}`}
-                  data-active={isActive ? "true" : "false"}
-                  onClick={() => setTab(t.key)}
-                  className={cn(
-                    "inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-semibold tracking-tightish transition-colors duration-150",
-                    isActive
-                      ? "border-accent text-accent"
-                      : "border-transparent text-fg-muted hover:text-fg",
-                  )}
-                >
-                  {t.label}
-                  {t.badge ? (
-                    <span className="text-3xs font-normal text-fg-faint">
-                      {t.badge}
-                    </span>
-                  ) : null}
-                </button>
-              );
-            })}
-          </div>
+          <TabStrip tabs={tabs} active={active} setTab={setTab} />
 
           <div
+            id={`detail-tabpanel-${active.key}`}
             role="tabpanel"
             aria-labelledby={`detail-tab-${active.key}`}
             data-active-tab={active.key}
+            tabIndex={0}
+            className="outline-none focus-visible:ring-2 focus-visible:ring-accent rounded-sm"
           >
             {active.content}
           </div>
@@ -256,6 +234,136 @@ export function DetailPage({
         ) : null}
       </div>
     </>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// TabStrip — extracted for keyboard navigation and sticky positioning.
+//
+// ARIA tablist semantics:
+//   - role="tablist" + aria-label
+//   - tabs use role="tab", aria-selected, aria-controls, tabIndex
+//     (active=0, inactive=-1) so Arrow / Home / End cycle the tabs without
+//     trapping the user in screenreader-tab-stop hell.
+//   - Left/Right arrows wrap through the strip; Home/End jump to the ends.
+//
+// Sticky positioning: the strip becomes `sticky top-0` with a translucent
+// blur backdrop so it stays visible while a long body scrolls. The detail
+// pages wrap in a layout that gives this `top` real meaning.
+// ---------------------------------------------------------------------------
+
+function badgeToneClass(
+  tone: TabDescriptor["badgeTone"] | undefined,
+): string {
+  switch (tone) {
+    case "info":
+      return "bg-info-softer text-info-fg border border-info/30";
+    case "success":
+      return "bg-success-softer text-success-fg border border-success/30";
+    case "warning":
+      return "bg-warning-softer text-warning-fg border border-warning/30";
+    case "danger":
+      return "bg-danger-softer text-danger-fg border border-danger/30";
+    default:
+      return "bg-bg-subtle text-fg-muted border border-border/40";
+  }
+}
+
+function TabStrip({
+  tabs,
+  active,
+  setTab,
+}: {
+  tabs: TabDescriptor[];
+  active: TabDescriptor;
+  setTab: (key: string) => void;
+}): JSX.Element {
+  const stripRef = useRef<HTMLDivElement>(null);
+
+  const focusTabAt = useCallback(
+    (idx: number) => {
+      const strip = stripRef.current;
+      if (!strip) return;
+      const buttons = strip.querySelectorAll<HTMLButtonElement>("[role='tab']");
+      const wrapped = (idx + buttons.length) % buttons.length;
+      const btn = buttons.item(wrapped);
+      if (btn) {
+        btn.focus();
+        const k = btn.dataset.tabKey;
+        if (k) setTab(k);
+      }
+    },
+    [setTab],
+  );
+
+  const onKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
+    const idx = tabs.findIndex((t) => t.key === active.key);
+    if (idx < 0) return;
+    if (e.key === "ArrowRight") {
+      e.preventDefault();
+      focusTabAt(idx + 1);
+    } else if (e.key === "ArrowLeft") {
+      e.preventDefault();
+      focusTabAt(idx - 1);
+    } else if (e.key === "Home") {
+      e.preventDefault();
+      focusTabAt(0);
+    } else if (e.key === "End") {
+      e.preventDefault();
+      focusTabAt(tabs.length - 1);
+    }
+  };
+
+  return (
+    <div
+      ref={stripRef}
+      role="tablist"
+      aria-label="Detail sections"
+      onKeyDown={onKeyDown}
+      className={cn(
+        "sticky top-0 z-20 -mx-1 flex flex-wrap items-center gap-1 px-1",
+        "border-b border-border/70 bg-bg-card/85 backdrop-blur",
+        "supports-[not(backdrop-filter:blur(8px))]:bg-bg-card",
+      )}
+    >
+      {tabs.map((t) => {
+        const isActive = t.key === active.key;
+        return (
+          <button
+            key={t.key}
+            type="button"
+            role="tab"
+            id={`detail-tab-${t.key}`}
+            aria-selected={isActive}
+            aria-controls={`detail-tabpanel-${t.key}`}
+            tabIndex={isActive ? 0 : -1}
+            data-testid={`detail-tab-${t.key}`}
+            data-active={isActive ? "true" : "false"}
+            data-tab-key={t.key}
+            onClick={() => setTab(t.key)}
+            className={cn(
+              "inline-flex items-center gap-1.5 border-b-2 px-3 py-2 text-xs font-semibold tracking-tightish transition-colors duration-150",
+              "outline-none focus-visible:ring-2 focus-visible:ring-accent",
+              isActive
+                ? "border-accent text-accent"
+                : "border-transparent text-fg-muted hover:text-fg",
+            )}
+          >
+            <span>{t.label}</span>
+            {t.badge ? (
+              <span
+                className={cn(
+                  "inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full px-1.5 text-3xs font-semibold leading-none",
+                  badgeToneClass(t.badgeTone),
+                )}
+              >
+                {t.badge}
+              </span>
+            ) : null}
+          </button>
+        );
+      })}
+    </div>
   );
 }
 
