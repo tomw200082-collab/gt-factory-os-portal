@@ -111,7 +111,7 @@ export function BomDraftEditorPage({
   // editing the version metadata (header) or the supplier readiness panel.
   // We surface the upstream error in a banner instead of stalling the page.
   const linesQuery = useQuery({
-    queryKey: ["boms", "lines", versionId],
+    queryKey: ["boms", "draft-lines", versionId],
     queryFn: async (): Promise<{
       rows: BomLineDataRow[];
       warning: string | null;

@@ -80,7 +80,7 @@ export function BomLineRow({
         ifMatchUpdatedAt: new Date(line.updated_at).toISOString(),
       }),
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["boms", "lines", versionId] });
+      qc.invalidateQueries({ queryKey: ["boms", "draft-lines", versionId] });
       setEditing(false);
       setError(null);
     },
@@ -125,7 +125,7 @@ export function BomLineRow({
     },
     onSuccess: () => {
       setConfirmDelete(false);
-      qc.invalidateQueries({ queryKey: ["boms", "lines", versionId] });
+      qc.invalidateQueries({ queryKey: ["boms", "draft-lines", versionId] });
     },
     onError: (e: Error) => {
       setError(e.message);

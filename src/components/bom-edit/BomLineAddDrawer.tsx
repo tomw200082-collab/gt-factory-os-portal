@@ -87,7 +87,7 @@ export function BomLineAddDrawer({
       return res.json();
     },
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ["boms", "lines", versionId] });
+      qc.invalidateQueries({ queryKey: ["boms", "draft-lines", versionId] });
       setSelected(null);
       setSearch("");
       setQty("1");
