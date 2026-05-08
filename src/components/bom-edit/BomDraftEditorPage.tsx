@@ -162,6 +162,7 @@ export function BomDraftEditorPage({
   const [addOpen, setAddOpen] = useState(false);
   const [fixComponentId, setFixComponentId] = useState<string | null>(null);
   const [previewOpen, setPreviewOpen] = useState(false);
+  const [publishError, setPublishError] = useState<string | null>(null);
 
   const previewQuery = useQuery({
     queryKey: ["boms", "publish-preview", versionId],
@@ -196,12 +197,15 @@ export function BomDraftEditorPage({
           }),
         },
       );
-      if (!res.ok) throw new Error(`publish: ${res.status}`);
+      if (!res.ok) {
+        const body = await res.text().catch(() => "");
+        throw new Error(`Publish failed (HTTP ${res.status})${body ? `: ${body.slice(0, 200)}` : ""}`);
+      }
       return res.json();
     },
     onSuccess: () => {
+      setPublishError(null);
       if (onClose) {
-        // Panel mode: return to the item detail view.
         onClose();
       } else {
         const itemId = headQuery.data?.parent_ref_id;
@@ -211,6 +215,10 @@ export function BomDraftEditorPage({
           navigate(`/admin/masters/boms/${bomHeadId}`);
         }
       }
+    },
+    onError: (e: Error) => {
+      setPublishError(e.message);
+      setPreviewOpen(false);
     },
   });
 
@@ -446,6 +454,58 @@ export function BomDraftEditorPage({
           onClose={() => setFixComponentId(null)}
         />
       )}
+      {/* Publish preview — loading overlay */}
+      {previewOpen && previewQuery.isLoading && (
+        <div
+          role="dialog"
+          aria-label="Loading publish preview"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-fg/40 p-4"
+        >
+          <div className="w-full max-w-sm rounded-md border border-border bg-bg-raised p-6 shadow-lg text-center">
+            <div className="mx-auto mb-3 h-6 w-6 animate-spin rounded-full border-2 border-border border-t-accent" />
+            <p className="text-sm font-medium text-fg">Checking publish readiness…</p>
+            <button
+              type="button"
+              onClick={() => setPreviewOpen(false)}
+              className="mt-4 text-xs text-fg-muted hover:text-fg underline"
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      )}
+      {/* Publish preview — error overlay */}
+      {previewOpen && previewQuery.isError && (
+        <div
+          role="dialog"
+          aria-label="Publish preview failed"
+          className="fixed inset-0 z-50 flex items-center justify-center bg-fg/40 p-4"
+        >
+          <div className="w-full max-w-sm rounded-md border border-danger-border bg-bg-raised p-5 shadow-lg">
+            <h3 className="text-sm font-semibold text-danger-fg">Could not load publish preview</h3>
+            <p className="mt-1 text-xs text-fg-muted">
+              {(previewQuery.error as Error).message ?? "Unknown error"}
+            </p>
+            <div className="mt-4 flex justify-end gap-2">
+              <button
+                type="button"
+                onClick={() => setPreviewOpen(false)}
+                className="rounded-sm border border-border bg-bg-raised px-3 py-1.5 text-sm text-fg hover:bg-bg-subtle"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={() => previewQuery.refetch()}
+                className="rounded-sm border border-accent-border bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:bg-accent-hover"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Publish confirm modal — only when preview is ready */}
       {previewOpen && previewQuery.data && (
         <PublishConfirmModal
           preview={previewQuery.data}
@@ -501,11 +561,16 @@ export function BomDraftEditorPage({
             </button>
             <button
               type="button"
-              disabled={!editable}
-              onClick={() => setPreviewOpen(true)}
-              className="rounded-sm border border-accent-border bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={!editable || (previewOpen && previewQuery.isLoading)}
+              onClick={() => { setPublishError(null); setPreviewOpen(true); }}
+              className="inline-flex items-center gap-1.5 rounded-sm border border-accent-border bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
             >
-              Publish
+              {previewOpen && previewQuery.isLoading ? (
+                <>
+                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-accent-fg/40 border-t-accent-fg" />
+                  Checking…
+                </>
+              ) : "Publish"}
             </button>
           </div>
         </div>
@@ -520,6 +585,23 @@ export function BomDraftEditorPage({
           <div className="rounded-md border border-danger-border bg-danger-soft px-4 py-2 text-sm">
             <span className="font-semibold text-danger-fg">Lines unavailable. </span>
             <span className="text-danger-fg/90">{linesWarning}</span>
+          </div>
+        )}
+        {publishError && (
+          <div className="rounded-md border border-danger-border bg-danger-soft px-4 py-2 text-sm">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <span className="font-semibold text-danger-fg">Publish failed. </span>
+                <span className="text-danger-fg/90">{publishError}</span>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPublishError(null)}
+                className="shrink-0 text-xs text-fg-muted hover:text-fg"
+              >
+                ✕
+              </button>
+            </div>
           </div>
         )}
 
@@ -558,11 +640,16 @@ export function BomDraftEditorPage({
             </button>
             <button
               type="button"
-              disabled={!editable}
-              onClick={() => setPreviewOpen(true)}
-              className="rounded-sm border border-accent-border bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
+              disabled={!editable || (previewOpen && previewQuery.isLoading)}
+              onClick={() => { setPublishError(null); setPreviewOpen(true); }}
+              className="inline-flex items-center gap-1.5 rounded-sm border border-accent-border bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
             >
-              Publish
+              {previewOpen && previewQuery.isLoading ? (
+                <>
+                  <span className="h-3.5 w-3.5 animate-spin rounded-full border-2 border-accent-fg/40 border-t-accent-fg" />
+                  Checking…
+                </>
+              ) : "Publish"}
             </button>
           </div>
         </div>
@@ -577,6 +664,23 @@ export function BomDraftEditorPage({
         <div className="border-b border-danger-border bg-danger-soft px-6 py-2 text-sm">
           <span className="font-semibold text-danger-fg">Lines unavailable. </span>
           <span className="text-danger-fg/90">{linesWarning}</span>
+        </div>
+      )}
+      {publishError && (
+        <div className="border-b border-danger-border bg-danger-soft px-6 py-2 text-sm">
+          <div className="mx-auto flex max-w-7xl items-center justify-between gap-2">
+            <div>
+              <span className="font-semibold text-danger-fg">Publish failed. </span>
+              <span className="text-danger-fg/90">{publishError}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setPublishError(null)}
+              className="shrink-0 text-xs text-fg-muted hover:text-fg"
+            >
+              ✕
+            </button>
+          </div>
         </div>
       )}
 

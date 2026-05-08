@@ -66,12 +66,27 @@ export function useComponentReadinessMap(
     })),
   });
 
-  const isReady = unique.length === 0 || results.every((r) => r.isSuccess);
+  // isReady once nothing is still pending (success OR error both count as settled)
+  const isReady = unique.length === 0 || results.every((r) => !r.isPending);
   const map = new Map<string, ComponentReadiness>();
-  if (isReady && unique.length > 0) {
+  // Populate from settled queries — failed ones get a null-supplier placeholder
+  // so that Fix buttons still appear and the drawer can surface the error.
+  if (unique.length > 0) {
     unique.forEach((id, idx) => {
-      const rows = (results[idx].data ?? []) as SupplierItemRow[];
-      map.set(id, rowsToReadiness(id, rows));
+      const r = results[idx];
+      if (r.isSuccess) {
+        map.set(id, rowsToReadiness(id, (r.data ?? []) as SupplierItemRow[]));
+      } else if (r.isError) {
+        map.set(id, {
+          component_id: id,
+          component_name: id,
+          component_status: "ACTIVE",
+          primary_supplier_id: null,
+          primary_supplier_name: null,
+          active_price_value: null,
+          active_price_updated_at: null,
+        });
+      }
     });
   }
   const firstError = results.find((r) => r.isError);
