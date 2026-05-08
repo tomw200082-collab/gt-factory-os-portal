@@ -305,10 +305,16 @@ export default function ForecastVersionDetailPage() {
   // ----- Buckets + items derived -----
   const buckets = useMemo(() => {
     if (!version) return [];
+    // DEC-2 (2026-05-08): cap monthly cadence to 2 months for default display.
+    // Backend horizon stays unchanged; this is a display-only cap.
+    const displayCount =
+      version.cadence === "monthly"
+        ? Math.min(version.horizon_weeks, 2)
+        : version.horizon_weeks;
     return computeMonthBuckets(
       version.cadence,
       version.horizon_start_at,
-      version.horizon_weeks,
+      displayCount,
     );
   }, [version]);
 
