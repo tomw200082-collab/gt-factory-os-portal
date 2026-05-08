@@ -17,7 +17,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
 import { Mail } from "lucide-react";
-import { createSupabaseBrowserClient } from "@/lib/supabase/client";
+import { createSupabaseOtpClient } from "@/lib/supabase/client";
 
 const DEV_SHIM_ON = process.env.NEXT_PUBLIC_ENABLE_DEV_SHIM_AUTH === "true";
 
@@ -158,7 +158,7 @@ function MagicLinkLogin() {
 
   const supabase = useMemo(() => {
     try {
-      return createSupabaseBrowserClient();
+      return createSupabaseOtpClient();
     } catch (err) {
       return err instanceof Error ? err : new Error(String(err));
     }
