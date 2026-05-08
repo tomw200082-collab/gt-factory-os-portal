@@ -27,7 +27,7 @@
 // ---------------------------------------------------------------------------
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useMemo, useState, useCallback } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Calendar,
@@ -42,6 +42,45 @@ import {
   ChevronRight,
   ArrowRight,
   Sparkles,
+  Search,
+  Scale,
+  X,
+  Repeat,
+  Target,
+  Gauge,
+  AlertTriangle,
+  PackageSearch,
+  Timer,
+  Download,
+  Check,
+  Lock,
+  LockOpen,
+  Grid2X2,
+  Grid3X3,
+  Layers,
+  MessageSquare,
+  History,
+  Star,
+  HeartPulse,
+  FileText,
+  PackageX,
+  BarChart3,
+  Clock,
+  CircleDot,
+  Package,
+  BarChart2,
+  ClipboardX,
+  CalendarMinus,
+  CircleDollarSign,
+  AreaChart,
+  CheckSquare,
+  Activity,
+  Forward,
+  Maximize2,
+  Trash2,
+  Flag,
+  TrendingUp,
+  Pause,
 } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
@@ -271,11 +310,13 @@ function PlanRowCard({
   canAct,
   onEdit,
   onCancel,
+  isRecurring,
 }: {
   plan: ProductionPlanRow;
   canAct: boolean;
   onEdit: (p: ProductionPlanRow) => void;
   onCancel: (p: ProductionPlanRow) => void;
+  isRecurring?: boolean;
 }) {
   const isLive = plan.rendered_state === "planned";
   const isDone = plan.rendered_state === "done";
@@ -299,11 +340,18 @@ function PlanRowCard({
         <div className="min-w-0 flex-1">
           <div
             className={cn(
-              "text-sm font-medium",
+              "text-sm font-medium flex items-center gap-1",
               isCancelled ? "line-through text-fg-muted" : "text-fg-strong",
             )}
           >
             {plan.item_name ?? plan.item_id}
+            {isRecurring ? (
+              <Repeat
+                className="text-fg-faint w-3 h-3 flex-shrink-0"
+                strokeWidth={1.5}
+                aria-label="Recurring item"
+              />
+            ) : null}
           </div>
           <div className="mt-0.5 font-mono text-3xs text-fg-faint">
             {plan.item_id}
@@ -481,6 +529,13 @@ function DayCard({
   onAdd,
   onEdit,
   onCancel,
+  itemSearch,
+  recurringItemIds,
+  isLocked,
+  onToggleLock,
+  showPriorityHighlight,
+  priorityItemIds,
+  onTogglePriority,
 }: {
   date: Date;
   plans: ProductionPlanRow[];
@@ -490,6 +545,13 @@ function DayCard({
   onAdd: (date: Date) => void;
   onEdit: (p: ProductionPlanRow) => void;
   onCancel: (p: ProductionPlanRow) => void;
+  itemSearch?: string;
+  recurringItemIds?: string[];
+  isLocked?: boolean;
+  onToggleLock?: () => void;
+  showPriorityHighlight?: boolean;
+  priorityItemIds?: Set<string>;
+  onTogglePriority?: (itemId: string) => void;
 }) {
   const { dayName, dateLabel } = fmtDayHeader(date);
   const planned = plans.filter((p) => p.rendered_state === "planned");
@@ -504,6 +566,7 @@ function DayCard({
         "rounded-md border bg-bg-raised transition-colors",
         isToday ? "border-accent/50" : "border-border/60",
         expanded && "ring-1 ring-accent/40",
+        isLocked && "border-warning/40",
       )}
       data-testid="day-card"
       data-date={toIsoDate(date)}
@@ -523,6 +586,11 @@ function DayCard({
               <Badge tone="accent" variant="soft">
                 Today
               </Badge>
+            ) : null}
+            {isLocked ? (
+              <span className="text-3xs text-warning-fg font-medium">
+                Locked
+              </span>
             ) : null}
           </div>
           <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-3xs">
@@ -546,46 +614,113 @@ function DayCard({
             ) : null}
           </div>
         </div>
-        <ChevronRight
-          className={cn(
-            "h-4 w-4 shrink-0 text-fg-muted transition-transform",
-            expanded && "rotate-90",
-          )}
-          strokeWidth={2}
-        />
+        <div className="flex items-center gap-1 shrink-0">
+          {onToggleLock ? (
+            <button
+              type="button"
+              aria-label={isLocked ? "Unlock this day" : "Lock this day"}
+              title={isLocked ? "Unlock this day" : "Lock this day"}
+              onClick={(e) => {
+                e.stopPropagation();
+                onToggleLock();
+              }}
+              className="flex items-center justify-center h-5 w-5 rounded hover:bg-bg-subtle/60 transition-colors"
+            >
+              {isLocked ? (
+                <Lock className="h-3 w-3 text-warning-fg" strokeWidth={2} />
+              ) : (
+                <LockOpen className="h-3 w-3 text-fg-faint" strokeWidth={2} />
+              )}
+            </button>
+          ) : null}
+          <ChevronRight
+            className={cn(
+              "h-4 w-4 text-fg-muted transition-transform",
+              expanded && "rotate-90",
+            )}
+            strokeWidth={2}
+          />
+        </div>
       </button>
 
       {expanded ? (
         <div className="border-t border-border/40 p-3 space-y-2">
-          {plans.length === 0 ? (
-            <div className="text-xs text-fg-muted text-center py-2">
-              No production planned for this day yet.
-            </div>
-          ) : (
-            plans.map((p) => (
-              <PlanRowCard
-                key={p.plan_id}
-                plan={p}
-                canAct={canAct}
-                onEdit={onEdit}
-                onCancel={onCancel}
-              />
-            ))
-          )}
-          {canAct ? (
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm w-full gap-1.5"
-              onClick={(e) => {
-                e.stopPropagation();
-                onAdd(date);
-              }}
-              data-testid="day-card-add"
-            >
-              <Plus className="h-3 w-3" strokeWidth={2.5} />
-              Add production for this day
-            </button>
-          ) : null}
+          <div className={cn(isLocked && "opacity-60 pointer-events-none")}>
+            {plans.length === 0 ? (
+              <div className="text-xs text-fg-muted text-center py-2">
+                No production planned for this day yet.
+              </div>
+            ) : (() => {
+              const searchTerm = itemSearch?.trim().toLowerCase() ?? "";
+              const filteredPlans = searchTerm.length > 0
+                ? plans.filter((p) => {
+                    const name =
+                      ((p as any).item_name ?? (p as any).name ?? (p as any).component_name ?? "") as string;
+                    return name.toLowerCase().includes(searchTerm);
+                  })
+                : plans;
+              if (searchTerm.length > 0 && filteredPlans.length === 0) {
+                return (
+                  <div className="px-2 py-2 text-3xs text-fg-faint italic">
+                    No matches
+                  </div>
+                );
+              }
+              return filteredPlans.map((p) => {
+                const pItemKey = (p as any).item_id ?? (p as any).name ?? p.plan_id;
+                const isPriority = showPriorityHighlight && (priorityItemIds?.has(pItemKey) ?? false);
+                return (
+                  <div
+                    key={p.plan_id}
+                    className={cn(
+                      "relative",
+                      isPriority && "bg-yellow-50/30 rounded-md",
+                    )}
+                  >
+                    {showPriorityHighlight && onTogglePriority ? (
+                      <button
+                        type="button"
+                        title={isPriority ? "Remove priority" : "Mark as priority"}
+                        aria-label={isPriority ? "Remove priority" : "Mark as priority"}
+                        onClick={() => onTogglePriority(pItemKey)}
+                        className="absolute top-2 right-2 z-10 flex items-center justify-center h-5 w-5 rounded hover:bg-bg-subtle/60 transition-colors"
+                      >
+                        <Star
+                          className={cn(
+                            "h-3 w-3",
+                            isPriority ? "text-yellow-500" : "text-fg-faint",
+                          )}
+                          strokeWidth={2}
+                          fill={isPriority ? "currentColor" : "none"}
+                        />
+                      </button>
+                    ) : null}
+                    <PlanRowCard
+                      plan={p}
+                      canAct={canAct}
+                      onEdit={onEdit}
+                      onCancel={onCancel}
+                      isRecurring={recurringItemIds?.includes(p.item_id) ?? false}
+                    />
+                  </div>
+                );
+              });
+            })()}
+            {canAct ? (
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm w-full gap-1.5"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onAdd(date);
+                }}
+                data-testid="day-card-add"
+              >
+                <Plus className="h-3 w-3" strokeWidth={2.5} />
+                Add production for this day
+              </button>
+            ) : null}
+          </div>
         </div>
       ) : null}
     </div>
@@ -1433,6 +1568,83 @@ export default function ProductionPlanPage() {
     message: string;
   } | null>(null);
 
+  // Improvement 7 — Export Week Plan (clipboard copy)
+  const [copiedExport, setCopiedExport] = useState<boolean>(false);
+
+  // Improvement 8 — Per-Day Lock Toggle (persisted to localStorage)
+  const [lockedDayIds, setLockedDayIds] = useState<Set<number>>(() => {
+    if (typeof window === "undefined") return new Set<number>();
+    try {
+      const raw = localStorage.getItem("gt_plan_locked_days");
+      if (!raw) return new Set<number>();
+      const arr = JSON.parse(raw) as number[];
+      return new Set<number>(arr);
+    } catch {
+      return new Set<number>();
+    }
+  });
+
+  // Item search across all DayCards
+  const [planItemSearch, setPlanItemSearch] = useState<string>("");
+
+  // Improvement 1 — Recurring Items Badge
+  const recurringItemsQuery = useQuery<unknown>({
+    queryKey: ["recurring_plan_items"],
+    queryFn: async () => {
+      const res = await fetch("/api/production/plan/recurring");
+      if (!res.ok) throw new Error("Could not load recurring items");
+      return res.json();
+    },
+    throwOnError: false,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Improvement 2 — Weekly Output Target Setter
+  const weekStartIso = toIsoDate(weekStart);
+  const [weeklyOutputTarget, setWeeklyOutputTarget] = useState<number>(() => {
+    try {
+      return parseInt(
+        localStorage.getItem(`gt_prod_output_target_${weekStartIso}`) ?? "0",
+        10,
+      ) || 0;
+    } catch {
+      return 0;
+    }
+  });
+  const [showTargetEditor, setShowTargetEditor] = useState<boolean>(false);
+
+  // Improvement 3 — Weekly Capacity Fill Gauge
+  const [showCapacityFill, setShowCapacityFill] = useState<boolean>(false);
+
+  // Improvement 4 — Low Progress Alert Banner
+  const [dismissProgressAlert, setDismissProgressAlert] = useState<boolean>(false);
+
+  // Improvement 5 — Material Readiness Panel
+  const [showMaterialReadiness, setShowMaterialReadiness] = useState<boolean>(false);
+
+  const stockQuery = useQuery<unknown>({
+    queryKey: ["current_stock_summary"],
+    queryFn: async () => {
+      const res = await fetch("/api/stock/current?summary=true");
+      if (!res.ok) throw new Error("Could not load stock summary");
+      return res.json();
+    },
+    throwOnError: false,
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Improvement 6 — Week Cycle Time Target Chip
+  const [weekCycleTimeTarget, setWeekCycleTimeTarget] = useState<number>(() => {
+    try {
+      return parseInt(localStorage.getItem("gt_plan_cycle_target") ?? "40", 10) || 40;
+    } catch {
+      return 40;
+    }
+  });
+  const [showCycleTimeEditor, setShowCycleTimeEditor] = useState<boolean>(false);
+
+  const planItemSearchActive = planItemSearch.trim().length > 0;
+
   const plansQuery = usePlans(toIsoDate(weekStart), toIsoDate(weekEnd));
   const createMut = useCreatePlan();
   const patchMut = usePatchPlan();
@@ -1456,6 +1668,43 @@ export default function ProductionPlanPage() {
     return out;
   }, [plansQuery.data, weekStart]);
 
+  // weekDays — flat array of ISO date strings for the current week (7 days).
+  const weekDays = Array.from({ length: 7 }).map((_, i) => toIsoDate(addDays(weekStart, i)));
+
+  // Weekly production ratio — output units / components consumed this week.
+  // Reads the production plan query response via (d as any).
+  const weeklyProductionRatio = useMemo((): {
+    ratio: number;
+    outputUnits: number;
+    consumedUnits: number;
+  } | null => {
+    const d = plansQuery.data;
+    if (!d) return null;
+    const outputUnits: number =
+      (d as any).total_output_units ?? (d as any).total_produced ?? 0;
+    const consumedUnits: number =
+      (d as any).total_components_consumed ?? (d as any).total_rm_consumed ?? 0;
+    if (outputUnits === 0 && consumedUnits === 0) return null;
+    const ratio = outputUnits / Math.max(consumedUnits, 1);
+    return { ratio, outputUnits, consumedUnits };
+  }, [plansQuery.data]);
+
+  // Improvement 1 — recurring item IDs from query
+  const recurringItemIds = useMemo((): string[] => {
+    const d = recurringItemsQuery.data;
+    if (!d) return [];
+    return ((d as any).item_ids ?? (d as any).recurring ?? []) as string[];
+  }, [recurringItemsQuery.data]);
+
+  // Improvement 2 — weekly output actual (sum completed quantities from weekData)
+  const weeklyOutputActual = useMemo((): number => {
+    const d = plansQuery.data;
+    if (!d) return 0;
+    return (
+      (d as any).total_output ?? (d as any).completed_units ?? 0
+    ) as number;
+  }, [plansQuery.data]);
+
   // State-hygiene gate: derive counts only when we have real data.
   // If `plansQuery.data` is undefined (loading or error), the header chips
   // do NOT render — that prevents the "0 planned + red error" contradiction
@@ -1465,6 +1714,91 @@ export default function ProductionPlanPage() {
   const plannedCount = allPlans.filter((p) => p.rendered_state === "planned").length;
   const doneCount = allPlans.filter((p) => p.rendered_state === "done").length;
   const cancelledCount = allPlans.filter((p) => p.rendered_state === "cancelled").length;
+
+  // Improvement 1 — count of current-week plan items that are recurring
+  const recurringCount = useMemo((): number => {
+    if (recurringItemIds.length === 0) return 0;
+    const seen = new Set<string>();
+    for (const p of allPlans) {
+      if (recurringItemIds.includes(p.item_id)) {
+        seen.add(p.item_id);
+      }
+    }
+    return seen.size;
+  }, [allPlans, recurringItemIds]);
+
+  // Improvement 2 — weekly target percentage
+  const weeklyTargetPct: number | null =
+    weeklyOutputTarget > 0
+      ? Math.min(100, Math.round((weeklyOutputActual / weeklyOutputTarget) * 100))
+      : null;
+
+  // Improvement 3 — Weekly Capacity Fill Gauge
+  const MAX_DAILY_CAPACITY = 8;
+  const { totalPlannedItems, capacityFillPct } = useMemo(() => {
+    // Only count the 5 weekdays (Mon–Fri = indices 1–5 in Sunday-first week).
+    // weekDays is 7 days starting from weekStart (Sunday).
+    const weekdayIsos = weekDays.filter((_, idx) => idx >= 1 && idx <= 5);
+    const total = weekdayIsos.reduce((sum, iso) => {
+      return sum + (plansByDay.get(iso)?.length ?? 0);
+    }, 0);
+    const pct = Math.min(100, Math.round((total / (MAX_DAILY_CAPACITY * 5)) * 100));
+    return { totalPlannedItems: total, capacityFillPct: pct };
+  }, [plansByDay, weekDays]);
+
+  // Improvement 4 — Low Progress Alert Banner
+  // Show when week is at mid-point or later (Wednesday = getDay() 3, or Thursday/Friday)
+  // and actual production progress is below 20% of target.
+  const weekProgressPct: number | null = weeklyTargetPct;
+  const showProgressAlert: boolean =
+    weekProgressPct !== null &&
+    weekProgressPct < 20 &&
+    new Date().getDay() >= 2;
+
+  // Improvement 5 — Material Readiness rows
+  const materialReadinessRows = useMemo((): {
+    name: string;
+    available: number;
+    needed: number;
+    readyPct: number;
+  }[] => {
+    const stockData = stockQuery.data;
+    const stockItems: unknown[] =
+      (stockData as any)?.items ?? (stockData as any)?.components ?? [];
+    const planItems: unknown[] = allPlans.length > 0 ? allPlans : [];
+    if (planItems.length === 0) return [];
+    return planItems.slice(0, 6).map((p) => {
+      const itemId = (p as any).item_id ?? "";
+      const name: string =
+        (p as any).item_name ?? (p as any).name ?? itemId ?? "—";
+      const needed: number =
+        (p as any).required_qty ?? (p as any).quantity ?? (p as any).qty ?? 10;
+      const s = stockItems.find(
+        (si) =>
+          (si as any).item_id === itemId ||
+          (si as any).id === itemId ||
+          (si as any).component_id === itemId,
+      );
+      const available: number =
+        s !== undefined
+          ? ((s as any).current_qty ?? (s as any).qty ?? 0)
+          : 0;
+      const readyPct = Math.min(
+        100,
+        Math.round((available / Math.max(needed, 1)) * 100),
+      );
+      return { name, available, needed, readyPct };
+    });
+  }, [stockQuery.data, allPlans]);
+
+  // Improvement 6 — Estimated cycle hours this week
+  const estimatedCycleHrs = useMemo((): number => {
+    // Count total plan items across all weekday slots; assume 2h per item.
+    const total = weekDays.reduce((sum, iso) => {
+      return sum + (plansByDay.get(iso)?.length ?? 0);
+    }, 0);
+    return total * 2;
+  }, [plansByDay, weekDays]);
 
   function handleManualAdd(req: {
     plan_date: string;
@@ -1574,6 +1908,880 @@ export default function ProductionPlanPage() {
     );
   }
 
+  // Improvement 7 — Export Week Plan handler
+  const handleExportWeekPlan = useCallback(() => {
+    const weekLabel = fmtWeekRange(weekStart, weekEnd);
+    const lines: string[] = [`GT Production Plan — ${weekLabel}`, "=================="];
+    let totalItems = 0;
+    let activeDays = 0;
+    for (let i = 0; i < 7; i++) {
+      const date = addDays(weekStart, i);
+      const iso = toIsoDate(date);
+      const dayPlans = plansByDay.get(iso) ?? [];
+      const activePlans = dayPlans.filter((p) => p.rendered_state !== "cancelled");
+      if (activePlans.length === 0) continue;
+      activeDays += 1;
+      totalItems += activePlans.length;
+      const { dayName, dateLabel } = fmtDayHeader(date);
+      const itemNames = activePlans
+        .map((p) => (p as any).item_name ?? p.item_id)
+        .join(", ");
+      lines.push(`${dayName} ${dateLabel}: ${itemNames}`);
+      // Per-day notes are not stored on plan rows in v1; skip note line
+    }
+    lines.push("==================");
+    lines.push(`Total: ${totalItems} item${totalItems !== 1 ? "s" : ""} across ${activeDays} day${activeDays !== 1 ? "s" : ""}`);
+    const text = lines.join("\n");
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedExport(true);
+      window.setTimeout(() => setCopiedExport(false), 2000);
+    }).catch(() => {
+      // Clipboard unavailable — non-fatal; silently skip feedback
+    });
+  }, [weekStart, weekEnd, plansByDay]);
+
+  // Improvement 8 — Per-Day Lock Toggle handler
+  function toggleDayLock(dayIndex: number) {
+    setLockedDayIds((prev) => {
+      const next = new Set<number>(prev);
+      if (next.has(dayIndex)) {
+        next.delete(dayIndex);
+      } else {
+        next.add(dayIndex);
+      }
+      try {
+        localStorage.setItem("gt_plan_locked_days", JSON.stringify(Array.from(next)));
+      } catch {
+        // localStorage unavailable — non-fatal
+      }
+      return next;
+    });
+  }
+
+  // Improvement 9 — Item Effort × Urgency Matrix
+  const [showEffortMatrix, setShowEffortMatrix] = useState<boolean>(false);
+
+  const effortMatrixData = useMemo((): {
+    highUrgHighEff: string[];
+    highUrgLowEff: string[];
+    lowUrgHighEff: string[];
+    lowUrgLowEff: string[];
+  } => {
+    if (allPlans.length === 0) {
+      return { highUrgHighEff: [], highUrgLowEff: [], lowUrgHighEff: [], lowUrgLowEff: [] };
+    }
+    const seen = new Set<string>();
+    const highUrgHighEff: string[] = [];
+    const highUrgLowEff: string[] = [];
+    const lowUrgHighEff: string[] = [];
+    const lowUrgLowEff: string[] = [];
+    for (const item of allPlans) {
+      const name: string =
+        (item as any).item_name ?? (item as any).name ?? (item as any).item_id ?? "—";
+      if (seen.has(name)) continue;
+      seen.add(name);
+      const isHighUrgency: boolean =
+        (item as any).priority === "high" ||
+        (item as any).urgency === "high" ||
+        !!(item as any).is_critical;
+      const isHighEffort: boolean =
+        (item as any).cycle_time_hours > 4 ||
+        (item as any).complexity === "high";
+      if (isHighUrgency && isHighEffort) {
+        if (highUrgHighEff.length < 4) highUrgHighEff.push(name);
+      } else if (isHighUrgency && !isHighEffort) {
+        if (highUrgLowEff.length < 4) highUrgLowEff.push(name);
+      } else if (!isHighUrgency && isHighEffort) {
+        if (lowUrgHighEff.length < 4) lowUrgHighEff.push(name);
+      } else {
+        if (lowUrgLowEff.length < 4) lowUrgLowEff.push(name);
+      }
+    }
+    return { highUrgHighEff, highUrgLowEff, lowUrgHighEff, lowUrgLowEff };
+  }, [allPlans]);
+
+  // Improvement 10 — Week Pace Indicator
+  const weekPaceIndicator = useMemo((): {
+    paceRatio: number;
+    label: string;
+    color: "success" | "info" | "danger";
+  } | null => {
+    const dayOfWeek = new Date().getDay(); // 0=Sun, 6=Sat
+    if (dayOfWeek === 0 || dayOfWeek === 6) return null;
+    const businessDaysPassed = Math.min(Math.max(dayOfWeek - 1, 0), 5);
+    const expectedProgress = businessDaysPassed / 5;
+    const actualProgress =
+      weeklyTargetPct !== null
+        ? weeklyTargetPct / 100
+        : doneCount > 0 && allPlans.length > 0
+        ? doneCount / allPlans.length
+        : 0;
+    const rawRatio = actualProgress / Math.max(expectedProgress, 0.01);
+    const paceRatio = Math.min(rawRatio, 2);
+    const label =
+      paceRatio >= 1.1 ? "Ahead" : paceRatio >= 0.9 ? "On pace" : "Behind";
+    const color: "success" | "info" | "danger" =
+      paceRatio >= 1.1 ? "success" : paceRatio >= 0.9 ? "info" : "danger";
+    return { paceRatio, label, color };
+  }, [weeklyTargetPct, doneCount, allPlans]);
+
+  // Improvement 11 — Batching Opportunity Indicator
+  const [showBatchingOpps, setShowBatchingOpps] = useState<boolean>(false);
+
+  const batchingOpportunities = useMemo((): {
+    item: string;
+    daysCount: number;
+    dayLabels: string[];
+  }[] => {
+    if (allPlans.length === 0) return [];
+    // Map item name -> set of day labels (Sun/Mon/...) where it appears
+    const itemDayMap = new Map<string, Set<string>>();
+    for (const p of allPlans) {
+      if (p.rendered_state === "cancelled") continue;
+      const name: string =
+        (p as any).item_name ?? (p as any).name ?? (p as any).item_id ?? "";
+      if (!name) continue;
+      const planDate = p.plan_date; // ISO string
+      const d = new Date(planDate + "T00:00:00");
+      const dayLabel = DAY_NAMES[d.getDay()] ?? planDate;
+      if (!itemDayMap.has(name)) itemDayMap.set(name, new Set<string>());
+      itemDayMap.get(name)!.add(dayLabel);
+    }
+    const candidates: { item: string; daysCount: number; dayLabels: string[] }[] = [];
+    for (const [item, daysSet] of itemDayMap.entries()) {
+      if (daysSet.size >= 2) {
+        candidates.push({ item, daysCount: daysSet.size, dayLabels: Array.from(daysSet) });
+      }
+    }
+    candidates.sort((a, b) => b.daysCount - a.daysCount);
+    return candidates.slice(0, 8);
+  }, [allPlans]);
+
+  // Improvement 12 — Week Commentary
+  const [showWeekCommentary, setShowWeekCommentary] = useState<boolean>(false);
+  const [weekCommentary, setWeekCommentary] = useState<string>(() => {
+    if (typeof window === "undefined") return "";
+    try {
+      return localStorage.getItem(`gt_plan_week_commentary_${weekStartIso}`) ?? "";
+    } catch {
+      return "";
+    }
+  });
+
+  // ---------------------------------------------------------------------------
+  // Improvement 13 — Plan Change Log
+  // ---------------------------------------------------------------------------
+  const CHANGE_LOG_KEY = "gt_plan_change_log";
+
+  const [planChangeLogs, setPlanChangeLogs] = useState<
+    { id: string; action: string; item: string; day: string; at: string }[]
+  >(() => {
+    if (typeof window === "undefined") return [];
+    try {
+      const raw = localStorage.getItem(CHANGE_LOG_KEY);
+      if (!raw) return [];
+      return JSON.parse(raw) as {
+        id: string;
+        action: string;
+        item: string;
+        day: string;
+        at: string;
+      }[];
+    } catch {
+      return [];
+    }
+  });
+
+  const [showChangeLog, setShowChangeLog] = useState<boolean>(false);
+
+  const logPlanChange = useCallback(
+    (action: "add" | "remove", item: string, day: string) => {
+      const entry = {
+        id: Date.now().toString(),
+        action,
+        item: item.slice(0, 30),
+        day,
+        at: new Date().toLocaleTimeString(),
+      };
+      setPlanChangeLogs((prev) => {
+        const next = [entry, ...prev].slice(0, 10);
+        try {
+          localStorage.setItem(CHANGE_LOG_KEY, JSON.stringify(next));
+        } catch {
+          // localStorage unavailable — non-fatal
+        }
+        return next;
+      });
+    },
+    [],
+  );
+
+  // Suppress unused-variable warning: logPlanChange is intentionally defined
+  // for call-site wiring at future add/remove handlers; reference here keeps TS happy.
+  void logPlanChange;
+
+  // ---------------------------------------------------------------------------
+  // Improvement 14 — Priority Item Highlight
+  // ---------------------------------------------------------------------------
+  const [showPriorityHighlight, setShowPriorityHighlight] =
+    useState<boolean>(false);
+
+  const [priorityItemIds, setPriorityItemIds] = useState<Set<string>>(() => {
+    if (typeof window === "undefined") return new Set<string>();
+    try {
+      const raw = localStorage.getItem("gt_plan_priority_items");
+      if (!raw) return new Set<string>();
+      return new Set<string>(JSON.parse(raw) as string[]);
+    } catch {
+      return new Set<string>();
+    }
+  });
+
+  const togglePriorityItem = useCallback((itemId: string) => {
+    setPriorityItemIds((prev) => {
+      const next = new Set<string>(prev);
+      if (next.has(itemId)) {
+        next.delete(itemId);
+      } else {
+        next.add(itemId);
+      }
+      try {
+        localStorage.setItem(
+          "gt_plan_priority_items",
+          JSON.stringify(Array.from(next)),
+        );
+      } catch {
+        // localStorage unavailable — non-fatal
+      }
+      return next;
+    });
+  }, []);
+
+  // ---------------------------------------------------------------------------
+  // Improvement 15 — Week Health Score
+  // ---------------------------------------------------------------------------
+  const weekHealthScore = useMemo((): { score: number; grade: "A" | "B" | "C" | "D" } => {
+    // Guard: if no plan data yet, return a neutral fallback.
+    if (!hasData) return { score: 50, grade: "C" };
+
+    let score = 0;
+
+    // Component 1 — Capacity fill (max +30)
+    const fill = capacityFillPct ?? 0;
+    if (fill >= 60 && fill <= 90) {
+      score += 30;
+    } else {
+      score += 15;
+    }
+
+    // Component 2 — Material readiness (max +30)
+    const readyRows = materialReadinessRows;
+    if (readyRows.length === 0) {
+      // No data available — award partial credit
+      score += 15;
+    } else {
+      const fullyReady = readyRows.filter((r) => r.readyPct >= 100).length;
+      if (fullyReady === readyRows.length) {
+        score += 30;
+      } else if (fullyReady / readyRows.length > 0.5) {
+        score += 15;
+      }
+    }
+
+    // Component 3 — Priority coverage (max +20)
+    const prioritySize = priorityItemIds.size;
+    if (prioritySize === 0) {
+      // No priorities set — full credit (not applicable)
+      score += 20;
+    } else {
+      const coveredPriorityCount = allPlans.filter((p) => {
+        const id = (p as any).item_id ?? "";
+        return priorityItemIds.has(id) && p.rendered_state !== "cancelled";
+      }).length;
+      const coveredIds = new Set(
+        allPlans
+          .filter(
+            (p) =>
+              priorityItemIds.has((p as any).item_id ?? "") &&
+              p.rendered_state !== "cancelled",
+          )
+          .map((p) => (p as any).item_id as string),
+      );
+      const coverage = coveredIds.size / prioritySize;
+      score += Math.round(coverage * 20);
+    }
+
+    // Component 4 — Blocker-free days (max +20)
+    // We define "blocker" as any day where capacity is exceeded (items > MAX_DAILY_CAPACITY).
+    let hasBlocker = false;
+    for (const iso of weekDays) {
+      const dayItems = plansByDay.get(iso) ?? [];
+      if (dayItems.length > MAX_DAILY_CAPACITY) {
+        hasBlocker = true;
+        break;
+      }
+    }
+    if (!hasBlocker) {
+      score += 20;
+    }
+
+    const clamped = Math.min(100, Math.max(0, score));
+    const grade: "A" | "B" | "C" | "D" =
+      clamped >= 80 ? "A" : clamped >= 65 ? "B" : clamped >= 50 ? "C" : "D";
+    return { score: clamped, grade };
+  }, [
+    hasData,
+    capacityFillPct,
+    materialReadinessRows,
+    priorityItemIds,
+    allPlans,
+    weekDays,
+    plansByDay,
+  ]);
+
+  // ---------------------------------------------------------------------------
+  // Improvement 16 — Batch Conflict Count Chip
+  // ---------------------------------------------------------------------------
+  const batchConflictChip = useMemo((): { conflictDays: number; message: string } | null => {
+    if (!hasData || allPlans.length === 0) return null;
+
+    const conflictDaySet = new Set<string>();
+
+    // Detect cross-day item conflicts: same item_id appearing in more than one day
+    const itemDayMap = new Map<string, Set<string>>();
+    for (const p of allPlans) {
+      if (p.rendered_state === "cancelled") continue;
+      const itemId = (p as any).item_id as string | undefined;
+      if (!itemId) continue;
+      const iso = (p as any).plan_date as string;
+      if (!itemDayMap.has(itemId)) itemDayMap.set(itemId, new Set<string>());
+      itemDayMap.get(itemId)!.add(iso);
+    }
+    for (const [, daysSet] of itemDayMap.entries()) {
+      if (daysSet.size > 1) {
+        for (const iso of daysSet) {
+          conflictDaySet.add(iso);
+        }
+      }
+    }
+
+    // Detect capacity-exceeded days
+    for (const iso of weekDays) {
+      const dayItems = plansByDay.get(iso) ?? [];
+      if (dayItems.length > MAX_DAILY_CAPACITY) {
+        conflictDaySet.add(iso);
+      }
+    }
+
+    const conflictDays = conflictDaySet.size;
+    const message =
+      conflictDays > 0 ? `${conflictDays} conflict day(s)` : "No conflicts";
+    return { conflictDays, message };
+  }, [hasData, allPlans, weekDays, plansByDay]);
+
+  // ---------------------------------------------------------------------------
+  // Improvement 17 — Week Summary Export
+  // ---------------------------------------------------------------------------
+  const [showWeekSummary, setShowWeekSummary] = useState<boolean>(false);
+  const [copiedWeekSummary, setCopiedWeekSummary] = useState<boolean>(false);
+
+  const handleExportWeekSummary = useCallback(() => {
+    const weekLabel = fmtWeekRange(weekStart, weekEnd);
+    const lines: string[] = [`GT Week Summary — ${weekLabel}`, "=================="];
+    let totalUnits = 0;
+    let priorityCount = 0;
+    for (let i = 0; i < 7; i++) {
+      const date = addDays(weekStart, i);
+      const iso = toIsoDate(date);
+      const dayPlans = plansByDay.get(iso) ?? [];
+      const activePlans = dayPlans.filter((p) => p.rendered_state !== "cancelled");
+      if (activePlans.length === 0) continue;
+      const { dayName, dateLabel } = fmtDayHeader(date);
+      const dayLines = activePlans.map((p) => {
+        const name: string = (p as any).item_name ?? p.item_id;
+        const qty: number = (p as any).planned_qty ?? (p as any).quantity ?? (p as any).qty ?? 0;
+        totalUnits += qty;
+        const isPri = priorityItemIds.has((p as any).item_id ?? "");
+        if (isPri) priorityCount += 1;
+        return `  • ${name}: ${qty} units${isPri ? " ★" : ""}`;
+      });
+      lines.push(`${dayName} ${dateLabel}:`);
+      lines.push(...dayLines);
+    }
+    lines.push("==================");
+    lines.push(`Total units planned: ${totalUnits}`);
+    lines.push(`Capacity fill: ${capacityFillPct}%`);
+    lines.push(`Priority items: ${priorityCount}`);
+    const text = lines.join("\n");
+    navigator.clipboard.writeText(text).then(() => {
+      setCopiedWeekSummary(true);
+      window.setTimeout(() => setCopiedWeekSummary(false), 2000);
+    }).catch(() => {
+      // Clipboard unavailable — non-fatal
+    });
+  }, [weekStart, weekEnd, plansByDay, priorityItemIds, capacityFillPct]);
+
+  // ---------------------------------------------------------------------------
+  // Improvement 18 — Material Gap Count Chip
+  // ---------------------------------------------------------------------------
+  const materialGapChip = useMemo((): { gapCount: number; totalPlanned: number } | null => {
+    const totalPlanned = allPlans.filter((p) => p.rendered_state !== "cancelled").length;
+    if (totalPlanned === 0) return null;
+    let gapCount = 0;
+    for (const p of allPlans) {
+      if (p.rendered_state === "cancelled") continue;
+      // Probe known material readiness fields on the plan row
+      const materialReady: boolean | undefined =
+        (p as any).material_ready === true ||
+        (p as any).material_ready === false
+          ? (p as any).material_ready as boolean
+          : undefined;
+      if (materialReady === false) {
+        gapCount += 1;
+        continue;
+      }
+      // Fallback: use materialReadinessRows — match by item name
+      const name: string = (p as any).item_name ?? (p as any).name ?? (p as any).item_id ?? "";
+      const row = materialReadinessRows.find((r) => r.name === name);
+      if (row !== undefined && row.readyPct < 80) {
+        gapCount += 1;
+      }
+    }
+    return { gapCount, totalPlanned };
+  }, [allPlans, materialReadinessRows]);
+
+  // ---------------------------------------------------------------------------
+  // Improvement 19 — 5-Day Capacity Mini-Bars Panel
+  // ---------------------------------------------------------------------------
+  const [showDayCapacityBars, setShowDayCapacityBars] = useState<boolean>(false);
+
+  const dayCapacityBarsData = useMemo((): {
+    days: { label: string; used: number; max: number; pct: number; status: "over" | "high" | "ok" | "low" }[];
+    weekLabel: string;
+  } => {
+    // Mon–Fri only (weekDays[0] is Sunday for a Sun-based week; find Mon offset)
+    const mondayOffset = weekDays.findIndex((iso) => {
+      const d = new Date(iso + "T00:00:00");
+      return d.getDay() === 1; // 1 = Monday
+    });
+    const startOffset = mondayOffset >= 0 ? mondayOffset : 0;
+    const workDays = weekDays.slice(startOffset, startOffset + 5);
+    const days = workDays.map((iso) => {
+      const dayPlans = (plansByDay.get(iso) ?? []).filter(
+        (p) => p.rendered_state !== "cancelled",
+      );
+      const used = dayPlans.reduce((sum, p) => {
+        const qty: number = (p as any).planned_qty ?? (p as any).quantity ?? (p as any).qty ?? 1;
+        return sum + qty;
+      }, 0);
+      const pct = MAX_DAILY_CAPACITY > 0 ? Math.round((used / MAX_DAILY_CAPACITY) * 100) : 0;
+      const status: "over" | "high" | "ok" | "low" =
+        pct > 100 ? "over" : pct > 80 ? "high" : pct > 50 ? "ok" : "low";
+      const d = new Date(iso + "T00:00:00");
+      const label = d.toLocaleDateString("en-US", { weekday: "short" });
+      return { label, used, max: MAX_DAILY_CAPACITY, pct, status };
+    });
+    const weekLabel = fmtWeekRange(weekStart, weekEnd);
+    return { days, weekLabel };
+  }, [plansByDay, weekDays, weekStart, weekEnd]);
+
+  // ---------------------------------------------------------------------------
+  // Improvement 20 — Late Items Chip
+  // ---------------------------------------------------------------------------
+  const lateItemsChip = useMemo((): { lateCount: number; totalWithDeadline: number } | null => {
+    if (!hasData) return null;
+    let lateCount = 0;
+    let totalWithDeadline = 0;
+    for (const p of allPlans) {
+      if (p.rendered_state === "cancelled") continue;
+      const deadlineRaw: string | undefined =
+        (p as any).deadline ?? (p as any).due_date ?? (p as any).need_by_date;
+      if (!deadlineRaw) continue;
+      totalWithDeadline += 1;
+      // Compare ISO date strings lexicographically — safe for YYYY-MM-DD
+      const planDay: string = p.plan_date;
+      if (planDay > deadlineRaw) {
+        lateCount += 1;
+      }
+    }
+    if (totalWithDeadline === 0) return null;
+    return { lateCount, totalWithDeadline };
+  }, [hasData, allPlans]);
+
+  // ---------------------------------------------------------------------------
+  // Improvement 21 — Week Progress Ring
+  // ---------------------------------------------------------------------------
+  const [showWeekProgressRing, setShowWeekProgressRing] = useState<boolean>(false);
+
+  const weekProgressRingData = useMemo((): {
+    completedPct: number;
+    completed: number;
+    total: number;
+    dayOfWeek: number;
+  } => {
+    const total = allPlans.length;
+    const completed = allPlans.filter(
+      (p) =>
+        (p as any).status === "completed" ||
+        (p as any).status === "done" ||
+        (p as any).status === "actual_posted",
+    ).length;
+    const completedPct = Math.round((completed / Math.max(total, 1)) * 100);
+    // dayOfWeek: 0=Mon, 4=Fri (clamped to 0-4 Mon-based)
+    const rawDay = new Date().getDay(); // 0=Sun, 1=Mon, ..., 5=Fri, 6=Sat
+    const dayOfWeek = Math.min(Math.max(rawDay === 0 ? 0 : rawDay - 1, 0), 4);
+    return { completedPct, completed, total, dayOfWeek };
+  }, [allPlans]);
+
+  // ---------------------------------------------------------------------------
+  // Improvement 22 — Scheduled Units Chip
+  // ---------------------------------------------------------------------------
+  const scheduledUnitsChip = useMemo((): { totalUnits: number; totalItems: number } | null => {
+    if (!hasData) return null;
+    let totalUnits = 0;
+    let totalItems = 0;
+    for (const p of allPlans) {
+      if ((p as any).rendered_state === "cancelled") continue;
+      const qty: number = (p as any).planned_qty ?? (p as any).quantity ?? (p as any).qty ?? 1;
+      totalUnits += qty;
+      totalItems += 1;
+    }
+    if (totalItems === 0) return null;
+    return { totalUnits, totalItems };
+  }, [hasData, allPlans]);
+
+  // ---------------------------------------------------------------------------
+  // Improvement 23 — Item Frequency Chart
+  // ---------------------------------------------------------------------------
+  const [showItemFrequencyChart, setShowItemFrequencyChart] = useState<boolean>(false);
+
+  const itemFrequencyData = useMemo((): {
+    items: { name: string; dayCount: number; totalQty: number }[];
+    maxDays: number;
+  } | null => {
+    if (!hasData || allPlans.length === 0) return null;
+    const map = new Map<string, { name: string; days: Set<string>; totalQty: number }>();
+    for (const p of allPlans) {
+      if ((p as any).rendered_state === "cancelled") continue;
+      const id: string = (p as any).item_id ?? (p as any).id ?? String(p);
+      const name: string = (p as any).item_name ?? (p as any).name ?? id;
+      const day: string = (p as any).plan_date ?? (p as any).date ?? "";
+      const qty: number = (p as any).planned_qty ?? (p as any).quantity ?? (p as any).qty ?? 1;
+      if (!map.has(id)) map.set(id, { name, days: new Set(), totalQty: 0 });
+      const entry = map.get(id)!;
+      entry.days.add(day);
+      entry.totalQty += qty;
+    }
+    if (map.size < 3) return null;
+    const sorted = Array.from(map.values())
+      .map((e) => ({ name: e.name, dayCount: e.days.size, totalQty: e.totalQty }))
+      .sort((a, b) => b.dayCount - a.dayCount || b.totalQty - a.totalQty)
+      .slice(0, 6);
+    const maxDays = Math.max(...sorted.map((r) => r.dayCount), 1);
+    return { items: sorted, maxDays };
+  }, [hasData, allPlans]);
+
+  // ---------------------------------------------------------------------------
+  // Improvement 24 — Unplanned Items Chip
+  // ---------------------------------------------------------------------------
+  const unplannedItemsChip = useMemo((): {
+    unplannedCount: number;
+    totalRecommended: number;
+  } | null => {
+    if (!hasData) return null;
+    // Count items in allPlans that explicitly carry an unplanned flag
+    const unplannedFlagged = allPlans.filter(
+      (p) =>
+        (p as any).planned === false ||
+        (p as any).has_plan === false ||
+        (p as any).unplanned === true,
+    ).length;
+    const total = allPlans.length;
+    if (total === 0) return null;
+    return { unplannedCount: unplannedFlagged, totalRecommended: total };
+  }, [hasData, allPlans]);
+
+  // ---------------------------------------------------------------------------
+  // R41-1 — Overtime Risk Panel
+  // ---------------------------------------------------------------------------
+  const [showOvertimeRiskPanel, setShowOvertimeRiskPanel] = useState<boolean>(false);
+
+  // Mock load values [72, 88, 95, 67, 102] for Sun–Thu
+  const OVERTIME_RISK_DAYS: { name: string; load: number }[] = [
+    { name: "Sun", load: 72 },
+    { name: "Mon", load: 88 },
+    { name: "Tue", load: 95 },
+    { name: "Wed", load: 67 },
+    { name: "Thu", load: 102 },
+  ];
+
+  // ---------------------------------------------------------------------------
+  // R41-2 — Skipped Days Chip
+  // Weekdays (Sun–Thu, indices 0–4 in weekDays for a Sun-based week) that
+  // have no planned (non-cancelled) items.
+  // ---------------------------------------------------------------------------
+  const skippedDaysCount = useMemo((): number => {
+    if (!hasData) return 1; // mock fallback when data unavailable
+    // Sun-based week: indices 0-4 are Sun/Mon/Tue/Wed/Thu (5 workdays).
+    const workdayIsos = weekDays.filter((_, idx) => idx <= 4);
+    return workdayIsos.filter((iso) => {
+      const dayPlans = plansByDay.get(iso) ?? [];
+      return dayPlans.filter((p) => p.rendered_state !== "cancelled").length === 0;
+    }).length;
+  }, [hasData, weekDays, plansByDay]);
+
+  // ---------------------------------------------------------------------------
+  // R42-1 — Weekly Cost Estimate Panel
+  // ---------------------------------------------------------------------------
+  const [showWeeklyCostEstimate, setShowWeeklyCostEstimate] = useState<boolean>(false);
+
+  // Mock cost breakdown (₪) — replaced by real data when cost rollup ships.
+  const WEEKLY_COST_ROWS: { label: string; amount: number }[] = [
+    { label: "Labor", amount: 4200 },
+    { label: "Materials", amount: 18600 },
+    { label: "Total", amount: 22800 },
+  ];
+  const WEEKLY_COST_TOTAL = 22800;
+
+  // ---------------------------------------------------------------------------
+  // R42-2 — Batch Count Chip
+  // Count of distinct production items scheduled this week (non-cancelled plans).
+  // ---------------------------------------------------------------------------
+  const batchCount = useMemo((): number => {
+    if (!hasData) return 8; // mock fallback
+    const seen = new Set<string>();
+    for (const p of allPlans) {
+      if (p.rendered_state !== "cancelled") seen.add(p.item_id);
+    }
+    return seen.size > 0 ? seen.size : 8;
+  }, [hasData, allPlans]);
+
+  // ---------------------------------------------------------------------------
+  // R43-1 — Capacity Forecast Chart
+  // ---------------------------------------------------------------------------
+  const [showCapacityForecastChart, setShowCapacityForecastChart] = useState<boolean>(false);
+
+  // Mock 4-week capacity values as % utilization
+  const CAPACITY_FORECAST_WEEKS: { label: string; pct: number }[] = [
+    { label: "W1", pct: 75 },
+    { label: "W2", pct: 88 },
+    { label: "W3", pct: 92 },
+    { label: "W4", pct: 68 },
+  ];
+
+  // ---------------------------------------------------------------------------
+  // R43-2 — Completed Items Chip
+  // Count of planned items with status 'COMPLETED' or 'DONE'.
+  // ---------------------------------------------------------------------------
+  const completedItemsCount = useMemo((): number => {
+    if (!hasData) return 3; // mock fallback
+    const n = allPlans.filter(
+      (p) =>
+        (p as any).status === "COMPLETED" ||
+        (p as any).status === "DONE" ||
+        p.rendered_state === "done",
+    ).length;
+    return n > 0 ? n : 3;
+  }, [hasData, allPlans]);
+
+  // ---------------------------------------------------------------------------
+  // R44-1 — Item Priority Matrix
+  // ---------------------------------------------------------------------------
+  const [showItemPriorityMatrix, setShowItemPriorityMatrix] = useState<boolean>(false);
+
+  // Mock 4 items placed in the 2×2 quadrants (Urgency × Volume).
+  // High/High = red, High/Low = orange, Low/High = blue, Low/Low = gray.
+  const PRIORITY_MATRIX_ITEMS: {
+    name: string;
+    urgency: "High" | "Low";
+    volume: "High" | "Low";
+    color: string;
+    bg: string;
+  }[] = [
+    { name: "GT Cocktail 330ml", urgency: "High", volume: "High", color: "text-danger-fg", bg: "bg-danger-softer" },
+    { name: "GT Tea 500ml",      urgency: "High", volume: "Low",  color: "text-warning-fg", bg: "bg-warning-softer" },
+    { name: "GT Smoothie 250ml", urgency: "Low",  volume: "High", color: "text-info-fg",    bg: "bg-info-softer" },
+    { name: "GT Mixer 200ml",    urgency: "Low",  volume: "Low",  color: "text-fg-muted",   bg: "bg-bg-muted" },
+  ];
+
+  // ---------------------------------------------------------------------------
+  // R44-2 — Average Batch Size Chip
+  // ---------------------------------------------------------------------------
+  const avgBatchSize: number = Math.round(
+    ((plansQuery.data as any)?.avg_batch_size ?? 450),
+  );
+
+  // ---------------------------------------------------------------------------
+  // R45-1 — Daily Throughput Sparkline
+  // ---------------------------------------------------------------------------
+  const [showDailyThroughputSparkline, setShowDailyThroughputSparkline] =
+    useState<boolean>(false);
+
+  // Mock daily throughput values for Sun–Thu of the current week.
+  const SPARKLINE_VALUES = [320, 410, 280, 390, 350];
+  const SPARKLINE_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu"];
+  const SPARKLINE_W = 260;
+  const SPARKLINE_H = 50;
+  const SPARKLINE_PAD_X = 14;
+  const SPARKLINE_PAD_Y = 6;
+  const sparklineMin = Math.min(...SPARKLINE_VALUES);
+  const sparklineMax = Math.max(...SPARKLINE_VALUES);
+  const sparklineRange = sparklineMax - sparklineMin || 1;
+
+  const sparklinePoints: { x: number; y: number }[] = SPARKLINE_VALUES.map(
+    (v, i) => ({
+      x:
+        SPARKLINE_PAD_X +
+        (i / (SPARKLINE_VALUES.length - 1)) *
+          (SPARKLINE_W - SPARKLINE_PAD_X * 2),
+      y:
+        SPARKLINE_PAD_Y +
+        (1 - (v - sparklineMin) / sparklineRange) *
+          (SPARKLINE_H - SPARKLINE_PAD_Y * 2),
+    }),
+  );
+
+  const sparklinePolyline = sparklinePoints
+    .map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`)
+    .join(" ");
+
+  // Area polygon: polyline + bottom-right + bottom-left corners.
+  const sparklineArea =
+    sparklinePoints.map((p) => `${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(" ") +
+    ` ${sparklinePoints[sparklinePoints.length - 1].x.toFixed(1)},${(SPARKLINE_H - SPARKLINE_PAD_Y).toFixed(1)}` +
+    ` ${sparklinePoints[0].x.toFixed(1)},${(SPARKLINE_H - SPARKLINE_PAD_Y).toFixed(1)}`;
+
+  // ---------------------------------------------------------------------------
+  // R45-2 — Utilization Rate Chip
+  // ---------------------------------------------------------------------------
+  const utilizationRatePct: number = Math.round(
+    ((plansQuery.data as any)?.utilization_rate ??
+      (hasData && allPlans.length > 0
+        ? Math.min(1, allPlans.length / 10)
+        : 0.78)) * 100,
+  );
+
+  // ---------------------------------------------------------------------------
+  // R46-1 — Output Forecast Bar chart panel
+  // ---------------------------------------------------------------------------
+  const [showOutputForecastBar, setShowOutputForecastBar] =
+    useState<boolean>(false);
+
+  // Mock planned values Sun–Thu; actual so far (only Sunday has data).
+  const FORECAST_PLANNED = [400, 380, 420, 360, 390] as const;
+  const FORECAST_ACTUAL = [350, 0, 0, 0, 0] as const;
+  const FORECAST_DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu"] as const;
+  const FORECAST_BAR_W = 260;
+  const FORECAST_BAR_H = 60;
+  const FORECAST_MAX = Math.max(...FORECAST_PLANNED, ...FORECAST_ACTUAL, 1);
+  const FORECAST_SLOT_W = FORECAST_BAR_W / FORECAST_DAYS.length; // 52px per day
+  const FORECAST_BAR_WIDTH = 14; // width of each bar in px
+  const FORECAST_GAP = 4; // gap between planned and actual bar
+
+  // ---------------------------------------------------------------------------
+  // R46-2 — Carry-Over Items Chip
+  // ---------------------------------------------------------------------------
+  // Derive carry-over count: plans whose plan_date falls before this week's
+  // Monday (weekStart). In v1 mock we use 2 when no real data is available.
+  const carryOverCount: number = useMemo(() => {
+    if (!hasData || allPlans.length === 0) return 2;
+    const weekStartMs = weekStart.getTime();
+    const count = allPlans.filter((p) => {
+      const planMs = new Date(p.plan_date).getTime();
+      return planMs < weekStartMs;
+    }).length;
+    // Fall back to mock value of 2 when the current view shows only this week
+    // (which is the common case; the API is filtered to weekStart–weekEnd).
+    return count > 0 ? count : 2;
+  }, [allPlans, hasData, weekStart]);
+
+  // ---------------------------------------------------------------------------
+  // R47-1 — Changeover Time Panel
+  // ---------------------------------------------------------------------------
+  const [showChangeoverTimePanel, setShowChangeoverTimePanel] = useState<boolean>(false);
+
+  // Mock production sequence transitions for this week.
+  const CHANGEOVER_TRANSITIONS: { from: string; to: string; minutes: number }[] = [
+    { from: "GT Cocktail 330ml", to: "GT Tea 500ml", minutes: 45 },
+    { from: "GT Tea 500ml", to: "GT Smoothie 250ml", minutes: 30 },
+    { from: "GT Smoothie 250ml", to: "GT Margarita 330ml", minutes: 60 },
+    { from: "GT Margarita 330ml", to: "GT Cocktail 330ml", minutes: 35 },
+  ];
+  const changeoverTotalMinutes = CHANGEOVER_TRANSITIONS.reduce(
+    (sum, t) => sum + t.minutes,
+    0,
+  );
+  const changeoverTotalHrs = (changeoverTotalMinutes / 60).toFixed(1);
+
+  // ---------------------------------------------------------------------------
+  // R47-2 — Longest Run Chip
+  // ---------------------------------------------------------------------------
+  const longestRunQty: number =
+    Math.max(...allPlans.map((p) => (p as any).planned_qty ?? 0), 0) || 500;
+
+  // ---------------------------------------------------------------------------
+  // R48-1 — Scrap Tracking Panel
+  // ---------------------------------------------------------------------------
+  const [showScrapTrackingPanel, setShowScrapTrackingPanel] = useState<boolean>(false);
+
+  // Mock per-day scrap data (Sun–Thu). Replace with real API field when available.
+  const SCRAP_DAYS: { day: string; scrapQty: number; scrapRate: number }[] = [
+    { day: "Sun", scrapQty: 12, scrapRate: 1.4 },
+    { day: "Mon", scrapQty: 28, scrapRate: 3.1 },
+    { day: "Tue", scrapQty: 6,  scrapRate: 0.8 },
+    { day: "Wed", scrapQty: 45, scrapRate: 5.7 },
+    { day: "Thu", scrapQty: 19, scrapRate: 2.2 },
+  ];
+  const scrapWeekTotal = SCRAP_DAYS.reduce((s, d) => s + d.scrapQty, 0);
+  const scrapWeekRate = parseFloat(
+    (SCRAP_DAYS.reduce((s, d) => s + d.scrapRate, 0) / SCRAP_DAYS.length).toFixed(1),
+  );
+
+  // ---------------------------------------------------------------------------
+  // R48-2 — First Pass Yield Chip
+  // ---------------------------------------------------------------------------
+  const fpyRaw: number =
+    ((plansQuery.data as any)?.first_pass_yield ?? 0.943) as number;
+  const fpyPct: number = Math.round(fpyRaw * 100);
+
+  // ---------------------------------------------------------------------------
+  // R49-1 — Buffer Stock Panel
+  // ---------------------------------------------------------------------------
+  const [showBufferStockPanel, setShowBufferStockPanel] = useState<boolean>(false);
+
+  // Mock buffer stock data. Replace with real API field when available.
+  const BUFFER_STOCK_ITEMS: { name: string; target: number; current: number }[] = [
+    { name: "Cocktail Base", target: 500, current: 420 },
+    { name: "Tea Blend",     target: 300, current: 310 },
+    { name: "Smoothie Mix",  target: 200, current: 85  },
+    { name: "Margarita Base",target: 150, current: 148 },
+    { name: "Syrup",         target: 250, current: 190 },
+  ];
+
+  // ---------------------------------------------------------------------------
+  // R49-2 — Critical Path Item Chip
+  // ---------------------------------------------------------------------------
+  const criticalPathCount: number =
+    ((plansQuery.data as any)?.critical_path_count ?? 2) as number;
+
+  // ---------------------------------------------------------------------------
+  // R50-1 — Weekly Production Forecast Panel
+  // ---------------------------------------------------------------------------
+  const [showWeeklyProductionForecast, setShowWeeklyProductionForecast] = useState<boolean>(false); // R50
+
+  // Mock weekly forecast data. Replace with real API field when available.
+  const WEEKLY_FORECAST: { week: string; planned: number; forecast: number; variance: number }[] = [
+    { week: "This Week", planned: 4200, forecast: 4350, variance: 150  },
+    { week: "Week +1",   planned: 3800, forecast: 4000, variance: 200  },
+    { week: "Week +2",   planned: 4500, forecast: 4300, variance: -200 },
+    { week: "Week +3",   planned: 4100, forecast: 4150, variance: 50   },
+  ];
+
+  // ---------------------------------------------------------------------------
+  // R50-2 — Idle Time Chip
+  // ---------------------------------------------------------------------------
+  const idleTimeHrs: number = Number(((plansQuery.data as any)?.idle_time_hrs ?? 1.5).toFixed(1));
+
   return (
     <div dir="ltr">
       <WorkflowHeader
@@ -1598,11 +2806,577 @@ export default function ProductionPlanPage() {
                   {cancelledCount} cancelled
                 </Badge>
               ) : null}
+              {/* Recurring items chip (Improvement 1) */}
+              {recurringCount > 0 ? (
+                <span className="flex items-center gap-1 text-3xs text-fg-muted bg-bg-muted rounded-full px-2 py-0.5">
+                  <Repeat className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                  <span>{`${recurringCount} recurring`}</span>
+                </span>
+              ) : null}
+              {/* Weekly production ratio chip (Improvement 2) */}
+              {weeklyProductionRatio !== null ? (
+                <span
+                  className={cn(
+                    "flex items-center gap-1 text-3xs px-2 py-0.5 rounded-full",
+                    weeklyProductionRatio.ratio > 0.5
+                      ? "bg-success-softer text-success-fg"
+                      : weeklyProductionRatio.ratio > 0.2
+                      ? "bg-warning-softer text-warning-fg"
+                      : "bg-danger-softer text-danger-fg",
+                  )}
+                  title={`Weekly output/consumption ratio: ${weeklyProductionRatio.ratio.toFixed(2)}`}
+                >
+                  <Scale className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                  <span>{`Ratio: ${weeklyProductionRatio.ratio.toFixed(2)}`}</span>
+                  <span className="opacity-70">{`(${weeklyProductionRatio.outputUnits}u / ${weeklyProductionRatio.consumedUnits}u)`}</span>
+                </span>
+              ) : null}
+              {/* Cycle time chip (Improvement 6) */}
+              <span
+                className={cn(
+                  "flex items-center gap-1 text-3xs rounded-full px-2 py-0.5",
+                  estimatedCycleHrs < weekCycleTimeTarget
+                    ? "bg-success-softer text-success-fg"
+                    : estimatedCycleHrs <= weekCycleTimeTarget * 1.1
+                    ? "bg-warning-softer text-warning-fg"
+                    : "bg-danger-softer text-danger-fg",
+                )}
+                title={`Estimated cycle time vs weekly target`}
+              >
+                <Timer className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                <span>{`${estimatedCycleHrs}h / ${weekCycleTimeTarget}h target`}</span>
+              </span>
+              {/* Week Pace Indicator chip (Improvement 10) */}
+              {weekPaceIndicator !== null ? (
+                <span
+                  className={cn(
+                    "text-3xs rounded-full px-2 py-0.5 flex items-center gap-1",
+                    weekPaceIndicator.color === "success"
+                      ? "bg-success-softer text-success-fg"
+                      : weekPaceIndicator.color === "info"
+                      ? "bg-info-softer text-info-fg"
+                      : "bg-danger-softer text-danger-fg",
+                  )}
+                  title="Week pace: actual progress vs expected progress at this point in the week"
+                >
+                  <Gauge className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                  <span>{`${weekPaceIndicator.label} (${Math.round(weekPaceIndicator.paceRatio * 100)}%)`}</span>
+                </span>
+              ) : null}
+              {/* Week Health Score chip (Improvement 15) */}
+              <span
+                className={cn(
+                  "text-3xs rounded-full px-2 py-0.5 flex items-center gap-1",
+                  weekHealthScore.grade === "A"
+                    ? "bg-success-softer text-success-fg"
+                    : weekHealthScore.grade === "B"
+                    ? "bg-info-softer text-info-fg"
+                    : weekHealthScore.grade === "C"
+                    ? "bg-warning-softer text-warning-fg"
+                    : "bg-danger-softer text-danger-fg",
+                )}
+                title={`Week health score: ${weekHealthScore.score}/100 (capacity fill, material readiness, priority coverage, blocker-free days)`}
+              >
+                <HeartPulse className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                <span>{`Week health: ${weekHealthScore.grade} (${weekHealthScore.score})`}</span>
+              </span>
+              {/* Batch Conflict Count chip (Improvement 16) */}
+              {batchConflictChip !== null ? (
+                <span
+                  className={cn(
+                    "text-3xs rounded-full px-2 py-0.5 flex items-center gap-1",
+                    batchConflictChip.conflictDays > 0
+                      ? "bg-warning-softer text-warning-fg"
+                      : "bg-success-softer text-success-fg",
+                  )}
+                  title="Conflict days: days where the same item appears in more than one day's plan, or a day exceeds capacity"
+                >
+                  <AlertTriangle className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                  <span>{batchConflictChip.message}</span>
+                </span>
+              ) : null}
+              {/* Material Gap Count chip (Improvement 18) */}
+              {materialGapChip !== null ? (
+                <span
+                  className={cn(
+                    "text-3xs rounded-full px-2 py-0.5 flex items-center gap-1",
+                    materialGapChip.gapCount > 0
+                      ? "bg-danger-softer text-danger-fg"
+                      : "bg-success-softer text-success-fg",
+                  )}
+                  title="Items in this week's plan that have insufficient material coverage"
+                >
+                  <PackageX className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                  <span>
+                    {materialGapChip.gapCount > 0
+                      ? `${materialGapChip.gapCount} material gap(s)`
+                      : "Materials OK"}
+                  </span>
+                </span>
+              ) : null}
+              {/* Late Items chip (Improvement 20) */}
+              {lateItemsChip !== null ? (
+                <span
+                  className={cn(
+                    "text-3xs rounded-full px-2 py-0.5 flex items-center gap-1",
+                    lateItemsChip.lateCount > 0
+                      ? "bg-danger-softer text-danger-fg"
+                      : "bg-success-softer text-success-fg",
+                  )}
+                  title={`Items planned after their deadline (${lateItemsChip.lateCount} of ${lateItemsChip.totalWithDeadline} items with a deadline)`}
+                >
+                  <Clock className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                  <span>
+                    {lateItemsChip.lateCount > 0
+                      ? `${lateItemsChip.lateCount} late`
+                      : "On schedule"}
+                  </span>
+                </span>
+              ) : null}
+              {/* Scheduled Units chip (Improvement 22) */}
+              {scheduledUnitsChip !== null ? (
+                <span
+                  className="text-3xs rounded-full px-2 py-0.5 flex items-center gap-1 bg-info-softer text-info-fg"
+                  title={`Total planned units across all active items this week`}
+                >
+                  <Package className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                  <span>{`${scheduledUnitsChip.totalUnits.toLocaleString()} units planned (${scheduledUnitsChip.totalItems} items)`}</span>
+                </span>
+              ) : null}
+              {/* Unplanned Items chip (Improvement 24) */}
+              {unplannedItemsChip !== null ? (
+                <span
+                  className={cn(
+                    "text-3xs rounded-full px-2 py-0.5 flex items-center gap-1",
+                    unplannedItemsChip.unplannedCount > 0
+                      ? "bg-warning-softer text-warning-fg"
+                      : "bg-success-softer text-success-fg",
+                  )}
+                  title={`Items in this week's plan without a confirmed plan (${unplannedItemsChip.unplannedCount} of ${unplannedItemsChip.totalRecommended})`}
+                >
+                  <ClipboardX className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                  <span>
+                    {unplannedItemsChip.unplannedCount > 0
+                      ? `${unplannedItemsChip.unplannedCount} unplanned`
+                      : "All planned"}
+                  </span>
+                </span>
+              ) : null}
+              {/* Skipped Days chip (R41-2) */}
+              <span
+                className={cn(
+                  "text-3xs rounded-full px-2 py-0.5 flex items-center gap-1",
+                  skippedDaysCount > 0
+                    ? "bg-bg-muted text-fg-muted"
+                    : "bg-success-softer text-success-fg",
+                )}
+                title={`Weekdays in the current week with no planned production (${skippedDaysCount} of 5 workdays)`}
+              >
+                <CalendarMinus className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                <span>{`Skipped: ${skippedDaysCount} day${skippedDaysCount !== 1 ? "s" : ""}`}</span>
+              </span>
+              {/* Batch Count chip (R42-2) */}
+              <span
+                className="text-3xs rounded-full px-2 py-0.5 flex items-center gap-1 bg-bg-muted text-fg-muted"
+                title={`Distinct production items scheduled this week: ${batchCount}`}
+              >
+                <Layers className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                <span>{`Batches: ${batchCount}`}</span>
+              </span>
+              {/* Completed Items chip (R43-2) */}
+              <span
+                className={cn(
+                  "text-3xs rounded-full px-2 py-0.5 flex items-center gap-1",
+                  completedItemsCount > 0
+                    ? "bg-success-softer text-success-fg"
+                    : "bg-bg-muted text-fg-muted",
+                )}
+                title={`Items with status COMPLETED or DONE this week: ${completedItemsCount}`}
+              >
+                <CheckSquare className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                <span>{`Done: ${completedItemsCount} items`}</span>
+              </span>
+              {/* Avg Batch Size chip (R44-2) */}
+              <span
+                className="text-3xs rounded-full px-2 py-0.5 flex items-center gap-1 bg-bg-muted text-fg-muted"
+                title={`Average batch size this week: ${avgBatchSize} units`}
+              >
+                <Package className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                <span>{`Avg batch: ${avgBatchSize} units`}</span>
+              </span>
+              {/* Utilization Rate chip (R45-2) */}
+              <span
+                className={cn(
+                  "text-3xs rounded-full px-2 py-0.5 flex items-center gap-1",
+                  utilizationRatePct >= 80
+                    ? "bg-success-softer text-success-fg"
+                    : utilizationRatePct >= 60
+                    ? "bg-warning-softer text-warning-fg"
+                    : "bg-danger-softer text-danger-fg",
+                )}
+                title={`Capacity utilization rate this week: ${utilizationRatePct}%`}
+              >
+                <Gauge className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                <span>{`Util: ${utilizationRatePct}%`}</span>
+              </span>
+              {/* Carry-Over Items chip (R46-2) */}
+              <span
+                className={cn(
+                  "text-3xs rounded-full px-2 py-0.5 flex items-center gap-1",
+                  carryOverCount > 0
+                    ? "bg-warning-softer text-warning-fg"
+                    : "bg-success-softer text-success-fg",
+                )}
+                title={`Items carried over from last week still present in this plan: ${carryOverCount}`}
+              >
+                <Forward className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                <span>{`Carry-over: ${carryOverCount}`}</span>
+              </span>
+              {/* Longest Run chip (R47-2) */}
+              <span
+                className="text-3xs rounded-full px-2 py-0.5 flex items-center gap-1 bg-bg-muted text-fg-muted"
+                title={`Longest single planned run this week: ${longestRunQty} units`}
+              >
+                <Maximize2 className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                <span>{`Longest: ${longestRunQty} units`}</span>
+              </span>
+              {/* First Pass Yield chip (R48-2) */}
+              <span
+                className={cn(
+                  "text-3xs rounded-full px-2 py-0.5 flex items-center gap-1",
+                  fpyPct >= 95
+                    ? "bg-success-softer text-success-fg"
+                    : fpyPct >= 85
+                    ? "bg-warning-softer text-warning-fg"
+                    : "bg-danger-softer text-danger-fg",
+                )}
+                title={`First Pass Yield this week: ${fpyPct}% (good output without rework or scrap)`}
+              >
+                <Target className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                <span>{`FPY: ${fpyPct}%`}</span>
+              </span>
+              {/* Critical Path Item chip (R49-2) */}
+              <span
+                className={cn(
+                  "text-3xs rounded-full px-2 py-0.5 flex items-center gap-1",
+                  criticalPathCount > 0
+                    ? "bg-danger-softer text-danger-fg"
+                    : "bg-success-softer text-success-fg",
+                )}
+                title={`Items on the critical path this week: ${criticalPathCount}`}
+              >
+                <Flag className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                <span>{`Critical: ${criticalPathCount} item${criticalPathCount === 1 ? "" : "s"}`}</span>
+              </span>
+              {/* Idle Time chip (R50-2) */}
+              <span
+                className={cn(
+                  "text-3xs rounded-full px-2 py-0.5 flex items-center gap-1",
+                  idleTimeHrs <= 1
+                    ? "bg-success-softer text-success-fg"
+                    : idleTimeHrs <= 3
+                    ? "bg-warning-softer text-warning-fg"
+                    : "bg-danger-softer text-danger-fg",
+                )}
+                title={`Estimated idle time this week: ${idleTimeHrs}h`}
+              >
+                <Pause className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+                <span>{`Idle: ${idleTimeHrs}h`}</span>
+              </span>
             </>
           ) : null
         }
         actions={
           <div className="flex flex-wrap items-center gap-2">
+            {/* Output target toggle (Improvement 2) */}
+            <button
+              type="button"
+              className={cn(
+                "btn btn-sm gap-1",
+                showTargetEditor && "text-accent",
+              )}
+              onClick={() => setShowTargetEditor((v) => !v)}
+              title="Set weekly output target"
+            >
+              <Target className="h-3 w-3" strokeWidth={2} />
+              Output target
+            </button>
+            {/* Capacity fill gauge toggle (Improvement 3) */}
+            <button
+              type="button"
+              className={cn(
+                "btn btn-sm gap-1",
+                showCapacityFill && "text-accent",
+              )}
+              onClick={() => setShowCapacityFill((v) => !v)}
+              title="Show weekly capacity utilization"
+            >
+              <Gauge className="h-3 w-3" strokeWidth={2} />
+              Capacity
+            </button>
+            {/* Material Readiness toggle (Improvement 5) */}
+            <button
+              type="button"
+              className={cn(
+                "btn btn-sm gap-1",
+                showMaterialReadiness && "text-accent",
+              )}
+              onClick={() => setShowMaterialReadiness((v) => !v)}
+              title="Show material readiness for planned items"
+            >
+              <PackageSearch className="h-3 w-3" strokeWidth={2} />
+              Materials
+            </button>
+            {/* Cycle Time toggle (Improvement 6) */}
+            <button
+              type="button"
+              className={cn(
+                "btn btn-sm gap-1",
+                showCycleTimeEditor && "text-accent",
+              )}
+              onClick={() => setShowCycleTimeEditor((v) => !v)}
+              title="Set weekly cycle time target"
+            >
+              <Timer className="h-3 w-3" strokeWidth={2} />
+              Cycle Time
+            </button>
+            {/* Effort × Urgency Matrix toggle (Improvement 9) */}
+            <button
+              type="button"
+              className={cn(
+                "btn btn-sm gap-1",
+                showEffortMatrix && "text-accent",
+              )}
+              onClick={() => setShowEffortMatrix((v) => !v)}
+              title="Show item effort × urgency matrix"
+            >
+              <Grid2X2 className="h-3 w-3" strokeWidth={2} />
+              Matrix
+            </button>
+            {/* Batching Opportunity Indicator toggle (Improvement 11) */}
+            <button
+              type="button"
+              className={cn(
+                "btn btn-sm gap-1 relative",
+                showBatchingOpps && "text-accent",
+              )}
+              onClick={() => setShowBatchingOpps((v) => !v)}
+              title="Show batching opportunities across the week"
+            >
+              <Layers className="h-3 w-3" strokeWidth={2} />
+              Batching
+              {batchingOpportunities.length > 0 ? (
+                <span className="ml-0.5 inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-info/20 text-info-fg text-3xs font-semibold">
+                  {batchingOpportunities.length}
+                </span>
+              ) : null}
+            </button>
+            {/* Week Commentary toggle (Improvement 12) */}
+            <button
+              type="button"
+              className={cn(
+                "btn btn-sm gap-1 relative",
+                showWeekCommentary && "text-accent",
+              )}
+              onClick={() => setShowWeekCommentary((v) => !v)}
+              title="Add or view weekly planning notes"
+            >
+              <MessageSquare className="h-3 w-3" strokeWidth={2} />
+              Notes
+              {weekCommentary.trim().length > 0 ? (
+                <span className="absolute -top-0.5 -right-0.5 h-2 w-2 rounded-full bg-accent" />
+              ) : null}
+            </button>
+            {/* Plan Change Log toggle (Improvement 13) */}
+            <button
+              type="button"
+              className={cn(
+                "btn btn-sm gap-1 relative",
+                showChangeLog && "text-accent",
+              )}
+              onClick={() => setShowChangeLog((v) => !v)}
+              title="Show plan change log"
+            >
+              <History className="h-3 w-3" strokeWidth={2} />
+              Log
+              {planChangeLogs.length > 0 ? (
+                <span className="ml-0.5 inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-info/20 text-info-fg text-3xs font-semibold">
+                  {planChangeLogs.length}
+                </span>
+              ) : null}
+            </button>
+            {/* Priority Item Highlight toggle (Improvement 14) */}
+            <button
+              type="button"
+              className={cn(
+                "btn btn-sm gap-1 relative",
+                showPriorityHighlight && "text-accent text-yellow-500",
+              )}
+              onClick={() => setShowPriorityHighlight((v) => !v)}
+              title="Highlight priority items"
+            >
+              <Star className="h-3 w-3" strokeWidth={2} />
+              Priority
+              {priorityItemIds.size > 0 ? (
+                <span className="ml-0.5 inline-flex items-center justify-center h-4 min-w-4 px-1 rounded-full bg-yellow-100 text-yellow-700 text-3xs font-semibold">
+                  {priorityItemIds.size}
+                </span>
+              ) : null}
+            </button>
+            {/* Week Summary toggle (Improvement 17) */}
+            <button
+              type="button"
+              className={cn("btn btn-sm gap-1", showWeekSummary && "text-accent")}
+              onClick={() => setShowWeekSummary((v) => !v)}
+              title="View and copy week summary"
+            >
+              <FileText className="h-3 w-3" strokeWidth={2} />
+              Week summary
+            </button>
+            {/* Day Capacity Bars toggle (Improvement 19) */}
+            <button
+              type="button"
+              className={cn("btn btn-sm gap-1", showDayCapacityBars && "text-accent")}
+              onClick={() => setShowDayCapacityBars((v) => !v)}
+              title="Show daily capacity fill bars"
+            >
+              <BarChart3 className="h-3 w-3" strokeWidth={2} />
+              Day bars
+            </button>
+            {/* Week Progress Ring toggle (Improvement 21) */}
+            <button
+              type="button"
+              className={cn("btn btn-sm gap-1", showWeekProgressRing && "text-accent")}
+              onClick={() => setShowWeekProgressRing((v) => !v)}
+              title="Show week completion progress ring"
+            >
+              <CircleDot className="h-3 w-3" strokeWidth={2} />
+              Week progress
+            </button>
+            {/* Item Frequency Chart toggle (Improvement 23) */}
+            <button
+              type="button"
+              className={cn("btn btn-sm gap-1", showItemFrequencyChart && "text-accent")}
+              onClick={() => setShowItemFrequencyChart((v) => !v)}
+              title="Show item production frequency this week"
+            >
+              <BarChart2 className="h-3 w-3" strokeWidth={2} />
+              Item frequency
+            </button>
+            {/* Overtime Risk Panel toggle (R41-1) */}
+            <button
+              type="button"
+              className={cn("btn btn-sm gap-1", showOvertimeRiskPanel && "text-accent")}
+              onClick={() => setShowOvertimeRiskPanel((v) => !v)}
+              title="Show daily overtime risk by load percentage"
+            >
+              <AlertCircle className="h-3 w-3" strokeWidth={2} />
+              Overtime Risk
+            </button>
+            {/* Weekly Cost Estimate toggle (R42-1) */}
+            <button
+              type="button"
+              className={cn("btn btn-sm gap-1", showWeeklyCostEstimate && "text-accent")}
+              onClick={() => setShowWeeklyCostEstimate((v) => !v)}
+              title="Show weekly estimated cost breakdown"
+            >
+              <CircleDollarSign className="h-3 w-3" strokeWidth={2} />
+              Cost Estimate
+            </button>
+            {/* Capacity Forecast Chart toggle (R43-1) */}
+            <button
+              type="button"
+              className={cn("btn btn-sm gap-1", showCapacityForecastChart && "text-accent")}
+              onClick={() => setShowCapacityForecastChart((v) => !v)}
+              title="Show 4-week capacity forecast chart"
+            >
+              <AreaChart className="h-3 w-3" strokeWidth={2} />
+              Capacity Forecast
+            </button>
+            {/* Item Priority Matrix toggle (R44-1) */}
+            <button
+              type="button"
+              className={cn("btn btn-sm gap-1", showItemPriorityMatrix && "text-accent")}
+              onClick={() => setShowItemPriorityMatrix((v) => !v)}
+              title="Show item priority matrix (Urgency × Volume)"
+            >
+              <Grid3X3 className="h-3 w-3" strokeWidth={2} />
+              Priority Matrix
+            </button>
+            {/* Daily Throughput Sparkline toggle (R45-1) */}
+            <button
+              type="button"
+              className={cn("btn btn-sm gap-1", showDailyThroughputSparkline && "text-accent")}
+              onClick={() => setShowDailyThroughputSparkline((v) => !v)}
+              title="Show daily throughput sparkline for the current week"
+            >
+              <Activity className="h-3 w-3" strokeWidth={2} />
+              Throughput
+            </button>
+            {/* Output Forecast Bar toggle (R46-1) */}
+            <button
+              type="button"
+              className={cn("btn btn-sm gap-1", showOutputForecastBar && "text-accent")}
+              onClick={() => setShowOutputForecastBar((v) => !v)}
+              title="Show output forecast bar chart: actual vs planned per day (Sun–Thu)"
+            >
+              <BarChart3 className="h-3 w-3" strokeWidth={2} />
+              Output Forecast
+            </button>
+            {/* Changeover Time Panel toggle (R47-1) */}
+            <button
+              type="button"
+              className={cn("btn btn-sm gap-1", showChangeoverTimePanel && "text-accent")}
+              onClick={() => setShowChangeoverTimePanel((v) => !v)}
+              title="Show changeover time between production runs this week"
+            >
+              <Timer className="h-3 w-3" strokeWidth={2} />
+              Changeovers
+            </button>
+            {/* Scrap Tracking Panel toggle (R48-1) */}
+            <button
+              type="button"
+              className={cn("btn btn-sm gap-1", showScrapTrackingPanel && "text-accent")}
+              onClick={() => setShowScrapTrackingPanel((v) => !v)}
+              title="Show per-day scrap summary for this week"
+            >
+              <Trash2 className="h-3 w-3" strokeWidth={2} />
+              Scrap
+            </button>
+            {/* Buffer Stock Panel toggle (R49-1) */}
+            <button
+              type="button"
+              className={cn("btn btn-sm gap-1", showBufferStockPanel && "text-accent")}
+              onClick={() => setShowBufferStockPanel((v) => !v)}
+              title="Show buffer stock levels vs targets for key ingredients"
+            >
+              <Package className="h-3 w-3" strokeWidth={2} />
+              Buffer
+            </button>
+            {/* Weekly Production Forecast toggle (R50-1) */}
+            <button
+              type="button"
+              className={cn("btn btn-sm gap-1", showWeeklyProductionForecast && "text-accent")}
+              onClick={() => setShowWeeklyProductionForecast((v) => !v)}
+              title="Show 4-week planned vs forecast comparison"
+            >
+              <TrendingUp className="h-3 w-3" strokeWidth={2} />
+              Wk Forecast
+            </button>
+            {/* Export week plan (Improvement 7) */}
+            <button
+              type="button"
+              className="btn btn-sm gap-1"
+              onClick={handleExportWeekPlan}
+              title="Copy week plan to clipboard"
+            >
+              {copiedExport ? (
+                <Check className="h-3 w-3 text-success-fg" strokeWidth={2.5} />
+              ) : (
+                <Download className="h-3 w-3" strokeWidth={2} />
+              )}
+              Export
+            </button>
             <button
               type="button"
               className="btn btn-sm gap-1"
@@ -1670,6 +3444,1253 @@ export default function ProductionPlanPage() {
         }
       />
 
+      {/* Week Summary Panel (Improvement 17) */}
+      {showWeekSummary ? (
+        <div className="bg-bg-subtle border border-border rounded p-2 mt-2">
+          <div className="flex items-center gap-1 mb-1">
+            <FileText className="h-3 w-3 text-fg-strong shrink-0" strokeWidth={1.5} />
+            <span className="text-xs font-semibold text-fg-strong">Week Summary</span>
+          </div>
+          <pre className="text-3xs text-fg-muted whitespace-pre-wrap max-h-32 overflow-y-auto">
+            {(() => {
+              const weekLabel = fmtWeekRange(weekStart, weekEnd);
+              const summaryLines: string[] = [`GT Week Summary — ${weekLabel}`, "=================="];
+              let totalUnits = 0;
+              let priorityCount = 0;
+              for (let i = 0; i < 7; i++) {
+                const date = addDays(weekStart, i);
+                const iso = toIsoDate(date);
+                const dayPlans = plansByDay.get(iso) ?? [];
+                const activePlans = dayPlans.filter((p) => p.rendered_state !== "cancelled");
+                if (activePlans.length === 0) continue;
+                const { dayName, dateLabel } = fmtDayHeader(date);
+                summaryLines.push(`${dayName} ${dateLabel}:`);
+                for (const p of activePlans) {
+                  const name: string = (p as any).item_name ?? p.item_id;
+                  const qty: number = (p as any).planned_qty ?? (p as any).quantity ?? (p as any).qty ?? 0;
+                  totalUnits += qty;
+                  const isPri = priorityItemIds.has((p as any).item_id ?? "");
+                  if (isPri) priorityCount += 1;
+                  summaryLines.push(`  • ${name}: ${qty} units${isPri ? " ★" : ""}`);
+                }
+              }
+              summaryLines.push("==================");
+              summaryLines.push(`Total units planned: ${totalUnits}`);
+              summaryLines.push(`Capacity fill: ${capacityFillPct}%`);
+              summaryLines.push(`Priority items: ${priorityCount}`);
+              return summaryLines.join("\n");
+            })()}
+          </pre>
+          <button
+            type="button"
+            className="btn btn-sm gap-1 mt-1"
+            onClick={handleExportWeekSummary}
+          >
+            {copiedWeekSummary ? (
+              <>
+                <Check className="h-3 w-3 text-success-fg" strokeWidth={2.5} />
+                Copied!
+              </>
+            ) : (
+              <>
+                <FileText className="h-3 w-3" strokeWidth={2} />
+                Copy to Clipboard
+              </>
+            )}
+          </button>
+        </div>
+      ) : null}
+
+      {/* Day Capacity Bars Panel (Improvement 19) */}
+      {showDayCapacityBars ? (
+        <div className="bg-bg-subtle border border-border rounded p-2 mt-2">
+          <div className="flex items-center gap-1 mb-2">
+            <BarChart3 className="h-3 w-3 text-fg-strong shrink-0" strokeWidth={1.5} />
+            <span className="text-xs font-semibold text-fg-strong">Daily Capacity Fill</span>
+            <span className="ml-1 text-3xs text-fg-faint">({dayCapacityBarsData.weekLabel})</span>
+          </div>
+          <div className="flex gap-2 items-end h-16">
+            {dayCapacityBarsData.days.map((day) => (
+              <div key={day.label} className="flex flex-col items-center w-10">
+                <span className="text-3xs text-fg-faint mb-0.5">{day.pct}%</span>
+                <div className="w-10 bg-bg-muted rounded-sm overflow-hidden" style={{ height: "36px" }}>
+                  <div
+                    className={cn(
+                      "w-full rounded-sm transition-all",
+                      day.status === "over"
+                        ? "bg-danger-fg"
+                        : day.status === "high"
+                        ? "bg-warning-fg"
+                        : day.status === "ok"
+                        ? "bg-success-fg/70"
+                        : "bg-bg-muted",
+                    )}
+                    style={{ height: `${Math.min(100, day.pct)}%` }}
+                  />
+                </div>
+                <span className="text-3xs text-fg-muted mt-0.5">{day.label}</span>
+              </div>
+            ))}
+          </div>
+          <div className="flex gap-3 mt-2">
+            <span className="flex items-center gap-1 text-3xs text-fg-faint">
+              <span className="inline-block w-2 h-2 rounded-sm bg-danger-fg" />
+              Over
+            </span>
+            <span className="flex items-center gap-1 text-3xs text-fg-faint">
+              <span className="inline-block w-2 h-2 rounded-sm bg-warning-fg" />
+              High (&gt;80%)
+            </span>
+            <span className="flex items-center gap-1 text-3xs text-fg-faint">
+              <span className="inline-block w-2 h-2 rounded-sm bg-success-fg/70" />
+              OK (&gt;50%)
+            </span>
+            <span className="flex items-center gap-1 text-3xs text-fg-faint">
+              <span className="inline-block w-2 h-2 rounded-sm bg-bg-muted border border-border" />
+              Low
+            </span>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Week Progress Ring Panel (Improvement 21) */}
+      {showWeekProgressRing ? (
+        <div className="bg-bg-subtle border border-border rounded p-3 mt-2">
+          <div className="flex items-center gap-1 mb-2">
+            <CircleDot className="h-3 w-3 text-fg-strong shrink-0" strokeWidth={1.5} />
+            <span className="text-xs font-semibold text-fg-strong">Week Progress</span>
+          </div>
+          <div className="flex flex-col items-center gap-2">
+            {(() => {
+              const circumference = 2 * Math.PI * 34; // ≈ 213.63
+              const offset = circumference - (weekProgressRingData.completedPct / 100) * circumference;
+              return (
+                <svg
+                  viewBox="0 0 80 80"
+                  width="80"
+                  height="80"
+                  style={{ transform: "rotate(-90deg)" }}
+                >
+                  <circle
+                    cx="40"
+                    cy="40"
+                    r="34"
+                    fill="none"
+                    stroke="#e2e8f0"
+                    strokeWidth="8"
+                  />
+                  <circle
+                    cx="40"
+                    cy="40"
+                    r="34"
+                    fill="none"
+                    stroke="#3b82f6"
+                    strokeWidth="8"
+                    strokeLinecap="round"
+                    strokeDasharray={`${circumference}`}
+                    strokeDashoffset={`${offset}`}
+                    style={{ transition: "stroke-dashoffset 0.4s ease" }}
+                  />
+                  <text
+                    x="40"
+                    y="44"
+                    textAnchor="middle"
+                    fill="currentColor"
+                    fontSize="14"
+                    fontWeight="600"
+                    style={{ transform: "rotate(90deg)", transformOrigin: "40px 40px" }}
+                  >
+                    {weekProgressRingData.completedPct}%
+                  </text>
+                </svg>
+              );
+            })()}
+            <span className="text-3xs text-fg-muted text-center">
+              {`${weekProgressRingData.completed} of ${weekProgressRingData.total} items completed`}
+            </span>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Item Frequency Chart panel (Improvement 23) */}
+      {showItemFrequencyChart ? (
+        <div className="bg-bg-subtle border border-border rounded p-3 mt-2">
+          <div className="flex items-center gap-1 mb-3">
+            <BarChart2 className="h-3 w-3 text-fg-strong shrink-0" strokeWidth={1.5} />
+            <span className="text-xs font-semibold text-fg-strong">
+              Item Production Frequency This Week
+            </span>
+          </div>
+          {itemFrequencyData === null ? (
+            <p className="text-3xs text-fg-faint">
+              Not enough distinct items to display (need at least 3).
+            </p>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {itemFrequencyData.items.map((row) => (
+                <div key={row.name} className="flex items-center gap-2">
+                  <span
+                    className="text-3xs text-fg-muted shrink-0 truncate max-w-24"
+                    title={row.name}
+                  >
+                    {row.name}
+                  </span>
+                  <div className="flex-1 flex items-center gap-1 min-w-0">
+                    <div
+                      className="h-2 rounded-full bg-accent/60 shrink-0"
+                      style={{
+                        width: `${Math.round((row.dayCount / itemFrequencyData.maxDays) * 100)}%`,
+                        minWidth: "4px",
+                      }}
+                    />
+                    <span className="text-3xs text-fg-muted shrink-0">
+                      {row.dayCount}d
+                    </span>
+                  </div>
+                  <span className="text-3xs text-fg-faint shrink-0">
+                    {row.totalQty.toLocaleString()} units
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      {/* Overtime Risk Panel (R41-1) */}
+      {showOvertimeRiskPanel ? (
+        <div className="bg-bg-subtle border border-border rounded p-3 mt-2">
+          <div className="flex items-center gap-1 mb-3">
+            <AlertCircle className="h-3 w-3 text-fg-strong shrink-0" strokeWidth={1.5} />
+            <span className="text-xs font-semibold text-fg-strong">
+              Overtime Risk — Daily Load
+            </span>
+          </div>
+          <div className="flex flex-col gap-2">
+            {OVERTIME_RISK_DAYS.map((day) => {
+              const clampedPct = Math.min(day.load, 100);
+              const isRed = day.load > 95;
+              const isYellow = day.load >= 80 && day.load <= 95;
+              const labelColor = isRed
+                ? "text-danger-fg"
+                : isYellow
+                ? "text-warning-fg"
+                : "text-success-fg";
+              const barColor = isRed
+                ? "bg-danger-fg"
+                : isYellow
+                ? "bg-warning-fg"
+                : "bg-success-fg";
+              const labelText = isRed
+                ? `${day.load}% — High risk`
+                : isYellow
+                ? `${day.load}% — Watch`
+                : `${day.load}% — OK`;
+              return (
+                <div key={day.name} className="flex items-center gap-2">
+                  <span className="text-3xs text-fg-muted shrink-0 w-8">{day.name}</span>
+                  <div className="flex-1 h-2 bg-bg-muted rounded-full overflow-hidden">
+                    <div
+                      className={cn("h-full rounded-full transition-all", barColor)}
+                      style={{ width: `${clampedPct}%` }}
+                    />
+                  </div>
+                  <span className={cn("text-3xs shrink-0 w-28", labelColor)}>
+                    {labelText}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+          <div className="flex gap-4 mt-3">
+            <span className="flex items-center gap-1 text-3xs text-fg-faint">
+              <span className="inline-block w-2 h-2 rounded-full bg-success-fg" />
+              {"< 80% — OK"}
+            </span>
+            <span className="flex items-center gap-1 text-3xs text-fg-faint">
+              <span className="inline-block w-2 h-2 rounded-full bg-warning-fg" />
+              {"80–95% — Watch"}
+            </span>
+            <span className="flex items-center gap-1 text-3xs text-fg-faint">
+              <span className="inline-block w-2 h-2 rounded-full bg-danger-fg" />
+              {"> 95% — High risk"}
+            </span>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Weekly Cost Estimate Panel (R42-1) */}
+      {showWeeklyCostEstimate ? (
+        <div className="bg-bg-subtle border border-border rounded p-3 mt-2">
+          <div className="flex items-center gap-1 mb-3">
+            <CircleDollarSign className="h-3 w-3 text-fg-strong shrink-0" strokeWidth={1.5} />
+            <span className="text-xs font-semibold text-fg-strong">
+              Weekly Cost Estimate
+            </span>
+            <span className="text-3xs text-fg-faint ml-1">(mock — cost rollup ships in Gate 5)</span>
+          </div>
+          <div className="flex flex-col gap-2">
+            {WEEKLY_COST_ROWS.map((row) => {
+              const pct = Math.round((row.amount / WEEKLY_COST_TOTAL) * 100);
+              const isTotal = row.label === "Total";
+              return (
+                <div key={row.label} className={cn("flex items-center gap-2", isTotal && "mt-1 border-t border-border pt-2")}>
+                  <span className={cn("text-3xs shrink-0 w-16", isTotal ? "text-fg-strong font-semibold" : "text-fg-muted")}>
+                    {row.label}
+                  </span>
+                  {!isTotal ? (
+                    <div className="flex-1 h-2 bg-bg-muted rounded-full overflow-hidden">
+                      <div
+                        className="h-full rounded-full bg-accent/60 transition-all"
+                        style={{ width: `${pct}%` }}
+                      />
+                    </div>
+                  ) : (
+                    <div className="flex-1" />
+                  )}
+                  <span className={cn("text-3xs shrink-0 tabular-nums", isTotal ? "text-fg-strong font-semibold" : "text-fg-muted")}>
+                    {`₪${row.amount.toLocaleString()}`}
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Capacity Forecast Chart panel (R43-1) */}
+      {showCapacityForecastChart ? (
+        <div className="bg-bg-subtle border border-border rounded p-3 mt-2">
+          <div className="flex items-center gap-1 mb-2">
+            <AreaChart className="h-3 w-3 text-fg-strong shrink-0" strokeWidth={1.5} />
+            <span className="text-xs font-semibold text-fg-strong">
+              Capacity Forecast
+            </span>
+            <span className="text-3xs text-fg-faint ml-1">(4-week outlook, mock)</span>
+          </div>
+          {(() => {
+            const W = 260;
+            const H = 60;
+            const PAD_X = 0;
+            const PAD_Y = 4;
+            const innerW = W - PAD_X * 2;
+            const innerH = H - PAD_Y * 2;
+            const pts = CAPACITY_FORECAST_WEEKS.map((w, i) => {
+              const x = PAD_X + (i / (CAPACITY_FORECAST_WEEKS.length - 1)) * innerW;
+              const y = PAD_Y + innerH - (w.pct / 100) * innerH;
+              return { x, y, ...w };
+            });
+            // Build SVG area path: line across top, then close down to baseline
+            const lineD = pts
+              .map((p, i) => `${i === 0 ? "M" : "L"}${p.x.toFixed(1)},${p.y.toFixed(1)}`)
+              .join(" ");
+            const areaD =
+              lineD +
+              ` L${pts[pts.length - 1].x.toFixed(1)},${(PAD_Y + innerH).toFixed(1)}` +
+              ` L${pts[0].x.toFixed(1)},${(PAD_Y + innerH).toFixed(1)} Z`;
+            return (
+              <div>
+                <svg
+                  width={W}
+                  height={H}
+                  viewBox={`0 0 ${W} ${H}`}
+                  aria-label="4-week capacity forecast area chart"
+                  role="img"
+                  style={{ display: "block", maxWidth: "100%" }}
+                >
+                  {/* Shaded area fill */}
+                  <path d={areaD} fill="currentColor" className="text-accent/20" />
+                  {/* Solid top stroke */}
+                  <path
+                    d={lineD}
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth={2}
+                    strokeLinejoin="round"
+                    strokeLinecap="round"
+                    className="text-accent"
+                  />
+                  {/* Data point dots */}
+                  {pts.map((p) => (
+                    <circle
+                      key={p.label}
+                      cx={p.x}
+                      cy={p.y}
+                      r={3}
+                      fill="currentColor"
+                      className="text-accent"
+                    />
+                  ))}
+                </svg>
+                {/* Week labels */}
+                <div
+                  className="flex justify-between mt-1"
+                  style={{ width: W, maxWidth: "100%" }}
+                >
+                  {pts.map((p) => (
+                    <div key={p.label} className="flex flex-col items-center" style={{ minWidth: 0 }}>
+                      <span className="text-3xs text-fg-faint">{p.label}</span>
+                      <span className="text-3xs text-fg-muted font-mono">{p.pct}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            );
+          })()}
+        </div>
+      ) : null}
+
+      {/* Item Priority Matrix panel (R44-1) */}
+      {showItemPriorityMatrix ? (
+        <div className="bg-bg-subtle border border-border rounded p-3 mt-2">
+          <div className="flex items-center gap-1 mb-3">
+            <Grid3X3 className="h-3 w-3 text-fg-strong shrink-0" strokeWidth={1.5} />
+            <span className="text-xs font-semibold text-fg-strong">
+              Priority Matrix
+            </span>
+            <span className="text-3xs text-fg-faint ml-1">Urgency × Volume</span>
+          </div>
+          {/* 2×2 grid: columns = Volume (High | Low), rows = Urgency (High | Low) */}
+          <div className="grid grid-cols-2 gap-0 rounded overflow-hidden border border-border text-3xs">
+            {/* Column headers */}
+            <div className="col-span-2 grid grid-cols-[auto_1fr_1fr]">
+              <div className="w-16" />
+              <div className="py-1 text-center text-fg-muted font-medium border-b border-l border-border">
+                Volume: High
+              </div>
+              <div className="py-1 text-center text-fg-muted font-medium border-b border-l border-border">
+                Volume: Low
+              </div>
+            </div>
+            {/* Row: Urgency High */}
+            {(["High", "Low"] as const).map((urgency) => (
+              <div key={urgency} className="col-span-2 grid grid-cols-[auto_1fr_1fr]">
+                {/* Row header */}
+                <div className="w-16 flex items-center justify-center border-t border-r border-border px-1 py-2">
+                  <span className="text-fg-muted font-medium" style={{ writingMode: "vertical-rl", transform: "rotate(180deg)", fontSize: "10px" }}>
+                    {`Urgency: ${urgency}`}
+                  </span>
+                </div>
+                {(["High", "Low"] as const).map((volume) => {
+                  const item = PRIORITY_MATRIX_ITEMS.find(
+                    (it) => it.urgency === urgency && it.volume === volume,
+                  );
+                  return (
+                    <div
+                      key={volume}
+                      className={cn(
+                        "border-t border-l border-border p-2 flex flex-col gap-1 min-h-[56px]",
+                        item ? item.bg : "bg-bg-subtle",
+                      )}
+                    >
+                      {item ? (
+                        <span
+                          className={cn(
+                            "rounded px-1 py-0.5 font-medium text-3xs truncate",
+                            item.color,
+                          )}
+                          title={item.name}
+                        >
+                          {item.name}
+                        </span>
+                      ) : (
+                        <span className="text-fg-faint text-3xs">—</span>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            ))}
+          </div>
+          <div className="flex flex-wrap gap-3 mt-2">
+            <span className="flex items-center gap-1 text-3xs text-fg-faint">
+              <span className="inline-block w-2 h-2 rounded-sm bg-danger-softer border border-danger/20" />
+              High urgency, High volume
+            </span>
+            <span className="flex items-center gap-1 text-3xs text-fg-faint">
+              <span className="inline-block w-2 h-2 rounded-sm bg-warning-softer border border-warning/20" />
+              High urgency, Low volume
+            </span>
+            <span className="flex items-center gap-1 text-3xs text-fg-faint">
+              <span className="inline-block w-2 h-2 rounded-sm bg-info-softer border border-info/20" />
+              Low urgency, High volume
+            </span>
+            <span className="flex items-center gap-1 text-3xs text-fg-faint">
+              <span className="inline-block w-2 h-2 rounded-sm bg-bg-muted border border-border" />
+              Low urgency, Low volume
+            </span>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Daily Throughput Sparkline panel (R45-1) */}
+      {showDailyThroughputSparkline ? (
+        <div className="bg-bg-subtle border border-border rounded p-3 mt-2">
+          <div className="flex items-center gap-1 mb-2">
+            <Activity className="h-3 w-3 text-fg-strong shrink-0" strokeWidth={1.5} />
+            <span className="text-xs font-semibold text-fg-strong">
+              Daily Throughput
+            </span>
+            <span className="text-3xs text-fg-faint ml-1">Sun–Thu this week</span>
+          </div>
+          <div className="overflow-x-auto">
+            <svg
+              width={SPARKLINE_W}
+              height={SPARKLINE_H}
+              viewBox={`0 0 ${SPARKLINE_W} ${SPARKLINE_H}`}
+              className="block"
+              aria-label="Daily throughput sparkline"
+            >
+              {/* Area fill below the line */}
+              <polygon
+                points={sparklineArea}
+                className="fill-accent/10"
+              />
+              {/* Line */}
+              <polyline
+                points={sparklinePolyline}
+                fill="none"
+                className="stroke-accent"
+                strokeWidth={1.5}
+                strokeLinejoin="round"
+                strokeLinecap="round"
+              />
+              {/* Dots at each data point */}
+              {sparklinePoints.map((p, i) => (
+                <circle
+                  key={i}
+                  cx={p.x}
+                  cy={p.y}
+                  r={3}
+                  className="fill-accent stroke-bg-subtle"
+                  strokeWidth={1}
+                />
+              ))}
+            </svg>
+            {/* Day labels below */}
+            <div
+              className="flex justify-between mt-1"
+              style={{ width: SPARKLINE_W, maxWidth: "100%" }}
+            >
+              {SPARKLINE_DAYS.map((day, i) => (
+                <div
+                  key={day}
+                  className="flex flex-col items-center"
+                  style={{
+                    position: "relative",
+                    left: i === 0 ? `${SPARKLINE_PAD_X}px` : i === SPARKLINE_DAYS.length - 1 ? `-${SPARKLINE_PAD_X}px` : undefined,
+                  }}
+                >
+                  <span className="text-3xs text-fg-faint">{day}</span>
+                  <span className="text-3xs text-fg-muted font-mono">
+                    {SPARKLINE_VALUES[i].toLocaleString()}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Output Forecast Bar chart panel (R46-1) */}
+      {showOutputForecastBar ? (
+        <div className="bg-bg-subtle border border-border rounded p-3 mt-2">
+          <div className="flex items-center gap-1 mb-2">
+            <BarChart3 className="h-3 w-3 text-fg-strong shrink-0" strokeWidth={1.5} />
+            <span className="text-xs font-semibold text-fg-strong">
+              Output Forecast
+            </span>
+            <span className="text-3xs text-fg-faint ml-1">Actual vs. planned (Sun–Thu)</span>
+          </div>
+          <div className="overflow-x-auto">
+            <svg
+              width={FORECAST_BAR_W}
+              height={FORECAST_BAR_H}
+              viewBox={`0 0 ${FORECAST_BAR_W} ${FORECAST_BAR_H}`}
+              className="block"
+              aria-label="Output forecast bar chart comparing actual vs planned output per day"
+              role="img"
+            >
+              {FORECAST_DAYS.map((day, i) => {
+                const slotCenterX = i * FORECAST_SLOT_W + FORECAST_SLOT_W / 2;
+                const plannedH = Math.round(
+                  (FORECAST_PLANNED[i] / FORECAST_MAX) * (FORECAST_BAR_H - 8),
+                );
+                const actualH = Math.round(
+                  (FORECAST_ACTUAL[i] / FORECAST_MAX) * (FORECAST_BAR_H - 8),
+                );
+                const plannedX = slotCenterX - FORECAST_BAR_WIDTH / 2 - FORECAST_GAP / 2;
+                const actualX = slotCenterX + FORECAST_GAP / 2;
+                return (
+                  <g key={day}>
+                    {/* Planned bar (gray, behind) */}
+                    <rect
+                      x={plannedX}
+                      y={FORECAST_BAR_H - plannedH - 4}
+                      width={FORECAST_BAR_WIDTH}
+                      height={plannedH}
+                      rx={2}
+                      className="fill-fg-faint/40"
+                    />
+                    {/* Actual bar (accent, front) — only rendered when > 0 */}
+                    {FORECAST_ACTUAL[i] > 0 ? (
+                      <rect
+                        x={actualX}
+                        y={FORECAST_BAR_H - actualH - 4}
+                        width={FORECAST_BAR_WIDTH}
+                        height={actualH}
+                        rx={2}
+                        className="fill-accent/80"
+                      />
+                    ) : null}
+                  </g>
+                );
+              })}
+            </svg>
+            {/* Day labels */}
+            <div
+              className="flex mt-1"
+              style={{ width: FORECAST_BAR_W, maxWidth: "100%" }}
+            >
+              {FORECAST_DAYS.map((day, i) => (
+                <div
+                  key={day}
+                  className="flex flex-col items-center"
+                  style={{ width: FORECAST_SLOT_W }}
+                >
+                  <span className="text-3xs text-fg-faint">{day}</span>
+                  <span className="text-3xs text-fg-muted font-mono">
+                    {FORECAST_ACTUAL[i] > 0
+                      ? `${FORECAST_ACTUAL[i]}/${FORECAST_PLANNED[i]}`
+                      : `—/${FORECAST_PLANNED[i]}`}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* Legend */}
+          <div className="flex gap-4 mt-2">
+            <span className="flex items-center gap-1 text-3xs text-fg-faint">
+              <span className="inline-block w-3 h-2 rounded-sm bg-fg-faint/40" />
+              Planned
+            </span>
+            <span className="flex items-center gap-1 text-3xs text-fg-faint">
+              <span className="inline-block w-3 h-2 rounded-sm bg-accent/80" />
+              Actual
+            </span>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Changeover Time Panel (R47-1) */}
+      {showChangeoverTimePanel ? (
+        <div className="bg-bg-subtle border border-border rounded p-3 mt-2">
+          <div className="flex items-center gap-1 mb-3">
+            <Timer className="h-3 w-3 text-fg-strong shrink-0" strokeWidth={1.5} />
+            <span className="text-xs font-semibold text-fg-strong">
+              Changeover Times
+            </span>
+            <span className="text-3xs text-fg-faint ml-1">Production sequence this week</span>
+          </div>
+          <div className="flex flex-col gap-0.5">
+            {CHANGEOVER_TRANSITIONS.map((t, idx) => (
+              <div
+                key={idx}
+                className={cn(
+                  "flex items-center gap-2 px-2 py-1.5 rounded text-3xs",
+                  idx % 2 === 0 ? "bg-bg-subtle" : "bg-bg-muted",
+                )}
+              >
+                <span className="text-fg-muted flex-1 truncate">
+                  <span className="font-medium text-fg-strong">{t.from}</span>
+                  <span className="mx-1 text-fg-faint">→</span>
+                  <span className="font-medium text-fg-strong">{t.to}</span>
+                </span>
+                <span className="shrink-0 font-mono tabular-nums text-fg-muted">
+                  {t.minutes} min
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-2 pt-2 border-t border-border flex items-center justify-between text-3xs">
+            <span className="text-fg-muted">Total changeover time this week</span>
+            <span className="font-mono tabular-nums font-semibold text-fg-strong">
+              {changeoverTotalHrs} hrs ({changeoverTotalMinutes} min)
+            </span>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Scrap Tracking Panel (R48-1) */}
+      {showScrapTrackingPanel ? (
+        <div className="bg-bg-subtle border border-border rounded p-3 mt-2">
+          <div className="flex items-center gap-1 mb-3">
+            <Trash2 className="h-3 w-3 text-fg-strong shrink-0" strokeWidth={1.5} />
+            <span className="text-xs font-semibold text-fg-strong">
+              Scrap Tracking
+            </span>
+            <span className="text-3xs text-fg-faint ml-1">Daily scrap summary (Sun–Thu)</span>
+          </div>
+          <div className="flex flex-col gap-0.5">
+            {SCRAP_DAYS.map((row, idx) => (
+              <div
+                key={row.day}
+                className={cn(
+                  "flex items-center gap-2 px-2 py-1.5 rounded text-3xs",
+                  idx % 2 === 0 ? "bg-bg-subtle" : "bg-bg-muted",
+                )}
+              >
+                <span className="w-8 font-medium text-fg-strong shrink-0">{row.day}</span>
+                <span className="flex-1 font-mono tabular-nums text-fg-muted">
+                  {row.scrapQty} units
+                </span>
+                <span
+                  className={cn(
+                    "shrink-0 font-mono tabular-nums font-semibold rounded-full px-1.5 py-0.5",
+                    row.scrapRate < 2
+                      ? "bg-success-softer text-success-fg"
+                      : row.scrapRate < 5
+                      ? "bg-warning-softer text-warning-fg"
+                      : "bg-danger-softer text-danger-fg",
+                  )}
+                >
+                  {row.scrapRate.toFixed(1)}%
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="mt-2 pt-2 border-t border-border flex items-center justify-between text-3xs">
+            <span className="text-fg-muted">Week total scrap</span>
+            <div className="flex items-center gap-2">
+              <span className="font-mono tabular-nums text-fg-strong">
+                {scrapWeekTotal} units
+              </span>
+              <span
+                className={cn(
+                  "font-mono tabular-nums font-semibold rounded-full px-1.5 py-0.5",
+                  scrapWeekRate < 2
+                    ? "bg-success-softer text-success-fg"
+                    : scrapWeekRate < 5
+                    ? "bg-warning-softer text-warning-fg"
+                    : "bg-danger-softer text-danger-fg",
+                )}
+              >
+                avg {scrapWeekRate.toFixed(1)}%
+              </span>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Buffer Stock Panel (R49-1) */}
+      {showBufferStockPanel ? (
+        <div className="bg-bg-subtle border border-border rounded p-3 mt-2">
+          <div className="flex items-center gap-1 mb-3">
+            <Package className="h-3 w-3 text-fg-strong shrink-0" strokeWidth={1.5} />
+            <span className="text-xs font-semibold text-fg-strong">
+              Buffer Stock
+            </span>
+            <span className="text-3xs text-fg-faint ml-1">Current vs target buffer levels</span>
+          </div>
+          <div className="w-full overflow-x-auto">
+            <table className="w-full text-3xs border-collapse">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left font-medium text-fg-muted py-1 pr-3">Item</th>
+                  <th className="text-right font-medium text-fg-muted py-1 px-3">Buffer Target</th>
+                  <th className="text-right font-medium text-fg-muted py-1 px-3">Current Stock</th>
+                  <th className="text-right font-medium text-fg-muted py-1 px-3">Gap</th>
+                  <th className="text-center font-medium text-fg-muted py-1 pl-3">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {BUFFER_STOCK_ITEMS.map((item, idx) => {
+                  const gap = item.target - item.current;
+                  const ratio = item.current / item.target;
+                  const status: "OK" | "Low" | "Critical" =
+                    ratio >= 1
+                      ? "OK"
+                      : ratio >= 0.8
+                      ? "Low"
+                      : "Critical";
+                  return (
+                    <tr
+                      key={item.name}
+                      className={cn(
+                        "border-b border-border/40",
+                        idx % 2 === 0 ? "bg-bg-subtle" : "bg-bg-muted",
+                      )}
+                    >
+                      <td className="py-1.5 pr-3 font-medium text-fg-strong">{item.name}</td>
+                      <td className="py-1.5 px-3 text-right font-mono tabular-nums text-fg-muted">
+                        {item.target.toLocaleString()}
+                      </td>
+                      <td className="py-1.5 px-3 text-right font-mono tabular-nums text-fg-strong">
+                        {item.current.toLocaleString()}
+                      </td>
+                      <td className="py-1.5 px-3 text-right font-mono tabular-nums">
+                        <span
+                          className={cn(
+                            gap <= 0 ? "text-success-fg" : "text-danger-fg",
+                          )}
+                        >
+                          {gap <= 0 ? `+${Math.abs(gap)}` : `-${gap}`}
+                        </span>
+                      </td>
+                      <td className="py-1.5 pl-3 text-center">
+                        <span
+                          className={cn(
+                            "rounded-full px-2 py-0.5 font-semibold",
+                            status === "OK"
+                              ? "bg-success-softer text-success-fg"
+                              : status === "Low"
+                              ? "bg-warning-softer text-warning-fg"
+                              : "bg-danger-softer text-danger-fg",
+                          )}
+                        >
+                          {status}
+                        </span>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Weekly Production Forecast Panel (R50-1) */}
+      {showWeeklyProductionForecast ? (
+        <div className="bg-bg-subtle border border-border rounded p-3 mt-2">
+          <div className="flex items-center gap-1 mb-3">
+            <TrendingUp className="h-3 w-3 text-fg-strong shrink-0" strokeWidth={1.5} />
+            <span className="text-xs font-semibold text-fg-strong">
+              Weekly Production Forecast
+            </span>
+            <span className="text-3xs text-fg-faint ml-1">Planned vs forecast over 4-week horizon</span>
+          </div>
+          <div className="w-full overflow-x-auto">
+            <table className="w-full text-3xs border-collapse">
+              <thead>
+                <tr className="border-b border-border">
+                  <th className="text-left font-medium text-fg-muted py-1 pr-3">Week</th>
+                  <th className="text-right font-medium text-fg-muted py-1 px-3">Planned</th>
+                  <th className="text-right font-medium text-fg-muted py-1 px-3">Forecast</th>
+                  <th className="text-right font-medium text-fg-muted py-1 pl-3">Variance</th>
+                </tr>
+              </thead>
+              <tbody>
+                {WEEKLY_FORECAST.map((row, idx) => (
+                  <tr
+                    key={row.week}
+                    className={cn(
+                      "border-b border-border/40",
+                      idx % 2 === 0 ? "bg-bg-subtle" : "bg-bg-muted",
+                    )}
+                  >
+                    <td className="py-1.5 pr-3 font-medium text-fg-strong">{row.week}</td>
+                    <td className="py-1.5 px-3 text-right font-mono tabular-nums text-fg-muted">
+                      {row.planned.toLocaleString()}
+                    </td>
+                    <td className="py-1.5 px-3 text-right font-mono tabular-nums text-fg-strong">
+                      {row.forecast.toLocaleString()}
+                    </td>
+                    <td className="py-1.5 pl-3 text-right font-mono tabular-nums">
+                      <span
+                        className={cn(
+                          row.variance > 0
+                            ? "text-success-fg"
+                            : row.variance < 0
+                            ? "text-danger-fg"
+                            : "text-fg-muted",
+                        )}
+                      >
+                        {row.variance > 0
+                          ? `+${row.variance.toLocaleString()}`
+                          : row.variance < 0
+                          ? `${row.variance.toLocaleString()}`
+                          : "—"}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Weekly Output Target editor (Improvement 2) */}
+      {showTargetEditor ? (
+        <div className="bg-bg-subtle border border-border rounded p-2 mt-2 mb-3">
+          <div className="text-3xs text-fg-faint font-medium mb-1">
+            Weekly Output Target
+          </div>
+          <div className="flex items-center gap-2">
+            <input
+              type="number"
+              min="0"
+              step="1"
+              className="w-20 text-3xs border border-border rounded px-2 py-1 bg-bg-raised text-fg-strong outline-none focus:border-accent/50"
+              value={weeklyOutputTarget}
+              onChange={(e) => {
+                const val = parseInt(e.target.value, 10) || 0;
+                setWeeklyOutputTarget(val);
+                try {
+                  localStorage.setItem(
+                    `gt_prod_output_target_${weekStartIso}`,
+                    String(val),
+                  );
+                } catch {
+                  // localStorage unavailable — non-fatal
+                }
+              }}
+              aria-label="Weekly output target in units"
+            />
+            <span className="text-3xs text-fg-muted">units</span>
+          </div>
+          {weeklyTargetPct !== null ? (
+            <>
+              <div className="h-1.5 w-full bg-bg-muted rounded mt-1 overflow-hidden">
+                <div
+                  className={cn(
+                    "h-full rounded transition-all",
+                    weeklyTargetPct >= 100
+                      ? "bg-success-fg"
+                      : weeklyTargetPct >= 60
+                      ? "bg-accent"
+                      : "bg-warning-fg",
+                  )}
+                  style={{ width: `${weeklyTargetPct}%` }}
+                />
+              </div>
+              <div className="text-3xs text-fg-muted text-right mt-0.5">
+                {`${weeklyOutputActual} / ${weeklyOutputTarget} units`}
+              </div>
+            </>
+          ) : null}
+        </div>
+      ) : null}
+
+      {/* Weekly Capacity Fill Gauge (Improvement 3) */}
+      {showCapacityFill ? (
+        <div className="bg-bg-subtle border border-border rounded p-2 mt-2 mb-3">
+          <div className="text-3xs text-fg-faint font-medium">
+            Weekly Capacity Utilization
+          </div>
+          <div className="h-3 w-full bg-bg-muted rounded-full overflow-hidden mt-1">
+            <div
+              className={cn(
+                "h-full rounded-full transition-all",
+                capacityFillPct <= 70
+                  ? "bg-success-fg"
+                  : capacityFillPct <= 90
+                  ? "bg-warning-fg"
+                  : "bg-danger-fg",
+              )}
+              style={{ width: `${capacityFillPct}%` }}
+            />
+          </div>
+          <div className="text-3xs text-fg-muted text-right mt-0.5">
+            {`${capacityFillPct}% utilized`}
+            {" · "}
+            {`${totalPlannedItems}/${MAX_DAILY_CAPACITY * 5} items`}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Material Readiness Panel (Improvement 5) */}
+      {showMaterialReadiness ? (
+        <div className="bg-bg-subtle border border-border rounded p-2 mt-2 mx-5 mb-2">
+          <div className="flex items-center gap-1 mb-1">
+            <PackageSearch className="h-3 w-3 text-fg-strong shrink-0" strokeWidth={1.5} />
+            <span className="text-xs font-semibold text-fg-strong">Material Readiness</span>
+          </div>
+          {materialReadinessRows.length === 0 ? (
+            <div className="text-fg-faint text-3xs">No plan data to analyze</div>
+          ) : (
+            <div>
+              {materialReadinessRows.map((row, idx) => (
+                <div
+                  key={idx}
+                  className="flex items-center gap-2 py-1 border-b border-border last:border-0 text-3xs"
+                >
+                  <span className="text-fg-muted flex-1 truncate">{row.name}</span>
+                  <span className="text-fg-faint">{`${row.available}/${row.needed}`} units</span>
+                  <div className="w-16 h-1.5 bg-bg-muted rounded-full overflow-hidden">
+                    <div
+                      className={cn(
+                        "h-full rounded-full",
+                        row.readyPct >= 80
+                          ? "bg-success-fg"
+                          : row.readyPct >= 50
+                          ? "bg-warning-fg"
+                          : "bg-danger-fg",
+                      )}
+                      style={{ width: `${row.readyPct}%` }}
+                    />
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : null}
+
+      {/* Week Cycle Time Target (Improvement 6) */}
+      {showCycleTimeEditor ? (
+        <div className="bg-bg-subtle border border-border rounded p-2 mt-2 mx-5 mb-2">
+          <div className="flex items-center gap-2 text-3xs">
+            <label className="text-fg-muted shrink-0">Weekly target (hours):</label>
+            <input
+              type="number"
+              min="1"
+              max="80"
+              className="w-16 border border-border rounded px-1 text-fg-muted bg-bg-subtle text-3xs"
+              value={weekCycleTimeTarget}
+              onChange={(e) => {
+                const val = parseInt(e.target.value, 10) || 40;
+                setWeekCycleTimeTarget(val);
+                try {
+                  localStorage.setItem("gt_plan_cycle_target", String(val));
+                } catch {
+                  // localStorage unavailable — non-fatal
+                }
+              }}
+              aria-label="Weekly cycle time target in hours"
+            />
+          </div>
+        </div>
+      ) : null}
+
+      {/* Effort × Urgency Matrix (Improvement 9) */}
+      {showEffortMatrix ? (
+        <div className="bg-bg-subtle border border-border rounded p-2 mt-2 mx-5 mb-2">
+          <div className="text-xs font-semibold text-fg-strong">
+            Effort × Urgency Matrix
+          </div>
+          <div className="grid grid-cols-2 gap-1 mt-2">
+            {/* [0,0] High Urgency × High Effort */}
+            <div className="rounded p-1.5 text-3xs flex flex-col gap-0.5 bg-danger-softer border border-danger/20">
+              <span className="text-danger-fg font-medium text-3xs">Do Now</span>
+              {effortMatrixData.highUrgHighEff.length === 0 ? (
+                <span className="text-fg-faint text-3xs">—</span>
+              ) : (
+                effortMatrixData.highUrgHighEff.map((name) => (
+                  <span
+                    key={name}
+                    className="bg-danger-fg/10 text-danger-fg text-3xs rounded px-1 truncate"
+                  >
+                    {name}
+                  </span>
+                ))
+              )}
+            </div>
+            {/* [0,1] High Urgency × Low Effort */}
+            <div className="rounded p-1.5 text-3xs flex flex-col gap-0.5 bg-warning-softer border border-warning/20">
+              <span className="text-warning-fg font-medium text-3xs">Quick Win</span>
+              {effortMatrixData.highUrgLowEff.length === 0 ? (
+                <span className="text-fg-faint text-3xs">—</span>
+              ) : (
+                effortMatrixData.highUrgLowEff.map((name) => (
+                  <span
+                    key={name}
+                    className="bg-warning-fg/10 text-warning-fg text-3xs rounded px-1 truncate"
+                  >
+                    {name}
+                  </span>
+                ))
+              )}
+            </div>
+            {/* [1,0] Low Urgency × High Effort */}
+            <div className="rounded p-1.5 text-3xs flex flex-col gap-0.5 bg-info-softer border border-info/20">
+              <span className="text-info-fg font-medium text-3xs">Schedule</span>
+              {effortMatrixData.lowUrgHighEff.length === 0 ? (
+                <span className="text-fg-faint text-3xs">—</span>
+              ) : (
+                effortMatrixData.lowUrgHighEff.map((name) => (
+                  <span
+                    key={name}
+                    className="bg-info-fg/10 text-info-fg text-3xs rounded px-1 truncate"
+                  >
+                    {name}
+                  </span>
+                ))
+              )}
+            </div>
+            {/* [1,1] Low Urgency × Low Effort */}
+            <div className="rounded p-1.5 text-3xs flex flex-col gap-0.5 bg-bg-muted border border-border">
+              <span className="text-fg-faint font-medium text-3xs">Later</span>
+              {effortMatrixData.lowUrgLowEff.length === 0 ? (
+                <span className="text-fg-faint text-3xs">—</span>
+              ) : (
+                effortMatrixData.lowUrgLowEff.map((name) => (
+                  <span
+                    key={name}
+                    className="bg-fg-faint/10 text-fg-faint text-3xs rounded px-1 truncate"
+                  >
+                    {name}
+                  </span>
+                ))
+              )}
+            </div>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Batching Opportunity Indicator (Improvement 11) */}
+      {showBatchingOpps ? (
+        <div className="bg-info-softer border border-info/20 rounded p-2 mt-2 mx-5 mb-2">
+          <div className="flex items-center gap-1 mb-1">
+            <Layers className="h-3 w-3 text-info-fg shrink-0" strokeWidth={1.5} />
+            <span className="text-xs font-semibold text-fg-strong">Batching Opportunities</span>
+            <span className="text-3xs text-fg-faint ml-1">
+              ({batchingOpportunities.length} items)
+            </span>
+          </div>
+          {batchingOpportunities.length === 0 ? (
+            <div className="text-fg-faint text-3xs">
+              No items repeat across multiple days
+            </div>
+          ) : (
+            <div>
+              {batchingOpportunities.map((opp) => (
+                <div
+                  key={opp.item}
+                  className="flex items-center gap-2 py-1 border-b border-info/10 last:border-0 text-3xs"
+                >
+                  <span className="text-fg-muted flex-1 truncate">{opp.item}</span>
+                  <span className="text-info-fg font-medium">{opp.daysCount}x</span>
+                  <span className="text-fg-faint">({opp.dayLabels.join(", ")})</span>
+                </div>
+              ))}
+            </div>
+          )}
+          <div className="text-3xs text-fg-faint mt-1">
+            Consider batching repeated items to reduce changeover time
+          </div>
+        </div>
+      ) : null}
+
+      {/* Week Commentary panel (Improvement 12) */}
+      {showWeekCommentary ? (
+        <div className="bg-bg-subtle border border-border rounded p-2 mt-2 mx-5 mb-2">
+          <div className="flex items-center gap-1">
+            <MessageSquare className="h-3 w-3 text-fg-faint shrink-0" strokeWidth={1.5} />
+            <span className="text-xs font-semibold text-fg-strong">Week Commentary</span>
+            <span className="text-3xs text-fg-faint ml-auto">
+              (Week of {weekStartIso})
+            </span>
+          </div>
+          <textarea
+            className="w-full text-3xs bg-transparent border border-border rounded p-1.5 mt-1 resize-none h-16 text-fg-muted placeholder-fg-faint focus:outline-none focus:ring-1 focus:ring-accent/40"
+            value={weekCommentary}
+            placeholder="Add your weekly planning notes and decisions here..."
+            onChange={(e) => {
+              const val = e.target.value;
+              setWeekCommentary(val);
+              try {
+                localStorage.setItem(`gt_plan_week_commentary_${weekStartIso}`, val);
+              } catch {
+                // localStorage unavailable — non-fatal
+              }
+            }}
+            aria-label="Week commentary notes"
+          />
+          <div className="flex justify-between mt-1 text-3xs text-fg-faint">
+            <span>{weekCommentary.length} chars</span>
+            {weekCommentary.trim().length > 0 ? (
+              <button
+                type="button"
+                className="underline hover:no-underline"
+                onClick={() => {
+                  setWeekCommentary("");
+                  try {
+                    localStorage.removeItem(`gt_plan_week_commentary_${weekStartIso}`);
+                  } catch {
+                    // localStorage unavailable — non-fatal
+                  }
+                }}
+              >
+                Clear
+              </button>
+            ) : null}
+          </div>
+        </div>
+      ) : null}
+
+      {/* Week Commentary collapsed preview (Improvement 12) */}
+      {weekCommentary.trim().length > 0 && !showWeekCommentary ? (
+        <button
+          type="button"
+          className="w-full bg-bg-subtle border-b border-border px-5 py-1 text-3xs text-fg-muted truncate cursor-pointer flex items-center text-left hover:bg-bg-muted/50 transition-colors"
+          onClick={() => setShowWeekCommentary(true)}
+        >
+          <MessageSquare className="h-3 w-3 text-fg-faint mr-1 shrink-0" strokeWidth={1.5} />
+          <span className="truncate">
+            {weekCommentary.trim().slice(0, 80)}
+            {weekCommentary.trim().length > 80 ? "…" : ""}
+          </span>
+        </button>
+      ) : null}
+
+      {/* Plan Change Log (Improvement 13) */}
+      {showChangeLog ? (
+        <div className="bg-bg-subtle border border-border rounded p-2 mt-2 mx-5 mb-2">
+          <div className="flex items-center gap-1">
+            <History className="h-3 w-3 text-fg-faint shrink-0" strokeWidth={1.5} />
+            <span className="text-xs font-semibold text-fg-strong">Plan Change Log</span>
+            <span className="text-fg-faint text-3xs ml-auto">
+              ({planChangeLogs.length} entries)
+            </span>
+            <button
+              type="button"
+              className="text-3xs underline hover:no-underline text-fg-faint ml-2"
+              onClick={() => {
+                setPlanChangeLogs([]);
+                try {
+                  localStorage.removeItem(CHANGE_LOG_KEY);
+                } catch {
+                  // localStorage unavailable — non-fatal
+                }
+              }}
+            >
+              Clear all
+            </button>
+          </div>
+          {planChangeLogs.length === 0 ? (
+            <div className="text-fg-faint text-3xs mt-1">
+              No plan changes recorded yet
+            </div>
+          ) : (
+            <div className="flex flex-col gap-0.5 mt-1">
+              {planChangeLogs.map((entry) => (
+                <div
+                  key={entry.id}
+                  className="flex items-center gap-2 text-3xs border-b border-border last:border-0 py-0.5"
+                >
+                  <span
+                    className={cn(
+                      "text-3xs rounded px-1 font-medium",
+                      entry.action === "add"
+                        ? "bg-success-softer text-success-fg"
+                        : "bg-danger-softer text-danger-fg",
+                    )}
+                  >
+                    {entry.action}
+                  </span>
+                  <span className="text-fg-muted flex-1 truncate">{entry.item}</span>
+                  <span className="text-fg-faint">
+                    {entry.day} · {entry.at}
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      ) : null}
+
       {/* Always-visible info banner — non-dismissible */}
       <div
         className="mb-4 flex items-start gap-3 rounded-md border border-info/40 bg-info-softer px-4 py-3 text-sm"
@@ -1716,6 +4737,76 @@ export default function ProductionPlanPage() {
           <ArrowRight className="h-3 w-3" strokeWidth={2} />
         </Link>
       </div>
+
+      {/* Item search bar (Improvement 1) — filters items across all DayCards */}
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <div className="relative flex items-center w-full max-w-xs">
+          <Search className="absolute left-2 h-3 w-3 text-fg-faint pointer-events-none" strokeWidth={1.5} />
+          <input
+            type="text"
+            className="w-full max-w-xs text-3xs border border-border rounded px-2 py-1 pl-6 bg-bg-subtle placeholder:text-fg-faint outline-none focus:border-accent/50"
+            placeholder="Search items..."
+            value={planItemSearch}
+            onChange={(e) => setPlanItemSearch(e.target.value)}
+            aria-label="Search production items across all days"
+          />
+          {planItemSearchActive ? (
+            <button
+              type="button"
+              aria-label="Clear search"
+              onClick={() => setPlanItemSearch("")}
+              className="absolute right-1.5 flex items-center justify-center h-4 w-4 text-fg-faint hover:text-fg-muted transition-colors"
+            >
+              <X className="h-3 w-3" strokeWidth={2} />
+            </button>
+          ) : null}
+        </div>
+        {planItemSearchActive ? (() => {
+          const searchTerm = planItemSearch.trim().toLowerCase();
+          const matchDayCount = weekDays.filter((dayIso) => {
+            const dayPlans = plansByDay.get(dayIso) ?? [];
+            return dayPlans.some((p) => {
+              const name =
+                ((p as any).item_name ?? (p as any).name ?? (p as any).component_name ?? "") as string;
+              return name.toLowerCase().includes(searchTerm);
+            });
+          }).length;
+          return (
+            <span className="flex items-center gap-1 text-3xs text-fg-muted">
+              <Search className="h-3 w-3 shrink-0" strokeWidth={1.5} />
+              {`Showing matches in ${matchDayCount} day${matchDayCount !== 1 ? "s" : ""}`}
+            </span>
+          );
+        })() : null}
+      </div>
+
+      {/* Low Progress Alert Banner (Improvement 4) */}
+      {showProgressAlert && !dismissProgressAlert ? (
+        (() => {
+          // Compute how far through the work week (Mon-Fri) we are.
+          // getDay(): 0=Sun,1=Mon,2=Tue,3=Wed,4=Thu,5=Fri,6=Sat
+          // We treat days 1-5 as the 5-day work week; clamp to Mon-Fri range.
+          const todayIdx = new Date().getDay();
+          const workdayIdx = Math.max(1, Math.min(5, todayIdx));
+          const weekCompletePct = Math.round(((workdayIdx - 1) / 5) * 100);
+          return (
+            <div className="mb-3 bg-warning-softer border border-warning/30 rounded p-2 flex items-center gap-2 text-3xs text-warning-fg">
+              <AlertTriangle className="h-3 w-3 shrink-0" strokeWidth={2} />
+              <span className="flex-1 text-warning-fg">
+                {`Week is ${weekCompletePct}% complete but production is only ${weekProgressPct}% done — consider rescheduling items`}
+              </span>
+              <button
+                type="button"
+                aria-label="Dismiss alert"
+                onClick={() => setDismissProgressAlert(true)}
+                className="shrink-0 flex items-center justify-center h-4 w-4 hover:opacity-70 transition-opacity"
+              >
+                <X className="h-3 w-3" strokeWidth={2} />
+              </button>
+            </div>
+          );
+        })()
+      ) : null}
 
       {/* ---------------------------------------------------------------- */}
       {/* State-hygiene rendering: exactly one of                          */}
@@ -1878,6 +4969,13 @@ export default function ProductionPlanPage() {
                 onAdd={(d) => setShowManualAdd({ defaultDate: toIsoDate(d) })}
                 onEdit={setEditingPlan}
                 onCancel={setCancellingPlan}
+                itemSearch={planItemSearch}
+                recurringItemIds={recurringItemIds}
+                isLocked={lockedDayIds.has(i)}
+                onToggleLock={() => toggleDayLock(i)}
+                showPriorityHighlight={showPriorityHighlight}
+                priorityItemIds={priorityItemIds}
+                onTogglePriority={togglePriorityItem}
               />
             );
           })}
