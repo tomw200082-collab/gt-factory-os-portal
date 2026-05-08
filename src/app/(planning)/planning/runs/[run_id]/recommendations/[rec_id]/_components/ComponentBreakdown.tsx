@@ -97,8 +97,12 @@ function ComponentCard({ row }: { row: RecDetailComponent }) {
     <div className="rounded border border-border/60 bg-bg-raised p-3 space-y-1.5">
       <div className="flex items-start justify-between gap-2">
         <div className="min-w-0">
-          <div className="text-sm font-medium text-fg-strong">{row.component_name}</div>
-          <div className="font-mono text-3xs text-fg-subtle">{row.component_id}</div>
+          <div
+            className="text-sm font-medium text-fg-strong"
+            title={row.component_id}
+          >
+            {row.component_name}
+          </div>
         </div>
         {/* Loop 14 — fast-fix link for blocked rows. Operator/manager
             can jump straight to component master to update supplier mapping
@@ -257,8 +261,12 @@ export function ComponentBreakdown({ rec }: ComponentBreakdownProps) {
                       <td className="px-3 py-2.5">
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
-                            <div className="font-medium text-fg-strong">{row.component_name}</div>
-                            <div className="font-mono text-3xs text-fg-subtle">{row.component_id}</div>
+                            <div
+                              className="font-medium text-fg-strong"
+                              title={row.component_id}
+                            >
+                              {row.component_name}
+                            </div>
                           </div>
                           {/* Loop 14 — fast-fix link for blocked rows. */}
                           {shortage > 0 ? (

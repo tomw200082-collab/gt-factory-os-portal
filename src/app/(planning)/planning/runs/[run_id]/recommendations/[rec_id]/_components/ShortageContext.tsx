@@ -107,10 +107,10 @@ export function ShortageContext({ rec }: ShortageContextProps) {
         </div>
       )}
 
-      {rec.supplier_id && (
+      {rec.supplier_name && (
         <div className="mt-3 text-xs text-fg-muted">
           <span className="font-semibold text-fg">Supplier: </span>
-          {rec.supplier_name ?? rec.supplier_id}
+          {rec.supplier_name}
         </div>
       )}
     </SectionCard>

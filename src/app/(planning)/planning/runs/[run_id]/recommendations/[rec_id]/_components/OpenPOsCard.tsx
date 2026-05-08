@@ -90,7 +90,7 @@ export function OpenPOsCard({ rec }: OpenPOsCardProps) {
                       </Link>
                     </td>
                     <td className="px-3 py-2.5 text-xs text-fg-muted">
-                      {po.supplier_name ?? po.supplier_id}
+                      {po.supplier_name ?? "—"}
                     </td>
                     <td className="px-3 py-2.5 text-right font-mono text-xs tabular-nums text-fg-strong">
                       {fmtQty(po.open_qty)}
@@ -110,7 +110,7 @@ export function OpenPOsCard({ rec }: OpenPOsCardProps) {
             {rec.open_pos.map((po) => (
               <div key={po.po_id} className="rounded border border-border/60 bg-bg-raised p-3 space-y-1.5">
                 <div className="text-xs font-medium text-fg">
-                  {po.supplier_name ?? po.supplier_id}
+                  {po.supplier_name ?? "—"}
                 </div>
                 <div className="flex items-center justify-between">
                   <Link

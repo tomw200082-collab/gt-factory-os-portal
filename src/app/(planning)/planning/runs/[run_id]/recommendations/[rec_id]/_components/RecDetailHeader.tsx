@@ -47,6 +47,11 @@ const SUPPLY_METHOD_DESCRIPTION_LABELS: Record<
   BOUGHT_FINISHED: "Bought finished — purchased",
 };
 
+const REC_TYPE_HUMAN: Record<"purchase" | "production", string> = {
+  purchase: "Purchase order recommended",
+  production: "Production recommended",
+};
+
 function recTypeBadge(recType: "purchase" | "production") {
   if (recType === "purchase") {
     return <Badge tone="info" dotted>{REC_TYPE_LABELS.purchase}</Badge>;
@@ -97,17 +102,16 @@ interface RecDetailHeaderProps {
 }
 
 export function RecDetailHeader({ rec }: RecDetailHeaderProps) {
-  // Description must NOT be the raw item_id. For purchase recs we surface
-  // supplier; for production recs we surface the supply method label.
-  // The bare SKU lives in the small monospace chip in `meta` below.
+  // Names are primary content. The id is surfaced only as a low-contrast
+  // hint chip (U5 — names not IDs).
   const description =
     rec.rec_type === "production"
-      ? `${rec.item_name} · ${supplyMethodLabel(rec.supply_method)}`
-      : `${rec.item_name} · ${rec.supplier_name ?? "—"}`;
+      ? `${REC_TYPE_HUMAN.production} · ${supplyMethodLabel(rec.supply_method)}`
+      : `${REC_TYPE_HUMAN.purchase}${rec.supplier_name ? ` · ${rec.supplier_name}` : ""}`;
 
   return (
     <WorkflowHeader
-      eyebrow="Recommendation detail"
+      eyebrow="Planning workspace"
       title={rec.item_name}
       description={description}
       meta={
@@ -115,21 +119,7 @@ export function RecDetailHeader({ rec }: RecDetailHeaderProps) {
           {recTypeBadge(rec.rec_type)}
           {recStatusBadge(rec.rec_status)}
           {supplyMethodBadge(rec.supply_method)}
-          {/*
-            Converted-to-PO chip — at-glance signal in the header badge row.
-            Closes scorecard P1 #3 / cycle-1 audit Tom-tax: previously the
-            planner had to scroll into the action card (page.tsx:543-555) to
-            discover the linked PO. The chip is presence-only — when
-            converted_po_id is null/absent we render NOTHING (no
-            "Not converted" placeholder) per UX hygiene: a chip that appears
-            on every non-converted rec is noise, not signal.
-            Data source: RecommendationDetailResponse.converted_po_id
-            (api/src/planning/schemas.ts §710, signal #21 dto_shape_version
-            1.1, migration 0052 + 0096). The W1 DTO does NOT denormalize a
-            converted_po_number — acceptable degraded state per dispatch:
-            we render a truncated UUID and rely on the PO detail page to
-            resolve the human-readable po_number on click.
-          */}
+          {/* Converted-to-PO chip — presence-only signal in the header. */}
           {rec.converted_po_id !== null ? (
             <Link
               href={`/purchase-orders/${encodeURIComponent(rec.converted_po_id)}`}
@@ -139,20 +129,9 @@ export function RecDetailHeader({ rec }: RecDetailHeaderProps) {
               title="Open the purchase order this recommendation was converted into"
             >
               <span aria-hidden>{"→"}</span>
-              <span>PO</span>
-              <span className="font-mono normal-case tracking-normal">
-                {rec.converted_po_id.slice(0, 8)}
-                {"…"}
-              </span>
+              <span>Linked PO</span>
             </Link>
           ) : null}
-          <span
-            className="inline-flex items-center gap-1 rounded border border-border-subtle bg-bg-subtle px-1.5 py-0.5 font-mono text-3xs text-fg-muted"
-            title="Item id"
-          >
-            <span className="text-3xs uppercase tracking-sops text-fg-subtle">SKU</span>
-            <span>{rec.item_id}</span>
-          </span>
         </>
       }
     />

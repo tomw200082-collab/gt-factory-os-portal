@@ -25,7 +25,7 @@
 
 import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Check, X, Factory, FileOutput, Copy } from "lucide-react";
+import { ArrowLeft, Check, X, Factory, FileOutput } from "lucide-react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { SectionCard } from "@/components/workflow/SectionCard";
@@ -542,15 +542,14 @@ export default function RecommendationDrillDownPage() {
 
           {rec.converted_po_id !== null ? (
             <div className="flex items-center gap-2">
-              <span className="text-xs text-fg-muted">Existing PO:</span>
+              <Badge tone="success" dotted>Converted</Badge>
               <Link
                 href={`/purchase-orders/${encodeURIComponent(rec.converted_po_id)}`}
-                className="text-xs text-accent hover:underline font-mono"
+                className="text-xs text-accent hover:underline"
                 data-testid="rec-detail-po-link"
               >
-                {rec.converted_po_id.slice(0, 8)}…
+                Open purchase order →
               </Link>
-              <Badge tone="success" dotted>Converted</Badge>
             </div>
           ) : null}
         </div>
@@ -589,39 +588,23 @@ export default function RecommendationDrillDownPage() {
         description="Details of the planning run that produced this recommendation"
         density="compact"
       >
-        <dl className="grid grid-cols-1 gap-2 text-xs sm:grid-cols-2 lg:grid-cols-4">
+        <dl className="grid grid-cols-1 gap-3 text-xs sm:grid-cols-2 lg:grid-cols-3">
           <div>
             <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              Run id
+              Planning run
             </dt>
-            <dd className="mt-0.5 font-mono text-fg inline-flex items-center gap-1">
+            <dd className="mt-0.5 inline-flex items-center gap-2">
               <Link
                 href={`/planning/runs/${encodeURIComponent(rec.run_id)}`}
                 className="text-accent hover:underline"
+                data-testid="rec-detail-run-link"
               >
-                {rec.run_id.slice(0, 8)}…
+                Open run
               </Link>
-              <button
-                type="button"
-                className="inline-flex items-center justify-center rounded p-0.5 text-fg-subtle hover:text-fg hover:bg-bg-subtle"
-                title="Copy full id"
-                aria-label="Copy run id"
-                onClick={() => {
-                  void navigator.clipboard.writeText(rec.run_id);
-                }}
-              >
-                <Copy className="h-3 w-3" strokeWidth={2} />
-              </button>
               <span className="text-fg-muted">
                 ({fmtDateAgo(rec.run_created_at)})
               </span>
             </dd>
-          </div>
-          <div>
-            <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              Site
-            </dt>
-            <dd className="mt-0.5 font-mono text-fg">{rec.planning_run_site_id}</dd>
           </div>
           <div>
             <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
@@ -633,23 +616,15 @@ export default function RecommendationDrillDownPage() {
             <dt className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
               Source forecast
             </dt>
-            {/* DTO v1.1 (signal #21) forecast_version_id consumption: when
-                non-null, surfaces the truncated id with a deep link into the
-                forecast detail page; when null, shows a small caveat that
-                this run was not tied to a forecast (e.g., orders-only or run
-                executed before the snapshot link landed — ~39 of 98 live runs
-                per W1 cycle 4 distribution check). Closes W2 cycle 3 marker
-                W1-FOLLOWUP-REC-DETAIL-FORECAST-VERSION. */}
             {rec.forecast_version_id !== null ? (
-              <dd className="mt-0.5 text-xs text-fg-muted inline-flex items-center gap-1">
+              <dd className="mt-0.5 text-xs">
                 <Link
                   href={`/planning/forecast/${encodeURIComponent(rec.forecast_version_id)}`}
-                  className="font-mono text-accent hover:underline"
+                  className="text-accent hover:underline"
                   data-testid="rec-detail-forecast-version-link"
                 >
-                  {rec.forecast_version_id.slice(0, 8)}…
+                  Open forecast →
                 </Link>
-                <span className="text-fg-subtle">view forecast</span>
               </dd>
             ) : (
               <dd className="mt-0.5 text-xs text-fg-muted">Not recorded for this run</dd>
