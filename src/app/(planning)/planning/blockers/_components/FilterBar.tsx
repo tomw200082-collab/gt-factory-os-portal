@@ -6,6 +6,8 @@
 // Source filter is intentionally hidden in v1: the only active source is
 // 'planning_exception'; the field exists in the DTO so future iterations can
 // reveal it without a portal redeploy. (See contract pack §6 + Tom 2026-04-27.)
+//
+// English/LTR per planning UX full-pass handoff (DEC-1, Tom 2026-05-08).
 // ---------------------------------------------------------------------------
 
 import { Search, X } from "lucide-react";
@@ -17,8 +19,8 @@ import {
   type BlockerSeverity,
 } from "../_lib/types";
 import {
-  BLOCKER_CATEGORY_HE,
-  SEVERITY_LABEL_HE,
+  BLOCKER_CATEGORY_LABEL,
+  SEVERITY_LABEL,
   SEVERITY_TONE,
 } from "../_lib/labelMaps";
 
@@ -62,11 +64,11 @@ export function FilterBar({
     severity.length > 0 || category.length > 0 || itemSearch.trim() !== "";
 
   return (
-    <div className="card p-4 space-y-4" dir="rtl">
+    <div className="card p-4 space-y-4">
       {/* Severity */}
       <div>
         <div className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle mb-2">
-          חומרה
+          Severity
         </div>
         <div className="flex flex-wrap gap-2">
           {BLOCKER_SEVERITY_VALUES.map((s) => {
@@ -95,7 +97,7 @@ export function FilterBar({
                   )}
                   aria-hidden
                 />
-                {SEVERITY_LABEL_HE[s]}
+                {SEVERITY_LABEL[s]}
               </button>
             );
           })}
@@ -105,7 +107,7 @@ export function FilterBar({
       {/* Category */}
       <div>
         <div className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle mb-2">
-          סוג חסם
+          Category
         </div>
         <div className="flex flex-wrap gap-2">
           {BLOCKER_CATEGORY_VALUES.map((c) => {
@@ -124,7 +126,7 @@ export function FilterBar({
                 )}
                 data-testid={`blockers-filter-category-${c}`}
               >
-                {BLOCKER_CATEGORY_HE[c]}
+                {BLOCKER_CATEGORY_LABEL[c]}
               </button>
             );
           })}
@@ -134,11 +136,11 @@ export function FilterBar({
       {/* Item / product search */}
       <div>
         <div className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle mb-2">
-          חיפוש פריט / רכיב
+          Search item or component
         </div>
         <div className="relative">
           <Search
-            className="absolute right-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-faint"
+            className="absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-faint"
             strokeWidth={1.75}
             aria-hidden
           />
@@ -146,8 +148,8 @@ export function FilterBar({
             type="text"
             value={itemSearch}
             onChange={(e) => onItemSearchChange(e.target.value)}
-            placeholder="הקלד שם פריט או חומר גלם…"
-            className="w-full rounded border border-border bg-bg-raised py-1.5 pe-8 ps-3 text-sm placeholder:text-fg-faint focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+            placeholder="Type an item or raw-material name…"
+            className="w-full rounded border border-border bg-bg-raised py-1.5 pl-8 pr-3 text-sm placeholder:text-fg-faint focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             data-testid="blockers-filter-item-search"
           />
         </div>
@@ -163,7 +165,7 @@ export function FilterBar({
             data-testid="blockers-filter-clear"
           >
             <X className="h-3 w-3" strokeWidth={2.5} aria-hidden />
-            נקה סינונים
+            Clear filters
           </button>
         </div>
       ) : null}

@@ -41,7 +41,7 @@ export function BlockerDetailAccordion({ detail }: BlockerDetailAccordionProps) 
           strokeWidth={2}
           aria-hidden
         />
-        פרטים טכניים
+        Technical details
       </button>
       {open ? (
         <pre

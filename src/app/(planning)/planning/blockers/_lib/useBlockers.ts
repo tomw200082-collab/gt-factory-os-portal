@@ -55,7 +55,7 @@ async function fetchBlockers(filters: BlockersFilters): Promise<BlockersResult> 
       data: null,
       notFound: false,
       unauthorized: false,
-      error: "לא ניתן לטעון את החסמים. בדוק את החיבור ונסה שוב.",
+      error: "Could not load blockers. Check your connection and try again.",
     };
   }
 
@@ -80,7 +80,7 @@ async function fetchBlockers(filters: BlockersFilters): Promise<BlockersResult> 
       data: null,
       notFound: false,
       unauthorized: false,
-      error: "לא ניתן לטעון את החסמים. בדוק את החיבור ונסה שוב.",
+      error: "Could not load blockers. Check your connection and try again.",
     };
   }
   let json: BlockersResponse;
@@ -91,7 +91,7 @@ async function fetchBlockers(filters: BlockersFilters): Promise<BlockersResult> 
       data: null,
       notFound: false,
       unauthorized: false,
-      error: "לא ניתן לטעון את החסמים. בדוק את החיבור ונסה שוב.",
+      error: "Could not load blockers. Check your connection and try again.",
     };
   }
   return { data: json, notFound: false, unauthorized: false, error: null };

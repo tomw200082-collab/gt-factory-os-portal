@@ -1,11 +1,17 @@
 // ---------------------------------------------------------------------------
-// Hebrew label maps for blocker rows.
+// English label maps for blocker rows.
 //
-// Backend never returns Hebrew. W2 maps stable English keys → Hebrew here.
+// Backend never returns user-facing copy. W2 maps stable English keys →
+// English operator-facing labels here.
+//
+// Hebrew labels were superseded 2026-05-08 by Tom written approval in the
+// FLOW-003 decision packet (Section Q). The Tom-lock from 2026-04-27 on
+// Hebrew strings is no longer in effect; all blocker UI is English/LTR per
+// the planning UX full-pass handoff (DEC-1).
+//
 // If the W1 schema gains a new BlockerLabelKey or FixActionLabelKey value,
 // these maps would silently fall through to the raw key — that is by design;
-// see assertExhaustiveLabelMaps() below for the build-time exhaustiveness
-// check.
+// see the runtime exhaustiveness check below.
 // ---------------------------------------------------------------------------
 
 import type {
@@ -20,37 +26,39 @@ import {
   FIX_ACTION_LABEL_KEY_VALUES,
 } from "./types";
 
-// blocker_label (English key → Hebrew operational label)
-// Tom-locked verbatim 2026-04-27.
-export const BLOCKER_LABEL_HE: Record<BlockerLabelKey, string> = {
-  MISSING_SUPPLIER_MAPPING: "אין ספק מוגדר לפריט",
-  MISSING_BOM: "חסר BOM פעיל",
-  PO_SUBSTRATE_ABSENT: "לא ניתן לבדוק הזמנות פתוחות",
-  BELOW_TRIGGER_THRESHOLD: "המלצה קטנה מסף ההפעלה",
+// blocker_label (English key → English operational label)
+export const BLOCKER_LABEL: Record<BlockerLabelKey, string> = {
+  MISSING_SUPPLIER_MAPPING: "No supplier mapped to this item",
+  MISSING_BOM: "No active BOM",
+  PO_SUBSTRATE_ABSENT: "Missing substrate PO — not netted",
+  BELOW_TRIGGER_THRESHOLD: "Recommendation below trigger threshold",
 };
 
-// fix_action_label (English key → Hebrew CTA copy)
-// Tom-locked verbatim 2026-04-27.
-// Amended 2026-05-08 (Phase 8 Run C, FLOW-003 closure):
-//   check_po_substrate "פנה למפתח" → "פתח כרטיס טיפול".
-//   The CTA is now a clickable button that opens DevTicketModal with the
-//   blocker context auto-populated. See devTicketContent.ts for payload shape.
-export const FIX_ACTION_LABEL_HE: Record<FixActionLabelKey, string> = {
-  configure_supplier: "הגדר ספק",
-  configure_bom: "הגדר BOM",
-  check_po_substrate: "פתח כרטיס טיפול",
-  review_trigger_threshold: "בדוק סף הפעלה",
+// fix_action_label (English key → English fix-action description)
+//
+// FLOW-003 (Tom decision 2026-05-08, Option D): the `check_po_substrate`
+// label renders as a static informational label, NOT a button or link. The
+// planner has no in-app action available; a system fix is required.
+export const FIX_ACTION_LABEL: Record<FixActionLabelKey, string> = {
+  configure_supplier: "Configure supplier",
+  configure_bom: "Configure BOM",
+  check_po_substrate: "Pending fix — developer action required",
+  review_trigger_threshold: "Review trigger threshold",
 };
 
-// category → Hebrew (parallel to BLOCKER_LABEL_HE, used for filter chips)
-export const BLOCKER_CATEGORY_HE: Record<BlockerCategory, string> = {
-  missing_supplier_mapping: "אין ספק מוגדר לפריט",
-  missing_bom: "חסר BOM פעיל",
-  po_substrate_absent_supply_not_netted: "לא ניתן לבדוק הזמנות פתוחות",
-  recommendation_below_trigger_threshold: "המלצה קטנה מסף ההפעלה",
+// category → English (parallel to BLOCKER_LABEL, used for filter chips)
+export const BLOCKER_CATEGORY_LABEL: Record<BlockerCategory, string> = {
+  missing_supplier_mapping: "No supplier mapped to this item",
+  missing_bom: "No active BOM",
+  po_substrate_absent_supply_not_netted: "Missing substrate PO — not netted",
+  recommendation_below_trigger_threshold: "Recommendation below trigger threshold",
 };
 
 // severity (raw DB value → tone string consumed by Badge / cn lookups)
+//
+// U7: success=resolved, warning=high, danger=critical, muted/info=low/info.
+// `fail_hard` (DB-level critical) maps to `danger`; `warning` maps to
+// `warning`; `info` maps to `info`.
 export type SeverityTone = "danger" | "warning" | "info";
 export const SEVERITY_TONE: Record<BlockerSeverity, SeverityTone> = {
   fail_hard: "danger",
@@ -58,11 +66,11 @@ export const SEVERITY_TONE: Record<BlockerSeverity, SeverityTone> = {
   info: "info",
 };
 
-// severity (raw DB value → Hebrew label for badge text)
-export const SEVERITY_LABEL_HE: Record<BlockerSeverity, string> = {
-  fail_hard: "קריטי",
-  warning: "אזהרה",
-  info: "מידע",
+// severity (raw DB value → English label for badge text)
+export const SEVERITY_LABEL: Record<BlockerSeverity, string> = {
+  fail_hard: "Critical",
+  warning: "Warning",
+  info: "Info",
 };
 
 // severity sort rank (low rank surfaces first; matches backend sort)
@@ -83,25 +91,25 @@ export const SEVERITY_RANK: Record<BlockerSeverity, number> = {
 // ---------------------------------------------------------------------------
 
 if (process.env.NODE_ENV !== "production") {
-  const labelKeysCovered = new Set(Object.keys(BLOCKER_LABEL_HE));
+  const labelKeysCovered = new Set(Object.keys(BLOCKER_LABEL));
   for (const k of BLOCKER_LABEL_KEY_VALUES) {
     if (!labelKeysCovered.has(k)) {
       // eslint-disable-next-line no-console
-      console.warn(`[planning/blockers] missing Hebrew label for blocker_label key '${k}'`);
+      console.warn(`[planning/blockers] missing English label for blocker_label key '${k}'`);
     }
   }
-  const fixKeysCovered = new Set(Object.keys(FIX_ACTION_LABEL_HE));
+  const fixKeysCovered = new Set(Object.keys(FIX_ACTION_LABEL));
   for (const k of FIX_ACTION_LABEL_KEY_VALUES) {
     if (!fixKeysCovered.has(k)) {
       // eslint-disable-next-line no-console
-      console.warn(`[planning/blockers] missing Hebrew label for fix_action_label key '${k}'`);
+      console.warn(`[planning/blockers] missing English label for fix_action_label key '${k}'`);
     }
   }
-  const categoryKeysCovered = new Set(Object.keys(BLOCKER_CATEGORY_HE));
+  const categoryKeysCovered = new Set(Object.keys(BLOCKER_CATEGORY_LABEL));
   for (const k of BLOCKER_CATEGORY_VALUES) {
     if (!categoryKeysCovered.has(k)) {
       // eslint-disable-next-line no-console
-      console.warn(`[planning/blockers] missing Hebrew label for category '${k}'`);
+      console.warn(`[planning/blockers] missing English label for category '${k}'`);
     }
   }
 }

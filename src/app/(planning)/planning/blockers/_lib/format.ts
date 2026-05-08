@@ -2,14 +2,14 @@
 // Small formatters for blocker rows.
 //
 // Consistent with sibling surfaces (Recommendation Drill-Down, Inventory Flow).
-// Uses tabular-nums-friendly output and U+2014 em dash for null.
+// English/LTR output. U+2014 em dash for null. tabular-nums-friendly.
 // ---------------------------------------------------------------------------
 
 const EM_DASH = "—";
 
 /**
- * Format a date-only ISO string ("2026-04-30") or full ISO timestamp as
- * a short Hebrew-locale d/m display ("30/4").
+ * Format a date-only ISO string ("2026-04-30") or full ISO timestamp as a
+ * short d/m display ("30/4").
  */
 export function fmtShortDate(iso: string | null | undefined): string {
   if (!iso) return EM_DASH;
@@ -31,8 +31,8 @@ export function fmtShortDate(iso: string | null | undefined): string {
 }
 
 /**
- * Format an ISO timestamp as Hebrew-relative ago string.
- * Examples: "כרגע", "לפני 7 דק'", "לפני 3 שע'", "לפני 2 ימים".
+ * Format an ISO timestamp as an English-relative ago string.
+ * Examples: "just now", "7m ago", "3h ago", "2d ago".
  */
 export function fmtRelativeAgo(iso: string | null | undefined): string {
   if (!iso) return EM_DASH;
@@ -40,20 +40,20 @@ export function fmtRelativeAgo(iso: string | null | undefined): string {
     const ms = Date.now() - new Date(iso).getTime();
     if (Number.isNaN(ms)) return iso;
     const mins = Math.floor(ms / 60000);
-    if (mins < 0) return "כרגע";
-    if (mins < 2) return "כרגע";
-    if (mins < 60) return `לפני ${mins} דק'`;
+    if (mins < 0) return "just now";
+    if (mins < 2) return "just now";
+    if (mins < 60) return `${mins}m ago`;
     const hrs = Math.floor(mins / 60);
-    if (hrs < 24) return `לפני ${hrs} שע'`;
+    if (hrs < 24) return `${hrs}h ago`;
     const days = Math.floor(hrs / 24);
-    return `לפני ${days} ימים`;
+    return `${days}d ago`;
   } catch {
     return iso;
   }
 }
 
 /**
- * Format a qty_8dp string into a readable Hebrew number.
+ * Format a qty_8dp string into a readable number.
  * Trims trailing zeros, integer-formatted when whole.
  */
 export function fmtQty(s: string | null | undefined): string {

@@ -5,18 +5,26 @@
 //
 // Tom hard rule: NO mock fallback rendering. Each non-data state renders an
 // honest, distinct visual:
-//   - LoadingSkeleton    — table/card-row shaped skeletons
-//   - EmptyAllClear      — "אין חסמים פעילים בריצת התכנון הנוכחית"
-//   - EmptyNoRunYet      — "טרם הורצה ריצת תכנון מוצלחת" + link to /planning/runs
-//   - ErrorState         — banner with retry hint, no fallback rows
+//   - BlockersLoadingSkeleton  — table/card-row shaped skeletons (animate-pulse)
+//   - BlockersEmptyAllClear    — calm "all clear" card via shared EmptyState
+//   - BlockersEmptyNoRunYet    — guidance + link to /planning/runs
+//   - BlockersErrorBanner      — danger banner with retry hint, no fallback rows
+//   - BlockersFilteredEmpty    — filter mismatch helper
+//
+// English/LTR per planning UX full-pass (DEC-1 + Tom approval 2026-05-08).
 // ---------------------------------------------------------------------------
 
 import Link from "next/link";
-import { AlertOctagon, CheckCircle2, ListChecks } from "lucide-react";
+import { CheckCircle2, ListChecks } from "lucide-react";
+import { EmptyState, ErrorState } from "@/components/feedback/states";
 
 export function BlockersLoadingSkeleton() {
   return (
-    <div className="space-y-3" aria-busy="true" aria-label="טוען חסמים…" dir="rtl">
+    <div
+      className="space-y-3"
+      aria-busy="true"
+      aria-label="Loading blockers…"
+    >
       {/* desktop table skeleton */}
       <div className="hidden sm:block card overflow-hidden p-0">
         <div className="border-b border-border/60 bg-bg-subtle/40 px-3 py-2">
@@ -56,47 +64,45 @@ export function BlockersLoadingSkeleton() {
 
 export function BlockersEmptyAllClear() {
   return (
-    <div
-      className="card flex flex-col items-center gap-3 px-6 py-12 text-center"
-      dir="rtl"
-      data-testid="blockers-empty-all-clear"
-    >
-      <div className="flex h-12 w-12 items-center justify-center rounded-full border border-success/30 bg-success-softer text-success">
-        <CheckCircle2 className="h-6 w-6" strokeWidth={2} aria-hidden />
-      </div>
-      <div className="text-sm font-semibold text-fg-strong">
-        אין חסמים פעילים בריצת התכנון הנוכחית
-      </div>
-      <div className="max-w-md text-xs text-fg-muted">
-        כל הביקוש בריצה האחרונה הפך להמלצת רכש או ייצור שמישה. אין צורך בפעולה.
-      </div>
+    <div data-testid="blockers-empty-all-clear">
+      <EmptyState
+        title="No blockers — all demand is covered by the last planning run."
+        description="Every demand item in the latest run produced a usable purchase or production recommendation. No action is required."
+        icon={
+          <CheckCircle2
+            className="h-5 w-5 text-success"
+            strokeWidth={2}
+            aria-hidden
+          />
+        }
+      />
     </div>
   );
 }
 
 export function BlockersEmptyNoRunYet() {
   return (
-    <div
-      className="card flex flex-col items-center gap-3 px-6 py-12 text-center"
-      dir="rtl"
-      data-testid="blockers-empty-no-run"
-    >
-      <div className="flex h-12 w-12 items-center justify-center rounded-full border border-border/60 bg-bg-subtle text-fg-faint">
-        <ListChecks className="h-6 w-6" strokeWidth={1.75} aria-hidden />
-      </div>
-      <div className="text-sm font-semibold text-fg-strong">
-        טרם הורצה ריצת תכנון מוצלחת
-      </div>
-      <div className="max-w-md text-xs text-fg-muted">
-        חסמי תכנון מחושבים מתוך ריצת תכנון. הרץ ריצה כדי לראות חסמים פעילים.
-      </div>
-      <Link
-        href="/planning/runs"
-        className="btn btn-sm"
-        data-testid="blockers-empty-go-runs"
-      >
-        מעבר לריצות תכנון
-      </Link>
+    <div data-testid="blockers-empty-no-run">
+      <EmptyState
+        title="No planning run found — trigger a run to see blockers."
+        description="Planning blockers are computed from a planning run. Run planning to populate this list."
+        icon={
+          <ListChecks
+            className="h-5 w-5 text-fg-faint"
+            strokeWidth={1.75}
+            aria-hidden
+          />
+        }
+        action={
+          <Link
+            href="/planning/runs"
+            className="btn btn-sm"
+            data-testid="blockers-empty-go-runs"
+          >
+            Go to runs →
+          </Link>
+        }
+      />
     </div>
   );
 }
@@ -104,41 +110,25 @@ export function BlockersEmptyNoRunYet() {
 export function BlockersErrorBanner() {
   return (
     <div
-      className="rounded border border-danger/40 bg-danger-softer px-4 py-3"
-      dir="rtl"
+      className="rounded border border-danger/30 bg-danger-softer px-4 py-3"
       role="alert"
       data-testid="blockers-error-banner"
     >
-      <div className="flex items-start gap-3">
-        <div className="mt-0.5 flex h-6 w-6 items-center justify-center rounded border border-danger/40 bg-danger-soft text-danger">
-          <AlertOctagon className="h-4 w-4" strokeWidth={2} aria-hidden />
-        </div>
-        <div className="flex-1">
-          <div className="text-sm font-semibold text-danger-fg">
-            לא ניתן לטעון את החסמים
-          </div>
-          <div className="mt-0.5 text-xs text-fg-muted">
-            בדוק את החיבור ונסה שוב.
-          </div>
-        </div>
-      </div>
+      <ErrorState
+        title="Could not load blockers"
+        description="Check your connection and try again."
+      />
     </div>
   );
 }
 
 export function BlockersFilteredEmpty() {
   return (
-    <div
-      className="card flex flex-col items-center gap-2 px-6 py-10 text-center"
-      dir="rtl"
-      data-testid="blockers-filtered-empty"
-    >
-      <div className="text-sm font-semibold text-fg-strong">
-        אין חסמים תואמים לסינון
-      </div>
-      <div className="max-w-md text-xs text-fg-muted">
-        נסה להסיר חלק מהסינונים כדי לראות חסמים נוספים.
-      </div>
+    <div data-testid="blockers-filtered-empty">
+      <EmptyState
+        title="No blockers match the current filters"
+        description="Try removing a filter to see more blockers."
+      />
     </div>
   );
 }
