@@ -19,6 +19,12 @@
 //   - Empty / loading / error states are mutually exclusive
 //   - No raw IDs as primary content
 //   - Names not IDs
+//
+// Visual redesign (2026-05-09): 4-zone production board.
+//   Zone A: KPI hero band (4 micro-cards)
+//   Zone B: Week load segment bar (7 segments — daily volume heatmap)
+//   Zone C: 7 always-visible day cards with item chips + inventory impact panel
+//   Zone D: Week summary footer with progress bar
 // ---------------------------------------------------------------------------
 
 import Link from "next/link";
@@ -33,9 +39,15 @@ import {
   Factory,
   ChevronLeft,
   ChevronRight,
+  ChevronUp,
+  ChevronDown,
   Sparkles,
   ArrowRight,
   Calendar,
+  Clock,
+  Package,
+  PlayCircle,
+  Boxes,
 } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
@@ -166,11 +178,6 @@ function fmtVariancePct(variancePctStr: string | null): string {
   return `${n > 0 ? "+" : "−"}${abs.toFixed(1)}%`;
 }
 
-const VARIANCE_SIGN_TONE: Record<VarianceSign, "success" | "warning"> = {
-  on_target: "success",
-  over: "warning",
-  under: "warning",
-};
 const VARIANCE_SIGN_LABEL: Record<VarianceSign, string> = {
   on_target: "On target",
   over: "Over",
@@ -206,224 +213,476 @@ function useProducibleItems() {
 }
 
 // ---------------------------------------------------------------------------
-// Status chip — per U7: warning=planned, success=completed, danger=cancelled.
+// BOM impact hook — lazy fetch for the inventory-impact panel inside the
+// production item chip. Reuses the production-actual `open` endpoint, which
+// returns the pinned BOM snapshot for an item. Disabled by default — only
+// fetches when the user expands the panel.
 // ---------------------------------------------------------------------------
-function StatusChip({ state }: { state: RenderedState }) {
-  if (state === "done") {
-    return (
-      <Badge tone="success" variant="soft" dotted>
-        Completed
-      </Badge>
-    );
-  }
-  if (state === "cancelled") {
-    return (
-      <Badge tone="danger" variant="soft" dotted>
-        Cancelled
-      </Badge>
-    );
-  }
+interface BomImpactSnapshot {
+  bom_final_output_qty: string;
+  bom_final_output_uom: string;
+  bom_lines: Array<{
+    component_id: string;
+    component_name: string;
+    final_component_qty: string;
+    component_uom: string | null;
+  }>;
+}
+
+function useBomImpact(itemId: string | null) {
+  return useQuery<BomImpactSnapshot | null>({
+    queryKey: ["bom-impact", itemId],
+    queryFn: async () => {
+      if (!itemId) return null;
+      const res = await fetch(
+        `/api/production-actuals/open?item_id=${encodeURIComponent(itemId)}`,
+        { headers: { Accept: "application/json" } },
+      );
+      if (!res.ok) return null;
+      const body = (await res.json()) as BomImpactSnapshot | null;
+      return body ?? null;
+    },
+    enabled: false,
+    staleTime: 5 * 60 * 1000,
+  });
+}
+
+// ---------------------------------------------------------------------------
+// Week load segment — Zone B. One per day; height encodes total planned qty
+// relative to week max. Color hints completion status (all done = success
+// tint; any planned = warning tint).
+// ---------------------------------------------------------------------------
+function WeekLoadSegment({
+  date,
+  total,
+  allDone,
+  hasPlanned,
+  maxVolume,
+  isToday,
+}: {
+  date: Date;
+  total: number;
+  allDone: boolean;
+  hasPlanned: boolean;
+  maxVolume: number;
+  isToday: boolean;
+}) {
+  const { dayName } = fmtDayHeader(date);
+  const dayAbbrev = dayName.slice(0, 3);
+  const fillPct = maxVolume > 0 ? Math.round((total / maxVolume) * 80) : 0;
+
   return (
-    <Badge tone="warning" variant="soft" dotted>
-      Planned
-    </Badge>
+    <div
+      className={cn(
+        "relative flex flex-col items-center justify-end overflow-hidden rounded-sm h-[52px]",
+        "bg-bg-subtle border border-border/40 transition-all duration-150",
+        isToday ? "ring-1 ring-accent/50 border-accent/40" : "",
+      )}
+      data-testid="week-load-segment"
+    >
+      {/* Fill bar */}
+      <div
+        className={cn(
+          "absolute bottom-0 left-0 right-0 transition-all duration-500",
+          allDone ? "bg-success/30" : hasPlanned ? "bg-warning/25" : "",
+        )}
+        style={{ height: `${fillPct}%` }}
+        aria-hidden
+      />
+      <div className="relative z-[1] flex w-full flex-col items-center gap-0.5 px-1 pb-1.5">
+        <span
+          className={cn(
+            "text-[9px] font-semibold uppercase tracking-sops leading-none",
+            isToday ? "text-accent" : "text-fg-muted",
+          )}
+        >
+          {dayAbbrev}
+        </span>
+        {total > 0 && (
+          <span className="text-[11px] font-semibold tabular-nums leading-none text-fg-strong">
+            {total >= 1000
+              ? `${(total / 1000).toFixed(1)}k`
+              : total % 1 === 0
+                ? total.toFixed(0)
+                : total.toFixed(1)}
+          </span>
+        )}
+      </div>
+      {isToday && (
+        <span
+          aria-hidden
+          className="absolute top-1.5 left-1/2 -translate-x-1/2 h-1 w-1 rounded-full bg-accent today-pill-pulse"
+        />
+      )}
+    </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Plan row card — shown inside an expanded day.
+// Production item chip — replaces PlanRowCard. Compact card optimised for
+// 7-column board layout. Includes inline action buttons, source badge,
+// optional inventory-impact disclosure panel, and variance summary on done.
 // ---------------------------------------------------------------------------
-function PlanRowCard({
+function ProductionItemChip({
   plan,
   canAct,
+  isToday,
   onEdit,
   onCancel,
 }: {
   plan: ProductionPlanRow;
   canAct: boolean;
+  isToday: boolean;
   onEdit: (p: ProductionPlanRow) => void;
   onCancel: (p: ProductionPlanRow) => void;
 }) {
   const isLive = plan.rendered_state === "planned";
   const isDone = plan.rendered_state === "done";
   const isCancelled = plan.rendered_state === "cancelled";
+  const [impactOpen, setImpactOpen] = useState(false);
+
+  const bomQuery = useBomImpact(impactOpen ? plan.item_id : null);
+
+  function toggleImpact() {
+    setImpactOpen((v) => !v);
+    if (!impactOpen) {
+      void bomQuery.refetch();
+    }
+  }
+
+  // Compute projected RM consumption for the inventory-impact panel.
+  const rmLines = useMemo(() => {
+    if (!bomQuery.data) return [];
+    const snap = bomQuery.data;
+    const outputQty = parseFloat(snap.bom_final_output_qty);
+    if (!Number.isFinite(outputQty) || outputQty <= 0) return [];
+    const plannedQty = parseFloat(plan.planned_qty);
+    if (!Number.isFinite(plannedQty) || plannedQty <= 0) return [];
+    const multiplier = plannedQty / outputQty;
+    return snap.bom_lines.map((line) => ({
+      name: line.component_name,
+      required: parseFloat(line.final_component_qty) * multiplier,
+      uom: line.component_uom ?? "",
+    }));
+  }, [bomQuery.data, plan.planned_qty]);
 
   return (
     <div
-      dir="ltr"
       className={cn(
-        "rounded-md border p-3 space-y-2 transition-colors",
-        isLive && "border-warning/40 bg-warning-softer/20",
-        isDone && "border-success/40 bg-success-softer/30",
-        isCancelled && "border-border/60 bg-bg-subtle/50 opacity-80",
+        "rounded border pl-3 pr-2 py-2 transition-colors duration-150",
+        "border-l-[3px]",
+        isLive && "border-l-warning bg-warning-softer/30 border-warning/20",
+        isDone && "border-l-success bg-success-softer/40 border-success/20",
+        isCancelled && "border-l-border/50 bg-bg-subtle/30 border-border/30 opacity-70",
       )}
-      data-testid="plan-row-card"
+      data-testid="production-item-chip"
       data-plan-id={plan.plan_id}
       data-rendered-state={plan.rendered_state}
     >
-      {/* Header row: name (primary) + status badge */}
-      <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0 flex-1">
+      <div className="flex items-start gap-2">
+        {/* Main content */}
+        <div className="flex-1 min-w-0">
+          {/* Item name */}
           <div
             className={cn(
-              "text-sm font-medium",
+              "text-sm font-medium leading-tight truncate",
               isCancelled ? "line-through text-fg-muted" : "text-fg-strong",
             )}
             title={plan.item_id}
           >
             {plan.item_name ?? plan.item_id}
           </div>
-          <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-xs text-fg-muted">
-            <span>
-              <span className="text-fg-faint">Qty: </span>
-              <span className="font-mono tabular-nums font-semibold text-fg-strong">
-                {fmtQty(plan.planned_qty, plan.uom)}
+
+          {/* Quantity — large, primary data */}
+          <div
+            className={cn(
+              "mt-1 text-xl font-semibold tabular-nums leading-none tracking-tightish",
+              isLive && "text-warning-fg",
+              isDone && "text-success-fg",
+              isCancelled && "text-fg-muted",
+            )}
+          >
+            {fmtQty(plan.planned_qty, plan.uom)}
+          </div>
+
+          {/* Source + actions row */}
+          <div className="mt-2 flex flex-wrap items-center gap-1.5">
+            {/* Source badge */}
+            {plan.source_recommendation_id ? (
+              <span className="chip chip-accent gap-1 text-[10px]">
+                <Sparkles className="h-2 w-2" strokeWidth={2.5} />
+                Rec
               </span>
-            </span>
-            <span className="text-3xs">
-              {plan.source_recommendation_id ? (
-                <>
-                  Source: production recommendation
-                  {plan.source_run_status === "superseded" ? (
-                    <span className="ml-1 text-warning-fg">
-                      (older planning run)
-                    </span>
-                  ) : null}
-                </>
-              ) : (
-                <>Source: manual entry</>
-              )}
-            </span>
+            ) : (
+              <span className="chip gap-1 text-[10px]">
+                <Pencil className="h-2 w-2" strokeWidth={2.5} />
+                Manual
+              </span>
+            )}
+
+            {/* Inventory impact toggle (hidden on cancelled) */}
+            {!isCancelled && (
+              <button
+                type="button"
+                className={cn(
+                  "chip gap-1 text-[10px] transition-colors",
+                  impactOpen
+                    ? "bg-info-softer/60 border-info/40 text-info-fg"
+                    : "hover:bg-info-softer/40 hover:border-info/30 hover:text-info-fg",
+                )}
+                onClick={toggleImpact}
+                aria-expanded={impactOpen}
+                data-testid="chip-impact-toggle"
+              >
+                {impactOpen ? (
+                  <ChevronUp className="h-2 w-2" strokeWidth={2.5} />
+                ) : (
+                  <ChevronDown className="h-2 w-2" strokeWidth={2.5} />
+                )}
+                Impact
+              </button>
+            )}
+
+            {/* Done variance mini-badge */}
+            {isDone && plan.completed_actual && (() => {
+              const ca = plan.completed_actual;
+              const sign = computeVarianceSign(ca.variance_qty, plan.planned_qty);
+              const tone = sign === "on_target" ? "success" : "warning";
+              return (
+                <Badge tone={tone} variant="soft">
+                  {fmtVarianceQty(ca.variance_qty)} ({fmtVariancePct(ca.variance_pct)})
+                </Badge>
+              );
+            })()}
+
+            {/* Cancelled reason mini */}
+            {isCancelled && plan.cancel_reason && (
+              <span
+                className="text-[10px] text-fg-faint truncate max-w-[14ch]"
+                title={plan.cancel_reason}
+              >
+                {plan.cancel_reason}
+              </span>
+            )}
           </div>
         </div>
-        <StatusChip state={plan.rendered_state} />
-      </div>
 
-      {/* Done variance — backed by the live completed_actual sub-object. */}
-      {isDone && plan.completed_actual ? (
-        (() => {
-          const ca = plan.completed_actual;
-          const sign = computeVarianceSign(ca.variance_qty, plan.planned_qty);
-          const tone = VARIANCE_SIGN_TONE[sign];
-          return (
-            <div
-              className="rounded border border-success/30 bg-success-softer/40 p-2 text-xs"
-              data-testid="plan-row-variance"
-              data-variance-sign={sign}
-            >
-              <div className="font-medium text-success-fg">
-                Completed in actual production
-              </div>
-              <div
-                className="mt-0.5 flex flex-wrap items-center gap-x-3 gap-y-1 text-fg-muted"
-                title={VARIANCE_TOOLTIP}
-              >
-                <span>
-                  Plan:{" "}
-                  <span className="font-mono tabular-nums text-fg-strong">
-                    {fmtQty(plan.planned_qty, plan.uom)}
-                  </span>
-                </span>
-                <span>
-                  Output:{" "}
-                  <span className="font-mono tabular-nums text-fg-strong">
-                    {fmtQty(ca.output_qty, ca.output_uom)}
-                  </span>
-                </span>
-                <span className="font-mono tabular-nums">
-                  Variance:{" "}
-                  <span
-                    className={cn(
-                      tone === "success" ? "text-success-fg" : "text-warning-fg",
-                    )}
+        {/* Right column: status icon + actions */}
+        <div className="flex flex-col items-end gap-1.5 shrink-0">
+          {/* Status icon */}
+          <div className="pt-0.5">
+            {isLive && <Clock className="h-3.5 w-3.5 text-warning" strokeWidth={2} />}
+            {isDone && <CheckCircle2 className="h-3.5 w-3.5 text-success" strokeWidth={2} />}
+            {isCancelled && <Ban className="h-3.5 w-3.5 text-fg-faint" strokeWidth={2} />}
+          </div>
+
+          {/* Action buttons — only when live + canAct */}
+          {canAct && isLive && (
+            <div className="flex flex-col gap-1 items-end">
+              {isToday && (
+                <Link
+                  href={`/ops/stock/production-actual?from_plan_id=${encodeURIComponent(plan.plan_id)}`}
+                  className="btn btn-primary btn-xs gap-1"
+                  title="Report actual production — this marks the plan complete and writes inventory"
+                >
+                  <Factory className="h-2.5 w-2.5" strokeWidth={2.5} />
+                  Report
+                </Link>
+              )}
+              <div className="flex items-center gap-1">
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs gap-1"
+                  onClick={() => onEdit(plan)}
+                  data-testid="plan-row-edit"
+                  title="Edit plan"
+                  aria-label="Edit plan"
+                >
+                  <Pencil className="h-2.5 w-2.5" strokeWidth={2.5} />
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-xs gap-1 text-danger"
+                  onClick={() => onCancel(plan)}
+                  data-testid="plan-row-cancel"
+                  title="Cancel plan"
+                  aria-label="Cancel plan"
+                >
+                  <Ban className="h-2.5 w-2.5" strokeWidth={2.5} />
+                </button>
+                {!isToday && (
+                  <Link
+                    href={`/ops/stock/production-actual?from_plan_id=${encodeURIComponent(plan.plan_id)}`}
+                    className="btn btn-ghost btn-xs gap-1 text-accent"
+                    title="Report production"
+                    data-testid="plan-row-report"
+                    aria-label="Report production"
                   >
-                    {fmtVarianceQty(ca.variance_qty)} {ca.output_uom}
-                    {" "}
-                    ({fmtVariancePct(ca.variance_pct)})
-                  </span>
-                </span>
-                <Badge tone={tone} variant="soft">
-                  {VARIANCE_SIGN_LABEL[sign]}
-                </Badge>
-                {Number(ca.scrap_qty) > 0 ? (
-                  <span className="text-3xs text-fg-subtle">
-                    Scrap reported: {fmtQty(ca.scrap_qty, ca.output_uom)} (excluded
-                    from variance)
-                  </span>
-                ) : null}
+                    <Factory className="h-2.5 w-2.5" strokeWidth={2.5} />
+                  </Link>
+                )}
               </div>
             </div>
-          );
-        })()
-      ) : null}
+          )}
 
-      {/* Cancelled reason */}
-      {isCancelled && plan.cancel_reason ? (
-        <div className="rounded border border-border/40 bg-bg-subtle/40 p-2 text-3xs text-fg-muted">
-          <span className="font-medium text-fg">Reason for cancellation: </span>
-          {plan.cancel_reason}
+          {/* Done: link to submission */}
+          {isDone && plan.completed_actual && (
+            <Link
+              href={`/ops/stock/production-actual?submission_id=${plan.completed_actual.submission_id}`}
+              className="text-[10px] text-accent hover:underline"
+              title="View production report"
+            >
+              View report →
+            </Link>
+          )}
         </div>
-      ) : null}
+      </div>
+
+      {/* Inventory impact panel — expandable */}
+      {impactOpen && (
+        <div
+          className="mt-2 rounded border border-info/30 bg-info-softer/20 p-2.5 space-y-2"
+          data-testid="impact-panel"
+        >
+          {/* FG output */}
+          <div className="flex items-center gap-2 rounded border border-success/30 bg-success-softer/50 px-2.5 py-1.5">
+            <Package className="h-3 w-3 text-success shrink-0" strokeWidth={2} />
+            <span className="text-xs text-success-fg">
+              <span className="font-semibold tabular-nums">
+                +{fmtQty(plan.planned_qty, plan.uom)}
+              </span>
+              {" of "}
+              <span className="font-medium">{plan.item_name ?? plan.item_id}</span>
+              {" to finished goods"}
+            </span>
+          </div>
+
+          {/* RM requirements */}
+          {bomQuery.isLoading ? (
+            <div className="space-y-1">
+              {[1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="h-5 w-full animate-pulse rounded bg-bg-subtle"
+                />
+              ))}
+            </div>
+          ) : bomQuery.isError || (!bomQuery.data && !bomQuery.isLoading) ? (
+            <div className="text-xs text-fg-muted">
+              BOM data not available.{" "}
+              <Link href="/planning/inventory-flow" className="text-accent hover:underline">
+                Check inventory flow →
+              </Link>
+            </div>
+          ) : rmLines.length === 0 ? (
+            <div className="text-xs text-fg-muted">No components in BOM.</div>
+          ) : (
+            <div>
+              <div className="text-[9px] font-semibold uppercase tracking-sops text-fg-faint mb-1">
+                Raw materials required
+              </div>
+              <table className="w-full">
+                <thead>
+                  <tr>
+                    <th className="text-left text-[9px] uppercase tracking-sops text-fg-faint font-semibold pb-1">
+                      Material
+                    </th>
+                    <th className="text-right text-[9px] uppercase tracking-sops text-fg-faint font-semibold pb-1">
+                      Required
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-border/30">
+                  {rmLines.map((line, idx) => (
+                    <tr key={idx}>
+                      <td className="text-xs text-fg py-1 pr-2">{line.name}</td>
+                      <td className="text-right text-xs tabular-nums text-fg-muted py-1">
+                        {line.required % 1 === 0
+                          ? line.required.toFixed(0)
+                          : line.required.toFixed(2).replace(/\.?0+$/, "")}
+                        {" "}
+                        {line.uom}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+              <div className="mt-1.5">
+                <Link
+                  href="/planning/inventory-flow"
+                  className="text-[10px] text-accent hover:underline"
+                >
+                  Check stock levels in inventory flow →
+                </Link>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Done full variance block — detailed breakdown */}
+      {isDone && plan.completed_actual && (() => {
+        const ca = plan.completed_actual;
+        const sign = computeVarianceSign(ca.variance_qty, plan.planned_qty);
+        const tone = sign === "on_target" ? "success" : "warning";
+        return (
+          <div
+            className="mt-2 rounded border border-success/30 bg-success-softer/40 p-2 text-xs"
+            data-testid="plan-row-variance"
+            data-variance-sign={sign}
+          >
+            <div
+              className="flex flex-wrap items-center gap-x-3 gap-y-1 text-fg-muted"
+              title={VARIANCE_TOOLTIP}
+            >
+              <span>
+                Plan:{" "}
+                <span className="font-mono tabular-nums text-fg-strong">
+                  {fmtQty(plan.planned_qty, plan.uom)}
+                </span>
+              </span>
+              <span>
+                Output:{" "}
+                <span className="font-mono tabular-nums text-fg-strong">
+                  {fmtQty(ca.output_qty, ca.output_uom)}
+                </span>
+              </span>
+              <span className="font-mono tabular-nums">
+                <span
+                  className={
+                    sign === "on_target" ? "text-success-fg" : "text-warning-fg"
+                  }
+                >
+                  {fmtVarianceQty(ca.variance_qty)} {ca.output_uom} (
+                  {fmtVariancePct(ca.variance_pct)})
+                </span>
+              </span>
+              <Badge tone={tone} variant="soft">
+                {VARIANCE_SIGN_LABEL[sign]}
+              </Badge>
+            </div>
+          </div>
+        );
+      })()}
 
       {/* Notes */}
-      {plan.notes ? (
-        <div className="text-3xs text-fg-muted">
+      {plan.notes && (
+        <div className="mt-1.5 text-[10px] text-fg-muted">
           <span className="font-medium">Notes: </span>
           {plan.notes}
         </div>
-      ) : null}
-
-      {/* Actions row — only visible while planned and only to planner/admin */}
-      {canAct && isLive ? (
-        <div className="flex flex-wrap items-center gap-2 pt-1">
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm gap-1.5"
-            data-testid="plan-row-edit"
-            onClick={() => onEdit(plan)}
-          >
-            <Pencil className="h-3 w-3" strokeWidth={2.5} />
-            Edit
-          </button>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm gap-1.5 text-danger"
-            data-testid="plan-row-cancel"
-            onClick={() => onCancel(plan)}
-          >
-            <Ban className="h-3 w-3" strokeWidth={2.5} />
-            Cancel
-          </button>
-          {/* Production-actual deep link — wired with from_plan_id (Gate 5
-              from_plan additive linkage). The Production Actual form fetches
-              the plan, prefills item + qty, and submits with from_plan_id so
-              the plan flips to status=done in the same transaction as the
-              ledger writes. */}
-          <Link
-            href={
-              `/ops/stock/production-actual` +
-              `?from_plan_id=${encodeURIComponent(plan.plan_id)}`
-            }
-            className="btn btn-ghost btn-sm gap-1.5 text-accent"
-            title="Open the production report linked to this plan; submit will mark this plan complete."
-          >
-            <Factory className="h-3 w-3" strokeWidth={2.5} />
-            Report production
-          </Link>
-        </div>
-      ) : null}
+      )}
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Day card — building block of the week view.
+// Day card — building block of the week view. Always-visible (no accordion).
+// Shows date header + plan chips + add button.
 // ---------------------------------------------------------------------------
 function DayCard({
   date,
   plans,
-  expanded,
-  onToggle,
   canAct,
   onAdd,
   onEdit,
@@ -431,110 +690,110 @@ function DayCard({
 }: {
   date: Date;
   plans: ProductionPlanRow[];
-  expanded: boolean;
-  onToggle: () => void;
   canAct: boolean;
   onAdd: (date: Date) => void;
   onEdit: (p: ProductionPlanRow) => void;
   onCancel: (p: ProductionPlanRow) => void;
 }) {
   const { dayName, dateLabel } = fmtDayHeader(date);
-  const planned = plans.filter((p) => p.rendered_state === "planned");
-  const done = plans.filter((p) => p.rendered_state === "done");
-  const cancelled = plans.filter((p) => p.rendered_state === "cancelled");
   const isToday = toIsoDate(date) === toIsoDate(new Date());
+  const isPast = date < new Date() && !isToday;
+  const plannedOnPast = isPast && plans.some((p) => p.rendered_state === "planned");
 
   return (
     <div
       dir="ltr"
       className={cn(
-        "rounded-md border bg-bg-raised transition-colors",
-        isToday ? "border-accent/50" : "border-border/60",
-        expanded && "ring-1 ring-accent/40",
+        "relative flex flex-col rounded-lg border bg-bg-raised shadow-raised transition-shadow duration-150 min-h-[160px]",
+        isToday
+          ? "border-l-[3px] border-l-accent border-accent/50"
+          : plannedOnPast
+            ? "border-l-[3px] border-l-danger border-danger/30"
+            : "border-border/60",
+        !isToday && isPast && !plannedOnPast && "opacity-80",
       )}
       data-testid="day-card"
       data-date={toIsoDate(date)}
     >
-      <button
-        type="button"
-        onClick={onToggle}
-        className="flex w-full items-start justify-between gap-2 p-3 text-left hover:bg-bg-subtle/40"
-      >
-        <div>
-          <div className="flex items-center gap-2">
-            <span className="text-sm font-semibold text-fg-strong">
-              {dayName}
+      {/* Header */}
+      <div className="flex items-start justify-between gap-2 px-3 pt-3 pb-2 border-b border-border/40">
+        <div className="flex items-baseline gap-2">
+          <span
+            className={cn(
+              "text-sm font-semibold",
+              isToday ? "text-accent" : isPast ? "text-fg-muted" : "text-fg-strong",
+            )}
+          >
+            {dayName}
+          </span>
+          <span className="text-[11px] text-fg-muted tabular-nums">{dateLabel}</span>
+        </div>
+        <div className="flex flex-wrap items-center gap-1">
+          {isToday && (
+            <Badge tone="accent" variant="soft">
+              Today
+            </Badge>
+          )}
+          {plannedOnPast && (
+            <Badge tone="danger" variant="soft">
+              Overdue
+            </Badge>
+          )}
+          {plans.length > 0 && (
+            <span className="text-[9px] font-semibold uppercase tracking-sops text-fg-faint">
+              {plans.length}
             </span>
-            <span className="text-3xs text-fg-muted">{dateLabel}</span>
-            {isToday ? (
-              <Badge tone="accent" variant="soft">
-                Today
-              </Badge>
-            ) : null}
-          </div>
-          <div className="mt-1.5 flex flex-wrap items-center gap-1.5 text-3xs">
-            {planned.length > 0 ? (
-              <Badge tone="warning" variant="soft" dotted>
-                {planned.length} planned
-              </Badge>
-            ) : null}
-            {done.length > 0 ? (
-              <Badge tone="success" variant="soft" dotted>
-                {done.length} completed
-              </Badge>
-            ) : null}
-            {cancelled.length > 0 ? (
-              <Badge tone="danger" variant="soft" dotted>
-                {cancelled.length} cancelled
-              </Badge>
-            ) : null}
-            {plans.length === 0 ? (
-              <span className="text-fg-muted">No production planned</span>
-            ) : null}
-          </div>
-        </div>
-        <ChevronRight
-          className={cn(
-            "h-4 w-4 text-fg-muted transition-transform shrink-0",
-            expanded && "rotate-90",
           )}
-          strokeWidth={2}
-        />
-      </button>
+        </div>
+      </div>
 
-      {expanded ? (
-        <div className="border-t border-border/40 p-3 space-y-2">
-          {plans.length === 0 ? (
-            <div className="text-xs text-fg-muted text-center py-2">
-              No production planned for this day yet.
+      {/* Body — plan chips */}
+      <div className="flex flex-col gap-1.5 p-2 flex-1">
+        {plans.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-2 py-4 text-center flex-1">
+            <div className="h-6 w-6 rounded-full bg-bg-muted flex items-center justify-center">
+              <Plus className="h-3 w-3 text-fg-faint" strokeWidth={2} />
             </div>
-          ) : (
-            plans.map((p) => (
-              <PlanRowCard
-                key={p.plan_id}
-                plan={p}
-                canAct={canAct}
-                onEdit={onEdit}
-                onCancel={onCancel}
-              />
-            ))
-          )}
-          {canAct ? (
-            <button
-              type="button"
-              className="btn btn-ghost btn-sm w-full gap-1.5"
-              onClick={(e) => {
-                e.stopPropagation();
-                onAdd(date);
-              }}
-              data-testid="day-card-add"
-            >
-              <Plus className="h-3 w-3" strokeWidth={2.5} />
-              Add production for this day
-            </button>
-          ) : null}
+            <span className="text-[10px] text-fg-faint">No production</span>
+            {canAct && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-xs gap-1 text-fg-subtle hover:text-fg"
+                onClick={() => onAdd(date)}
+                data-testid="day-card-add"
+              >
+                Add
+              </button>
+            )}
+          </div>
+        ) : (
+          plans.map((p) => (
+            <ProductionItemChip
+              key={p.plan_id}
+              plan={p}
+              canAct={canAct}
+              isToday={isToday}
+              onEdit={onEdit}
+              onCancel={onCancel}
+            />
+          ))
+        )}
+      </div>
+
+      {/* Footer — add button when day already has plans */}
+      {canAct && plans.length > 0 && (
+        <div className="px-2 pb-2">
+          <button
+            type="button"
+            className="btn btn-ghost btn-xs w-full gap-1 text-fg-subtle hover:text-fg"
+            onClick={() => onAdd(date)}
+            data-testid="day-card-add"
+          >
+            <Plus className="h-3 w-3" strokeWidth={2.5} />
+            Add
+          </button>
         </div>
-      ) : null}
+      )}
     </div>
   );
 }
@@ -1003,8 +1262,8 @@ function AddFromRecommendationsModal({
                               {rec.item_supply_method === "MANUFACTURED"
                                 ? "Manufactured"
                                 : rec.item_supply_method === "REPACK"
-                                ? "Repack"
-                                : rec.item_supply_method}
+                                  ? "Repack"
+                                  : rec.item_supply_method}
                             </span>
                           ) : null}
                         </div>
@@ -1346,8 +1605,6 @@ export default function ProductionPlanPage() {
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const weekEnd = addDays(weekStart, 6);
 
-  const [expandedDay, setExpandedDay] = useState<string | null>(null);
-
   // Modal state
   const [showManualAdd, setShowManualAdd] = useState<{
     defaultDate: string;
@@ -1395,6 +1652,52 @@ export default function ProductionPlanPage() {
   const plannedCount = allPlans.filter((p) => p.rendered_state === "planned").length;
   const doneCount = allPlans.filter((p) => p.rendered_state === "done").length;
   const cancelledCount = allPlans.filter((p) => p.rendered_state === "cancelled").length;
+
+  // Zone A computations — total volume, dominant UoM, completion percentage.
+  const totalQty = allPlans
+    .filter((p) => p.rendered_state !== "cancelled")
+    .reduce((s, p) => s + (parseFloat(p.planned_qty) || 0), 0);
+  const dominantUom = (() => {
+    const uoms = allPlans
+      .filter((p) => p.rendered_state !== "cancelled")
+      .map((p) => p.uom);
+    const first = uoms[0];
+    return first && uoms.every((u) => u === first) ? first : "units";
+  })();
+  const completionPct =
+    plannedCount + doneCount > 0
+      ? Math.round((doneCount / (plannedCount + doneCount)) * 100)
+      : 0;
+
+  // Zone B computations — per-day totals + week max for relative scaling.
+  const dayTotals = useMemo(() => {
+    const out = new Map<
+      string,
+      { total: number; allDone: boolean; hasPlanned: boolean }
+    >();
+    for (let i = 0; i < 7; i++) {
+      const iso = toIsoDate(addDays(weekStart, i));
+      const plans = plansByDay.get(iso) ?? [];
+      const total = plans
+        .filter((p) => p.rendered_state !== "cancelled")
+        .reduce((s, p) => s + (parseFloat(p.planned_qty) || 0), 0);
+      const liveOrDone = plans.filter((p) => p.rendered_state !== "cancelled");
+      const allDone =
+        liveOrDone.length > 0 &&
+        liveOrDone.every((p) => p.rendered_state === "done");
+      const hasPlanned = plans.some((p) => p.rendered_state === "planned");
+      out.set(iso, { total, allDone, hasPlanned });
+    }
+    return out;
+  }, [plansByDay, weekStart]);
+
+  const weekMaxVolume = useMemo(() => {
+    let max = 0;
+    dayTotals.forEach((d) => {
+      if (d.total > max) max = d.total;
+    });
+    return max;
+  }, [dayTotals]);
 
   function handleManualAdd(req: {
     plan_date: string;
@@ -1506,27 +1809,6 @@ export default function ProductionPlanPage() {
         eyebrow="Planning workspace"
         title="Production plan"
         description="Plan production for the week. Inventory updates only when actuals are reported."
-        meta={
-          // State-hygiene: chips render only when data has loaded so the
-          // page never claims "0 planned" while an error is showing.
-          hasData ? (
-            <>
-              <Badge tone="warning" variant="soft" dotted>
-                {plannedCount} planned
-              </Badge>
-              {doneCount > 0 ? (
-                <Badge tone="success" variant="soft" dotted>
-                  {doneCount} completed
-                </Badge>
-              ) : null}
-              {cancelledCount > 0 ? (
-                <Badge tone="danger" variant="soft" dotted>
-                  {cancelledCount} cancelled
-                </Badge>
-              ) : null}
-            </>
-          ) : null
-        }
         actions={
           canAct ? (
             <div className="flex flex-wrap items-center gap-2">
@@ -1558,6 +1840,33 @@ export default function ProductionPlanPage() {
         }
       />
 
+      {/* Navigation context strip — sibling pages in the planning workspace */}
+      <div className="mb-4 flex flex-wrap items-center gap-3 text-xs text-fg-muted">
+        <Link
+          href="/planning/runs"
+          className="hover:text-fg transition-colors flex items-center gap-1"
+        >
+          <PlayCircle className="h-3 w-3" strokeWidth={2} />
+          Planning runs
+        </Link>
+        <span className="text-fg-faint" aria-hidden>·</span>
+        <Link
+          href="/planning/inventory-flow"
+          className="hover:text-fg transition-colors flex items-center gap-1"
+        >
+          <Boxes className="h-3 w-3" strokeWidth={2} />
+          Inventory flow
+        </Link>
+        <span className="text-fg-faint" aria-hidden>·</span>
+        <Link
+          href="/ops/stock/production-actual"
+          className="hover:text-fg transition-colors flex items-center gap-1"
+        >
+          <Factory className="h-3 w-3" strokeWidth={2} />
+          Report production
+        </Link>
+      </div>
+
       {/* Locked-principle banner — quiet, non-dismissible info note. */}
       <div
         className="mb-4 rounded-md border border-info/30 bg-info-softer/40 px-3 py-2 text-xs text-info-fg"
@@ -1568,6 +1877,61 @@ export default function ProductionPlanPage() {
         Inventory updates only after actuals are reported in the production
         report.
       </div>
+
+      {/* Zone A — KPI hero band. Renders only when data has loaded so the
+          page never claims "0 planned" while an error is showing. */}
+      {hasData && (
+        <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
+          {/* Planned */}
+          <div
+            className="kpi-microcard"
+            style={{ ["--kpi-accent" as string]: "var(--warning)" }}
+          >
+            <span className="text-[22px] font-semibold tabular-nums leading-none tracking-tightish text-fg-strong">
+              {plannedCount}
+            </span>
+            <span className="text-[9px] font-semibold uppercase tracking-sops leading-none text-fg-muted mt-0.5">
+              Planned
+            </span>
+          </div>
+          {/* Completed */}
+          <div
+            className="kpi-microcard"
+            style={{ ["--kpi-accent" as string]: "var(--success)" }}
+          >
+            <span className="text-[22px] font-semibold tabular-nums leading-none tracking-tightish text-success-fg">
+              {doneCount}
+            </span>
+            <span className="text-[9px] font-semibold uppercase tracking-sops leading-none text-fg-muted mt-0.5">
+              Completed
+            </span>
+          </div>
+          {/* Total volume */}
+          <div
+            className="kpi-microcard"
+            style={{ ["--kpi-accent" as string]: "var(--accent)" }}
+          >
+            <span className="text-[22px] font-semibold tabular-nums leading-none tracking-tightish text-fg-strong">
+              {totalQty % 1 === 0 ? totalQty.toFixed(0) : totalQty.toFixed(1)}
+            </span>
+            <span className="text-[9px] font-semibold uppercase tracking-sops leading-none text-fg-muted mt-0.5">
+              {dominantUom} total
+            </span>
+          </div>
+          {/* Completion % */}
+          <div
+            className="kpi-microcard"
+            style={{ ["--kpi-accent" as string]: "var(--info)" }}
+          >
+            <span className="text-[22px] font-semibold tabular-nums leading-none tracking-tightish text-fg-strong">
+              {completionPct}%
+            </span>
+            <span className="text-[9px] font-semibold uppercase tracking-sops leading-none text-fg-muted mt-0.5">
+              Done
+            </span>
+          </div>
+        </div>
+      )}
 
       {/* Week navigation — centered week label, prev/next arrows, This Week. */}
       <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
@@ -1605,19 +1969,51 @@ export default function ProductionPlanPage() {
         </button>
       </div>
 
+      {/* Zone B — week load segment bar. 7-segment heatmap encoding daily
+          planned volume relative to the week's max. */}
+      {hasData && (
+        <div
+          className="mb-5 grid gap-1"
+          style={{ gridTemplateColumns: "repeat(7, 1fr)" }}
+          aria-label="Week production load"
+        >
+          {Array.from({ length: 7 }).map((_, i) => {
+            const date = addDays(weekStart, i);
+            const iso = toIsoDate(date);
+            const info = dayTotals.get(iso) ?? {
+              total: 0,
+              allDone: false,
+              hasPlanned: false,
+            };
+            const isToday = iso === toIsoDate(new Date());
+            return (
+              <WeekLoadSegment
+                key={iso}
+                date={date}
+                total={info.total}
+                allDone={info.allDone}
+                hasPlanned={info.hasPlanned}
+                maxVolume={weekMaxVolume}
+                isToday={isToday}
+              />
+            );
+          })}
+        </div>
+      )}
+
       {/* State-hygiene rendering: exactly one of                          */}
       {/*   loading | error | empty | week-view                            */}
       {plansQuery.isLoading ? (
-        <SectionCard contentClassName="p-3">
-          <div className="space-y-2" aria-busy="true" aria-live="polite">
-            {Array.from({ length: 7 }).map((_, i) => (
-              <div
-                key={i}
-                className="h-20 w-full animate-pulse rounded-md bg-bg-subtle"
-              />
-            ))}
-          </div>
-        </SectionCard>
+        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-7">
+          {Array.from({ length: 7 }).map((_, i) => (
+            <div
+              key={i}
+              className="h-[160px] w-full animate-pulse rounded-lg bg-bg-subtle"
+              aria-busy="true"
+              aria-live="polite"
+            />
+          ))}
+        </div>
       ) : plansQuery.isError ? (
         (() => {
           const err = plansQuery.error;
@@ -1738,26 +2134,96 @@ export default function ProductionPlanPage() {
           }
         />
       ) : (
-        // Week view — day cards
-        <div className="space-y-2" data-testid="production-plan-week">
-          {Array.from({ length: 7 }).map((_, i) => {
-            const date = addDays(weekStart, i);
-            const iso = toIsoDate(date);
-            return (
-              <DayCard
-                key={iso}
-                date={date}
-                plans={plansByDay.get(iso) ?? []}
-                expanded={expandedDay === iso}
-                onToggle={() => setExpandedDay(expandedDay === iso ? null : iso)}
-                canAct={canAct}
-                onAdd={(d) => setShowManualAdd({ defaultDate: toIsoDate(d) })}
-                onEdit={setEditingPlan}
-                onCancel={setCancellingPlan}
-              />
-            );
-          })}
-        </div>
+        <>
+          {/* Zone C — week view, 7 always-visible day cards */}
+          <div
+            className="grid gap-3 sm:grid-cols-2 lg:grid-cols-7"
+            data-testid="production-plan-week"
+          >
+            {Array.from({ length: 7 }).map((_, i) => {
+              const date = addDays(weekStart, i);
+              const iso = toIsoDate(date);
+              return (
+                <DayCard
+                  key={iso}
+                  date={date}
+                  plans={plansByDay.get(iso) ?? []}
+                  canAct={canAct}
+                  onAdd={(d) =>
+                    setShowManualAdd({ defaultDate: toIsoDate(d) })
+                  }
+                  onEdit={setEditingPlan}
+                  onCancel={setCancellingPlan}
+                />
+              );
+            })}
+          </div>
+
+          {/* Zone D — week summary footer */}
+          <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-border/50 bg-bg-raised px-4 py-3 shadow-raised">
+            {/* Progress bar */}
+            <div className="flex flex-1 min-w-[160px] flex-col gap-1">
+              <div className="flex items-baseline justify-between gap-2">
+                <span className="text-[9px] font-semibold uppercase tracking-sops text-fg-muted">
+                  Week completion
+                </span>
+                <span className="text-xs font-semibold tabular-nums text-fg-strong">
+                  {completionPct}%
+                </span>
+              </div>
+              <div className="h-1.5 w-full rounded-full bg-bg-muted overflow-hidden">
+                <div
+                  className={cn(
+                    "h-full rounded-full transition-all duration-500",
+                    completionPct >= 100
+                      ? "bg-success"
+                      : completionPct >= 50
+                        ? "bg-accent"
+                        : "bg-warning",
+                  )}
+                  style={{ width: `${Math.min(completionPct, 100)}%` }}
+                  aria-hidden
+                />
+              </div>
+            </div>
+            <div className="hidden sm:block h-8 w-px bg-border/50" aria-hidden />
+            <div className="flex flex-wrap items-center gap-2 text-xs text-fg-muted">
+              <span>
+                <span className="font-semibold text-fg-strong tabular-nums">
+                  {plannedCount}
+                </span>{" "}
+                planned
+              </span>
+              <span className="text-fg-faint">·</span>
+              <span>
+                <span className="font-semibold text-success-fg tabular-nums">
+                  {doneCount}
+                </span>{" "}
+                completed
+              </span>
+              {cancelledCount > 0 && (
+                <>
+                  <span className="text-fg-faint">·</span>
+                  <span>
+                    <span className="font-semibold text-danger-fg tabular-nums">
+                      {cancelledCount}
+                    </span>{" "}
+                    cancelled
+                  </span>
+                </>
+              )}
+            </div>
+            <div className="hidden lg:flex items-center gap-2 ml-auto">
+              <Link
+                href="/planning/inventory-flow"
+                className="text-xs text-accent hover:underline flex items-center gap-1"
+              >
+                View inventory impact
+                <ArrowRight className="h-3 w-3" strokeWidth={2} />
+              </Link>
+            </div>
+          </div>
+        </>
       )}
 
       {/* Modals */}
@@ -1807,3 +2273,7 @@ export default function ProductionPlanPage() {
     </div>
   );
 }
+
+// Suppress unused-import warning for RenderedState — the type is re-exported
+// implicitly through ProductionPlanRow.rendered_state usage above.
+export type { RenderedState };
