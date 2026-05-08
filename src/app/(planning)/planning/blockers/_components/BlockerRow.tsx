@@ -13,7 +13,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ExternalLink, Plus, Wrench } from "lucide-react";
+import { ExternalLink, LifeBuoy, Plus, Wrench } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Badge } from "@/components/badges/StatusBadge";
 import {
@@ -25,6 +25,7 @@ import {
 import { fmtQty, fmtRelativeAgo, fmtShortDate } from "../_lib/format";
 import type { BlockerRow as BlockerRowData } from "../_lib/types";
 import { BlockerDetailAccordion } from "./BlockerDetailAccordion";
+import { DevTicketModal } from "./DevTicketModal";
 
 interface BlockerRowProps {
   row: BlockerRowData;
@@ -62,10 +63,12 @@ export function BlockerRow({
   moodEmoji,
 }: BlockerRowProps) {
   const [tagDropdownOpen, setTagDropdownOpen] = useState(false);
+  const [devTicketOpen, setDevTicketOpen] = useState(false);
   const tone = SEVERITY_TONE[row.severity];
   const fixHref = buildFixHref(row);
   const blockerLabelHe = BLOCKER_LABEL_HE[row.blocker_label] ?? row.blocker_label;
   const fixActionHe = FIX_ACTION_LABEL_HE[row.fix_action_label] ?? row.fix_action_label;
+  const isDevEscalation = row.fix_action_label === "check_po_substrate";
 
   return (
     <tr
@@ -142,7 +145,26 @@ export function BlockerRow({
 
       {/* Q4 — מה עושים עכשיו? */}
       <td className="px-3 py-3">
-        <div className="text-xs text-fg">{fixActionHe}</div>
+        {isDevEscalation ? (
+          <>
+            <button
+              type="button"
+              onClick={() => setDevTicketOpen(true)}
+              className="inline-flex items-center gap-1 rounded border border-accent/40 bg-accent-soft px-2 py-1 text-xs font-medium text-accent-fg hover:bg-accent-softer transition-colors"
+              data-testid={`blockers-dev-ticket-trigger-${row.exception_id}`}
+            >
+              <LifeBuoy className="h-3 w-3" strokeWidth={2} aria-hidden />
+              {fixActionHe}
+            </button>
+            <DevTicketModal
+              row={row}
+              open={devTicketOpen}
+              onClose={() => setDevTicketOpen(false)}
+            />
+          </>
+        ) : (
+          <div className="text-xs text-fg">{fixActionHe}</div>
+        )}
       </td>
 
       {/* Q5 — איפה מתקנים? */}
