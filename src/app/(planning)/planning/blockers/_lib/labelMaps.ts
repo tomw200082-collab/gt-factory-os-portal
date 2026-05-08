@@ -31,10 +31,14 @@ export const BLOCKER_LABEL_HE: Record<BlockerLabelKey, string> = {
 
 // fix_action_label (English key → Hebrew CTA copy)
 // Tom-locked verbatim 2026-04-27.
+// Amended 2026-05-08 (Phase 8 Run C, FLOW-003 closure):
+//   check_po_substrate "פנה למפתח" → "פתח כרטיס טיפול".
+//   The CTA is now a clickable button that opens DevTicketModal with the
+//   blocker context auto-populated. See devTicketContent.ts for payload shape.
 export const FIX_ACTION_LABEL_HE: Record<FixActionLabelKey, string> = {
   configure_supplier: "הגדר ספק",
   configure_bom: "הגדר BOM",
-  check_po_substrate: "פנה למפתח",
+  check_po_substrate: "פתח כרטיס טיפול",
   review_trigger_threshold: "בדוק סף הפעלה",
 };
 

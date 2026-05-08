@@ -10,7 +10,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { ExternalLink, Plus, Wrench } from "lucide-react";
+import { ExternalLink, LifeBuoy, Plus, Wrench } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Badge } from "@/components/badges/StatusBadge";
 import {
@@ -22,6 +22,7 @@ import {
 import { fmtQty, fmtRelativeAgo, fmtShortDate } from "../_lib/format";
 import type { BlockerRow as BlockerRowData } from "../_lib/types";
 import { BlockerDetailAccordion } from "./BlockerDetailAccordion";
+import { DevTicketModal } from "./DevTicketModal";
 
 interface BlockerCardProps {
   row: BlockerRowData;
@@ -59,10 +60,12 @@ export function BlockerCard({
   moodEmoji,
 }: BlockerCardProps) {
   const [tagDropdownOpen, setTagDropdownOpen] = useState(false);
+  const [devTicketOpen, setDevTicketOpen] = useState(false);
   const tone = SEVERITY_TONE[row.severity];
   const fixHref = buildFixHref(row);
   const blockerLabelHe = BLOCKER_LABEL_HE[row.blocker_label] ?? row.blocker_label;
   const fixActionHe = FIX_ACTION_LABEL_HE[row.fix_action_label] ?? row.fix_action_label;
+  const isDevEscalation = row.fix_action_label === "check_po_substrate";
 
   return (
     <div
@@ -156,6 +159,26 @@ export function BlockerCard({
             {fixActionHe}
             <ExternalLink className="h-3 w-3 opacity-60" strokeWidth={2} aria-hidden />
           </Link>
+        ) : isDevEscalation ? (
+          <>
+            <button
+              type="button"
+              onClick={() => setDevTicketOpen(true)}
+              className="inline-flex w-full items-center justify-center gap-1.5 rounded border border-accent/40 bg-accent-soft px-3 py-2 text-sm font-medium text-accent-fg hover:bg-accent-softer transition-colors"
+              data-testid={`blockers-dev-ticket-trigger-${row.exception_id}`}
+            >
+              <LifeBuoy className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+              {fixActionHe}
+            </button>
+            <p className="mt-1 text-3xs text-fg-faint text-center">
+              שלח לצוות הפיתוח את ID החסם
+            </p>
+            <DevTicketModal
+              row={row}
+              open={devTicketOpen}
+              onClose={() => setDevTicketOpen(false)}
+            />
+          </>
         ) : (
           <div className="rounded border border-border/60 bg-bg-subtle px-3 py-2 text-center">
             <div className="text-xs font-medium text-fg-muted">{fixActionHe}</div>
