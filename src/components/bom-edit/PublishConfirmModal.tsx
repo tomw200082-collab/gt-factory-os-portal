@@ -62,6 +62,8 @@ export function PublishConfirmModal({
   onConfirm,
 }: PublishConfirmModalProps): JSX.Element {
   const [agreed, setAgreed] = useState(false);
+  const blockingIssues = preview.blocking_issues ?? [];
+  const backendWarnings = preview.warnings ?? [];
 
   // Variant C: hard-block.
   if (!preview.can_publish_with_override) {
@@ -75,7 +77,7 @@ export function PublishConfirmModal({
           again.
         </p>
         <ul className="mt-3 space-y-1 text-sm">
-          {preview.blocking_issues.map((b) => (
+          {blockingIssues.map((b) => (
             <li
               key={b}
               className="flex items-start gap-1.5 rounded-sm border border-danger-border bg-danger-soft px-2.5 py-1.5 text-danger-fg"
@@ -104,7 +106,7 @@ export function PublishConfirmModal({
   // Variant A: clean (backend AND no UI warnings).
   if (
     preview.can_publish_clean &&
-    preview.warnings.length === 0 &&
+    backendWarnings.length === 0 &&
     uiWarnings.length === 0
   ) {
     return (
@@ -148,7 +150,7 @@ export function PublishConfirmModal({
         until they are fixed.
       </p>
       <ul className="mt-3 max-h-48 space-y-1 overflow-auto text-sm">
-        {preview.warnings.map((w) => (
+        {backendWarnings.map((w) => (
           <li
             key={w}
             className="flex items-start gap-1.5 rounded-sm border border-warning-border bg-warning-soft px-2.5 py-1.5 text-warning-fg"
