@@ -69,7 +69,6 @@ import {
   AlertTriangle,
   Archive,
   ArrowUpDown,
-  Banknote,
   Bell,
   Building2,
   CalendarCheck,
