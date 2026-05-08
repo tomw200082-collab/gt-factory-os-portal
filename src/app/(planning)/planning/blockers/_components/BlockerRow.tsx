@@ -11,8 +11,9 @@
 //   5. איפה מתקנים?     — fix_route link OR "פנה למפתח" when null
 // ---------------------------------------------------------------------------
 
+import { useState } from "react";
 import Link from "next/link";
-import { ExternalLink, Wrench } from "lucide-react";
+import { ExternalLink, Plus, Wrench } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { Badge } from "@/components/badges/StatusBadge";
 import {
@@ -27,6 +28,17 @@ import { BlockerDetailAccordion } from "./BlockerDetailAccordion";
 
 interface BlockerRowProps {
   row: BlockerRowData;
+  /** I2 — due date assignment */
+  currentDueDate?: string;
+  onSetDueDate?: (date: string) => void;
+  /** I3 — tag labels */
+  currentTags?: string[];
+  onToggleTag?: (tag: string) => void;
+  tagPresets?: string[];
+  /** I10 — escalation level badge */
+  escalationLevel?: string;
+  /** I11 — mood emoji */
+  moodEmoji?: string;
 }
 
 function buildFixHref(row: BlockerRowData): string | null {
@@ -39,7 +51,17 @@ function buildFixHref(row: BlockerRowData): string | null {
   return `${row.fix_route}${sep}${qs.toString()}`;
 }
 
-export function BlockerRow({ row }: BlockerRowProps) {
+export function BlockerRow({
+  row,
+  currentDueDate,
+  onSetDueDate,
+  currentTags = [],
+  onToggleTag,
+  tagPresets = [],
+  escalationLevel,
+  moodEmoji,
+}: BlockerRowProps) {
+  const [tagDropdownOpen, setTagDropdownOpen] = useState(false);
   const tone = SEVERITY_TONE[row.severity];
   const fixHref = buildFixHref(row);
   const blockerLabelHe = BLOCKER_LABEL_HE[row.blocker_label] ?? row.blocker_label;
@@ -52,9 +74,27 @@ export function BlockerRow({ row }: BlockerRowProps) {
     >
       {/* Q1 — מה חסום? */}
       <td className="px-3 py-3">
-        <div className="text-sm font-medium text-fg-strong">
-          {row.display_name ??
-            (row.display_kind === "run_level" ? "ריצת תכנון" : "—")}
+        <div className="flex items-center gap-1.5 flex-wrap" dir="rtl">
+          <span className="text-sm font-medium text-fg-strong">
+            {row.display_name ??
+              (row.display_kind === "run_level" ? "ריצת תכנון" : "—")}
+          </span>
+          {moodEmoji ? (
+            <span className="text-sm" aria-label="מצב רוח">{moodEmoji}</span>
+          ) : null}
+          {escalationLevel && escalationLevel !== "ללא" ? (
+            <span
+              className={cn(
+                "text-3xs rounded px-1 shrink-0",
+                escalationLevel === "הנהלה"
+                  ? "bg-danger-softer text-danger-fg"
+                  : "bg-warning-softer text-warning-fg",
+              )}
+              dir="rtl"
+            >
+              {escalationLevel}
+            </span>
+          ) : null}
         </div>
         {row.supply_method ? (
           <div className="mt-0.5 text-3xs text-fg-faint">
@@ -139,6 +179,79 @@ export function BlockerRow({ row }: BlockerRowProps) {
         </div>
         <div className="mt-2">
           <BlockerDetailAccordion detail={row.blocker_detail} />
+        </div>
+      </td>
+
+      {/* I2 — Due Date */}
+      <td className="px-3 py-3 align-top" dir="rtl">
+        {onSetDueDate ? (
+          <div className="flex flex-col gap-0.5">
+            {currentDueDate ? (
+              <span className="text-3xs text-fg-faint">יעד:</span>
+            ) : null}
+            <input
+              type="date"
+              dir="rtl"
+              value={currentDueDate ?? ""}
+              onChange={(e) => onSetDueDate(e.target.value)}
+              className="text-3xs border border-border rounded px-1 py-0.5 bg-bg-subtle text-fg-muted"
+              aria-label="תאריך יעד לחסם"
+            />
+          </div>
+        ) : null}
+      </td>
+
+      {/* I3 — Tag Labels */}
+      <td className="px-3 py-3 align-top" dir="rtl">
+        <div className="flex flex-wrap gap-1 items-center" dir="rtl">
+          {currentTags.map((tag) => (
+            <span
+              key={tag}
+              className="text-3xs rounded px-1 py-0.5 bg-accent-softer text-accent"
+              dir="rtl"
+            >
+              {tag}
+            </span>
+          ))}
+          {onToggleTag && tagPresets.length > 0 ? (
+            <div className="relative" dir="rtl">
+              <button
+                type="button"
+                onClick={() => setTagDropdownOpen((v) => !v)}
+                className="text-fg-faint hover:text-fg-muted text-3xs rounded px-1 py-0.5 border border-border/40 bg-bg-subtle transition-colors"
+                aria-label="הוסף תגית"
+                dir="rtl"
+              >
+                <Plus className="h-3 w-3" strokeWidth={2} aria-hidden />
+              </button>
+              {tagDropdownOpen ? (
+                <div
+                  className="absolute z-10 right-0 top-full mt-1 bg-bg-muted border border-border rounded shadow-sm min-w-max"
+                  dir="rtl"
+                >
+                  {tagPresets.map((preset) => (
+                    <button
+                      key={preset}
+                      type="button"
+                      onClick={() => {
+                        onToggleTag(preset);
+                        setTagDropdownOpen(false);
+                      }}
+                      className={cn(
+                        "block w-full text-right px-2 py-1 text-3xs hover:bg-bg-subtle transition-colors",
+                        currentTags.includes(preset)
+                          ? "text-accent font-medium"
+                          : "text-fg-muted",
+                      )}
+                      dir="rtl"
+                    >
+                      {currentTags.includes(preset) ? `✓ ${preset}` : preset}
+                    </button>
+                  ))}
+                </div>
+              ) : null}
+            </div>
+          ) : null}
         </div>
       </td>
     </tr>

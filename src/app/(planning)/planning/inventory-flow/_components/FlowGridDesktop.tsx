@@ -42,6 +42,7 @@
 // ---------------------------------------------------------------------------
 
 import { useEffect, useMemo, useRef, type CSSProperties } from "react";
+import { ChevronRight } from "lucide-react";
 import { compareItemsByRisk } from "../_lib/risk";
 import { todayIsoLocal } from "../_lib/format";
 import type { FlowItem } from "../_lib/types";
@@ -49,6 +50,7 @@ import {
   weeklySumsByItem,
   type PlannedInflowRow,
 } from "../_lib/plannedInflow";
+import { cn } from "@/lib/cn";
 import { DayCell } from "./DayCell";
 import { DayHeaderRow } from "./DayHeaderRow";
 import { StickyItemPanel } from "./StickyItemPanel";
@@ -96,6 +98,16 @@ interface FlowGridDesktopProps {
    * behaviour unchanged.
    */
   disableRowLink?: boolean;
+  /** When true, coverage-days heat badges are shown on item rows. */
+  showCoverageHeatmap?: boolean;
+  /** itemId → coverage days (null if unavailable). Used when showCoverageHeatmap is true. */
+  coverageDaysMap?: Map<string, number | null>;
+  /** Called with the item_id when the user clicks the detail chevron. */
+  onSelectItem?: (itemId: string) => void;
+  /** When true, render 4-week net movement sparklines on each item row. */
+  showMovementSparklines?: boolean;
+  /** item_id → array of 4 weekly net movement values. */
+  movementByItemId?: Map<string, number[]>;
 }
 
 export function FlowGridDesktop({
@@ -104,6 +116,11 @@ export function FlowGridDesktop({
   plannedByItemDate,
   plannedRows,
   disableRowLink = false,
+  showCoverageHeatmap = false,
+  coverageDaysMap,
+  onSelectItem,
+  showMovementSparklines = false,
+  movementByItemId,
 }: FlowGridDesktopProps) {
   const sortedItems = useMemo(
     () => [...items].sort(compareItemsByRisk),
@@ -185,6 +202,11 @@ export function FlowGridDesktop({
               rowIdx={rowIdx}
               gridStyle={sharedGridStyle}
               disableRowLink={disableRowLink}
+              showCoverageHeatmap={showCoverageHeatmap}
+              coverageDaysMap={coverageDaysMap}
+              onSelectItem={onSelectItem}
+              showMovementSparklines={showMovementSparklines}
+              movementByItemId={movementByItemId}
             />
           ))}
         </div>
@@ -204,6 +226,16 @@ interface ItemRowProps {
   gridStyle: CSSProperties;
   /** Forwarded to per-day popover; disables drill-down link when true. */
   disableRowLink?: boolean;
+  /** When true, a coverage-days heat badge is shown on the sticky item panel. */
+  showCoverageHeatmap?: boolean;
+  /** itemId → coverage days (null if unavailable). */
+  coverageDaysMap?: Map<string, number | null>;
+  /** Called with the item_id when the user clicks the detail chevron. */
+  onSelectItem?: (itemId: string) => void;
+  /** When true, render 4-week net movement sparklines inline on each row. */
+  showMovementSparklines?: boolean;
+  /** item_id → array of 4 weekly net movement values. */
+  movementByItemId?: Map<string, number[]>;
 }
 
 function ItemRow({
@@ -216,6 +248,11 @@ function ItemRow({
   rowIdx,
   gridStyle,
   disableRowLink = false,
+  showCoverageHeatmap = false,
+  coverageDaysMap,
+  onSelectItem,
+  showMovementSparklines = false,
+  movementByItemId,
 }: ItemRowProps) {
   const dailyWeekCount = Math.ceil(item.days.length / 7);
   const weeklyOnly = item.weeks.slice(dailyWeekCount);
@@ -238,13 +275,92 @@ function ItemRow({
     animationDelay: staggerDelay,
   };
 
+  // Coverage badge — computed once per row when heatmap is active.
+  const coverageDays = showCoverageHeatmap
+    ? (coverageDaysMap?.get(item.item_id) ?? null)
+    : null;
+  const coverageBadgeClass =
+    coverageDays === null
+      ? null
+      : coverageDays <= 7
+        ? "bg-danger-softer text-danger-fg"
+        : coverageDays <= 30
+          ? "bg-warning-softer text-warning-fg"
+          : "bg-success-softer text-success-fg";
+
+  // R-NEW-7 — Movement sparkline: compute SVG points from 4-week data.
+  const movementSparklineEl = useMemo(() => {
+    if (!showMovementSparklines) return null;
+    const weeks = movementByItemId?.get(item.item_id);
+    if (!weeks) return null;
+    const xs = [5, 15, 25, 35] as const;
+    const maxVal = Math.max(...weeks.map(Math.abs), 1);
+    const pts = weeks
+      .map((val, i) => `${xs[i]},${8 - (val / maxVal) * 6}`)
+      .join(" ");
+    return (
+      <svg
+        viewBox="0 0 40 16"
+        width={40}
+        height={16}
+        className="inline-block ml-1"
+        aria-hidden
+      >
+        <polyline
+          points={pts}
+          fill="none"
+          stroke="#3b82f6"
+          strokeWidth={1.5}
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        />
+      </svg>
+    );
+  }, [showMovementSparklines, movementByItemId, item.item_id]);
+
   return (
     <div
       role="row"
       className="grid border-b border-border/30 last:border-b-0 reveal hover:bg-bg-subtle/30"
       style={{ ...gridStyle, ...rowAnimStyle }}
     >
-      <StickyItemPanel item={item} />
+      {/* Wrap StickyItemPanel in relative container so the coverage badge
+          and the detail-chevron (R-NEW-5) can be absolute-positioned. */}
+      <div className="relative">
+        <StickyItemPanel item={item} />
+        {/* R-NEW-7 — Movement sparkline rendered after the cover tile */}
+        {movementSparklineEl !== null ? (
+          <span className="absolute bottom-1 left-4 z-30 pointer-events-none">
+            {movementSparklineEl}
+          </span>
+        ) : null}
+        {showCoverageHeatmap && coverageDays !== null && coverageBadgeClass ? (
+          <span
+            className={cn(
+              "absolute left-4 top-1 z-30 text-3xs font-medium rounded px-1 leading-tight pointer-events-none",
+              coverageBadgeClass,
+            )}
+            aria-label={`Coverage: ${coverageDays} days`}
+          >
+            {coverageDays}d
+          </span>
+        ) : null}
+        {/* R-NEW-5 — detail-chevron button; only when parent wires onSelectItem */}
+        {onSelectItem ? (
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onSelectItem(item.item_id);
+            }}
+            className="absolute bottom-1 right-1 z-30 inline-flex h-5 w-5 items-center justify-center rounded-sm text-fg-faint opacity-50 hover:opacity-100 hover:text-fg-muted transition-opacity"
+            aria-label={`View detail for ${item.item_name}`}
+            title="Open item detail"
+          >
+            <ChevronRight size={12} strokeWidth={2} aria-hidden />
+          </button>
+        ) : null}
+      </div>
       {/* Spacer cells — daily band */}
       {item.days.map((d) => {
         const plannedRow = overlayEnabled

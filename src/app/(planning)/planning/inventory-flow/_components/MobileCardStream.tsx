@@ -31,6 +31,16 @@ interface MobileCardStreamProps {
    * v2. Default `false` keeps FG behaviour unchanged.
    */
   disableRowLink?: boolean;
+  /** When true, coverage-days heat badge is shown on each mobile card. */
+  showCoverageHeatmap?: boolean;
+  /** itemId → coverage days (null if unavailable). */
+  coverageDaysMap?: Map<string, number | null>;
+  /** Called with the item_id when the user clicks a card (R-NEW-5). */
+  onSelectItem?: (itemId: string) => void;
+  /** When true, render 4-week net movement sparklines on each card. */
+  showMovementSparklines?: boolean;
+  /** item_id → array of 4 weekly net movement values. */
+  movementByItemId?: Map<string, number[]>;
 }
 
 export function MobileCardStream({
@@ -40,6 +50,11 @@ export function MobileCardStream({
   overlayEnabled = false,
   plannedByItemDate,
   disableRowLink = false,
+  showCoverageHeatmap = false,
+  coverageDaysMap,
+  onSelectItem,
+  showMovementSparklines = false,
+  movementByItemId,
 }: MobileCardStreamProps) {
   const sorted = useMemo(() => [...items].sort(compareItemsByRisk), [items]);
   const queryClient = useQueryClient();
@@ -111,6 +126,10 @@ export function MobileCardStream({
           overlayEnabled={overlayEnabled}
           plannedByItemDate={plannedByItemDate}
           disableRowLink={disableRowLink}
+          showCoverageHeatmap={showCoverageHeatmap}
+          coverageDays={coverageDaysMap?.get(item.item_id) ?? null}
+          showMovementSparklines={showMovementSparklines}
+          movementWeeks={movementByItemId?.get(item.item_id)}
         />
       ))}
     </div>

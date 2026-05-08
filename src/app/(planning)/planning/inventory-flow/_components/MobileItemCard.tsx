@@ -46,6 +46,14 @@ interface MobileItemCardProps {
    * `false` preserves the FG card behaviour exactly.
    */
   disableRowLink?: boolean;
+  /** When true, a coverage-days heat badge is overlaid on the card. */
+  showCoverageHeatmap?: boolean;
+  /** Coverage days for this item (null if unavailable). */
+  coverageDays?: number | null;
+  /** When true, render 4-week net movement sparkline on the card. */
+  showMovementSparklines?: boolean;
+  /** Array of 4 weekly net movement values for this item. */
+  movementWeeks?: number[];
 }
 
 function MobileItemCardInner({
@@ -53,6 +61,10 @@ function MobileItemCardInner({
   overlayEnabled = false,
   plannedByItemDate,
   disableRowLink = false,
+  showCoverageHeatmap = false,
+  coverageDays = null,
+  showMovementSparklines = false,
+  movementWeeks,
 }: MobileItemCardProps) {
   const style = RISK_TIER_STYLE[item.risk_tier];
   const insight = buildInsight(item);
@@ -107,11 +119,33 @@ function MobileItemCardInner({
     borderLeft: `3px solid ${familyColor}`,
   };
 
+  // Coverage badge class
+  const coverageBadgeClass =
+    showCoverageHeatmap && coverageDays !== null
+      ? coverageDays <= 7
+        ? "bg-danger-softer text-danger-fg"
+        : coverageDays <= 30
+          ? "bg-warning-softer text-warning-fg"
+          : "bg-success-softer text-success-fg"
+      : null;
+
   const cardBody = (
     <>
       {/* Tier strip (kept as a thin secondary cue inside the family-colored
           left border so risk still reads at a glance). */}
       <div className={cn("w-1 shrink-0", style.stripClass)} aria-hidden />
+      {/* R-NEW-3 — Coverage heat badge (absolute top-left of card) */}
+      {showCoverageHeatmap && coverageDays !== null && coverageBadgeClass ? (
+        <span
+          className={cn(
+            "absolute left-3 top-1.5 z-10 text-3xs font-medium rounded px-1 leading-tight pointer-events-none",
+            coverageBadgeClass,
+          )}
+          aria-label={`Coverage: ${coverageDays} days`}
+        >
+          {coverageDays}d
+        </span>
+      ) : null}
       <div className="flex-1 px-4 py-4">
         {/* Header */}
         <div className="flex items-start justify-between gap-3">
@@ -156,6 +190,32 @@ function MobileItemCardInner({
             width={96}
             height={28}
           />
+          {/* R-NEW-7 — 4-week movement sparkline */}
+          {showMovementSparklines && movementWeeks && movementWeeks.length >= 4 ? (() => {
+            const xs = [5, 15, 25, 35] as const;
+            const maxVal = Math.max(...movementWeeks.map(Math.abs), 1);
+            const pts = movementWeeks
+              .map((val, i) => `${xs[i]},${8 - (val / maxVal) * 6}`)
+              .join(" ");
+            return (
+              <svg
+                viewBox="0 0 40 16"
+                width={40}
+                height={16}
+                className="inline-block ml-1"
+                aria-hidden
+              >
+                <polyline
+                  points={pts}
+                  fill="none"
+                  stroke="#3b82f6"
+                  strokeWidth={1.5}
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+              </svg>
+            );
+          })() : null}
         </div>
 
         {/* Insight sentence */}
