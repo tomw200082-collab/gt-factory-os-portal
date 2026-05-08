@@ -3,30 +3,27 @@
 import { openDB, type IDBPDatabase } from "idb";
 
 // ---------------------------------------------------------------------------
-// IDB store setup — reconciled for Phase A.
+// IDB store setup.
 //
-// DB_VERSION bumped from 1 to 2. The upgrade path deletes and recreates
-// all stores because:
+// Version history — always forward-only, never downgrade:
 //
-//   - Per-store keyPaths changed to match the locked schema PKs
-//     (item_id, component_id, supplier_id, supplier_item_id,
-//      bom_head_id, bom_version_id, line_id, key).
+//   v1 → v2 (Phase A): keyPaths changed to locked schema PKs; added
+//     bom_versions and bom_lines stores. Migration: full wipe + recreate
+//     (pre-production, no user data at risk).
 //
-//   - Two new stores were added: bom_versions, bom_lines (the locked
-//     three-table BOM model separates these from bom_head).
+//   v2 → v3 (no-op version advance): DB_VERSION was temporarily set to 3
+//     in an uncommitted dev session, advancing the browser's stored version
+//     to 3. Rolling back the constant to 2 caused a VersionError on that
+//     browser ("requested version (2) < existing version (3)"). Fix: advance
+//     the constant to 3. No schema changes — stores and keyPaths are
+//     identical to v2.
 //
-//   - The canonical portal is pre-production; no user has persistent
-//     operational data in this IDB yet. Clearing and re-seeding is safe
-//     and is cheaper than migrating rows between shapes that do not
-//     share a schema.
-//
-// If this code ships to production before Tranche 3 and someone has
-// operational data locally, bump DB_VERSION again and write a real
-// migration. Do not attempt in-place reshape here.
+// Rule: never lower DB_VERSION. If adding stores or changing keyPaths,
+// bump DB_VERSION and write a forward migration below.
 // ---------------------------------------------------------------------------
 
 export const DB_NAME = "gt-factory-os-portal";
-export const DB_VERSION = 2;
+export const DB_VERSION = 3;
 
 export const STORES = {
   items: "items",
@@ -75,15 +72,14 @@ export function getDb(): Promise<IDBPDatabase> {
   if (!dbPromise) {
     dbPromise = openDB(DB_NAME, DB_VERSION, {
       upgrade(db, oldVersion) {
-        // Phase A reconciliation: if coming from v1 (pre-Phase-A), wipe
-        // every existing store so they can be recreated with the new
-        // per-store keyPaths and the new three-table BOM model. No
-        // in-place migration — see header comment.
+        // v1 → v2: keyPaths and stores changed — wipe and recreate.
         if (oldVersion < 2) {
           for (const existing of Array.from(db.objectStoreNames)) {
             db.deleteObjectStore(existing);
           }
         }
+        // v2 → v3: no schema changes; createObjectStore loop below is a no-op
+        //   for browsers already at v2 (all stores exist).
         for (const [storeName, keyPath] of Object.entries(KEY_PATHS) as Array<
           [StoreName, string]
         >) {
@@ -91,6 +87,11 @@ export function getDb(): Promise<IDBPDatabase> {
             db.createObjectStore(storeName, { keyPath });
           }
         }
+      },
+      blocked() {
+        console.warn(
+          "[IDB] upgrade blocked — another tab has this database open. Close other tabs and reload.",
+        );
       },
     });
   }
