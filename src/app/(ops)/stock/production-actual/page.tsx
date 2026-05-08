@@ -505,14 +505,59 @@ export default function ProductionActualPage() {
   const [comboboxOpen, setComboboxOpen] = useState<boolean>(false);
   const comboboxRef = useRef<HTMLDivElement>(null);
   const comboboxInputRef = useRef<HTMLInputElement>(null);
+  const dropdownListRef = useRef<HTMLDivElement>(null);
 
-  // Close combobox when clicking outside.
+  // ---------------------------------------------------------------------------
+  // Dropdown position — fixed positioning avoids clipping by overflow-x-hidden
+  // on AppShellChrome. Recalculated on open, scroll, and resize.
+  // ---------------------------------------------------------------------------
+  const [dropdownRect, setDropdownRect] = useState<{
+    top: number; left: number; width: number; maxHeight: number;
+  } | null>(null);
+
+  const recalcDropdown = useCallback(() => {
+    if (!comboboxInputRef.current) return;
+    const r = comboboxInputRef.current.getBoundingClientRect();
+    const spaceBelow = window.innerHeight - r.bottom - 8;
+    const spaceAbove = r.top - 8;
+    const openDownward = spaceBelow >= 120 || spaceBelow >= spaceAbove;
+    if (openDownward) {
+      setDropdownRect({
+        top: r.bottom + 4,
+        left: r.left,
+        width: r.width,
+        maxHeight: Math.min(320, Math.max(120, spaceBelow)),
+      });
+    } else {
+      // Open upward when more space above
+      setDropdownRect({
+        top: r.top - Math.min(320, Math.max(120, spaceAbove)) - 4,
+        left: r.left,
+        width: r.width,
+        maxHeight: Math.min(320, Math.max(120, spaceAbove)),
+      });
+    }
+  }, []);
+
+  useEffect(() => {
+    if (!comboboxOpen) { setDropdownRect(null); return; }
+    recalcDropdown();
+    window.addEventListener("scroll", recalcDropdown, { capture: true, passive: true });
+    window.addEventListener("resize", recalcDropdown, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", recalcDropdown, true);
+      window.removeEventListener("resize", recalcDropdown);
+    };
+  }, [comboboxOpen, recalcDropdown]);
+
+  // Close combobox when clicking outside. Checks both the input wrapper and
+  // the fixed-positioned dropdown list (which lives outside the DOM subtree).
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (
-        comboboxRef.current &&
-        !comboboxRef.current.contains(e.target as Node)
-      ) {
+      const target = e.target as Node;
+      const insideInput = comboboxRef.current?.contains(target);
+      const insideDropdown = dropdownListRef.current?.contains(target);
+      if (!insideInput && !insideDropdown) {
         setComboboxOpen(false);
       }
     }
@@ -1752,8 +1797,19 @@ export default function ProductionActualPage() {
                       }}
                       autoComplete="off"
                     />
-                    {comboboxOpen && filteredItems.length > 0 ? (
-                      <div className="absolute z-20 mt-1 max-h-72 w-full overflow-y-auto rounded-md border border-border bg-bg shadow-lg">
+                    {comboboxOpen && dropdownRect && filteredItems.length > 0 ? (
+                      <div
+                        ref={dropdownListRef}
+                        style={{
+                          position: "fixed",
+                          top: dropdownRect.top,
+                          left: dropdownRect.left,
+                          width: dropdownRect.width,
+                          maxHeight: dropdownRect.maxHeight,
+                          zIndex: 9999,
+                        }}
+                        className="overflow-y-auto rounded-md border border-border bg-bg shadow-xl"
+                      >
                         {filteredManufactured.length > 0 ? (
                           <div>
                             <div className="px-3 py-1.5 text-3xs font-semibold uppercase tracking-sops text-fg-subtle bg-bg-subtle/60 border-b border-border/40">
@@ -1764,7 +1820,7 @@ export default function ProductionActualPage() {
                                 key={r.item_id}
                                 type="button"
                                 className={cn(
-                                  "flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-bg-subtle/60 transition-colors",
+                                  "flex w-full items-center justify-between px-3 py-3 text-left text-sm hover:bg-bg-subtle/60 transition-colors",
                                   selectedItemId === r.item_id && "bg-accent/10",
                                 )}
                                 onClick={() => {
@@ -1795,7 +1851,7 @@ export default function ProductionActualPage() {
                                 key={r.item_id}
                                 type="button"
                                 className={cn(
-                                  "flex w-full items-center justify-between px-3 py-2 text-left text-sm hover:bg-bg-subtle/60 transition-colors",
+                                  "flex w-full items-center justify-between px-3 py-3 text-left text-sm hover:bg-bg-subtle/60 transition-colors",
                                   selectedItemId === r.item_id && "bg-accent/10",
                                 )}
                                 onClick={() => {
@@ -1816,16 +1872,21 @@ export default function ProductionActualPage() {
                             ))}
                           </div>
                         ) : null}
-                        {filteredItems.length === 0 ? (
-                          <div className="px-3 py-3 text-sm text-fg-muted">
-                            No items match "{itemSearch}"
-                          </div>
-                        ) : null}
                       </div>
-                    ) : comboboxOpen && itemSearch && filteredItems.length === 0 ? (
-                      <div className="absolute z-20 mt-1 w-full rounded-md border border-border bg-bg shadow-lg">
+                    ) : comboboxOpen && dropdownRect && itemSearch && filteredItems.length === 0 ? (
+                      <div
+                        ref={dropdownListRef}
+                        style={{
+                          position: "fixed",
+                          top: dropdownRect.top,
+                          left: dropdownRect.left,
+                          width: dropdownRect.width,
+                          zIndex: 9999,
+                        }}
+                        className="rounded-md border border-border bg-bg shadow-xl"
+                      >
                         <div className="px-3 py-3 text-sm text-fg-muted">
-                          No items match "{itemSearch}"
+                          No items match &ldquo;{itemSearch}&rdquo;
                         </div>
                       </div>
                     ) : null}
