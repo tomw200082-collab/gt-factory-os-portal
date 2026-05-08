@@ -27,7 +27,6 @@ import {
 import { fmtQty, fmtRelativeAgo, fmtShortDate } from "../_lib/format";
 import type { BlockerRow as BlockerRowData } from "../_lib/types";
 import { BlockerDetailAccordion } from "./BlockerDetailAccordion";
-import { DevTicketModal } from "./DevTicketModal";
 
 interface BlockerCardProps {
   row: BlockerRowData;
