@@ -1001,7 +1001,7 @@ export default function ProductionPlanPage() {
           Inventory flow
         </Link>
         <span className="text-fg-faint" aria-hidden>·</span>
-        <Link href="/ops/stock/production-actual" className="hover:text-fg transition-colors flex items-center gap-1">
+        <Link href="/stock/production-actual" className="hover:text-fg transition-colors flex items-center gap-1">
           <Factory className="h-3 w-3" strokeWidth={2} />
           Report production
         </Link>

@@ -246,7 +246,7 @@ export function ProductionJobCard({
         <div className="flex items-center justify-between gap-1.5 px-3 pb-2.5 border-t border-border/20 pt-2">
           {/* Report button — primary for today */}
           <Link
-            href={`/ops/stock/production-actual?from_plan_id=${encodeURIComponent(plan.plan_id)}`}
+            href={`/stock/production-actual?from_plan_id=${encodeURIComponent(plan.plan_id)}`}
             className={cn(
               "btn btn-xs gap-1",
               isToday ? "btn-primary" : "btn-ghost text-accent",
@@ -300,7 +300,7 @@ export function ProductionJobCard({
             </span>
           </div>
           <Link
-            href={`/ops/stock/production-actual?submission_id=${completedActual.submission_id}`}
+            href={`/stock/production-actual?submission_id=${completedActual.submission_id}`}
             className="text-[10px] text-accent hover:underline shrink-0"
           >
             View report →
