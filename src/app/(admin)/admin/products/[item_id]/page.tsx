@@ -51,6 +51,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Popover from "@radix-ui/react-popover";
 import { AlertTriangle, Plus } from "lucide-react";
 import { fmtSupplyMethod } from "@/lib/display";
+import { fmtNumStr } from "@/lib/utils/format-quantity";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
 import { InlineEditCell } from "@/components/tables/InlineEditCell";
@@ -1405,7 +1406,7 @@ function AdminProduct360PageInner({ params }: PageProps): JSX.Element {
                         </div>
                       </td>
                       <td className="px-3 py-2 text-right font-mono text-xs tabular-nums text-fg-muted">
-                        {l.final_component_qty}
+                        {fmtNumStr(l.final_component_qty)}
                       </td>
                       <td className="px-3 py-2 text-xs text-fg-muted">
                         {l.component_uom ?? "—"}

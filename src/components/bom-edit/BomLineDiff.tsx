@@ -5,6 +5,7 @@
 
 import { useState } from "react";
 import type { BomLineRow as BomLineDataRow } from "@/components/admin/recipe-health/useTrackData";
+import { fmtNumStr } from "@/lib/utils/format-quantity";
 
 interface ChangedLine {
   component_id: string;
@@ -88,7 +89,7 @@ export function BomLineDiff({
               <span>
                 {l.final_component_name || l.final_component_id} ·{" "}
                 <span className="font-mono tabular-nums">
-                  {l.final_component_qty}
+                  {fmtNumStr(l.final_component_qty)}
                 </span>
               </span>
             </div>
@@ -107,7 +108,7 @@ export function BomLineDiff({
               <span>
                 {l.final_component_name || l.final_component_id} ·{" "}
                 <span className="font-mono tabular-nums">
-                  {l.final_component_qty}
+                  {fmtNumStr(l.final_component_qty)}
                 </span>
               </span>
             </div>
@@ -126,7 +127,7 @@ export function BomLineDiff({
               <span>
                 {c.component_id} ·{" "}
                 <span className="font-mono tabular-nums">
-                  {c.oldQty} → {c.newQty}
+                  {fmtNumStr(c.oldQty)} → {fmtNumStr(c.newQty)}
                 </span>
               </span>
             </div>

@@ -57,6 +57,7 @@ import { QuickCreateSupplierItem } from "@/components/admin/quick-create/QuickCr
 import { AdminMutationError } from "@/lib/admin/mutations";
 import { useSession } from "@/lib/auth/session-provider";
 import { fmtSupplyMethod } from "@/lib/display";
+import { fmtNumStr } from "@/lib/utils/format-quantity";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -1081,7 +1082,7 @@ function Step7Review({
                       {l.final_component_id}
                     </span>
                     <span className="text-xs text-fg-muted">
-                      qty {l.final_component_qty}
+                      qty {fmtNumStr(l.final_component_qty)}
                     </span>
                   </li>
                 ))}

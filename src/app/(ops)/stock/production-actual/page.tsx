@@ -55,6 +55,7 @@ import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { useSession } from "@/lib/auth/session-provider";
 import { cn } from "@/lib/cn";
+import { fmtNumStr } from "@/lib/utils/format-quantity";
 
 // ---------------------------------------------------------------------------
 // Production Actual contract — inlined.
@@ -422,8 +423,8 @@ function stringDiv(num: string, denom: string, prodQty: number): string {
   const d = Number(denom);
   if (!Number.isFinite(n) || !Number.isFinite(d) || d === 0) return "?";
   const r = (n * prodQty) / d;
-  // 4dp is plenty for a preview UI; server precision is qty_8dp.
-  return r.toFixed(4);
+  const s = r.toFixed(4);
+  return s.includes('.') ? s.replace(/\.?0+$/, '') : s;
 }
 
 // ---------------------------------------------------------------------------
@@ -631,7 +632,7 @@ export default function ProductionActualPage() {
   // typed values on subsequent re-renders.
   const searchParams = useSearchParams();
   const initialItemId = searchParams?.get("item_id") ?? "";
-  const initialSuggestedQty = searchParams?.get("suggested_qty") ?? "";
+  const initialSuggestedQty = fmtNumStr(searchParams?.get("suggested_qty") ?? "");
   const fromRecId = searchParams?.get("from_rec") ?? null;
   const fromRunId = searchParams?.get("from_run") ?? null;
   const fromPlanIdParam = searchParams?.get("from_plan_id") ?? null;
@@ -1289,7 +1290,7 @@ export default function ProductionActualPage() {
                     Target
                   </div>
                   <div className="mt-0.5 text-base font-mono font-bold tabular-nums">
-                    {linkedPlan.planned_qty}{" "}
+                    {fmtNumStr(linkedPlan.planned_qty)}{" "}
                     <span className="text-sm font-normal">{linkedPlan.uom}</span>
                   </div>
                 </div>
@@ -1306,7 +1307,7 @@ export default function ProductionActualPage() {
                 <span className="opacity-80">
                   Progress: target{" "}
                   <span className="font-mono tabular-nums font-semibold">
-                    {linkedPlan.planned_qty} {linkedPlan.uom}
+                    {fmtNumStr(linkedPlan.planned_qty)} {linkedPlan.uom}
                   </span>
                 </span>
                 <Link
@@ -1443,7 +1444,7 @@ export default function ProductionActualPage() {
                 <div>
                   <div className="text-xs uppercase opacity-70">Output</div>
                   <div className="mt-0.5 font-mono text-3xl font-bold tabular-nums">
-                    {done.committed.output_qty}
+                    {fmtNumStr(done.committed.output_qty)}
                     <span className="ml-1 text-base font-normal">
                       {done.committed.output_uom}
                     </span>
@@ -1453,7 +1454,7 @@ export default function ProductionActualPage() {
                   <div>
                     <div className="text-xs uppercase opacity-70">Scrap</div>
                     <div className="mt-0.5 font-mono text-lg tabular-nums">
-                      {done.committed.scrap_qty}
+                      {fmtNumStr(done.committed.scrap_qty)}
                       <span className="ml-1 text-sm font-normal">
                         {done.committed.output_uom}
                       </span>
@@ -1489,7 +1490,7 @@ export default function ProductionActualPage() {
                             {c.component_id}
                           </td>
                           <td className="px-3 py-1.5 text-right font-mono tabular-nums">
-                            {c.consumption_qty}
+                            {fmtNumStr(c.consumption_qty)}
                           </td>
                           <td className="px-3 py-1.5 opacity-70">
                             {c.component_uom ?? "—"}
@@ -1557,13 +1558,13 @@ export default function ProductionActualPage() {
                         <span>
                           Plan:{" "}
                           <span className="font-mono tabular-nums">
-                            {linkedPlan.planned_qty} {linkedPlan.uom}
+                            {fmtNumStr(linkedPlan.planned_qty)} {linkedPlan.uom}
                           </span>
                         </span>
                         <span>
                           Output:{" "}
                           <span className="font-mono tabular-nums">
-                            {done.committed.output_qty}{" "}
+                            {fmtNumStr(done.committed.output_qty)}{" "}
                             {done.committed.output_uom}
                           </span>
                         </span>
@@ -1998,7 +1999,7 @@ export default function ProductionActualPage() {
                       <div className="text-fg-subtle">BOM batch size</div>
                       <div className="mt-0.5">
                         <span className="inline-block rounded bg-accent/10 px-2 py-0.5 font-mono text-xs font-semibold text-accent">
-                          {snapshot.bom_final_output_qty}{" "}
+                          {fmtNumStr(snapshot.bom_final_output_qty)}{" "}
                           {snapshot.bom_final_output_uom} per batch
                         </span>
                       </div>
@@ -2150,7 +2151,7 @@ export default function ProductionActualPage() {
                   <div className="sm:col-span-2 rounded bg-bg-subtle/60 border border-border/50 px-3 py-2 text-sm">
                     <span className="text-fg-muted">Total processed: </span>
                     <span className="font-mono font-semibold tabular-nums text-fg">
-                      {outputQty || "0"} + {scrapQty || "0"} ={" "}
+                      {fmtNumStr(outputQty || "0")} + {fmtNumStr(scrapQty || "0")} ={" "}
                       {totalProcessed.toFixed(
                         totalProcessed % 1 === 0 ? 0 : 2,
                       )}
@@ -2225,7 +2226,7 @@ export default function ProductionActualPage() {
                     <div className="mb-3 text-sm text-fg-muted">
                       מוצר זה מורכב מאריזה ({snapshot.bom_version_label}) ובסיס
                       נוזל ({snapshot.base_bom_version_label}). כל יחידה צורכת{" "}
-                      {snapshot.base_qty_per_pack_unit}{" "}
+                      {fmtNumStr(snapshot.base_qty_per_pack_unit)}{" "}
                       {snapshot.base_bom_final_output_uom} בסיס.
                     </div>
                   ) : null}
@@ -2437,10 +2438,10 @@ export default function ProductionActualPage() {
                         <div className="font-medium text-fg">{r.item_name}</div>
                       </td>
                       <td className="px-3 py-2 text-right font-mono tabular-nums text-fg">
-                        {r.output_qty} {r.output_uom}
+                        {fmtNumStr(r.output_qty)} {r.output_uom}
                       </td>
                       <td className="px-3 py-2 text-right font-mono tabular-nums text-fg-muted">
-                        {r.scrap_qty} {r.output_uom}
+                        {fmtNumStr(r.scrap_qty)} {r.output_uom}
                       </td>
                       <td className="px-3 py-2 font-mono text-fg-muted">
                         {r.bom_version_label}

@@ -2,6 +2,7 @@
 
 import Link from "next/link";
 import { useQuery, useQueries } from "@tanstack/react-query";
+import { fmtNumStr } from "@/lib/utils/format-quantity";
 import {
   DetailTabLoading,
   DetailTabError,
@@ -179,7 +180,7 @@ export function UsedInRecipes(props: UsedInRecipesProps): JSX.Element {
           </div>
           <div className="shrink-0 text-right">
             <span className="font-mono text-sm text-fg-strong">
-              {line.final_component_qty}
+              {fmtNumStr(line.final_component_qty)}
             </span>
             {line.component_uom ? (
               <span className="ml-1 text-xs text-fg-muted">

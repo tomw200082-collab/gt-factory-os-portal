@@ -52,6 +52,7 @@ import { EmptyState } from "@/components/feedback/states";
 import { useSession } from "@/lib/auth/session-provider";
 import { authorizeCapability } from "@/lib/auth/authorize";
 import { cn } from "@/lib/cn";
+import { fmtNumStr } from "@/lib/utils/format-quantity";
 import { QUICK_ACTIONS } from "@/features/dashboard/quick-actions";
 
 // ---------------------------------------------------------------------------
@@ -1174,7 +1175,7 @@ function SlippedPlansBlock({ now }: { now: Date }) {
                     {row.item_name ?? row.item_id}
                   </div>
                   <div className="mt-0.5 text-xs leading-relaxed text-fg-muted">
-                    Planned: <span className="font-mono">{row.planned_qty}</span> {row.uom}
+                    Planned: <span className="font-mono">{fmtNumStr(row.planned_qty)}</span> {row.uom}
                   </div>
                 </div>
                 <Link

@@ -9,6 +9,7 @@
 
 import { use, useMemo, useState } from "react";
 import { fmtSupplyMethod } from "@/lib/display";
+import { fmtNumStr } from "@/lib/utils/format-quantity";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -867,7 +868,7 @@ function LineRow({ line }: { line: BomLineRow }): JSX.Element {
         </div>
       </td>
       <td className="px-3 py-2 text-right font-mono text-xs tabular-nums text-fg">
-        {line.final_component_qty}
+        {fmtNumStr(line.final_component_qty)}
       </td>
       {/* iter 10: UOM displayed clearly */}
       <td className="px-3 py-2 text-xs text-fg-muted">
@@ -980,7 +981,7 @@ function CompareDiff({
               rows={added.map((l) => ({
                 component_id: l.final_component_id,
                 component_name: l.final_component_name,
-                detail: `per batch: ${l.final_component_qty} ${l.component_uom ?? ""}`.trim(),
+                detail: `per batch: ${fmtNumStr(l.final_component_qty)} ${l.component_uom ?? ""}`.trim(),
               }))}
             />
           ) : null}
@@ -991,7 +992,7 @@ function CompareDiff({
               rows={removed.map((l) => ({
                 component_id: l.final_component_id,
                 component_name: l.final_component_name,
-                detail: `was: ${l.final_component_qty} ${l.component_uom ?? ""} per batch`.trim(),
+                detail: `was: ${fmtNumStr(l.final_component_qty)} ${l.component_uom ?? ""} per batch`.trim(),
               }))}
             />
           ) : null}
@@ -1002,7 +1003,7 @@ function CompareDiff({
               rows={changed.map(({ thisLine, targetLine }) => ({
                 component_id: thisLine.final_component_id,
                 component_name: thisLine.final_component_name,
-                detail: `${targetLine.final_component_qty} → ${thisLine.final_component_qty} ${thisLine.component_uom ?? ""}`.trim(),
+                detail: `${fmtNumStr(targetLine.final_component_qty)} → ${fmtNumStr(thisLine.final_component_qty)} ${thisLine.component_uom ?? ""}`.trim(),
               }))}
             />
           ) : null}
