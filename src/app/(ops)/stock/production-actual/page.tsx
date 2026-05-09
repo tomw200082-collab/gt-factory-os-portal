@@ -648,7 +648,7 @@ export default function ProductionActualPage() {
   const planQueryWindow = useMemo(() => {
     const today = new Date();
     const back = new Date(today);
-    back.setDate(today.getDate() - 7);
+    back.setDate(today.getDate() - 30);
     const fwd = new Date(today);
     fwd.setDate(today.getDate() + 90);
     const ymd = (d: Date) =>
@@ -798,8 +798,26 @@ export default function ProductionActualPage() {
     return () => document.removeEventListener("keydown", handleKeyDown);
   }, [handleKeyDown]);
 
-  async function handleOpen(e: React.FormEvent): Promise<void> {
-    e.preventDefault();
+  // Auto-advance to Step 2 when the form was opened from a plan card and
+  // the item is already known. Fires once: when from_plan_id is in the URL,
+  // the selected item is confirmed producible, and the form is still on Step 1.
+  const autoOpenFiredRef = useRef(false);
+  useEffect(() => {
+    if (autoOpenFiredRef.current) return;
+    if (!fromPlanIdParam) return;
+    if (!selectedItemId) return;
+    if (phase !== "pick") return;
+    if (itemsQuery.isLoading || itemsQuery.isError) return;
+    if (!producibleItems.some((r) => r.item_id === selectedItemId)) return;
+    autoOpenFiredRef.current = true;
+    void handleOpen();
+    // handleOpen reads selectedItemId, isAdmin, and stable setters from
+    // closure — safe to omit from deps since this effect fires only once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromPlanIdParam, selectedItemId, phase, itemsQuery.isLoading, itemsQuery.isError, producibleItems]);
+
+  async function handleOpen(e?: React.FormEvent): Promise<void> {
+    e?.preventDefault();
     setDone(null);
     if (!selectedItemId) {
       setDone({ kind: "error", message: "Choose an item to produce." });

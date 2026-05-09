@@ -246,7 +246,7 @@ export function ProductionJobCard({
         <div className="flex items-center justify-between gap-1.5 px-3 pb-2.5 border-t border-border/20 pt-2">
           {/* Report button — primary for today */}
           <Link
-            href={`/stock/production-actual?from_plan_id=${encodeURIComponent(plan.plan_id)}`}
+            href={`/stock/production-actual?from_plan_id=${encodeURIComponent(plan.plan_id)}${plan.item_id ? `&item_id=${encodeURIComponent(plan.item_id)}` : ""}&suggested_qty=${encodeURIComponent(plan.planned_qty)}`}
             className={cn(
               "btn btn-xs gap-1",
               isToday ? "btn-primary" : "btn-ghost text-accent",
