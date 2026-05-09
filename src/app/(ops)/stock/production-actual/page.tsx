@@ -1180,10 +1180,17 @@ export default function ProductionActualPage() {
   //
   // Two-head note (Tranche 4): the per-row `source` ('pack' | 'base') is
   // carried through verbatim so the rendering layer can group lines under
-  // the two operator-facing sub-headings (רכיבי אריזה / רכיבי נוזל). The
-  // client-side scaling math is the same for both sources because the
-  // backend already explodes BASE-line quantities to "per pack unit" on the
-  // OPEN response — every line scales linearly with (output + scrap).
+  // the two operator-facing sub-headings (רכיבי אריזה / רכיבי נוזל).
+  //
+  // Pack lines scale linearly with productionQty / bom_final_output_qty.
+  //
+  // Base lines must use the BASE BOM batch size (base_bom_final_output_qty)
+  // as the denominator, and the effective production quantity must be
+  // expressed in base-liquid units via base_qty_per_pack_unit:
+  //   consumption = (final_component_qty / base_bom_final_output_qty)
+  //                 × (productionQty × base_qty_per_pack_unit)
+  // Example: 45 KG Sencha Tea per 1000 L base batch; each bottle uses 1 L;
+  //   440 bottles → (45/1000) × (440×1) = 19.8 KG, not 19800 KG.
   const previewRows = useMemo(() => {
     if (!snapshot)
       return [] as Array<{
@@ -1195,17 +1202,35 @@ export default function ProductionActualPage() {
       }>;
     const productionQty = Number(outputQty || "0") + Number(scrapQty || "0");
     if (!Number.isFinite(productionQty) || productionQty <= 0) return [];
-    return snapshot.bom_lines.map((bl) => ({
-      component_id: bl.component_id,
-      component_name: bl.component_name,
-      consumption_preview: stringDiv(
-        bl.final_component_qty,
-        snapshot.bom_final_output_qty,
-        productionQty,
-      ),
-      component_uom: bl.component_uom,
-      source: bl.source,
-    }));
+    return snapshot.bom_lines.map((bl) => {
+      let consumption_preview: string;
+      if (
+        bl.source === "base" &&
+        snapshot.base_bom_final_output_qty &&
+        snapshot.base_qty_per_pack_unit
+      ) {
+        const baseProdQty =
+          productionQty * Number(snapshot.base_qty_per_pack_unit);
+        consumption_preview = stringDiv(
+          bl.final_component_qty,
+          snapshot.base_bom_final_output_qty,
+          baseProdQty,
+        );
+      } else {
+        consumption_preview = stringDiv(
+          bl.final_component_qty,
+          snapshot.bom_final_output_qty,
+          productionQty,
+        );
+      }
+      return {
+        component_id: bl.component_id,
+        component_name: bl.component_name,
+        consumption_preview,
+        component_uom: bl.component_uom,
+        source: bl.source,
+      };
+    });
   }, [snapshot, outputQty, scrapQty]);
 
   // Split the preview rows into pack vs base groups for the two-head
