@@ -52,6 +52,22 @@ function ShortageRow({ label, value, unit, bold, danger }: ShortageRowProps) {
   );
 }
 
+interface SubRowProps {
+  label: string;
+  value: string;
+}
+
+function SubRow({ label, value }: SubRowProps) {
+  return (
+    <div className="flex items-baseline justify-between gap-4 py-1 pl-4">
+      <dt className="text-xs text-fg-faint">{label}</dt>
+      <dd className="font-mono text-xs tabular-nums text-fg-muted">
+        {fmtQty(value, null)}
+      </dd>
+    </div>
+  );
+}
+
 interface ShortageContextProps {
   rec: RecommendationDetailResponse;
 }
@@ -59,6 +75,9 @@ interface ShortageContextProps {
 export function ShortageContext({ rec }: ShortageContextProps) {
   const shortage = parseQty(rec.net_shortage_qty);
   const hasShortage = shortage > 0;
+  const showBreakdown =
+    parseQty(rec.demand_breakdown.forecast_qty) > 0 ||
+    parseQty(rec.demand_breakdown.confirmed_qty) > 0;
 
   return (
     <SectionCard
@@ -78,6 +97,12 @@ export function ShortageContext({ rec }: ShortageContextProps) {
           value={rec.demand_qty}
           unit={null}
         />
+        {showBreakdown && (
+          <>
+            <SubRow label="↳ Forecast" value={rec.demand_breakdown.forecast_qty} />
+            <SubRow label="↳ Confirmed orders" value={rec.demand_breakdown.confirmed_qty} />
+          </>
+        )}
         <ShortageRow
           label="On hand"
           value={rec.on_hand_qty}
