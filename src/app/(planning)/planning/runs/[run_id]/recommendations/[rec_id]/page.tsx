@@ -7,12 +7,14 @@
 //
 // Layout:
 //   1. RecDetailHeader — item name, type + status badges, supply method
-//   2. ShortageContext — demand / on-hand / open POs / net shortage
+//   2. ShortageContext — demand / on-hand / open POs / net shortage (+ demand breakdown sub-rows)
 //   3. OrderActionCard — recommended qty, MOQ, lead time, action button
 //   4. OpenPOsCard — what is already on the way
 //   5. ComponentBreakdown — component table (MANUFACTURED/REPACK only)
-//   6. ExceptionsCard — scoped exceptions (hidden when empty)
-//   7. SourceFooter — run_id, run_created_at, site_id, run_status
+//   6. PolicyAppliedCard — planning mode badge + key dates (v1.2)
+//   7. StockCurveCard — weekly projected on-hand curve (hidden when empty)
+//   8. ExceptionsCard — scoped exceptions (hidden when empty)
+//   9. SourceFooter — run_id, run_created_at, site_id, run_status
 //
 // State: useRecDetail(rec_id) → TanStack Query, staleTime 60s
 // Loading: skeleton per section
@@ -40,6 +42,8 @@ import { ShortageContext, ShortageContextSkeleton } from "./_components/Shortage
 import { ComponentBreakdown, ComponentBreakdownSkeleton } from "./_components/ComponentBreakdown";
 import { OpenPOsCard, OpenPOsCardSkeleton } from "./_components/OpenPOsCard";
 import { ExceptionsCard } from "./_components/ExceptionsCard";
+import { PolicyAppliedCard, PolicyAppliedCardSkeleton } from "./_components/PolicyAppliedCard";
+import { StockCurveCard, StockCurveCardSkeleton } from "./_components/StockCurveCard";
 
 function genIdempotencyKey(): string {
   try {
@@ -157,6 +161,8 @@ function SkeletonLayout({ runId }: { runId: string }) {
       </div>
       <OpenPOsCardSkeleton />
       <ComponentBreakdownSkeleton />
+      <PolicyAppliedCardSkeleton />
+      <StockCurveCardSkeleton />
       <div className="card p-5 space-y-2">
         <div className="h-3 w-32 animate-pulse rounded bg-bg-subtle" />
         <div className="h-5 w-48 animate-pulse rounded bg-bg-subtle" />
@@ -576,12 +582,18 @@ export default function RecommendationDrillDownPage() {
       {/* 5. Component breakdown */}
       <ComponentBreakdown rec={rec} />
 
-      {/* 6. Scoped exceptions (hidden when empty) */}
+      {/* 6. Planning policy */}
+      <PolicyAppliedCard rec={rec} />
+
+      {/* 7. Stock coverage curve (hidden when empty) */}
+      <StockCurveCard rec={rec} />
+
+      {/* 8. Scoped exceptions (hidden when empty) */}
       {rec.scoped_exceptions.length > 0 ? (
         <ExceptionsCard exceptions={rec.scoped_exceptions} />
       ) : null}
 
-      {/* 7. Source / freshness footer */}
+      {/* 9. Source / freshness footer */}
       <SectionCard
         eyebrow="Source"
         title="Planning run"
