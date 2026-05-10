@@ -160,8 +160,8 @@ export default function AdminMastersBomsListPage(): JSX.Element {
         const item = itemsById.get(h.parent_ref_id);
         return (
           !q ||
-          h.bom_head_id.toLowerCase().includes(q) ||
-          h.parent_ref_id.toLowerCase().includes(q) ||
+          (h.bom_head_id ?? "").toLowerCase().includes(q) ||
+          (h.parent_ref_id ?? "").toLowerCase().includes(q) ||
           (item?.item_name ?? "").toLowerCase().includes(q) ||
           (h.display_family ?? "").toLowerCase().includes(q) ||
           (h.parent_name ?? "").toLowerCase().includes(q)
@@ -174,12 +174,14 @@ export default function AdminMastersBomsListPage(): JSX.Element {
         const aName = (
           itemsById.get(a.parent_ref_id)?.item_name ??
           a.parent_name ??
-          a.bom_head_id
+          a.bom_head_id ??
+          ""
         ).toLowerCase();
         const bName = (
           itemsById.get(b.parent_ref_id)?.item_name ??
           b.parent_name ??
-          b.bom_head_id
+          b.bom_head_id ??
+          ""
         ).toLowerCase();
         return aName.localeCompare(bName);
       });

@@ -16,7 +16,8 @@
 // ---------------------------------------------------------------------------
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
@@ -292,7 +293,20 @@ export default function PhysicalCountPage() {
   // ---------------------------------------------------------------------------
   const [searchQuery, setSearchQuery] = useState<string>("");
   const searchInputRef = useRef<HTMLInputElement>(null);
+  // Anchor for the portaled dropdown — wraps the input row so we can measure
+  // its viewport rect and position the panel directly below it. The wrapper
+  // is a stable target across phase transitions (no remount on input refocus).
+  const comboAnchorRef = useRef<HTMLDivElement>(null);
   const [comboOpen, setComboOpen] = useState(false);
+  // Viewport-relative coordinates for the portaled dropdown. Recomputed on
+  // open / scroll (capture phase) / resize so the panel tracks the input as
+  // the page shifts, even when an inner scroll container scrolls (mobile
+  // keyboard, sticky-element layout shifts, etc.).
+  const [comboRect, setComboRect] = useState<{
+    top: number;
+    left: number;
+    width: number;
+  } | null>(null);
 
   const filteredCountable = useMemo<CountableRow[]>(() => {
     const q = searchQuery.trim().toLowerCase();
@@ -337,6 +351,35 @@ export default function PhysicalCountPage() {
       searchInputRef.current?.focus();
     }
   }, [phase, loading, loadErr]);
+
+  // Position-tracking for the portaled dropdown.
+  // We portal the dropdown to <body> so it can never be clipped by an
+  // ancestor `overflow-hidden` / `transform` / `filter` / `contain` rule
+  // (the AppShellChrome wrapper applies `overflow-x-hidden` on mobile,
+  // which was the root cause of the clipped dropdown on Step 1).
+  // - position: fixed → coordinates are viewport-relative; do NOT add scroll
+  //   offsets.
+  // - useLayoutEffect for the initial measurement so the panel paints in
+  //   the right spot on the same frame it opens (no flash at 0,0).
+  // - Listen for scroll on the *capture* phase so inner scroll containers
+  //   (e.g. the page main, sticky shells, iOS bounce) also fire updates.
+  // - Listen for resize for keyboard show/hide on mobile and orientation.
+  useLayoutEffect(() => {
+    if (!comboOpen) return;
+    const measure = () => {
+      const el = comboAnchorRef.current;
+      if (!el) return;
+      const r = el.getBoundingClientRect();
+      setComboRect({ top: r.bottom, left: r.left, width: r.width });
+    };
+    measure();
+    window.addEventListener("scroll", measure, true);
+    window.addEventListener("resize", measure);
+    return () => {
+      window.removeEventListener("scroll", measure, true);
+      window.removeEventListener("resize", measure);
+    };
+  }, [comboOpen]);
 
   // Derived: selected row label for the chip display
   const selectedRow = selKey ? byKey.get(selKey) : undefined;
@@ -758,7 +801,11 @@ export default function PhysicalCountPage() {
               ) : (
                 /* Combobox input */
                 <div className="relative">
-                  <div className="flex min-w-0 items-center gap-2" data-testid="physical-count-combobox">
+                  <div
+                    ref={comboAnchorRef}
+                    className="flex min-w-0 items-center gap-2"
+                    data-testid="physical-count-combobox"
+                  >
                     <input
                       ref={searchInputRef}
                       type="search"
@@ -803,81 +850,98 @@ export default function PhysicalCountPage() {
                     </p>
                   ) : null}
 
-                  {/* Dropdown */}
-                  {comboOpen && (
-                    <div className="absolute z-50 mt-1 max-h-72 w-full overflow-auto rounded-lg border border-border bg-bg shadow-lg">
-                      {filteredCountable.length === 0 ? (
-                        <div className="px-4 py-3 text-sm text-fg-muted">
-                          {searchQuery.trim() ? "No items match your search." : "No items available."}
-                        </div>
-                      ) : (
-                        <>
-                          {fgItems.length > 0 && (
-                            <div>
-                              <div className="sticky top-0 bg-bg-raised px-3 py-1.5 text-3xs font-semibold uppercase tracking-sops text-fg-muted border-b border-border/50">
-                                Finished Goods
-                              </div>
-                              {fgItems.map((r) => (
-                                <button
-                                  key={`${r.kind}:${r.id}`}
-                                  type="button"
-                                  className={cn(
-                                    "flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm hover:bg-bg-subtle transition-all duration-150",
-                                    selKey === `${r.kind}:${r.id}` && "bg-accent/5 text-accent",
-                                  )}
-                                  onClick={() => {
-                                    setSelKey(`${r.kind}:${r.id}`);
-                                    setItemTypeOverride("");
-                                    setComboOpen(false);
-                                    setSearchQuery("");
-                                  }}
-                                >
-                                  <span className="chip shrink-0 text-3xs bg-info-softer text-info-fg">FG</span>
-                                  <span className="min-w-0 flex-1 truncate">{r.label}</span>
-                                  {selKey === `${r.kind}:${r.id}` && (
-                                    <svg className="h-4 w-4 shrink-0 text-accent" viewBox="0 0 16 16" fill="none">
-                                      <path d="M3 8l3.5 3.5L13 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                                    </svg>
-                                  )}
-                                </button>
-                              ))}
+                  {/* Dropdown — portaled to <body> with position: fixed so no
+                      ancestor `overflow:hidden` / `transform` / `filter` /
+                      `contain` rule can clip it. Coordinates are computed
+                      from the input wrapper's getBoundingClientRect() and
+                      kept in sync via the layout effect above. */}
+                  {comboOpen && comboRect && typeof document !== "undefined"
+                    ? createPortal(
+                        <div
+                          className="z-50 max-h-72 overflow-auto rounded-lg border border-border bg-bg shadow-lg"
+                          style={{
+                            position: "fixed",
+                            top: comboRect.top + 4,
+                            left: comboRect.left,
+                            width: comboRect.width,
+                          }}
+                          role="listbox"
+                          aria-label="Items and components"
+                        >
+                          {filteredCountable.length === 0 ? (
+                            <div className="px-4 py-3 text-sm text-fg-muted">
+                              {searchQuery.trim() ? "No items match your search." : "No items available."}
                             </div>
+                          ) : (
+                            <>
+                              {fgItems.length > 0 && (
+                                <div>
+                                  <div className="sticky top-0 bg-bg-raised px-3 py-1.5 text-3xs font-semibold uppercase tracking-sops text-fg-muted border-b border-border/50">
+                                    Finished Goods
+                                  </div>
+                                  {fgItems.map((r) => (
+                                    <button
+                                      key={`${r.kind}:${r.id}`}
+                                      type="button"
+                                      className={cn(
+                                        "flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm hover:bg-bg-subtle transition-all duration-150",
+                                        selKey === `${r.kind}:${r.id}` && "bg-accent/5 text-accent",
+                                      )}
+                                      onClick={() => {
+                                        setSelKey(`${r.kind}:${r.id}`);
+                                        setItemTypeOverride("");
+                                        setComboOpen(false);
+                                        setSearchQuery("");
+                                      }}
+                                    >
+                                      <span className="chip shrink-0 text-3xs bg-info-softer text-info-fg">FG</span>
+                                      <span className="min-w-0 flex-1 truncate">{r.label}</span>
+                                      {selKey === `${r.kind}:${r.id}` && (
+                                        <svg className="h-4 w-4 shrink-0 text-accent" viewBox="0 0 16 16" fill="none">
+                                          <path d="M3 8l3.5 3.5L13 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                        </svg>
+                                      )}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                              {rmItems.length > 0 && (
+                                <div>
+                                  <div className="sticky top-0 bg-bg-raised px-3 py-1.5 text-3xs font-semibold uppercase tracking-sops text-fg-muted border-b border-border/50">
+                                    Raw Materials / Components
+                                  </div>
+                                  {rmItems.map((r) => (
+                                    <button
+                                      key={`${r.kind}:${r.id}`}
+                                      type="button"
+                                      className={cn(
+                                        "flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm hover:bg-bg-subtle transition-all duration-150",
+                                        selKey === `${r.kind}:${r.id}` && "bg-accent/5 text-accent",
+                                      )}
+                                      onClick={() => {
+                                        setSelKey(`${r.kind}:${r.id}`);
+                                        setItemTypeOverride("");
+                                        setComboOpen(false);
+                                        setSearchQuery("");
+                                      }}
+                                    >
+                                      <span className="chip shrink-0 text-3xs bg-bg-raised text-fg-muted">RM</span>
+                                      <span className="min-w-0 flex-1 truncate">{r.label}</span>
+                                      {selKey === `${r.kind}:${r.id}` && (
+                                        <svg className="h-4 w-4 shrink-0 text-accent" viewBox="0 0 16 16" fill="none">
+                                          <path d="M3 8l3.5 3.5L13 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                        </svg>
+                                      )}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                            </>
                           )}
-                          {rmItems.length > 0 && (
-                            <div>
-                              <div className="sticky top-0 bg-bg-raised px-3 py-1.5 text-3xs font-semibold uppercase tracking-sops text-fg-muted border-b border-border/50">
-                                Raw Materials / Components
-                              </div>
-                              {rmItems.map((r) => (
-                                <button
-                                  key={`${r.kind}:${r.id}`}
-                                  type="button"
-                                  className={cn(
-                                    "flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm hover:bg-bg-subtle transition-all duration-150",
-                                    selKey === `${r.kind}:${r.id}` && "bg-accent/5 text-accent",
-                                  )}
-                                  onClick={() => {
-                                    setSelKey(`${r.kind}:${r.id}`);
-                                    setItemTypeOverride("");
-                                    setComboOpen(false);
-                                    setSearchQuery("");
-                                  }}
-                                >
-                                  <span className="chip shrink-0 text-3xs bg-bg-raised text-fg-muted">RM</span>
-                                  <span className="min-w-0 flex-1 truncate">{r.label}</span>
-                                  {selKey === `${r.kind}:${r.id}` && (
-                                    <svg className="h-4 w-4 shrink-0 text-accent" viewBox="0 0 16 16" fill="none">
-                                      <path d="M3 8l3.5 3.5L13 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                                    </svg>
-                                  )}
-                                </button>
-                              ))}
-                            </div>
-                          )}
-                        </>
-                      )}
-                    </div>
-                  )}
+                        </div>,
+                        document.body,
+                      )
+                    : null}
                 </div>
               )}
             </div>
