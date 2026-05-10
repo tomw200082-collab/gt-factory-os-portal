@@ -22,9 +22,9 @@ export function EmptyState({
   icon,
 }: BaseStateProps) {
   return (
-    <div className="relative flex flex-col items-center gap-4 overflow-hidden rounded border border-dashed border-border bg-bg-raised px-6 py-14 text-center">
+    <div className="relative flex flex-col items-center gap-4 rounded border border-dashed border-border bg-bg-raised px-6 py-14 text-center">
       <div
-        className="pointer-events-none absolute inset-0 bg-grid bg-grid-fade opacity-40"
+        className="pointer-events-none absolute inset-0 rounded bg-grid bg-grid-fade opacity-40"
         aria-hidden
       />
       <div className="relative flex h-12 w-12 items-center justify-center rounded border border-border/80 bg-bg shadow-raised">

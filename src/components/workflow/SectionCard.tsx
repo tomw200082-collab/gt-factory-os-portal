@@ -36,10 +36,10 @@ export function SectionCard({
 }: SectionCardProps) {
   return (
     <section
-      className={cn("card overflow-hidden", TONE_CLASSES[tone], className)}
+      className={cn("card", TONE_CLASSES[tone], className)}
     >
       {(title || actions || eyebrow) && (
-        <div className="flex items-start justify-between gap-4 border-b border-border/70 bg-gradient-to-b from-bg-raised to-bg/40 px-4 py-3 sm:px-5 sm:py-4">
+        <div className="flex items-start justify-between gap-4 rounded-t-md border-b border-border/70 bg-gradient-to-b from-bg-raised to-bg/40 px-4 py-3 sm:px-5 sm:py-4">
           <div className="min-w-0">
             {eyebrow ? (
               <div className="mb-1 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
@@ -71,7 +71,7 @@ export function SectionCard({
         {children}
       </div>
       {footer ? (
-        <div className="border-t border-border/70 bg-bg-subtle/60 px-4 py-3 text-xs text-fg-muted sm:px-5">
+        <div className="rounded-b-md border-t border-border/70 bg-bg-subtle/60 px-4 py-3 text-xs text-fg-muted sm:px-5">
           {footer}
         </div>
       ) : null}
