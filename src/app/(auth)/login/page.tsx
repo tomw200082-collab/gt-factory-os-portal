@@ -16,8 +16,8 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { Mail } from "lucide-react";
-import { createSupabaseOtpClient } from "@/lib/supabase/client";
+import { Mail, KeyRound } from "lucide-react";
+import { createSupabaseBrowserClient, createSupabaseOtpClient } from "@/lib/supabase/client";
 
 const DEV_SHIM_ON = process.env.NEXT_PUBLIC_ENABLE_DEV_SHIM_AUTH === "true";
 
@@ -138,7 +138,9 @@ function MagicLinkLogin() {
   const urlErrorDetail = params.get("detail");
   const redirectTo = params.get("redirectTo") ?? "/dashboard";
 
+  const [mode, setMode] = useState<"magic" | "password">("magic");
   const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
   const [status, setStatus] = useState<"idle" | "submitting" | "sent" | "error">(
     "idle",
   );
@@ -159,6 +161,17 @@ function MagicLinkLogin() {
   const supabase = useMemo(() => {
     try {
       return createSupabaseOtpClient();
+    } catch (err) {
+      return err instanceof Error ? err : new Error(String(err));
+    }
+  }, []);
+
+  // Separate client for password sign-in. signInWithPassword needs cookie-based
+  // session persistence so the middleware can read the session; the OTP client
+  // is configured persistSession:false and would lose the session immediately.
+  const passwordClient = useMemo(() => {
+    try {
+      return createSupabaseBrowserClient();
     } catch (err) {
       return err instanceof Error ? err : new Error(String(err));
     }
@@ -218,6 +231,45 @@ function MagicLinkLogin() {
     setCooldownRemaining(0);
   }
 
+  async function handlePasswordSubmit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (passwordClient instanceof Error) {
+      setStatus("error");
+      setError(passwordClient.message);
+      return;
+    }
+    setStatus("submitting");
+    setError(null);
+
+    const { error: signInError } = await passwordClient.auth.signInWithPassword({
+      email,
+      password,
+    });
+
+    if (signInError) {
+      setStatus("error");
+      setError(signInError.message);
+      return;
+    }
+
+    // Full reload so the server middleware picks up the new session cookies
+    // and routes correctly to the dashboard / requested redirect.
+    window.location.href = redirectTo;
+  }
+
+  function switchToPasswordMode() {
+    setMode("password");
+    setStatus("idle");
+    setError(null);
+  }
+
+  function switchToMagicMode() {
+    setMode("magic");
+    setStatus("idle");
+    setError(null);
+    setPassword("");
+  }
+
   const gmailLink = gmailDeepLink(email);
 
   // Block the form when we cannot reach Supabase at all. urlError is from a
@@ -250,9 +302,9 @@ function MagicLinkLogin() {
       <div className="card p-6">
         <div className="text-lg font-semibold">Sign in</div>
         <p className="mt-1 text-sm text-fg-muted">
-          Enter your email and we&rsquo;ll send you a magic link. Only approved
-          GT Factory OS users can sign in; unknown email addresses will not
-          receive a link.
+          {mode === "password"
+            ? "Enter your email and password. Only approved GT Factory OS users can sign in."
+            : "Enter your email and we’ll send you a magic link. Only approved GT Factory OS users can sign in; unknown email addresses will not receive a link."}
         </p>
 
         {envError && (
@@ -363,6 +415,79 @@ function MagicLinkLogin() {
               <span className="font-mono">supabase.co</span>.
             </div>
           </div>
+        ) : mode === "password" ? (
+          <form className="mt-4 space-y-3" onSubmit={handlePasswordSubmit}>
+            <label className="block text-sm">
+              <span className="text-fg">Email</span>
+              <input
+                type="email"
+                required
+                autoComplete="email"
+                inputMode="email"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                disabled={status === "submitting" || formBlocked}
+                className="mt-1 block w-full rounded border border-border px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
+                placeholder="you@example.com"
+                data-testid="login-email-input"
+              />
+            </label>
+            <label className="block text-sm">
+              <span className="text-fg">Password</span>
+              <input
+                type="password"
+                required
+                autoComplete="current-password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                disabled={status === "submitting" || formBlocked}
+                className="mt-1 block w-full rounded border border-border px-3 py-2 text-sm focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/30"
+                placeholder="••••••••"
+                data-testid="login-password-input"
+                aria-describedby={status === "error" && error ? "login-error-msg" : undefined}
+              />
+            </label>
+
+            {status === "error" && error && (
+              <div
+                id="login-error-msg"
+                role="alert"
+                aria-live="polite"
+                className="rounded border border-danger/40 bg-danger-softer p-3 text-xs text-danger-fg"
+                data-testid="login-password-error"
+              >
+                {error}
+              </div>
+            )}
+
+            <button
+              type="submit"
+              disabled={
+                status === "submitting" ||
+                formBlocked ||
+                email.trim().length === 0 ||
+                password.length === 0
+              }
+              className="btn btn-primary w-full justify-center"
+              data-testid="login-password-submit"
+            >
+              {status === "submitting"
+                ? "Signing in…"
+                : formBlocked
+                ? "Auth service unavailable"
+                : "Sign in"}
+            </button>
+
+            <button
+              type="button"
+              onClick={switchToMagicMode}
+              className="mt-1 block w-full text-center text-xs text-accent underline-offset-2 hover:underline"
+              data-testid="login-switch-to-magic"
+            >
+              <Mail className="mr-1 inline h-3 w-3" strokeWidth={2} />
+              Use a magic link instead
+            </button>
+          </form>
         ) : (
           <form className="mt-4 space-y-3" onSubmit={handleSubmit}>
             <label className="block text-sm">
@@ -405,6 +530,16 @@ function MagicLinkLogin() {
                 : formBlocked
                 ? "Auth service unavailable"
                 : "Send magic link"}
+            </button>
+
+            <button
+              type="button"
+              onClick={switchToPasswordMode}
+              className="mt-1 block w-full text-center text-xs text-accent underline-offset-2 hover:underline"
+              data-testid="login-switch-to-password"
+            >
+              <KeyRound className="mr-1 inline h-3 w-3" strokeWidth={2} />
+              Sign in with a password instead
             </button>
           </form>
         )}
