@@ -354,6 +354,46 @@
   input[type="number"] {
     -moz-appearance: textfield;
   }
+
+  /* ───────────────────────────────────────────────────────────────────────
+     Touch-device input font-size floor — kills iOS focus-zoom.
+
+     WebKit (iOS Safari, iOS Chrome, iOS Edge, every iOS browser) auto-zooms
+     on focus whenever a form control's computed font-size is below 16px.
+     Our "Operational Precision" type scale is intentionally 14px-dense on
+     desktop, which means every .input / .textarea / native <select> on the
+     portal triggers the zoom on a phone — small but persistent UX friction.
+
+     Fix: on touch devices only, floor input/textarea/select/contenteditable
+     font-size at 16px. Desktop density is preserved because hover-capable
+     pointers (mouse, trackpad) match (hover: hover) and never enter this
+     block. iPad Pro with the Magic Keyboard trackpad reports hover:hover
+     and correctly keeps desktop density; iPad in finger-only mode reports
+     hover:none and gets the 16px floor — both behaviors are correct.
+
+     The !important is load-bearing: it must beat every component-level
+     text-sm / text-xs declaration across the 70+ form files and the
+     .fc-list-search-input 12px override in this same file, without
+     editing them individually. We do not weaken this with a less-specific
+     selector — that would let a future text-xs reintroduce the zoom.
+
+     We do NOT lower viewport maximumScale to 1 — that would mask this
+     symptom on iOS but break WCAG 1.4.4 (text resize) by disabling
+     pinch-to-zoom for low-vision users. Floor the font-size; never cap
+     the user's zoom.
+     ─────────────────────────────────────────────────────────────────── */
+  @media (hover: none) and (pointer: coarse) {
+    input:not([type="checkbox"]):not([type="radio"]):not([type="submit"]):not([type="button"]):not([type="reset"]):not([type="file"]):not([type="hidden"]):not([type="range"]):not([type="color"]),
+    textarea,
+    select,
+    [contenteditable="true"],
+    [contenteditable=""],
+    [role="textbox"],
+    [role="combobox"],
+    [role="searchbox"] {
+      font-size: 16px !important;
+    }
+  }
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
