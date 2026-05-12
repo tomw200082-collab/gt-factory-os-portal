@@ -66,10 +66,25 @@ interface ItemRow {
 interface ComponentRow {
   component_id: string;
   component_name: string;
+  component_class: string | null;
   status: string;
   inventory_uom: string | null;
   purchase_uom: string | null;
   bom_uom: string | null;
+}
+
+// Mirror of db/migrations/0132_pre_launch_cleanup.sql:308-318 — PACKAGING /
+// PACKAGING_SET / PKG / PACK component_class → item_type=PKG; everything else
+// (including NULL component_class) → item_type=RM. Must stay aligned with
+// COMPONENT_CLASS_BY_ITEM_TYPE in api/src/physical-counts/handler.ts:88.
+function componentItemType(
+  componentClass: string | null,
+): PhysicalCountItemType {
+  const c = (componentClass ?? "").trim().toUpperCase();
+  if (c === "PACKAGING" || c === "PACKAGING_SET" || c === "PKG" || c === "PACK") {
+    return "PKG";
+  }
+  return "RM";
 }
 
 type ListEnvelope<T> = { rows: T[]; count: number };
@@ -265,7 +280,7 @@ export default function PhysicalCountPage() {
       })),
       ...components.map<CountableRow>((c) => ({
         kind: "component",
-        item_type: "RM",
+        item_type: componentItemType(c.component_class),
         id: c.component_id,
         label: `${c.component_name} · ${c.component_id}`,
         default_uom: toUom(c.inventory_uom ?? c.bom_uom ?? c.purchase_uom),
@@ -569,8 +584,9 @@ export default function PhysicalCountPage() {
   // Render helpers
   // ---------------------------------------------------------------------------
 
-  const fgItems = filteredCountable.filter((r) => r.kind === "item");
-  const rmItems = filteredCountable.filter((r) => r.kind === "component");
+  const fgItems = filteredCountable.filter((r) => r.item_type === "FG");
+  const rmItems = filteredCountable.filter((r) => r.item_type === "RM");
+  const pkgItems = filteredCountable.filter((r) => r.item_type === "PKG");
 
   /** Parse delta string like "+5.00" or "-3.00" for coloring */
   function parseDeltaSign(delta: string | undefined): "positive" | "negative" | "neutral" {
@@ -778,9 +794,13 @@ export default function PhysicalCountPage() {
                     </svg>
                     <span className={cn(
                       "chip shrink-0 text-3xs",
-                      selectedRow.kind === "item" ? "bg-info-softer text-info-fg" : "bg-bg-raised text-fg-muted",
+                      selectedRow.item_type === "FG"
+                        ? "bg-info-softer text-info-fg"
+                        : selectedRow.item_type === "PKG"
+                          ? "bg-warning-softer text-warning-fg"
+                          : "bg-bg-raised text-fg-muted",
                     )}>
-                      {selectedRow.kind === "item" ? "FG" : "RM"}
+                      {selectedRow.item_type}
                     </span>
                     <span className="min-w-0 truncate text-sm font-medium text-fg">
                       {selectedRow.label}
@@ -908,7 +928,7 @@ export default function PhysicalCountPage() {
                               {rmItems.length > 0 && (
                                 <div>
                                   <div className="sticky top-0 bg-bg-raised px-3 py-1.5 text-3xs font-semibold uppercase tracking-sops text-fg-muted border-b border-border/50">
-                                    Raw Materials / Components
+                                    Raw Materials
                                   </div>
                                   {rmItems.map((r) => (
                                     <button
@@ -926,6 +946,37 @@ export default function PhysicalCountPage() {
                                       }}
                                     >
                                       <span className="chip shrink-0 text-3xs bg-bg-raised text-fg-muted">RM</span>
+                                      <span className="min-w-0 flex-1 truncate">{r.label}</span>
+                                      {selKey === `${r.kind}:${r.id}` && (
+                                        <svg className="h-4 w-4 shrink-0 text-accent" viewBox="0 0 16 16" fill="none">
+                                          <path d="M3 8l3.5 3.5L13 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                                        </svg>
+                                      )}
+                                    </button>
+                                  ))}
+                                </div>
+                              )}
+                              {pkgItems.length > 0 && (
+                                <div>
+                                  <div className="sticky top-0 bg-bg-raised px-3 py-1.5 text-3xs font-semibold uppercase tracking-sops text-fg-muted border-b border-border/50">
+                                    Packaging
+                                  </div>
+                                  {pkgItems.map((r) => (
+                                    <button
+                                      key={`${r.kind}:${r.id}`}
+                                      type="button"
+                                      className={cn(
+                                        "flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm hover:bg-bg-subtle transition-all duration-150",
+                                        selKey === `${r.kind}:${r.id}` && "bg-accent/5 text-accent",
+                                      )}
+                                      onClick={() => {
+                                        setSelKey(`${r.kind}:${r.id}`);
+                                        setItemTypeOverride("");
+                                        setComboOpen(false);
+                                        setSearchQuery("");
+                                      }}
+                                    >
+                                      <span className="chip shrink-0 text-3xs bg-warning-softer text-warning-fg">PKG</span>
                                       <span className="min-w-0 flex-1 truncate">{r.label}</span>
                                       {selKey === `${r.kind}:${r.id}` && (
                                         <svg className="h-4 w-4 shrink-0 text-accent" viewBox="0 0 16 16" fill="none">
@@ -1033,7 +1084,11 @@ export default function PhysicalCountPage() {
                   <div className="flex items-center gap-2 flex-wrap">
                     <span className={cn(
                       "chip text-3xs",
-                      snapshot.item_type === "FG" ? "bg-info-softer text-info-fg" : "bg-bg-subtle text-fg-muted",
+                      snapshot.item_type === "FG"
+                        ? "bg-info-softer text-info-fg"
+                        : snapshot.item_type === "PKG"
+                          ? "bg-warning-softer text-warning-fg"
+                          : "bg-bg-subtle text-fg-muted",
                     )}>
                       {snapshot.item_type}
                     </span>
