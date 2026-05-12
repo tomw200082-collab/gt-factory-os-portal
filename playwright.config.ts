@@ -18,6 +18,7 @@ export default defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
+      testIgnore: /mobile-.*\.spec\.ts$/,
     },
     {
       // Mobile WebKit emulation — used by tests/e2e/mobile-input-zoom.spec.ts
