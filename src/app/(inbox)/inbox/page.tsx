@@ -70,6 +70,7 @@ import {
   CreditNeededFactCard,
   extractCreditNeededPayload,
 } from "@/features/inbox/credit-card";
+import { ApprovalInlineCard } from "@/features/inbox/approval-inline-card";
 import {
   acknowledgeException,
   bulkResolveExceptions,
@@ -1666,6 +1667,10 @@ function InboxRowCard({
     ? extractCreditNeededPayload(row.raw)
     : null;
 
+  const isInlineApproval =
+    isApproval &&
+    (row.type === "approval:waste" || row.type === "approval:physical_count");
+
   const labels = buttonLabelsFor(row.category);
   const isResolveDestructive = labels.resolve === "דחה";
   const friendlyCategory = categoryFriendly(row.category);
@@ -1839,6 +1844,12 @@ function InboxRowCard({
             </div>
           ) : null}
 
+          {isInlineApproval && density !== "compact" ? (
+            <div onClick={(e) => e.stopPropagation()}>
+              <ApprovalInlineCard row={row} now={now} />
+            </div>
+          ) : null}
+
           <div
             className={cn(
               "mt-3 flex flex-wrap items-center",
@@ -1846,13 +1857,31 @@ function InboxRowCard({
             )}
             onClick={(e) => e.stopPropagation()}
           >
-            {isApproval ? (
+            {isApproval && !isInlineApproval ? (
               <Link
                 href={row.deep_link}
                 className="btn btn-sm btn-primary gap-1.5"
                 data-testid="inbox-row-review"
               >
                 Review
+                <ArrowLeft className="h-3 w-3 rtl:rotate-180" strokeWidth={2.25} />
+              </Link>
+            ) : isApproval && isInlineApproval && density === "compact" ? (
+              <Link
+                href={row.deep_link}
+                className="btn btn-sm btn-primary gap-1.5"
+                data-testid="inbox-row-review"
+              >
+                Review
+                <ArrowLeft className="h-3 w-3 rtl:rotate-180" strokeWidth={2.25} />
+              </Link>
+            ) : isApproval && isInlineApproval ? (
+              <Link
+                href={row.deep_link}
+                className="btn btn-sm gap-1 text-fg-muted"
+                data-testid="inbox-row-review-full"
+              >
+                פרטים מלאים
                 <ArrowLeft className="h-3 w-3 rtl:rotate-180" strokeWidth={2.25} />
               </Link>
             ) : !isApproval && row.deep_link !== "/inbox" ? (
