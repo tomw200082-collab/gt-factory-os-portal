@@ -210,22 +210,28 @@ export const NAV_MANIFEST: NavGroup[] = [
         required_capability: "planning:read",
       },
       {
-        // Cycle 16 — gated to admin per W4 cycle 6 spec
-        // production_simulation_runtime_decision_pack.md §5 default A+B,
-        // PSDP-3 default (ii) "min_role: admin". Daily planners should
-        // not see this surface in the sidebar because the page is
-        // IDB-backed and can silently disagree with live production data
-        // (audit 2026-05-01 §16 #9 P0). Direct URL navigation still
-        // works for admins / dev preview; the in-page containment
-        // banner at /planning/production-simulation labels the surface
-        // as "Simulation preview only — this does not change inventory
-        // and is not the production planning source of truth." Full
-        // backend wiring is the queued replacement (W4 → W1 → W2).
+        // 2026-05-12 — widened from cycle-16 admin-only to planner+admin per
+        // Tom's request ("add access also for planner"). Cycle-16 had pinned
+        // this surface to admin because the page is IDB-backed and can
+        // silently disagree with live database state (audit 2026-05-01 §16 #9
+        // P0). The driver is unchanged: full backend wiring is still queued
+        // as a separate W4 contract → W1 backend → W2 portal sequence. What
+        // changes is the audience that can navigate here: planners now need
+        // routine access to the simulator, and the data-quality risk is
+        // contained at the page surface — the non-dismissible "Simulation
+        // preview only — this does not change inventory and is not the
+        // production planning source of truth" banner at
+        // src/app/(planning)/planning/production-simulation/page.tsx stays
+        // in place. We deliberately do NOT use min_role:"viewer" here even
+        // though the rest of the Planning group does, because viewers and
+        // operators have no decision authority over the output and the
+        // containment posture argues for the narrowest audience that can
+        // act on the simulation.
         href: "/planning/production-simulation",
         label: "Production Simulation",
         icon: Network,
-        min_role: "admin",
-        required_capability: "admin:execute",
+        min_role: "planner",
+        required_capability: "planning:read",
       },
       {
         href: "/planning/inventory-flow",

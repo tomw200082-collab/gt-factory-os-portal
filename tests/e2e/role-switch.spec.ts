@@ -37,6 +37,33 @@ test.describe("Fake login / role switch", () => {
     await expect(page.getByRole("link", { name: /Waste/i })).toHaveCount(0);
   });
 
+  test("planner sees the Production Simulation link in Planning", async ({ page }) => {
+    await setFakeRole(page, "planner");
+    await page.goto("/dashboard");
+    await expect(
+      page.getByRole("link", { name: /Production Simulation/i }),
+    ).toBeVisible();
+  });
+
+  test("planner can reach /planning/production-simulation directly", async ({ page }) => {
+    await setFakeRole(page, "planner");
+    await page.goto("/planning/production-simulation");
+    // Containment banner is the deterministic on-page marker: it has a stable
+    // data-testid and is non-dismissible by design (page.tsx). If RoleGate
+    // had blocked the planner we would see "Access restricted" instead.
+    await expect(
+      page.getByTestId("production-simulation-containment-banner"),
+    ).toBeVisible();
+  });
+
+  test("operator does not see the Production Simulation link", async ({ page }) => {
+    await setFakeRole(page, "operator");
+    await page.goto("/dashboard");
+    await expect(
+      page.getByRole("link", { name: /Production Simulation/i }),
+    ).toHaveCount(0);
+  });
+
   test("operator cannot reach the admin items page even by direct URL", async ({ page }) => {
     await setFakeRole(page, "operator");
     await page.goto("/admin/items");
