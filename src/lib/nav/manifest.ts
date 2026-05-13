@@ -169,13 +169,6 @@ export const NAV_MANIFEST: NavGroup[] = [
         min_role: "viewer",
         required_capability: "viewer:read",
       },
-      {
-        href: "/stock/submissions",
-        label: "My History",
-        icon: Clock,
-        min_role: "viewer",
-        required_capability: "stock:execute",
-      },
     ],
   },
   {
@@ -377,6 +370,18 @@ export const NAV_MANIFEST: NavGroup[] = [
         icon: CalendarDays,
         min_role: "admin",
         required_capability: "admin:execute",
+      },
+    ],
+  },
+  {
+    title: "Me",
+    items: [
+      {
+        href: "/me/activity",
+        label: "My activity",
+        icon: Clock,
+        min_role: "viewer",
+        required_capability: "stock:execute",
       },
     ],
   },
