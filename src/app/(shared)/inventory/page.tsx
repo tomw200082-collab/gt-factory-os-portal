@@ -74,8 +74,11 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import * as Tooltip from "@radix-ui/react-tooltip";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
+import { ReconcileBadge } from "@/components/stock/ReconcileBadge";
+import { StockTruthDrawer } from "@/components/stock/StockTruthDrawer";
 import { cn } from "@/lib/cn";
 
 // === Types ================================================================
@@ -86,6 +89,10 @@ interface StockRow {
   display_name: string | null;
   base_uom: string | null;
   calculated_on_hand: string;
+  on_hand_raw: string;
+  on_hand_display: string;
+  is_below_floor: boolean;
+  floor_gap: string;
   last_event_at: string | null;
 }
 
@@ -107,7 +114,7 @@ interface StockValueResponse {
 }
 
 type TabType = "FG" | "RM_PKG";
-type Tier = "healthy" | "low" | "critical" | "out" | "negative" | "unknown";
+type Tier = "healthy" | "low" | "critical" | "out" | "reconcile" | "unknown";
 type CostStatus = "has_cost" | "missing_cost" | "pending_rollup" | "na";
 
 interface ValueMeta {
@@ -207,10 +214,10 @@ function smartRelativeDate(iso: string | null): { label: string; aria: string; d
   return { label, aria: fullDate, daysAgo: days };
 }
 
-function deriveTier(onHandStr: string): Tier {
-  const n = Number(onHandStr);
+function deriveTier(onHandRaw: string): Tier {
+  const n = Number(onHandRaw);
   if (isNaN(n)) return "unknown";
-  if (n < 0) return "negative";
+  if (n < 0) return "reconcile";
   if (n === 0) return "out";
   if (n < CRITICAL_STOCK_THRESHOLD) return "critical";
   if (n < LOW_STOCK_THRESHOLD) return "low";
@@ -292,12 +299,12 @@ function KpiCard({
 // === Tier badge ===========================================================
 function TierBadge({ tier }: { tier: Tier }) {
   const meta: Record<Tier, { label: string; cls: string; glyph: string }> = {
-    healthy:  { label: "Healthy",  cls: "bg-success-softer text-success-fg ring-success/20", glyph: "●" },
-    low:      { label: "Low",      cls: "bg-warning-softer text-warning-fg ring-warning/30", glyph: "◐" },
-    critical: { label: "Critical", cls: "bg-warning-softer text-warning-fg ring-warning/40", glyph: "◑" },
-    out:      { label: "Out",      cls: "bg-danger-softer text-danger-fg ring-danger/30",    glyph: "◯" },
-    negative: { label: "Negative", cls: "bg-danger-softer text-danger-fg ring-danger/50",    glyph: "‼" },
-    unknown:  { label: "Unknown",  cls: "bg-bg-subtle text-fg-subtle ring-border",            glyph: "?" },
+    healthy:   { label: "Healthy",   cls: "bg-success-softer text-success-fg ring-success/20", glyph: "●" },
+    low:       { label: "Low",       cls: "bg-warning-softer text-warning-fg ring-warning/30", glyph: "◐" },
+    critical:  { label: "Critical",  cls: "bg-warning-softer text-warning-fg ring-warning/40", glyph: "◑" },
+    out:       { label: "Out",       cls: "bg-danger-softer text-danger-fg ring-danger/30",    glyph: "◯" },
+    reconcile: { label: "Reconcile", cls: "bg-warning-softer text-warning-fg ring-warning/50", glyph: "◈" },
+    unknown:   { label: "Unknown",   cls: "bg-bg-subtle text-fg-subtle ring-border",            glyph: "?" },
   };
   const m = meta[tier];
   return (
@@ -374,32 +381,42 @@ function StaleBadge({ daysAgo }: { daysAgo: number }) {
 }
 
 // === On-hand cell =========================================================
-function OnHandCell({ value, uom }: { value: string; uom: string | null }) {
-  const n = Number(value);
-  const tier = deriveTier(value);
-  const isNeg = n < 0;
-  const isZero = !isNaN(n) && n === 0;
-  const display = isNaN(n) ? value : isNeg ? `(${Math.abs(n).toFixed(2)})` : n.toFixed(2);
+function OnHandCell({
+  row,
+  onReconcileClick,
+}: {
+  row: StockRow;
+  onReconcileClick: (row: StockRow) => void;
+}) {
+  const tier = deriveTier(row.on_hand_raw);
+  const displayN = Number(row.on_hand_display);
   return (
-    <span className="inline-flex items-baseline justify-end gap-1 tabular-nums">
+    <span className="inline-flex items-baseline justify-end gap-1.5 tabular-nums">
       <span
         className={cn(
           "font-medium",
-          isNeg
-            ? "text-danger-fg"
+          tier === "reconcile"
+            ? "text-warning-fg"
             : tier === "out"
             ? "text-fg-muted"
             : tier === "critical" || tier === "low"
             ? "text-warning-fg"
-            : isZero
+            : displayN === 0
             ? "text-fg-subtle"
             : "text-fg",
         )}
       >
-        {display}
+        {isNaN(displayN) ? row.on_hand_display : displayN.toFixed(2)}
       </span>
-      {uom ? (
-        <span className="text-2xs uppercase text-fg-subtle">{uom}</span>
+      {row.base_uom ? (
+        <span className="text-2xs uppercase text-fg-subtle">{row.base_uom}</span>
+      ) : null}
+      {row.is_below_floor ? (
+        <ReconcileBadge
+          floorGap={row.floor_gap}
+          uom={row.base_uom}
+          onClick={() => onReconcileClick(row)}
+        />
       ) : null}
     </span>
   );
@@ -453,28 +470,33 @@ function SkeletonTable({ rows = 8, cols = 7 }: { rows?: number; cols?: number })
 function InventoryCardMobile({
   row,
   value,
+  onReconcileClick,
 }: {
   row: StockRow;
   value: ValueMeta | null;
+  onReconcileClick: (row: StockRow) => void;
 }) {
-  const tier = deriveTier(row.calculated_on_hand);
+  const tier = deriveTier(row.on_hand_raw);
   const cost = deriveCostStatus(row.item_type, value);
   const date = smartRelativeDate(row.last_event_at);
   const totalVal = fmtIlsAccountancy(value?.total_value ?? null);
   return (
-    <Link
-      href={`/admin/masters/items/${encodeURIComponent(row.item_id)}`}
+    <article
       className={cn(
-        "flex flex-col gap-2 rounded-lg border bg-bg px-3 py-3 transition hover:bg-bg-subtle/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
-        tier === "negative"
-          ? "border-l-4 border-l-danger/60 border-y-border/70 border-r-border/70"
+        "flex flex-col gap-2 rounded-lg border bg-bg px-3 py-3 transition hover:bg-bg-subtle/40",
+        tier === "reconcile"
+          ? "border-l-4 border-l-warning/60 border-y-border/70 border-r-border/70"
           : tier === "out"
-          ? "border-l-4 border-l-warning/40 border-y-border/70 border-r-border/70"
+          ? "border-l-4 border-l-warning/30 border-y-border/70 border-r-border/70"
           : "border-border/70",
       )}
     >
       <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0 flex-1">
+        <Link
+          href={`/admin/masters/items/${encodeURIComponent(row.item_id)}`}
+          className="min-w-0 flex-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+          title={row.display_name ?? row.item_id}
+        >
           <div className="truncate text-sm font-medium text-fg">
             {row.display_name ?? row.item_id}
           </div>
@@ -482,9 +504,9 @@ function InventoryCardMobile({
             <span className="truncate">{row.item_id}</span>
             <SupplyMethodBadge method={value?.supply_method ?? null} />
           </div>
-        </div>
+        </Link>
         <div className="text-right tabular-nums">
-          <OnHandCell value={row.calculated_on_hand} uom={row.base_uom} />
+          <OnHandCell row={row} onReconcileClick={onReconcileClick} />
         </div>
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
@@ -501,7 +523,7 @@ function InventoryCardMobile({
           {date.label}
         </span>
       </div>
-    </Link>
+    </article>
   );
 }
 
@@ -650,7 +672,12 @@ export default function InventoryPage() {
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [density, setDensity] = useState<"comfortable" | "compact">("comfortable");
+  const [drawerRow, setDrawerRow] = useState<StockRow | null>(null);
   const searchRef = useRef<HTMLInputElement>(null);
+
+  function handleReconcileClick(row: StockRow) {
+    setDrawerRow(row);
+  }
 
   // Iteration 29 — `/` keyboard shortcut to focus search.
   useEffect(() => {
@@ -741,7 +768,7 @@ export default function InventoryPage() {
         } else if (tierFilter === "low") {
           const t = deriveTier(r.calculated_on_hand);
           if (t !== "low" && t !== "critical") return false;
-        } else if (tierFilter === "negative") {
+        } else if (tierFilter === "reconcile") {
           if (Number(r.calculated_on_hand) >= 0) return false;
         }
       }
@@ -810,11 +837,10 @@ export default function InventoryPage() {
   const itemsMissing = valueData?.items_without_cost ?? 0;
   const totalItems = valueData?.row_count ?? fgCount + rmCount;
 
-  // Negative-stock count across both tabs
+  // Reconcile (below-floor) count scoped to the active tab.
   const negativeCount = useMemo(() => {
-    const all = [...(fgRows ?? []), ...(rmRows ?? [])];
-    return all.filter((r) => Number(r.calculated_on_hand) < 0).length;
-  }, [fgRows, rmRows]);
+    return allRows.filter((r) => Number(r.calculated_on_hand) < 0).length;
+  }, [allRows]);
 
   function handleSort(key: SortKey) {
     setSortKey((prev) => {
@@ -845,6 +871,7 @@ export default function InventoryPage() {
   const refreshing = isFetching || valueFetching;
 
   return (
+    <Tooltip.Provider>
     <div className="space-y-5 sm:space-y-6">
       <WorkflowHeader
         eyebrow="Stock"
@@ -932,20 +959,21 @@ export default function InventoryPage() {
         />
       </div>
 
-      {/* Negative-stock alert (Iteration 25 surfaced at page level) */}
+      {/* Below-physical-floor alert (Iteration 25 surfaced at page level) */}
       {negativeCount > 0 ? (
         <div
-          className="flex items-start gap-2 rounded-md border border-danger/40 bg-danger-softer/40 px-3 py-2 text-sm text-danger-fg"
+          className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning-softer/40 px-3 py-2 text-sm text-warning-fg"
           role="alert"
         >
-          <span aria-hidden>‼</span>
+          <span aria-hidden>⚠</span>
           <span>
             <strong className="font-semibold">{negativeCount}</strong> item
-            {negativeCount === 1 ? "" : "s"} with negative on-hand. Likely
-            indicates missing receipts, reversed shipments, or count drift.{" "}
+            {negativeCount === 1 ? "" : "s"} below physical floor. Recorded outflow
+            events exceed receipts. Each item shown clamped to zero with a Reconcile
+            badge — click the badge for the offending ledger events.{" "}
             <button
               type="button"
-              onClick={() => setTierFilter("negative")}
+              onClick={() => setTierFilter("reconcile")}
               className="underline hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
             >
               Show only these →
@@ -1074,7 +1102,7 @@ export default function InventoryPage() {
               { value: "has_stock", label: "Has stock" },
               { value: "low", label: "Low / Critical" },
               { value: "out", label: "Out of stock" },
-              { value: "negative", label: "Negative" },
+              { value: "reconcile", label: "Reconcile" },
             ].map((c) => {
               const active = tierFilter === c.value;
               return (
@@ -1297,7 +1325,7 @@ export default function InventoryPage() {
                     <tbody className="divide-y divide-border/40">
                       {rows.map((row) => {
                         const v = valueMap?.get(`${row.item_type}:${row.item_id}`) ?? null;
-                        const tier = deriveTier(row.calculated_on_hand);
+                        const tier = deriveTier(row.on_hand_raw);
                         const cost = deriveCostStatus(row.item_type, v);
                         const date = smartRelativeDate(row.last_event_at);
                         const totalVal = fmtIlsAccountancy(v?.total_value ?? null);
@@ -1307,8 +1335,8 @@ export default function InventoryPage() {
                             key={`${row.item_type}-${row.item_id}`}
                             className={cn(
                               "group transition hover:bg-bg-subtle/40",
-                              tier === "negative"
-                                ? "border-l-4 border-l-danger/50"
+                              tier === "reconcile"
+                                ? "border-l-4 border-l-warning/60"
                                 : tier === "out"
                                 ? "border-l-4 border-l-warning/30"
                                 : "",
@@ -1337,8 +1365,8 @@ export default function InventoryPage() {
                             </td>
                             <td className="py-2 pr-4 text-right">
                               <OnHandCell
-                                value={row.calculated_on_hand}
-                                uom={row.base_uom}
+                                row={row}
+                                onReconcileClick={handleReconcileClick}
                               />
                             </td>
                             <td className="py-2 pr-4">
@@ -1388,6 +1416,7 @@ export default function InventoryPage() {
                     key={`${row.item_type}-${row.item_id}`}
                     row={row}
                     value={valueMap?.get(`${row.item_type}:${row.item_id}`) ?? null}
+                    onReconcileClick={handleReconcileClick}
                   />
                 ))}
               </div>
@@ -1395,6 +1424,20 @@ export default function InventoryPage() {
           )}
         </div>
       </SectionCard>
+
+      {drawerRow ? (
+        <StockTruthDrawer
+          itemId={drawerRow.item_id}
+          itemType={drawerRow.item_type}
+          displayName={drawerRow.display_name}
+          onHandRaw={drawerRow.on_hand_raw}
+          floorGap={drawerRow.floor_gap}
+          uom={drawerRow.base_uom}
+          open={true}
+          onClose={() => setDrawerRow(null)}
+        />
+      ) : null}
     </div>
+    </Tooltip.Provider>
   );
 }
