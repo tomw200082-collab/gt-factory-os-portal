@@ -2,23 +2,47 @@
 
 import { useMemo, useState, useCallback } from "react";
 import { useInfiniteQuery } from "@tanstack/react-query";
+import { useSearchParams, useRouter } from "next/navigation";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { EmptyState } from "@/components/feedback/states";
 import { DayHeader, dayLabel } from "./_components/DayHeader";
 import { ActivityRow } from "./_components/ActivityRow";
-import type { ActivityListResponse, ActivityRow as ActivityRowT } from "./_types";
+import { FilterBar, type FilterValue } from "./_components/FilterBar";
+import type { ActivityListResponse, ActivityRow as ActivityRowT, SourceKind } from "./_types";
 
 export default function MyActivityPage() {
   const [selected, setSelected] = useState<ActivityRowT | null>(null);
 
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
+  const filter: FilterValue = useMemo(() => ({
+    sourceKinds: (searchParams.getAll("source_kind") as SourceKind[]),
+    from:        searchParams.get("from"),
+    to:          searchParams.get("to"),
+    searchTerm:  searchParams.get("q") ?? "",
+  }), [searchParams]);
+
+  const setFilter = useCallback((next: FilterValue) => {
+    const sp = new URLSearchParams();
+    for (const k of next.sourceKinds) sp.append("source_kind", k);
+    if (next.from) sp.set("from", next.from);
+    if (next.to)   sp.set("to",   next.to);
+    if (next.searchTerm) sp.set("q", next.searchTerm);
+    router.replace(`/me/activity${sp.toString() ? `?${sp.toString()}` : ""}`);
+  }, [router]);
+
   const query = useInfiniteQuery<ActivityListResponse, Error>({
-    queryKey: ["me", "activity"],
+    queryKey: ["me", "activity", filter.sourceKinds.join(","), filter.from, filter.to],
     initialPageParam: undefined as string | undefined,
     queryFn: async ({ pageParam }) => {
       const url = new URL("/api/me/activity", window.location.origin);
       url.searchParams.set("limit", "100");
       if (pageParam) url.searchParams.set("cursor", pageParam as string);
+      for (const k of filter.sourceKinds) url.searchParams.append("source_kind", k);
+      if (filter.from) url.searchParams.set("from", filter.from);
+      if (filter.to)   url.searchParams.set("to",   filter.to);
       const res = await fetch(url.toString());
       if (!res.ok) throw new Error("Could not load activity. Check your connection and try refreshing.");
       return res.json() as Promise<ActivityListResponse>;
@@ -32,7 +56,17 @@ export default function MyActivityPage() {
     [query.data],
   );
 
-  const grouped = useMemo(() => groupByDay(allRows), [allRows]);
+  const visibleRows = useMemo(() => {
+    if (!filter.searchTerm.trim()) return allRows;
+    const q = filter.searchTerm.toLowerCase();
+    return allRows.filter((r) =>
+      r.summary.headline.toLowerCase().includes(q) ||
+      (r.summary.secondary?.toLowerCase().includes(q) ?? false) ||
+      r.action_kind.toLowerCase().includes(q)
+    );
+  }, [allRows, filter.searchTerm]);
+
+  const grouped = useMemo(() => groupByDay(visibleRows), [visibleRows]);
   const onRowClick = useCallback((r: ActivityRowT) => setSelected(r), []);
 
   return (
@@ -56,6 +90,7 @@ export default function MyActivityPage() {
       ) : null}
 
       <SectionCard contentClassName="p-0">
+        <FilterBar value={filter} onChange={setFilter} />
         {query.isLoading ? (
           <ul className="divide-y divide-border/60 px-5 py-5" aria-busy="true" aria-live="polite">
             {Array.from({ length: 6 }).map((_, i) => (
@@ -65,7 +100,7 @@ export default function MyActivityPage() {
               </li>
             ))}
           </ul>
-        ) : allRows.length === 0 ? (
+        ) : visibleRows.length === 0 ? (
           <EmptyState
             title="No activity yet"
             description="When you submit a form, approve a credit, or resolve an Inbox card, it will appear here."
