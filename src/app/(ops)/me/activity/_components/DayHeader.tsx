@@ -17,12 +17,20 @@ export function dayLabel(iso: string): string {
   if (isSameDay(d, yesterday)) return "Yesterday";
   const dayDiff = daysAgo(d);
   if (dayDiff > 0 && dayDiff < 7) {
-    return d.toLocaleDateString(undefined, { weekday: "long" });
+    return d.toLocaleDateString("en-US", { weekday: "long" });
   }
-  return d.toLocaleDateString(undefined, { day: "2-digit", month: "short", year: "numeric" });
+  return d.toLocaleDateString("en-US", { day: "2-digit", month: "short", year: "numeric" });
 }
 
-export function DayHeader({ label, count }: { label: string; count: number }) {
+export function DayHeader({
+  id,
+  label,
+  count,
+}: {
+  id?: string;
+  label: string;
+  count: number;
+}) {
   return (
     <div
       className={cn(
@@ -30,11 +38,17 @@ export function DayHeader({ label, count }: { label: string; count: number }) {
         "border-b border-border/60 bg-bg-base/95 px-5 py-2 backdrop-blur"
       )}
     >
-      <span className="text-xs font-semibold uppercase tracking-wide text-fg-muted">
+      <h3
+        id={id}
+        className="text-2xs font-semibold uppercase tracking-sops text-fg-muted"
+      >
         {label}
-      </span>
-      <span className="text-xs text-fg-subtle">
-        {count} {count === 1 ? "action" : "actions"}
+      </h3>
+      <span
+        className="rounded-sm bg-bg-subtle px-1.5 py-0.5 text-2xs tabular-nums text-fg-subtle"
+        aria-label={`${count} ${count === 1 ? "action" : "actions"}`}
+      >
+        {count}
       </span>
     </div>
   );
