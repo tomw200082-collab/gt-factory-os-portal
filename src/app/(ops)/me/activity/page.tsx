@@ -9,6 +9,7 @@ import { EmptyState } from "@/components/feedback/states";
 import { DayHeader, dayLabel } from "./_components/DayHeader";
 import { ActivityRow } from "./_components/ActivityRow";
 import { FilterBar, type FilterValue } from "./_components/FilterBar";
+import { ActivityDrawer } from "./_components/ActivityDrawer";
 import type { ActivityListResponse, ActivityRow as ActivityRowT, SourceKind } from "./_types";
 
 export default function MyActivityPage() {
@@ -131,15 +132,7 @@ export default function MyActivityPage() {
         ) : null}
       </SectionCard>
 
-      {/* Drawer placeholder — replaced in Task 20 */}
-      {selected ? (
-        <div
-          role="dialog"
-          className="fixed inset-0 z-40 bg-black/30"
-          onClick={() => setSelected(null)}
-          aria-label="Activity detail (loading)"
-        />
-      ) : null}
+      {selected ? <ActivityDrawer row={selected} onClose={() => setSelected(null)} /> : null}
     </>
   );
 }
