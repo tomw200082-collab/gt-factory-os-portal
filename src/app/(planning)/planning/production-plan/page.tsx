@@ -935,6 +935,7 @@ export default function ProductionPlanPage() {
   // Modal state
   const [showManualAdd, setShowManualAdd] = useState<{ defaultDate: string } | null>(null);
   const [showAddFromRecs, setShowAddFromRecs] = useState<{ defaultDate: string } | null>(null);
+  const [showAddNote, setShowAddNote] = useState<{ defaultDate: string } | null>(null);
   const [editingPlan, setEditingPlan] = useState<ProductionPlanRow | null>(null);
   const [cancellingPlan, setCancellingPlan] = useState<ProductionPlanRow | null>(null);
   const [showMaterialsDrawer, setShowMaterialsDrawer] = useState(false);
@@ -964,16 +965,17 @@ export default function ProductionPlanPage() {
 
   const hasData = plansQuery.data !== undefined && !plansQuery.isError;
   const allPlans = hasData ? plansQuery.data!.rows : [];
-  const plannedCount = allPlans.filter((p) => p.rendered_state === "planned").length;
-  const doneCount = allPlans.filter((p) => p.rendered_state === "done").length;
-  const cancelledCount = allPlans.filter((p) => p.rendered_state === "cancelled").length;
+  const productionPlans = allPlans.filter((p) => p.plan_type === "production");
+  const plannedCount = productionPlans.filter((p) => p.rendered_state === "planned").length;
+  const doneCount = productionPlans.filter((p) => p.rendered_state === "done").length;
+  const cancelledCount = productionPlans.filter((p) => p.rendered_state === "cancelled").length;
 
-  const totalQty = allPlans
+  const totalQty = productionPlans
     .filter((p) => p.rendered_state !== "cancelled")
-    .reduce((s, p) => s + (parseFloat(p.planned_qty) || 0), 0);
+    .reduce((s, p) => s + (parseFloat(p.planned_qty ?? "0") || 0), 0);
 
   const dominantUom = (() => {
-    const uoms = allPlans
+    const uoms = productionPlans
       .filter((p) => p.rendered_state !== "cancelled")
       .map((p) => p.uom);
     const first = uoms[0];
@@ -993,7 +995,7 @@ export default function ProductionPlanPage() {
       const plans = plansByDay.get(iso) ?? [];
       const total = plans
         .filter((p) => p.rendered_state !== "cancelled")
-        .reduce((s, p) => s + (parseFloat(p.planned_qty) || 0), 0);
+        .reduce((s, p) => s + (parseFloat(p.planned_qty ?? "0") || 0), 0);
       const liveOrDone = plans.filter((p) => p.rendered_state !== "cancelled");
       const allDone =
         liveOrDone.length > 0 && liveOrDone.every((p) => p.rendered_state === "done");
@@ -1063,6 +1065,19 @@ export default function ProductionPlanPage() {
         onSuccess: () => {
           flashToast("success", "Plan added from recommendation.");
           setShowAddFromRecs(null);
+        },
+        onError: (err) => { flashToast("error", err.message); },
+      },
+    );
+  }
+
+  function handleAddNote(req: { plan_date: string; notes: string }) {
+    createMut.mutate(
+      { plan_type: "note", plan_date: req.plan_date, notes: req.notes },
+      {
+        onSuccess: () => {
+          flashToast("success", "Note added to the plan.");
+          setShowAddNote(null);
         },
         onError: (err) => { flashToast("error", err.message); },
       },
@@ -1141,6 +1156,16 @@ export default function ProductionPlanPage() {
                 >
                   <Sparkles className="h-3 w-3" strokeWidth={2.5} />
                   Add from recommendations
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm gap-1.5"
+                  onClick={() => setShowAddNote({ defaultDate: toIsoDate(new Date()) })}
+                  title="Add a note to the plan"
+                  data-testid="header-add-note"
+                >
+                  <StickyNote className="h-3 w-3" strokeWidth={2} />
+                  Add note
                 </button>
                 <button
                   type="button"
@@ -1410,6 +1435,7 @@ export default function ProductionPlanPage() {
                       dayTotal={info.total}
                       dominantUom={dominantUom}
                       onAdd={(d) => setShowManualAdd({ defaultDate: toIsoDate(d) })}
+                      onAddNote={(d) => setShowAddNote({ defaultDate: toIsoDate(d) })}
                       onEdit={setEditingPlan}
                       onCancel={setCancellingPlan}
                     />
@@ -1494,7 +1520,23 @@ export default function ProductionPlanPage() {
         />
       ) : null}
 
-      {editingPlan ? (
+      {showAddNote ? (
+        <AddNoteModal
+          defaultDate={showAddNote.defaultDate}
+          onClose={() => setShowAddNote(null)}
+          onSubmit={handleAddNote}
+          isSubmitting={createMut.isPending}
+        />
+      ) : null}
+
+      {editingPlan?.plan_type === "note" ? (
+        <EditNoteModal
+          plan={editingPlan}
+          onClose={() => setEditingPlan(null)}
+          onSubmit={handleEdit}
+          isSubmitting={patchMut.isPending}
+        />
+      ) : editingPlan ? (
         <EditModal
           plan={editingPlan}
           onClose={() => setEditingPlan(null)}
