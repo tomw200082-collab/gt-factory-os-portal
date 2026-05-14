@@ -5,12 +5,13 @@ export type RenderedState = "planned" | "done" | "cancelled";
 
 export interface ProductionPlanRow {
   plan_id: string;
+  plan_type: "production" | "note";
   plan_date: string;
-  item_id: string;
+  item_id: string | null;
   item_name: string | null;
   item_supply_method: string | null;
-  planned_qty: string;
-  uom: string;
+  planned_qty: string | null;
+  uom: string | null;
   status: "planned" | "cancelled";
   rendered_state: RenderedState;
 
@@ -54,6 +55,7 @@ export interface ListProductionPlanResponse {
 }
 
 export interface CreateProductionPlanRequest {
+  plan_type: "production";
   idempotency_key?: string;
   plan_date: string;
   item_id: string;
@@ -63,6 +65,15 @@ export interface CreateProductionPlanRequest {
   bom_version_id_pinned?: string;
   notes?: string;
 }
+
+export interface CreateNoteRequest {
+  plan_type: "note";
+  idempotency_key?: string;
+  plan_date: string;
+  notes: string;
+}
+
+export type CreatePlanOrNoteRequest = CreateProductionPlanRequest | CreateNoteRequest;
 
 export interface CreateProductionPlanResponse {
   plan_id: string;
