@@ -9,9 +9,10 @@
 //   Overdue  → bg + border-l-2 border-l-danger/60  (NOT flooded red)
 //   Future   → bg                                  (neutral)
 
-import { Plus } from "lucide-react";
+import { Plus, StickyNote } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { ProductionJobCard } from "./ProductionJobCard";
+import { ProductionNoteCard } from "./ProductionNoteCard";
 import type { ProductionPlanRow } from "../_lib/types";
 
 function formatDayTotal(total: number, uom: string): string {
@@ -53,6 +54,7 @@ export function ProductionDayLane({
   dayTotal,
   dominantUom,
   onAdd,
+  onAddNote,
   onEdit,
   onCancel,
 }: {
@@ -68,6 +70,7 @@ export function ProductionDayLane({
   dayTotal: number;
   dominantUom: string;
   onAdd: (date: Date) => void;
+  onAddNote: (date: Date) => void;
   onEdit: (p: ProductionPlanRow) => void;
   onCancel: (p: ProductionPlanRow) => void;
 }) {
@@ -140,30 +143,41 @@ export function ProductionDayLane({
         {plans.length === 0 ? (
           <div className="flex flex-col items-center justify-center gap-2 flex-1 py-6 text-center">
             {canAct ? (
-              <button
-                type="button"
-                className="flex flex-col items-center gap-2 group/add transition-opacity duration-150"
-                onClick={() => onAdd(date)}
-                data-testid="day-lane-add-empty"
-                aria-label={`Add production for ${dayName} ${dateLabel}`}
-              >
-                <div
-                  className={cn(
-                    "h-8 w-8 rounded-full flex items-center justify-center",
-                    "bg-bg-muted border border-border/30",
-                    "group-hover/add:bg-accent/10 group-hover/add:border-accent/30",
-                    "transition-colors duration-150",
-                  )}
+              <>
+                <button
+                  type="button"
+                  className="flex flex-col items-center gap-2 group/add transition-opacity duration-150"
+                  onClick={() => onAdd(date)}
+                  data-testid="day-lane-add-empty"
+                  aria-label={`Add production for ${dayName} ${dateLabel}`}
                 >
-                  <Plus
-                    className="h-3.5 w-3.5 text-fg-faint group-hover/add:text-accent transition-colors duration-150"
-                    strokeWidth={2}
-                  />
-                </div>
-                <span className="text-[10px] text-fg-faint group-hover/add:text-fg-subtle transition-colors duration-150">
-                  No production planned
-                </span>
-              </button>
+                  <div
+                    className={cn(
+                      "h-8 w-8 rounded-full flex items-center justify-center",
+                      "bg-bg-muted border border-border/30",
+                      "group-hover/add:bg-accent/10 group-hover/add:border-accent/30",
+                      "transition-colors duration-150",
+                    )}
+                  >
+                    <Plus
+                      className="h-3.5 w-3.5 text-fg-faint group-hover/add:text-accent transition-colors duration-150"
+                      strokeWidth={2}
+                    />
+                  </div>
+                  <span className="text-[10px] text-fg-faint group-hover/add:text-fg-subtle transition-colors duration-150">
+                    No production planned
+                  </span>
+                </button>
+                <button
+                  type="button"
+                  className="text-[10px] text-fg-faint hover:text-fg-subtle transition-colors duration-150 underline decoration-dotted underline-offset-2"
+                  onClick={() => onAddNote(date)}
+                  data-testid="day-lane-add-note-empty"
+                  aria-label={`Add note for ${dayName} ${dateLabel}`}
+                >
+                  or add a note
+                </button>
+              </>
             ) : (
               <div className="flex flex-col items-center gap-2">
                 <div className="h-8 w-8 rounded-full flex items-center justify-center bg-bg-muted border border-border/30">
@@ -176,30 +190,49 @@ export function ProductionDayLane({
             )}
           </div>
         ) : (
-          plans.map((p) => (
-            <ProductionJobCard
-              key={p.plan_id}
-              plan={p}
-              canAct={canAct}
-              isToday={isToday}
-              onEdit={onEdit}
-              onCancel={onCancel}
-            />
-          ))
+          plans.map((p) =>
+            p.plan_type === "note" ? (
+              <ProductionNoteCard
+                key={p.plan_id}
+                plan={p}
+                canAct={canAct}
+                onEdit={onEdit}
+                onCancel={onCancel}
+              />
+            ) : (
+              <ProductionJobCard
+                key={p.plan_id}
+                plan={p}
+                canAct={canAct}
+                isToday={isToday}
+                onEdit={onEdit}
+                onCancel={onCancel}
+              />
+            )
+          )
         )}
       </div>
 
       {/* Footer Add — only when lane already has cards */}
       {canAct && plans.length > 0 && (
-        <div className="px-2 pb-2">
+        <div className="px-2 pb-2 flex gap-1">
           <button
             type="button"
-            className="btn btn-ghost btn-xs w-full gap-1 text-fg-faint hover:text-fg"
+            className="btn btn-ghost btn-xs flex-1 gap-1 text-fg-faint hover:text-fg"
             onClick={() => onAdd(date)}
             data-testid="day-lane-add"
           >
             <Plus className="h-3 w-3" strokeWidth={2.5} />
-            Add
+            Production
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost btn-xs flex-1 gap-1 text-fg-faint hover:text-fg"
+            onClick={() => onAddNote(date)}
+            data-testid="day-lane-add-note"
+          >
+            <StickyNote className="h-3 w-3" strokeWidth={2} />
+            Note
           </button>
         </div>
       )}
