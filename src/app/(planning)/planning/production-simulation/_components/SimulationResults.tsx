@@ -220,11 +220,14 @@ async function loadSimulationData(
     component_uom: l.component_uom,
     qty_per_unit: parseFloat(l.unit_ratio),
   }));
+  // Use the BASE BOM head's own bom_head_id as the lookup key — PACK BOM lines
+  // store final_component_id = bom_head_id (e.g. "BOM-BASE-AME-REG"), not
+  // the base-mix component's parent_ref_id ("BASE-AME-REG").
   const resolved: BaseFillResolution = product.baseHead
     ? resolveBaseFillQtyPerUnit({
         item: product.item,
         packBomLines,
-        baseBomParentRefId: product.baseHead.parent_ref_id,
+        baseBomParentRefId: product.baseHead.bom_head_id,
       })
     : product.baseFill;
 

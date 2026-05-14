@@ -26,6 +26,7 @@ import {
   Calendar,
   PlayCircle,
   Boxes,
+  StickyNote,
 } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
@@ -629,6 +630,173 @@ function EditModal({
               className="btn btn-primary btn-sm"
               disabled={isSubmitting}
               data-testid="edit-submit"
+            >
+              {isSubmitting ? "Saving…" : "Save changes"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function AddNoteModal({
+  defaultDate,
+  onClose,
+  onSubmit,
+  isSubmitting,
+}: {
+  defaultDate: string;
+  onClose: () => void;
+  onSubmit: (req: { plan_date: string; notes: string }) => void;
+  isSubmitting: boolean;
+}) {
+  const [planDate, setPlanDate] = useState(defaultDate);
+  const [notes, setNotes] = useState("");
+
+  const canSubmit = planDate && notes.trim().length > 0 && !isSubmitting;
+
+  return (
+    <div
+      dir="ltr"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 px-2 sm:px-4"
+      role="dialog"
+      aria-modal="true"
+      data-testid="add-note-modal"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-2xl">
+        <h2 className="text-base font-semibold text-fg-strong">Add a note</h2>
+        <p className="mt-1 text-3xs text-fg-muted">
+          Notes appear on the plan board but don&apos;t affect inventory.
+        </p>
+
+        <form
+          className="mt-4 space-y-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!canSubmit) return;
+            onSubmit({ plan_date: planDate, notes: notes.trim() });
+          }}
+        >
+          <label className="block">
+            <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+              Day *
+            </span>
+            <input
+              type="date"
+              className="input"
+              value={planDate}
+              onChange={(e) => setPlanDate(e.target.value)}
+              required
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+              Note *
+            </span>
+            <textarea
+              rows={3}
+              className="input min-h-[4rem]"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              placeholder="e.g. Organize the warehouse, technician visit at 2pm…"
+              required
+              autoFocus
+            />
+          </label>
+
+          <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
+            <button type="button" className="btn btn-sm" onClick={onClose} disabled={isSubmitting}>
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="btn btn-primary btn-sm gap-1.5"
+              disabled={!canSubmit}
+              data-testid="add-note-submit"
+            >
+              <StickyNote className="h-3 w-3" strokeWidth={2} />
+              {isSubmitting ? "Saving…" : "Add note"}
+            </button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+function EditNoteModal({
+  plan,
+  onClose,
+  onSubmit,
+  isSubmitting,
+}: {
+  plan: ProductionPlanRow;
+  onClose: () => void;
+  onSubmit: (body: { plan_date?: string; notes?: string }) => void;
+  isSubmitting: boolean;
+}) {
+  const [planDate, setPlanDate] = useState(plan.plan_date);
+  const [notes, setNotes] = useState(plan.notes ?? "");
+
+  return (
+    <div
+      dir="ltr"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 px-2 sm:px-4"
+      role="dialog"
+      aria-modal="true"
+      data-testid="edit-note-modal"
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+    >
+      <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-2xl">
+        <h2 className="text-base font-semibold text-fg-strong">Edit note</h2>
+
+        <form
+          className="mt-4 space-y-3"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const body: { plan_date?: string; notes?: string } = {};
+            if (planDate !== plan.plan_date) body.plan_date = planDate;
+            if (notes !== (plan.notes ?? "")) body.notes = notes;
+            onSubmit(body);
+          }}
+        >
+          <label className="block">
+            <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+              Day
+            </span>
+            <input
+              type="date"
+              className="input"
+              value={planDate}
+              onChange={(e) => setPlanDate(e.target.value)}
+            />
+          </label>
+
+          <label className="block">
+            <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+              Note
+            </span>
+            <textarea
+              rows={3}
+              className="input min-h-[4rem]"
+              value={notes}
+              onChange={(e) => setNotes(e.target.value)}
+              autoFocus
+            />
+          </label>
+
+          <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
+            <button type="button" className="btn btn-sm" onClick={onClose} disabled={isSubmitting}>
+              Cancel
+            </button>
+            <button
+              type="submit"
+              className="btn btn-primary btn-sm"
+              disabled={isSubmitting}
+              data-testid="edit-note-submit"
             >
               {isSubmitting ? "Saving…" : "Save changes"}
             </button>

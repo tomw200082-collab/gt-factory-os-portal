@@ -356,7 +356,7 @@ export default function AdminComponentDetailPage({
 
   const effectiveSafetyDays = primarySupplierItem?.safety_days ?? 0;
   const safetyDaysSource =
-    (primarySupplierItem?.safety_days ?? 0) > 0 ? "Primary supplier" : "Default (0d)";
+    (primarySupplierItem?.safety_days ?? 0) > 0 ? "Primary supplier" : "Global policy (0d)";
 
   const effectiveReorderLead = effectiveLeadTime + effectiveSafetyDays;
 
@@ -846,7 +846,7 @@ export default function AdminComponentDetailPage({
                 className="underline hover:no-underline"
                 onClick={() => { window.location.href = "?tab=supplier-items"; }}
               >
-                Supplier items tab &rarr;
+                Edit in supplier items ↓
               </button>
             </p>
           </SectionCard>
