@@ -88,7 +88,7 @@ export function StockTruthDrawer({
       {/* Math summary */}
       <div className="rounded-md border border-warning/30 bg-warning-softer/40 p-3 text-sm">
         <div className="font-medium text-warning-fg">
-          Below physical floor by {floorGap} {uom ?? 'units'}
+          More outflows recorded than receipts — {floorGap} {uom ?? 'units'} gap
         </div>
         <div className="mt-2 space-y-0.5 font-mono text-xs text-fg-muted">
           <div>Calculated on-hand : {onHandRaw}</div>
@@ -134,61 +134,88 @@ export function StockTruthDrawer({
         </p>
       )}
       {data && data.rows.length > 0 && (
-        <ul className="mt-2 space-y-1.5">
-          {data.rows.map((ev) => (
-            <li
-              key={ev.movement_id}
-              className="flex items-center justify-between gap-2 rounded border border-border/50 bg-bg-subtle/60 px-2 py-1 text-2xs"
-            >
-              <div className="min-w-0 flex-1">
-                <div className="truncate font-medium text-fg">{ev.movement_type}</div>
-                <div className="truncate text-fg-muted">
-                  {new Date(ev.event_at).toLocaleString('en-GB', {
-                    day: '2-digit',
-                    month: 'short',
-                    hour: '2-digit',
-                    minute: '2-digit',
-                  })}
-                  {ev.reported_by_snapshot ? ` · ${ev.reported_by_snapshot}` : ''}
-                  {ev.po_number ? ` · PO ${ev.po_number}` : ''}
-                  {ev.lw_destination_city ? ` · → ${ev.lw_destination_city}` : ''}
+        <>
+          <ul className="mt-2 space-y-1.5">
+            {data.rows.map((ev) => (
+              <li
+                key={ev.movement_id}
+                className="flex items-center justify-between gap-2 rounded border border-border/50 bg-bg-subtle/60 px-2 py-1 text-2xs"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="truncate font-medium text-fg">{ev.movement_type}</div>
+                  <div className="truncate text-fg-muted">
+                    {new Date(ev.event_at).toLocaleString('en-GB', {
+                      day: '2-digit',
+                      month: 'short',
+                      hour: '2-digit',
+                      minute: '2-digit',
+                    })}
+                    {ev.reported_by_snapshot ? ` · ${ev.reported_by_snapshot}` : ''}
+                    {ev.po_number ? ` · PO ${ev.po_number}` : ''}
+                    {ev.lw_destination_city ? ` · → ${ev.lw_destination_city}` : ''}
+                  </div>
                 </div>
-              </div>
-              <div className={cn(
-                'shrink-0 font-mono tabular-nums',
-                Number(ev.qty_delta) < 0 ? 'text-danger-fg' : 'text-success-fg',
-              )}>
-                {Number(ev.qty_delta) > 0 ? '+' : ''}{ev.qty_delta} {ev.uom}
-              </div>
-            </li>
-          ))}
-        </ul>
+                <div className={cn(
+                  'shrink-0 font-mono tabular-nums',
+                  Number(ev.qty_delta) < 0 ? 'text-danger-fg' : 'text-success-fg',
+                )}>
+                  {Number(ev.qty_delta) > 0 ? '+' : ''}{ev.qty_delta} {ev.uom}
+                </div>
+              </li>
+            ))}
+          </ul>
+          {/* FLOW-010: show total_matching when truncated */}
+          {data.total_matching > 10 && (
+            <p className="mt-2 text-2xs text-fg-muted">
+              Showing 10 of {data.total_matching} events ·{' '}
+              <Link
+                href={`/stock/ledger?item_id=${encodeURIComponent(itemId)}`}
+                className="underline hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+              >
+                View full ledger for this item →
+              </Link>
+            </p>
+          )}
+        </>
       )}
 
       {/* CTA — opens in a new tab to preserve drawer context (INTER-002).
+          FLOW-011: gated on !isError so operator can't act without having seen ledger.
           When there are no ledger events, link to physical count instead of
           Goods Receipt — the discrepancy is more likely an anchor issue. */}
-      <div className="mt-6 flex items-center justify-between gap-2">
-        {hasEvents ? (
-          <Link
-            href={`/stock/receipts?item_id=${encodeURIComponent(itemId)}`}
-            target="_blank"
-            rel="noopener"
-            className="btn btn-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
-          >
-            Post corrective Goods Receipt
-          </Link>
-        ) : (
-          <Link
-            href={`/stock/physical-count?item_id=${encodeURIComponent(itemId)}`}
-            target="_blank"
-            rel="noopener"
-            className="btn btn-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
-          >
-            Post physical count
-          </Link>
-        )}
-      </div>
+      {!isError && data !== undefined && (
+        <div className="mt-6 flex flex-wrap items-center gap-2">
+          {hasEvents ? (
+            <Link
+              href={`/stock/receipts?item_id=${encodeURIComponent(itemId)}`}
+              target="_blank"
+              rel="noopener"
+              className="btn btn-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+            >
+              Post corrective Goods Receipt
+            </Link>
+          ) : (
+            <Link
+              href={`/stock/physical-count?item_id=${encodeURIComponent(itemId)}`}
+              target="_blank"
+              rel="noopener"
+              className="btn btn-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+            >
+              Post physical count
+            </Link>
+          )}
+          {/* FLOW-008: refresh button after posting GR in new tab */}
+          {hasEvents && (
+            <button
+              type="button"
+              onClick={() => refetch()}
+              className="rounded border border-border/60 bg-bg px-2.5 py-1 text-2xs font-medium text-fg-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+            >
+              I posted the receipt — refresh
+            </button>
+          )}
+        </div>
+      )}
     </Drawer>
   );
 }
