@@ -89,11 +89,31 @@ interface StockRow {
   display_name: string | null;
   base_uom: string | null;
   calculated_on_hand: string;
-  on_hand_raw: string;
-  on_hand_display: string;
-  is_below_floor: boolean;
-  floor_gap: string;
+  // Stock Truth Layering Change 1 derived fields. Optional because old
+  // backend deploys do not return them — fall back to deriving from
+  // calculated_on_hand at every read site so the row still renders.
+  on_hand_raw?: string;
+  on_hand_display?: string;
+  is_below_floor?: boolean;
+  floor_gap?: string;
   last_event_at: string | null;
+}
+
+function resolveDisplay(row: StockRow): {
+  raw: string;
+  display: string;
+  isBelowFloor: boolean;
+  floorGap: string;
+} {
+  const raw = row.on_hand_raw ?? row.calculated_on_hand;
+  const n = Number(raw);
+  const safe = Number.isFinite(n) ? n : 0;
+  return {
+    raw,
+    display: row.on_hand_display ?? String(Math.max(0, safe)),
+    isBelowFloor: row.is_below_floor ?? safe < 0,
+    floorGap: row.floor_gap ?? String(Math.max(0, -safe)),
+  };
 }
 
 interface StockValueRow {
@@ -388,8 +408,9 @@ function OnHandCell({
   row: StockRow;
   onReconcileClick: (row: StockRow) => void;
 }) {
-  const tier = deriveTier(row.on_hand_raw);
-  const displayN = Number(row.on_hand_display);
+  const resolved = resolveDisplay(row);
+  const tier = deriveTier(resolved.raw);
+  const displayN = Number(resolved.display);
   return (
     <span className="inline-flex items-baseline justify-end gap-1.5 tabular-nums">
       <span
@@ -406,14 +427,14 @@ function OnHandCell({
             : "text-fg",
         )}
       >
-        {isNaN(displayN) ? row.on_hand_display : displayN.toFixed(2)}
+        {isNaN(displayN) ? resolved.display : displayN.toFixed(2)}
       </span>
       {row.base_uom ? (
         <span className="text-2xs uppercase text-fg-subtle">{row.base_uom}</span>
       ) : null}
-      {row.is_below_floor ? (
+      {resolved.isBelowFloor ? (
         <ReconcileBadge
-          floorGap={row.floor_gap}
+          floorGap={resolved.floorGap}
           uom={row.base_uom}
           onClick={() => onReconcileClick(row)}
         />
@@ -476,7 +497,7 @@ function InventoryCardMobile({
   value: ValueMeta | null;
   onReconcileClick: (row: StockRow) => void;
 }) {
-  const tier = deriveTier(row.on_hand_raw);
+  const tier = deriveTier(resolveDisplay(row).raw);
   const cost = deriveCostStatus(row.item_type, value);
   const date = smartRelativeDate(row.last_event_at);
   const totalVal = fmtIlsAccountancy(value?.total_value ?? null);
@@ -1325,7 +1346,7 @@ export default function InventoryPage() {
                     <tbody className="divide-y divide-border/40">
                       {rows.map((row) => {
                         const v = valueMap?.get(`${row.item_type}:${row.item_id}`) ?? null;
-                        const tier = deriveTier(row.on_hand_raw);
+                        const tier = deriveTier(resolveDisplay(row).raw);
                         const cost = deriveCostStatus(row.item_type, v);
                         const date = smartRelativeDate(row.last_event_at);
                         const totalVal = fmtIlsAccountancy(v?.total_value ?? null);
@@ -1430,8 +1451,8 @@ export default function InventoryPage() {
           itemId={drawerRow.item_id}
           itemType={drawerRow.item_type}
           displayName={drawerRow.display_name}
-          onHandRaw={drawerRow.on_hand_raw}
-          floorGap={drawerRow.floor_gap}
+          onHandRaw={resolveDisplay(drawerRow).raw}
+          floorGap={resolveDisplay(drawerRow).floorGap}
           uom={drawerRow.base_uom}
           open={true}
           onClose={() => setDrawerRow(null)}
