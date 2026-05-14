@@ -45,7 +45,7 @@ export function DayHeader({
         {label}
       </h3>
       <span
-        className="rounded-sm bg-bg-subtle px-1.5 py-0.5 text-2xs tabular-nums text-fg-subtle"
+        className="rounded-sm border border-border bg-bg-subtle px-1.5 py-0.5 text-2xs tabular-nums text-fg-subtle"
         aria-label={`${count} ${count === 1 ? "action" : "actions"}`}
       >
         {count}

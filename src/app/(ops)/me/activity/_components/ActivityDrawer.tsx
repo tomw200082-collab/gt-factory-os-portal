@@ -165,7 +165,7 @@ export function ActivityDrawer({
                       "hover:text-fg focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
                     )}
                   >
-                    Developer detail (read-only)
+                    Raw submission data (read-only)
                   </summary>
                   <pre
                     className={cn(
