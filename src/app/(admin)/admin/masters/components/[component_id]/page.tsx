@@ -842,7 +842,6 @@ export default function AdminComponentDetailPage({
               </tbody>
             </table>
             <p className="mt-3 text-xs text-muted-foreground">
-              Edit values in the{" "}
               <Link
                 href="?tab=supplier-items"
                 className="underline hover:no-underline"
