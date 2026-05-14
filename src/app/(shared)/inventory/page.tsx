@@ -345,7 +345,7 @@ function CostBadge({ status }: { status: CostStatus }) {
   if (status === "has_cost") return null; // implicit when value renders
   const meta: Record<Exclude<CostStatus, "has_cost">, { label: string; cls: string; glyph: string }> = {
     missing_cost: { label: "Cost not set", cls: "bg-warning-softer text-warning-fg ring-warning/30", glyph: "⚠" },
-    pending_rollup: { label: "Rolled-up cost pending", cls: "bg-info-softer text-info-fg ring-info/20", glyph: "◷" },
+    pending_rollup: { label: "BOM cost not set", cls: "bg-warning-softer text-warning-fg ring-warning/30", glyph: "⚠" },
     na: { label: "—", cls: "bg-bg-subtle text-fg-subtle ring-border", glyph: "·" },
   };
   const m = meta[status];
@@ -796,7 +796,7 @@ export default function InventoryPage() {
       if (missingCostOnly) {
         const v = valueMap?.get(`${r.item_type}:${r.item_id}`) ?? null;
         const cs = deriveCostStatus(r.item_type, v);
-        if (cs !== "missing_cost") return false;
+        if (cs !== "missing_cost" && cs !== "pending_rollup") return false;
       }
       if (staleOnly) {
         const d = smartRelativeDate(r.last_event_at);
@@ -923,11 +923,11 @@ export default function InventoryPage() {
         {/* Iteration 6 — Trust strip */}
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border border-info/20 bg-info-softer/40 px-3 py-2 text-2xs text-info-fg">
           <span>
-            <strong className="font-semibold">Source:</strong> private_core.current_balances
+            <strong className="font-semibold">Source:</strong> Stock ledger
           </span>
           {valueData?.as_of ? (
             <span>
-              <strong className="font-semibold">As of:</strong>{" "}
+              <strong className="font-semibold">Fetched at:</strong>{" "}
               {new Date(valueData.as_of).toLocaleString("en-GB", {
                 month: "short",
                 day: "2-digit",
@@ -937,7 +937,7 @@ export default function InventoryPage() {
             </span>
           ) : null}
           <span className="text-fg-muted">
-            Negative on-hand requires investigation · Cost rolled-up nightly for manufactured FG
+            Items below the physical floor (red) need investigation · Items without a configured cost show no value
           </span>
         </div>
       </WorkflowHeader>
@@ -947,7 +947,7 @@ export default function InventoryPage() {
         <KpiCard
           label="Total inventory value"
           primary={fmtIls(totalValue)}
-          secondary="RM/PKG + bought-finished. Manufactured FG rolled up nightly."
+          secondary="Sums every item with a configured cost. Items without a cost are excluded."
           loading={!valueData}
         />
         <KpiCard
