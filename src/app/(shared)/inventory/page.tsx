@@ -512,7 +512,7 @@ function InventoryCardMobile({
           : "border-border/70",
       )}
     >
-      <div className="flex items-start justify-between gap-2">
+      <div className="flex items-start justify-between gap-4">
         <Link
           href={`/admin/masters/items/${encodeURIComponent(row.item_id)}`}
           className="min-w-0 flex-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
@@ -526,7 +526,8 @@ function InventoryCardMobile({
             <SupplyMethodBadge method={value?.supply_method ?? null} />
           </div>
         </Link>
-        <div className="text-right tabular-nums">
+        {/* FLOW-014: min-h-[44px] satisfies WCAG touch-target for ReconcileBadge */}
+        <div className="flex min-h-[44px] items-center text-right tabular-nums">
           <OnHandCell row={row} onReconcileClick={onReconcileClick} />
         </div>
       </div>
@@ -694,7 +695,9 @@ export default function InventoryPage() {
   const [sortDir, setSortDir] = useState<SortDir>("asc");
   const [density, setDensity] = useState<"comfortable" | "compact">("comfortable");
   const [drawerRow, setDrawerRow] = useState<StockRow | null>(null);
+  const [alertDismissed, setAlertDismissed] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
+  const chipRowRef = useRef<HTMLDivElement>(null);
 
   function handleReconcileClick(row: StockRow) {
     setDrawerRow(row);
@@ -980,26 +983,37 @@ export default function InventoryPage() {
         />
       </div>
 
-      {/* Below-physical-floor alert (Iteration 25 surfaced at page level) */}
-      {negativeCount > 0 ? (
+      {/* Below-floor alert — FLOW-005 (dismissable), FLOW-006 (link names chip), FLOW-007 (plain language) */}
+      {negativeCount > 0 && !alertDismissed && tierFilter !== "reconcile" ? (
         <div
           className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning-softer/40 px-3 py-2 text-sm text-warning-fg"
           role="alert"
         >
           <span aria-hidden>⚠</span>
-          <span>
+          <span className="flex-1">
             <strong className="font-semibold">{negativeCount}</strong> item
-            {negativeCount === 1 ? "" : "s"} below physical floor. Recorded outflow
-            events exceed receipts. Each item shown clamped to zero with a Reconcile
-            badge — click the badge for the offending ledger events.{" "}
+            {negativeCount === 1 ? "" : "s"} with more outflows recorded than receipts.
+            Each is clamped to zero with a Reconcile badge — click the badge to see
+            the ledger.{" "}
             <button
               type="button"
-              onClick={() => setTierFilter("reconcile")}
+              onClick={() => {
+                setTierFilter("reconcile");
+                chipRowRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+              }}
               className="underline hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
             >
-              Show only these →
+              Filter to Reconcile items →
             </button>
           </span>
+          <button
+            type="button"
+            aria-label="Dismiss alert"
+            onClick={() => setAlertDismissed(true)}
+            className="ml-1 shrink-0 rounded focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 hover:text-warning"
+          >
+            ×
+          </button>
         </div>
       ) : null}
 
@@ -1117,13 +1131,13 @@ export default function InventoryPage() {
           </div>
 
           {/* Iteration 30 — Filter chips */}
-          <div className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Stock-tier filters">
+          <div ref={chipRowRef} className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Stock-tier filters">
             {[
               { value: "", label: "All" },
               { value: "has_stock", label: "Has stock" },
               { value: "low", label: "Low / Critical" },
               { value: "out", label: "Out of stock" },
-              { value: "reconcile", label: "Reconcile" },
+              { value: "reconcile", label: negativeCount > 0 ? `Reconcile (${negativeCount})` : "Reconcile" },
             ].map((c) => {
               const active = tierFilter === c.value;
               return (
