@@ -141,7 +141,7 @@ function DayCellInner({
             : spike
               ? `Demand spike: ${formatCompact(totalDemand)} units (${spikePct >= 0 ? "+" : ""}${spikePct}% vs avg)`
               : productionInflow > 0
-                ? `+${formatCompact(productionInflow)} bottles arriving from planned production`
+                ? `+${formatCompact(productionInflow)} from planned production · already included in the EOD value shown`
                 : undefined
       }
     >
@@ -174,7 +174,7 @@ function DayCellInner({
               "rounded-full border border-accent/45 bg-accent-soft/95",
               "px-1.5 py-0 text-[9px] font-semibold leading-none text-accent shadow-sm",
             )}
-            aria-label={`Plus ${formatCompact(productionInflow)} from planned production`}
+            aria-label={`+${formatCompact(productionInflow)} from planned production · already included in the EOD value shown`}
             data-testid="day-cell-production-inflow"
           >
             <ArrowDown
