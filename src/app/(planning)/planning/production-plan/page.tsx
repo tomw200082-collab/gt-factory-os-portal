@@ -1034,7 +1034,7 @@ export default function ProductionPlanPage() {
     uom: string;
     notes?: string;
   }) {
-    createMut.mutate(req, {
+    createMut.mutate({ plan_type: "production", ...req }, {
       onSuccess: () => {
         flashToast("success", "Production added to the plan. Inventory has not changed.");
         setShowManualAdd(null);
@@ -1055,6 +1055,7 @@ export default function ProductionPlanPage() {
     }
     createMut.mutate(
       {
+        plan_type: "production",
         plan_date: rec.suggested_for_date,
         item_id: rec.item_id,
         planned_qty: qty,
