@@ -65,6 +65,14 @@ export function DayPopover({
   // grid's display horizon so the user sees the same trajectory.
   const heroDays = item.days.slice(0, 14);
 
+  // Stock Truth Change 2 (2026-05-14) — counterfactual for the production row.
+  // rawEodProd reconstructs the pre-clamp signed EOD: max(0,raw) - max(0,-raw) = raw.
+  // Falls back correctly when shortfall_qty_with_production is absent (pre-deploy).
+  const productionInflow = day.inflow_from_production;
+  const rawEodProd =
+    day.projected_on_hand_eod_with_production - (day.shortfall_qty_with_production ?? 0);
+  const withoutProduction = rawEodProd - productionInflow;
+
   return (
     <Popover.Root>
       <Popover.Trigger asChild>{children}</Popover.Trigger>
@@ -141,23 +149,27 @@ export function DayPopover({
                 value={day.incoming_supply}
                 valueClassName={day.incoming_supply > 0 ? "text-info-fg" : ""}
               />
-              {day.inflow_from_production > 0 ? (
+              {productionInflow > 0 ? (
                 <Row
                   label="From planned production"
-                  value={day.inflow_from_production}
+                  value={productionInflow}
                   valueClassName="text-info-fg"
                 />
               ) : null}
               <Row
                 label="Projected on-hand (eod)"
                 value={day.projected_on_hand_eod_with_production}
-                valueClassName={
-                  day.projected_on_hand_eod_with_production < 0
-                    ? "text-danger-fg font-semibold"
-                    : "font-semibold text-fg-strong"
-                }
+                valueClassName="font-semibold text-fg-strong"
                 emphasized
               />
+              {productionInflow > 0 ? (
+                <Row
+                  label="Without this production"
+                  value={withoutProduction}
+                  valueClassName={withoutProduction < 0 ? "text-danger-fg" : "text-fg-muted"}
+                  negativePrefix
+                />
+              ) : null}
             </dl>
           ) : (
             <p className="mt-2 text-xs leading-relaxed text-fg-muted">
@@ -246,9 +258,16 @@ interface RowProps {
   /** Render the row with a slightly heavier visual weight (used for the
    *  bottom-line projected-on-hand row). */
   emphasized?: boolean;
+  /** When true and value < 0, render "−N" instead of the raw negative formatCompact output. */
+  negativePrefix?: boolean;
 }
 
-function Row({ label, value, valueClassName, emphasized = false }: RowProps) {
+function Row({ label, value, valueClassName, emphasized = false, negativePrefix = false }: RowProps) {
+  const displayValue =
+    negativePrefix && value < 0
+      ? `−${formatCompact(Math.abs(value))}`
+      : formatCompact(value);
+
   return (
     <div
       className={cn(
@@ -264,7 +283,7 @@ function Row({ label, value, valueClassName, emphasized = false }: RowProps) {
           valueClassName,
         )}
       >
-        {formatCompact(value)}
+        {displayValue}
       </dd>
     </div>
   );
