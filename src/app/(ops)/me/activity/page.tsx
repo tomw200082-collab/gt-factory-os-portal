@@ -148,7 +148,7 @@ export default function MyActivityPage() {
           </div>
         ) : null}
 
-        {query.isLoading ? (
+        {query.isError ? null : query.isLoading ? (
           <ul className="divide-y divide-border/60 px-5 py-2" aria-busy="true" aria-live="polite">
             {Array.from({ length: 6 }).map((_, i) => (
               <li key={i} className="flex animate-pulse items-start gap-4 py-3">
