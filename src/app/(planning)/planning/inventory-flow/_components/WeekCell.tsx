@@ -64,6 +64,11 @@ function WeekCellInner({
     week.min_on_hand_with_production != null
       ? week.min_on_hand_with_production
       : week.min_on_hand;
+  // Stock Truth Change 2 (2026-05-14) — worst-day shortfall across the week.
+  // Defensive fallback to plain max_shortfall_qty, then 0 when backend
+  // hasn't deployed the new field yet.
+  const weekShortfall =
+    week.max_shortfall_qty_with_production ?? week.max_shortfall_qty ?? 0;
   const hasProductionAwareStockout =
     week.stockout_day_with_production != null;
 
@@ -87,7 +92,11 @@ function WeekCellInner({
           hasProductionAwareStockout,
         ),
       )}
-      title={`Week of ${week.week_start} — min on-hand ${fmtQty(minOnHand)}`}
+      title={
+        weekShortfall > 0
+          ? `Week of ${week.week_start} — min on-hand ${fmtQty(minOnHand)}, worst-day shortfall ${fmtQty(weekShortfall)} units`
+          : `Week of ${week.week_start} — min on-hand ${fmtQty(minOnHand)}`
+      }
     >
       {/* Depth gradient overlay — subtle 8% vertical fade for modern
           dashboard depth without flattening the tier fill. */}
@@ -97,7 +106,7 @@ function WeekCellInner({
       />
 
       {/* ---------- Top row: EOD numeral (right-aligned, semibold) -------- */}
-      <div className="relative z-[1] flex flex-1 items-end justify-end pt-1">
+      <div className="relative z-[1] flex flex-1 flex-col items-end justify-end pt-1">
         <span
           className={cn(
             "leading-none tabular-nums",
@@ -108,6 +117,15 @@ function WeekCellInner({
         >
           {fmtQty(minOnHand)}
         </span>
+        {/* Stock Truth Change 2 (2026-05-14) — week-level worst-day shortfall. */}
+        {weekShortfall > 0 ? (
+          <span
+            className="mt-0.5 text-[10px] font-semibold leading-none text-danger-fg tabular-nums"
+            data-testid="week-cell-shortfall"
+          >
+            −{fmtQty(weekShortfall)}
+          </span>
+        ) : null}
       </div>
 
       {/* ---------- Bottom row: stockout day with calendar icon ----------- */}
