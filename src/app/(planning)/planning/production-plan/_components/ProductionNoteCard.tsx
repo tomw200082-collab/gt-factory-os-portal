@@ -77,7 +77,7 @@ export function ProductionNoteCard({
             isCancelled ? "text-fg-muted line-through" : "text-fg",
           )}
         >
-          {plan.notes}
+          {plan.notes ?? <span className="italic text-fg-faint">No note text</span>}
         </p>
 
         {isCancelled && plan.cancel_reason && (

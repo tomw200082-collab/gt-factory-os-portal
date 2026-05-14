@@ -536,8 +536,8 @@ function EditModal({
   isSubmitting: boolean;
 }) {
   const [planDate, setPlanDate] = useState(plan.plan_date);
-  const [qty, setQty] = useState(plan.planned_qty);
-  const [uom, setUom] = useState(plan.uom);
+  const [qty, setQty] = useState(plan.planned_qty ?? "");
+  const [uom, setUom] = useState(plan.uom ?? "");
   const [notes, setNotes] = useState(plan.notes ?? "");
 
   return (
@@ -741,6 +741,8 @@ function EditNoteModal({
   const [planDate, setPlanDate] = useState(plan.plan_date);
   const [notes, setNotes] = useState(plan.notes ?? "");
 
+  const canSubmit = notes.trim().length > 0 && !isSubmitting;
+
   return (
     <div
       dir="ltr"
@@ -795,7 +797,7 @@ function EditNoteModal({
             <button
               type="submit"
               className="btn btn-primary btn-sm"
-              disabled={isSubmitting}
+              disabled={!canSubmit}
               data-testid="edit-note-submit"
             >
               {isSubmitting ? "Saving…" : "Save changes"}
@@ -832,7 +834,9 @@ function CancelModal({
       <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-2xl">
         <h2 className="text-base font-semibold text-fg-strong">Cancel plan</h2>
         <p className="mt-1 text-3xs text-fg-muted">
-          {plan.item_name ?? plan.item_id} · {fmtQty(plan.planned_qty, plan.uom)}
+          {plan.plan_type === "note"
+            ? "Note"
+            : `${plan.item_name ?? plan.item_id} · ${fmtQty(plan.planned_qty ?? "0", plan.uom ?? "")}`}
         </p>
 
         <div className="mt-3 rounded border border-warning/30 bg-warning-softer/30 p-3 text-xs text-warning-fg">
