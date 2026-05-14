@@ -89,12 +89,10 @@ function DayCellInner({
   // Render the production-aware EOD on the cell.
   const cellEod = day.projected_on_hand_eod_with_production;
 
-  // Stock Truth Change 2 (2026-05-14) — when backend ships the clamp,
-  // shortfall_qty_with_production carries the demand-minus-available gap.
-  // Defensive fallback to plain shortfall_qty for the supply-side view,
-  // then to 0 when the backend hasn't deployed the new field yet.
-  const cellShortfall =
-    day.shortfall_qty_with_production ?? day.shortfall_qty ?? 0;
+  // shortfall_qty_with_production = demand-minus-available gap including
+  // planned production. Supply-side view sets it equal to shortfall_qty
+  // (no production overlay). Both required after migration 0189/0190.
+  const cellShortfall = day.shortfall_qty_with_production;
 
   const hasChipRow = productionInflow > 0;
 

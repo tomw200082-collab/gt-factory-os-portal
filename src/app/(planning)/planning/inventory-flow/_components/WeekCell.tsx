@@ -64,11 +64,7 @@ function WeekCellInner({
     week.min_on_hand_with_production != null
       ? week.min_on_hand_with_production
       : week.min_on_hand;
-  // Stock Truth Change 2 (2026-05-14) — worst-day shortfall across the week.
-  // Defensive fallback to plain max_shortfall_qty, then 0 when backend
-  // hasn't deployed the new field yet.
-  const weekShortfall =
-    week.max_shortfall_qty_with_production ?? week.max_shortfall_qty ?? 0;
+  const weekShortfall = week.max_shortfall_qty;
   const hasProductionAwareStockout =
     week.stockout_day_with_production != null;
 

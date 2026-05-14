@@ -2,7 +2,7 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
-  CreateProductionPlanRequest,
+  CreatePlanOrNoteRequest,
   CreateProductionPlanResponse,
   ListProductionPlanResponse,
   PatchProductionPlanRequest,
@@ -110,7 +110,7 @@ function genIdempotencyKey(): string {
 
 export function useCreatePlan() {
   const qc = useQueryClient();
-  return useMutation<CreateProductionPlanResponse, Error, CreateProductionPlanRequest>({
+  return useMutation<CreateProductionPlanResponse, Error, CreatePlanOrNoteRequest>({
     mutationFn: async (req) => {
       const res = await fetch("/api/production-plan", {
         method: "POST",

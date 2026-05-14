@@ -49,12 +49,12 @@ export interface FlowDay {
   // Optional/nullable so the portal can defensively fall back to `tier`
   // during deployment ordering (API rollout before portal, or vice-versa).
   cell_tier_with_production?: CellTierWithProduction | null;
-  // Stock Truth Change 2 (2026-05-14) — Tom-approved clamp + shortfall.
-  // Backend now clamps projected_on_hand_eod to ≥ 0; the gap (demand minus
-  // available supply) is surfaced here. Optional so the portal degrades
-  // gracefully if the API hasn't shipped yet.
-  shortfall_qty?: number;
-  shortfall_qty_with_production?: number;
+  // Migration 0189 (2026-05-14) — authoritative clamp + shortfall.
+  // projected_on_hand_eod is always ≥ 0; shortfall_qty carries the
+  // magnitude of any demand-exceeds-supply gap. Both required (always
+  // present after migration 0189 ships).
+  shortfall_qty: number;
+  shortfall_qty_with_production: number;
 }
 
 export interface FlowWeek {
@@ -74,10 +74,9 @@ export interface FlowWeek {
   // coarse 4→5 mapping. Optional so the portal degrades gracefully if
   // the API hasn't rolled forward yet.
   cell_tier_with_production?: CellTierWithProduction | null;
-  // Stock Truth Change 2 (2026-05-14) — max shortfall across the week.
-  // Optional so the portal degrades gracefully if the API hasn't shipped.
-  max_shortfall_qty?: number;
-  max_shortfall_qty_with_production?: number;
+  // Migration 0189 (2026-05-14) — max shortfall across the week.
+  // Required after migration 0189 ships (always present from SQL MAX(shortfall_qty)).
+  max_shortfall_qty: number;
 }
 
 export interface FlowItem {

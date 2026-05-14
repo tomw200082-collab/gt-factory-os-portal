@@ -144,6 +144,8 @@ export default function AdminUsersPage() {
     kind: "success" | "error";
     message: string;
   } | null>(null);
+  // Default to active-only; deactivated rows are rare and admin-curiosity only.
+  const [showInactive, setShowInactive] = useState<boolean>(false);
 
   const getRowState = (user_id: string): RowState =>
     rowStates[user_id] ?? DEFAULT_ROW_STATE;
@@ -210,6 +212,12 @@ export default function AdminUsersPage() {
   const currentUserId: string =
     (session as { user_id?: string }).user_id ?? "";
 
+  const allRows = data?.rows ?? [];
+  const visibleRows = showInactive
+    ? allRows
+    : allRows.filter((u) => u.status === "active");
+  const inactiveCount = allRows.length - allRows.filter((u) => u.status === "active").length;
+
   return (
     <>
       <WorkflowHeader
@@ -219,7 +227,7 @@ export default function AdminUsersPage() {
         meta={
           <>
             <Badge tone="info" dotted>
-              {data?.rows.length ?? 0} users
+              {visibleRows.length} users
             </Badge>
           </>
         }
@@ -275,7 +283,20 @@ export default function AdminUsersPage() {
 
       <SectionCard
         eyebrow="Users"
-        title={`${data?.rows.length ?? 0} users`}
+        title={`${visibleRows.length} ${showInactive ? "users" : "active users"}`}
+        description={
+          inactiveCount > 0 ? (
+            <button
+              type="button"
+              onClick={() => setShowInactive((v) => !v)}
+              className="text-xs font-medium text-accent underline hover:no-underline"
+            >
+              {showInactive
+                ? `Hide ${inactiveCount} inactive`
+                : `Show ${inactiveCount} inactive`}
+            </button>
+          ) : undefined
+        }
         contentClassName="p-0"
       >
         {isLoading && (
@@ -310,7 +331,7 @@ export default function AdminUsersPage() {
           </div>
         )}
 
-        {data && data.rows.length === 0 && (
+        {data && visibleRows.length === 0 && (
           <div className="p-8 text-center">
             <div className="mx-auto max-w-sm">
               <Users
@@ -341,7 +362,7 @@ export default function AdminUsersPage() {
           </div>
         )}
 
-        {data && data.rows.length > 0 && (
+        {data && visibleRows.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
               <thead>
@@ -364,7 +385,7 @@ export default function AdminUsersPage() {
                 </tr>
               </thead>
               <tbody>
-                {data.rows.map((u) => {
+                {visibleRows.map((u) => {
                   const rs = getRowState(u.user_id);
                   const isSelf = u.user_id === currentUserId;
 

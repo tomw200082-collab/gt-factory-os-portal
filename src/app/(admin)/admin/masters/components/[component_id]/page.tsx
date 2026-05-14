@@ -81,6 +81,7 @@ interface SupplierItemRow {
   pack_conversion: string;
   lead_time_days: number | null;
   moq: string | null;
+  safety_days: number;
   std_cost_per_inv_uom: string | null;
   approval_status: string | null;
   updated_at: string;
@@ -333,6 +334,33 @@ export default function AdminComponentDetailPage({
 
   const primarySi = supplierItemsQuery.data?.rows.filter((si) => si.is_primary) ?? [];
   const allSi = supplierItemsQuery.data?.rows ?? [];
+
+  // Planning parameters — derived from primary supplier item, falling back to
+  // component-level defaults, then global policy constants.
+  const primarySupplierItem = primarySi[0] ?? null;
+
+  const effectiveLeadTime =
+    primarySupplierItem?.lead_time_days ??
+    row?.lead_time_days ??
+    14;
+
+  const leadTimeSource =
+    primarySupplierItem?.lead_time_days != null
+      ? "Primary supplier"
+      : row?.lead_time_days != null
+      ? "Supplier default"
+      : "Global policy (14d)";
+
+  const effectiveMoq = primarySupplierItem?.moq ?? null;
+  const moqSource = effectiveMoq != null ? "Primary supplier" : null;
+
+  const effectiveSafetyDays = primarySupplierItem?.safety_days ?? 0;
+  const safetyDaysSource =
+    primarySupplierItem?.safety_days != null
+      ? "Primary supplier"
+      : "Global policy (0d)";
+
+  const effectiveReorderLead = effectiveLeadTime + effectiveSafetyDays;
 
   const supplierOptions: EntityOption[] = useMemo(
     () =>
@@ -781,6 +809,46 @@ export default function AdminComponentDetailPage({
                 </EditableField>
               ) : null}
             </div>
+          </SectionCard>
+
+          {/* Planning parameters — read-only summary derived from primary supplier item */}
+          <SectionCard title="Planning parameters">
+            <table className="w-full text-sm">
+              <tbody className="divide-y divide-border/50">
+                <tr>
+                  <td className="py-2 pr-4 text-muted-foreground w-1/2">Lead time</td>
+                  <td className="py-2 font-medium tabular-nums">{effectiveLeadTime}d</td>
+                  <td className="py-2 pl-4 text-xs text-muted-foreground">{leadTimeSource}</td>
+                </tr>
+                <tr>
+                  <td className="py-2 pr-4 text-muted-foreground">MOQ</td>
+                  <td className="py-2 font-medium tabular-nums">
+                    {effectiveMoq != null
+                      ? `${Number(effectiveMoq).toLocaleString()} ${row.purchase_uom ?? "UNIT"}`
+                      : "—"}
+                  </td>
+                  <td className="py-2 pl-4 text-xs text-muted-foreground">{moqSource ?? "—"}</td>
+                </tr>
+                <tr>
+                  <td className="py-2 pr-4 text-muted-foreground">Safety days</td>
+                  <td className="py-2 font-medium tabular-nums">{effectiveSafetyDays}d</td>
+                  <td className="py-2 pl-4 text-xs text-muted-foreground">{safetyDaysSource}</td>
+                </tr>
+                <tr>
+                  <td className="py-2 pr-4 text-muted-foreground font-medium">Effective reorder lead</td>
+                  <td className="py-2 font-semibold tabular-nums">{effectiveReorderLead}d</td>
+                  <td className="py-2 pl-4 text-xs text-muted-foreground">lead + safety</td>
+                </tr>
+              </tbody>
+            </table>
+            <p className="mt-3 text-xs text-muted-foreground">
+              <Link
+                href="?tab=supplier-items"
+                className="underline hover:no-underline"
+              >
+                Edit in supplier items ↓
+              </Link>
+            </p>
           </SectionCard>
 
           {/* iter 10: Technical details collapsible with open:bg-bg-subtle/60 */}
