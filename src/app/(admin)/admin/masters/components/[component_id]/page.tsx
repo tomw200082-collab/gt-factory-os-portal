@@ -81,7 +81,7 @@ interface SupplierItemRow {
   pack_conversion: string;
   lead_time_days: number | null;
   moq: string | null;
-  safety_days: number | null;
+  safety_days: number;
   std_cost_per_inv_uom: string | null;
   approval_status: string | null;
   updated_at: string;
