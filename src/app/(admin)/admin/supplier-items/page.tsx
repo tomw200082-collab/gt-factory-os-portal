@@ -867,7 +867,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
                             "—"
                           )}
                         </td>
-                        <td className="px-3 py-2 text-right tabular-nums text-sm">
+                        <td className="px-3 py-2 text-right font-mono text-xs tabular-nums text-fg-muted">
                           {isAdmin ? (
                             <InlineEditCell
                               value={r.safety_days ?? 0}
