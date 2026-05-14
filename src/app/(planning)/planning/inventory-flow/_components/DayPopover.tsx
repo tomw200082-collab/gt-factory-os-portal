@@ -152,7 +152,7 @@ export function DayPopover({
                 label="Projected on-hand (eod)"
                 value={day.projected_on_hand_eod_with_production}
                 valueClassName={
-                  day.projected_on_hand_eod_with_production < 0
+                  day.shortfall_qty_with_production > 0
                     ? "text-danger-fg font-semibold"
                     : "font-semibold text-fg-strong"
                 }

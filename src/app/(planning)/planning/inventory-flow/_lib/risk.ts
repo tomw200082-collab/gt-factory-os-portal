@@ -72,7 +72,7 @@ export function dayCellClassName(tier: DayCellTier): string {
 // ----- Polish A v3 review (2026-05-04) — 5-tier production-aware gradient ----
 //
 // Tom-locked thresholds (server-computed via cell_tier_with_production):
-//   critical_stockout : projected_eod_with_production < 0  (RED)
+//   critical_stockout : shortfall_qty_with_production > 0  (RED)
 //   at_risk           : days_cover < 7                     (RED-ORANGE)
 //   low               : 7  <= days_cover < 14              (YELLOW-ORANGE)
 //   medium            : 14 <= days_cover < 21              (YELLOW-GREEN)
