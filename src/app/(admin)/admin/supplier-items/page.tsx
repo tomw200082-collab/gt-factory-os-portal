@@ -264,7 +264,8 @@ export default function AdminSupplierItemsPage(): JSX.Element {
         | "moq"
         | "pack_conversion"
         | "std_cost_per_inv_uom"
-        | "order_uom";
+        | "order_uom"
+        | "safety_days";
       value: string | number | null;
       updated_at: string;
     }) =>
@@ -673,6 +674,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
                       <Th align="right">Pack conversion</Th>
                       <Th align="right">Lead time</Th>
                       <Th align="right">Min. order qty</Th>
+                      <Th align="right">Safety days</Th>
                       <Th align="right">Std cost (ILS)</Th>
                       <Th>Readiness</Th>
                       <Th>Primary</Th>
@@ -865,6 +867,27 @@ export default function AdminSupplierItemsPage(): JSX.Element {
                             "—"
                           )}
                         </td>
+                        <td className="px-3 py-2 text-right tabular-nums text-sm">
+                          {isAdmin ? (
+                            <InlineEditCell
+                              value={r.safety_days ?? 0}
+                              type="number"
+                              inputMode="numeric"
+                              ifMatchUpdatedAt={r.updated_at}
+                              onSave={async (newValue) => {
+                                await fieldMutation.mutateAsync({
+                                  supplier_item_id: r.supplier_item_id,
+                                  field: "safety_days",
+                                  value: newValue,
+                                  updated_at: r.updated_at,
+                                });
+                              }}
+                              ariaLabel={`Edit safety days for ${r.component_id ?? r.item_id ?? r.supplier_item_id}`}
+                            />
+                          ) : (
+                            <SafetyDaysChip days={r.safety_days} />
+                          )}
+                        </td>
                         {/* Iter 8 — Cost with currency formatting + last-updated timestamp */}
                         <td
                           className="px-3 py-2 text-right text-xs tabular-nums"
@@ -1027,6 +1050,12 @@ export default function AdminSupplierItemsPage(): JSX.Element {
 // ---------------------------------------------------------------------------
 // Layout helper
 // ---------------------------------------------------------------------------
+
+function SafetyDaysChip({ days }: { days: number }): JSX.Element {
+  if (days === 0) return <span className="text-muted-foreground text-xs">0d</span>;
+  if (days <= 6) return <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">{days}d</span>;
+  return <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">{days}d</span>;
+}
 
 function Th({
   children,
