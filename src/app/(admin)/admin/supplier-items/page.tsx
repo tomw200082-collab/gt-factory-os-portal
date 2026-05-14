@@ -875,10 +875,14 @@ export default function AdminSupplierItemsPage(): JSX.Element {
                               inputMode="numeric"
                               ifMatchUpdatedAt={r.updated_at}
                               onSave={async (newValue) => {
+                                const clamped = Math.max(
+                                  0,
+                                  Math.round(Number(newValue) || 0),
+                                );
                                 await fieldMutation.mutateAsync({
                                   supplier_item_id: r.supplier_item_id,
                                   field: "safety_days",
-                                  value: newValue,
+                                  value: clamped,
                                   updated_at: r.updated_at,
                                 });
                               }}
