@@ -313,6 +313,13 @@ export const NAV_MANIFEST: NavGroup[] = [
         required_capability: "admin:execute",
       },
       {
+        href: "/admin/economics",
+        label: "Economics",
+        icon: TrendingUp,
+        min_role: "admin" as Role,
+        required_capability: "admin:execute",
+      },
+      {
         href: "/admin/jobs",
         label: "Jobs",
         icon: Activity,
