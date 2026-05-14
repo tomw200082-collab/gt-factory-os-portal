@@ -89,6 +89,13 @@ function DayCellInner({
   // Render the production-aware EOD on the cell.
   const cellEod = day.projected_on_hand_eod_with_production;
 
+  // Stock Truth Change 2 (2026-05-14) — when backend ships the clamp,
+  // shortfall_qty_with_production carries the demand-minus-available gap.
+  // Defensive fallback to plain shortfall_qty for the supply-side view,
+  // then to 0 when the backend hasn't deployed the new field yet.
+  const cellShortfall =
+    day.shortfall_qty_with_production ?? day.shortfall_qty ?? 0;
+
   const hasChipRow = productionInflow > 0;
 
   // Compute spike % above average for the tooltip.
@@ -107,7 +114,9 @@ function DayCellInner({
       aria-label={
         isNonWorking
           ? day.holiday_name_he ?? "Non-working day"
-          : `${item.item_name} on ${day.day}: ${formatCompact(cellEod)} units, tier ${day.cell_tier_with_production ?? day.tier}`
+          : cellShortfall > 0
+            ? `${item.item_name} on ${day.day}: 0 units on hand, short ${formatCompact(cellShortfall)} units, tier ${day.cell_tier_with_production ?? day.tier}`
+            : `${item.item_name} on ${day.day}: ${formatCompact(cellEod)} units, tier ${day.cell_tier_with_production ?? day.tier}`
       }
       className={cn(
         "group relative flex h-full w-full cursor-pointer flex-col items-stretch",
@@ -181,7 +190,7 @@ function DayCellInner({
       {/* ---------- Number row (always) ------------------------------------ */}
       <div
         className={cn(
-          "relative z-[1] flex flex-1 items-center justify-end pr-2",
+          "relative z-[1] flex flex-1 flex-col items-end justify-center pr-2",
           // When there's no chip, give the number a tiny bit of top
           // breathing room so it doesn't kiss the cell border.
           !hasChipRow && "pt-1",
@@ -190,19 +199,33 @@ function DayCellInner({
         {isNonWorking ? (
           <span className="text-fg-faint">—</span>
         ) : (
-          <span
-            className={cn(
-              "leading-none tabular-nums text-right",
-              // 12px is the default; bump to 13px when the cell has no
-              // chip so the number reads slightly heavier (Tom locked: a
-              // production-marked cell is "louder" by virtue of the chip,
-              // so the number can be quieter; clean cells lean on the
-              // number alone).
-              hasChipRow ? "text-[12px]" : "text-[13px]",
-            )}
-          >
-            {formatCompact(cellEod)}
-          </span>
+          <>
+            <span
+              className={cn(
+                "leading-none tabular-nums text-right",
+                // 12px is the default; bump to 13px when the cell has no
+                // chip so the number reads slightly heavier (Tom locked: a
+                // production-marked cell is "louder" by virtue of the chip,
+                // so the number can be quieter; clean cells lean on the
+                // number alone).
+                hasChipRow ? "text-[12px]" : "text-[13px]",
+              )}
+            >
+              {formatCompact(cellEod)}
+            </span>
+            {/* Stock Truth Change 2 (2026-05-14) — shortfall hint when
+                projected demand exceeds available supply on this day.
+                Renders only when backend reports shortfall_qty > 0. */}
+            {cellShortfall > 0 ? (
+              <span
+                className="mt-0.5 text-[10px] font-semibold leading-none text-danger-fg tabular-nums"
+                title={`Short ${formatCompact(cellShortfall)} units (demand exceeds available stock)`}
+                data-testid="day-cell-shortfall"
+              >
+                −{formatCompact(cellShortfall)}
+              </span>
+            ) : null}
+          </>
         )}
       </div>
 
