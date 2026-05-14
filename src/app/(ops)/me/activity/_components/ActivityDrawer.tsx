@@ -81,7 +81,6 @@ export function ActivityDrawer({
     <div
       className="fixed inset-0 z-40 flex justify-end bg-black/40"
       onClick={onClose}
-      aria-hidden
     >
       <div
         ref={panelRef}
@@ -157,16 +156,26 @@ export function ActivityDrawer({
 
               <section>
                 <h3 className="text-2xs font-semibold uppercase tracking-sops text-fg-muted">
-                  Payload
+                  Submitted data
                 </h3>
-                <pre
-                  className={cn(
-                    "mt-2 max-h-96 overflow-auto rounded-md border border-border bg-bg-subtle p-3",
-                    "text-xs font-mono whitespace-pre-wrap break-all"
-                  )}
-                >
-                  {JSON.stringify(detail.data.row.raw_payload_redacted, null, 2)}
-                </pre>
+                <details className="mt-2 rounded-md border border-border bg-bg-deep">
+                  <summary
+                    className={cn(
+                      "cursor-pointer select-none rounded-md px-3 py-2 text-2xs font-medium uppercase tracking-sops text-fg-muted",
+                      "hover:text-fg focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                    )}
+                  >
+                    Developer detail (read-only)
+                  </summary>
+                  <pre
+                    className={cn(
+                      "max-h-96 overflow-auto border-t border-border bg-bg-subtle p-3",
+                      "text-xs font-mono whitespace-pre-wrap break-all text-fg-muted"
+                    )}
+                  >
+                    {JSON.stringify(detail.data.row.raw_payload_redacted, null, 2)}
+                  </pre>
+                </details>
               </section>
 
               <section>
