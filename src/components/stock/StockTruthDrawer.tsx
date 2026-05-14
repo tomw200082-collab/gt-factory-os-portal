@@ -166,9 +166,8 @@ export function StockTruthDrawer({
       )}
 
       {/* CTA — opens in a new tab to preserve drawer context (INTER-002).
-          When there are no ledger events, the CTA is gated to a count-corrective
-          path (INTER-004). Until the count form route is confirmed by the
-          executor, render the no-events case as a disabled span. */}
+          When there are no ledger events, link to physical count instead of
+          Goods Receipt — the discrepancy is more likely an anchor issue. */}
       <div className="mt-6 flex items-center justify-between gap-2">
         {hasEvents ? (
           <Link
@@ -180,13 +179,14 @@ export function StockTruthDrawer({
             Post corrective Goods Receipt
           </Link>
         ) : (
-          <span
-            aria-disabled="true"
-            title="Physical-count form route pending — see follow-up plan."
-            className="btn btn-sm cursor-not-allowed opacity-50"
+          <Link
+            href={`/stock/physical-count?item_id=${encodeURIComponent(itemId)}`}
+            target="_blank"
+            rel="noopener"
+            className="btn btn-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
           >
-            Post corrective count (coming soon)
-          </span>
+            Post physical count
+          </Link>
         )}
       </div>
     </Drawer>
