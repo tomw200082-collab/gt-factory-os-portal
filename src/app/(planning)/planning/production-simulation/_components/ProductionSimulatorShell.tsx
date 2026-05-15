@@ -58,13 +58,18 @@ export interface SimulatableProduct {
 }
 
 /**
- * One PACK BOM line, reduced to what base-fill resolution needs: the qty of
- * this component consumed per ONE finished unit, plus its UOM.
+ * A raw bom_lines row from GET /api/boms/lines?bom_version_id=… — the only
+ * place the BASE-mix consumption line is visible (the /simulate endpoint
+ * filters it out, see resolveBaseFillFromRecipe).
  */
-export interface PackBomLineForFill {
-  component_id: string;
+export interface BomLineRow {
+  line_no: number;
+  component_ref_type: string;
+  final_component_id: string | null;
+  final_component_qty: string | null;
   component_uom: string | null;
-  qty_per_unit: number;
+  qty_per_l_output: string | null;
+  status: string;
 }
 
 interface ListEnvelope<T> {
@@ -86,36 +91,46 @@ async function fetchJson<T>(url: string): Promise<T> {
 /**
  * Resolve litres of BASE liquid per finished unit — strictly from the recipe.
  *
- * The PACK recipe has one line that consumes the linked BASE head as a
- * component; that line's per-unit qty IS the litres of base mix per finished
- * unit. This is the only trustworthy source: it comes straight from the BOM,
- * so the simulation scales on the same ratios the factory actually uses.
+ * In a two-tier BOM the PACK recipe carries one bom_lines row with
+ * component_ref_type='BASE_BOM' stating how much base mix one finished unit
+ * consumes. `qty_per_l_output` on that row is the per-finished-unit ratio.
+ *
+ * Two non-obvious facts this depends on:
+ *  - The BASE_BOM line has final_component_id = NULL by design — the BASE
+ *    head is resolved via bom_head.linked_base_bom_head_id, not via the line.
+ *  - The /simulate endpoint OMITS the BASE_BOM line entirely (it filters
+ *    `final_component_id IS NOT NULL`). So the base fill is invisible to
+ *    /simulate and must be read from the raw /api/boms/lines list instead.
  *
  * Earlier versions guessed this value from the product name ("AMERICAN 1L"
- * → 1.0 L) or from pack_size when the recipe link was missing. Those guesses
- * silently produced base quantities that did not match the recipe, so they
- * were removed: if the recipe cannot supply the ratio, the simulation is
- * blocked rather than answered with a guess.
+ * → 1.0 L). That guess silently produced base quantities that did not match
+ * the recipe, so it was removed: if the recipe carries no usable BASE_BOM
+ * line, the simulation is blocked rather than answered with a guess.
  *
- * Returns null when the PACK recipe has no line consuming the BASE head, or
- * that line is not in a volume UOM.
+ * Returns null when the PACK version has no ACTIVE BASE_BOM line, or that
+ * line is not in a volume UOM.
  */
 export function resolveBaseFillFromRecipe(
-  packBomLines: PackBomLineForFill[],
-  baseHeadId: string,
+  packLines: BomLineRow[],
 ): number | null {
-  const baseLine = packBomLines.find((l) => l.component_id === baseHeadId);
-  if (
-    !baseLine ||
-    !Number.isFinite(baseLine.qty_per_unit) ||
-    baseLine.qty_per_unit <= 0
-  ) {
-    return null;
-  }
+  const baseLine = packLines.find(
+    (l) => l.component_ref_type === "BASE_BOM" && l.status === "ACTIVE",
+  );
+  if (!baseLine) return null;
+  const ratio =
+    toFiniteNumber(baseLine.qty_per_l_output) ??
+    toFiniteNumber(baseLine.final_component_qty);
+  if (ratio === null || ratio <= 0) return null;
   const uom = (baseLine.component_uom ?? "").toUpperCase();
-  if (uom === "L") return baseLine.qty_per_unit;
-  if (uom === "ML") return baseLine.qty_per_unit / 1000;
+  if (uom === "L") return ratio;
+  if (uom === "ML") return ratio / 1000;
   return null;
+}
+
+function toFiniteNumber(v: string | null | undefined): number | null {
+  if (v === null || v === undefined) return null;
+  const n = parseFloat(v);
+  return Number.isFinite(n) ? n : null;
 }
 
 async function loadSimulatableProducts(): Promise<SimulatableProduct[]> {
