@@ -31,7 +31,9 @@ const STALE_TIME_MS = 30_000;
 // a fresh 22s SQL run. The 60s background refetch will keep the data fresh
 // while the user is on the page; nav-away just suspends the timer.
 const GC_TIME_MS = 24 * 60 * 60 * 1000;
-const PERSIST_KEY_PREFIX = "gtfos:inv_flow:";
+// v2: cache key bumped after migration 0193 (recursive clamp + GREATEST demand)
+// to force all browsers to ignore pre-migration localStorage data.
+const PERSIST_KEY_PREFIX = "gtfos:inv_flow:v2:";
 
 interface PersistedEntry {
   ts: number;
