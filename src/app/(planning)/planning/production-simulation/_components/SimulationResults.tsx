@@ -5,7 +5,7 @@ import { AlertTriangle, FileWarning } from "lucide-react";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { cn } from "@/lib/cn";
 import type {
-  PackBomLineForFill,
+  BomLineRow,
   SimulatableProduct,
 } from "./ProductionSimulatorShell";
 import { resolveBaseFillFromRecipe } from "./ProductionSimulatorShell";
@@ -169,6 +169,16 @@ async function fetchComponentClasses(): Promise<Map<string, string | null>> {
   return map;
 }
 
+async function fetchBomLines(versionId: string): Promise<BomLineRow[]> {
+  const url = `/api/boms/lines?bom_version_id=${encodeURIComponent(versionId)}`;
+  const res = await fetch(url, { headers: { Accept: "application/json" } });
+  if (!res.ok) {
+    throw new Error(`Could not load PACK recipe lines (HTTP ${res.status}).`);
+  }
+  const env = (await res.json()) as { rows?: BomLineRow[] };
+  return env.rows ?? [];
+}
+
 function classifyGroup(
   componentClass: string | null,
   fromBase: boolean,
@@ -208,25 +218,19 @@ async function loadSimulationData(
     fetchComponentClasses(),
   ]);
 
-  const packBomLines: PackBomLineForFill[] = pack.lines.map((l) => ({
-    component_id: l.component_id,
-    component_uom: l.component_uom,
-    qty_per_unit: parseFloat(l.unit_ratio),
-  }));
-
-  // Step 2 — resolve base fill strictly from the PACK recipe.
+  // Step 2 — resolve base fill from the PACK recipe's BASE_BOM line.
+  // /simulate omits that line (it filters final_component_id IS NOT NULL),
+  // so the per-unit base ratio is read from the raw bom_lines list.
   let baseLitresPerUnit: number | null = null;
   if (product.baseHead) {
-    baseLitresPerUnit = resolveBaseFillFromRecipe(
-      packBomLines,
-      product.baseHead.bom_head_id,
-    );
+    const packLines = await fetchBomLines(pack.active_version_id);
+    baseLitresPerUnit = resolveBaseFillFromRecipe(packLines);
     if (baseLitresPerUnit === null) {
-      // BLOCKED: a BASE recipe is linked, but the PACK recipe has no line
-      // consuming it in litres. Refuse to guess — return a fix-the-data
+      // BLOCKED: a BASE recipe is linked, but the PACK version carries no
+      // usable ACTIVE BASE_BOM line. Refuse to guess — return a fix-the-data
       // message instead of a wrong answer.
       return {
-        blocked: `This product links a BASE recipe (${product.baseHead.bom_head_id}), but its PACK recipe (${product.packHead.bom_head_id}) has no line consuming that BASE mix in a volume unit (L or ML). The base-ingredient quantities cannot be computed from the recipe until that line is added. Fix the PACK BOM, then run the simulation again.`,
+        blocked: `This product links a BASE recipe (${product.baseHead.bom_head_id}), but its PACK recipe version has no active BASE_BOM line stating how much base mix one unit consumes. The base-ingredient quantities cannot be computed from the recipe until that line is added. Fix the PACK BOM, then run the simulation again.`,
         lines: [],
         packHeadId: product.packHead.bom_head_id,
         packVersionLabel: pack.version_label,
@@ -307,14 +311,11 @@ async function loadSimulationData(
     };
   }
 
+  // PACK /simulate already excludes the BASE_BOM aggregate line (it filters
+  // final_component_id IS NOT NULL), so pack.lines is packaging-only — no
+  // double-count with the exploded BASE ingredient lines below.
   const lines: SimulationLine[] = [];
   for (const line of pack.lines) {
-    // Drop the PACK line that consumes the BASE head — it is fully exploded
-    // into the BASE ingredient lines below, so showing it too would
-    // double-count the same liquid in the table.
-    if (product.baseHead && line.component_id === product.baseHead.bom_head_id) {
-      continue;
-    }
     lines.push(toLine(line, pack.bom_head_id, false));
   }
   if (base) {
