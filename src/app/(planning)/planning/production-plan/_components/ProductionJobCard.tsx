@@ -92,7 +92,7 @@ export function ProductionJobCard({
     const snap = bomQuery.data;
     if (!snap) return [];
     const outputQty = parseFloat(snap.bom_final_output_qty);
-    const plannedQty = parseFloat(plan.planned_qty);
+    const plannedQty = parseFloat(plan.planned_qty ?? "0");
     if (!Number.isFinite(outputQty) || outputQty <= 0) return [];
     if (!Number.isFinite(plannedQty) || plannedQty <= 0) return [];
     const multiplier = plannedQty / outputQty;
@@ -103,7 +103,7 @@ export function ProductionJobCard({
     }));
   }, [bomQuery.data, plan.planned_qty]);
 
-  const qty = parseFloat(plan.planned_qty);
+  const qty = parseFloat(plan.planned_qty ?? "0");
   const qtyStr = Number.isInteger(qty) ? qty.toFixed(0) : qty.toFixed(1);
 
   const completedActual = plan.completed_actual;
