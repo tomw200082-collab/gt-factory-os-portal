@@ -91,7 +91,7 @@ function DayCellInner({
 
   // shortfall_qty_with_production = demand-minus-available gap including
   // planned production. Supply-side view sets it equal to shortfall_qty
-  // (no production overlay). Both required after migration 0189/0190.
+  // (no production overlay). Both required after migration 0193/0190.
   const cellShortfall = day.shortfall_qty_with_production;
 
   const hasChipRow = productionInflow > 0;

@@ -52,7 +52,7 @@ export interface FlowDay {
   // Migration 0189 (2026-05-14) — authoritative clamp + shortfall.
   // projected_on_hand_eod is always ≥ 0; shortfall_qty carries the
   // magnitude of any demand-exceeds-supply gap. Both required (always
-  // present after migration 0189 ships).
+  // present after migration 0193 ships).
   shortfall_qty: number;
   shortfall_qty_with_production: number;
 }
@@ -75,7 +75,7 @@ export interface FlowWeek {
   // the API hasn't rolled forward yet.
   cell_tier_with_production?: CellTierWithProduction | null;
   // Migration 0189 (2026-05-14) — max shortfall across the week.
-  // Required after migration 0189 ships (always present from SQL MAX(shortfall_qty)).
+  // Required after migration 0193 ships (always present from SQL MAX(shortfall_qty)).
   max_shortfall_qty: number;
 }
 
