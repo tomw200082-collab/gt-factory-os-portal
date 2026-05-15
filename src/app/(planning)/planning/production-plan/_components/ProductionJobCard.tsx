@@ -108,7 +108,7 @@ export function ProductionJobCard({
 
   const completedActual = plan.completed_actual;
   const varianceSign = completedActual
-    ? computeVarianceSign(completedActual.variance_qty, plan.planned_qty)
+    ? computeVarianceSign(completedActual.variance_qty, plan.planned_qty ?? "0")
     : null;
 
   return (
@@ -172,7 +172,7 @@ export function ProductionJobCard({
             "text-sm font-semibold leading-tight truncate mb-2",
             isCancelled ? "text-fg-muted" : "text-fg-strong",
           )}
-          title={plan.item_name ?? plan.item_id}
+          title={plan.item_name ?? plan.item_id ?? undefined}
         >
           {plan.item_name ?? plan.item_id}
         </div>
@@ -246,7 +246,7 @@ export function ProductionJobCard({
         <div className="flex items-center justify-between gap-1.5 px-3 pb-2.5 border-t border-border/20 pt-2">
           {/* Report button — primary for today */}
           <Link
-            href={`/stock/production-actual?from_plan_id=${encodeURIComponent(plan.plan_id)}${plan.item_id ? `&item_id=${encodeURIComponent(plan.item_id)}` : ""}&suggested_qty=${encodeURIComponent(plan.planned_qty)}`}
+            href={`/stock/production-actual?from_plan_id=${encodeURIComponent(plan.plan_id)}${plan.item_id ? `&item_id=${encodeURIComponent(plan.item_id)}` : ""}&suggested_qty=${encodeURIComponent(plan.planned_qty ?? "")}`}
             className={cn(
               "btn btn-xs gap-1",
               isToday ? "btn-primary" : "btn-ghost text-accent",
@@ -318,7 +318,7 @@ export function ProductionJobCard({
             <Package className="h-3 w-3 text-success shrink-0" strokeWidth={2} />
             <span className="text-xs text-success-fg">
               <span className="font-semibold tabular-nums">
-                +{fmtQty(plan.planned_qty, plan.uom)}
+                +{fmtQty(plan.planned_qty ?? "0", plan.uom ?? "")}
               </span>
               {" of "}
               <span className="font-medium">{plan.item_name ?? plan.item_id}</span>
