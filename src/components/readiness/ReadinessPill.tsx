@@ -10,7 +10,7 @@
 //   - unknown "—"
 // ---------------------------------------------------------------------------
 
-import { Badge } from "@/components/badges/StatusBadge";
+import { Badge } from "@/components/ui/Badge";
 import { readinessToneFromPayload } from "@/lib/admin/mutations";
 
 export interface ReadinessPillProps {
@@ -33,27 +33,27 @@ export function ReadinessPill({
 
   if (tone === "unknown") {
     return (
-      <Badge tone="neutral" dotted>
+      <Badge tone="neutral" dot>
         —
       </Badge>
     );
   }
   if (tone === "red") {
     return (
-      <Badge tone="danger" dotted>
+      <Badge tone="danger" dot>
         {showBlockerCount && blockerCount > 0 ? `Blocked (${blockerCount})` : "Blocked"}
       </Badge>
     );
   }
   if (tone === "yellow") {
     return (
-      <Badge tone="warning" dotted>
+      <Badge tone="warning" dot>
         {showBlockerCount && blockerCount > 0 ? `Check (${blockerCount})` : "Check"}
       </Badge>
     );
   }
   return (
-    <Badge tone="success" dotted>
+    <Badge tone="success" dot>
       Ready
     </Badge>
   );

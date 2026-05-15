@@ -1,5 +1,6 @@
 import { Clock } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { BADGE_TONE_CLASSES } from "@/components/ui/Badge";
 
 interface FreshnessBadgeProps {
   label?: string;
@@ -72,14 +73,11 @@ export function FreshnessBadge({
     toneLabel = "Stale";
   }
 
-  const dotColor =
-    tone === "success"
-      ? "bg-success"
-      : tone === "warning"
-        ? "bg-warning"
-        : tone === "danger"
-          ? "bg-danger"
-          : "bg-fg-faint";
+  // Dot color comes from the shared BADGE_TONE_CLASSES lookup so this badge
+  // stays consistent with the rest of the status system. The four tones used
+  // here (success / warning / danger / neutral) map to the same class strings
+  // the previous 4-branch ternary produced.
+  const dotColor = BADGE_TONE_CLASSES[tone].dot;
 
   // Tooltip: producer + state + relative + absolute + thresholds. Per S7
   // research §C: "Tooltip copy template: 'Producer: lionwheel_orders_mirror ·

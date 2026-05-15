@@ -29,7 +29,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import type { ReactNode } from "react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
-import { Badge } from "@/components/badges/StatusBadge";
+import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/lib/cn";
 
 // ---------------------------------------------------------------------------
