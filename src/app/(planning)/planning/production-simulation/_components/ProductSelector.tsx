@@ -1,5 +1,10 @@
 "use client";
 
+import { useMemo } from "react";
+import {
+  SearchableSelect,
+  type SearchableSelectOption,
+} from "@/components/fields/SearchableSelect";
 import type { SimulatableProduct } from "./ProductionSimulatorShell";
 
 interface ProductSelectorProps {
@@ -10,6 +15,11 @@ interface ProductSelectorProps {
   onSelect: (id: string | null) => void;
 }
 
+/**
+ * Searchable finished-product picker. Replaces the old native <select> with
+ * the portal's standard type-ahead combobox so a planner can find a product
+ * by typing part of its name instead of scrolling a long list.
+ */
 export function ProductSelector({
   products,
   loading,
@@ -17,34 +27,41 @@ export function ProductSelector({
   selectedHeadId,
   onSelect,
 }: ProductSelectorProps) {
+  const options = useMemo<SearchableSelectOption[]>(
+    () =>
+      products.map((p) => ({
+        value: p.packHead.bom_head_id,
+        label: p.displayName,
+        meta: p.packSize
+          ? `${p.supplyMethod} · ${p.packSize}`
+          : p.supplyMethod,
+      })),
+    [products],
+  );
+
+  const emptyMessage = error
+    ? "Could not load products"
+    : "No simulatable products found";
+
   return (
-    <label className="flex flex-col gap-1.5">
-      <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+    <label className="flex flex-col gap-2">
+      <span className="text-xs font-bold uppercase tracking-sops text-fg-subtle">
         Product
       </span>
-      <select
-        className="select select-bordered w-full rounded-sm border border-border/70 bg-bg-raised px-3 py-2 text-sm text-fg focus:border-accent focus:outline-none"
+      <SearchableSelect
         value={selectedHeadId ?? ""}
-        onChange={(e) => onSelect(e.target.value || null)}
-        disabled={loading || error}
-        data-testid="production-simulation-product-select"
-      >
-        <option value="">
-          {loading
-            ? "Loading products…"
-            : error
-              ? "Could not load products"
-              : products.length === 0
-                ? "No simulatable products found"
-                : `Select a product… (${products.length} available)`}
-        </option>
-        {products.map((p) => (
-          <option key={p.packHead.bom_head_id} value={p.packHead.bom_head_id}>
-            {p.displayName}
-            {p.packSize ? ` — ${p.packSize}` : ""}
-          </option>
-        ))}
-      </select>
+        onChange={(id) => onSelect(id || null)}
+        options={options}
+        loading={loading}
+        disabled={error}
+        placeholder="Select a finished product…"
+        searchPlaceholder="Search products by name…"
+        emptyMessage={emptyMessage}
+        invalid={error}
+        ariaLabel="Finished product"
+        testId="production-simulation-product-select"
+        className="h-12 text-base"
+      />
     </label>
   );
 }

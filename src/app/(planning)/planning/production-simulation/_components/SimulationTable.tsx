@@ -1,134 +1,192 @@
 "use client";
 
+import { CheckCircle2, AlertTriangle, MinusCircle, HelpCircle } from "lucide-react";
 import { formatQty } from "@/lib/utils/format-quantity";
 import { cn } from "@/lib/cn";
+
+export type CoverageStatus =
+  | "covered"
+  | "partial"
+  | "not_covered"
+  | "no_stock_data";
+
+export type MaterialGroup = "ingredient" | "packaging" | "other";
 
 export interface SimulationLine {
   id: string;
   componentId: string;
   componentName: string;
-  /**
-   * Per-line classification.
-   *
-   * Sourced from `components.component_class` (the only per-component
-   * classifier we have on the contract) joined onto each simulator line
-   * by component_id. Free-text on the contract — we render whatever the
-   * component master holds. `null` means the component has no class set.
-   *
-   * Earlier versions of this page tagged every line with the head's
-   * `bom_kind` ("PACK" / "BASE"), which was wrong: a single combined
-   * recipe head can return liquid ingredients AND packaging, and the
-   * head's bom_kind reflects its role in a 2-tier factoring rather than
-   * the nature of any individual line's component.
-   */
   componentClass: string | null;
+  /** Bucket the component falls in — drives the grouped table sections. */
+  group: MaterialGroup;
+  /** Quantity of this component per ONE finished unit (the recipe ratio). */
   qtyPerUnit: number;
+  /** Total quantity needed for the whole simulated run. */
   requiredQty: number;
   uom: string;
-  /**
-   * Optional per-line stock coverage. Populated when the net-requirements
-   * endpoint returns data for this component. Null when no stock data is
-   * available for the component (covered separately in the StockCoverage
-   * panel).
-   */
-  coverage?: {
+  /** On-hand vs required, when net-requirements returned data for it. */
+  coverage: {
     availableQty: number;
     netShortageQty: number;
-    status: "covered" | "partial" | "not_covered" | "no_stock_data";
+    status: CoverageStatus;
   } | null;
 }
 
-interface SimulationTableProps {
-  lines: SimulationLine[];
-  /**
-   * Rendering mode.
-   *  - "scaled" (default): standard table with a "Per finished unit" column.
-   *    Used for the main combined PACK + BASE results scaled to the
-   *    operator's target output.
-   *  - "unscaled": the lines represent ONE reference batch of a BOM (e.g.
-   *    a BASE recipe at its natural batch size). The "Per finished unit"
-   *    column is hidden because there are no "finished units" in this
-   *    context — only batch quantities. The "Required" column header is
-   *    relabelled to "Batch quantity".
-   */
-  mode?: "scaled" | "unscaled";
+const GROUP_ORDER: MaterialGroup[] = ["ingredient", "packaging", "other"];
+
+const GROUP_LABEL: Record<MaterialGroup, string> = {
+  ingredient: "Ingredients & raw materials",
+  packaging: "Packaging",
+  other: "Other components",
+};
+
+function CoverageCell({ status }: { status: CoverageStatus }) {
+  const map: Record<
+    CoverageStatus,
+    { icon: JSX.Element; label: string; cls: string }
+  > = {
+    covered: {
+      icon: <CheckCircle2 className="h-4 w-4" strokeWidth={2.25} aria-hidden />,
+      label: "Covered",
+      cls: "text-success-fg",
+    },
+    partial: {
+      icon: <MinusCircle className="h-4 w-4" strokeWidth={2.25} aria-hidden />,
+      label: "Partial",
+      cls: "text-warning-fg",
+    },
+    not_covered: {
+      icon: <AlertTriangle className="h-4 w-4" strokeWidth={2.25} aria-hidden />,
+      label: "Short",
+      cls: "text-danger-fg",
+    },
+    no_stock_data: {
+      icon: <HelpCircle className="h-4 w-4" strokeWidth={2.25} aria-hidden />,
+      label: "No data",
+      cls: "text-fg-faint",
+    },
+  };
+  const c = map[status];
+  return (
+    <span
+      className={cn("inline-flex items-center gap-1.5 text-sm font-semibold", c.cls)}
+    >
+      {c.icon}
+      {c.label}
+    </span>
+  );
 }
 
-function classBadgeTone(c: string | null): string {
-  if (!c) return "bg-bg-muted text-fg-muted border-border/70";
-  const u = c.toUpperCase();
-  // Tint liquid/raw-material classes with info, packaging with neutral.
-  if (
-    u.includes("LIQUID") ||
-    u.includes("RAW") ||
-    u.includes("INGREDIENT") ||
-    u.includes("BASE")
-  ) {
-    return "bg-info-softer text-info-fg border-info/30";
-  }
-  if (u.includes("PACK") || u.includes("BOTTLE") || u.includes("LABEL") || u.includes("CAP") || u.includes("CARTON")) {
-    return "bg-bg-muted text-fg-muted border-border/70";
-  }
-  return "bg-bg-muted text-fg-muted border-border/70";
-}
-
-export function SimulationTable({ lines, mode = "scaled" }: SimulationTableProps) {
+export function SimulationTable({ lines }: { lines: SimulationLine[] }) {
   if (lines.length === 0) {
     return (
-      <div className="px-4 py-3 text-xs text-fg-muted">
-        No component lines to display for this simulation.
+      <div className="px-5 py-4 text-sm text-fg-muted">
+        This recipe returned no component lines.
       </div>
     );
   }
 
-  const isUnscaled = mode === "unscaled";
+  const groups = GROUP_ORDER.map((g) => ({
+    group: g,
+    rows: lines.filter((l) => l.group === g),
+  })).filter((g) => g.rows.length > 0);
 
   return (
     <div className="overflow-x-auto">
-      <table className="w-full text-sm">
-        <thead className="bg-bg-subtle/60 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-          <tr>
-            <th className="px-4 py-2 text-left">Class</th>
-            <th className="px-4 py-2 text-left">Component</th>
-            {!isUnscaled && (
-              <th className="px-4 py-2 text-right">Per finished unit</th>
-            )}
-            <th className="px-4 py-2 text-right">
-              {isUnscaled ? "Batch quantity" : "Required"}
-            </th>
-            <th className="px-4 py-2 text-left">UOM</th>
+      <table className="w-full">
+        <thead>
+          <tr className="border-b border-border/70 text-2xs font-bold uppercase tracking-sops text-fg-subtle">
+            <th className="px-5 py-3 text-left">Component</th>
+            <th className="px-5 py-3 text-right">Per unit</th>
+            <th className="px-5 py-3 text-right">Required</th>
+            <th className="px-5 py-3 text-right">On hand</th>
+            <th className="px-5 py-3 text-left">Coverage</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-border/50">
-          {lines.map((l) => (
-            <tr key={l.id} data-testid="simulation-line-row">
-              <td className="px-4 py-2">
-                <span
-                  className={cn(
-                    "inline-flex items-center rounded-sm border px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-sops",
-                    classBadgeTone(l.componentClass),
-                  )}
-                  title={l.componentClass ?? "No component class set"}
-                >
-                  {l.componentClass ?? "—"}
-                </span>
-              </td>
-              <td className="px-4 py-2 font-medium text-fg-strong">
-                {l.componentName}
-              </td>
-              {!isUnscaled && (
-                <td className="px-4 py-2 text-right tabular-nums text-fg">
-                  {formatQty(l.qtyPerUnit, l.uom)}
-                </td>
-              )}
-              <td className="px-4 py-2 text-right tabular-nums font-semibold text-fg-strong">
-                {formatQty(l.requiredQty, l.uom)}
-              </td>
-              <td className="px-4 py-2 text-fg-muted">{l.uom}</td>
-            </tr>
+        <tbody>
+          {groups.map(({ group, rows }) => (
+            <GroupSection key={group} group={group} rows={rows} />
           ))}
         </tbody>
       </table>
     </div>
+  );
+}
+
+function GroupSection({
+  group,
+  rows,
+}: {
+  group: MaterialGroup;
+  rows: SimulationLine[];
+}) {
+  return (
+    <>
+      <tr className="bg-bg-subtle/70">
+        <th
+          colSpan={5}
+          className="px-5 py-2 text-left text-xs font-bold uppercase tracking-sops text-fg-strong"
+        >
+          {GROUP_LABEL[group]}
+          <span className="ml-2 font-semibold text-fg-faint">{rows.length}</span>
+        </th>
+      </tr>
+      {rows.map((l) => {
+        const cov = l.coverage;
+        const isShort =
+          cov?.status === "partial" || cov?.status === "not_covered";
+        return (
+          <tr
+            key={l.id}
+            data-testid="simulation-line-row"
+            className={cn(
+              "border-b border-border/40 last:border-0",
+              isShort && "bg-danger-softer/25",
+            )}
+          >
+            <td className="px-5 py-3">
+              <div className="text-sm font-semibold text-fg-strong">
+                {l.componentName}
+              </div>
+              <div className="font-mono text-2xs text-fg-faint">
+                {l.componentClass ? `${l.componentClass} · ` : ""}
+                {l.componentId}
+              </div>
+            </td>
+            <td className="whitespace-nowrap px-5 py-3 text-right text-sm tabular-nums text-fg-muted">
+              {formatQty(l.qtyPerUnit, l.uom)}{" "}
+              <span className="text-2xs text-fg-faint">{l.uom}</span>
+            </td>
+            <td className="whitespace-nowrap px-5 py-3 text-right">
+              <span className="text-lg font-bold tabular-nums text-fg-strong">
+                {formatQty(l.requiredQty, l.uom)}
+              </span>{" "}
+              <span className="text-xs font-semibold text-fg-muted">
+                {l.uom}
+              </span>
+            </td>
+            <td className="whitespace-nowrap px-5 py-3 text-right text-sm tabular-nums text-fg-muted">
+              {cov && cov.status !== "no_stock_data"
+                ? formatQty(cov.availableQty, l.uom)
+                : "—"}
+            </td>
+            <td className="px-5 py-3">
+              {cov ? (
+                <div className="flex flex-col gap-0.5">
+                  <CoverageCell status={cov.status} />
+                  {cov.netShortageQty > 0 ? (
+                    <span className="text-2xs font-semibold text-danger-fg">
+                      Short {formatQty(cov.netShortageQty, l.uom)} {l.uom}
+                    </span>
+                  ) : null}
+                </div>
+              ) : (
+                <CoverageCell status="no_stock_data" />
+              )}
+            </td>
+          </tr>
+        );
+      })}
+    </>
   );
 }
