@@ -124,12 +124,17 @@ export function useCreatePlan() {
         const text = await res.text().catch(() => "");
         let detail = "";
         try {
-          detail = (JSON.parse(text) as { detail?: string }).detail ?? "";
+          const parsed = JSON.parse(text) as {
+            detail?: string;
+            validation_errors?: Array<{ path?: unknown[]; message?: string }>;
+          };
+          detail =
+            parsed.detail ??
+            parsed.validation_errors?.map((e) => `[${(e.path ?? []).join(".")}] ${e.message ?? ""}`).join(" | ") ??
+            "";
         } catch {
           /* ignore */
         }
-        // Use code-mapped English on every status; backend `detail` strings
-        // are typically API-internal — don't surface raw to the operator.
         throw new Error(mapStatusToHebrew(res.status) + (detail && res.status === 422 ? ` (${detail})` : ""));
       }
       return (await res.json()) as CreateProductionPlanResponse;
