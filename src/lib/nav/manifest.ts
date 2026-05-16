@@ -203,6 +203,13 @@ export const NAV_MANIFEST: NavGroup[] = [
         required_capability: "planning:read",
       },
       {
+        href: "/planning/purchase-session",
+        label: "Purchase Session",
+        icon: ShoppingCart,
+        min_role: "planner",
+        required_capability: "planning:read",
+      },
+      {
         // 2026-05-12 — widened from cycle-16 admin-only to planner+admin per
         // Tom's request ("add access also for planner"). Cycle-16 had pinned
         // this surface to admin because the page is IDB-backed and can
