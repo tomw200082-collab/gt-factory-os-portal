@@ -1,32 +1,34 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// Admin · Economics — Phase 10A.
+// Admin · Economics — unified cost-of-sale surface.
 //
-// Two-tab view onto the COGS snapshot pipeline:
-//   - Overview        : COGS per SKU, inventory at cost, snapshot freshness.
-//   - Component Costs : effective cost per component + inline fallback edit.
+// Two tabs, each combining entry + analysis for one entity:
+//   - Products      : per-FG COGS, average sale price (inline entry),
+//                     material margin (₪ and %), on-hand, inventory value.
+//   - Raw Materials : effective cost per component with a SMART cost cell
+//                     that edits whichever source drives COGS — the primary
+//                     supplier_items row, or the component fallback.
+//
+// Every cost / sale-price change is recorded to history; the per-row History
+// button opens <PriceHistoryDrawer> (a secondary on-demand view).
 //
 // Source of truth:
-//   GET  /api/economics                          → snapshot rows (one per item)
-//   GET  /api/economics/component-costs          → cost view (one per component)
-//   PATCH /api/economics/component-costs/:id     → updates fallback (components
-//                                                  .std_cost_per_inv_uom)
-//   POST /api/economics/recalculate              → run snapshot now
-//
-// Edits to the fallback do NOT change the active effective cost when the
-// component has a primary supplier — the supplier_items row wins. That nuance
-// is surfaced on the row and inside the edit cell so admins do not silently
-// edit a value with no effect.
+//   GET   /api/economics                          → v_fg_economics rows
+//   GET   /api/economics/component-costs           → component effective cost
+//   PATCH /api/economics/component-costs/:id        → smart cost write
+//   POST  /api/economics/sale-prices                → append FG sale price
+//   POST  /api/economics/recalculate                → run COGS snapshot now
 // ---------------------------------------------------------------------------
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Play } from "lucide-react";
+import { Play, History } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
 import { useSession } from "@/lib/auth/session-provider";
+import { PriceHistoryDrawer } from "@/components/economics/PriceHistoryDrawer";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -42,6 +44,9 @@ interface EconomicsRow {
   qty_on_hand: string;
   fg_inventory_value_at_cost: string | null;
   avg_sale_price_ils: string | null;
+  material_margin_ils: string | null;
+  material_margin_pct: string | null;
+  fg_inventory_value_at_sale_price: string | null;
   reliability_flag: string;
 }
 
@@ -54,6 +59,7 @@ interface ComponentCostRow {
   supplier_cost: string | null;
   effective_cost: string | null;
   cost_source: "supplier_items_primary" | "components_fallback" | "missing";
+  supplier_item_id: string | null;
 }
 
 type ListEnvelope<T> = { rows: T[]; count: number };
@@ -65,7 +71,7 @@ interface RecalculateResponse {
 }
 
 // ---------------------------------------------------------------------------
-// Data fetcher (matches components/page.tsx pattern exactly)
+// Data fetcher
 // ---------------------------------------------------------------------------
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -96,93 +102,101 @@ function formatIlsGrouped(value: number): string {
   })}`;
 }
 
+function formatPct(value: string | null): string {
+  if (value == null) return "—";
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "—";
+  return `${n.toFixed(1)}%`;
+}
+
 function formatQtyZero(value: string): string {
   const n = Number(value);
   if (!Number.isFinite(n)) return "—";
   return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
 }
 
-function formatRelativeShort(iso: string | null): string {
-  if (!iso) return "—";
-  const then = new Date(iso).getTime();
-  if (!Number.isFinite(then)) return "—";
-  const diffMs = Date.now() - then;
-  if (diffMs < 0) return new Date(iso).toLocaleDateString();
-  const mins = Math.floor(diffMs / 60_000);
-  if (mins < 60) return `${mins}m ago`;
-  const hours = Math.floor(mins / 60);
-  if (hours < 24) return `${hours}h ago`;
-  const days = Math.floor(hours / 24);
-  if (days < 14) return `${days}d ago`;
-  return new Date(iso).toLocaleDateString();
-}
-
 // ---------------------------------------------------------------------------
-// Snapshot status badge (overview tab)
-// ---------------------------------------------------------------------------
-
-function SnapshotStatusBadge({ row }: { row: EconomicsRow }): JSX.Element {
-  if (row.cogs_complete) {
-    return <Badge tone="success" dotted>Complete</Badge>;
-  }
-  if (row.cogs_snapshot_at == null) {
-    return <Badge tone="neutral" dotted>No snapshot</Badge>;
-  }
-  return <Badge tone="warning" dotted>Incomplete</Badge>;
-}
-
-// ---------------------------------------------------------------------------
-// Source badge (component-costs tab)
+// Source badge (raw-materials tab)
 // ---------------------------------------------------------------------------
 
 function CostSourceBadge({
   source,
-  supplierCost,
 }: {
   source: ComponentCostRow["cost_source"];
-  supplierCost: string | null;
 }): JSX.Element {
   if (source === "supplier_items_primary") {
-    return (
-      <span
-        title={
-          supplierCost != null
-            ? `Set via primary supplier (${formatIls(supplierCost)}). Edit supplier items to change the active cost.`
-            : "Set via primary supplier. Edit supplier items to change the active cost."
-        }
-      >
-        <Badge tone="success" dotted>Primary supplier</Badge>
-      </span>
-    );
+    return <Badge tone="success" dotted>Primary supplier</Badge>;
   }
   if (source === "components_fallback") {
-    return <Badge tone="warning" dotted>Fallback cost</Badge>;
+    return <Badge tone="warning" dotted>Component cost</Badge>;
   }
   return <Badge tone="danger" dotted>Missing</Badge>;
 }
 
 // ---------------------------------------------------------------------------
-// CostEditCell — the star of the component-costs tab
+// MarginBadge — colour the margin % by health.
 // ---------------------------------------------------------------------------
 
-interface CostEditCellProps {
+function MarginBadge({ pct }: { pct: string | null }): JSX.Element {
+  if (pct == null) return <span className="text-fg-subtle">—</span>;
+  const n = Number(pct);
+  if (!Number.isFinite(n)) return <span className="text-fg-subtle">—</span>;
+  const tone = n < 0 ? "danger" : n < 20 ? "warning" : "success";
+  return (
+    <Badge tone={tone} dotted>
+      {n.toFixed(1)}%
+    </Badge>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// History button — opens the secondary price-history drawer.
+// ---------------------------------------------------------------------------
+
+function HistoryButton({
+  onClick,
+}: {
+  onClick: () => void;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-3xs font-medium text-fg-muted transition-colors hover:bg-bg-subtle hover:text-accent"
+      title="View price history"
+    >
+      <History className="h-3 w-3" strokeWidth={2} />
+      History
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Smart cost cell — raw-materials tab.
+//
+// Edits whichever cost drives COGS: the primary supplier_items row when one
+// exists, otherwise the component fallback. The PATCH endpoint routes the
+// write and records a price_history row.
+// ---------------------------------------------------------------------------
+
+function CostEditCell({
+  row,
+  isAdmin,
+  onSaved,
+}: {
   row: ComponentCostRow;
   isAdmin: boolean;
   onSaved: () => void;
-}
-
-function CostEditCell({ row, isAdmin, onSaved }: CostEditCellProps): JSX.Element {
+}): JSX.Element {
   const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState<string>(() => row.fallback_cost ?? "");
+  const [value, setValue] = useState<string>(() => row.effective_cost ?? "");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState(false);
 
-  const display = formatIls(row.effective_cost);
-
   const startEdit = () => {
     if (!isAdmin) return;
-    setValue(row.fallback_cost ?? "");
+    setValue(row.effective_cost ?? "");
     setError(null);
     setEditing(true);
   };
@@ -190,7 +204,7 @@ function CostEditCell({ row, isAdmin, onSaved }: CostEditCellProps): JSX.Element
   const cancel = () => {
     setEditing(false);
     setError(null);
-    setValue(row.fallback_cost ?? "");
+    setValue(row.effective_cost ?? "");
   };
 
   const commit = async () => {
@@ -202,6 +216,16 @@ function CostEditCell({ row, isAdmin, onSaved }: CostEditCellProps): JSX.Element
     }
     setBusy(true);
     setError(null);
+    const finalSource =
+      row.cost_source === "missing" ? "components_fallback" : row.cost_source;
+    const payload =
+      finalSource === "supplier_items_primary"
+        ? {
+            std_cost_per_inv_uom: num,
+            cost_source: finalSource,
+            supplier_item_id: row.supplier_item_id,
+          }
+        : { std_cost_per_inv_uom: num, cost_source: finalSource };
     try {
       const res = await fetch(
         `/api/economics/component-costs/${encodeURIComponent(row.component_id)}`,
@@ -211,15 +235,15 @@ function CostEditCell({ row, isAdmin, onSaved }: CostEditCellProps): JSX.Element
             "Content-Type": "application/json",
             Accept: "application/json",
           },
-          body: JSON.stringify({ std_cost_per_inv_uom: num }),
+          body: JSON.stringify(payload),
         },
       );
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as
-          | { message?: string }
+          | { message?: string; error?: string }
           | null;
         throw new Error(
-          body?.message ?? `Save failed (HTTP ${res.status}).`,
+          body?.error ?? body?.message ?? `Save failed (HTTP ${res.status}).`,
         );
       }
       setEditing(false);
@@ -260,7 +284,7 @@ function CostEditCell({ row, isAdmin, onSaved }: CostEditCellProps): JSX.Element
             className={`input w-28 text-right tabular-nums ${
               error ? "border-danger focus:border-danger" : ""
             }`}
-            aria-label={`Edit fallback cost for ${row.component_name}`}
+            aria-label={`Edit cost for ${row.component_name}`}
           />
           {busy ? (
             <span
@@ -271,11 +295,153 @@ function CostEditCell({ row, isAdmin, onSaved }: CostEditCellProps): JSX.Element
         </div>
         {error ? (
           <span className="text-3xs text-danger-fg">{error}</span>
-        ) : row.cost_source === "supplier_items_primary" ? (
+        ) : (
           <span className="text-3xs text-fg-subtle">
-            Editing fallback — primary supplier{" "}
-            {formatIls(row.supplier_cost)} still wins.
+            {row.cost_source === "supplier_items_primary"
+              ? "Updates the primary supplier cost."
+              : "Updates the component cost."}
           </span>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={startEdit}
+      disabled={!isAdmin}
+      title={
+        isAdmin
+          ? "Click to edit cost"
+          : "Read-only — sign in as admin to edit"
+      }
+      className={`inline-flex min-w-[5rem] items-center justify-end rounded px-1.5 py-0.5 text-right text-sm tabular-nums transition-colors ${
+        flash
+          ? "bg-success-softer text-success-fg"
+          : isAdmin
+            ? "text-fg-strong hover:bg-bg-subtle hover:text-accent"
+            : "cursor-default text-fg-strong"
+      }`}
+    >
+      {formatIls(row.effective_cost)}
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sale-price entry cell — products tab.
+//
+// Appends a fg_sale_prices history row. Append-only — each save is a new
+// snapshot, not an overwrite.
+// ---------------------------------------------------------------------------
+
+function SalePriceEditCell({
+  row,
+  isAdmin,
+  onSaved,
+}: {
+  row: EconomicsRow;
+  isAdmin: boolean;
+  onSaved: () => void;
+}): JSX.Element {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState<string>(() => row.avg_sale_price_ils ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [flash, setFlash] = useState(false);
+
+  const startEdit = () => {
+    if (!isAdmin) return;
+    setValue(row.avg_sale_price_ils ?? "");
+    setError(null);
+    setEditing(true);
+  };
+
+  const cancel = () => {
+    setEditing(false);
+    setError(null);
+    setValue(row.avg_sale_price_ils ?? "");
+  };
+
+  const commit = async () => {
+    if (busy) return;
+    const num = Number(value);
+    if (!Number.isFinite(num) || num < 0) {
+      setError("Price must be a number ≥ 0.");
+      return;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch("/api/economics/sale-prices", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({
+          item_id: row.item_id,
+          avg_sale_price_ils: num,
+        }),
+      });
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as
+          | { message?: string; error?: string }
+          | null;
+        throw new Error(
+          body?.error ?? body?.message ?? `Save failed (HTTP ${res.status}).`,
+        );
+      }
+      setEditing(false);
+      setFlash(true);
+      onSaved();
+      window.setTimeout(() => setFlash(false), 800);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <div className="flex flex-col items-end gap-1">
+        <div className="flex items-center gap-1">
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            autoFocus
+            disabled={busy}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onBlur={() => {
+              void commit();
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void commit();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                cancel();
+              }
+            }}
+            className={`input w-28 text-right tabular-nums ${
+              error ? "border-danger focus:border-danger" : ""
+            }`}
+            aria-label={`Edit sale price for ${row.item_name}`}
+          />
+          {busy ? (
+            <span
+              className="dot bg-info animate-pulse-soft"
+              aria-label="Saving"
+            />
+          ) : null}
+        </div>
+        {error ? (
+          <span className="text-3xs text-danger-fg">{error}</span>
         ) : null}
       </div>
     );
@@ -288,7 +454,7 @@ function CostEditCell({ row, isAdmin, onSaved }: CostEditCellProps): JSX.Element
       disabled={!isAdmin}
       title={
         isAdmin
-          ? "Click to edit fallback cost"
+          ? "Click to enter average sale price"
           : "Read-only — sign in as admin to edit"
       }
       className={`inline-flex min-w-[5rem] items-center justify-end rounded px-1.5 py-0.5 text-right text-sm tabular-nums transition-colors ${
@@ -299,13 +465,17 @@ function CostEditCell({ row, isAdmin, onSaved }: CostEditCellProps): JSX.Element
             : "cursor-default text-fg-strong"
       }`}
     >
-      {display}
+      {row.avg_sale_price_ils == null ? (
+        <span className="text-accent">Set price</span>
+      ) : (
+        formatIls(row.avg_sale_price_ils)
+      )}
     </button>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Loading skeleton (matches components/page.tsx)
+// Loading skeleton
 // ---------------------------------------------------------------------------
 
 function TableSkeleton(): JSX.Element {
@@ -328,7 +498,7 @@ function TableSkeleton(): JSX.Element {
 }
 
 // ---------------------------------------------------------------------------
-// Error card (matches components/page.tsx)
+// Error card
 // ---------------------------------------------------------------------------
 
 function ErrorCard({
@@ -364,17 +534,21 @@ export default function AdminEconomicsPage(): JSX.Element {
   const isAdmin = session.role === "admin";
   const queryClient = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState<"overview" | "component-costs">(
-    "overview",
+  const [activeTab, setActiveTab] = useState<"products" | "raw-materials">(
+    "products",
   );
   const [banner, setBanner] = useState<
-    | { kind: "success" | "error"; message: string }
-    | null
+    { kind: "success" | "error"; message: string } | null
   >(null);
-  const [costSavedHint, setCostSavedHint] = useState(false);
   const [componentQuery, setComponentQuery] = useState("");
+  const [productQuery, setProductQuery] = useState("");
+  const [history, setHistory] = useState<{
+    mode: "rm" | "fg";
+    id: string;
+    name: string;
+  } | null>(null);
 
-  // --- Overview data ------------------------------------------------------
+  // --- Products data ------------------------------------------------------
 
   const economicsQuery = useQuery<ListEnvelope<EconomicsRow>>({
     queryKey: ["admin", "economics"],
@@ -395,7 +569,9 @@ export default function AdminEconomicsPage(): JSX.Element {
         const body = (await res.json().catch(() => null)) as
           | { message?: string }
           | null;
-        throw new Error(body?.message ?? `Snapshot failed (HTTP ${res.status}).`);
+        throw new Error(
+          body?.message ?? `Snapshot failed (HTTP ${res.status}).`,
+        );
       }
       return (await res.json()) as RecalculateResponse;
     },
@@ -416,7 +592,7 @@ export default function AdminEconomicsPage(): JSX.Element {
     },
   });
 
-  // --- Component-costs data ----------------------------------------------
+  // --- Raw-materials data -------------------------------------------------
 
   const costsQuery = useQuery<ListEnvelope<ComponentCostRow>>({
     queryKey: ["admin", "economics", "component-costs"],
@@ -426,19 +602,27 @@ export default function AdminEconomicsPage(): JSX.Element {
       ),
   });
 
-  // Total inventory at cost (overview footer)
   const totalInventoryAtCost = useMemo(() => {
     const rows = economicsQuery.data?.rows ?? [];
     let sum = 0;
     for (const r of rows) {
-      if (r.fg_inventory_value_at_cost == null) continue;
       const n = Number(r.fg_inventory_value_at_cost);
       if (Number.isFinite(n)) sum += n;
     }
     return sum;
   }, [economicsQuery.data]);
 
-  // Filtered component-costs (client-side text search)
+  const filteredProducts = useMemo(() => {
+    const rows = economicsQuery.data?.rows ?? [];
+    if (!productQuery) return rows;
+    const q = productQuery.toLowerCase();
+    return rows.filter(
+      (r) =>
+        r.item_name.toLowerCase().includes(q) ||
+        r.item_id.toLowerCase().includes(q),
+    );
+  }, [economicsQuery.data, productQuery]);
+
   const filteredCosts = useMemo(() => {
     const rows = costsQuery.data?.rows ?? [];
     if (!componentQuery) return rows;
@@ -472,7 +656,7 @@ export default function AdminEconomicsPage(): JSX.Element {
       <WorkflowHeader
         eyebrow="Admin · economics"
         title="Economics"
-        description="COGS per SKU and component cost management. Edit raw material costs → snapshot runs nightly."
+        description="COGS, sale prices and material margins per product. Enter raw-material costs and average sale prices to see the full cost-of-sale picture."
         meta={
           <>
             <Badge tone="info" dotted>
@@ -500,7 +684,7 @@ export default function AdminEconomicsPage(): JSX.Element {
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-border pb-0">
-        {(["overview", "component-costs"] as const).map((tab) => (
+        {(["products", "raw-materials"] as const).map((tab) => (
           <button
             key={tab}
             type="button"
@@ -511,114 +695,176 @@ export default function AdminEconomicsPage(): JSX.Element {
                 : "text-fg-muted hover:text-fg"
             }`}
           >
-            {tab === "overview" ? "Overview" : "Component Costs"}
+            {tab === "products" ? "Products" : "Raw Materials"}
           </button>
         ))}
       </div>
 
-      {activeTab === "overview" ? (
-        <SectionCard
-          eyebrow="Snapshot"
-          title="COGS per product"
-          description="Per-unit COGS and on-hand inventory valued at the same snapshot. Edits to component costs flow into tonight’s 04:00 UTC re-snapshot — or run one now."
-          contentClassName="p-0"
-        >
-          {economicsQuery.isLoading ? (
-            <TableSkeleton />
-          ) : economicsQuery.isError ? (
-            <ErrorCard
-              message={(economicsQuery.error as Error).message}
-              onRetry={() => economicsQuery.refetch()}
-            />
-          ) : (economicsQuery.data?.rows ?? []).length === 0 ? (
-            <div className="p-10">
-              <div className="mx-auto max-w-sm rounded-lg border border-border/60 bg-bg-subtle/50 p-6 text-center">
-                <div className="mb-1 text-sm font-semibold text-fg-strong">
-                  No snapshot rows yet
-                </div>
-                <div className="mb-4 text-xs text-fg-muted">
-                  Run the snapshot to compute COGS for every product.
+      {activeTab === "products" ? (
+        <>
+          <SectionCard title="Filter" density="compact">
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+              <div className="block sm:col-span-2">
+                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Search products
+                </span>
+                <div className="flex gap-2">
+                  <input
+                    className="input flex-1"
+                    value={productQuery}
+                    onChange={(e) => setProductQuery(e.target.value)}
+                    placeholder="Search products…"
+                    dir="auto"
+                  />
+                  {productQuery ? (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm shrink-0"
+                      onClick={() => setProductQuery("")}
+                    >
+                      Clear
+                    </button>
+                  ) : null}
                 </div>
               </div>
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-border/70 bg-bg-subtle/60">
-                    <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      Product
-                    </th>
-                    <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      COGS / unit
-                    </th>
-                    <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      On hand
-                    </th>
-                    <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      Inventory at cost
-                    </th>
-                    <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      Status
-                    </th>
-                    <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      Last snapshot
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(economicsQuery.data?.rows ?? []).map((r) => (
-                    <tr
-                      key={r.item_id}
-                      className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
-                    >
-                      <td className="px-3 py-2">
-                        <span
-                          className="block text-sm font-medium leading-snug text-fg-strong"
-                          dir="auto"
-                        >
-                          {r.item_name}
-                        </span>
-                        <span className="block font-mono text-3xs text-fg-subtle">
-                          {r.item_id}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 text-right text-sm tabular-nums">
-                        {formatIls(r.cogs_per_unit_ils)}
-                      </td>
-                      <td className="px-3 py-2 text-right text-sm tabular-nums text-fg-muted">
-                        {formatQtyZero(r.qty_on_hand)}
-                      </td>
-                      <td className="px-3 py-2 text-right text-sm tabular-nums">
-                        {formatIls(r.fg_inventory_value_at_cost)}
-                      </td>
-                      <td className="px-3 py-2">
-                        <SnapshotStatusBadge row={r} />
-                      </td>
-                      <td className="px-3 py-2 text-xs text-fg-muted">
-                        {formatRelativeShort(r.cogs_snapshot_at)}
+          </SectionCard>
+
+          <SectionCard
+            eyebrow="Products"
+            title="COGS, sale price and margin"
+            description={
+              isAdmin
+                ? "Click a sale-price cell to enter the average sale price. Margin = sale price − COGS. COGS refreshes on the nightly snapshot or via Run Snapshot Now."
+                : "Read-only — sign in as admin to enter sale prices."
+            }
+            contentClassName="p-0"
+          >
+            {economicsQuery.isLoading ? (
+              <TableSkeleton />
+            ) : economicsQuery.isError ? (
+              <ErrorCard
+                message={(economicsQuery.error as Error).message}
+                onRetry={() => economicsQuery.refetch()}
+              />
+            ) : filteredProducts.length === 0 ? (
+              <div className="p-10">
+                <div className="mx-auto max-w-sm rounded-lg border border-border/60 bg-bg-subtle/50 p-6 text-center">
+                  <div className="mb-1 text-sm font-semibold text-fg-strong">
+                    No products
+                  </div>
+                  <div className="mb-4 text-xs text-fg-muted">
+                    Try clearing the search.
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-border/70 bg-bg-subtle/60">
+                      <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                        Product
+                      </th>
+                      <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                        COGS / unit
+                      </th>
+                      <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                        Sale price
+                      </th>
+                      <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                        Margin
+                      </th>
+                      <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                        Margin %
+                      </th>
+                      <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                        On hand
+                      </th>
+                      <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                        Inventory at cost
+                      </th>
+                      <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                        History
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredProducts.map((r) => (
+                      <tr
+                        key={r.item_id}
+                        className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
+                      >
+                        <td className="px-3 py-2">
+                          <span
+                            className="block text-sm font-medium leading-snug text-fg-strong"
+                            dir="auto"
+                          >
+                            {r.item_name}
+                          </span>
+                          <span className="block font-mono text-3xs text-fg-subtle">
+                            {r.item_id}
+                          </span>
+                        </td>
+                        <td className="px-3 py-2 text-right text-sm tabular-nums">
+                          {formatIls(r.cogs_per_unit_ils)}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <SalePriceEditCell
+                            row={r}
+                            isAdmin={isAdmin}
+                            onSaved={() => {
+                              void queryClient.invalidateQueries({
+                                queryKey: ["admin", "economics"],
+                              });
+                            }}
+                          />
+                        </td>
+                        <td className="px-3 py-2 text-right text-sm tabular-nums">
+                          {formatIls(r.material_margin_ils)}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <MarginBadge pct={r.material_margin_pct} />
+                        </td>
+                        <td className="px-3 py-2 text-right text-sm tabular-nums text-fg-muted">
+                          {formatQtyZero(r.qty_on_hand)}
+                        </td>
+                        <td className="px-3 py-2 text-right text-sm tabular-nums">
+                          {formatIls(r.fg_inventory_value_at_cost)}
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <HistoryButton
+                            onClick={() =>
+                              setHistory({
+                                mode: "fg",
+                                id: r.item_id,
+                                name: r.item_name,
+                              })
+                            }
+                          />
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t border-border/70 bg-bg-subtle/60">
+                      <td
+                        colSpan={8}
+                        className="px-3 py-2 text-right text-sm font-semibold text-fg-strong tabular-nums"
+                      >
+                        Total inventory at cost:{" "}
+                        {formatIlsGrouped(totalInventoryAtCost)}
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="border-t border-border/70 bg-bg-subtle/60">
-                    <td
-                      colSpan={6}
-                      className="px-3 py-2 text-right text-sm font-semibold text-fg-strong tabular-nums"
-                    >
-                      Total inventory at cost:{" "}
-                      {formatIlsGrouped(totalInventoryAtCost)}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
-            </div>
-          )}
-        </SectionCard>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </SectionCard>
+        </>
       ) : null}
 
-      {activeTab === "component-costs" ? (
+      {activeTab === "raw-materials" ? (
         <>
           <SectionCard title="Filter" density="compact">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
@@ -649,11 +895,11 @@ export default function AdminEconomicsPage(): JSX.Element {
           </SectionCard>
 
           <SectionCard
-            eyebrow="Component costs"
+            eyebrow="Raw materials"
             title={`Showing ${filteredCosts.length} of ${costsQuery.data?.rows.length ?? 0}`}
             description={
               isAdmin
-                ? "Click the cost cell to edit the fallback. Edits apply to components.std_cost_per_inv_uom; the primary supplier price still wins where one is set."
+                ? "Click a cost cell to edit. The cell edits whichever cost drives COGS — the primary supplier cost when one exists, otherwise the component cost. Every change is recorded to history."
                 : "Read-only — sign in as admin to edit."
             }
             contentClassName="p-0"
@@ -696,6 +942,9 @@ export default function AdminEconomicsPage(): JSX.Element {
                       <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                         Source
                       </th>
+                      <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                        History
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
@@ -726,7 +975,6 @@ export default function AdminEconomicsPage(): JSX.Element {
                             row={r}
                             isAdmin={isAdmin}
                             onSaved={() => {
-                              setCostSavedHint(true);
                               void queryClient.invalidateQueries({
                                 queryKey: [
                                   "admin",
@@ -738,9 +986,17 @@ export default function AdminEconomicsPage(): JSX.Element {
                           />
                         </td>
                         <td className="px-3 py-2">
-                          <CostSourceBadge
-                            source={r.cost_source}
-                            supplierCost={r.supplier_cost}
+                          <CostSourceBadge source={r.cost_source} />
+                        </td>
+                        <td className="px-3 py-2 text-right">
+                          <HistoryButton
+                            onClick={() =>
+                              setHistory({
+                                mode: "rm",
+                                id: r.component_id,
+                                name: r.component_name,
+                              })
+                            }
                           />
                         </td>
                       </tr>
@@ -750,15 +1006,16 @@ export default function AdminEconomicsPage(): JSX.Element {
               </div>
             )}
           </SectionCard>
-
-          {costSavedHint ? (
-            <div className="text-xs text-fg-muted">
-              Cost saved. New COGS will recalculate tonight at 04:00 UTC — or
-              click Run Snapshot Now.
-            </div>
-          ) : null}
         </>
       ) : null}
+
+      <PriceHistoryDrawer
+        open={history != null}
+        onClose={() => setHistory(null)}
+        mode={history?.mode ?? "fg"}
+        id={history?.id ?? null}
+        name={history?.name ?? ""}
+      />
     </>
   );
 }
