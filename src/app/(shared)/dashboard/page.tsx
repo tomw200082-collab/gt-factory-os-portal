@@ -27,6 +27,17 @@
 //   - ExceptionsCard: "Open inbox" link.
 //
 // /dashboard/v2 is now a permanent redirect to this page.
+//
+// Dashboard audit pass (2026-05-16):
+//   - Open Purchase Orders KPI added to the hero strip (count + open value +
+//     late count), sourced from /api/purchase-orders.
+//   - Recent Movements panel added — last 3 stock-ledger postings of any kind
+//     (/api/stock/ledger), distinct from the production-only Recent actuals.
+//   - Hero strip is now the five run-the-factory numbers; Stock Health donut
+//     moved beside Planning. KPI tiles gained icons + deep links.
+//   - Header carries a greeting, the date, and a combined inventory value.
+//   - RM/FG value cards read the API's uncapped `by_type` rollup instead of
+//     fields the handler never emitted (which left both cards showing "—").
 // ---------------------------------------------------------------------------
 
 import type { ReactNode } from "react";
@@ -35,9 +46,13 @@ import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import {
   AlertTriangle,
+  ArrowLeftRight,
   ArrowRight,
   CheckCircle2,
+  ClipboardList,
+  Coins,
   Flame,
+  PackageCheck,
   RefreshCw,
   TrendingDown,
 } from "lucide-react";
@@ -69,18 +84,28 @@ const QK_PRODUCTION_ACTUALS = ["dashboard", "production-actuals", "recent"] as c
 const QK_CRITICAL_TODAY = ["dashboard", "critical-today"] as const;
 const QK_SLIPPED_PLANS = ["dashboard", "slipped-plans"] as const;
 const QK_BREAK_GLASS = ["dashboard", "break-glass"] as const;
+const QK_PURCHASE_ORDERS = ["dashboard", "purchase-orders", "all"] as const;
+const QK_RECENT_MOVEMENTS = ["dashboard", "stock", "ledger", "recent"] as const;
 
 // ---------------------------------------------------------------------------
 // API response types.
 // ---------------------------------------------------------------------------
+// Mirror of api/src/stock/schemas.ts StockValueResponse. `by_type` is the
+// authoritative, uncapped per-item_type rollup — the dashboard reads it
+// directly rather than re-aggregating the (capped) per-item `rows` array.
+interface StockValueTypeBucket {
+  item_type: string;
+  value_ils: string;
+  priced_sku_count: number;
+  unpriced_sku_count: number;
+  total_sku_count: number;
+}
 interface StockValueResponse {
-  rm_value?: number | null;
-  rm_total?: number | null;
-  fg_value?: number | null;
-  fg_total?: number | null;
-  rm_sku_count?: number | null;
-  fg_sku_count?: number | null;
   as_of?: string | null;
+  total_value_ils?: string | null;
+  items_with_cost?: number | null;
+  items_without_cost?: number | null;
+  by_type?: StockValueTypeBucket[] | null;
 }
 
 interface ExceptionRow {
@@ -169,6 +194,40 @@ interface BreakGlassResponse {
   break_glass_active: boolean;
   jobs_paused: boolean;
   set_at: string | null;
+}
+
+interface PurchaseOrderRow {
+  po_id: string;
+  po_number: string;
+  supplier_name?: string | null;
+  status: string;
+  expected_receive_date?: string | null;
+  currency?: string | null;
+  total_net?: string | number | null;
+}
+interface PurchaseOrdersResponse {
+  rows?: PurchaseOrderRow[];
+  data?: PurchaseOrderRow[];
+  count?: number;
+}
+
+interface LedgerRow {
+  movement_id: string;
+  movement_type: string;
+  item_type?: string | null;
+  item_id: string;
+  item_name?: string | null;
+  qty_delta: string | number;
+  uom: string;
+  event_at: string;
+  posted_at?: string | null;
+  reported_by_snapshot?: string | null;
+  po_number?: string | null;
+}
+interface LedgerResponse {
+  rows?: LedgerRow[];
+  data?: LedgerRow[];
+  total?: number;
 }
 
 // ---------------------------------------------------------------------------
@@ -347,6 +406,59 @@ function triggerKindLabel(kind: string): string {
 }
 
 // ---------------------------------------------------------------------------
+// Movement-log registry — compact mirror of the movement-log page registry.
+// Maps a raw movement_type to an operator-facing label, a direction, and a
+// glyph. Direction drives the qty colour (in = success, out = neutral/danger).
+// ---------------------------------------------------------------------------
+type MoveDir = "in" | "out" | "audit" | "reversal" | "unknown";
+
+const MOVEMENT_REGISTRY: Record<string, { label: string; dir: MoveDir; glyph: string }> = {
+  GR_POSTED: { label: "Goods Receipt", dir: "in", glyph: "↓" },
+  GR_REVERSAL: { label: "GR Reversal", dir: "reversal", glyph: "↶" },
+  WASTE_POSTED: { label: "Waste / Adjustment", dir: "out", glyph: "✕" },
+  WASTE_REVERSAL: { label: "Waste Reversal", dir: "reversal", glyph: "↶" },
+  LIONWHEEL_PICK: { label: "Shipment Pick", dir: "out", glyph: "→" },
+  LIONWHEEL_UNPICK: { label: "Shipment Pick Reversal", dir: "reversal", glyph: "↶" },
+  FG_OUT_PICK: { label: "Shipment Pick", dir: "out", glyph: "→" },
+  FG_OUT_PICK_REVERSAL: { label: "Shipment Pick Reversal", dir: "reversal", glyph: "↶" },
+  production_output: { label: "Production Output", dir: "in", glyph: "↑" },
+  production_consumption: { label: "Production Consumption", dir: "out", glyph: "↓" },
+  production_scrap: { label: "Production Scrap", dir: "audit", glyph: "·" },
+  COUNT_ADJUST: { label: "Count Adjustment", dir: "audit", glyph: "=" },
+};
+
+function moveMeta(raw: string): { label: string; dir: MoveDir; glyph: string } {
+  return (
+    MOVEMENT_REGISTRY[raw] ?? {
+      label: raw
+        .replace(/_/g, " ")
+        .toLowerCase()
+        .replace(/\b\w/g, (c) => c.toUpperCase()),
+      dir: "unknown",
+      glyph: "•",
+    }
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Time-of-day greeting — small warmth on the morning view.
+// ---------------------------------------------------------------------------
+function greeting(now: Date): string {
+  const h = now.getHours();
+  if (h < 12) return "Good morning";
+  if (h < 18) return "Good afternoon";
+  return "Good evening";
+}
+
+function fmtToday(now: Date): string {
+  return now.toLocaleDateString(undefined, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Shared shells.
 // ---------------------------------------------------------------------------
 function Skel({ h, w, className }: { h?: number; w?: string | number; className?: string }) {
@@ -474,12 +586,16 @@ function ValueCard({
   value,
   sub,
   tone,
+  icon,
+  href,
   loading,
 }: {
   label: string;
   value: string | null;
-  sub: string;
+  sub: ReactNode;
   tone: "accent" | "success" | "info" | "warning";
+  icon?: ReactNode;
+  href?: string;
   loading?: boolean;
 }) {
   const TONE_CHIP: Record<typeof tone, string> = {
@@ -494,15 +610,34 @@ function ValueCard({
     info: "bg-info",
     warning: "bg-warning",
   };
-  return (
-    <div className="card flex flex-col gap-3 p-5">
-      <div
-        className={cn(
-          "text-3xs font-semibold uppercase tracking-sops",
-          TONE_CHIP[tone],
-        )}
-      >
-        {label}
+  const TONE_ICON: Record<typeof tone, string> = {
+    accent: "bg-accent-soft text-accent",
+    success: "bg-success-soft text-success",
+    info: "bg-info-soft text-info",
+    warning: "bg-warning-soft text-warning",
+  };
+  const body = (
+    <>
+      <div className="flex items-start justify-between gap-3">
+        <div
+          className={cn(
+            "text-3xs font-semibold uppercase tracking-sops",
+            TONE_CHIP[tone],
+          )}
+        >
+          {label}
+        </div>
+        {icon ? (
+          <div
+            className={cn(
+              "flex h-8 w-8 shrink-0 items-center justify-center rounded-md",
+              TONE_ICON[tone],
+            )}
+            aria-hidden
+          >
+            {icon}
+          </div>
+        ) : null}
       </div>
       {loading ? (
         <Skel h={36} w="80%" />
@@ -512,9 +647,20 @@ function ValueCard({
         </div>
       )}
       <div className="text-xs text-fg-muted">{sub}</div>
-      <div className={cn("h-0.5 w-full rounded opacity-60", TONE_BAR[tone])} aria-hidden />
-    </div>
+      <div className={cn("mt-auto h-0.5 w-full rounded opacity-60", TONE_BAR[tone])} aria-hidden />
+    </>
   );
+  if (href) {
+    return (
+      <Link
+        href={href}
+        className="card flex flex-col gap-3 p-5 transition-colors hover:border-accent/50 hover:bg-bg-raised"
+      >
+        {body}
+      </Link>
+    );
+  }
+  return <div className="card flex flex-col gap-3 p-5">{body}</div>;
 }
 
 // ---------------------------------------------------------------------------
@@ -1011,6 +1157,121 @@ function RecentProduction({
 }
 
 // ---------------------------------------------------------------------------
+// Recent movements — last 3 rows from the stock ledger (movement log).
+// Distinct from "Recent production": this surfaces every movement kind
+// (goods receipts, shipments, waste, counts), not just production output.
+// ---------------------------------------------------------------------------
+function RecentMovements({
+  rows,
+  now,
+  loading,
+  error,
+  onRetry,
+}: {
+  rows: LedgerRow[];
+  now: Date;
+  loading?: boolean;
+  error?: boolean;
+  onRetry: () => void;
+}) {
+  const DIR_PILL: Record<MoveDir, string> = {
+    in: "bg-success-softer text-success-fg ring-1 ring-success/20",
+    out: "bg-bg-subtle text-fg ring-1 ring-border",
+    audit: "bg-info-softer text-info-fg ring-1 ring-info/20",
+    reversal: "bg-info-softer text-info-fg ring-1 ring-info/30",
+    unknown: "bg-bg-subtle text-fg-subtle ring-1 ring-border",
+  };
+
+  return (
+    <SectionCard
+      eyebrow="Stock ledger"
+      title={
+        <span className="inline-flex items-center gap-2">
+          <ArrowLeftRight className="h-4 w-4 text-accent" strokeWidth={2.25} />
+          Recent movements
+        </span>
+      }
+      description="The 3 most recent postings to the stock ledger."
+      footer={
+        <Link
+          href="/stock/movement-log"
+          className="inline-flex items-center gap-1 text-xs font-semibold text-accent hover:underline"
+        >
+          View movement log
+          <ArrowRight className="h-3 w-3" strokeWidth={2} />
+        </Link>
+      }
+    >
+      {loading ? (
+        <div className="flex flex-col gap-2">
+          <SkeletonRow />
+          <SkeletonRow />
+          <SkeletonRow />
+        </div>
+      ) : error ? (
+        <ErrorAlert label="Recent movements unavailable." onRetry={onRetry} />
+      ) : rows.length === 0 ? (
+        <EmptyState
+          title="No movements recorded yet."
+          description="No rows have been posted to the stock ledger."
+        />
+      ) : (
+        <ul className="flex flex-col gap-2">
+          {rows.slice(0, 3).map((r) => {
+            const meta = moveMeta(r.movement_type);
+            const qty = toNum(r.qty_delta);
+            const positive = qty > 0;
+            const name = r.item_name ?? r.item_id;
+            const when = r.posted_at ?? r.event_at;
+            return (
+              <li
+                key={r.movement_id}
+                className="flex items-center gap-3 rounded border border-border/70 bg-bg-raised px-3 py-2.5"
+              >
+                <span
+                  className={cn(
+                    "inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-2xs font-medium",
+                    DIR_PILL[meta.dir],
+                  )}
+                  title={`${meta.label} (${r.movement_type})`}
+                >
+                  <span aria-hidden className="font-mono">
+                    {meta.glyph}
+                  </span>
+                  {meta.label}
+                </span>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold text-fg-strong">{name}</div>
+                  <div
+                    className="mt-0.5 text-3xs text-fg-muted"
+                    title={fmtAbsolute(when)}
+                  >
+                    {fmtRelative(when, now)}
+                    {r.po_number ? ` · PO ${r.po_number}` : ""}
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <div
+                    className={cn(
+                      "text-base font-semibold tabular-nums",
+                      positive ? "text-success" : "text-fg-strong",
+                    )}
+                  >
+                    {positive ? "+" : ""}
+                    {qty.toLocaleString(undefined, { maximumFractionDigits: 3 })}
+                  </div>
+                  <div className="text-3xs uppercase text-fg-faint">{r.uom}</div>
+                </div>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </SectionCard>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Critical Today block — graduated v2 implementation. Full state hygiene.
 // ---------------------------------------------------------------------------
 function CriticalTodayBlock({ now }: { now: Date }) {
@@ -1252,6 +1513,22 @@ export default function DashboardPage() {
     refetchInterval: STALE_TIME_MS,
   });
 
+  const purchaseOrdersQ = useQuery({
+    queryKey: QK_PURCHASE_ORDERS,
+    queryFn: ({ signal }) =>
+      fetchJson<PurchaseOrdersResponse>("/api/purchase-orders?limit=500", signal),
+    staleTime: STALE_TIME_MS,
+    refetchInterval: STALE_TIME_MS,
+  });
+
+  const movementsQ = useQuery({
+    queryKey: QK_RECENT_MOVEMENTS,
+    queryFn: ({ signal }) =>
+      fetchJson<LedgerResponse>("/api/stock/ledger?limit=3", signal),
+    staleTime: STALE_TIME_MS,
+    refetchInterval: STALE_TIME_MS,
+  });
+
   // Derived: stock health from inventory-flow.
   const flowItems = flowQ.data?.items ?? [];
   const healthy = flowItems.filter((i) => i.risk_tier === "healthy").length;
@@ -1261,13 +1538,37 @@ export default function DashboardPage() {
   ).length;
   const total = flowItems.length;
 
-  // Derived: inventory values.
-  const vd = valueQ.data;
-  const rmValue = vd?.rm_value ?? vd?.rm_total ?? null;
-  const fgValue = vd?.fg_value ?? vd?.fg_total ?? null;
-  const rmSkus = vd?.rm_sku_count ?? null;
-  const fgSkus = vd?.fg_sku_count ?? null;
-  const valueAsOf = vd?.as_of ?? null;
+  // Derived: inventory values. The /api/stock/value response carries an
+  // uncapped per-item_type rollup in `by_type`. The dashboard composes two
+  // cards from it:
+  //   FG card = item_type 'FG'
+  //   RM card = item_type 'RM' + 'PKG' (raw materials + packaging)
+  // `value_ils` already excludes unpriced items; `unpriced_sku_count` is
+  // surfaced so the figure stays honest about its coverage.
+  const stockValue = useMemo(() => {
+    const buckets = valueQ.data?.by_type ?? [];
+    const bucket = (t: string) => buckets.find((b) => b.item_type === t);
+    const fg = bucket("FG");
+    const rm = bucket("RM");
+    const pkg = bucket("PKG");
+    const hasData = buckets.length > 0;
+    return {
+      rmValue: hasData
+        ? Number(rm?.value_ils ?? 0) + Number(pkg?.value_ils ?? 0)
+        : null,
+      fgValue: hasData ? Number(fg?.value_ils ?? 0) : null,
+      rmSkus: (rm?.total_sku_count ?? 0) + (pkg?.total_sku_count ?? 0),
+      fgSkus: fg?.total_sku_count ?? 0,
+      rmUnpriced: (rm?.unpriced_sku_count ?? 0) + (pkg?.unpriced_sku_count ?? 0),
+      fgUnpriced: fg?.unpriced_sku_count ?? 0,
+    };
+  }, [valueQ.data]);
+
+  const rmValue = stockValue.rmValue;
+  const fgValue = stockValue.fgValue;
+  const rmSkus = stockValue.rmSkus;
+  const fgSkus = stockValue.fgSkus;
+  const valueAsOf = valueQ.data?.as_of ?? null;
 
   // Derived: exceptions.
   const excRows = exceptionsQ.data?.rows ?? exceptionsQ.data?.data ?? [];
@@ -1313,11 +1614,33 @@ export default function DashboardPage() {
   // Derived: recent actuals.
   const recentActuals = actualsQ.data?.rows ?? actualsQ.data?.data ?? [];
 
+  // Derived: recent stock-ledger movements (3 most recent).
+  const recentMovements = movementsQ.data?.rows ?? movementsQ.data?.data ?? [];
+
+  // Derived: open purchase orders. "Open" = not yet fully received, i.e.
+  // status OPEN or PARTIAL. Late = an open PO whose expected receive date
+  // has already passed.
+  const poStats = useMemo(() => {
+    const rows = purchaseOrdersQ.data?.rows ?? purchaseOrdersQ.data?.data ?? [];
+    const today = new Date().toISOString().slice(0, 10);
+    const open = rows.filter((r) => r.status === "OPEN" || r.status === "PARTIAL");
+    const late = open.filter(
+      (r) => !!r.expected_receive_date && r.expected_receive_date < today,
+    );
+    const openValue = open.reduce((sum, r) => sum + toNum(r.total_net), 0);
+    return { openCount: open.length, lateCount: late.length, openValue };
+  }, [purchaseOrdersQ.data]);
+
+  // Combined inventory value for the header chip.
+  const totalInventoryValue =
+    rmValue != null || fgValue != null ? (rmValue ?? 0) + (fgValue ?? 0) : null;
+
   return (
     <div className="flex flex-col gap-6 sm:gap-8">
       <WorkflowHeader
         eyebrow="Factory floor"
         title="Dashboard"
+        description={`${greeting(now)} — here is the state of the factory on ${fmtToday(now)}.`}
         meta={
           <MetaRow>
             <FreshnessBadge
@@ -1326,6 +1649,15 @@ export default function DashboardPage() {
               warnAfterMinutes={15}
               failAfterMinutes={120}
             />
+            {totalInventoryValue != null ? (
+              <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-bg-subtle px-2.5 py-1 text-2xs font-semibold text-fg-muted">
+                <Coins className="h-3.5 w-3.5 text-accent" strokeWidth={2} />
+                Total inventory{" "}
+                <span className="tabular-nums text-fg-strong">
+                  {fmtILS(totalInventoryValue)}
+                </span>
+              </span>
+            ) : null}
           </MetaRow>
         }
       />
@@ -1337,28 +1669,60 @@ export default function DashboardPage() {
       <CriticalTodayBlock now={now} />
       <SlippedPlansBlock now={now} />
 
-      {/* Hero KPI strip. */}
+      {/* Hero KPI strip — the five numbers the factory is run by. */}
       <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <ValueCard
           label="RM Inventory Value"
           value={rmValue != null ? fmtILS(rmValue) : null}
-          sub={rmSkus != null ? `${rmSkus} raw material SKUs` : "Raw materials"}
+          sub={
+            <span>
+              {rmSkus} raw material &amp; packaging SKUs
+              {stockValue.rmUnpriced > 0 ? (
+                <span className="text-fg-faint"> · {stockValue.rmUnpriced} unpriced</span>
+              ) : null}
+            </span>
+          }
           tone="warning"
+          icon={<Coins className="h-4 w-4" strokeWidth={2} />}
+          href="/inventory"
           loading={valueQ.isLoading}
         />
         <ValueCard
           label="FG Inventory Value"
           value={fgValue != null ? fmtILS(fgValue) : null}
-          sub={fgSkus != null ? `${fgSkus} finished good SKUs` : "Finished goods"}
+          sub={
+            <span>
+              {fgSkus} finished good SKUs
+              {stockValue.fgUnpriced > 0 ? (
+                <span className="text-fg-faint"> · {stockValue.fgUnpriced} unpriced</span>
+              ) : null}
+            </span>
+          }
           tone="success"
+          icon={<PackageCheck className="h-4 w-4" strokeWidth={2} />}
+          href="/inventory"
           loading={valueQ.isLoading}
         />
-        <StockDonut
-          healthy={healthy}
-          watch={watch}
-          critical={critical}
-          total={total}
-          loading={flowQ.isLoading}
+        <ValueCard
+          label="Open Purchase Orders"
+          value={String(poStats.openCount)}
+          sub={
+            <span>
+              {fmtILS(poStats.openValue)} open value
+              {poStats.lateCount > 0 ? (
+                <>
+                  {" · "}
+                  <span className="font-semibold text-danger">
+                    {poStats.lateCount} late
+                  </span>
+                </>
+              ) : null}
+            </span>
+          }
+          tone="info"
+          icon={<ClipboardList className="h-4 w-4" strokeWidth={2} />}
+          href="/purchase-orders"
+          loading={purchaseOrdersQ.isLoading}
         />
         <ExceptionsCard
           criticalN={criticalN}
@@ -1368,16 +1732,34 @@ export default function DashboardPage() {
         />
       </div>
 
-      {/* Shortage + Planning. */}
+      {/* Shortage risk + stock health + planning. */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
         <ShortageRisk items={flowItems} loading={flowQ.isLoading} />
-        <PlanningCard run={latestRun} loading={planningQ.isLoading} />
+        <div className="flex flex-col gap-4">
+          <StockDonut
+            healthy={healthy}
+            watch={watch}
+            critical={critical}
+            total={total}
+            loading={flowQ.isLoading}
+          />
+          <PlanningCard run={latestRun} loading={planningQ.isLoading} />
+        </div>
       </div>
 
-      {/* Production + Recent actuals. */}
+      {/* Production this week + recent activity. */}
       <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
         <ProductionWeek rows={prodWeekItems} loading={productionQ.isLoading} />
-        <RecentProduction rows={recentActuals} now={now} loading={actualsQ.isLoading} />
+        <div className="flex flex-col gap-4">
+          <RecentProduction rows={recentActuals} now={now} loading={actualsQ.isLoading} />
+          <RecentMovements
+            rows={recentMovements}
+            now={now}
+            loading={movementsQ.isLoading}
+            error={movementsQ.isError}
+            onRetry={() => movementsQ.refetch()}
+          />
+        </div>
       </div>
     </div>
   );
