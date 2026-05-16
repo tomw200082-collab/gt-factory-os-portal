@@ -36,6 +36,8 @@
 //   - Hero strip is now the five run-the-factory numbers; Stock Health donut
 //     moved beside Planning. KPI tiles gained icons + deep links.
 //   - Header carries a greeting, the date, and a combined inventory value.
+//   - RM/FG value cards read the API's uncapped `by_type` rollup instead of
+//     fields the handler never emitted (which left both cards showing "—").
 // ---------------------------------------------------------------------------
 
 import type { ReactNode } from "react";
@@ -88,22 +90,22 @@ const QK_RECENT_MOVEMENTS = ["dashboard", "stock", "ledger", "recent"] as const;
 // ---------------------------------------------------------------------------
 // API response types.
 // ---------------------------------------------------------------------------
-// Mirror of api/src/stock/schemas.ts StockValueResponse. The upstream handler
-// returns per-item rows + a single combined total — it does NOT pre-aggregate
-// by item_type. The dashboard splits RM vs FG client-side (see stockValue memo).
-interface StockValueRow {
+// Mirror of api/src/stock/schemas.ts StockValueResponse. `by_type` is the
+// authoritative, uncapped per-item_type rollup — the dashboard reads it
+// directly rather than re-aggregating the (capped) per-item `rows` array.
+interface StockValueTypeBucket {
   item_type: string;
-  item_id: string;
-  display_name: string | null;
-  total_value_ils: string | null;
+  value_ils: string;
+  priced_sku_count: number;
+  unpriced_sku_count: number;
+  total_sku_count: number;
 }
 interface StockValueResponse {
   as_of?: string | null;
-  rows?: StockValueRow[];
   total_value_ils?: string | null;
   items_with_cost?: number | null;
   items_without_cost?: number | null;
-  row_count?: number | null;
+  by_type?: StockValueTypeBucket[] | null;
 }
 
 interface ExceptionRow {
@@ -1536,42 +1538,29 @@ export default function DashboardPage() {
   ).length;
   const total = flowItems.length;
 
-  // Derived: inventory values. The upstream /api/stock/value handler returns
-  // a flat per-item `rows` array (item_type FG | RM | PKG) plus one combined
-  // `total_value_ils` — it does not split RM vs FG. We aggregate here:
-  //   FG bucket  = item_type 'FG'
-  //   RM bucket  = item_type 'RM' or 'PKG' (raw materials + packaging)
-  // Only rows with a non-null total_value_ils contribute to value; rows with
-  // no primary supplier cost are counted as "unpriced" so the number stays
-  // honest about what it does and does not include.
+  // Derived: inventory values. The /api/stock/value response carries an
+  // uncapped per-item_type rollup in `by_type`. The dashboard composes two
+  // cards from it:
+  //   FG card = item_type 'FG'
+  //   RM card = item_type 'RM' + 'PKG' (raw materials + packaging)
+  // `value_ils` already excludes unpriced items; `unpriced_sku_count` is
+  // surfaced so the figure stays honest about its coverage.
   const stockValue = useMemo(() => {
-    const rows = valueQ.data?.rows ?? [];
-    let rmValue = 0;
-    let fgValue = 0;
-    let rmSkus = 0;
-    let fgSkus = 0;
-    let rmUnpriced = 0;
-    let fgUnpriced = 0;
-    for (const r of rows) {
-      const priced = r.total_value_ils != null;
-      if (r.item_type === "FG") {
-        fgSkus += 1;
-        if (priced) fgValue += Number(r.total_value_ils);
-        else fgUnpriced += 1;
-      } else {
-        rmSkus += 1;
-        if (priced) rmValue += Number(r.total_value_ils);
-        else rmUnpriced += 1;
-      }
-    }
-    const hasRows = rows.length > 0;
+    const buckets = valueQ.data?.by_type ?? [];
+    const bucket = (t: string) => buckets.find((b) => b.item_type === t);
+    const fg = bucket("FG");
+    const rm = bucket("RM");
+    const pkg = bucket("PKG");
+    const hasData = buckets.length > 0;
     return {
-      rmValue: hasRows ? rmValue : null,
-      fgValue: hasRows ? fgValue : null,
-      rmSkus,
-      fgSkus,
-      rmUnpriced,
-      fgUnpriced,
+      rmValue: hasData
+        ? Number(rm?.value_ils ?? 0) + Number(pkg?.value_ils ?? 0)
+        : null,
+      fgValue: hasData ? Number(fg?.value_ils ?? 0) : null,
+      rmSkus: (rm?.total_sku_count ?? 0) + (pkg?.total_sku_count ?? 0),
+      fgSkus: fg?.total_sku_count ?? 0,
+      rmUnpriced: (rm?.unpriced_sku_count ?? 0) + (pkg?.unpriced_sku_count ?? 0),
+      fgUnpriced: fg?.unpriced_sku_count ?? 0,
     };
   }, [valueQ.data]);
 
