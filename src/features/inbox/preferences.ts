@@ -17,11 +17,14 @@ export interface InboxPrefs {
   sort?: InboxSort;
   density: InboxDensity;
   showZeroCounts: boolean;
+  /** Whether the collapsed "System & diagnostics" section is expanded. */
+  systemSectionOpen: boolean;
 }
 
 const DEFAULTS: InboxPrefs = {
   density: "cozy",
   showZeroCounts: false,
+  systemSectionOpen: false,
 };
 
 export function readPrefs(): InboxPrefs {
@@ -40,6 +43,7 @@ export function readPrefs(): InboxPrefs {
           ? parsed.density
           : DEFAULTS.density,
       showZeroCounts: parsed.showZeroCounts === true,
+      systemSectionOpen: parsed.systemSectionOpen === true,
     };
   } catch {
     return DEFAULTS;
@@ -80,7 +84,7 @@ export function densityRowPaddingClass(d: InboxDensity): string {
       return "px-5 py-2.5";
     case "cozy":
     default:
-      return "px-5 py-3.5";
+      return "px-5 py-4";
   }
 }
 

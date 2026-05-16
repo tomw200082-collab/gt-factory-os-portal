@@ -127,6 +127,31 @@ export function rowFamily(row: InboxRow): RowFamily {
   return "info";
 }
 
+// ---------------------------------------------------------------------------
+// Inbox lane — the top-level split that drives the default "all" view.
+//
+//   actionable    — decisions, to-dos, and approvals. The operator can and
+//                   should act on these; they fill the working inbox.
+//   system_health — integration / sync / auth warnings. Usually self-recovers
+//                   or is an admin/IT concern, not an operator decision.
+//   diagnostics   — informational and audit-only records. Nothing to resolve.
+//
+// system_health + diagnostics are folded into the collapsed
+// "System & diagnostics" section so the working inbox carries only
+// operator-actionable rows. An unknown / new category falls through
+// rowFamily() to "info" → diagnostics, i.e. it stays out of the working
+// inbox until it is explicitly classified as a decision or to-do — the
+// noise-free default Tom asked for.
+// ---------------------------------------------------------------------------
+export type InboxLane = "actionable" | "system_health" | "diagnostics";
+
+export function rowLane(row: InboxRow): InboxLane {
+  const family = rowFamily(row);
+  if (family === "warning") return "system_health";
+  if (family === "info") return "diagnostics";
+  return "actionable";
+}
+
 export function categoryFriendly(category: string): string {
   return CATEGORY_FRIENDLY[category] ?? category;
 }
