@@ -49,7 +49,6 @@ import {
   RefreshCw,
   Search,
   Sparkles,
-  Star,
   X,
 } from "lucide-react";
 
@@ -265,6 +264,10 @@ function readFilterFromSearchParams(
 
 // ---------------------------------------------------------------------------
 // Severity visual config (UI-only projection of the backend enum).
+//
+// Calm-direction pass (Tom 2026-05-16): severity reads from the thin left
+// edge bar and the dot/icon only. No full-row colour washes — the working
+// inbox stays quiet so the summary line is the single focal point per row.
 // ---------------------------------------------------------------------------
 const SEVERITY_CONFIG: Record<
   InboxSeverity,
@@ -273,7 +276,6 @@ const SEVERITY_CONFIG: Record<
     icon: typeof AlertCircle;
     label: string;
     accentBar: string;
-    bgWash: string;
   }
 > = {
   critical: {
@@ -281,23 +283,18 @@ const SEVERITY_CONFIG: Record<
     icon: AlertCircle,
     label: "Critical",
     accentBar: "bg-danger",
-    bgWash:
-      "bg-gradient-to-l from-transparent via-transparent to-danger-softer/40",
   },
   warning: {
     tone: "warning",
     icon: AlertTriangle,
     label: "Warning",
     accentBar: "bg-warning",
-    bgWash:
-      "bg-gradient-to-l from-transparent via-transparent to-warning-softer/35",
   },
   info: {
     tone: "info",
     icon: Info,
     label: "Info",
     accentBar: "bg-info",
-    bgWash: "",
   },
 };
 
@@ -1179,7 +1176,7 @@ export default function InboxListPage() {
       <WorkflowHeader
         eyebrow="Inbox"
         title="Inbox"
-        description="Unified triage surface — approvals + exceptions in one list. Filter, search, and resolve in bulk."
+        description="Everything waiting on you — approvals and exceptions, in one place. System noise stays tucked away."
         meta={
           <div className="flex flex-wrap items-center gap-2">
             {criticalCount > 0 ? (
@@ -1218,7 +1215,7 @@ export default function InboxListPage() {
         }
       />
 
-      <SectionCard contentClassName="p-0">
+      <SectionCard contentClassName="p-0" className="reveal">
         {/* ---- Filter bar ----------------------------------------------- */}
         <div
           className="flex flex-wrap items-center gap-3 border-b border-border/60 px-5 py-3"
@@ -1489,7 +1486,7 @@ export default function InboxListPage() {
               />
             ) : (
               <ul
-                className="divide-y divide-border/60"
+                className="fc-list-stagger divide-y divide-border/60"
                 data-testid="inbox-list"
                 role="list"
               >
@@ -1670,14 +1667,18 @@ function InboxEmptyState({
 
   return (
     <div
-      className="flex flex-col items-center justify-center gap-3 px-5 py-12 text-center"
+      className="reveal flex flex-col items-center justify-center gap-4 px-5 py-16 text-center"
       data-testid="inbox-empty"
     >
-      <div className="flex h-12 w-12 items-center justify-center rounded-full bg-success-subtle/40 text-success">
-        <CheckCircle2 className="h-6 w-6" strokeWidth={2} />
+      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-success-subtle/40 text-success ring-1 ring-success/15">
+        <CheckCircle2 className="h-7 w-7" strokeWidth={1.75} />
       </div>
-      <div className="text-sm font-semibold text-fg-strong">{title}</div>
-      <div className="max-w-md text-xs text-fg-muted">{description}</div>
+      <div className="text-base font-semibold tracking-tightish text-fg-strong">
+        {title}
+      </div>
+      <div className="max-w-md text-sm leading-relaxed text-fg-muted">
+        {description}
+      </div>
       {action ? <div className="mt-2">{action}</div> : null}
     </div>
   );
@@ -1756,7 +1757,6 @@ function InboxRowCard({
         isSelected && "bg-accent-soft/40",
         stuck && "bg-danger-softer/15",
         fresh && "ring-1 ring-inset ring-success/30",
-        sev.bgWash,
         "hover:bg-bg-subtle/50",
       )}
       data-testid="inbox-row"
@@ -1836,20 +1836,13 @@ function InboxRowCard({
         )}
 
         <div className="min-w-0 flex-1">
+          {/* Quiet meta line — severity is carried by the dot/edge bar, so no
+              severity text chip here. Category is the one identifying chip;
+              everything else recedes. */}
           <div className="flex flex-wrap items-center gap-2">
-            <span
-              className={cn(
-                "inline-flex items-center gap-1 rounded-sm px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-sops",
-                row.severity === "critical" && "bg-danger-softer text-danger",
-                row.severity === "warning" && "bg-warning-softer text-warning",
-                row.severity === "info" && "bg-info-softer text-info",
-              )}
-            >
-              {sev.label}
-            </span>
             {!row.type.startsWith("exception:") ? (
               <span
-                className="chip"
+                className="chip-ghost"
                 data-testid="inbox-row-type"
                 title={row.type}
               >
@@ -1869,16 +1862,15 @@ function InboxRowCard({
             </span>
             {stuck ? (
               <span
-                className="inline-flex items-center gap-1 rounded-sm bg-danger px-1.5 py-0.5 text-[0.6rem] font-bold uppercase tracking-sops text-accent-fg"
-                title="Critical and >72h old"
+                className="inline-flex items-center rounded-full border border-danger/30 bg-danger-softer px-2 py-0.5 text-3xs font-semibold text-danger"
+                title="Critical and waiting more than 72h"
               >
-                <Star className="h-2.5 w-2.5" strokeWidth={2.5} />
                 Stuck
               </span>
             ) : null}
             {fresh ? (
               <span
-                className="inline-flex items-center gap-1 rounded-sm bg-success px-1.5 py-0.5 text-[0.6rem] font-bold uppercase tracking-sops text-accent-fg"
+                className="inline-flex items-center rounded-full border border-success/40 bg-success-subtle px-2 py-0.5 text-3xs font-semibold text-success"
                 title="Just arrived"
               >
                 New
@@ -1886,7 +1878,7 @@ function InboxRowCard({
             ) : null}
             <span
               className={cn(
-                "ml-auto font-mono text-3xs uppercase tracking-sops",
+                "ml-auto shrink-0 font-mono text-3xs lowercase",
                 stuck ? "text-danger" : "text-fg-subtle",
               )}
               title={formatTimestamp(row.created_at)}
@@ -1895,11 +1887,12 @@ function InboxRowCard({
             </span>
           </div>
 
+          {/* The summary is the one thing the operator reads — give it room
+              and a single, consistent weight. */}
           <div
             className={cn(
-              "mt-1 tracking-tightish text-fg-strong",
+              "mt-1.5 font-semibold leading-snug tracking-tightish text-fg-strong",
               density === "compact" ? "text-sm" : "text-base",
-              row.severity === "critical" ? "font-bold" : "font-semibold",
             )}
             data-testid="inbox-row-summary"
           >
@@ -2072,7 +2065,7 @@ function SystemDiagnosticsSection({
 
   return (
     <section
-      className="border-t-2 border-border/70 bg-bg-subtle/30"
+      className="border-t border-border/60 bg-bg-subtle/25"
       data-testid="inbox-system-section"
       aria-label="System and diagnostics"
     >

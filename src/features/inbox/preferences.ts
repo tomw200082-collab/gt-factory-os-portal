@@ -84,7 +84,7 @@ export function densityRowPaddingClass(d: InboxDensity): string {
       return "px-5 py-2.5";
     case "cozy":
     default:
-      return "px-5 py-3.5";
+      return "px-5 py-4";
   }
 }
 
