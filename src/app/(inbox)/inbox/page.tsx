@@ -38,11 +38,13 @@ import {
   AlertTriangle,
   ArrowLeft,
   CheckCircle2,
+  ChevronDown,
   Clock,
   Filter,
   Flame,
   Info,
   Keyboard,
+  Layers,
   Pin,
   RefreshCw,
   Search,
@@ -90,6 +92,7 @@ import {
   categoryFriendly,
   PINNED_CATEGORIES,
   rowFamily,
+  rowLane,
   searchBag,
   SEV_DOT,
   severityIconStroke,
@@ -727,6 +730,32 @@ export default function InboxListPage() {
     return viewedRows.filter((r) => searchBag(r).includes(searchTerm));
   }, [viewedRows, searchTerm, filter.sort]);
 
+  // -------------------------------------------------------------------------
+  // Actionable / muted partition (Tom 2026-05-16).
+  //
+  // On the default "all" view the working inbox shows ONLY rows the operator
+  // can act on — decisions, to-dos, and approvals. Integration / sync / auth
+  // warnings and informational diagnostic records are folded into a collapsed
+  // "System & diagnostics" section so the inbox is free of noise the operator
+  // cannot resolve. Explicit views (Integrations, Exceptions, Data Quality …)
+  // and active searches bypass the split — drilling into a category or
+  // searching is an explicit request to see everything.
+  // -------------------------------------------------------------------------
+  const splitActive = filter.view === "all" && searchTerm === "";
+
+  const { mainRows, mutedRows } = useMemo(() => {
+    if (!splitActive) {
+      return { mainRows: visibleRows, mutedRows: [] as InboxRow[] };
+    }
+    const main: InboxRow[] = [];
+    const muted: InboxRow[] = [];
+    for (const r of visibleRows) {
+      if (rowLane(r) === "actionable") main.push(r);
+      else muted.push(r);
+    }
+    return { mainRows: main, mutedRows: muted };
+  }, [visibleRows, splitActive]);
+
   // Critical count for the page header.
   const criticalCount = useMemo(
     () => allRows.filter((r) => r.severity === "critical").length,
@@ -735,13 +764,13 @@ export default function InboxListPage() {
 
   const visibleSelectableIds = useMemo(() => {
     const out: string[] = [];
-    for (const r of visibleRows) {
+    for (const r of mainRows) {
       if (r.type.startsWith("approval:")) continue;
       if (!r.inline_actions.includes("resolve")) continue;
       out.push(r.id);
     }
     return out;
-  }, [visibleRows]);
+  }, [mainRows]);
 
   const allVisibleSelected = useMemo(() => {
     if (visibleSelectableIds.length === 0) return false;
@@ -846,6 +875,11 @@ export default function InboxListPage() {
     },
     [setPrefs],
   );
+
+  const systemSectionOpen = prefs.systemSectionOpen === true;
+  const toggleSystemSection = useCallback(() => {
+    setPrefs({ systemSectionOpen: !(prefs.systemSectionOpen === true) });
+  }, [prefs.systemSectionOpen, setPrefs]);
 
   // -------------------------------------------------------------------------
   // Mutations.
@@ -976,6 +1010,55 @@ export default function InboxListPage() {
     bulkResolveMutation.mutate({ ids });
   }, [selected, selectionBreakdown, bulkResolveMutation]);
 
+  // Shared row renderer — used by both the working inbox list and the
+  // collapsed System & diagnostics section. `focusIdx` is the j/k keyboard
+  // index for main-list rows; muted rows pass null (not keyboard-traversed).
+  const renderInboxRow = useCallback(
+    (row: InboxRow, focusIdx: number | null): ReactNode => (
+      <InboxRowCard
+        key={row.id}
+        row={row}
+        now={now}
+        density={density}
+        isFocused={focusIdx !== null && focusedIdx === focusIdx}
+        onFocusRow={() => {
+          if (focusIdx !== null) setFocusedIdx(focusIdx);
+        }}
+        canAct={canAct}
+        isResolvingThis={resolvingId === row.id}
+        isSelected={selected.has(row.id)}
+        onToggleSelected={toggleSelected}
+        onStartResolve={(id) => {
+          setActionSuccess(null);
+          setActionError(null);
+          setResolvingId(id);
+        }}
+        onCancelResolve={() => setResolvingId(null)}
+        onConfirmResolve={(id, notes) => resolveMutation.mutate({ id, notes })}
+        onAcknowledge={(id) => {
+          setActionSuccess(null);
+          setActionError(null);
+          ackMutation.mutate(id);
+        }}
+        ackBusy={ackMutation.isPending && ackMutation.variables === row.id}
+        resolveBusy={
+          resolveMutation.isPending && resolveMutation.variables?.id === row.id
+        }
+      />
+    ),
+    [
+      now,
+      density,
+      focusedIdx,
+      canAct,
+      resolvingId,
+      selected,
+      toggleSelected,
+      resolveMutation,
+      ackMutation,
+    ],
+  );
+
   // -------------------------------------------------------------------------
   // Keyboard navigation (§66-72). Skipped while a textarea/input is focused.
   // -------------------------------------------------------------------------
@@ -1004,7 +1087,7 @@ export default function InboxListPage() {
       if (isEditing()) return;
       if (e.key === "j" || e.key === "ArrowDown") {
         e.preventDefault();
-        setFocusedIdx((i) => Math.min((visibleRows.length || 1) - 1, i + 1));
+        setFocusedIdx((i) => Math.min((mainRows.length || 1) - 1, i + 1));
         return;
       }
       if (e.key === "k" || e.key === "ArrowUp") {
@@ -1012,7 +1095,7 @@ export default function InboxListPage() {
         setFocusedIdx((i) => Math.max(0, i - 1));
         return;
       }
-      const focused = focusedIdx >= 0 ? visibleRows[focusedIdx] : null;
+      const focused = focusedIdx >= 0 ? mainRows[focusedIdx] : null;
       if (!focused) return;
       if (e.key === "x") {
         if (focused.type.startsWith("approval:")) return;
@@ -1046,7 +1129,7 @@ export default function InboxListPage() {
     window.addEventListener("keydown", handler);
     return () => window.removeEventListener("keydown", handler);
   }, [
-    visibleRows,
+    mainRows,
     visibleSelectableIds,
     focusedIdx,
     selected,
@@ -1058,12 +1141,12 @@ export default function InboxListPage() {
     router,
   ]);
 
-  // Reset focused index when the visible row count shrinks below it.
+  // Reset focused index when the main-list row count shrinks below it.
   useEffect(() => {
-    if (focusedIdx >= visibleRows.length) {
-      setFocusedIdx(Math.max(0, visibleRows.length - 1));
+    if (focusedIdx >= mainRows.length) {
+      setFocusedIdx(Math.max(0, mainRows.length - 1));
     }
-  }, [visibleRows.length, focusedIdx]);
+  }, [mainRows.length, focusedIdx]);
 
   // Slow-load nudge (§50).
   const [showSlowNudge, setShowSlowNudge] = useState(false);
@@ -1105,7 +1188,9 @@ export default function InboxListPage() {
               </Badge>
             ) : null}
             <Badge tone="neutral" dotted>
-              {visibleRows.length} of {allRows.length} row{allRows.length === 1 ? "" : "s"}
+              {splitActive
+                ? `${mainRows.length} to action`
+                : `${visibleRows.length} of ${allRows.length} row${allRows.length === 1 ? "" : "s"}`}
             </Badge>
             {lastRefreshedHuman ? (
               <span
@@ -1390,58 +1475,36 @@ export default function InboxListPage() {
         {/* ---- List, skeleton, or empty -------------------------------- */}
         {anyLoading ? (
           <LoadingSkeleton density={density} showSlowNudge={showSlowNudge} />
-        ) : visibleRows.length === 0 ? (
-          <InboxEmptyState
-            view={filter.view}
-            search={searchTerm}
-            allRowsCount={allRows.length}
-            viewedRowsCount={viewedRows.length}
-            onClearSearch={() => setSearchInput("")}
-            onSwitchToAll={() => setView("all")}
-          />
         ) : (
-          <ul
-            className="divide-y divide-border/60"
-            data-testid="inbox-list"
-            role="list"
-          >
-            {visibleRows.map((row, idx) => (
-              <InboxRowCard
-                key={row.id}
-                row={row}
-                now={now}
-                density={density}
-                isFocused={focusedIdx === idx}
-                onFocusRow={() => setFocusedIdx(idx)}
-                canAct={canAct}
-                isResolvingThis={resolvingId === row.id}
-                isSelected={selected.has(row.id)}
-                onToggleSelected={toggleSelected}
-                onStartResolve={(id) => {
-                  setActionSuccess(null);
-                  setActionError(null);
-                  setResolvingId(id);
-                }}
-                onCancelResolve={() => setResolvingId(null)}
-                onConfirmResolve={(id, notes) =>
-                  resolveMutation.mutate({ id, notes })
-                }
-                onAcknowledge={(id) => {
-                  setActionSuccess(null);
-                  setActionError(null);
-                  ackMutation.mutate(id);
-                }}
-                ackBusy={
-                  ackMutation.isPending &&
-                  ackMutation.variables === row.id
-                }
-                resolveBusy={
-                  resolveMutation.isPending &&
-                  resolveMutation.variables?.id === row.id
-                }
+          <>
+            {mainRows.length === 0 ? (
+              <InboxEmptyState
+                view={filter.view}
+                search={searchTerm}
+                allRowsCount={allRows.length}
+                viewedRowsCount={viewedRows.length}
+                mutedCount={mutedRows.length}
+                onClearSearch={() => setSearchInput("")}
+                onSwitchToAll={() => setView("all")}
               />
-            ))}
-          </ul>
+            ) : (
+              <ul
+                className="divide-y divide-border/60"
+                data-testid="inbox-list"
+                role="list"
+              >
+                {mainRows.map((row, idx) => renderInboxRow(row, idx))}
+              </ul>
+            )}
+            {mutedRows.length > 0 ? (
+              <SystemDiagnosticsSection
+                rows={mutedRows}
+                open={systemSectionOpen}
+                onToggle={toggleSystemSection}
+                renderRow={renderInboxRow}
+              />
+            ) : null}
+          </>
         )}
 
         {/* ---- Footer with reset prefs --------------------------------- */}
@@ -1533,6 +1596,7 @@ function InboxEmptyState({
   search,
   allRowsCount,
   viewedRowsCount,
+  mutedCount,
   onClearSearch,
   onSwitchToAll,
 }: {
@@ -1540,6 +1604,7 @@ function InboxEmptyState({
   search: string;
   allRowsCount: number;
   viewedRowsCount: number;
+  mutedCount: number;
   onClearSearch: () => void;
   onSwitchToAll: () => void;
 }) {
@@ -1578,8 +1643,15 @@ function InboxEmptyState({
       );
     }
   } else if (view === "all") {
-    title = "Nothing in your inbox.";
-    description = "All approvals and exceptions are clear. Nice work.";
+    if (mutedCount > 0) {
+      title = "You're all caught up.";
+      description = `No decisions or to-dos need you right now. ${mutedCount} background ${
+        mutedCount === 1 ? "notice is" : "notices are"
+      } tucked into System & diagnostics below — open it only if you want to look.`;
+    } else {
+      title = "Nothing in your inbox.";
+      description = "All approvals and exceptions are clear. Nice work.";
+    }
   } else {
     title = `No ${VIEW_LABELS[view].toLowerCase()} items.`;
     description =
@@ -1966,5 +2038,135 @@ function InboxRowCard({
         </div>
       </div>
     </li>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SystemDiagnosticsSection — the collapsed home for non-actionable rows.
+//
+// Everything the operator cannot decide on (integration / sync / auth
+// warnings and informational diagnostics) lives here instead of the working
+// inbox. Collapsed by default; the expanded/collapsed state is a per-user
+// preference. Inside, rows are split into two labelled sub-groups so the
+// noise stays scannable. Nothing is deleted or hidden from the system — the
+// rows are still on the page, one click away, and still fully resolvable.
+// ---------------------------------------------------------------------------
+function SystemDiagnosticsSection({
+  rows,
+  open,
+  onToggle,
+  renderRow,
+}: {
+  rows: InboxRow[];
+  open: boolean;
+  onToggle: () => void;
+  renderRow: (row: InboxRow, focusIdx: number | null) => ReactNode;
+}): ReactNode {
+  const health: InboxRow[] = [];
+  const diagnostics: InboxRow[] = [];
+  for (const r of rows) {
+    if (rowLane(r) === "system_health") health.push(r);
+    else diagnostics.push(r);
+  }
+  const criticalCount = rows.filter((r) => r.severity === "critical").length;
+
+  return (
+    <section
+      className="border-t-2 border-border/70 bg-bg-subtle/30"
+      data-testid="inbox-system-section"
+      aria-label="System and diagnostics"
+    >
+      <button
+        type="button"
+        onClick={onToggle}
+        aria-expanded={open}
+        data-testid="inbox-system-toggle"
+        className="flex w-full items-center gap-2.5 px-5 py-3 text-left transition-colors hover:bg-bg-subtle/70"
+      >
+        <ChevronDown
+          className={cn(
+            "h-4 w-4 shrink-0 text-fg-subtle transition-transform duration-200",
+            !open && "-rotate-90 rtl:rotate-90",
+          )}
+          strokeWidth={2.25}
+        />
+        <Layers className="h-4 w-4 shrink-0 text-fg-muted" strokeWidth={2} />
+        <span className="text-sm font-semibold text-fg-strong">
+          System &amp; diagnostics
+        </span>
+        <span
+          className="inline-flex h-5 min-w-[1.25rem] items-center justify-center rounded-full bg-bg-subtle px-1.5 text-3xs font-bold tabular-nums text-fg-strong ring-1 ring-border/60"
+          data-testid="inbox-system-count"
+        >
+          {rows.length > 99 ? "99+" : rows.length}
+        </span>
+        {criticalCount > 0 ? (
+          <span
+            className="inline-flex items-center gap-1 rounded-sm bg-danger-softer px-1.5 py-0.5 text-3xs font-bold uppercase tracking-sops text-danger"
+            title={`${criticalCount} critical notice${criticalCount === 1 ? "" : "s"} in this section`}
+          >
+            <AlertCircle className="h-3 w-3" strokeWidth={2.5} />
+            {criticalCount} critical
+          </span>
+        ) : null}
+        <span className="ml-auto truncate text-3xs text-fg-subtle">
+          {open
+            ? "Background notices — collapse to hide"
+            : `${health.length} sync · ${diagnostics.length} info — nothing for you to do`}
+        </span>
+      </button>
+
+      {open ? (
+        <div data-testid="inbox-system-body">
+          <SystemSubGroup
+            label="Integration & sync health"
+            hint="Connectivity, auth, and sync warnings. Usually self-recovers or is an admin/IT concern."
+            icon={AlertTriangle}
+            rows={health}
+            renderRow={renderRow}
+          />
+          <SystemSubGroup
+            label="Informational"
+            hint="Diagnostic and audit-only records. Logged for traceability — nothing to resolve."
+            icon={Info}
+            rows={diagnostics}
+            renderRow={renderRow}
+          />
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
+function SystemSubGroup({
+  label,
+  hint,
+  icon: Icon,
+  rows,
+  renderRow,
+}: {
+  label: string;
+  hint: string;
+  icon: typeof Info;
+  rows: InboxRow[];
+  renderRow: (row: InboxRow, focusIdx: number | null) => ReactNode;
+}): ReactNode {
+  if (rows.length === 0) return null;
+  return (
+    <div data-testid="inbox-system-subgroup">
+      <div className="flex items-center gap-2 border-b border-border/40 bg-bg-subtle/55 px-5 py-1.5">
+        <Icon className="h-3 w-3 shrink-0 text-fg-subtle" strokeWidth={2} />
+        <span className="text-3xs font-semibold uppercase tracking-sops text-fg-muted">
+          {label}
+        </span>
+        <span className="font-mono text-3xs text-fg-subtle">{rows.length}</span>
+        <span className="ml-2 hidden truncate text-3xs text-fg-subtle md:inline">
+          {hint}
+        </span>
+      </div>
+      <ul className="divide-y divide-border/40" role="list">
+        {rows.map((r) => renderRow(r, null))}
+      </ul>
+    </div>
   );
 }
