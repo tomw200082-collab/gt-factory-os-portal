@@ -38,10 +38,23 @@
 //   - Header carries a greeting, the date, and a combined inventory value.
 //   - RM/FG value cards read the API's uncapped `by_type` rollup instead of
 //     fields the handler never emitted (which left both cards showing "—").
+//
+// UX/UI polish — 10 iterations (2026-05-16):
+//   1.  Reveal cascade — sections fade-and-rise in a staggered sequence.
+//   2.  Personalised greeting — operator first name from the session.
+//   3.  Card tactility — KPI tiles lift, shadow and ring on hover/focus.
+//   4.  Section count chips — every list section sizes up at a glance.
+//   5.  Critical-today escalation — calm when clear, loud when not.
+//   6.  Shimmer skeletons — a light sweep replaces the flat opacity pulse.
+//   7.  Empty-state iconography — every empty panel carries an icon.
+//   8.  Accessibility — aria-live regions, labelled donut, focus rings.
+//   9.  Donut draw-in — arcs sweep from zero on mount.
+//   10. Live affordance — an "auto-refreshing" pill in the header.
+//   All motion is gated behind motion-reduce for vestibular safety.
 // ---------------------------------------------------------------------------
 
 import type { ReactNode } from "react";
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -52,7 +65,9 @@ import {
   ClipboardList,
   Coins,
   Flame,
+  Inbox,
   PackageCheck,
+  PackageSearch,
   RefreshCw,
   TrendingDown,
 } from "lucide-react";
@@ -441,13 +456,14 @@ function moveMeta(raw: string): { label: string; dir: MoveDir; glyph: string } {
 }
 
 // ---------------------------------------------------------------------------
-// Time-of-day greeting — small warmth on the morning view.
+// Time-of-day greeting — small warmth on the morning view. Iteration 2 adds
+// the operator's first name when the session carries a display name.
 // ---------------------------------------------------------------------------
-function greeting(now: Date): string {
+function greeting(now: Date, name?: string | null): string {
   const h = now.getHours();
-  if (h < 12) return "Good morning";
-  if (h < 18) return "Good afternoon";
-  return "Good evening";
+  const base = h < 12 ? "Good morning" : h < 18 ? "Good afternoon" : "Good evening";
+  const first = name?.trim().split(/\s+/)[0];
+  return first ? `${base}, ${first}` : base;
 }
 
 function fmtToday(now: Date): string {
@@ -461,22 +477,52 @@ function fmtToday(now: Date): string {
 // ---------------------------------------------------------------------------
 // Shared shells.
 // ---------------------------------------------------------------------------
+// Iteration 6 — shimmer skeletons. A light sweep reads as "loading live data"
+// far better than a flat opacity pulse. Driven by the gt-shimmer keyframe
+// already defined in globals.css.
 function Skel({ h, w, className }: { h?: number; w?: string | number; className?: string }) {
   return (
     <div
-      className={cn("animate-pulse rounded bg-bg-muted", className)}
+      className={cn("relative overflow-hidden rounded bg-bg-muted", className)}
       style={{ height: h ?? 16, width: w ?? "100%" }}
-    />
+    >
+      <div
+        className="absolute inset-y-0 w-3/5 bg-gradient-to-r from-transparent via-bg-raised/80 to-transparent motion-reduce:hidden"
+        style={{ animation: "gt-shimmer 1.5s ease-in-out infinite" }}
+        aria-hidden
+      />
+    </div>
   );
 }
 
 function SkeletonRow() {
   return (
     <div className="flex items-center gap-3 rounded border border-border/60 bg-bg-subtle px-3 py-3">
-      <div className="h-3 w-20 animate-pulse rounded bg-border/60" />
-      <div className="h-3 w-40 flex-1 animate-pulse rounded bg-border/60" />
-      <div className="h-3 w-16 animate-pulse rounded bg-border/60" />
+      <Skel h={12} w={80} />
+      <Skel h={12} className="flex-1" />
+      <Skel h={12} w={64} />
     </div>
+  );
+}
+
+// Iteration 4 — count chip rendered inside a SectionCard title so the operator
+// can size up a section before reading a single row.
+function TitleCount({ n, tone = "neutral" }: { n: number; tone?: "neutral" | "danger" | "warning" }) {
+  if (n <= 0) return null;
+  const TONE: Record<"neutral" | "danger" | "warning", string> = {
+    neutral: "bg-bg-muted text-fg-muted",
+    danger: "bg-danger/15 text-danger",
+    warning: "bg-warning/15 text-warning-fg",
+  };
+  return (
+    <span
+      className={cn(
+        "ml-2 inline-flex min-w-[1.375rem] items-center justify-center rounded-full px-1.5 py-0.5 align-middle text-2xs font-semibold tabular-nums",
+        TONE[tone],
+      )}
+    >
+      {n}
+    </span>
   );
 }
 
@@ -630,7 +676,7 @@ function ValueCard({
         {icon ? (
           <div
             className={cn(
-              "flex h-8 w-8 shrink-0 items-center justify-center rounded-md",
+              "flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-transform duration-150 ease-out-quart group-hover:scale-110 motion-reduce:transition-none motion-reduce:group-hover:scale-100",
               TONE_ICON[tone],
             )}
             aria-hidden
@@ -654,7 +700,7 @@ function ValueCard({
     return (
       <Link
         href={href}
-        className="card flex flex-col gap-3 p-5 transition-colors hover:border-accent/50 hover:bg-bg-raised"
+        className="card group flex flex-col gap-3 p-5 transition-all duration-150 ease-out-quart hover:-translate-y-0.5 hover:border-accent/50 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
       >
         {body}
       </Link>
@@ -682,7 +728,16 @@ function StockDonut({
   const r = 40;
   const circ = 2 * Math.PI * r;
   const gap = 6;
+
+  // Iteration 9 — draw-in: arcs grow from zero length on first paint.
+  const [drawn, setDrawn] = useState(false);
+  useEffect(() => {
+    const raf = requestAnimationFrame(() => setDrawn(true));
+    return () => cancelAnimationFrame(raf);
+  }, []);
+
   function arc(count: number, stroke: string, offset: number) {
+    const len = Math.max(0, (count / Math.max(1, total)) * circ - gap);
     return (
       <circle
         cx={52}
@@ -691,10 +746,11 @@ function StockDonut({
         fill="none"
         className={stroke}
         strokeWidth={10}
-        strokeDasharray={`${Math.max(0, (count / Math.max(1, total)) * circ - gap)} ${circ}`}
+        strokeDasharray={`${drawn ? len : 0} ${circ}`}
         strokeDashoffset={offset}
         transform="rotate(-90 52 52)"
         strokeLinecap="round"
+        style={{ transition: "stroke-dasharray 700ms cubic-bezier(0.165,0.84,0.44,1)" }}
       />
     );
   }
@@ -717,7 +773,13 @@ function StockDonut({
         </div>
       ) : (
         <div className="mt-4 flex items-center gap-5">
-          <svg width={104} height={104} viewBox="0 0 104 104">
+          <svg
+            width={104}
+            height={104}
+            viewBox="0 0 104 104"
+            role="img"
+            aria-label={`Stock health across ${total} items: ${healthy} healthy, ${watch} on watch, ${critical} critical.`}
+          >
             <circle cx={52} cy={52} r={r} fill="none" className="stroke-border/40" strokeWidth={10} />
             {arc(healthy, "stroke-success", 0)}
             {arc(watch, "stroke-warning", -hShare)}
@@ -812,7 +874,7 @@ function ExceptionsCard({
       )}
       <Link
         href="/inbox"
-        className="inline-flex items-center gap-1 self-start text-xs font-semibold text-accent hover:underline"
+        className="inline-flex items-center gap-1 self-start rounded text-xs font-semibold text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
       >
         Open inbox
         <ArrowRight className="h-3 w-3" strokeWidth={2} />
@@ -863,7 +925,12 @@ function ShortageRisk({ items, loading }: { items: FlowItem[]; loading?: boolean
   return (
     <SectionCard
       eyebrow="Shortage risk"
-      title="Items at risk in horizon"
+      title={
+        <span>
+          Items at risk in horizon
+          <TitleCount n={shortageItems.length} tone="warning" />
+        </span>
+      }
       description="Days to projected stockout · top 6 items"
     >
       {loading ? (
@@ -888,7 +955,7 @@ function ShortageRisk({ items, loading }: { items: FlowItem[]; loading?: boolean
                 <Link
                   href={`/planning/inventory-flow/${item.item_id}`}
                   className={cn(
-                    "flex items-center gap-3 rounded border px-3 py-2.5 text-fg-strong hover:bg-bg-raised",
+                    "flex items-center gap-3 rounded border px-3 py-2.5 text-fg-strong transition-colors hover:bg-bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
                     u.border,
                     u.bg,
                   )}
@@ -945,7 +1012,7 @@ function PlanningCard({ run, loading }: { run: PlanningRunRow | null; loading?: 
         run ? (
           <Link
             href={`/planning/runs/${encodeURIComponent(run.run_id)}`}
-            className="inline-flex items-center gap-1 text-xs font-semibold text-accent hover:underline"
+            className="inline-flex items-center gap-1 rounded text-xs font-semibold text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
           >
             Open run
             <ArrowRight className="h-3 w-3" strokeWidth={2} />
@@ -1017,7 +1084,12 @@ function ProductionWeek({ rows, loading }: { rows: ProdWeekItem[]; loading?: boo
   return (
     <SectionCard
       eyebrow="Production this week"
-      title="Planned vs completed"
+      title={
+        <span>
+          Planned vs completed
+          <TitleCount n={rows.length} />
+        </span>
+      }
       description="Top 5 items by planned quantity in the current week."
     >
       {loading ? (
@@ -1028,6 +1100,7 @@ function ProductionWeek({ rows, loading }: { rows: ProdWeekItem[]; loading?: boo
         </div>
       ) : rows.length === 0 ? (
         <EmptyState
+          icon={<PackageSearch className="h-5 w-5 text-fg-subtle" strokeWidth={2} />}
           title="No production planned for this week."
           description="No daily-plan rows exist for the current Sun–Sat window."
         />
@@ -1089,12 +1162,17 @@ function RecentProduction({
   return (
     <SectionCard
       eyebrow="Recent production"
-      title="Last 5 actuals"
+      title={
+        <span>
+          Last 5 actuals
+          <TitleCount n={rows.length} />
+        </span>
+      }
       description="Most recent production output postings."
       footer={
         <Link
           href="/stock/movement-log"
-          className="inline-flex items-center gap-1 text-xs font-semibold text-accent hover:underline"
+          className="inline-flex items-center gap-1 rounded text-xs font-semibold text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
         >
           View movement log
           <ArrowRight className="h-3 w-3" strokeWidth={2} />
@@ -1109,6 +1187,7 @@ function RecentProduction({
         </div>
       ) : rows.length === 0 ? (
         <EmptyState
+          icon={<Inbox className="h-5 w-5 text-fg-subtle" strokeWidth={2} />}
           title="No recent production actuals."
           description="No production-actual postings have been recorded yet."
         />
@@ -1195,7 +1274,7 @@ function RecentMovements({
       footer={
         <Link
           href="/stock/movement-log"
-          className="inline-flex items-center gap-1 text-xs font-semibold text-accent hover:underline"
+          className="inline-flex items-center gap-1 rounded text-xs font-semibold text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
         >
           View movement log
           <ArrowRight className="h-3 w-3" strokeWidth={2} />
@@ -1212,11 +1291,12 @@ function RecentMovements({
         <ErrorAlert label="Recent movements unavailable." onRetry={onRetry} />
       ) : rows.length === 0 ? (
         <EmptyState
+          icon={<Inbox className="h-5 w-5 text-fg-subtle" strokeWidth={2} />}
           title="No movements recorded yet."
           description="No rows have been posted to the stock ledger."
         />
       ) : (
-        <ul className="flex flex-col gap-2">
+        <ul className="flex flex-col gap-2" aria-live="polite">
           {rows.slice(0, 3).map((r) => {
             const meta = moveMeta(r.movement_type);
             const qty = toNum(r.qty_delta);
@@ -1284,15 +1364,27 @@ function CriticalTodayBlock({ now }: { now: Date }) {
 
   const rows = query.data?.rows ?? [];
   const asOf = query.data?.as_of;
+  // Iteration 5 — escalation: the block is loud (danger border, pulsing
+  // flame, count chip) only while something is actually critical. When the
+  // floor is clear it drops to the calm default tone with a green check.
+  const hot = rows.length > 0;
 
   return (
     <SectionCard
-      tone="danger"
+      tone={hot ? "danger" : "default"}
       eyebrow="Live"
       title={
         <span className="inline-flex items-center gap-2">
-          <Flame className="h-4 w-4 text-danger" strokeWidth={2.25} />
+          {hot ? (
+            <Flame
+              className="h-4 w-4 text-danger animate-pulse-soft motion-reduce:animate-none"
+              strokeWidth={2.25}
+            />
+          ) : (
+            <CheckCircle2 className="h-4 w-4 text-success" strokeWidth={2.25} />
+          )}
           Critical today
+          <TitleCount n={rows.length} tone="danger" />
         </span>
       }
       description="What stops production today if nothing is done."
@@ -1319,7 +1411,7 @@ function CriticalTodayBlock({ now }: { now: Date }) {
           description="No stockouts, no fail-hard planning exceptions, no critical-stale integrations, no active break-glass."
         />
       ) : (
-        <ul className="flex flex-col gap-2">
+        <ul className="flex flex-col gap-2" aria-live="polite">
           {rows.map((row, idx) => {
             const hint = detailHintFor(row);
             return (
@@ -1347,7 +1439,7 @@ function CriticalTodayBlock({ now }: { now: Date }) {
                 {hint.link ? (
                   <Link
                     href={hint.link.href}
-                    className="inline-flex shrink-0 items-center gap-1 self-start text-xs font-semibold text-danger-fg hover:underline sm:self-center"
+                    className="inline-flex shrink-0 items-center gap-1 self-start rounded text-xs font-semibold text-danger-fg hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/40 sm:self-center"
                   >
                     {hint.link.label}
                     <ArrowRight className="h-3 w-3" strokeWidth={2} />
@@ -1384,6 +1476,7 @@ function SlippedPlansBlock({ now }: { now: Date }) {
         <span className="inline-flex items-center gap-2">
           <TrendingDown className="h-4 w-4 text-warning" strokeWidth={2.25} />
           Slipped plans
+          <TitleCount n={rows.length} tone="warning" />
         </span>
       }
       description={`Planned production from the last ${windowDays} days that was not posted as an actual.`}
@@ -1411,7 +1504,7 @@ function SlippedPlansBlock({ now }: { now: Date }) {
           description="Every past plan in this window has a posted actual or was cancelled by the planner."
         />
       ) : (
-        <ul className="flex flex-col gap-2">
+        <ul className="flex flex-col gap-2" aria-live="polite">
           {rows.map((row) => {
             const planLink = `/planning/production-plan?from=${encodeURIComponent(
               row.plan_date,
@@ -1441,7 +1534,7 @@ function SlippedPlansBlock({ now }: { now: Date }) {
                 </div>
                 <Link
                   href={planLink}
-                  className="inline-flex shrink-0 items-center gap-1 self-start text-xs font-semibold text-fg-strong hover:underline sm:self-center"
+                  className="inline-flex shrink-0 items-center gap-1 self-start rounded text-xs font-semibold text-fg-strong hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 sm:self-center"
                 >
                   Open plan
                   <ArrowRight className="h-3 w-3" strokeWidth={2} />
@@ -1469,6 +1562,7 @@ function MetaRow({ children }: { children: ReactNode }) {
 export default function DashboardPage() {
   const now = useMemo(() => new Date(), []);
   const week = useMemo(() => weekRange(), []);
+  const { session } = useSession();
 
   // Inventory flow drives Stock Health + Shortage Risk + on-hand context.
   const flowQ = useInventoryFlow({});
@@ -1640,7 +1734,7 @@ export default function DashboardPage() {
       <WorkflowHeader
         eyebrow="Factory floor"
         title="Dashboard"
-        description={`${greeting(now)} — here is the state of the factory on ${fmtToday(now)}.`}
+        description={`${greeting(now, session?.display_name)} — here is the state of the factory on ${fmtToday(now)}.`}
         meta={
           <MetaRow>
             <FreshnessBadge
@@ -1658,19 +1752,37 @@ export default function DashboardPage() {
                 </span>
               </span>
             ) : null}
+            {/* Iteration 10 — live affordance: the dashboard polls in the
+                background; this pill tells the operator the numbers are fresh. */}
+            <span
+              className="inline-flex items-center gap-1.5 rounded-full border border-accent/30 bg-accent-soft px-2.5 py-1 text-2xs font-semibold text-accent"
+              title="Key panels re-fetch automatically every 60 seconds."
+            >
+              <span className="relative flex h-1.5 w-1.5" aria-hidden>
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60 motion-reduce:hidden" />
+                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent" />
+              </span>
+              Auto-refreshing
+            </span>
           </MetaRow>
         }
       />
 
       <BreakGlassBanner />
 
-      <QuickActionsLauncher />
+      <div className="reveal reveal-delay-1">
+        <QuickActionsLauncher />
+      </div>
 
-      <CriticalTodayBlock now={now} />
-      <SlippedPlansBlock now={now} />
+      <div className="reveal reveal-delay-2">
+        <CriticalTodayBlock now={now} />
+      </div>
+      <div className="reveal reveal-delay-3">
+        <SlippedPlansBlock now={now} />
+      </div>
 
       {/* Hero KPI strip — the five numbers the factory is run by. */}
-      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="reveal reveal-delay-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <ValueCard
           label="RM Inventory Value"
           value={rmValue != null ? fmtILS(rmValue) : null}
@@ -1733,7 +1845,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Shortage risk + stock health + planning. */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
+      <div className="reveal reveal-delay-5 grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
         <ShortageRisk items={flowItems} loading={flowQ.isLoading} />
         <div className="flex flex-col gap-4">
           <StockDonut
@@ -1748,7 +1860,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Production this week + recent activity. */}
-      <div className="grid grid-cols-1 gap-4 lg:grid-cols-2">
+      <div className="reveal reveal-delay-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
         <ProductionWeek rows={prodWeekItems} loading={productionQ.isLoading} />
         <div className="flex flex-col gap-4">
           <RecentProduction rows={recentActuals} now={now} loading={actualsQ.isLoading} />
