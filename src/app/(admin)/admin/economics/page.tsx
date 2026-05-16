@@ -102,17 +102,21 @@ function formatIlsGrouped(value: number): string {
   })}`;
 }
 
-function formatPct(value: string | null): string {
-  if (value == null) return "—";
-  const n = Number(value);
-  if (!Number.isFinite(n)) return "—";
-  return `${n.toFixed(1)}%`;
-}
-
 function formatQtyZero(value: string): string {
   const n = Number(value);
   if (!Number.isFinite(n)) return "—";
   return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
+}
+
+/**
+ * True when a numeric-string money value equals a number. Used to skip a
+ * save (and the spurious history row it would create) when an edit cell is
+ * opened and closed without an actual change.
+ */
+function sameAmount(a: string | null, b: number): boolean {
+  if (a == null) return false;
+  const n = Number(a);
+  return Number.isFinite(n) && n === b;
 }
 
 // ---------------------------------------------------------------------------
@@ -209,9 +213,20 @@ function CostEditCell({
 
   const commit = async () => {
     if (busy) return;
-    const num = Number(value);
+    const trimmed = value.trim();
+    // Empty input → treat as cancel; never write a 0 cost by accident.
+    if (trimmed === "") {
+      cancel();
+      return;
+    }
+    const num = Number(trimmed);
     if (!Number.isFinite(num) || num < 0) {
       setError("Cost must be a number ≥ 0.");
+      return;
+    }
+    // Unchanged → close without a PATCH so no spurious price_history row.
+    if (sameAmount(row.effective_cost, num)) {
+      setEditing(false);
       return;
     }
     setBusy(true);
@@ -366,9 +381,20 @@ function SalePriceEditCell({
 
   const commit = async () => {
     if (busy) return;
-    const num = Number(value);
+    const trimmed = value.trim();
+    // Empty input → treat as cancel; never append a 0 sale price by accident.
+    if (trimmed === "") {
+      cancel();
+      return;
+    }
+    const num = Number(trimmed);
     if (!Number.isFinite(num) || num < 0) {
       setError("Price must be a number ≥ 0.");
+      return;
+    }
+    // Unchanged → close without a POST so no spurious fg_sale_prices row.
+    if (sameAmount(row.avg_sale_price_ils, num)) {
+      setEditing(false);
       return;
     }
     setBusy(true);
