@@ -88,14 +88,22 @@ const QK_RECENT_MOVEMENTS = ["dashboard", "stock", "ledger", "recent"] as const;
 // ---------------------------------------------------------------------------
 // API response types.
 // ---------------------------------------------------------------------------
+// Mirror of api/src/stock/schemas.ts StockValueResponse. The upstream handler
+// returns per-item rows + a single combined total — it does NOT pre-aggregate
+// by item_type. The dashboard splits RM vs FG client-side (see stockValue memo).
+interface StockValueRow {
+  item_type: string;
+  item_id: string;
+  display_name: string | null;
+  total_value_ils: string | null;
+}
 interface StockValueResponse {
-  rm_value?: number | null;
-  rm_total?: number | null;
-  fg_value?: number | null;
-  fg_total?: number | null;
-  rm_sku_count?: number | null;
-  fg_sku_count?: number | null;
   as_of?: string | null;
+  rows?: StockValueRow[];
+  total_value_ils?: string | null;
+  items_with_cost?: number | null;
+  items_without_cost?: number | null;
+  row_count?: number | null;
 }
 
 interface ExceptionRow {
@@ -1528,13 +1536,50 @@ export default function DashboardPage() {
   ).length;
   const total = flowItems.length;
 
-  // Derived: inventory values.
-  const vd = valueQ.data;
-  const rmValue = vd?.rm_value ?? vd?.rm_total ?? null;
-  const fgValue = vd?.fg_value ?? vd?.fg_total ?? null;
-  const rmSkus = vd?.rm_sku_count ?? null;
-  const fgSkus = vd?.fg_sku_count ?? null;
-  const valueAsOf = vd?.as_of ?? null;
+  // Derived: inventory values. The upstream /api/stock/value handler returns
+  // a flat per-item `rows` array (item_type FG | RM | PKG) plus one combined
+  // `total_value_ils` — it does not split RM vs FG. We aggregate here:
+  //   FG bucket  = item_type 'FG'
+  //   RM bucket  = item_type 'RM' or 'PKG' (raw materials + packaging)
+  // Only rows with a non-null total_value_ils contribute to value; rows with
+  // no primary supplier cost are counted as "unpriced" so the number stays
+  // honest about what it does and does not include.
+  const stockValue = useMemo(() => {
+    const rows = valueQ.data?.rows ?? [];
+    let rmValue = 0;
+    let fgValue = 0;
+    let rmSkus = 0;
+    let fgSkus = 0;
+    let rmUnpriced = 0;
+    let fgUnpriced = 0;
+    for (const r of rows) {
+      const priced = r.total_value_ils != null;
+      if (r.item_type === "FG") {
+        fgSkus += 1;
+        if (priced) fgValue += Number(r.total_value_ils);
+        else fgUnpriced += 1;
+      } else {
+        rmSkus += 1;
+        if (priced) rmValue += Number(r.total_value_ils);
+        else rmUnpriced += 1;
+      }
+    }
+    const hasRows = rows.length > 0;
+    return {
+      rmValue: hasRows ? rmValue : null,
+      fgValue: hasRows ? fgValue : null,
+      rmSkus,
+      fgSkus,
+      rmUnpriced,
+      fgUnpriced,
+    };
+  }, [valueQ.data]);
+
+  const rmValue = stockValue.rmValue;
+  const fgValue = stockValue.fgValue;
+  const rmSkus = stockValue.rmSkus;
+  const fgSkus = stockValue.fgSkus;
+  const valueAsOf = valueQ.data?.as_of ?? null;
 
   // Derived: exceptions.
   const excRows = exceptionsQ.data?.rows ?? exceptionsQ.data?.data ?? [];
@@ -1640,7 +1685,14 @@ export default function DashboardPage() {
         <ValueCard
           label="RM Inventory Value"
           value={rmValue != null ? fmtILS(rmValue) : null}
-          sub={rmSkus != null ? `${rmSkus} raw material SKUs` : "Raw materials"}
+          sub={
+            <span>
+              {rmSkus} raw material &amp; packaging SKUs
+              {stockValue.rmUnpriced > 0 ? (
+                <span className="text-fg-faint"> · {stockValue.rmUnpriced} unpriced</span>
+              ) : null}
+            </span>
+          }
           tone="warning"
           icon={<Coins className="h-4 w-4" strokeWidth={2} />}
           href="/inventory"
@@ -1649,7 +1701,14 @@ export default function DashboardPage() {
         <ValueCard
           label="FG Inventory Value"
           value={fgValue != null ? fmtILS(fgValue) : null}
-          sub={fgSkus != null ? `${fgSkus} finished good SKUs` : "Finished goods"}
+          sub={
+            <span>
+              {fgSkus} finished good SKUs
+              {stockValue.fgUnpriced > 0 ? (
+                <span className="text-fg-faint"> · {stockValue.fgUnpriced} unpriced</span>
+              ) : null}
+            </span>
+          }
           tone="success"
           icon={<PackageCheck className="h-4 w-4" strokeWidth={2} />}
           href="/inventory"
