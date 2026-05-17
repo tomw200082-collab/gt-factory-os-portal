@@ -657,18 +657,10 @@ function ValueCard({
   href?: string;
   loading?: boolean;
 }) {
-  const TONE_CHIP: Record<typeof tone, string> = {
-    accent: "text-accent",
-    success: "text-success",
-    info: "text-info",
-    warning: "text-warning",
-  };
-  const TONE_BAR: Record<typeof tone, string> = {
-    accent: "bg-accent",
-    success: "bg-success",
-    info: "bg-info",
-    warning: "bg-warning",
-  };
+  // Restraint pass (2026-05-17): the four hero cards no longer each carry a
+  // full-strength tone. The label is now neutral and the bottom tone bar is
+  // gone — the soft icon chip is the single, quiet colour cue per card, so
+  // the strip reads as one calm row of numbers rather than four rainbows.
   const TONE_ICON: Record<typeof tone, string> = {
     accent: "bg-accent-soft text-accent",
     success: "bg-success-soft text-success",
@@ -678,18 +670,13 @@ function ValueCard({
   const body = (
     <>
       <div className="flex items-start justify-between gap-3">
-        <div
-          className={cn(
-            "text-3xs font-semibold uppercase tracking-sops",
-            TONE_CHIP[tone],
-          )}
-        >
+        <div className="text-2xs font-semibold uppercase tracking-sops text-fg-subtle">
           {label}
         </div>
         {icon ? (
           <div
             className={cn(
-              "flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-transform duration-150 ease-out-quart group-hover:scale-110 motion-reduce:transition-none motion-reduce:group-hover:scale-100",
+              "flex h-9 w-9 shrink-0 items-center justify-center rounded-md transition-transform duration-150 ease-out-quart group-hover:scale-105 motion-reduce:transition-none motion-reduce:group-hover:scale-100",
               TONE_ICON[tone],
             )}
             aria-hidden
@@ -699,21 +686,20 @@ function ValueCard({
         ) : null}
       </div>
       {loading ? (
-        <Skel h={36} w="80%" />
+        <Skel h={40} w="70%" />
       ) : (
-        <div className="text-3xl font-semibold tabular-nums tracking-tighter text-fg-strong">
+        <div className="text-4xl font-semibold tabular-nums tracking-tighter text-fg-strong">
           {value ?? "—"}
         </div>
       )}
-      <div className="text-xs text-fg-muted">{sub}</div>
-      <div className={cn("mt-auto h-0.5 w-full rounded opacity-60", TONE_BAR[tone])} aria-hidden />
+      <div className="text-xs leading-relaxed text-fg-muted">{sub}</div>
     </>
   );
   if (href) {
     return (
       <Link
         href={href}
-        className="card group flex flex-col gap-3 p-5 transition-all duration-150 ease-out-quart hover:-translate-y-0.5 hover:border-accent/50 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+        className="card group flex flex-col gap-3 p-5 transition-all duration-150 ease-out-quart hover:-translate-y-0.5 hover:border-border-strong hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
       >
         {body}
       </Link>
@@ -858,16 +844,27 @@ function ExceptionsCard({
         hot ? "border-danger/40 bg-danger-softer" : "",
       )}
     >
-      <div
-        className={cn(
-          "text-3xs font-semibold uppercase tracking-sops",
-          hot ? "text-danger" : "text-fg-subtle",
-        )}
-      >
-        Exceptions
+      <div className="flex items-start justify-between gap-3">
+        <div
+          className={cn(
+            "text-2xs font-semibold uppercase tracking-sops",
+            hot ? "text-danger" : "text-fg-subtle",
+          )}
+        >
+          Exceptions
+        </div>
+        <div
+          className={cn(
+            "flex h-9 w-9 shrink-0 items-center justify-center rounded-md",
+            hot ? "bg-danger/15 text-danger" : "bg-bg-muted text-fg-subtle",
+          )}
+          aria-hidden
+        >
+          <AlertTriangle className="h-4 w-4" strokeWidth={2} />
+        </div>
       </div>
       {loading ? (
-        <Skel h={46} w="60%" />
+        <Skel h={40} w="55%" />
       ) : (
         <div
           className={cn(
@@ -1990,16 +1987,14 @@ export default function DashboardPage() {
                 </span>
               </span>
             ) : null}
-            {/* Iteration 10 — live affordance: the dashboard polls in the
-                background; this pill tells the operator the numbers are fresh. */}
+            {/* Live affordance — the dashboard polls in the background. The
+                pill now sits in the same calm neutral family as the other
+                meta chips; a small static accent dot is the only colour. */}
             <span
-              className="inline-flex items-center gap-1.5 rounded-full border border-accent/30 bg-accent-soft px-2.5 py-1 text-2xs font-semibold text-accent"
+              className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-bg-subtle px-2.5 py-1 text-2xs font-semibold text-fg-muted"
               title="Key panels re-fetch automatically every 60 seconds."
             >
-              <span className="relative flex h-1.5 w-1.5" aria-hidden>
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60 motion-reduce:hidden" />
-                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent" />
-              </span>
+              <span className="h-1.5 w-1.5 rounded-full bg-accent" aria-hidden />
               Auto-refreshing
             </span>
           </MetaRow>
