@@ -270,7 +270,7 @@ export function SupplyFlowClient() {
   }
 
   // Loading state (first paint)
-  if (flowQuery.isLoading || !data) {
+  if (flowQuery.isLoading) {
     return (
       <>
         {tabs}
@@ -286,6 +286,31 @@ export function SupplyFlowClient() {
         </div>
         <InsightsHero items={[]} summary={null} isLoading />
         <SkeletonGrid />
+      </>
+    );
+  }
+
+  // Terminal fallback — the query settled but returned no projection (and
+  // did not error). Without this the loading skeleton would render forever.
+  if (!data) {
+    return (
+      <>
+        {tabs}
+        {header}
+        <EmptyState
+          title="No projection available"
+          description="The components flow projection finished but returned no data. This usually clears on a retry."
+          action={
+            <button
+              type="button"
+              onClick={() => void flowQuery.refetch()}
+              className="btn btn-sm btn-outline"
+            >
+              <RefreshCw className="h-3.5 w-3.5" strokeWidth={2} />
+              Retry
+            </button>
+          }
+        />
       </>
     );
   }

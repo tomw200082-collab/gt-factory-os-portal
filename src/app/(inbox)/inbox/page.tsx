@@ -1447,9 +1447,8 @@ export default function InboxListPage() {
           >
             <Sparkles className="h-3 w-3" strokeWidth={2} />
             <span className="font-semibold uppercase tracking-sops">
-              Recently dismissed
+              {recentActions.length} dismissed in the last few seconds
             </span>
-            <span className="font-mono">{recentActions.length}</span>
             <span className="truncate">
               {recentActions[0]!.summary.slice(0, 60)}
               {recentActions[0]!.summary.length > 60 ? "…" : ""}

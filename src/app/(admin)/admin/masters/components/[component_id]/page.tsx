@@ -590,12 +590,22 @@ export default function AdminComponentDetailPage({
     content: (() => {
       if (componentQuery.isLoading) return <DetailTabLoading />;
       if (componentQuery.isError) {
-        return <DetailTabError message={(componentQuery.error as Error).message} />;
+        return (
+          <DetailTabError
+            message={(componentQuery.error as Error).message}
+            onRetry={() => componentQuery.refetch()}
+          />
+        );
       }
       if (!row) {
         return (
           <DetailTabEmpty
             message={`Component ${component_id} not found in the components list.`}
+            action={
+              <Link href="/admin/components" className="btn btn-sm btn-primary">
+                Back to Components
+              </Link>
+            }
           />
         );
       }
@@ -887,7 +897,10 @@ export default function AdminComponentDetailPage({
       if (supplierItemsQuery.isLoading) return <DetailTabLoading />;
       if (supplierItemsQuery.isError) {
         return (
-          <DetailTabError message={(supplierItemsQuery.error as Error).message} />
+          <DetailTabError
+            message={(supplierItemsQuery.error as Error).message}
+            onRetry={() => supplierItemsQuery.refetch()}
+          />
         );
       }
 
@@ -1051,7 +1064,10 @@ export default function AdminComponentDetailPage({
       if (exceptionsQuery.isLoading) return <DetailTabLoading />;
       if (exceptionsQuery.isError) {
         return (
-          <DetailTabError message={(exceptionsQuery.error as Error).message} />
+          <DetailTabError
+            message={(exceptionsQuery.error as Error).message}
+            onRetry={() => exceptionsQuery.refetch()}
+          />
         );
       }
       if (sortedExceptions.length === 0) {

@@ -18,6 +18,7 @@
 import { Suspense } from "react";
 import { Info } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
+import { LoadingState } from "@/components/feedback/states";
 import { ProductionSimulatorShell } from "./_components/ProductionSimulatorShell";
 
 export default function ProductionSimulationPage() {
@@ -46,7 +47,12 @@ export default function ProductionSimulationPage() {
 
       <Suspense
         fallback={
-          <div className="mt-5 text-sm text-fg-muted">Loading…</div>
+          <div className="mt-5">
+            <LoadingState
+              title="Loading simulation"
+              description="Fetching products and recipes…"
+            />
+          </div>
         }
       >
         <ProductionSimulatorShell />

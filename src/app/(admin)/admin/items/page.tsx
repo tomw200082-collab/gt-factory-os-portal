@@ -22,7 +22,7 @@ import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Plus, Power } from "lucide-react";
+import { ArrowRight, Plus, Power, X } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
@@ -257,7 +257,7 @@ function ItemsPageInner(): JSX.Element {
   const [highlightedId, setHighlightedId] = useState<string | null>(preselectId);
   const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
   const [banner, setBanner] = useState<
-    | { kind: "success" | "error"; message: string }
+    | { kind: "success" | "error"; message: string; itemId?: string }
     | null
   >(null);
 
@@ -391,6 +391,7 @@ function ItemsPageInner(): JSX.Element {
               <Link
                 href="/admin/products/new"
                 className="btn-primary inline-flex items-center gap-1.5"
+                title="New item — full guided wizard with BOM, pricing and policy."
               >
                 <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
                 New item
@@ -404,11 +405,33 @@ function ItemsPageInner(): JSX.Element {
         <div
           className={
             banner.kind === "success"
-              ? "rounded-md border border-success/40 bg-success-softer p-3 text-sm text-success-fg"
-              : "rounded-md border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg"
+              ? "flex items-start justify-between gap-3 rounded-md border border-success/40 bg-success-softer p-3 text-sm text-success-fg"
+              : "flex items-start justify-between gap-3 rounded-md border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg"
           }
         >
-          {banner.message}
+          <span>
+            {banner.message}
+            {banner.itemId ? (
+              <>
+                {" "}
+                <Link
+                  href={`/admin/masters/items/${banner.itemId}`}
+                  className="font-semibold underline hover:no-underline"
+                >
+                  Open the detail page to edit
+                </Link>
+                .
+              </>
+            ) : null}
+          </span>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm shrink-0"
+            aria-label="Dismiss"
+            onClick={() => setBanner(null)}
+          >
+            <X className="h-3.5 w-3.5" strokeWidth={2.5} />
+          </button>
         </div>
       ) : null}
 
@@ -659,7 +682,8 @@ function ItemsPageInner(): JSX.Element {
         onCreated={(newId) => {
           setBanner({
             kind: "success",
-            message: `Created item ${newId}. Open the detail page to edit.`,
+            message: `Created item ${newId}.`,
+            itemId: newId,
           });
           void queryClient.invalidateQueries({ queryKey: ["admin", "items"] });
         }}

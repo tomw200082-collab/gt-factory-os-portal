@@ -23,6 +23,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import Link from "next/link";
 
 const ALLOWED_ORIGIN = "https://rvadsozabmxkkrktwgnv.supabase.co";
 const ALLOWED_PATH_PREFIX = "/auth/v1/verify";
@@ -36,6 +37,12 @@ function base64UrlDecode(input: string): string {
 export default function ClickToSigninPage() {
   const [link, setLink] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [showFallback, setShowFallback] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setShowFallback(true), 6000);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     try {
@@ -87,13 +94,31 @@ export default function ClickToSigninPage() {
         </p>
 
         {error && (
-          <div className="mt-6 rounded border border-danger/40 bg-danger-softer px-4 py-3 text-sm text-danger-fg">
-            {error}
-          </div>
+          <>
+            <div className="mt-6 rounded border border-danger/40 bg-danger-softer px-4 py-3 text-sm text-danger-fg">
+              {error}
+            </div>
+            <Link
+              href="/login"
+              className="mt-4 inline-block text-sm font-medium text-accent hover:underline"
+            >
+              Go to sign in →
+            </Link>
+          </>
         )}
 
         {!error && !link && (
-          <p className="mt-6 text-xs text-fg-muted">Preparing your link…</p>
+          <>
+            <p className="mt-6 text-xs text-fg-muted">Preparing your link…</p>
+            {showFallback && (
+              <Link
+                href="/login"
+                className="mt-4 inline-block text-sm font-medium text-accent hover:underline"
+              >
+                Go to sign in →
+              </Link>
+            )}
+          </>
         )}
 
         {link && (

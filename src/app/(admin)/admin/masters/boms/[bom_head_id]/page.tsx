@@ -563,6 +563,12 @@ export default function AdminMastersBomHeadDetailPage({
             <div className="mt-2 rounded-md border border-warning/30 bg-warning-softer px-4 py-3 text-sm text-warning-fg">
               No versions yet — create a draft version to start building this recipe.
             </div>
+            <Link
+              href={`/admin/masters/items/${encodeURIComponent(head.parent_ref_id)}`}
+              className="btn btn-sm btn-primary mt-3"
+            >
+              Open item to create a draft →
+            </Link>
           </SectionCard>
         );
       }

@@ -139,9 +139,19 @@ export default function InventoryFlowItemPage({ params }: PageParams) {
         <ErrorState
           title="Could not load item detail"
           description={(detailQuery.error as Error)?.message ?? ""}
+          onRetry={() => void detailQuery.refetch()}
         />
       ) : !detail ? (
-        <EmptyState title="No data" description="Item not found." />
+        <EmptyState
+          title="No data"
+          description="Item not found."
+          action={
+            <Link href="/planning/inventory-flow" className="btn btn-sm btn-outline">
+              <ArrowLeft className="h-3.5 w-3.5" strokeWidth={2} />
+              Back to Inventory Flow
+            </Link>
+          }
+        />
       ) : (
         <>
           {/* KPI strip */}

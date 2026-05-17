@@ -19,13 +19,21 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { Loader2 } from "lucide-react";
 import { createSupabaseBrowserClient } from "@/lib/supabase/client";
 
 export default function AuthCallbackPage() {
   const router = useRouter();
   const ranRef = useRef(false);
   const [status, setStatus] = useState<string>("Logging you in…");
+  const [timedOut, setTimedOut] = useState(false);
+
+  useEffect(() => {
+    const timer = window.setTimeout(() => setTimedOut(true), 10000);
+    return () => window.clearTimeout(timer);
+  }, []);
 
   useEffect(() => {
     if (ranRef.current) return;
@@ -98,8 +106,23 @@ export default function AuthCallbackPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center p-8">
-      <div className="text-center">
-        <p className="text-sm text-fg-muted">{status}</p>
+      <div className="flex flex-col items-center text-center">
+        <div className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+          GT Factory OS
+        </div>
+        {timedOut ? (
+          <Link
+            href="/login"
+            className="mt-4 text-sm font-medium text-accent hover:underline"
+          >
+            Taking longer than expected — return to sign in
+          </Link>
+        ) : (
+          <div className="mt-4 flex items-center gap-2">
+            <Loader2 className="h-4 w-4 animate-spin text-fg-muted" />
+            <p className="text-sm text-fg-muted">{status}</p>
+          </div>
+        )}
       </div>
     </div>
   );

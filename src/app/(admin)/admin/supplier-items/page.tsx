@@ -509,8 +509,15 @@ export default function AdminSupplierItemsPage(): JSX.Element {
                   Loading suppliers…
                 </div>
               ) : suppliersQuery.isError ? (
-                <div className="p-2 text-xs text-danger-fg">
-                  {(suppliersQuery.error as Error).message}
+                <div className="space-y-2 p-2 text-xs text-danger-fg">
+                  <div>{(suppliersQuery.error as Error).message}</div>
+                  <button
+                    type="button"
+                    className="btn btn-sm"
+                    onClick={() => void suppliersQuery.refetch()}
+                  >
+                    Retry
+                  </button>
                 </div>
               ) : (
                 <select
@@ -760,6 +767,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
                           {isAdmin ? (
                             <select
                               className="rounded border border-border bg-background px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                              aria-label={`Approval status for ${r.component_id ?? r.item_id ?? r.supplier_item_id}`}
                               value={r.approval_status ?? ""}
                               onChange={(e) => {
                                 const val = e.target.value;
@@ -1056,9 +1064,9 @@ export default function AdminSupplierItemsPage(): JSX.Element {
 // ---------------------------------------------------------------------------
 
 function SafetyDaysChip({ days }: { days: number }): JSX.Element {
-  if (days === 0) return <span className="text-muted-foreground text-xs">0d</span>;
-  if (days <= 6) return <span className="rounded-full bg-amber-100 px-2 py-0.5 text-xs font-medium text-amber-800">{days}d</span>;
-  return <span className="rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-800">{days}d</span>;
+  if (days === 0) return <span className="text-fg-faint text-xs">0d</span>;
+  if (days <= 6) return <span className="rounded-full bg-warning-softer px-2 py-0.5 text-xs font-medium text-warning-fg">{days}d</span>;
+  return <span className="rounded-full bg-success-softer px-2 py-0.5 text-xs font-medium text-success-fg">{days}d</span>;
 }
 
 function Th({

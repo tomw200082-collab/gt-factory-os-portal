@@ -279,6 +279,12 @@ export default function AdminBomsListPage(): JSX.Element {
                 BOMs are created from the items editor. Open a manufactured or
                 repack item and use the BOM tab to create the first recipe.
               </div>
+              <Link
+                href="/admin/masters/items"
+                className="btn btn-sm btn-primary mt-3"
+              >
+                Open items editor →
+              </Link>
             </div>
           </div>
         ) : filtered.length === 0 ? (

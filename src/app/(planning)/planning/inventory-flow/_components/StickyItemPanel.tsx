@@ -19,9 +19,6 @@
 //     direction signal stays risk-aware.
 //   - Hero pulses (1 → 1.04 → 1, 1.5s loop) when days-cover < 3 — the
 //     most urgent items literally beat. Pulse is reduce-motion safe.
-//   - 3-dot quick-action menu trigger appears on row hover (lucide
-//     `MoreVertical`). Stub-action handler for now — affordance signals
-//     that the row is interactive.
 //   - Layered right boundary preserved (inset hairline + soft drop shadow)
 //     for the sticky-vs-grid surface separation.
 //
@@ -34,7 +31,7 @@
 // ---------------------------------------------------------------------------
 
 import { memo, type CSSProperties } from "react";
-import { ArrowDown, ArrowUp, Minus, MoreVertical } from "lucide-react";
+import { ArrowDown, ArrowUp, Minus } from "lucide-react";
 import { Badge } from "@/components/badges/StatusBadge";
 import { cn } from "@/lib/cn";
 import { daysCoverTierClass, formatDaysCover } from "../_lib/format";
@@ -163,8 +160,7 @@ function StickyItemPanelInner({ item }: StickyItemPanelProps) {
         </div>
 
         {/* Days-cover hero — bounded stat tile with trend arrow + urgent
-            pulse + 3-dot quick-action menu. 96px wide so STOCKOUT + sub
-            label fit comfortably. */}
+            pulse. 96px wide so STOCKOUT + sub label fit comfortably. */}
         <div
           className="relative flex w-24 shrink-0 flex-col items-center justify-center overflow-hidden border-l border-border/60 bg-bg-subtle/40 px-2 py-2"
           style={{ borderLeftColor: `hsl(var(--border) / 0.6)` }}
@@ -221,24 +217,6 @@ function StickyItemPanelInner({ item }: StickyItemPanelProps) {
               {heroSub}
             </div>
           ) : null}
-
-          {/* 3-dot quick-action menu — fades in on row hover; stub
-              handler signals that the row is interactive. Sits in the
-              top-right corner of the cover tile so it never collides
-              with the value or sub-label. */}
-          <button
-            type="button"
-            className="row-quick-action absolute right-1 top-1 inline-flex h-5 w-5 items-center justify-center rounded-sm text-fg-subtle"
-            aria-label={`Row actions for ${item.item_name}`}
-            data-testid="row-quick-action-trigger"
-            onClick={(e) => {
-              // Stub — actions wired in a follow-up. Suppress click
-              // bubbling so the row's own onClick (if any) doesn't fire.
-              e.stopPropagation();
-            }}
-          >
-            <MoreVertical size={12} strokeWidth={2} aria-hidden />
-          </button>
         </div>
       </div>
     </div>

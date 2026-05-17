@@ -740,6 +740,11 @@ export default function ForecastVersionDetailPage() {
                 className="btn btn-primary btn-sm gap-1.5"
                 data-testid="forecast-detail-publish"
                 disabled={publishMut.isPending || itemsInForecast === 0}
+                title={
+                  itemsInForecast === 0
+                    ? "Add at least one item to publish"
+                    : undefined
+                }
                 onClick={async () => {
                   setPublishError(null);
                   setPublishSuccess(null);
@@ -806,7 +811,15 @@ export default function ForecastVersionDetailPage() {
           data-testid="forecast-action-error"
         >
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
-          {publishError}
+          <span className="min-w-0 flex-1">{publishError}</span>
+          <button
+            type="button"
+            className="shrink-0 font-medium text-danger-fg underline underline-offset-2 hover:no-underline"
+            onClick={() => setPublishError(null)}
+            data-testid="forecast-action-error-dismiss"
+          >
+            Dismiss
+          </button>
         </div>
       ) : null}
 
@@ -990,6 +1003,13 @@ export default function ForecastVersionDetailPage() {
               // already-saved cells stay on disk untouched. We can only
               // reliably clear local overlays since the autosave queue is
               // private; clearing local cells is the right UX here.
+              if (
+                !window.confirm(
+                  "Discard all local edits? Unsaved changes, including any in progress, will be lost.",
+                )
+              ) {
+                return;
+              }
               setLocalCells((prev) => {
                 const next = { ...prev };
                 // Remove only entries that are in the pending count window:

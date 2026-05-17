@@ -656,13 +656,22 @@ export default function PhysicalCountPage() {
               {done.detail && (
                 <div className="font-mono text-xs opacity-60">{done.detail}</div>
               )}
-              <button
-                type="button"
-                onClick={() => setDone(null)}
-                className="btn btn-ghost btn-sm transition-all duration-150"
-              >
-                Count another item
-              </button>
+              <div className="flex items-center gap-2 flex-wrap">
+                <Link
+                  href="/stock/movement-log"
+                  className="btn btn-primary btn-sm transition-all duration-150"
+                  data-testid="physical-count-success-movement-log"
+                >
+                  View posted ledger →
+                </Link>
+                <button
+                  type="button"
+                  onClick={() => setDone(null)}
+                  className="btn btn-ghost btn-sm transition-all duration-150"
+                >
+                  Count another item
+                </button>
+              </div>
             </div>
           ) : done.kind === "pending" ? (
             <div className="space-y-3">
@@ -724,6 +733,25 @@ export default function PhysicalCountPage() {
               {done.detail ? (
                 <div className="mt-1 font-mono text-xs opacity-60">{done.detail}</div>
               ) : null}
+              <div className="mt-3 flex items-center gap-2 flex-wrap">
+                {snapshot ? (
+                  <button
+                    type="button"
+                    onClick={() => void handleSubmit({ preventDefault: () => {} } as React.FormEvent)}
+                    className="btn btn-primary btn-sm transition-all duration-150"
+                    data-testid="physical-count-error-retry"
+                  >
+                    Try again
+                  </button>
+                ) : null}
+                <button
+                  type="button"
+                  onClick={() => setDone(null)}
+                  className="btn btn-ghost btn-sm transition-all duration-150"
+                >
+                  Dismiss
+                </button>
+              </div>
             </div>
           )}
         </div>

@@ -583,7 +583,7 @@ export default function CreditDetailPage(): ReactNode {
               <button
                 type="button"
                 data-testid="credit-reject-confirm"
-                className="btn btn-primary btn-sm"
+                className="btn btn-danger btn-sm"
                 disabled={busy || rejectReason.trim().length < 5}
                 onClick={handleReject}
               >

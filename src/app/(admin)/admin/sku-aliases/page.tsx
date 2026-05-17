@@ -297,6 +297,9 @@ function AdminSkuAliasesPageInner(): JSX.Element {
           This surface is restricted to admin. Current role:{" "}
           <span className="font-mono text-fg">{session.role}</span>.
         </div>
+        <Link href="/" className="btn btn-sm mt-4 inline-flex">
+          Back to dashboard
+        </Link>
       </div>
     );
   }
@@ -1002,9 +1005,9 @@ function AdminSkuAliasesPageInner(): JSX.Element {
                         <button
                           type="button"
                           className="btn btn-sm btn-primary px-2.5 text-xs disabled:cursor-not-allowed disabled:opacity-50"
-                          disabled={!canSelect || approveMutation.isPending}
+                          disabled={!backendLive || !canSelect || approveMutation.isPending}
                           onClick={() => {
-                            if (!canSelect) return;
+                            if (!backendLive || !canSelect) return;
                             setBanner(null);
                             approveMutation.mutate([
                               {
@@ -1016,9 +1019,11 @@ function AdminSkuAliasesPageInner(): JSX.Element {
                             ]);
                           }}
                           title={
-                            canSelect
-                              ? "Approve this mapping"
-                              : "Assign an item first"
+                            !backendLive
+                              ? "Alias approval is not yet available"
+                              : canSelect
+                                ? "Approve this mapping"
+                                : "Assign an item first"
                           }
                         >
                           Approve
@@ -1046,10 +1051,13 @@ function AdminSkuAliasesPageInner(): JSX.Element {
               type="button"
               className={cn(
                 "btn-primary disabled:cursor-not-allowed disabled:opacity-50",
-                canApprove ? "ring-2 ring-accent/30 ring-offset-1" : "",
+                canApprove && backendLive ? "ring-2 ring-accent/30 ring-offset-1" : "",
               )}
-              disabled={!canApprove}
+              disabled={!backendLive || !canApprove}
               onClick={handleApprove}
+              title={
+                !backendLive ? "Alias approval is not yet available" : undefined
+              }
             >
               {approveMutation.isPending
                 ? "Approving…"

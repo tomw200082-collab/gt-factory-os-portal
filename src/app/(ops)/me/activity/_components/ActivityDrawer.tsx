@@ -1,12 +1,31 @@
 "use client";
 import { useQuery } from "@tanstack/react-query";
 import { useCallback, useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import { Check, Copy, Loader2, X } from "lucide-react";
 import { cn } from "@/lib/cn";
-import type { ActivityDrawerResponse, ActivityRow } from "../_types";
+import type { ActivityCrossLink, ActivityDrawerResponse, ActivityRow } from "../_types";
 
 const FOCUSABLE =
   'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+// Map a cross-link kind to a portal route. Kinds that don't map to a known
+// route return null and the item renders as plain text.
+function crossLinkHref(link: ActivityCrossLink): string | null {
+  const id = encodeURIComponent(link.target_id);
+  switch (link.kind) {
+    case "purchase_order":
+      return `/purchase-orders/${id}`;
+    case "physical_count_approval":
+      return `/inbox/approvals/physical-count/${id}`;
+    case "waste_approval":
+      return `/inbox/approvals/waste/${id}`;
+    case "credit_exception":
+      return `/inbox/credit/${id}`;
+    default:
+      return null;
+  }
+}
 
 export function ActivityDrawer({
   row,
@@ -144,12 +163,24 @@ export function ActivityDrawer({
                     Related
                   </h3>
                   <ul className="mt-2 space-y-1 text-sm">
-                    {links.map((l) => (
-                      <li key={`${l.kind}:${l.target_id}`} className="flex items-baseline gap-2">
-                        <span className="text-xs text-fg-muted">{l.kind.replace(/_/g, " ")}</span>
-                        <span className="truncate text-sm text-fg">{l.label}</span>
-                      </li>
-                    ))}
+                    {links.map((l) => {
+                      const href = crossLinkHref(l);
+                      return (
+                        <li key={`${l.kind}:${l.target_id}`} className="flex items-baseline gap-2">
+                          <span className="text-xs text-fg-muted">{l.kind.replace(/_/g, " ")}</span>
+                          {href ? (
+                            <Link
+                              href={href}
+                              className="truncate text-sm text-accent underline underline-offset-2 hover:no-underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+                            >
+                              {l.label}
+                            </Link>
+                          ) : (
+                            <span className="truncate text-sm text-fg">{l.label}</span>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
                 </section>
               ) : null}

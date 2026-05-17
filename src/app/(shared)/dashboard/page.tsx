@@ -771,7 +771,10 @@ function StockDonut({
   const wShare = (watch / Math.max(1, total)) * circ;
 
   return (
-    <div className="card p-5">
+    <Link
+      href="/planning/inventory-flow"
+      className="card group block p-5 transition-all duration-150 ease-out-quart hover:-translate-y-0.5 hover:border-accent/50 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+    >
       <div className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
         Stock health
       </div>
@@ -821,7 +824,7 @@ function StockDonut({
           </div>
         </div>
       )}
-    </div>
+    </Link>
   );
 }
 
@@ -852,10 +855,11 @@ function ExceptionsCard({
   const total = criticalN + warningN + infoN;
   const hot = criticalN > 0;
   return (
-    <div
+    <Link
+      href="/inbox"
       className={cn(
-        "card flex flex-col gap-3 p-5",
-        hot ? "border-danger/40 bg-danger-softer" : "",
+        "card group flex flex-col gap-3 p-5 transition-all duration-150 ease-out-quart hover:-translate-y-0.5 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 motion-reduce:transition-none motion-reduce:hover:translate-y-0",
+        hot ? "border-danger/40 bg-danger-softer" : "hover:border-accent/50",
       )}
     >
       <div
@@ -885,14 +889,11 @@ function ExceptionsCard({
           <Legend dotClass="bg-info" label="Info" n={infoN} />
         </div>
       )}
-      <Link
-        href="/inbox"
-        className="inline-flex items-center gap-1 self-start rounded text-xs font-semibold text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-      >
+      <span className="inline-flex items-center gap-1 self-start text-xs font-semibold text-accent group-hover:underline">
         Open inbox
         <ArrowRight className="h-3 w-3" strokeWidth={2} />
-      </Link>
-    </div>
+      </span>
+    </Link>
   );
 }
 

@@ -310,9 +310,17 @@ export function BomDraftEditorPage({
     return (
       <div className={isPanel ? "p-4 text-sm text-fg-muted" : "mx-auto max-w-5xl p-8 text-sm text-fg-muted"}>
         BOM head not found.
-        {onClose && (
+        {onClose ? (
           <button type="button" onClick={onClose} className="ml-3 text-accent underline hover:no-underline">
             Close
+          </button>
+        ) : (
+          <button
+            type="button"
+            onClick={() => navigate("/admin/masters/boms")}
+            className="ml-3 text-accent underline hover:no-underline"
+          >
+            Back to BOMs
           </button>
         )}
       </div>
@@ -562,6 +570,11 @@ export function BomDraftEditorPage({
             <button
               type="button"
               disabled={!editable || (previewOpen && previewQuery.isLoading)}
+              title={
+                !editable
+                  ? `This version is ${version.status} — only DRAFT versions can be published.`
+                  : undefined
+              }
               onClick={() => { setPublishError(null); setPreviewOpen(true); }}
               className="inline-flex items-center gap-1.5 rounded-sm border border-accent-border bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
             >
@@ -641,6 +654,11 @@ export function BomDraftEditorPage({
             <button
               type="button"
               disabled={!editable || (previewOpen && previewQuery.isLoading)}
+              title={
+                !editable
+                  ? `This version is ${version.status} — only DRAFT versions can be published.`
+                  : undefined
+              }
               onClick={() => { setPublishError(null); setPreviewOpen(true); }}
               className="inline-flex items-center gap-1.5 rounded-sm border border-accent-border bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
             >

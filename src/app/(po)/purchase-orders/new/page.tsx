@@ -20,6 +20,7 @@
 // ---------------------------------------------------------------------------
 
 import { useState, useMemo, useCallback } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { AlertTriangle, FilePlus2, Trash2 } from "lucide-react";
@@ -496,6 +497,17 @@ function ManualPoFormInner(): JSX.Element {
     componentsQuery.isLoading ||
     itemsQuery.isLoading;
 
+  const masterDataError =
+    suppliersQuery.isError ||
+    componentsQuery.isError ||
+    itemsQuery.isError;
+
+  function retryMasterData(): void {
+    if (suppliersQuery.isError) void suppliersQuery.refetch();
+    if (componentsQuery.isError) void componentsQuery.refetch();
+    if (itemsQuery.isError) void itemsQuery.refetch();
+  }
+
   // --- Success / idempotent states ------------------------------------------
   if (phase === "success" || phase === "idempotent") {
     return (
@@ -513,7 +525,27 @@ function ManualPoFormInner(): JSX.Element {
                 {successPoId}
               </div>
             )}
-            <div className="text-xs text-fg-faint">Redirecting…</div>
+            {successPoId && (
+              <div className="text-xs text-fg-faint">Redirecting…</div>
+            )}
+            <div className="flex items-center justify-center gap-2 pt-2">
+              {successPoId && (
+                <Link
+                  href={`/purchase-orders/${encodeURIComponent(successPoId)}`}
+                  className="btn btn-sm btn-accent"
+                  data-testid="po-new-view-po"
+                >
+                  View purchase order →
+                </Link>
+              )}
+              <Link
+                href="/purchase-orders"
+                className="btn btn-sm"
+                data-testid="po-new-go-to-list"
+              >
+                Go to purchase orders
+              </Link>
+            </div>
           </div>
         </SectionCard>
       </>
@@ -543,6 +575,30 @@ function ManualPoFormInner(): JSX.Element {
         noValidate
         className="space-y-5 pb-12"
       >
+        {masterDataError && (
+          <div
+            role="alert"
+            className="rounded-md border border-danger/40 bg-danger/5 px-4 py-3 text-sm text-danger-fg flex items-start gap-2"
+            data-testid="po-new-masterdata-error"
+          >
+            <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" aria-hidden />
+            <div className="flex-1">
+              <div className="font-semibold">Could not load master data</div>
+              <div className="mt-0.5 text-xs text-fg-muted">
+                Suppliers, components, or items failed to load. The form cannot
+                be submitted until they are available.
+              </div>
+              <button
+                type="button"
+                onClick={retryMasterData}
+                className="mt-2 text-xs font-medium text-danger-fg underline hover:no-underline"
+              >
+                Retry
+              </button>
+            </div>
+          </div>
+        )}
+
         {serverError && (
           <div
             role="alert"
@@ -866,7 +922,7 @@ function ManualPoFormInner(): JSX.Element {
         <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3 pt-2">
           <button
             type="button"
-            className="btn btn-ghost btn-sm"
+            className="btn btn-ghost w-full sm:w-auto"
             onClick={() => router.push("/purchase-orders")}
             disabled={phase === "submitting"}
           >
@@ -876,7 +932,7 @@ function ManualPoFormInner(): JSX.Element {
             type="submit"
             data-testid="po-new-submit"
             className="btn btn-accent w-full sm:w-auto"
-            disabled={phase === "submitting" || masterDataLoading}
+            disabled={phase === "submitting" || masterDataLoading || masterDataError}
           >
             {phase === "submitting" ? "Creating…" : "Create purchase order"}
           </button>

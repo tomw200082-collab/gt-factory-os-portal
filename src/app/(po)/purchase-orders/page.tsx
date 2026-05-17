@@ -599,6 +599,24 @@ export default function PurchaseOrdersListPage() {
       />
 
       {/* KPI tile row — 4 tiles: Open / Partial / Late / Received */}
+      {allPosQuery.isError && (
+        <div
+          className="mb-2 flex flex-wrap items-center gap-3 rounded border border-danger/40 bg-danger-softer px-4 py-2.5 text-xs text-danger-fg"
+          data-testid="po-stats-error"
+        >
+          <span className="font-semibold">PO stats unavailable</span>
+          <span className="text-fg-muted">
+            The KPI tiles could not load. The list below is unaffected.
+          </span>
+          <button
+            type="button"
+            onClick={() => void allPosQuery.refetch()}
+            className="ml-auto text-xs font-medium text-danger-fg underline hover:no-underline"
+          >
+            Retry
+          </button>
+        </div>
+      )}
       {allPosQuery.data && (
         <div
           className="flex flex-wrap gap-3 mb-2"
@@ -807,11 +825,32 @@ export default function PurchaseOrdersListPage() {
               <EmptyState
                 title="No late purchase orders"
                 description="Nothing is past its expected receive date. Clear the Late filter to see all matching orders."
+                action={
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-accent"
+                    onClick={() => setLateOnly(false)}
+                  >
+                    Clear Late filter
+                  </button>
+                }
               />
             ) : (
               <EmptyState
                 title="No purchase orders match the current filter"
                 description="Clear the filter or widen the search."
+                action={
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-accent"
+                    onClick={() => {
+                      setQuery("");
+                      applyStatusFilter(null);
+                    }}
+                  >
+                    Show all purchase orders
+                  </button>
+                }
               />
             )}
           </div>

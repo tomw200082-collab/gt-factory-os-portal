@@ -272,7 +272,26 @@ export default function PlanningRunsListPage() {
           role="alert"
           className="rounded border border-danger/30 bg-danger-softer px-4 py-3 text-sm text-danger-fg"
         >
-          {triggerError}
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <span>{triggerError}</span>
+            <div className="flex items-center gap-1.5">
+              <button
+                type="button"
+                onClick={() => triggerMutation.mutate()}
+                disabled={triggerMutation.isPending}
+                className="btn btn-xs"
+              >
+                Try again
+              </button>
+              <button
+                type="button"
+                onClick={() => setTriggerError(null)}
+                className="btn btn-ghost btn-xs"
+              >
+                Dismiss
+              </button>
+            </div>
+          </div>
         </div>
       ) : null}
 
@@ -351,7 +370,15 @@ export default function PlanningRunsListPage() {
                 : "Try a different filter to see other runs."
             }
             action={
-              canAuthor && filter === "all" ? (
+              filter !== "all" ? (
+                <button
+                  type="button"
+                  onClick={() => setFilter("all")}
+                  className="btn btn-sm"
+                >
+                  Show all runs
+                </button>
+              ) : canAuthor ? (
                 <button
                   type="button"
                   onClick={() => triggerMutation.mutate()}

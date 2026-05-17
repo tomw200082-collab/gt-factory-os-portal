@@ -311,6 +311,10 @@ export default function AdminMasterDataHealthPage(): JSX.Element {
         </div>
       ) : null}
 
+      {/* On error, do not render the HealthSections — a failed load must
+          never show a green "no issues" all-clear. */}
+      {!isError && (
+        <>
       {/* Check 1: Active components missing a primary supplier */}
       <HealthSection
         title="Components missing a primary supplier"
@@ -356,7 +360,10 @@ export default function AdminMasterDataHealthPage(): JSX.Element {
             <Badge tone="info" dotted>
               {item.supply_method === "MANUFACTURED" ? "Manufactured" : "Repack"}
             </Badge>,
-            <CtaLink href="/admin/masters/boms" label="Open BOMs" />,
+            <CtaLink
+              href={`/admin/masters/items/${encodeURIComponent(item.item_id)}?tab=bom`}
+              label="Open BOM"
+            />,
           ])}
         />
       </HealthSection>
@@ -404,6 +411,8 @@ export default function AdminMasterDataHealthPage(): JSX.Element {
           ]}
         />
       </HealthSection>
+        </>
+      )}
     </>
   );
 }

@@ -377,6 +377,16 @@ export default function PoParityCheckPage(): JSX.Element {
           <EmptyState
             title="No parity check run yet"
             description='Click "Run parity check" to verify purchase order status consistency. This is a read-only diagnostic — no data is changed.'
+            action={
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => void runCheck()}
+                disabled={loading}
+              >
+                Run parity check
+              </button>
+            }
           />
         </SectionCard>
       )}
@@ -407,6 +417,13 @@ export default function PoParityCheckPage(): JSX.Element {
           {/* Iter 18 — health summary chips */}
           <SectionCard contentClassName="p-3 sm:p-4">
             <HealthSummary result={result} />
+            {totalIssues === 0 && (
+              <div className="mt-3">
+                <Link href="/purchase-orders" className="btn btn-sm">
+                  Back to Purchase Orders
+                </Link>
+              </div>
+            )}
           </SectionCard>
 
           {/* Iter 19 — drift table */}

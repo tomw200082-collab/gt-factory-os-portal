@@ -434,7 +434,6 @@ export default function AdminMastersBomVersionDetailPage({
             lines.length > 0
               ? `${lines.length} line${lines.length === 1 ? "" : "s"}`
               : "No lines — add components to build this recipe",
-          href: "#",
         },
         {
           label: "Version status",

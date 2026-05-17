@@ -6,9 +6,6 @@
 //
 // Locked principle: plans NEVER write stock_ledger. Stock changes only
 // when actual production is reported.
-//
-// Materials This Week Drawer ships in "unavailable" state until W4 authors
-// the backend weekly-materials endpoint contract.
 
 import Link from "next/link";
 import { useMemo, useState } from "react";
@@ -51,7 +48,6 @@ import {
 } from "./_lib/helpers";
 import { WeekTimelineRail } from "./_components/WeekTimelineRail";
 import { ProductionDayLane } from "./_components/ProductionDayLane";
-import { MaterialsThisWeekDrawer } from "./_components/MaterialsThisWeekDrawer";
 import type {
   ProductionPlanRow,
   RecommendationCandidate,
@@ -942,7 +938,6 @@ export default function ProductionPlanPage() {
   const [showAddNote, setShowAddNote] = useState<{ defaultDate: string } | null>(null);
   const [editingPlan, setEditingPlan] = useState<ProductionPlanRow | null>(null);
   const [cancellingPlan, setCancellingPlan] = useState<ProductionPlanRow | null>(null);
-  const [showMaterialsDrawer, setShowMaterialsDrawer] = useState(false);
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
 
   const plansQuery = usePlans(toIsoDate(weekStart), toIsoDate(weekEnd));
@@ -1135,21 +1130,6 @@ export default function ProductionPlanPage() {
         description="Plan production for the week. Inventory updates only when actuals are reported."
         actions={
           <div className="flex flex-wrap items-center gap-2">
-            {/* Materials this week — drawer trigger */}
-            <button
-              type="button"
-              className="btn btn-sm gap-1.5 text-fg-muted hover:text-fg"
-              onClick={() => setShowMaterialsDrawer(true)}
-              data-testid="header-materials-drawer"
-              aria-label="Materials this week"
-            >
-              <Boxes className="h-3 w-3" strokeWidth={2} />
-              Materials this week
-              <span className="ml-1 rounded text-[9px] font-semibold px-1 py-0.5 bg-warning-soft text-warning-fg border border-warning/30 leading-none">
-                Pending data source
-              </span>
-            </button>
-
             {canAct && (
               <>
                 <button
@@ -1558,14 +1538,6 @@ export default function ProductionPlanPage() {
           isSubmitting={patchMut.isPending}
         />
       ) : null}
-
-      {/* ── Materials This Week Drawer ── */}
-      <MaterialsThisWeekDrawer
-        open={showMaterialsDrawer}
-        onClose={() => setShowMaterialsDrawer(false)}
-        weekStart={weekStart}
-        weekEnd={weekEnd}
-      />
 
       {toast ? (
         <Toast kind={toast.kind} message={toast.message} onClose={() => setToast(null)} />

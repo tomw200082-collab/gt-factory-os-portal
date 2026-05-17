@@ -616,20 +616,6 @@ export default function AdminSupplierDetailPage({
           ? `"${row.supplier_name_short!}"`
           : "Operators see the short name. Set it so labels are concise.",
         href: `${detailPath}?tab=overview`,
-        fixAction: !hasShortName && isAdmin ? (
-          <button
-            type="button"
-            onClick={(e) => {
-              e.preventDefault();
-              e.stopPropagation();
-              // Focuses the short name inline edit — just navigate to overview.
-              window.location.href = `${detailPath}?tab=overview`;
-            }}
-            className="rounded bg-warning-softer px-1.5 py-0.5 text-3xs font-semibold text-warning-fg hover:opacity-80"
-          >
-            Set
-          </button>
-        ) : undefined,
       },
       {
         label: "Supplier type set",
@@ -732,6 +718,11 @@ export default function AdminSupplierDetailPage({
         return (
           <DetailTabEmpty
             message={`Supplier ${supplier_id} not found in the suppliers list.`}
+            action={
+              <Link href="/admin/suppliers" className="btn btn-sm btn-primary inline-flex">
+                Back to suppliers
+              </Link>
+            }
           />
         );
       }
@@ -1189,7 +1180,7 @@ export default function AdminSupplierDetailPage({
                 Once the planning engine generates recommendations and a planner approves them, purchase orders will appear here.
               </p>
               <Link
-                href="/purchase-orders/new"
+                href={`/purchase-orders/new?supplier_id=${encodeURIComponent(supplier_id)}`}
                 className="btn btn-primary btn-sm inline-flex"
               >
                 Create a PO

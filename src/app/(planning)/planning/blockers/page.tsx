@@ -112,7 +112,7 @@ export default function PlanningBlockersPage() {
     [explicitRunId, severity, category],
   );
 
-  const { data: result, isLoading, isError } = useBlockers(filters);
+  const { data: result, isLoading, isError, refetch } = useBlockers(filters);
 
   const filteredRows = useMemo(() => {
     const rows = result?.data?.rows ?? [];
@@ -368,7 +368,7 @@ export default function PlanningBlockersPage() {
       {isLoading ? (
         <BlockersLoadingSkeleton />
       ) : isError || result?.error ? (
-        <BlockersErrorBanner />
+        <BlockersErrorBanner onRetry={() => refetch()} />
       ) : noRunYet ? (
         <BlockersEmptyNoRunYet />
       ) : !hasAnyRows ? (

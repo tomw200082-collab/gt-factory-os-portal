@@ -697,21 +697,44 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
           >
             Retry
           </button>
+          <div className="mt-2">
+            <Link href="/admin/boms" className="btn btn-sm btn-outline">
+              ← Back to recipes
+            </Link>
+          </div>
         </div>
       </div>
     );
   }
   if (!head) {
     return (
-      <div className="p-5 text-sm text-danger-fg">
-        BOM head not found: {head_id}
+      <div className="p-5">
+        <div className="text-sm text-danger-fg">
+          BOM head not found: {head_id}
+        </div>
+        <Link href="/admin/boms" className="btn btn-sm btn-outline mt-3">
+          ← Back to recipes
+        </Link>
       </div>
     );
   }
   if (!version) {
     return (
-      <div className="p-5 text-sm text-danger-fg">
-        BOM version not found on this head: {version_id}
+      <div className="p-5">
+        <div className="text-sm text-danger-fg">
+          BOM version not found on this head: {version_id}
+        </div>
+        <div className="mt-3 flex gap-2">
+          <Link
+            href={`/admin/boms/${encodeURIComponent(head_id)}`}
+            className="btn btn-sm btn-outline"
+          >
+            ← Back to BOM head
+          </Link>
+          <Link href="/admin/boms" className="btn btn-sm btn-ghost">
+            All recipes
+          </Link>
+        </div>
       </div>
     );
   }

@@ -19,7 +19,7 @@ import { Suspense, useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { ArrowRight, Pencil, Phone, Plus, Power, X } from "lucide-react";
+import { ArrowRight, Phone, Plus, Power, X } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
@@ -241,7 +241,6 @@ function SuppliersPageInner(): JSX.Element {
   const [statusFilter, setStatusFilter] = useState<string>("ACTIVE");
   const [showCreate, setShowCreate] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [isEditing, setIsEditing] = useState(false);
   const [banner, setBanner] = useState<
     | { kind: "success" | "error"; message: string }
     | null
@@ -537,7 +536,6 @@ function SuppliersPageInner(): JSX.Element {
                     }`}
                     onClick={() => {
                       setSelectedId(r.supplier_id);
-                      setIsEditing(false);
                     }}
                   >
                     {/* Iter 16 — Name cell: official name + short + id */}
@@ -636,49 +634,18 @@ function SuppliersPageInner(): JSX.Element {
           title={selectedSupplier.supplier_name_official}
           actions={
             <div className="flex items-center gap-2">
-              {!isEditing ? (
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm inline-flex items-center gap-1"
-                  onClick={() => setIsEditing(true)}
-                  title="Edit supplier"
-                >
-                  <Pencil className="h-3 w-3" strokeWidth={2} />
-                  Edit
-                </button>
-              ) : (
-                <>
-                  <button
-                    type="button"
-                    className="btn btn-ghost btn-sm"
-                    onClick={() => setIsEditing(false)}
-                    title="Cancel edits"
-                  >
-                    Cancel
-                  </button>
-                  <button
-                    type="button"
-                    className="btn-primary btn-sm"
-                    onClick={() => {
-                      setIsEditing(false);
-                      setBanner({
-                        kind: "success",
-                        message:
-                          "Edits saved (supplier fields are read-only in this view; deep edits live on the master detail page).",
-                      });
-                    }}
-                  >
-                    Save
-                  </button>
-                </>
-              )}
+              <Link
+                href={`/admin/masters/suppliers/${encodeURIComponent(selectedSupplier.supplier_id)}`}
+                className="btn btn-ghost btn-sm inline-flex items-center gap-1"
+                title="Open full supplier detail"
+              >
+                Open full detail
+                <ArrowRight className="h-3 w-3" strokeWidth={2} />
+              </Link>
               <button
                 type="button"
                 className="btn btn-ghost btn-sm inline-flex items-center gap-1"
-                onClick={() => {
-                  setSelectedId(null);
-                  setIsEditing(false);
-                }}
+                onClick={() => setSelectedId(null)}
                 title="Close detail"
               >
                 <X className="h-3 w-3" strokeWidth={2} />

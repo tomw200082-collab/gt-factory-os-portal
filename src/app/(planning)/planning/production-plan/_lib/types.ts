@@ -123,15 +123,3 @@ export interface RecommendationCandidatesResponse {
   as_of: string;
 }
 
-// Materials This Week Drawer state machine. PDP-UX-01 handoff § 4.
-// Initial launch state is always "unavailable" until the backend
-// weekly-materials endpoint is built and verified (W4 contract).
-export type MaterialsDrawerState =
-  | "loading"
-  | "ready_covered"
-  | "ready_shortages"
-  | "ready_no_plans"
-  | "ready_missing_bom"
-  | "unavailable"
-  | "stale"
-  | "error";

@@ -17,6 +17,7 @@
 // loading / empty / error state is honest.
 // ---------------------------------------------------------------------------
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { cn } from "@/lib/cn";
@@ -65,7 +66,7 @@ function fmtQty(n: number): string {
 // Page
 // ===========================================================================
 export default function PurchaseSessionPage() {
-  const { data, isLoading, isError, error } = useCurrentSession();
+  const { data, isLoading, isError, error, refetch } = useCurrentSession();
   const startMut = useStartSession();
 
   const session = data?.session ?? null;
@@ -111,7 +112,10 @@ export default function PurchaseSessionPage() {
       />
 
       {startMut.isError ? (
-        <ErrorBanner message={(startMut.error as Error).message} />
+        <ErrorBanner
+          message={(startMut.error as Error).message}
+          onRetry={handleStart}
+        />
       ) : null}
 
       {isLoading ? (
@@ -121,6 +125,7 @@ export default function PurchaseSessionPage() {
           message={
             (error as Error)?.message ?? "לא ניתן לטעון את מושב הרכש."
           }
+          onRetry={() => void refetch()}
         />
       ) : !session ? (
         <EmptyNoSession />
@@ -225,8 +230,11 @@ function SessionBody({ session }: { session: PurchaseSession }) {
 
       {/* Tier sections */}
       {total === 0 ? (
-        <div className="card p-6 text-center text-sm text-fg-muted">
-          המנוע רץ בהצלחה — אין כרגע הזמנות רכש שדורשות פעולה בתוך האופק.
+        <div className="card flex flex-col items-center gap-3 p-6 text-center text-sm text-fg-muted">
+          <div>המנוע רץ בהצלחה — אין כרגע הזמנות רכש שדורשות פעולה בתוך האופק.</div>
+          <Link href="/planning/purchase-calendar" className="btn btn-sm btn-outline">
+            ללוח הרכש ←
+          </Link>
         </div>
       ) : (
         TIER_ORDER.map((t) =>
@@ -696,10 +704,27 @@ function EmptyNoSession() {
     </div>
   );
 }
-function ErrorBanner({ message }: { message: string }) {
+function ErrorBanner({
+  message,
+  onRetry,
+  retryLabel = "נסו שוב",
+}: {
+  message: string;
+  onRetry?: () => void;
+  retryLabel?: string;
+}) {
   return (
     <div className="rounded-lg border border-danger/40 bg-danger-softer px-3 py-2 text-xs text-danger-fg">
-      {message}
+      <div>{message}</div>
+      {onRetry ? (
+        <button
+          type="button"
+          onClick={onRetry}
+          className="btn btn-sm btn-outline mt-2"
+        >
+          {retryLabel}
+        </button>
+      ) : null}
     </div>
   );
 }

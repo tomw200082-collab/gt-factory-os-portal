@@ -830,7 +830,9 @@ export default function WeeklyOutlookPage() {
               <div className="space-y-4">
                 {selectedDayItems.length === 0 ? (
                   <p className="text-sm text-fg-muted">
-                    No item-level activity for this day.
+                    No item-level activity for this day. Pick another day on
+                    the timeline above, or close this panel to return to the
+                    week view.
                   </p>
                 ) : (
                   <div className="overflow-x-auto">

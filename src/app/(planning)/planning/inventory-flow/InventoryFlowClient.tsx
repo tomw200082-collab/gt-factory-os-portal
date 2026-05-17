@@ -1,6 +1,6 @@
 "use client";
 
-import { useSearchParams } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
@@ -28,6 +28,7 @@ import { cn } from "@/lib/cn";
 const UNMAPPED_GATE = 0.1;
 
 export function InventoryFlowClient() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [isMounted, setIsMounted] = useState(false);
   useEffect(() => setIsMounted(true), []);
@@ -179,6 +180,7 @@ export function InventoryFlowClient() {
         <ErrorState
           title="Could not load Inventory Flow"
           description={(flowQuery.error as Error)?.message ?? "Unknown error"}
+          onRetry={() => void flowQuery.refetch()}
         />
       </>
     );
@@ -187,7 +189,7 @@ export function InventoryFlowClient() {
   // ---------------------------------------------------------------------------
   // Loading state
   // ---------------------------------------------------------------------------
-  if (flowQuery.isLoading || !data) {
+  if (flowQuery.isLoading) {
     return (
       <>
         {tabs}
@@ -202,6 +204,31 @@ export function InventoryFlowClient() {
         </div>
         <InsightsHero items={[]} summary={null} isLoading />
         <SkeletonGrid />
+      </>
+    );
+  }
+
+  // Terminal fallback — the query settled but returned no projection (and
+  // did not error). Without this the loading skeleton would render forever.
+  if (!data) {
+    return (
+      <>
+        {tabs}
+        {header}
+        <EmptyState
+          title="No projection available"
+          description="The inventory flow projection finished but returned no data. This usually clears on a retry."
+          action={
+            <button
+              type="button"
+              onClick={() => void flowQuery.refetch()}
+              className="btn btn-sm btn-outline"
+            >
+              <RefreshCw className="h-3.5 w-3.5" strokeWidth={2} />
+              Retry
+            </button>
+          }
+        />
       </>
     );
   }
@@ -252,6 +279,11 @@ export function InventoryFlowClient() {
                 overlayEnabled={overlayEnabled}
                 plannedByItemDate={plannedByItemDate}
                 plannedRows={plannedRows}
+                onSelectItem={(itemId) =>
+                  router.push(
+                    `/planning/inventory-flow/${encodeURIComponent(itemId)}`,
+                  )
+                }
               />
             )}
 

@@ -215,14 +215,15 @@ export default function RecommendationDrillDownPage() {
     onError: (err: Error) => {
       // Approve already succeeded server-side; surface the convert failure
       // honestly so the planner can finish the job manually instead of
-      // discovering the orphaned approval later.
+      // discovering the orphaned approval later. This toast is persistent
+      // (no auto-dismiss) so the "Create purchase order" recovery button
+      // stays paired with the message until the planner acts.
       setActionToast({
         kind: "error",
         message:
           err.message ||
           "Recommendation approved, but the purchase order could not be created. You can create the PO manually from the run table.",
       });
-      window.setTimeout(() => setActionToast(null), 6000);
     },
   });
 
@@ -362,6 +363,23 @@ export default function RecommendationDrillDownPage() {
   const isProductionRec = rec.rec_type === "production";
   const isDraft = rec.rec_status === "draft";
   const isMutating = approveMut.isPending || dismissMut.isPending || convertMut.isPending;
+
+  // True when no action button renders in the "What to do next" card: either
+  // the role cannot execute, or the rec is in a terminal/non-actionable state.
+  // The converted_to_po case is excluded — it has its own "Converted" block.
+  const hasActionButton =
+    rec.converted_po_id !== null ||
+    (canExecute &&
+      (isDraft ||
+        isApprovedAndUnconverted ||
+        (isProductionRec && rec.rec_status === "approved")));
+  const noActionMessage = !canExecute
+    ? "View only — no action available for your role."
+    : rec.rec_status === "dismissed"
+      ? "This recommendation was dismissed — no action needed."
+      : rec.rec_status === "superseded"
+        ? "This recommendation was superseded by a newer run — no action needed."
+        : "No action available for this recommendation.";
 
   // For production recs, deep-link to /ops/stock/production-actual with
   // item_id + suggested_qty + breadcrumb params. For purchase recs, route
@@ -557,6 +575,15 @@ export default function RecommendationDrillDownPage() {
                 Open purchase order →
               </Link>
             </div>
+          ) : null}
+
+          {!hasActionButton ? (
+            <p
+              className="text-xs text-fg-muted"
+              data-testid="rec-detail-no-action-message"
+            >
+              {noActionMessage}
+            </p>
           ) : null}
         </div>
 

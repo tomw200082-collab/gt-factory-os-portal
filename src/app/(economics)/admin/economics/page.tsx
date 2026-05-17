@@ -35,7 +35,7 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Play } from "lucide-react";
+import { Play, X } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
@@ -685,11 +685,19 @@ export default function AdminEconomicsPage(): JSX.Element {
         <div
           className={
             banner.kind === "success"
-              ? "rounded-md border border-success/40 bg-success-softer p-3 text-sm text-success-fg"
-              : "rounded-md border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg"
+              ? "flex items-start justify-between gap-3 rounded-md border border-success/40 bg-success-softer p-3 text-sm text-success-fg"
+              : "flex items-start justify-between gap-3 rounded-md border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg"
           }
         >
-          {banner.message}
+          <span>{banner.message}</span>
+          <button
+            type="button"
+            onClick={() => setBanner(null)}
+            aria-label="Dismiss"
+            className="shrink-0 rounded p-0.5 hover:bg-fg/10"
+          >
+            <X className="h-3.5 w-3.5" strokeWidth={2.5} />
+          </button>
         </div>
       ) : null}
 
@@ -735,6 +743,22 @@ export default function AdminEconomicsPage(): JSX.Element {
                 <div className="mb-4 text-xs text-fg-muted">
                   Run the snapshot to compute COGS for every product.
                 </div>
+                {canEdit ? (
+                  <button
+                    type="button"
+                    className="btn-primary inline-flex items-center gap-1.5"
+                    onClick={() => {
+                      setBanner(null);
+                      recalculateMutation.mutate();
+                    }}
+                    disabled={recalculateMutation.isPending}
+                  >
+                    <Play className="h-3.5 w-3.5" strokeWidth={2.5} />
+                    {recalculateMutation.isPending
+                      ? "Running…"
+                      : "Run Snapshot Now"}
+                  </button>
+                ) : null}
               </div>
             </div>
           ) : (
