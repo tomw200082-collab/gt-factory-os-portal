@@ -50,12 +50,17 @@ import { fmtNumStr } from "@/lib/utils/format-quantity";
 // Types
 // ---------------------------------------------------------------------------
 
+interface MissingCostComponent {
+  component_id: string | null;
+  reason: string;
+}
+
 interface EconomicsRow {
   item_id: string;
   item_name: string;
   cogs_per_unit_ils: string | null;
   cogs_complete: boolean;
-  missing_cost_components: unknown[];
+  missing_cost_components: MissingCostComponent[];
   cogs_snapshot_at: string | null;
   qty_on_hand: string;
   fg_inventory_value_at_cost: string | null;
@@ -167,9 +172,41 @@ function SnapshotStatusBadge({ row }: { row: EconomicsRow }): JSX.Element {
     return <Badge tone="success" dotted>Complete</Badge>;
   }
   if (row.cogs_snapshot_at == null) {
-    return <Badge tone="neutral" dotted>No snapshot</Badge>;
+    return (
+      <span title="No COGS snapshot has been run for this product yet. Use Run Snapshot Now.">
+        <Badge tone="neutral" dotted>No snapshot</Badge>
+      </span>
+    );
   }
-  return <Badge tone="warning" dotted>Incomplete</Badge>;
+
+  // Incomplete — name the blockers so editors know exactly what to price.
+  const missing = row.missing_cost_components ?? [];
+  const boughtFinished = missing.some(
+    (m) => m.reason === "bought_finished_no_primary_supplier_cost",
+  );
+  if (boughtFinished) {
+    return (
+      <span title="This bought-finished product has no primary supplier cost. Set a supplier price for the item to compute its COGS.">
+        <Badge tone="warning" dotted>No supplier cost</Badge>
+      </span>
+    );
+  }
+  const ids = missing
+    .map((m) => m.component_id)
+    .filter((id): id is string => id != null);
+  const tip =
+    ids.length > 0
+      ? `Missing cost for ${ids.length} component${
+          ids.length === 1 ? "" : "s"
+        }: ${ids.join(", ")}. Add a cost on the Component Costs tab, then re-run the snapshot.`
+      : "COGS is incomplete — one or more component costs are missing.";
+  return (
+    <span title={tip}>
+      <Badge tone="warning" dotted>
+        {ids.length > 0 ? `Incomplete · ${ids.length}` : "Incomplete"}
+      </Badge>
+    </span>
+  );
 }
 
 // ---------------------------------------------------------------------------
