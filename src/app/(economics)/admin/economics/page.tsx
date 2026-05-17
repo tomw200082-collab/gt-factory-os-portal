@@ -7,21 +7,30 @@
 // planning:execute). Lifted out of the (admin) group 2026-05-17 so planners
 // own routine component-cost edits and on-demand re-snapshots.
 //
-// Two-tab view onto the COGS snapshot pipeline:
-//   - Overview        : COGS per SKU, inventory at cost, snapshot freshness.
+// Two-tab view onto the economics pipeline:
+//   - Overview        : COGS per SKU, editable average sale price, derived
+//                       material margin, inventory valued at cost / sale.
 //   - Component Costs : effective cost per component + inline fallback edit.
 //
 // Source of truth:
-//   GET  /api/economics                          → snapshot rows (one per item)
+//   GET  /api/economics                          → economics rows (per item)
 //   GET  /api/economics/component-costs          → cost view (one per component)
 //   PATCH /api/economics/component-costs/:id     → updates fallback (components
 //                                                  .std_cost_per_inv_uom)
+//   PATCH /api/economics/sale-price/:item_id     → updates the manual average
+//                                                  sale price (items
+//                                                  .manual_avg_sale_price_ils)
 //   POST /api/economics/recalculate              → run snapshot now
 //
-// Edits to the fallback do NOT change the active effective cost when the
-// component has a primary supplier — the supplier_items row wins. That nuance
-// is surfaced on the row and inside the edit cell so editors do not silently
-// edit a value with no effect.
+// Average sale price is a manual interim input (migration 0207, ahead of
+// Wave 10B automation). Unlike component costs, a sale-price edit feeds
+// v_fg_economics directly — margin and inventory-at-sale columns recompute
+// on the next fetch, no snapshot run required.
+//
+// Edits to the component fallback do NOT change the active effective cost
+// when the component has a primary supplier — the supplier_items row wins.
+// That nuance is surfaced on the row and inside the edit cell so editors do
+// not silently edit a value with no effect.
 // ---------------------------------------------------------------------------
 
 import { useMemo, useState } from "react";
@@ -46,6 +55,10 @@ interface EconomicsRow {
   qty_on_hand: string;
   fg_inventory_value_at_cost: string | null;
   avg_sale_price_ils: string | null;
+  material_margin_ils: string | null;
+  material_margin_pct: string | null;
+  fg_inventory_value_at_sale_price: string | null;
+  embedded_material_margin_in_stock: string | null;
   reliability_flag: string;
 }
 
@@ -104,6 +117,22 @@ function formatQtyZero(value: string): string {
   const n = Number(value);
   if (!Number.isFinite(n)) return "—";
   return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
+}
+
+function formatPct(value: string | null): string {
+  if (value == null) return "—";
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "—";
+  return `${n.toFixed(1)}%`;
+}
+
+// Tailwind tone for a margin value: negative margins read as a loss.
+function marginTone(value: string | null): string {
+  if (value == null) return "text-fg-muted";
+  const n = Number(value);
+  if (!Number.isFinite(n)) return "text-fg-muted";
+  if (n < 0) return "text-danger-fg";
+  return "text-fg-strong";
 }
 
 function formatRelativeShort(iso: string | null): string {
@@ -309,6 +338,158 @@ function CostEditCell({ row, canEdit, onSaved }: CostEditCellProps): JSX.Element
 }
 
 // ---------------------------------------------------------------------------
+// SalePriceEditCell — inline editor for the manual average sale price
+// (overview tab). Mirrors CostEditCell; a blank value clears the price.
+// ---------------------------------------------------------------------------
+
+interface SalePriceEditCellProps {
+  row: EconomicsRow;
+  canEdit: boolean;
+  onSaved: () => void;
+}
+
+function SalePriceEditCell({
+  row,
+  canEdit,
+  onSaved,
+}: SalePriceEditCellProps): JSX.Element {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState<string>(() => row.avg_sale_price_ils ?? "");
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [flash, setFlash] = useState(false);
+
+  const hasPrice = row.avg_sale_price_ils != null;
+
+  const startEdit = () => {
+    if (!canEdit) return;
+    setValue(row.avg_sale_price_ils ?? "");
+    setError(null);
+    setEditing(true);
+  };
+
+  const cancel = () => {
+    setEditing(false);
+    setError(null);
+    setValue(row.avg_sale_price_ils ?? "");
+  };
+
+  const commit = async () => {
+    if (busy) return;
+    const trimmed = value.trim();
+    let payload: number | null;
+    if (trimmed === "") {
+      payload = null;
+    } else {
+      const num = Number(trimmed);
+      if (!Number.isFinite(num) || num < 0) {
+        setError("Price must be a number ≥ 0, or blank to clear.");
+        return;
+      }
+      payload = num;
+    }
+    setBusy(true);
+    setError(null);
+    try {
+      const res = await fetch(
+        `/api/economics/sale-price/${encodeURIComponent(row.item_id)}`,
+        {
+          method: "PATCH",
+          headers: {
+            "Content-Type": "application/json",
+            Accept: "application/json",
+          },
+          body: JSON.stringify({ manual_avg_sale_price_ils: payload }),
+        },
+      );
+      if (!res.ok) {
+        const body = (await res.json().catch(() => null)) as
+          | { message?: string }
+          | null;
+        throw new Error(body?.message ?? `Save failed (HTTP ${res.status}).`);
+      }
+      setEditing(false);
+      setFlash(true);
+      onSaved();
+      window.setTimeout(() => setFlash(false), 800);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Save failed.");
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  if (editing) {
+    return (
+      <div className="flex flex-col gap-1">
+        <div className="flex items-center gap-1">
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            autoFocus
+            disabled={busy}
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            onBlur={() => {
+              void commit();
+            }}
+            onKeyDown={(e) => {
+              if (e.key === "Enter") {
+                e.preventDefault();
+                void commit();
+              } else if (e.key === "Escape") {
+                e.preventDefault();
+                cancel();
+              }
+            }}
+            className={`input w-28 text-right tabular-nums ${
+              error ? "border-danger focus:border-danger" : ""
+            }`}
+            aria-label={`Edit average sale price for ${row.item_name}`}
+          />
+          {busy ? (
+            <span
+              className="dot bg-info animate-pulse-soft"
+              aria-label="Saving"
+            />
+          ) : null}
+        </div>
+        {error ? (
+          <span className="text-3xs text-danger-fg">{error}</span>
+        ) : (
+          <span className="text-3xs text-fg-subtle">
+            Blank clears the price.
+          </span>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={startEdit}
+      disabled={!canEdit}
+      title={
+        canEdit
+          ? "Click to edit the average sale price"
+          : "Read-only — planner or admin access required to edit"
+      }
+      className={`inline-flex min-w-[5rem] items-center justify-end rounded px-1.5 py-0.5 text-right text-sm tabular-nums transition-colors ${
+        flash
+          ? "bg-success-softer text-success-fg"
+          : canEdit
+            ? "hover:bg-bg-subtle hover:text-accent"
+            : "cursor-default"
+      } ${hasPrice ? "text-fg-strong" : "text-fg-subtle"}`}
+    >
+      {hasPrice ? formatIls(row.avg_sale_price_ils) : canEdit ? "+ Set" : "—"}
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Loading skeleton (matches components/page.tsx)
 // ---------------------------------------------------------------------------
 
@@ -379,6 +560,7 @@ export default function AdminEconomicsPage(): JSX.Element {
     | null
   >(null);
   const [costSavedHint, setCostSavedHint] = useState(false);
+  const [priceSavedHint, setPriceSavedHint] = useState(false);
   const [componentQuery, setComponentQuery] = useState("");
 
   // --- Overview data ------------------------------------------------------
@@ -433,16 +615,22 @@ export default function AdminEconomicsPage(): JSX.Element {
       ),
   });
 
-  // Total inventory at cost (overview footer)
-  const totalInventoryAtCost = useMemo(() => {
+  // Overview footer totals — inventory valued at cost and at sale price.
+  const { totalInventoryAtCost, totalInventoryAtSalePrice } = useMemo(() => {
     const rows = economicsQuery.data?.rows ?? [];
-    let sum = 0;
+    let cost = 0;
+    let sale = 0;
     for (const r of rows) {
-      if (r.fg_inventory_value_at_cost == null) continue;
-      const n = Number(r.fg_inventory_value_at_cost);
-      if (Number.isFinite(n)) sum += n;
+      const c = Number(r.fg_inventory_value_at_cost);
+      if (r.fg_inventory_value_at_cost != null && Number.isFinite(c)) cost += c;
+      const s = Number(r.fg_inventory_value_at_sale_price);
+      if (r.fg_inventory_value_at_sale_price != null && Number.isFinite(s))
+        sale += s;
     }
-    return sum;
+    return {
+      totalInventoryAtCost: cost,
+      totalInventoryAtSalePrice: sale,
+    };
   }, [economicsQuery.data]);
 
   // Filtered component-costs (client-side text search)
@@ -479,7 +667,7 @@ export default function AdminEconomicsPage(): JSX.Element {
       <WorkflowHeader
         eyebrow="Economics"
         title="Economics"
-        description="COGS per SKU and component cost management. Edit raw material costs → snapshot runs nightly."
+        description="COGS, average sale price and material margin per SKU, plus component cost management. Enter sale prices on the Overview tab; edit raw material costs on Component Costs."
         meta={
           <>
             <Badge tone="info" dotted>
@@ -524,10 +712,11 @@ export default function AdminEconomicsPage(): JSX.Element {
       </div>
 
       {activeTab === "overview" ? (
+        <>
         <SectionCard
-          eyebrow="Snapshot"
-          title="COGS per product"
-          description="Per-unit COGS and on-hand inventory valued at the same snapshot. Edits to component costs flow into tonight’s 04:00 UTC re-snapshot — or run one now."
+          eyebrow="Economics"
+          title="COGS, sale price & margin per product"
+          description="Per-unit COGS, the editable average sale price, and the material margin derived from the two. Click an Avg sale price cell to enter or update it — margins recompute immediately, no snapshot run required."
           contentClassName="p-0"
         >
           {economicsQuery.isLoading ? (
@@ -560,10 +749,22 @@ export default function AdminEconomicsPage(): JSX.Element {
                       COGS / unit
                     </th>
                     <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                      Avg sale price
+                    </th>
+                    <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                      Margin / unit
+                    </th>
+                    <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                      Margin %
+                    </th>
+                    <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                       On hand
                     </th>
                     <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                       Inventory at cost
+                    </th>
+                    <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                      Inventory at sale price
                     </th>
                     <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                       Status
@@ -593,11 +794,40 @@ export default function AdminEconomicsPage(): JSX.Element {
                       <td className="px-3 py-2 text-right text-sm tabular-nums">
                         {formatIls(r.cogs_per_unit_ils)}
                       </td>
+                      <td className="px-3 py-2 text-right">
+                        <SalePriceEditCell
+                          row={r}
+                          canEdit={canEdit}
+                          onSaved={() => {
+                            setPriceSavedHint(true);
+                            void queryClient.invalidateQueries({
+                              queryKey: ["admin", "economics"],
+                            });
+                          }}
+                        />
+                      </td>
+                      <td
+                        className={`px-3 py-2 text-right text-sm tabular-nums ${marginTone(
+                          r.material_margin_ils,
+                        )}`}
+                      >
+                        {formatIls(r.material_margin_ils)}
+                      </td>
+                      <td
+                        className={`px-3 py-2 text-right text-sm tabular-nums ${marginTone(
+                          r.material_margin_pct,
+                        )}`}
+                      >
+                        {formatPct(r.material_margin_pct)}
+                      </td>
                       <td className="px-3 py-2 text-right text-sm tabular-nums text-fg-muted">
                         {formatQtyZero(r.qty_on_hand)}
                       </td>
                       <td className="px-3 py-2 text-right text-sm tabular-nums">
                         {formatIls(r.fg_inventory_value_at_cost)}
+                      </td>
+                      <td className="px-3 py-2 text-right text-sm tabular-nums">
+                        {formatIls(r.fg_inventory_value_at_sale_price)}
                       </td>
                       <td className="px-3 py-2">
                         <SnapshotStatusBadge row={r} />
@@ -611,11 +841,14 @@ export default function AdminEconomicsPage(): JSX.Element {
                 <tfoot>
                   <tr className="border-t border-border/70 bg-bg-subtle/60">
                     <td
-                      colSpan={6}
+                      colSpan={10}
                       className="px-3 py-2 text-right text-sm font-semibold text-fg-strong tabular-nums"
                     >
-                      Total inventory at cost:{" "}
+                      Total inventory — at cost:{" "}
                       {formatIlsGrouped(totalInventoryAtCost)}
+                      <span className="mx-2 text-fg-subtle">·</span>
+                      at sale price:{" "}
+                      {formatIlsGrouped(totalInventoryAtSalePrice)}
                     </td>
                   </tr>
                 </tfoot>
@@ -623,6 +856,13 @@ export default function AdminEconomicsPage(): JSX.Element {
             </div>
           )}
         </SectionCard>
+        {priceSavedHint ? (
+          <div className="text-xs text-fg-muted">
+            Average sale price saved — margin and inventory-at-sale columns
+            have been refreshed.
+          </div>
+        ) : null}
+        </>
       ) : null}
 
       {activeTab === "component-costs" ? (
