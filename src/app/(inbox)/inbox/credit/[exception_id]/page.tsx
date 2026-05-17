@@ -13,9 +13,19 @@
 // (`docs/integrations/lionwheel_credit_inbox_contract.md`) verbatim and
 // surfaces the four-fact card (Tom-locked per Doc B §7) plus three inline
 // actions:
-//   - אשר זיכוי (Approve)    — planner+admin (Doc B §3.2);
-//                               persists state='pending_gi_action' (SC-A3:
-//                               no Green Invoice call)
+//   - אשר זיכוי (Approve)    — planner+admin (Doc B §3.2). Approving now
+//                               triggers the Green Invoice (Morning)
+//                               credit-draft flow upstream: the handler
+//                               searches the original Shopify invoice,
+//                               matches the short line by customer + SKU +
+//                               price, and POSTs an unsigned credit note
+//                               (type 330, signed:false). On success the
+//                               exception resolves and the response carries
+//                               gi_draft = { document_id, url, ... }. On a
+//                               GI miss the exception stays at
+//                               pending_gi_action and gi_draft carries the
+//                               { error, reason } so the planner knows to
+//                               create the credit manually.
 //   - דחה זיכוי  (Reject)     — planner+admin (Doc B §3.3); reason ≥5 chars
 //   - ראיתי       (Acknowledge) — operator+planner+admin (Doc B §3.1)
 //
@@ -97,10 +107,44 @@ const STATUS_LABEL_HE: Record<CreditExceptionStatus, string> = {
   acknowledged: "ראיתי",
   resolved: "נסגר",
   auto_resolved: "נסגר אוטומטית",
-  pending_gi_action: "ממתין לאישור",
-  gi_draft_created: "נוצר זיכוי",
+  pending_gi_action: "אושר — ממתין ליצירת זיכוי",
+  gi_draft_created: "נוצרה טיוטת זיכוי",
   gi_action_failed: "לא נוצר זיכוי עדיין",
 };
+
+// ---------------------------------------------------------------------------
+// Green Invoice credit-draft result — mirrors the backend GiDraftResult union
+// (api/src/inbox/credit_decisions/schemas.ts). The Approve response carries
+// this so the portal can tell the planner whether the credit note was created
+// automatically (and link to it) or needs manual handling.
+// ---------------------------------------------------------------------------
+type GiDraftResult =
+  | {
+      document_id: string;
+      url: string | null;
+      original_number: string | number | null;
+    }
+  | { error: string; reason: string };
+
+// Backend GI failure codes → operator-facing Hebrew. Each one tells the
+// planner exactly why the draft was not created so the manual fallback is
+// obvious. Codes are the `kind` values of the backend CreatorOutcome union.
+const GI_ERROR_HE: Record<string, string> = {
+  search_no_match:
+    "לא נמצאה חשבונית מקור להזמנה זו ב-Green Invoice (30 הימים האחרונים). יש ליצור את הזיכוי ידנית.",
+  search_ambiguous:
+    "נמצאו כמה חשבוניות מקור אפשריות להזמנה. נדרשת בחירה ידנית של החשבונית הנכונה לפני יצירת הזיכוי.",
+  original_type_unsupported:
+    "סוג חשבונית המקור אינו נתמך ליצירת זיכוי אוטומטי. יש ליצור את הזיכוי ידנית.",
+  line_not_found_in_original:
+    "המוצר החסר לא אותר בשורות חשבונית המקור. יש ליצור את הזיכוי ידנית.",
+  gi_post_failed:
+    "יצירת טיוטת הזיכוי ב-Green Invoice נכשלה. נסה שוב מאוחר יותר או צור את הזיכוי ידנית.",
+};
+
+function giErrorHe(error: string, fallbackReason: string): string {
+  return GI_ERROR_HE[error] ?? fallbackReason;
+}
 
 // ---------------------------------------------------------------------------
 // HTTP response → discriminated outcome mapping. Per Wave 3 dispatch +
@@ -113,7 +157,18 @@ const STATUS_LABEL_HE: Record<CreditExceptionStatus, string> = {
 // (handles session expiry mid-action without surfacing a confusing toast).
 // ---------------------------------------------------------------------------
 type CreditActionOutcome =
-  | { kind: "ok"; data: { decision_id?: string; idempotent_replay?: boolean } }
+  | {
+      kind: "ok";
+      data: {
+        decision_id?: string;
+        idempotent_replay?: boolean;
+        // Post-Approve credit lifecycle state + the Green Invoice draft
+        // outcome. Both are undefined on Reject and on idempotent replays
+        // of older decisions.
+        status?: string;
+        gi_draft?: GiDraftResult;
+      };
+    }
   | { kind: "auth_required" }
   | { kind: "forbidden" }
   | { kind: "validation_error"; message: string }
@@ -162,6 +217,8 @@ async function postCreditAction(
     reason_code?: string;
     decision_id?: string;
     idempotent_replay?: boolean;
+    status?: string;
+    gi_draft?: GiDraftResult;
     validation_errors?: Array<{ message?: string }>;
   };
 
@@ -171,6 +228,8 @@ async function postCreditAction(
       data: {
         decision_id: responseBody.decision_id,
         idempotent_replay: responseBody.idempotent_replay,
+        status: responseBody.status,
+        gi_draft: responseBody.gi_draft,
       },
     };
   }
@@ -243,9 +302,13 @@ export default function CreditDetailPage(): ReactNode {
   const [busy, setBusy] = useState(false);
   const [feedback, setFeedback] = useState<
     | null
-    | { kind: "success"; text: string }
-    | { kind: "warning"; text: string }
-    | { kind: "error"; text: string }
+    | {
+        kind: "success" | "warning" | "error";
+        text: string;
+        // Optional outbound link — used to surface the created Green Invoice
+        // credit-draft document so the planner can open it directly.
+        link?: { href: string; label: string };
+      }
   >(null);
 
   const [showRejectPanel, setShowRejectPanel] = useState(false);
@@ -261,7 +324,7 @@ export default function CreditDetailPage(): ReactNode {
       // Fetch open + acknowledged + the post-Approve states; this catches
       // the Doc B §3.4 lifecycle states a planner might land on.
       const res = await fetch(
-        "/api/exceptions?status=open,acknowledged,resolved,auto_resolved",
+        "/api/exceptions?status=open,acknowledged,resolved,auto_resolved,pending_gi_action",
         { headers: { Accept: "application/json" } },
       );
       if (!res.ok) {
@@ -300,15 +363,48 @@ export default function CreditDetailPage(): ReactNode {
     const res = await postApprove(exceptionId);
     setBusy(false);
     if (res.kind === "ok") {
-      // W4 Doc B §6 Hebrew register — Tom-locked phrasing for post-Approve
-      // pending_gi_action state. Note this is the operator-facing copy from
-      // the Wave 3 dispatch ("the credit will be created in Green Invoice
-      // after document approval"); it intentionally does not promise a
-      // synchronous GI write (SC-A3).
-      setFeedback({
-        kind: "success",
-        text: "זיכוי אושר — הזיכוי ייווצר ב-Green Invoice לאחר אישור הקובץ.",
-      });
+      // Approving runs the Green Invoice credit-draft flow synchronously
+      // upstream. Reflect the actual outcome rather than a generic promise:
+      //   - gi_draft has document_id  → draft created; link straight to it.
+      //   - gi_draft has error        → approved, but draft not auto-created;
+      //                                  surface the reason + manual fallback.
+      //   - no gi_draft (idempotent replay) → fall back to the lifecycle
+      //                                  status so the planner still sees
+      //                                  where the credit stands.
+      const giDraft = res.data.gi_draft;
+      if (giDraft && "document_id" in giDraft) {
+        const origin = giDraft.original_number
+          ? ` (על בסיס חשבונית מקור ${giDraft.original_number})`
+          : "";
+        setFeedback({
+          kind: "success",
+          text: `זיכוי אושר וטיוטת זיכוי נוצרה ב-Green Invoice${origin}.`,
+          link: giDraft.url
+            ? {
+                href: giDraft.url,
+                label: "פתח את טיוטת הזיכוי ב-Green Invoice",
+              }
+            : undefined,
+        });
+      } else if (giDraft && "error" in giDraft) {
+        setFeedback({
+          kind: "warning",
+          text: `הזיכוי אושר, אך טיוטת הזיכוי לא נוצרה אוטומטית ב-Green Invoice. ${giErrorHe(
+            giDraft.error,
+            giDraft.reason,
+          )}`,
+        });
+      } else if (res.data.status === "gi_draft_created") {
+        setFeedback({
+          kind: "success",
+          text: "זיכוי אושר — טיוטת הזיכוי כבר נוצרה ב-Green Invoice.",
+        });
+      } else {
+        setFeedback({
+          kind: "warning",
+          text: "הזיכוי אושר — טיוטת הזיכוי טרם נוצרה ב-Green Invoice. ייתכן שנדרשת יצירה ידנית.",
+        });
+      }
       void exceptionQuery.refetch();
     } else if (res.kind === "auth_required") {
       window.location.href = `/login?redirectTo=${encodeURIComponent(window.location.pathname)}`;
@@ -483,6 +579,11 @@ export default function CreditDetailPage(): ReactNode {
     row.status === "resolved" ||
     row.status === "auto_resolved" ||
     row.status === "gi_draft_created";
+  // 'pending_gi_action' means the credit was already approved (the GI draft
+  // just did not auto-create). It is not "closed", but the decision is made —
+  // Approve/Reject/Acknowledge must all be disabled so the planner cannot
+  // re-decide a credit that is already in the GI lane.
+  const isDecided = isTerminal || row.status === "pending_gi_action";
 
   return (
     <>
@@ -514,6 +615,20 @@ export default function CreditDetailPage(): ReactNode {
           data-testid="credit-detail-feedback"
         >
           {feedback.text}
+          {feedback.link ? (
+            <>
+              {" "}
+              <a
+                href={feedback.link.href}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="font-semibold underline"
+                data-testid="credit-detail-gi-link"
+              >
+                {feedback.link.label}
+              </a>
+            </>
+          ) : null}
         </div>
       ) : null}
 
@@ -525,11 +640,13 @@ export default function CreditDetailPage(): ReactNode {
         eyebrow="פעולות"
         title="מה לעשות עם הבקשה"
         description={
-          isTerminal
-            ? "הבקשה כבר נסגרה. אין פעולות זמינות."
-            : canActOnCredits
-              ? "אישור או דחייה מחייבים תפקיד planner או admin. סימון 'ראיתי' פתוח לכולם."
-              : "סימון 'ראיתי' זמין לכל המשתמשים. אישור או דחייה מחייבים תפקיד planner או admin."
+          row.status === "pending_gi_action"
+            ? "הזיכוי כבר אושר. טיוטת הזיכוי טרם נוצרה אוטומטית ב-Green Invoice — ייתכן שנדרשת יצירה ידנית."
+            : isTerminal
+              ? "הבקשה כבר נסגרה. אין פעולות זמינות."
+              : canActOnCredits
+                ? "אישור או דחייה מחייבים תפקיד planner או admin. סימון 'ראיתי' פתוח לכולם."
+                : "סימון 'ראיתי' זמין לכל המשתמשים. אישור או דחייה מחייבים תפקיד planner או admin."
         }
       >
         <div className="flex flex-wrap gap-2">
@@ -537,7 +654,7 @@ export default function CreditDetailPage(): ReactNode {
             type="button"
             data-testid="credit-action-acknowledge"
             className="btn btn-sm"
-            disabled={busy || isTerminal || row.status === "acknowledged"}
+            disabled={busy || isDecided || row.status === "acknowledged"}
             onClick={handleAck}
           >
             {busy ? "שולח..." : "ראיתי"}
@@ -546,7 +663,7 @@ export default function CreditDetailPage(): ReactNode {
             type="button"
             data-testid="credit-action-approve"
             className="btn btn-sm btn-primary"
-            disabled={busy || isTerminal || !canActOnCredits}
+            disabled={busy || isDecided || !canActOnCredits}
             onClick={handleApprove}
           >
             {busy ? "שולח..." : "אשר זיכוי"}
@@ -555,7 +672,7 @@ export default function CreditDetailPage(): ReactNode {
             type="button"
             data-testid="credit-action-reject"
             className="btn btn-sm"
-            disabled={busy || isTerminal || !canActOnCredits}
+            disabled={busy || isDecided || !canActOnCredits}
             onClick={() => {
               setShowRejectPanel(true);
               setFeedback(null);

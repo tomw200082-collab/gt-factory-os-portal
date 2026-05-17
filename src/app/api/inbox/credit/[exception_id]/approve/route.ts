@@ -19,8 +19,13 @@ import { proxyRequest } from "@/lib/api-proxy";
 //     NOT body — replaces the prior stub which included exception_id in body)
 //
 // Role gate enforced upstream: planner | admin only (operator/viewer = 403).
-// SC-A3 invariant enforced upstream: handler stops at state='pending_gi_action'
-// with NO Green Invoice API call.
+//
+// Approve now drives the full Green Invoice credit-draft flow upstream
+// (api/src/integrations/greeninvoice): the handler creates an unsigned credit
+// note from the original Shopify invoice and returns `gi_draft` on the success
+// body — { document_id, url, original_number } when the draft was created, or
+// { error, reason } when it must be handled manually. This proxy preserves the
+// upstream status + body verbatim so the detail page can surface that result.
 // ---------------------------------------------------------------------------
 
 export async function POST(
