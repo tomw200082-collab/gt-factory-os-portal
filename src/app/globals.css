@@ -452,6 +452,18 @@
     @apply border-warning/40 bg-warning-soft text-warning-fg;
   }
 
+  .chip-info {
+    @apply border-info/40 bg-info-soft text-info-fg;
+  }
+
+  .chip-success {
+    @apply border-success/40 bg-success-soft text-success-fg;
+  }
+
+  .chip-danger {
+    @apply border-danger/40 bg-danger-soft text-danger-fg;
+  }
+
   /* ——— Buttons ————————————————————————————————————————————————————— */
 
   .btn {

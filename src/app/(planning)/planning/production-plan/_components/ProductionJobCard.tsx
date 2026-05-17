@@ -189,7 +189,7 @@ export function ProductionJobCard({
 
           {/* Overdue clock — only on live overdue plans */}
           {isLive && !isToday && (
-            <span className="chip gap-1 text-[10px] border-warning/30 bg-warning-softer/60 text-warning-fg">
+            <span className="chip chip-warning gap-1 text-[10px]">
               <Clock className="h-2.5 w-2.5" strokeWidth={2.5} />
               Overdue
             </span>
