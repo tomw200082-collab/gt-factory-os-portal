@@ -81,6 +81,9 @@ interface ComponentCostRow {
   supplier_cost: string | null;
   effective_cost: string | null;
   cost_source: "supplier_items_primary" | "components_fallback" | "missing";
+  // In-house semi-finished base: cost derived from a recipe BOM by the
+  // snapshot job, not manually editable (migration 0209).
+  is_semi_base: boolean;
 }
 
 type CostSource = "supplier_items_primary" | "components_fallback" | "missing";
@@ -216,10 +219,19 @@ function SnapshotStatusBadge({ row }: { row: EconomicsRow }): JSX.Element {
 function CostSourceBadge({
   source,
   supplierCost,
+  isSemiBase = false,
 }: {
   source: ComponentCostRow["cost_source"];
   supplierCost: string | null;
+  isSemiBase?: boolean;
 }): JSX.Element {
+  if (isSemiBase) {
+    return (
+      <span title="In-house semi-finished base. Its cost is rolled up from its recipe BOM by the COGS snapshot job.">
+        <Badge tone="info" dotted>Recipe rollup</Badge>
+      </span>
+    );
+  }
   if (source === "supplier_items_primary") {
     return (
       <span
@@ -257,6 +269,19 @@ function CostEditCell({ row, canEdit, onSaved }: CostEditCellProps): JSX.Element
   const [flash, setFlash] = useState(false);
 
   const display = formatIls(row.effective_cost);
+
+  // SEMI base components are costed from their recipe by the snapshot job —
+  // render read-only so editors are not misled into a no-op edit.
+  if (row.is_semi_base) {
+    return (
+      <span
+        title="Derived from this base's recipe BOM — recomputed by the COGS snapshot job. Not manually editable."
+        className="inline-flex min-w-[5rem] items-center justify-end px-1.5 py-0.5 text-right text-sm tabular-nums text-fg-strong"
+      >
+        {display}
+      </span>
+    );
+  }
 
   const startEdit = () => {
     if (!canEdit) return;
@@ -1199,6 +1224,7 @@ export default function AdminEconomicsPage(): JSX.Element {
                           <CostSourceBadge
                             source={r.cost_source}
                             supplierCost={r.supplier_cost}
+                            isSemiBase={r.is_semi_base}
                           />
                         </td>
                       </tr>
