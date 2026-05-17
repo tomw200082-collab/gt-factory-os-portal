@@ -254,6 +254,22 @@ export const NAV_MANIFEST: NavGroup[] = [
         min_role: "viewer",
         required_capability: "planning:read",
       },
+      {
+        // 2026-05-17 — moved here from the Admin group and widened from
+        // admin-only to planner+admin per Tom's request. The page was lifted
+        // out of the (admin) route group into a dedicated (economics) group
+        // whose layout gates on planning:execute — a capability the lattice
+        // grants to planner and admin only (operator/viewer hold
+        // planning:read, below execute). The URL is unchanged
+        // (/admin/economics) so existing links keep working; route-group
+        // folders never appear in URLs. Component-cost edits and the manual
+        // re-snapshot are enforced server-side on the same planner+admin gate.
+        href: "/admin/economics",
+        label: "Economics",
+        icon: TrendingUp,
+        min_role: "planner",
+        required_capability: "planning:execute",
+      },
     ],
   },
   {
@@ -324,13 +340,6 @@ export const NAV_MANIFEST: NavGroup[] = [
         label: "Users",
         icon: Users,
         min_role: "admin",
-        required_capability: "admin:execute",
-      },
-      {
-        href: "/admin/economics",
-        label: "Economics",
-        icon: TrendingUp,
-        min_role: "admin" as Role,
         required_capability: "admin:execute",
       },
       {
