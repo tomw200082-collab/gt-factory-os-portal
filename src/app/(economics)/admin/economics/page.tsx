@@ -7,14 +7,17 @@
 // planning:execute). Lifted out of the (admin) group 2026-05-17 so planners
 // own routine component-cost edits and on-demand re-snapshots.
 //
-// Two-tab view onto the economics pipeline:
+// Three-tab view onto the economics pipeline:
 //   - Overview        : COGS per SKU, editable average sale price, derived
-//                       material margin, inventory valued at cost / sale.
+//                       material margin, inventory valued at cost / sale,
+//                       plus a whole-factory valuation summary.
 //   - Component Costs : effective cost per component + inline fallback edit.
+//   - Raw Materials   : RM / packaging inventory valued at effective cost.
 //
 // Source of truth:
 //   GET  /api/economics                          → economics rows (per item)
 //   GET  /api/economics/component-costs          → cost view (one per component)
+//   GET  /api/economics/raw-materials            → RM/PKG inventory valuation
 //   PATCH /api/economics/component-costs/:id     → updates fallback (components
 //                                                  .std_cost_per_inv_uom)
 //   PATCH /api/economics/sale-price/:item_id     → updates the manual average
@@ -35,11 +38,13 @@
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Play } from "lucide-react";
+import { Play, Info } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
 import { useCapability } from "@/lib/auth/role-gate";
+import { formatIls, formatPct, formatQtyInt } from "@/lib/utils/format-money";
+import { fmtNumStr } from "@/lib/utils/format-quantity";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -73,6 +78,35 @@ interface ComponentCostRow {
   cost_source: "supplier_items_primary" | "components_fallback" | "missing";
 }
 
+type CostSource = "supplier_items_primary" | "components_fallback" | "missing";
+
+interface RawMaterialRow {
+  component_id: string;
+  component_name: string | null;
+  component_class: string | null;
+  item_type: string;
+  inventory_uom: string | null;
+  fallback_cost_ils: string | null;
+  supplier_cost_ils: string | null;
+  effective_cost_ils: string | null;
+  cost_source: CostSource;
+  qty_on_hand: string;
+  inventory_value_ils: string | null;
+}
+
+interface RawMaterialEconomicsResponse {
+  rows: RawMaterialRow[];
+  count: number;
+  totals: {
+    total_inventory_value_ils: string;
+    rm_inventory_value_ils: string;
+    pkg_inventory_value_ils: string;
+    priced_component_count: number;
+    unpriced_component_count: number;
+    component_count: number;
+  };
+}
+
 type ListEnvelope<T> = { rows: T[]; count: number };
 
 interface RecalculateResponse {
@@ -96,38 +130,12 @@ async function fetchJson<T>(url: string): Promise<T> {
 }
 
 // ---------------------------------------------------------------------------
-// Format helpers
+// Format helpers — formatIls / formatPct / formatQtyInt come from the shared
+// money module so every monetary value renders identically across surfaces.
 // ---------------------------------------------------------------------------
 
-function formatIls(value: string | null): string {
-  if (value == null) return "—";
-  const n = Number(value);
-  if (!Number.isFinite(n)) return "—";
-  return `₪${n.toFixed(2)}`;
-}
-
-function formatIlsGrouped(value: number): string {
-  return `₪${value.toLocaleString("en-US", {
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  })}`;
-}
-
-function formatQtyZero(value: string): string {
-  const n = Number(value);
-  if (!Number.isFinite(n)) return "—";
-  return n.toLocaleString("en-US", { maximumFractionDigits: 0 });
-}
-
-function formatPct(value: string | null): string {
-  if (value == null) return "—";
-  const n = Number(value);
-  if (!Number.isFinite(n)) return "—";
-  return `${n.toFixed(1)}%`;
-}
-
 // Tailwind tone for a margin value: negative margins read as a loss.
-function marginTone(value: string | null): string {
+function marginTone(value: string | number | null): string {
   if (value == null) return "text-fg-muted";
   const n = Number(value);
   if (!Number.isFinite(n)) return "text-fg-muted";
@@ -379,6 +387,16 @@ function SalePriceEditCell({
     const trimmed = value.trim();
     let payload: number | null;
     if (trimmed === "") {
+      // Clearing a price that was set is destructive — confirm first.
+      if (
+        row.avg_sale_price_ils != null &&
+        !window.confirm(
+          `Clear the average sale price for ${row.item_name}? Its margin and inventory-at-sale figures will go blank until a new price is entered.`,
+        )
+      ) {
+        cancel();
+        return;
+      }
       payload = null;
     } else {
       const num = Number(trimmed);
@@ -541,6 +559,60 @@ function ErrorCard({
 }
 
 // ---------------------------------------------------------------------------
+// HelpHint — small info icon carrying an explanatory tooltip. Used on table
+// headers so editors can see where a number comes from without leaving the
+// page.
+// ---------------------------------------------------------------------------
+
+function HelpHint({ text }: { text: string }): JSX.Element {
+  return (
+    <span
+      className="ml-1 inline-flex cursor-help align-middle text-fg-subtle"
+      title={text}
+      aria-label={text}
+      role="img"
+    >
+      <Info className="h-3 w-3" strokeWidth={2.25} />
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// StatTile — one figure in the Overview valuation summary.
+// ---------------------------------------------------------------------------
+
+function StatTile({
+  label,
+  value,
+  hint,
+  sub,
+  tone = "default",
+}: {
+  label: string;
+  value: string;
+  hint: string;
+  sub?: string;
+  tone?: "default" | "danger";
+}): JSX.Element {
+  return (
+    <div className="rounded-lg border border-border/60 bg-bg-subtle/40 p-3">
+      <div className="flex items-center text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+        {label}
+        <HelpHint text={hint} />
+      </div>
+      <div
+        className={`mt-1 text-lg font-semibold tabular-nums ${
+          tone === "danger" ? "text-danger-fg" : "text-fg-strong"
+        }`}
+      >
+        {value}
+      </div>
+      {sub ? <div className="mt-0.5 text-3xs text-fg-subtle">{sub}</div> : null}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
@@ -552,9 +624,9 @@ export default function AdminEconomicsPage(): JSX.Element {
   const canEdit = useCapability("planning:execute");
   const queryClient = useQueryClient();
 
-  const [activeTab, setActiveTab] = useState<"overview" | "component-costs">(
-    "overview",
-  );
+  const [activeTab, setActiveTab] = useState<
+    "overview" | "component-costs" | "raw-materials"
+  >("overview");
   const [banner, setBanner] = useState<
     | { kind: "success" | "error"; message: string }
     | null
@@ -615,21 +687,42 @@ export default function AdminEconomicsPage(): JSX.Element {
       ),
   });
 
-  // Overview footer totals — inventory valued at cost and at sale price.
-  const { totalInventoryAtCost, totalInventoryAtSalePrice } = useMemo(() => {
+  // --- Raw-material / packaging valuation --------------------------------
+
+  const rawMaterialsQuery = useQuery<RawMaterialEconomicsResponse>({
+    queryKey: ["admin", "economics", "raw-materials"],
+    queryFn: () =>
+      fetchJson<RawMaterialEconomicsResponse>("/api/economics/raw-materials"),
+  });
+
+  // Overview valuation summary + footer totals. Sums skip NULL values so a
+  // product with no COGS / no sale price simply does not contribute.
+  const overviewTotals = useMemo(() => {
     const rows = economicsQuery.data?.rows ?? [];
     let cost = 0;
     let sale = 0;
+    let embeddedMargin = 0;
+    let pricedCount = 0;
+    let cogsCount = 0;
     for (const r of rows) {
       const c = Number(r.fg_inventory_value_at_cost);
       if (r.fg_inventory_value_at_cost != null && Number.isFinite(c)) cost += c;
       const s = Number(r.fg_inventory_value_at_sale_price);
       if (r.fg_inventory_value_at_sale_price != null && Number.isFinite(s))
         sale += s;
+      const e = Number(r.embedded_material_margin_in_stock);
+      if (r.embedded_material_margin_in_stock != null && Number.isFinite(e))
+        embeddedMargin += e;
+      if (r.avg_sale_price_ils != null) pricedCount += 1;
+      if (r.cogs_per_unit_ils != null) cogsCount += 1;
     }
     return {
-      totalInventoryAtCost: cost,
-      totalInventoryAtSalePrice: sale,
+      cost,
+      sale,
+      embeddedMargin,
+      pricedCount,
+      cogsCount,
+      productCount: rows.length,
     };
   }, [economicsQuery.data]);
 
@@ -695,24 +788,74 @@ export default function AdminEconomicsPage(): JSX.Element {
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-border pb-0">
-        {(["overview", "component-costs"] as const).map((tab) => (
-          <button
-            key={tab}
-            type="button"
-            onClick={() => setActiveTab(tab)}
-            className={`px-4 py-2 text-sm font-medium ${
-              activeTab === tab
-                ? "border-b-2 border-accent text-accent -mb-px"
-                : "text-fg-muted hover:text-fg"
-            }`}
-          >
-            {tab === "overview" ? "Overview" : "Component Costs"}
-          </button>
-        ))}
+        {(["overview", "component-costs", "raw-materials"] as const).map(
+          (tab) => (
+            <button
+              key={tab}
+              type="button"
+              onClick={() => setActiveTab(tab)}
+              className={`px-4 py-2 text-sm font-medium ${
+                activeTab === tab
+                  ? "border-b-2 border-accent text-accent -mb-px"
+                  : "text-fg-muted hover:text-fg"
+              }`}
+            >
+              {tab === "overview"
+                ? "Overview"
+                : tab === "component-costs"
+                  ? "Component Costs"
+                  : "Raw Materials"}
+            </button>
+          ),
+        )}
       </div>
 
       {activeTab === "overview" ? (
         <>
+        <SectionCard
+          eyebrow="Valuation summary"
+          title="Whole-factory valuation"
+          description="Live totals across finished goods and raw materials. Finished-good figures need a COGS snapshot and an average sale price per product."
+        >
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+            <StatTile
+              label="FG inventory at cost"
+              value={formatIls(overviewTotals.cost)}
+              hint="Sum of COGS per unit × on-hand units across every finished good."
+              sub={`${overviewTotals.cogsCount} of ${overviewTotals.productCount} products have a COGS`}
+            />
+            <StatTile
+              label="FG inventory at sale price"
+              value={formatIls(overviewTotals.sale)}
+              hint="Sum of avg sale price × on-hand units across every finished good."
+              sub={`${overviewTotals.pricedCount} of ${overviewTotals.productCount} products have a sale price`}
+            />
+            <StatTile
+              label="Embedded margin in stock"
+              value={formatIls(overviewTotals.embeddedMargin)}
+              hint="FG inventory at sale price minus FG inventory at cost — the material margin locked up in finished-goods stock."
+              tone={overviewTotals.embeddedMargin < 0 ? "danger" : "default"}
+            />
+            <StatTile
+              label="Raw-material inventory"
+              value={
+                rawMaterialsQuery.data
+                  ? formatIls(
+                      rawMaterialsQuery.data.totals.total_inventory_value_ils,
+                    )
+                  : rawMaterialsQuery.isError
+                    ? "—"
+                    : "…"
+              }
+              hint="Raw material + packaging on hand valued at effective cost (primary supplier, then fallback). Full breakdown on the Raw Materials tab."
+              sub={
+                rawMaterialsQuery.data
+                  ? `RM ${formatIls(rawMaterialsQuery.data.totals.rm_inventory_value_ils)} · PKG ${formatIls(rawMaterialsQuery.data.totals.pkg_inventory_value_ils)}`
+                  : undefined
+              }
+            />
+          </div>
+        </SectionCard>
         <SectionCard
           eyebrow="Economics"
           title="COGS, sale price & margin per product"
@@ -742,34 +885,41 @@ export default function AdminEconomicsPage(): JSX.Element {
               <table className="w-full border-collapse text-sm">
                 <thead>
                   <tr className="border-b border-border/70 bg-bg-subtle/60">
-                    <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                       Product
                     </th>
-                    <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                       COGS / unit
+                      <HelpHint text="Cost of goods sold per unit — the sum of every BOM component's effective cost. Computed by the COGS snapshot job; run a snapshot to refresh it." />
                     </th>
-                    <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                       Avg sale price
+                      <HelpHint text="Manually-entered average sale price per unit. Click a cell to edit. Drives the margin and inventory-at-sale columns immediately." />
                     </th>
-                    <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                       Margin / unit
+                      <HelpHint text="Avg sale price minus COGS per unit. Negative means the unit sells below its material cost." />
                     </th>
-                    <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                       Margin %
+                      <HelpHint text="Margin per unit as a percentage of the avg sale price (margin / sale price × 100)." />
                     </th>
-                    <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                       On hand
+                      <HelpHint text="Finished-good units currently in stock (current_balances)." />
                     </th>
-                    <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                       Inventory at cost
+                      <HelpHint text="COGS per unit × on-hand units — the stock's value at material cost." />
                     </th>
-                    <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                       Inventory at sale price
+                      <HelpHint text="Avg sale price × on-hand units — the stock's value at sale price." />
                     </th>
-                    <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                       Status
                     </th>
-                    <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                       Last snapshot
                     </th>
                   </tr>
@@ -821,7 +971,7 @@ export default function AdminEconomicsPage(): JSX.Element {
                         {formatPct(r.material_margin_pct)}
                       </td>
                       <td className="px-3 py-2 text-right text-sm tabular-nums text-fg-muted">
-                        {formatQtyZero(r.qty_on_hand)}
+                        {formatQtyInt(r.qty_on_hand)}
                       </td>
                       <td className="px-3 py-2 text-right text-sm tabular-nums">
                         {formatIls(r.fg_inventory_value_at_cost)}
@@ -845,10 +995,10 @@ export default function AdminEconomicsPage(): JSX.Element {
                       className="px-3 py-2 text-right text-sm font-semibold text-fg-strong tabular-nums"
                     >
                       Total inventory — at cost:{" "}
-                      {formatIlsGrouped(totalInventoryAtCost)}
+                      {formatIls(overviewTotals.cost)}
                       <span className="mx-2 text-fg-subtle">·</span>
                       at sale price:{" "}
-                      {formatIlsGrouped(totalInventoryAtSalePrice)}
+                      {formatIls(overviewTotals.sale)}
                     </td>
                   </tr>
                 </tfoot>
@@ -1002,6 +1152,170 @@ export default function AdminEconomicsPage(): JSX.Element {
             <div className="text-xs text-fg-muted">
               Cost saved. New COGS will recalculate tonight at 04:00 UTC — or
               click Run Snapshot Now.
+            </div>
+          ) : null}
+        </>
+      ) : null}
+
+      {activeTab === "raw-materials" ? (
+        <>
+          <SectionCard
+            eyebrow="Raw materials"
+            title="Raw-material & packaging inventory value"
+            description="Every raw material and packaging component with stock on hand, valued at its effective unit cost (primary supplier price, then the components fallback). Sum of the value column is the total raw-material inventory value."
+            contentClassName="p-0"
+          >
+            {rawMaterialsQuery.isLoading ? (
+              <TableSkeleton />
+            ) : rawMaterialsQuery.isError ? (
+              <ErrorCard
+                message={(rawMaterialsQuery.error as Error).message}
+                onRetry={() => rawMaterialsQuery.refetch()}
+              />
+            ) : (rawMaterialsQuery.data?.rows ?? []).length === 0 ? (
+              <div className="p-10">
+                <div className="mx-auto max-w-sm rounded-lg border border-border/60 bg-bg-subtle/50 p-6 text-center">
+                  <div className="mb-1 text-sm font-semibold text-fg-strong">
+                    No raw-material stock
+                  </div>
+                  <div className="mb-4 text-xs text-fg-muted">
+                    No raw material or packaging component currently holds an
+                    on-hand balance.
+                  </div>
+                </div>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-border/70 bg-bg-subtle/60">
+                      <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                        Component
+                      </th>
+                      <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                        Type
+                      </th>
+                      <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                        Unit
+                      </th>
+                      <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                        On hand
+                        <HelpHint text="Quantity currently in stock, in the component's inventory unit of measure." />
+                      </th>
+                      <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                        Unit cost
+                        <HelpHint text="Effective cost per inventory unit: the primary supplier price, or the components fallback cost when no supplier price is set." />
+                      </th>
+                      <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                        Inventory value
+                        <HelpHint text="On-hand quantity × effective unit cost." />
+                      </th>
+                      <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                        Cost source
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(rawMaterialsQuery.data?.rows ?? []).map((r) => {
+                      const effNum =
+                        r.effective_cost_ils != null
+                          ? Number(r.effective_cost_ils)
+                          : null;
+                      const zeroCost = effNum === 0;
+                      return (
+                        <tr
+                          key={r.component_id}
+                          className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
+                        >
+                          <td className="px-3 py-2">
+                            <span
+                              className="block text-sm font-medium leading-snug text-fg-strong"
+                              dir="auto"
+                            >
+                              {r.component_name ?? r.component_id}
+                            </span>
+                            <span className="block font-mono text-3xs text-fg-subtle">
+                              {r.component_id}
+                              {r.component_class
+                                ? ` · ${r.component_class}`
+                                : ""}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2">
+                            <Badge
+                              tone={r.item_type === "PKG" ? "info" : "neutral"}
+                              dotted
+                            >
+                              {r.item_type}
+                            </Badge>
+                          </td>
+                          <td className="px-3 py-2 text-xs text-fg-muted">
+                            {r.inventory_uom ?? "—"}
+                          </td>
+                          <td className="px-3 py-2 text-right text-sm tabular-nums text-fg-muted">
+                            {fmtNumStr(r.qty_on_hand) || "—"}
+                          </td>
+                          <td
+                            className={`px-3 py-2 text-right text-sm tabular-nums ${
+                              zeroCost ? "text-danger-fg" : ""
+                            }`}
+                          >
+                            {formatIls(r.effective_cost_ils)}
+                            {zeroCost ? (
+                              <HelpHint text="Zero cost — this component is almost certainly missing a real price. It contributes nothing to inventory value or COGS." />
+                            ) : null}
+                          </td>
+                          <td className="px-3 py-2 text-right text-sm tabular-nums">
+                            {formatIls(r.inventory_value_ils)}
+                          </td>
+                          <td className="px-3 py-2">
+                            <CostSourceBadge
+                              source={r.cost_source}
+                              supplierCost={r.supplier_cost_ils}
+                            />
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t border-border/70 bg-bg-subtle/60">
+                      <td
+                        colSpan={7}
+                        className="px-3 py-2 text-right text-sm font-semibold text-fg-strong tabular-nums"
+                      >
+                        Total raw-material inventory:{" "}
+                        {formatIls(
+                          rawMaterialsQuery.data?.totals
+                            .total_inventory_value_ils ?? null,
+                        )}
+                        <span className="mx-2 text-fg-subtle">·</span>
+                        RM{" "}
+                        {formatIls(
+                          rawMaterialsQuery.data?.totals
+                            .rm_inventory_value_ils ?? null,
+                        )}
+                        <span className="mx-2 text-fg-subtle">·</span>
+                        PKG{" "}
+                        {formatIls(
+                          rawMaterialsQuery.data?.totals
+                            .pkg_inventory_value_ils ?? null,
+                        )}
+                      </td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </SectionCard>
+
+          {rawMaterialsQuery.data &&
+          rawMaterialsQuery.data.totals.unpriced_component_count > 0 ? (
+            <div className="text-xs text-fg-muted">
+              {rawMaterialsQuery.data.totals.unpriced_component_count} of{" "}
+              {rawMaterialsQuery.data.totals.component_count} components have no
+              cost and are excluded from the total. Add a supplier price or a
+              fallback cost on the Component Costs tab.
             </div>
           ) : null}
         </>
