@@ -40,12 +40,11 @@ interface DayPopoverProps {
   /** Planned-inflow row for this (item, day). */
   plannedRow?: PlannedInflowRow;
   /**
-   * When true, render the "Drill down" affordance as a non-clickable
-   * label instead of a `<Link>`. Used by the supply view, where the
-   * per-SKU drill-down page is deferred to v2 (the existing FG drill-down
-   * route assumes `[itemId]` is a finished-good ITEM_ID, not a component
-   * ID, so navigating from a component row would render broken/empty
-   * data). Default `false` preserves FG behaviour.
+   * When true, hide the "Drill down" affordance entirely. Used by the
+   * supply view, where the per-SKU drill-down page is deferred to v2 (the
+   * existing FG drill-down route assumes `[itemId]` is a finished-good
+   * ITEM_ID, not a component ID, so navigating from a component row would
+   * render broken/empty data). Default `false` preserves FG behaviour.
    */
   disableRowLink?: boolean;
 }
@@ -211,16 +210,7 @@ export function DayPopover({
                   ) : null}
                 </div>
               </div>
-              {disableRowLink ? (
-                <span
-                  className="inline-flex items-center gap-0.5 text-3xs font-semibold uppercase tracking-sops text-fg-muted"
-                  aria-disabled="true"
-                  title="Per-SKU drill-down for the supply view is not available yet"
-                >
-                  Drill down
-                  <ArrowRight className="h-3 w-3" strokeWidth={2.5} />
-                </span>
-              ) : (
+              {disableRowLink ? null : (
                 <Link
                   href={`/planning/inventory-flow/${encodeURIComponent(item.item_id)}`}
                   className="inline-flex items-center gap-0.5 text-3xs font-semibold uppercase tracking-sops text-accent hover:underline"

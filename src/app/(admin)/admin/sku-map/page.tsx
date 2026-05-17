@@ -189,6 +189,9 @@ export default function AdminSkuMapPage(): JSX.Element {
           This surface is restricted to admin. Current role:{" "}
           <span className="font-mono text-fg">{session.role}</span>.
         </div>
+        <Link href="/" className="btn btn-sm mt-4 inline-flex">
+          Back to dashboard
+        </Link>
       </div>
     );
   }
@@ -345,9 +348,16 @@ export default function AdminSkuMapPage(): JSX.Element {
           </div>
         ) : rows.length === 0 ? (
           <div className="p-5 text-sm text-fg-muted">
-            {channelFilter || statusFilter
-              ? "No mappings found for the selected filters."
-              : "No mappings exist yet. Aliases are created when unknown SKUs are observed during integration polling."}
+            <div>
+              {channelFilter || statusFilter
+                ? "No mappings found for the selected filters."
+                : "No mappings exist yet. Aliases are created when unknown SKUs are observed during integration polling."}
+            </div>
+            {!channelFilter && !statusFilter ? (
+              <Link href="/admin/sku-aliases" className="btn btn-sm mt-3 inline-flex">
+                Go to SKU Aliases
+              </Link>
+            ) : null}
           </div>
         ) : (
           <div className="overflow-x-auto">
@@ -398,7 +408,10 @@ export default function AdminSkuMapPage(): JSX.Element {
                     >
                       {/* iter 14: alias_id monospace small */}
                       <td className="px-3 py-2.5">
-                        <span className="font-mono text-3xs text-fg-muted">
+                        <span
+                          className="font-mono text-3xs text-fg-muted"
+                          title={row.alias_id}
+                        >
                           {row.alias_id.slice(0, 8)}&hellip;
                         </span>
                       </td>

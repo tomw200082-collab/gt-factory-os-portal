@@ -28,7 +28,6 @@ import {
   ArrowDownRight,
   ArrowUpRight,
   Check,
-  Copy,
   Eye,
   FileText,
   Minus,
@@ -263,8 +262,6 @@ export function ForecastRow({
   const author = v.published_by_snapshot ?? v.created_by_snapshot;
   const verb = v.published_at ? "published" : "updated";
   const detailHref = `/planning/forecast/${encodeURIComponent(v.version_id)}`;
-  const showArchiveAction =
-    v.status === "draft" || v.status === "superseded";
 
   return (
     <li
@@ -527,28 +524,6 @@ export function ForecastRow({
           >
             <Pencil className="h-3.5 w-3.5" strokeWidth={2} />
           </Link>
-          <button
-            type="button"
-            disabled
-            title="Duplicate (coming soon)"
-            aria-label="Duplicate forecast"
-            className="fc-list-row-action-btn"
-            data-testid="forecast-row-action-duplicate"
-          >
-            <Copy className="h-3.5 w-3.5" strokeWidth={2} />
-          </button>
-          {showArchiveAction ? (
-            <button
-              type="button"
-              disabled
-              title="Archive (coming soon)"
-              aria-label="Archive forecast"
-              className="fc-list-row-action-btn"
-              data-testid="forecast-row-action-archive"
-            >
-              <Archive className="h-3.5 w-3.5" strokeWidth={2} />
-            </button>
-          ) : null}
         </div>
 
         <Link

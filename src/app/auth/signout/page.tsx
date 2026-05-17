@@ -58,9 +58,23 @@ export default function SignOutPage() {
           </p>
         )}
         {status === "done" && (
-          <p style={{ fontSize: "0.9375rem", color: "#a1a1aa" }}>
-            Signed out. Redirecting…
-          </p>
+          <>
+            <p style={{ fontSize: "0.9375rem", color: "#a1a1aa" }}>
+              Signed out. Redirecting…
+            </p>
+            <a
+              href="/login"
+              style={{
+                display: "inline-block",
+                marginTop: "1rem",
+                fontSize: "0.875rem",
+                color: "#f6f7f8",
+                textDecoration: "underline",
+              }}
+            >
+              Go to sign in →
+            </a>
+          </>
         )}
         {status === "error" && (
           <>

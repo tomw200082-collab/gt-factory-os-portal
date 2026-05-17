@@ -11,7 +11,9 @@
 //                                           §2.5 reject transaction
 
 import { useState, type ReactNode } from "react";
+import Link from "next/link";
 import { useParams } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 import { useQuery } from "@tanstack/react-query";
 import { useSession } from "@/lib/auth/session-provider";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
@@ -167,6 +169,11 @@ export default function PhysicalCountReviewPage() {
       <SuccessState
         title="Approved. New anchor applied."
         description={`Submission ${outcome.body.submission_id} posted. Anchor source ${outcome.body.anchor_source}. Exception ${outcome.body.exception_id} resolved.`}
+        action={
+          <Link href="/inbox" className="btn btn-sm btn-primary">
+            Back to inbox
+          </Link>
+        }
       />
     );
   }
@@ -176,6 +183,11 @@ export default function PhysicalCountReviewPage() {
         title="Rejected. Anchor unchanged."
         description={`Submission ${outcome.body.submission_id} rejected. Reason: ${outcome.body.rejection_reason}. Exception ${outcome.body.exception_id} resolved. No anchor replacement.`}
         tone="warning"
+        action={
+          <Link href="/inbox" className="btn btn-sm btn-primary">
+            Back to inbox
+          </Link>
+        }
       />
     );
   }
@@ -185,12 +197,36 @@ export default function PhysicalCountReviewPage() {
         title="Action refused"
         description={outcome.body.detail || "This submission cannot be actioned in its current state. Refresh the page and try again."}
         tone="warning"
+        action={
+          <>
+            <button type="button" className="btn btn-sm btn-primary" onClick={() => setOutcome(null)}>
+              Try again
+            </button>
+            <Link href="/inbox" className="btn btn-sm">
+              Back to inbox
+            </Link>
+          </>
+        }
       />
     );
   }
   if (outcome?.kind === "network") {
     return (
-      <SuccessState title="Network error" description={outcome.message} tone="warning" />
+      <SuccessState
+        title="Network error"
+        description={outcome.message}
+        tone="warning"
+        action={
+          <>
+            <button type="button" className="btn btn-sm btn-primary" onClick={() => setOutcome(null)}>
+              Try again
+            </button>
+            <Link href="/inbox" className="btn btn-sm">
+              Back to inbox
+            </Link>
+          </>
+        }
+      />
     );
   }
 
@@ -203,6 +239,12 @@ export default function PhysicalCountReviewPage() {
           d
             ? `${d.item_display_name ?? d.item_id} · counted: ${d.counted_quantity} ${d.unit} · delta: ${formatDelta(d.computed_delta, d.unit)}`
             : `Submission ${submissionId}`
+        }
+        meta={
+          <Link href="/inbox" className="btn btn-sm">
+            <ArrowLeft className="h-3 w-3" />
+            Back to inbox
+          </Link>
         }
       />
 
@@ -319,7 +361,7 @@ export default function PhysicalCountReviewPage() {
           <button
             type="button"
             data-testid="pc-review-reject"
-            className="btn btn-primary"
+            className="btn btn-sm btn-danger"
             disabled={busy || !rejectionReason.trim()}
             onClick={handleReject}
           >

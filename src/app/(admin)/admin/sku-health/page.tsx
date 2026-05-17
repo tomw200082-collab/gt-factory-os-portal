@@ -493,7 +493,22 @@ export default function AdminSkuHealthPage(): JSX.Element {
             </div>
           </div>
         ) : filteredCoverage.length === 0 ? (
-          <div className="p-5 text-sm text-fg-muted">No items match these filters.</div>
+          <div className="p-5 text-sm text-fg-muted">
+            <div>No items match these filters.</div>
+            {query || supplyFilter || hasSkuFilter ? (
+              <button
+                type="button"
+                className="btn btn-sm mt-3 inline-flex"
+                onClick={() => {
+                  setQuery("");
+                  setSupplyFilter("");
+                  setHasSkuFilter("");
+                }}
+              >
+                Reset filters
+              </button>
+            ) : null}
+          </div>
         ) : (
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
@@ -511,9 +526,6 @@ export default function AdminSkuHealthPage(): JSX.Element {
                   </th>
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Has SKU
-                  </th>
-                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    Shopify variant
                   </th>
                 </tr>
               </thead>
@@ -552,20 +564,16 @@ export default function AdminSkuHealthPage(): JSX.Element {
                         {hasSku ? (
                           <Badge tone="success" dotted>yes</Badge>
                         ) : (
-                          <Badge tone="warning" dotted>no</Badge>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">
-                        {hasSku ? (
-                          <Badge tone="neutral">unknown</Badge>
-                        ) : (
-                          // Iter 14: "Add SKU →" CTA for missing rows
-                          <Link
-                            href={`/admin/sku-aliases?item_id=${encodeURIComponent(r.item_id)}`}
-                            className="text-xs font-medium text-warning-fg underline-offset-2 hover:underline"
-                          >
-                            Add SKU →
-                          </Link>
+                          <div className="flex items-center gap-2">
+                            <Badge tone="warning" dotted>no</Badge>
+                            {/* Iter 14: "Add SKU →" CTA for missing rows */}
+                            <Link
+                              href={`/admin/sku-aliases?item_id=${encodeURIComponent(r.item_id)}`}
+                              className="text-xs font-medium text-warning-fg underline-offset-2 hover:underline"
+                            >
+                              Add SKU →
+                            </Link>
+                          </div>
                         )}
                       </td>
                     </tr>

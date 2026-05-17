@@ -808,7 +808,9 @@ export default function PlanningRunDetailPage() {
                         r.item_name ??
                         r.component_name ??
                         "—";
-                      const isDraft = r.recommendation_status === "draft";
+                      const isActionable =
+                        r.recommendation_status === "draft" ||
+                        r.recommendation_status === "pending_approval";
                       const isMutating =
                         approveMutation.isPending ||
                         dismissMutation.isPending ||
@@ -852,7 +854,7 @@ export default function PlanningRunDetailPage() {
                           </td>
                           <td className="px-3 py-3">
                             <div className="flex flex-wrap items-center gap-1.5">
-                              {canAct && isDraft ? (
+                              {canAct && isActionable ? (
                                 <>
                                   <button
                                     type="button"
@@ -879,6 +881,19 @@ export default function PlanningRunDetailPage() {
                                     Dismiss
                                   </button>
                                 </>
+                              ) : null}
+                              {canAct && !isActionable && !isApprovedUnconverted ? (
+                                <span className="text-xs text-fg-faint">
+                                  {r.recommendation_status === "converted_to_po"
+                                    ? "Converted to PO"
+                                    : r.recommendation_status === "approved"
+                                      ? "Approved"
+                                      : r.recommendation_status === "dismissed"
+                                        ? "Dismissed"
+                                        : r.recommendation_status === "superseded"
+                                          ? "Superseded"
+                                          : "No action available"}
+                                </span>
                               ) : null}
                               {canAct && isApprovedUnconverted ? (
                                 <button
@@ -1032,9 +1047,13 @@ export default function PlanningRunDetailPage() {
                                 {fix.label} →
                               </Link>
                             ) : (
-                              <span className="text-xs text-fg-faint">
-                                No fix route
-                              </span>
+                              <Link
+                                href="/planning/blockers"
+                                className="text-xs font-semibold text-accent hover:underline"
+                                data-testid="run-detail-exc-fix-link"
+                              >
+                                View in blockers →
+                              </Link>
                             )}
                           </td>
                         </tr>
@@ -1078,20 +1097,14 @@ export default function PlanningRunDetailPage() {
                         </div>
                         <ExceptionSeverityBadge severity={exc.severity} />
                       </div>
-                      {fix ? (
-                        <div className="mt-2">
-                          <Link
-                            href={fix.href}
-                            className="text-xs font-semibold text-accent hover:underline"
-                          >
-                            {fix.label} →
-                          </Link>
-                        </div>
-                      ) : (
-                        <div className="mt-2 text-xs text-fg-faint">
-                          No fix route
-                        </div>
-                      )}
+                      <div className="mt-2">
+                        <Link
+                          href={fix ? fix.href : "/planning/blockers"}
+                          className="text-xs font-semibold text-accent hover:underline"
+                        >
+                          {fix ? fix.label : "View in blockers"} →
+                        </Link>
+                      </div>
                     </div>
                   );
                 })}

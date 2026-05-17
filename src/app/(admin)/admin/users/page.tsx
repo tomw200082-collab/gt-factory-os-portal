@@ -354,9 +354,9 @@ export default function AdminUsersPage() {
                 href="https://supabase.com/dashboard"
                 target="_blank"
                 rel="noopener noreferrer"
-                className="mt-3 inline-flex items-center gap-1 text-xs font-medium text-accent underline hover:no-underline"
+                className="btn btn-sm mt-3"
               >
-                Open Supabase dashboard →
+                Open Supabase dashboard
               </a>
             </div>
           </div>
@@ -434,6 +434,13 @@ export default function AdminUsersPage() {
                                 onChange={(e) => {
                                   const newRole = e.target.value;
                                   if (newRole === u.role) return;
+                                  const confirmed = window.confirm(
+                                    `Change ${u.display_name}'s role from "${u.role}" to "${newRole}"? This updates their portal access immediately.`,
+                                  );
+                                  if (!confirmed) {
+                                    e.target.value = u.role;
+                                    return;
+                                  }
                                   roleMutation.mutate({
                                     user_id: u.user_id,
                                     role: newRole,

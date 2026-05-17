@@ -75,6 +75,15 @@ export function BlockersEmptyAllClear() {
             aria-hidden
           />
         }
+        action={
+          <Link
+            href="/planning/production-plan"
+            className="btn btn-sm"
+            data-testid="blockers-empty-go-plan"
+          >
+            View production plan →
+          </Link>
+        }
       />
     </div>
   );
@@ -107,7 +116,11 @@ export function BlockersEmptyNoRunYet() {
   );
 }
 
-export function BlockersErrorBanner() {
+export function BlockersErrorBanner({
+  onRetry,
+}: {
+  onRetry?: () => void;
+}) {
   return (
     <div
       className="rounded border border-danger/30 bg-danger-softer px-4 py-3"
@@ -117,6 +130,7 @@ export function BlockersErrorBanner() {
       <ErrorState
         title="Could not load blockers"
         description="Check your connection and try again."
+        onRetry={onRetry}
       />
     </div>
   );

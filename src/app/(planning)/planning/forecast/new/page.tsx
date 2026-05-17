@@ -45,8 +45,8 @@ import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
+  ArrowLeft,
   ArrowRight,
-  Check,
   ChevronDown,
   ChevronRight,
   HelpCircle,
@@ -178,6 +178,16 @@ export default function NewForecastDraftPage() {
           >
             Only planners and admins may open a forecast draft.
           </div>
+          <div className="mt-4">
+            <Link
+              href="/planning/forecast"
+              className="btn btn-sm gap-1.5"
+              data-testid="forecast-new-forbidden-back"
+            >
+              <ArrowLeft className="h-3 w-3" strokeWidth={2.5} aria-hidden />
+              <span>Back to forecasts</span>
+            </Link>
+          </div>
         </SectionCard>
       </>
     );
@@ -275,8 +285,9 @@ export default function NewForecastDraftPage() {
               className="mt-2 max-w-prose text-xs leading-relaxed text-fg-muted"
               data-testid="forecast-new-whatis-body"
             >
-              A forecast is a versioned plan of expected sales over the next 8
-              weeks. The system uses it (together with open orders) to
+              A forecast is a versioned plan of expected sales over the
+              upcoming 2-month horizon. The system uses it (together with open
+              orders) to
               recommend production batches and purchase orders. Drafts let you
               edit; publishing makes it the active forecast for planning.
             </p>
@@ -467,7 +478,7 @@ export default function NewForecastDraftPage() {
             ) : null}
           </fieldset>
 
-          {/* ─── CTA row — Cancel (left) / Save draft (mid) / Create+open (right) ─── */}
+          {/* ─── CTA row — Cancel (left) / Create+open (right) ─── */}
           <div className="flex flex-wrap items-center justify-between gap-3 border-t border-border/40 pt-4">
             <Link
               href="/planning/forecast"
@@ -478,27 +489,6 @@ export default function NewForecastDraftPage() {
             </Link>
 
             <div className="flex items-center gap-2">
-              {/* Save draft — same backend call as Create+open. We DO NOT
-                  redirect on success in this branch; we keep the user on
-                  the form. The mutation's onSuccess always redirects, so
-                  this is a UX label promise that v1 cannot fully honor —
-                  we keep parity by rendering the same submission and
-                  letting the user's intent dictate whether they linger
-                  on the destination page. */}
-              <button
-                type="submit"
-                className="btn btn-sm gap-1.5"
-                disabled={isSubmitting || !!horizonError}
-                data-testid="forecast-new-save-draft"
-              >
-                {isSubmitting ? (
-                  <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.5} />
-                ) : (
-                  <Check className="h-3 w-3" strokeWidth={2.5} />
-                )}
-                <span>{isSubmitting ? "Creating…" : "Save draft"}</span>
-              </button>
-
               <button
                 type="submit"
                 className="btn btn-primary btn-sm cta-arrow-host gap-1.5"

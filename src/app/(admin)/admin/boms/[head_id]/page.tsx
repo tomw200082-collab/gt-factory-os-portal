@@ -237,14 +237,24 @@ export default function AdminBomHeadDetailPage({
           >
             Retry
           </button>
+          <div className="mt-2">
+            <Link href="/admin/boms" className="btn btn-sm btn-outline">
+              ← Back to recipes
+            </Link>
+          </div>
         </div>
       </div>
     );
   }
   if (!head) {
     return (
-      <div className="p-5 text-sm text-danger-fg">
-        BOM head not found: {head_id}
+      <div className="p-5">
+        <div className="text-sm text-danger-fg">
+          BOM head not found: {head_id}
+        </div>
+        <Link href="/admin/boms" className="btn btn-sm btn-outline mt-3">
+          ← Back to recipes
+        </Link>
       </div>
     );
   }

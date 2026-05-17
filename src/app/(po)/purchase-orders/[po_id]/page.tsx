@@ -514,6 +514,7 @@ export default function PurchaseOrderDetailPage({
   const { session } = useSession();
   const [cancelConfirming, setCancelConfirming] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
+  const [cancelSuccess, setCancelSuccess] = useState(false);
 
   const cancelMut = useMutation({
     mutationFn: async () => {
@@ -535,6 +536,7 @@ export default function PurchaseOrderDetailPage({
       void queryClient.invalidateQueries({ queryKey: ["purchase-order-lines", po_id] });
       setCancelConfirming(false);
       setCancelError(null);
+      setCancelSuccess(true);
       router.refresh();
     },
     onError: (err: unknown) => {
@@ -881,13 +883,13 @@ export default function PurchaseOrderDetailPage({
                       <div className="flex flex-col gap-0.5">
                         <LineStatusBadge status={line.line_status} />
                         {overReceiptLineIds.has(line.po_line_id) && (
-                          <a
+                          <Link
                             href="/inbox?view=exceptions"
                             className="inline-flex items-center gap-1 text-3xs text-warning-fg hover:underline"
                             title="Over-receipt exception open — check exceptions inbox"
                           >
                             ⚠ Over-received
-                          </a>
+                          </Link>
                         )}
                       </div>
                     </td>
@@ -1270,7 +1272,7 @@ export default function PurchaseOrderDetailPage({
 
   const grItems = (grsQuery.data?.rows ?? []).map((gr, i) => ({
     label: `Goods receipt ${i + 1} — ${fmtDate(gr.event_at)}`,
-    href: `/ops/receipts`,
+    href: `/purchase-orders/${encodeURIComponent(po_id)}?tab=attached-grs`,
     subtitle: gr.status,
   }));
   linkages.push({
@@ -1297,6 +1299,39 @@ export default function PurchaseOrderDetailPage({
       </div>
     ) : null;
 
+  // --- Page-level not-found / error guard -----------------------------------
+  // When the PO query errors or resolves with no row, render a single clear
+  // state instead of five confusing empty/error tabs.
+  if (!poQuery.isLoading && (poQuery.isError || !po)) {
+    const isError = poQuery.isError;
+    return (
+      <div className="mx-auto max-w-lg px-6 py-16 text-center" data-testid="po-detail-notfound">
+        <div className="text-sm font-semibold text-fg">
+          {isError ? "Could not load this purchase order" : "Purchase order not found"}
+        </div>
+        <div className="mt-1 text-xs text-fg-muted">
+          {isError
+            ? "Check your connection and try again."
+            : `No purchase order matches ${po_id}.`}
+        </div>
+        <div className="mt-4 flex items-center justify-center gap-2">
+          <Link href="/purchase-orders" className="btn btn-sm btn-accent">
+            Back to POs
+          </Link>
+          {isError && (
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={() => void poQuery.refetch()}
+            >
+              Retry
+            </button>
+          )}
+        </div>
+      </div>
+    );
+  }
+
   return (
     <DetailPage
       header={{
@@ -1308,6 +1343,9 @@ export default function PurchaseOrderDetailPage({
         meta: headerMeta,
         actions: (
           <div className="flex items-center gap-2">
+            <Link href="/purchase-orders" className="btn btn-ghost btn-sm">
+              ← Back to POs
+            </Link>
             {/*
               Receive-against-this-PO header CTA per W4 cycle 8 spec
               docs/integrations/po_attached_gr_enhancement_spec.md §3.
@@ -1376,13 +1414,24 @@ export default function PurchaseOrderDetailPage({
                 </button>
               </div>
             )}
-            <Link href="/purchase-orders" className="btn btn-ghost btn-sm">
-              Back to POs
-            </Link>
           </div>
         ),
       }}
-      subHeader={manualBanner}
+      subHeader={
+        <>
+          {cancelSuccess && (
+            <div
+              className="rounded-md border border-success/40 bg-success/5 px-4 py-3 text-sm text-success-fg mb-4 flex items-center gap-2"
+              role="status"
+              data-testid="po-cancel-success"
+            >
+              <span className="font-semibold">PO cancelled.</span>
+              <span className="text-fg-muted">This purchase order has been cancelled.</span>
+            </div>
+          )}
+          {manualBanner}
+        </>
+      }
       tabs={tabs}
       linkages={linkages}
     />

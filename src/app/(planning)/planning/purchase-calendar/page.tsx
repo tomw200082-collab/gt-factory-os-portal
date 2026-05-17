@@ -55,7 +55,7 @@ function tierChip(t: PoTier): string {
 }
 
 export default function PurchaseCalendarPage() {
-  const { data, isLoading, isError, error } = usePurchaseCalendar();
+  const { data, isLoading, isError, error, refetch } = usePurchaseCalendar();
 
   const todayISO = useMemo(() => toISO(new Date()), []);
 
@@ -123,12 +123,22 @@ export default function PurchaseCalendarPage() {
           טוען את לוח הרכש…
         </div>
       ) : isError ? (
-        <div className="rounded-lg border border-danger/40 bg-danger-softer px-3 py-2 text-xs text-danger-fg">
-          {(error as Error)?.message ?? "לא ניתן לטעון את לוח הרכש."}
+        <div className="rounded-lg border border-danger/40 bg-danger-softer px-3 py-3 text-xs text-danger-fg">
+          <div>{(error as Error)?.message ?? "לא ניתן לטעון את לוח הרכש."}</div>
+          <button
+            type="button"
+            onClick={() => void refetch()}
+            className="btn btn-sm btn-outline mt-2"
+          >
+            נסו שוב
+          </button>
         </div>
       ) : !data || data.session_id === null ? (
-        <div className="card p-6 text-center text-sm text-fg-muted">
-          עדיין לא הורץ מושב רכש. התחילו מושב כדי לראות את לוח ההזמנות.
+        <div className="card flex flex-col items-center gap-3 p-6 text-center text-sm text-fg-muted">
+          <div>עדיין לא הורץ מושב רכש. התחילו מושב כדי לראות את לוח ההזמנות.</div>
+          <Link href="/planning/purchase-session" className="btn btn-sm btn-primary">
+            התחל מושב רכש ←
+          </Link>
         </div>
       ) : (
         <>

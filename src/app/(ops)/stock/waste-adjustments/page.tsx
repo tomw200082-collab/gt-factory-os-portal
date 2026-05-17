@@ -665,6 +665,21 @@ export default function WasteAdjustmentPage() {
               </button>
             </div>
           )}
+
+          {/* Dismiss on error — the form stays mounted below, so clearing the
+              banner lets the operator correct and resubmit. */}
+          {done.kind === "error" && (
+            <div className="mt-3 border-t border-current/10 pt-3">
+              <button
+                type="button"
+                className="btn btn-sm transition-colors duration-150"
+                onClick={() => setDone(null)}
+                data-testid="waste-adjustment-error-dismiss"
+              >
+                Dismiss
+              </button>
+            </div>
+          )}
         </div>
       ) : null}
 

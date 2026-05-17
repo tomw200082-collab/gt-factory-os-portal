@@ -1224,6 +1224,28 @@ export default function GoodsReceiptPage() {
                   </button>
                 </div>
               ) : null}
+              {/* Error retry — the form stays mounted below, so Retry can
+                  re-invoke submit and Dismiss can clear the banner. */}
+              {done.kind === "error" ? (
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-primary transition-colors duration-150"
+                    data-testid="receipt-error-retry"
+                    onClick={() => void handleSubmit({ preventDefault: () => {} } as React.FormEvent)}
+                  >
+                    Retry
+                  </button>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm transition-colors duration-150"
+                    data-testid="receipt-error-dismiss"
+                    onClick={() => setDone(null)}
+                  >
+                    Dismiss
+                  </button>
+                </div>
+              ) : null}
             </div>
           </div>
         </div>

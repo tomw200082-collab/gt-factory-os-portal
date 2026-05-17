@@ -409,6 +409,7 @@ export default function ForecastListPage() {
         <ErrorState
           title="Could not load forecasts"
           description="Check your connection and try again. If the problem persists, contact support."
+          onRetry={() => query.refetch()}
         />
       ) : query.isLoading ? (
         <div

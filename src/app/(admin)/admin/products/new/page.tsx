@@ -943,8 +943,17 @@ function Step6PlanningPolicy({
   if (policyQuery.isError) {
     return (
       <SectionCard title="Planning policy" description="Load failed" tone="danger">
-        <div className="text-sm text-danger-fg">
-          {(policyQuery.error as Error).message}
+        <div className="space-y-2">
+          <div className="text-sm text-danger-fg">
+            {(policyQuery.error as Error).message}
+          </div>
+          <button
+            type="button"
+            className="btn btn-sm btn-primary"
+            onClick={() => void policyQuery.refetch()}
+          >
+            Retry
+          </button>
         </div>
       </SectionCard>
     );
@@ -1324,7 +1333,7 @@ export default function AdminNewProductWizardPage(): JSX.Element {
           href="/admin/items"
           className="text-xs text-fg-muted hover:text-fg"
         >
-          Skip wizard — quick create
+          Cancel — back to Items
         </Link>
       </div>
 
@@ -1343,12 +1352,6 @@ export default function AdminNewProductWizardPage(): JSX.Element {
         onSaveDraft={async (_s) => {
           // localStorage persistence is handled inside <Wizard>; this callback
           // is surfaced so future cycles can add server-side draft storage.
-          // For now just emit a console note.
-          if (typeof window !== "undefined") {
-            window.alert(
-              "Draft saved locally. Re-enter /admin/products/new to resume.",
-            );
-          }
         }}
         onComplete={async (s) => {
           const { item_id } = await executePublish(s);

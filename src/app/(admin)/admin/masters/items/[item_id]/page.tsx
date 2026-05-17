@@ -608,10 +608,24 @@ export default function AdminItemDetailPage({
     content: (() => {
       if (itemQuery.isLoading) return <DetailTabLoading />;
       if (itemQuery.isError) {
-        return <DetailTabError message={(itemQuery.error as Error).message} />;
+        return (
+          <DetailTabError
+            message={(itemQuery.error as Error).message}
+            onRetry={() => itemQuery.refetch()}
+          />
+        );
       }
       if (!row) {
-        return <DetailTabEmpty message={`Item ${item_id} not found in the items list.`} />;
+        return (
+          <DetailTabEmpty
+            message={`Item ${item_id} not found in the items list.`}
+            action={
+              <Link href="/admin/items" className="btn btn-sm btn-primary">
+                Back to Items
+              </Link>
+            }
+          />
+        );
       }
       const classLFields: FieldRow[] = [
         { label: "Item code (locked)", value: row.item_id, mono: true },
@@ -921,7 +935,10 @@ export default function AdminItemDetailPage({
       }
       if (bomHeadQuery.isError) {
         return (
-          <DetailTabError message={(bomHeadQuery.error as Error).message} />
+          <DetailTabError
+            message={(bomHeadQuery.error as Error).message}
+            onRetry={() => bomHeadQuery.refetch()}
+          />
         );
       }
       return (
@@ -982,6 +999,7 @@ export default function AdminItemDetailPage({
           return (
             <DetailTabError
               message={(itemSupplierItemsQuery.error as Error).message}
+              onRetry={() => itemSupplierItemsQuery.refetch()}
             />
           );
         }
@@ -1189,6 +1207,7 @@ export default function AdminItemDetailPage({
         return (
           <DetailTabError
             message={(exceptionsQuery.error as Error).message}
+            onRetry={() => exceptionsQuery.refetch()}
           />
         );
       }

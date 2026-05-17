@@ -1713,6 +1713,28 @@ export default function ProductionActualPage() {
             </div>
           ) : null}
 
+          {/* Generic submit-error retry — non-conflict, non-stale failures
+              otherwise leave the operator with only a message line. */}
+          {done.kind === "error" && !done.planConflict ? (
+            <div className="mt-2 flex flex-wrap items-center gap-3">
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => void submitProductionActual(fromPlanId)}
+                data-testid="production-actual-error-retry"
+              >
+                Retry
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm btn-ghost"
+                onClick={() => setDone(null)}
+              >
+                Dismiss
+              </button>
+            </div>
+          ) : null}
+
           {/* Success-panel follow-up links */}
           {done.kind === "success" ? (
             <div className="mt-2 flex flex-wrap items-center gap-3">

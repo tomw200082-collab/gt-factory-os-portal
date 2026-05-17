@@ -18,6 +18,7 @@
 // English-only, LTR-only per Tom's portal-wide standard locked 2026-05-01.
 // ---------------------------------------------------------------------------
 
+import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -385,6 +386,11 @@ export default function AdminHolidaysPage(): JSX.Element {
         <div className="mt-2 text-xs text-fg-muted">
           This page is restricted to planners and admins. Current role:{" "}
           <span className="font-mono text-fg">{session.role}</span>.
+        </div>
+        <div className="mt-4">
+          <Link href="/dashboard" className="btn btn-sm">
+            Back to dashboard
+          </Link>
         </div>
       </div>
     );

@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { AlertOctagon, CheckCircle2, Clock, Loader2, RefreshCw } from "lucide-react";
+import { AlertOctagon, CalendarClock, CheckCircle2, Clock, RefreshCw } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
@@ -189,6 +189,9 @@ function JobCard({ row }: { row: JobRow }) {
   const stale = isStale(row);
   const isFailed = row.last_status === "failed";
   const isRunning = row.last_status === "running";
+  const [errorExpanded, setErrorExpanded] = useState(false);
+  const errorText = row.last_error ?? "";
+  const errorIsLong = errorText.length > 120;
   const rowBg = isFailed
     ? "bg-danger-softer/30 border-danger/30"
     : "bg-bg-card border-border/60";
@@ -223,9 +226,18 @@ function JobCard({ row }: { row: JobRow }) {
           {isFailed && row.last_error && (
             <div className="mt-1.5 rounded border border-danger/30 bg-danger-softer/60 px-2 py-1 text-xs text-danger-fg">
               <span className="font-semibold">Error: </span>
-              {row.last_error.length > 120
-                ? `${row.last_error.slice(0, 120)}…`
-                : row.last_error}
+              {errorIsLong && !errorExpanded
+                ? `${errorText.slice(0, 120)}…`
+                : errorText}
+              {errorIsLong && (
+                <button
+                  type="button"
+                  onClick={() => setErrorExpanded((v) => !v)}
+                  className="ml-1.5 font-medium underline underline-offset-2 hover:no-underline"
+                >
+                  {errorExpanded ? "Show less" : "Show full error"}
+                </button>
+              )}
             </div>
           )}
         </div>
@@ -340,7 +352,7 @@ export default function AdminJobsPage() {
           <EmptyState
             title="No scheduled jobs yet"
             description="Jobs are registered by W1 migrations / Edge Functions. Once a job runs at least once, it appears here."
-            icon={<Loader2 className="h-5 w-5 text-fg-faint" strokeWidth={1.5} />}
+            icon={<CalendarClock className="h-5 w-5 text-fg-faint" strokeWidth={1.5} />}
           />
         )}
         {data && rows.length > 0 && (

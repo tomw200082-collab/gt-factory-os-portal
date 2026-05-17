@@ -42,7 +42,6 @@ import {
   Clock,
   Table2,
   CheckSquare,
-  Columns,
   Download,
   FileDown,
   Package,
@@ -65,6 +64,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
+import { ErrorState } from "@/components/feedback/states";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
 import { BomSimulator } from "@/components/bom/BomSimulator";
@@ -1663,21 +1663,6 @@ export default function PlanningBomsPage(): JSX.Element {
               <BarChart2 className="h-3 w-3 shrink-0" strokeWidth={2} />
               BOM metrics
             </button>
-            {/* R33 — Substitutes toggle button */}
-            <button
-              type="button"
-              onClick={() => setSelectedComponentForSubs(selectedComponentForSubs !== null ? null : selectedComponentForSubs)}
-              aria-pressed={selectedComponentForSubs !== null}
-              className={`inline-flex items-center gap-1 text-3xs px-2 py-0.5 rounded border transition-colors ${
-                selectedComponentForSubs !== null
-                  ? "text-accent bg-accent-softer border-accent/30"
-                  : "text-fg-muted bg-bg-subtle border-border/40 hover:text-fg-strong hover:bg-bg-raised"
-              }`}
-              title={selectedComponentForSubs !== null ? "Close substitutes panel" : "View component substitutes"}
-            >
-              <RefreshCw className="h-3 w-3 shrink-0" strokeWidth={2} />
-              Substitutes
-            </button>
             {/* NEW-1 — Yield Analysis toggle button */}
             <button
               type="button"
@@ -3057,9 +3042,11 @@ export default function PlanningBomsPage(): JSX.Element {
           {headsQuery.isLoading ? (
             <p className="text-xs text-fg-muted">Loading BOMs…</p>
           ) : headsQuery.isError ? (
-            <p className="text-xs text-danger-fg">
-              Failed to load BOMs. Check your connection and try refreshing.
-            </p>
+            <ErrorState
+              title="Failed to load BOMs"
+              description="Check your connection and try again."
+              onRetry={() => void headsQuery.refetch()}
+            />
           ) : (
             <div className="max-h-96 overflow-y-auto rounded-md border border-border/50">
               {filtered.length === 0 ? (
@@ -3067,7 +3054,18 @@ export default function PlanningBomsPage(): JSX.Element {
                   {query ? (
                     "No active BOMs match your search — try a shorter term."
                   ) : activeHeads.length === 0 ? (
-                    "No BOMs have an active version yet. Ask your admin to publish a BOM version to enable simulation."
+                    <div className="flex flex-col items-start gap-3">
+                      <span>
+                        No BOMs have an active version yet. Publish a BOM
+                        version to enable simulation.
+                      </span>
+                      <Link
+                        href="/admin/masters/boms"
+                        className="btn btn-sm btn-outline"
+                      >
+                        Open BOM masters →
+                      </Link>
+                    </div>
                   ) : (
                     "No active BOMs match your search."
                   )}
@@ -3078,16 +3076,6 @@ export default function PlanningBomsPage(): JSX.Element {
                   {selectedBomIds.size > 0 && showBomMultiSelect && (
                   <div className="flex gap-2 items-center mt-1 px-3 py-1 bg-accent-softer border border-accent/30 rounded text-3xs">
                     <span className="text-accent">{selectedBomIds.size} BOMs selected</span>
-                    {selectedBomIds.size >= 2 && (
-                      <button
-                        type="button"
-                        onClick={() => {}}
-                        className="inline-flex items-center gap-1 text-fg-muted hover:text-fg"
-                      >
-                        <Columns className="h-3 w-3 shrink-0" strokeWidth={2} />
-                        Compare
-                      </button>
-                    )}
                     <button
                       type="button"
                       onClick={() => {

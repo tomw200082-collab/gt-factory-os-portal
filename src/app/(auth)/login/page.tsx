@@ -558,10 +558,10 @@ function MagicLinkLogin() {
         </Link>
         <span aria-hidden>·</span>
         <Link
-          href="/dashboard"
+          href="/"
           className="hover:text-fg-muted hover:underline"
         >
-          Status
+          Back to portal
         </Link>
       </div>
     </div>

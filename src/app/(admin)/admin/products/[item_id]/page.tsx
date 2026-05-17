@@ -983,7 +983,10 @@ function AdminProduct360PageInner({ params }: PageProps): JSX.Element {
       if (skuMapQuery.isLoading) return <DetailTabLoading />;
       if (skuMapQuery.isError)
         return (
-          <DetailTabError message={(skuMapQuery.error as Error).message} />
+          <DetailTabError
+            message={(skuMapQuery.error as Error).message}
+            onRetry={() => skuMapQuery.refetch()}
+          />
         );
       return (
         <SectionCard
@@ -1152,10 +1155,7 @@ function AdminProduct360PageInner({ params }: PageProps): JSX.Element {
                 </ul>
               </div>
               <div className="flex shrink-0 gap-2">
-                <Link
-                  href="/admin/boms"
-                  className="inline-flex items-center gap-1.5 rounded bg-accent px-3 py-1.5 text-xs font-semibold text-white hover:bg-accent/90"
-                >
+                <Link href="/admin/boms" className="btn btn-sm btn-primary">
                   Open BOM editor
                 </Link>
               </div>
@@ -1168,7 +1168,10 @@ function AdminProduct360PageInner({ params }: PageProps): JSX.Element {
       }
       if (bomHeadsQuery.isError) {
         return (
-          <DetailTabError message={(bomHeadsQuery.error as Error).message} />
+          <DetailTabError
+            message={(bomHeadsQuery.error as Error).message}
+            onRetry={() => bomHeadsQuery.refetch()}
+          />
         );
       }
       const head = itemBomHead;
@@ -1339,10 +1342,18 @@ function AdminProduct360PageInner({ params }: PageProps): JSX.Element {
               <Badge tone="warning" dotted>
                 No active version
               </Badge>
-              <p className="text-sm text-warning-fg">
-                No active BOM version — components list is empty. Publish a
-                version in the BOM editor.
-              </p>
+              <div className="space-y-2">
+                <p className="text-sm text-warning-fg">
+                  No active BOM version — components list is empty. Publish a
+                  version in the BOM editor.
+                </p>
+                <Link
+                  href={`${detailPath}?tab=bom`}
+                  className="btn btn-sm btn-primary"
+                >
+                  Go to BOM tab
+                </Link>
+              </div>
             </div>
           </SectionCard>
         );
@@ -1350,16 +1361,24 @@ function AdminProduct360PageInner({ params }: PageProps): JSX.Element {
       if (bomLinesQuery.isLoading) return <DetailTabLoading />;
       if (bomLinesQuery.isError) {
         return (
-          <DetailTabError message={(bomLinesQuery.error as Error).message} />
+          <DetailTabError
+            message={(bomLinesQuery.error as Error).message}
+            onRetry={() => bomLinesQuery.refetch()}
+          />
         );
       }
       const lines = bomLinesQuery.data?.rows ?? [];
       if (lines.length === 0) {
         return (
           <SectionCard tone="warning" density="compact">
-            <p className="text-sm text-warning-fg">
-              Active BOM version has zero lines.
-            </p>
+            <div className="space-y-2">
+              <p className="text-sm text-warning-fg">
+                Active BOM version has zero lines.
+              </p>
+              <Link href="/admin/boms" className="btn btn-sm btn-primary">
+                Open BOM editor
+              </Link>
+            </div>
           </SectionCard>
         );
       }
@@ -1394,7 +1413,7 @@ function AdminProduct360PageInner({ params }: PageProps): JSX.Element {
                       </td>
                       <td className="px-3 py-2">
                         <Link
-                          href={`/admin/components/${encodeURIComponent(
+                          href={`/admin/masters/components/${encodeURIComponent(
                             l.final_component_id,
                           )}`}
                           className="font-medium text-fg hover:text-accent"
@@ -1616,6 +1635,7 @@ function AdminProduct360PageInner({ params }: PageProps): JSX.Element {
           ) : planningPolicyQuery.isError ? (
             <DetailTabError
               message={(planningPolicyQuery.error as Error).message}
+              onRetry={() => planningPolicyQuery.refetch()}
             />
           ) : (planningPolicyQuery.data?.rows ?? []).length > 0 ? (
             <SectionCard
@@ -1868,7 +1888,7 @@ function SupplierCoverageRow({
     <tr className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40">
       <td className="px-3 py-2">
         <Link
-          href={`/admin/components/${encodeURIComponent(component_id)}`}
+          href={`/admin/masters/components/${encodeURIComponent(component_id)}`}
           className="font-medium text-fg hover:text-accent"
         >
           {component?.component_name ?? component_id}
@@ -1881,7 +1901,7 @@ function SupplierCoverageRow({
         ) : primary ? (
           <div>
             <Link
-              href={`/admin/suppliers/${encodeURIComponent(primary.supplier_id)}`}
+              href={`/admin/masters/suppliers/${encodeURIComponent(primary.supplier_id)}`}
               className="font-medium text-fg hover:text-accent"
               title={primary.supplier_id}
             >

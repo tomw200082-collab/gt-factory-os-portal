@@ -42,6 +42,8 @@ export interface DetailHeader {
   description?: string;
   meta?: ReactNode;
   actions?: ReactNode;
+  backHref?: string;
+  backLabel?: string;
 }
 
 export interface TabDescriptor {
@@ -158,6 +160,8 @@ export function DetailPage({
         description={header.description}
         meta={header.meta}
         actions={header.actions}
+        backHref={header.backHref}
+        backLabel={header.backLabel}
       />
 
       {subHeader ? <div className="mb-4">{subHeader}</div> : null}
@@ -437,12 +441,17 @@ export function DetailTabLoading(): JSX.Element {
 
 export function DetailTabEmpty({
   message,
+  action,
 }: {
   message: string;
+  action?: ReactNode;
 }): JSX.Element {
   return (
     <SectionCard density="compact">
-      <div className="text-sm text-fg-muted">{message}</div>
+      <div className="flex flex-col items-start gap-3 text-sm text-fg-muted">
+        <span>{message}</span>
+        {action}
+      </div>
     </SectionCard>
   );
 }

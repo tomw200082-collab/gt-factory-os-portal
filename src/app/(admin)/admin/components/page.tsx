@@ -269,7 +269,7 @@ function ComponentsPageInner(): JSX.Element {
   const [showSupplierPicker, setShowSupplierPicker] = useState(false);
   const [pendingSupplier, setPendingSupplier] = useState<string>("");
   const [banner, setBanner] = useState<
-    | { kind: "success" | "error"; message: string }
+    | { kind: "success" | "error"; message: string; componentId?: string }
     | null
   >(null);
 
@@ -590,11 +590,33 @@ function ComponentsPageInner(): JSX.Element {
         <div
           className={
             banner.kind === "success"
-              ? "rounded-md border border-success/40 bg-success-softer p-3 text-sm text-success-fg"
-              : "rounded-md border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg"
+              ? "flex items-start justify-between gap-3 rounded-md border border-success/40 bg-success-softer p-3 text-sm text-success-fg"
+              : "flex items-start justify-between gap-3 rounded-md border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg"
           }
         >
-          {banner.message}
+          <span>
+            {banner.message}
+            {banner.componentId ? (
+              <>
+                {" "}
+                <Link
+                  href={`/admin/masters/components/${banner.componentId}`}
+                  className="font-semibold underline hover:no-underline"
+                >
+                  Open the detail page
+                </Link>
+                .
+              </>
+            ) : null}
+          </span>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm shrink-0"
+            aria-label="Dismiss"
+            onClick={() => setBanner(null)}
+          >
+            <X className="h-3.5 w-3.5" strokeWidth={2.5} />
+          </button>
         </div>
       ) : null}
 
@@ -1187,7 +1209,8 @@ function ComponentsPageInner(): JSX.Element {
         onCreated={(newId) => {
           setBanner({
             kind: "success",
-            message: `Created ${newId}. Open the detail page to add a supplier and set pricing.`,
+            message: `Created ${newId}. Add a supplier and set pricing.`,
+            componentId: newId,
           });
           setShowCreate(false);
           void queryClient.invalidateQueries({ queryKey: ["admin", "components"] });

@@ -15,6 +15,15 @@ interface BaseStateProps {
   icon?: ReactNode;
 }
 
+interface ErrorStateProps extends Partial<BaseStateProps> {
+  /**
+   * When provided, renders a standard "Try again" button so an error is
+   * never a dead end. Callers typically pass `() => query.refetch()`.
+   */
+  onRetry?: () => void;
+  retryLabel?: string;
+}
+
 export function EmptyState({
   title,
   description,
@@ -72,7 +81,9 @@ export function ErrorState({
   title = "Something went wrong",
   description,
   action,
-}: Partial<BaseStateProps>) {
+  onRetry,
+  retryLabel = "Try again",
+}: ErrorStateProps) {
   return (
     <div className="flex flex-col items-center gap-4 rounded border border-danger/40 bg-danger-softer px-6 py-14 text-center">
       <div className="flex h-12 w-12 items-center justify-center rounded border border-danger/40 bg-danger-soft text-danger">
@@ -88,7 +99,21 @@ export function ErrorState({
           </div>
         ) : null}
       </div>
-      {action}
+      {onRetry || action ? (
+        <div className="flex flex-wrap items-center justify-center gap-2">
+          {onRetry ? (
+            <button
+              type="button"
+              onClick={onRetry}
+              className="btn btn-sm btn-outline"
+            >
+              <RefreshCw className="h-3.5 w-3.5" strokeWidth={2} />
+              {retryLabel}
+            </button>
+          ) : null}
+          {action}
+        </div>
+      ) : null}
     </div>
   );
 }
