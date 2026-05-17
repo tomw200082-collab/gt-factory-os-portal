@@ -1,7 +1,11 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// Admin · Economics — Phase 10A.
+// Economics — Phase 10A.
+//
+// Access: planner + admin (the (economics) route group gates on
+// planning:execute). Lifted out of the (admin) group 2026-05-17 so planners
+// own routine component-cost edits and on-demand re-snapshots.
 //
 // Two-tab view onto the COGS snapshot pipeline:
 //   - Overview        : COGS per SKU, inventory at cost, snapshot freshness.
@@ -16,7 +20,7 @@
 //
 // Edits to the fallback do NOT change the active effective cost when the
 // component has a primary supplier — the supplier_items row wins. That nuance
-// is surfaced on the row and inside the edit cell so admins do not silently
+// is surfaced on the row and inside the edit cell so editors do not silently
 // edit a value with no effect.
 // ---------------------------------------------------------------------------
 
@@ -26,7 +30,7 @@ import { Play } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
-import { useSession } from "@/lib/auth/session-provider";
+import { useCapability } from "@/lib/auth/role-gate";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -167,11 +171,11 @@ function CostSourceBadge({
 
 interface CostEditCellProps {
   row: ComponentCostRow;
-  isAdmin: boolean;
+  canEdit: boolean;
   onSaved: () => void;
 }
 
-function CostEditCell({ row, isAdmin, onSaved }: CostEditCellProps): JSX.Element {
+function CostEditCell({ row, canEdit, onSaved }: CostEditCellProps): JSX.Element {
   const [editing, setEditing] = useState(false);
   const [value, setValue] = useState<string>(() => row.fallback_cost ?? "");
   const [busy, setBusy] = useState(false);
@@ -181,7 +185,7 @@ function CostEditCell({ row, isAdmin, onSaved }: CostEditCellProps): JSX.Element
   const display = formatIls(row.effective_cost);
 
   const startEdit = () => {
-    if (!isAdmin) return;
+    if (!canEdit) return;
     setValue(row.fallback_cost ?? "");
     setError(null);
     setEditing(true);
@@ -285,16 +289,16 @@ function CostEditCell({ row, isAdmin, onSaved }: CostEditCellProps): JSX.Element
     <button
       type="button"
       onClick={startEdit}
-      disabled={!isAdmin}
+      disabled={!canEdit}
       title={
-        isAdmin
+        canEdit
           ? "Click to edit fallback cost"
-          : "Read-only — sign in as admin to edit"
+          : "Read-only — planner or admin access required to edit"
       }
       className={`inline-flex min-w-[5rem] items-center justify-end rounded px-1.5 py-0.5 text-right text-sm tabular-nums transition-colors ${
         flash
           ? "bg-success-softer text-success-fg"
-          : isAdmin
+          : canEdit
             ? "text-fg-strong hover:bg-bg-subtle hover:text-accent"
             : "cursor-default text-fg-strong"
       }`}
@@ -360,8 +364,11 @@ function ErrorCard({
 // ---------------------------------------------------------------------------
 
 export default function AdminEconomicsPage(): JSX.Element {
-  const { session } = useSession();
-  const isAdmin = session.role === "admin";
+  // planning:execute is granted to planner + admin by the role lattice;
+  // operator/viewer never reach this page (the (economics) layout gates on
+  // the same capability), so canEdit is effectively always true here and the
+  // read-only branches below are defence-in-depth.
+  const canEdit = useCapability("planning:execute");
   const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useState<"overview" | "component-costs">(
@@ -452,7 +459,7 @@ export default function AdminEconomicsPage(): JSX.Element {
 
   // ----------------------------------------------------------------------
 
-  const headerActions = isAdmin ? (
+  const headerActions = canEdit ? (
     <button
       type="button"
       className="btn-primary inline-flex items-center gap-1.5"
@@ -470,7 +477,7 @@ export default function AdminEconomicsPage(): JSX.Element {
   return (
     <>
       <WorkflowHeader
-        eyebrow="Admin · economics"
+        eyebrow="Economics"
         title="Economics"
         description="COGS per SKU and component cost management. Edit raw material costs → snapshot runs nightly."
         meta={
@@ -652,9 +659,9 @@ export default function AdminEconomicsPage(): JSX.Element {
             eyebrow="Component costs"
             title={`Showing ${filteredCosts.length} of ${costsQuery.data?.rows.length ?? 0}`}
             description={
-              isAdmin
+              canEdit
                 ? "Click the cost cell to edit the fallback. Edits apply to components.std_cost_per_inv_uom; the primary supplier price still wins where one is set."
-                : "Read-only — sign in as admin to edit."
+                : "Read-only — planner or admin access required to edit."
             }
             contentClassName="p-0"
           >
@@ -724,7 +731,7 @@ export default function AdminEconomicsPage(): JSX.Element {
                         <td className="px-3 py-2 text-right">
                           <CostEditCell
                             row={r}
-                            isAdmin={isAdmin}
+                            canEdit={canEdit}
                             onSaved={() => {
                               setCostSavedHint(true);
                               void queryClient.invalidateQueries({
