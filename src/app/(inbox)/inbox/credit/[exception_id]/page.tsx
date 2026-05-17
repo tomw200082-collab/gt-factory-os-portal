@@ -188,9 +188,9 @@ type CreditActionOutcome =
 //                       detail, current_status?, current_category? }
 // exception_id is in the URL — NOT in the body.
 async function postCreditAction(
-  endpoint: "approve" | "reject",
+  endpoint: "approve" | "reject" | "retry-gi-draft",
   exceptionId: string,
-  body: { idempotency_key: string; reason?: string },
+  body: { idempotency_key?: string; reason?: string },
   fallbackErrorHe: string,
 ): Promise<CreditActionOutcome> {
   let res: Response;
@@ -247,6 +247,11 @@ async function postCreditAction(
     const code = responseBody.reason_code;
     if (code === "EXCEPTION_NOT_PENDING") return { kind: "not_pending" };
     if (code === "EXCEPTION_WRONG_CATEGORY") return { kind: "wrong_category" };
+    // retry-gi-draft: the draft already exists — the credit is fully done,
+    // so treat it as a (replay) success rather than an error.
+    if (code === "GI_DRAFT_ALREADY_CREATED") {
+      return { kind: "ok", data: { status: "gi_draft_created" } };
+    }
     // IDEMPOTENCY_KEY_REUSED is treated as silent re-success by the W1
     // handler (returns 201 with idempotent_replay=true), so it should never
     // reach this branch. EXCEPTION_NOT_FOUND falls through to generic error.
@@ -286,6 +291,18 @@ function postReject(
     exceptionId,
     { idempotency_key: newIdempotencyKey(), reason },
     "הדחייה נכשלה.",
+  );
+}
+
+// Retry the Green Invoice credit-draft creation for an already-approved
+// credit whose draft is stuck at pending_gi_action. No request body — the
+// approve decision is not re-created, only its GI side is re-run.
+function postRetryGiDraft(exceptionId: string): Promise<CreditActionOutcome> {
+  return postCreditAction(
+    "retry-gi-draft",
+    exceptionId,
+    {},
+    "ניסיון יצירת הטיוטה ב-Green Invoice נכשל.",
   );
 }
 
@@ -429,6 +446,63 @@ export default function CreditDetailPage(): ReactNode {
     } else {
       // Approve has no client-side validation_error path (no reason field
       // requirement), so this branch covers generic 5xx / network errors.
+      setFeedback({ kind: "error", text: res.message });
+    }
+  };
+
+  const handleRetryGiDraft = async () => {
+    setBusy(true);
+    setFeedback(null);
+    const res = await postRetryGiDraft(exceptionId);
+    setBusy(false);
+    if (res.kind === "ok") {
+      const giDraft = res.data.gi_draft;
+      if (giDraft && "document_id" in giDraft) {
+        const origin = giDraft.original_number
+          ? ` (על בסיס חשבונית מקור ${giDraft.original_number})`
+          : "";
+        setFeedback({
+          kind: "success",
+          text: `טיוטת הזיכוי נוצרה ב-Green Invoice${origin}.`,
+          link: giDraft.url
+            ? {
+                href: giDraft.url,
+                label: "פתח את טיוטת הזיכוי ב-Green Invoice",
+              }
+            : undefined,
+        });
+      } else if (giDraft && "error" in giDraft) {
+        setFeedback({
+          kind: "warning",
+          text: `יצירת הטיוטה נכשלה שוב. ${giErrorHe(giDraft.error, giDraft.reason)}`,
+        });
+      } else if (res.data.status === "gi_draft_created") {
+        setFeedback({
+          kind: "success",
+          text: "טיוטת הזיכוי כבר קיימת ב-Green Invoice.",
+        });
+      } else {
+        setFeedback({
+          kind: "warning",
+          text: "טיוטת הזיכוי טרם נוצרה ב-Green Invoice. ייתכן שנדרשת יצירה ידנית.",
+        });
+      }
+      void exceptionQuery.refetch();
+    } else if (res.kind === "auth_required") {
+      window.location.href = `/login?redirectTo=${encodeURIComponent(window.location.pathname)}`;
+    } else if (res.kind === "forbidden") {
+      setFeedback({
+        kind: "error",
+        text: "אין הרשאה — נדרש planner או admin.",
+      });
+    } else if (res.kind === "not_pending") {
+      setFeedback({ kind: "warning", text: "הבקשה כבר טופלה." });
+      void exceptionQuery.refetch();
+    } else if (res.kind === "wrong_category") {
+      setFeedback({ kind: "error", text: "זו אינה בקשת זיכוי. רענן את הדף." });
+    } else if (res.kind === "transient") {
+      setFeedback({ kind: "warning", text: res.message });
+    } else {
       setFeedback({ kind: "error", text: res.message });
     }
   };
@@ -641,7 +715,7 @@ export default function CreditDetailPage(): ReactNode {
         title="מה לעשות עם הבקשה"
         description={
           row.status === "pending_gi_action"
-            ? "הזיכוי כבר אושר. טיוטת הזיכוי טרם נוצרה אוטומטית ב-Green Invoice — ייתכן שנדרשת יצירה ידנית."
+            ? "הזיכוי כבר אושר אך טיוטת הזיכוי לא נוצרה אוטומטית ב-Green Invoice. נסה שוב ליצור את הטיוטה, או צור את הזיכוי ידנית."
             : isTerminal
               ? "הבקשה כבר נסגרה. אין פעולות זמינות."
               : canActOnCredits
@@ -680,6 +754,17 @@ export default function CreditDetailPage(): ReactNode {
           >
             דחה זיכוי
           </button>
+          {row.status === "pending_gi_action" ? (
+            <button
+              type="button"
+              data-testid="credit-action-retry-gi-draft"
+              className="btn btn-sm btn-primary"
+              disabled={busy || !canActOnCredits}
+              onClick={handleRetryGiDraft}
+            >
+              {busy ? "שולח..." : "נסה שוב ליצור טיוטה ב-Green Invoice"}
+            </button>
+          ) : null}
         </div>
 
         {showRejectPanel ? (
