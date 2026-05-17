@@ -1,4 +1,6 @@
 import type { ReactNode } from "react";
+import Link from "next/link";
+import { ArrowLeft } from "lucide-react";
 
 interface WorkflowHeaderProps {
   eyebrow?: string;
@@ -7,6 +9,12 @@ interface WorkflowHeaderProps {
   meta?: ReactNode;
   actions?: ReactNode;
   children?: ReactNode;
+  /**
+   * Optional "back" link rendered above the eyebrow. Gives every page a
+   * standard, visible exit so detail/sub-pages are never dead ends.
+   */
+  backHref?: string;
+  backLabel?: string;
 }
 
 /**
@@ -22,11 +30,22 @@ export function WorkflowHeader({
   meta,
   actions,
   children,
+  backHref,
+  backLabel = "Back",
 }: WorkflowHeaderProps) {
   return (
     <header className="flex flex-col gap-4 pb-6 sm:gap-6 sm:pb-8 reveal">
       <div className="flex flex-wrap items-start justify-between gap-4 sm:gap-6">
         <div className="min-w-0 flex-1">
+          {backHref ? (
+            <Link
+              href={backHref}
+              className="mb-2 inline-flex items-center gap-1 text-2xs font-semibold uppercase tracking-sops text-fg-muted transition-colors hover:text-fg"
+            >
+              <ArrowLeft className="h-3 w-3" strokeWidth={2.5} />
+              {backLabel}
+            </Link>
+          ) : null}
           {eyebrow ? (
             <div className="mb-2 flex items-center gap-2">
               <span className="dot bg-accent" aria-hidden />
