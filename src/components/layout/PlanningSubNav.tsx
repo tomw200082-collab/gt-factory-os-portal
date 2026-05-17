@@ -114,15 +114,12 @@ export function PlanningSubNav() {
   const criticalBlockerCount = useBlockersBadge();
 
   return (
-    <nav
-      aria-label="Planning sections"
-      className="relative -mx-4 md:-mx-8 xl:-mx-10"
-    >
+    <nav aria-label="Planning sections" className="relative">
       {/* Subtle wash to distinguish sub-nav from page content */}
       <div className="absolute inset-0 bg-bg-raised/50" aria-hidden />
 
       <div className="relative overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <div className="flex min-w-max items-end gap-0 border-b border-border/60 px-4 md:px-8 xl:px-10">
+        <div className="flex min-w-max items-end gap-0 border-b border-border/60">
           {PLANNING_TABS.map((tab) => {
             const active = isTabActive(tab.href, pathname, tab.exact);
             const Icon = tab.icon;

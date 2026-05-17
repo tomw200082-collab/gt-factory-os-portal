@@ -1075,7 +1075,7 @@ export default function GoodsReceiptPage() {
         <div
           className="relative mb-4 overflow-hidden rounded-md border border-info/30 px-4 py-3 text-sm"
           style={{
-            background: "linear-gradient(90deg, var(--color-info-softer,#eff6ff) 0%, var(--color-bg-raised,#fff) 50%, var(--color-info-softer,#eff6ff) 100%)",
+            background: "linear-gradient(90deg, hsl(var(--info-softer)) 0%, hsl(var(--bg-raised)) 50%, hsl(var(--info-softer)) 100%)",
             backgroundSize: "200% 100%",
             animation: "shimmer 3s ease-in-out infinite",
           }}
