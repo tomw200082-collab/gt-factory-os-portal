@@ -42,6 +42,7 @@ import {
   Clock,
   Filter,
   Flame,
+  Inbox as InboxIcon,
   Info,
   Keyboard,
   Layers,
@@ -607,6 +608,7 @@ export default function InboxListPage() {
   // Search box.
   const [searchInput, setSearchInput] = useState("");
   const [searchTerm, setSearchTerm] = useState("");
+  const searchInputRef = useRef<HTMLInputElement>(null);
   useEffect(() => {
     // Debounce 150ms — keeps typing snappy.
     const t = window.setTimeout(() => setSearchTerm(searchInput.trim().toLowerCase()), 150);
@@ -906,6 +908,14 @@ export default function InboxListPage() {
     [],
   );
 
+  // Auto-dismiss the success toast after 4s so it doesn't linger. Errors
+  // are sticky on purpose — they stay until the operator dismisses them.
+  useEffect(() => {
+    if (!actionSuccess) return;
+    const t = window.setTimeout(() => setActionSuccess(null), 4000);
+    return () => window.clearTimeout(t);
+  }, [actionSuccess]);
+
   // Auto-expire recent actions.
   useEffect(() => {
     if (recentActions.length === 0) return;
@@ -1082,6 +1092,13 @@ export default function InboxListPage() {
         return;
       }
       if (isEditing()) return;
+      // "/" jumps to the search box — the common triage shortcut.
+      if (e.key === "/") {
+        e.preventDefault();
+        searchInputRef.current?.focus();
+        searchInputRef.current?.select();
+        return;
+      }
       if (e.key === "j" || e.key === "ArrowDown") {
         e.preventDefault();
         setFocusedIdx((i) => Math.min((mainRows.length || 1) - 1, i + 1));
@@ -1209,7 +1226,7 @@ export default function InboxListPage() {
                 className={cn("h-3 w-3", anyFetching && "animate-spin")}
                 strokeWidth={2.25}
               />
-              Refresh
+              {anyFetching ? "Refreshing…" : "Refresh"}
             </button>
           </div>
         }
@@ -1279,11 +1296,19 @@ export default function InboxListPage() {
                 strokeWidth={2}
               />
               <input
+                ref={searchInputRef}
                 type="search"
                 className="input h-8 w-full pl-7 pr-7 text-xs"
                 placeholder="Search summary, item, category…"
                 value={searchInput}
                 onChange={(e) => setSearchInput(e.target.value)}
+                onKeyDown={(e) => {
+                  // ESC clears the search and returns focus to the list.
+                  if (e.key === "Escape") {
+                    setSearchInput("");
+                    e.currentTarget.blur();
+                  }
+                }}
                 data-testid="inbox-search"
                 aria-label="Search inbox"
               />
@@ -1363,7 +1388,7 @@ export default function InboxListPage() {
                       : "text-fg-muted hover:text-fg",
                   )}
                 >
-                  {DENSITY_LABELS[d].slice(0, 3)}
+                  {DENSITY_LABELS[d]}
                 </button>
               ))}
             </div>
@@ -1408,6 +1433,8 @@ export default function InboxListPage() {
           <div
             className="flex items-center gap-2 border-b border-success/30 bg-success-subtle/40 px-5 py-2 text-xs text-success-fg"
             data-testid="inbox-action-success"
+            role="status"
+            aria-live="polite"
           >
             <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
             <span>{actionSuccess}</span>
@@ -1425,6 +1452,8 @@ export default function InboxListPage() {
           <div
             className="flex items-center gap-2 border-b border-danger/30 bg-danger-softer px-5 py-2 text-xs text-danger-fg"
             data-testid="inbox-action-error"
+            role="alert"
+            aria-live="assertive"
           >
             <AlertCircle className="h-3.5 w-3.5 shrink-0" />
             <span>{actionError}</span>
@@ -1507,9 +1536,10 @@ export default function InboxListPage() {
         {/* ---- Footer with reset prefs --------------------------------- */}
         <div className="flex flex-wrap items-center justify-between gap-2 border-t border-border/40 px-5 py-2 text-3xs text-fg-subtle">
           <div className="inline-flex items-center gap-3">
-            <span className="inline-flex items-center gap-1">
+            <span className="hidden items-center gap-1 sm:inline-flex">
               <Keyboard className="h-3 w-3" strokeWidth={2} />
               <span className="font-mono">j/k</span> nav ·
+              <span className="font-mono">/</span> search ·
               <span className="font-mono">x</span> select ·
               <span className="font-mono">r</span> resolve ·
               <span className="font-mono">a</span> ack ·
@@ -1608,9 +1638,16 @@ function InboxEmptyState({
   let title: string;
   let description: ReactNode;
   let action: ReactNode = null;
+  // Icon reflects intent: a green check celebrates a genuinely clear inbox;
+  // a neutral glyph stays quiet for "no search match" / "no items here",
+  // which are states to navigate out of, not achievements.
+  let icon: typeof CheckCircle2 = CheckCircle2;
+  let iconNeutral = false;
 
   if (search && viewedRowsCount > 0) {
     title = "No matches for that search.";
+    icon = Search;
+    iconNeutral = true;
     description = (
       <>
         <span className="font-mono text-fg">&ldquo;{search}&rdquo;</span> didn&apos;t
@@ -1625,6 +1662,8 @@ function InboxEmptyState({
     );
   } else if (view === "mine") {
     title = "Nothing assigned to you.";
+    icon = InboxIcon;
+    iconNeutral = true;
     description = (
       <>
         Items you&apos;re responsible for will appear here.{" "}
@@ -1651,6 +1690,8 @@ function InboxEmptyState({
     }
   } else {
     title = `No ${VIEW_LABELS[view].toLowerCase()} items.`;
+    icon = InboxIcon;
+    iconNeutral = true;
     description =
       allRowsCount > 0
         ? `View All to see items from other categories (${allRowsCount} total).`
@@ -1665,13 +1706,22 @@ function InboxEmptyState({
     }
   }
 
+  const EmptyIcon = icon;
+
   return (
     <div
       className="reveal flex flex-col items-center justify-center gap-4 px-5 py-16 text-center"
       data-testid="inbox-empty"
     >
-      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-success-subtle/40 text-success ring-1 ring-success/15">
-        <CheckCircle2 className="h-7 w-7" strokeWidth={1.75} />
+      <div
+        className={cn(
+          "flex h-16 w-16 items-center justify-center rounded-full ring-1",
+          iconNeutral
+            ? "bg-bg-subtle text-fg-subtle ring-border/60"
+            : "bg-success-subtle/40 text-success ring-success/15",
+        )}
+      >
+        <EmptyIcon className="h-7 w-7" strokeWidth={1.75} />
       </div>
       <div className="text-base font-semibold tracking-tightish text-fg-strong">
         {title}
@@ -1748,8 +1798,15 @@ function InboxRowCard({
   const isResolveDestructive = labels.resolve === "דחה";
   const friendlyCategory = categoryFriendly(row.category);
 
+  // Keep the keyboard-focused row visible as j/k moves the selection.
+  const liRef = useRef<HTMLLIElement>(null);
+  useEffect(() => {
+    if (isFocused) liRef.current?.scrollIntoView({ block: "nearest" });
+  }, [isFocused]);
+
   return (
     <li
+      ref={liRef}
       className={cn(
         "group relative transition-colors duration-150",
         densityRowPaddingClass(density),
