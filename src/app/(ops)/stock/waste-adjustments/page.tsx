@@ -19,6 +19,7 @@ import { useQuery } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { UOMS, type Uom } from "@/lib/contracts/enums";
+import { componentItemType } from "@/lib/contracts/components";
 import { cn } from "@/lib/cn";
 
 // ---------------------------------------------------------------------------
@@ -92,6 +93,9 @@ interface ComponentRow {
   component_id: string;
   component_name: string;
   status: string;
+  // Drives the stock-event item_type (RM vs PKG). The API rejects an
+  // adjustment whose item_type does not match this class — see componentItemType().
+  component_class: string | null;
   inventory_uom: string | null;
   purchase_uom: string | null;
   bom_uom: string | null;
@@ -104,7 +108,9 @@ interface AdjustableRow {
   id: string;
   label: string;
   default_uom: Uom;
-  item_type: ItemType;
+  // null when a component's component_class is unknown/missing — the submit
+  // is blocked rather than sent with a guessed item_type the API 409s.
+  item_type: ItemType | null;
 }
 
 function nowLocalDateTime(): string {
@@ -356,7 +362,7 @@ function ItemCombobox({ options, value, onChange }: ComboboxProps) {
                     onMouseDown={(e) => { e.preventDefault(); handleSelect(row); }}
                   >
                     <span className="text-xs text-fg-muted mr-2">
-                      {row.item_type}
+                      {row.item_type ?? "—"}
                     </span>
                     {row.label}
                   </li>
@@ -399,7 +405,10 @@ export default function WasteAdjustmentPage() {
         id: c.component_id,
         label: `${c.component_name} · ${c.component_id}`,
         default_uom: toUom(c.inventory_uom ?? c.bom_uom ?? c.purchase_uom),
-        item_type: "RM",
+        // Resolve item_type from the component's class so packaging components
+        // submit as PKG, not RM. Mirrors the API's COMPONENT_CLASS_BY_ITEM_TYPE;
+        // null (unknown/missing class) blocks the submit in doSubmit().
+        item_type: componentItemType(c.component_class),
       })),
     ].sort((a, b) => a.label.localeCompare(b.label));
   }, [itemsQuery.data, componentsQuery.data]);
@@ -454,6 +463,13 @@ export default function WasteAdjustmentPage() {
   // can call it after user confirms).
   // ---------------------------------------------------------------------------
   async function doSubmit(row: AdjustableRow, qtyNumLocal: number): Promise<void> {
+    if (row.item_type === null) {
+      setDone({
+        kind: "error",
+        message: `"${row.label}" is missing a component classification and can't be adjusted. Ask an admin to set its component class.`,
+      });
+      return;
+    }
     const envelope: WasteAdjustmentRequest = {
       idempotency_key: newIdempotencyKey(),
       event_at: new Date(eventAt).toISOString(),
@@ -811,7 +827,7 @@ export default function WasteAdjustmentPage() {
                 {/* Selected item chip */}
                 {selectedRow && (
                   <div className="mt-1.5 inline-flex items-center gap-1 rounded-full border border-border/60 bg-bg-subtle px-2.5 py-0.5 text-xs text-fg-muted">
-                    <span className="font-semibold text-fg">{selectedRow.item_type}</span>
+                    <span className="font-semibold text-fg">{selectedRow.item_type ?? "—"}</span>
                     <span>·</span>
                     <span className="truncate max-w-[16rem]">{selectedRow.label}</span>
                   </div>
