@@ -70,6 +70,20 @@ export default function PurchaseSessionPage() {
 
   const session = data?.session ?? null;
 
+  // Starting a new session while one is still open supersedes it — confirm
+  // first so a stray click cannot discard an in-progress review.
+  function handleStart() {
+    if (
+      session?.status === "open" &&
+      !window.confirm(
+        "קיים מושב רכש פתוח. הרצת מושב חדש תחליף אותו וכל פעולה שלא נשמרה תאבד. להמשיך?",
+      )
+    ) {
+      return;
+    }
+    startMut.mutate({ session_type: "weekly" });
+  }
+
   return (
     <div className="space-y-5">
       <WorkflowHeader
@@ -79,7 +93,7 @@ export default function PurchaseSessionPage() {
         meta={
           <button
             type="button"
-            onClick={() => startMut.mutate({ session_type: "weekly" })}
+            onClick={handleStart}
             disabled={startMut.isPending}
             className={cn(
               "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition-colors",
@@ -293,11 +307,19 @@ function PoCard({
   }
 
   function saveEdit() {
-    const lines = po.lines.map((l) => ({
-      session_po_line_id: l.session_po_line_id,
-      final_qty: Number(draftQty[l.session_po_line_id] ?? l.final_qty),
-      is_dropped: draftDrop[l.session_po_line_id] ?? l.is_dropped,
-    }));
+    const lines = po.lines.map((l) => {
+      // Guard the free-text qty input: an empty, non-numeric, or negative
+      // draft must not reach the API (Number("") is 0, Number("x") is NaN
+      // which JSON-encodes to null). Fall back to the current quantity.
+      const raw = draftQty[l.session_po_line_id];
+      const parsed = raw === undefined || raw.trim() === "" ? NaN : Number(raw);
+      const finalQty = Number.isFinite(parsed) && parsed >= 0 ? parsed : l.final_qty;
+      return {
+        session_po_line_id: l.session_po_line_id,
+        final_qty: finalQty,
+        is_dropped: draftDrop[l.session_po_line_id] ?? l.is_dropped,
+      };
+    });
     editMut.mutate(
       { poId: po.session_po_id, lines },
       { onSuccess: () => setEditing(false) },
@@ -327,6 +349,8 @@ function PoCard({
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
+          aria-expanded={expanded}
+          aria-controls={`po-detail-${po.session_po_id}`}
           className="text-right"
         >
           <div className="flex items-center gap-2">
@@ -375,7 +399,7 @@ function PoCard({
       ) : null}
 
       {expanded ? (
-        <>
+        <div id={`po-detail-${po.session_po_id}`} className="space-y-3">
           {/* Lines table */}
           <div className="overflow-x-auto">
             <table className="w-full text-xs">
@@ -535,7 +559,7 @@ function PoCard({
               </div>
             </div>
           ) : null}
-        </>
+        </div>
       ) : null}
     </div>
   );
