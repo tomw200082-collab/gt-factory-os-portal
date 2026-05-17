@@ -51,6 +51,13 @@
 //   9.  Donut draw-in — arcs sweep from zero on mount.
 //   10. Live affordance — an "auto-refreshing" pill in the header.
 //   All motion is gated behind motion-reduce for vestibular safety.
+//
+// Urgent Procurement block (Stage 4, 2026-05-17):
+//   - New "Live" block between Critical today and Slipped plans, rendered for
+//     planner + admin only (gated at the call site so the query never mounts
+//     for other roles). Surfaces this week's purchase-session supplier orders
+//     that are overdue, due today, or flagged urgent-tier, each deep-linking
+//     into /planning/purchase-session. Calm green when nothing is due.
 // ---------------------------------------------------------------------------
 
 import type { ReactNode } from "react";
@@ -69,6 +76,7 @@ import {
   PackageCheck,
   PackageSearch,
   RefreshCw,
+  ShoppingCart,
   TrendingDown,
 } from "lucide-react";
 
@@ -84,6 +92,11 @@ import { authorizeCapability } from "@/lib/auth/authorize";
 import { cn } from "@/lib/cn";
 import { fmtNumStr } from "@/lib/utils/format-quantity";
 import { QUICK_ACTIONS } from "@/features/dashboard/quick-actions";
+import { useCurrentSession } from "@/app/(planning)/planning/purchase-session/_lib/api";
+import type {
+  PoTier,
+  PurchaseSessionPo,
+} from "@/app/(planning)/planning/purchase-session/_lib/types";
 
 // ---------------------------------------------------------------------------
 // Cadence — keep low for the morning view; refresh on tab focus is the default.
@@ -1549,6 +1562,226 @@ function SlippedPlansBlock({ now }: { now: Date }) {
 }
 
 // ---------------------------------------------------------------------------
+// Urgent Procurement block (Stage 4) — surfaces purchase-session supplier
+// orders that need ordering now: overdue, due today, or urgent-tier. The
+// block is rendered for planner/admin only, gated at the call site so the
+// /api/purchase-session/current query never mounts for other roles.
+// ---------------------------------------------------------------------------
+type ProcUrgency = "overdue" | "today" | "soon";
+
+interface ProcRow {
+  po: PurchaseSessionPo;
+  urgency: ProcUrgency;
+  // Whole days from today to the order-by date. Negative = overdue.
+  days: number | null;
+}
+
+const PROC_TIER_LABEL: Record<PoTier, string> = {
+  urgent: "Urgent",
+  must: "Must",
+  recommended: "Recommended",
+};
+const PROC_TIER_TONE: Record<PoTier, "danger" | "warning" | "info"> = {
+  urgent: "danger",
+  must: "warning",
+  recommended: "info",
+};
+
+function isoDateLocal(d: Date): string {
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate(),
+  ).padStart(2, "0")}`;
+}
+
+// Whole-day count from `todayISO` to `targetISO`. Negative = in the past.
+function daysFromToday(targetISO: string, todayISO: string): number | null {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(targetISO) || !/^\d{4}-\d{2}-\d{2}$/.test(todayISO)) {
+    return null;
+  }
+  const [ty, tm, td] = targetISO.split("-").map(Number);
+  const [cy, cm, cd] = todayISO.split("-").map(Number);
+  return Math.round((Date.UTC(ty, tm - 1, td) - Date.UTC(cy, cm - 1, cd)) / 86_400_000);
+}
+
+function fmtCost(n: number, currency: string): string {
+  const num = Math.round(n).toLocaleString("he-IL");
+  return currency && currency !== "ILS" ? `${num} ${currency}` : `₪ ${num}`;
+}
+
+function UrgentProcurementBlock({ now }: { now: Date }) {
+  const query = useCurrentSession();
+  const todayISO = useMemo(() => isoDateLocal(now), [now]);
+  const session = query.data?.session ?? null;
+
+  const rows = useMemo<ProcRow[]>(() => {
+    if (!session) return [];
+    const out: ProcRow[] = [];
+    for (const po of session.pos) {
+      // Only orders the planner still has to act on — placed and skipped
+      // POs are done with.
+      if (po.status !== "proposed" && po.status !== "approved") continue;
+      const days = daysFromToday(po.order_by_date, todayISO);
+      const dueOrPast = days !== null && days <= 0;
+      // Urgent-tier orders surface even when their order-by date is upcoming;
+      // everything else only surfaces once it is due today or overdue.
+      if (!dueOrPast && po.tier !== "urgent") continue;
+      const urgency: ProcUrgency =
+        days !== null && days < 0 ? "overdue" : days === 0 ? "today" : "soon";
+      out.push({ po, urgency, days });
+    }
+    // Overdue first (most overdue leads), then due-today, then urgent upcoming.
+    out.sort((a, b) => (a.days ?? 9_999) - (b.days ?? 9_999));
+    return out;
+  }, [session, todayISO]);
+
+  const dangerCount = rows.filter((r) => r.urgency !== "soon").length;
+  const hot = dangerCount > 0;
+  const tone: "danger" | "warning" | "default" = hot
+    ? "danger"
+    : rows.length > 0
+      ? "warning"
+      : "default";
+
+  return (
+    <SectionCard
+      tone={tone}
+      eyebrow="Live"
+      title={
+        <span className="inline-flex items-center gap-2">
+          {hot ? (
+            <ShoppingCart
+              className="h-4 w-4 text-danger animate-pulse-soft motion-reduce:animate-none"
+              strokeWidth={2.25}
+            />
+          ) : rows.length > 0 ? (
+            <ShoppingCart className="h-4 w-4 text-warning" strokeWidth={2.25} />
+          ) : (
+            <CheckCircle2 className="h-4 w-4 text-success" strokeWidth={2.25} />
+          )}
+          Urgent procurement
+          <TitleCount n={rows.length} tone={hot ? "danger" : "warning"} />
+        </span>
+      }
+      description="Supplier orders from this week's procurement session that need ordering now — overdue, due today, or flagged urgent."
+      actions={
+        <Link
+          href="/planning/purchase-session"
+          className="inline-flex items-center gap-1 rounded text-xs font-semibold text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+        >
+          Open session
+          <ArrowRight className="h-3 w-3" strokeWidth={2} />
+        </Link>
+      }
+      footer={
+        session ? (
+          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <span>
+              {session.session_type === "weekly" ? "Weekly" : "Off-cycle"} session · started{" "}
+              {fmtRelative(session.created_at, now)}
+            </span>
+            <span aria-hidden className="text-fg-faint">
+              ·
+            </span>
+            <Link
+              href="/planning/purchase-calendar"
+              className="font-semibold text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+            >
+              View purchase calendar
+            </Link>
+          </span>
+        ) : undefined
+      }
+    >
+      {query.isLoading ? (
+        <div className="flex flex-col gap-2">
+          <SkeletonRow />
+          <SkeletonRow />
+        </div>
+      ) : query.isError ? (
+        <ErrorAlert label="Purchase session unavailable." onRetry={() => query.refetch()} />
+      ) : !session ? (
+        <EmptyState
+          icon={<ShoppingCart className="h-5 w-5 text-fg-subtle" strokeWidth={2} />}
+          title="No purchase session this week."
+          description="Start the weekly procurement session to generate consolidated supplier order drafts."
+        />
+      ) : rows.length === 0 ? (
+        <EmptyState
+          icon={<CheckCircle2 className="h-5 w-5 text-success" strokeWidth={2} />}
+          title="All procurement is on track."
+          description="No supplier orders are overdue, due today, or flagged urgent. Upcoming orders appear on the purchase calendar."
+        />
+      ) : (
+        <ul className="flex flex-col gap-2" aria-live="polite">
+          {rows.map(({ po, urgency, days }) => {
+            const liveLines = po.lines.filter((l) => !l.is_dropped).length;
+            const urgencyLabel =
+              urgency === "overdue"
+                ? `${Math.abs(days ?? 0)}d overdue`
+                : urgency === "today"
+                  ? "Due today"
+                  : days !== null
+                    ? `In ${days}d`
+                    : "Urgent";
+            const isDanger = urgency !== "soon";
+            return (
+              <li
+                key={po.session_po_id}
+                className={cn(
+                  "flex flex-col gap-1.5 rounded border bg-bg-raised px-3 py-3 sm:flex-row sm:items-start sm:gap-3",
+                  isDanger ? "border-danger/40" : "border-warning/40",
+                )}
+              >
+                <div className="flex flex-wrap items-center gap-2 sm:w-44 sm:shrink-0">
+                  <Badge
+                    tone={isDanger ? "danger" : "warning"}
+                    variant={isDanger ? "solid" : "soft"}
+                    dotted={isDanger}
+                  >
+                    {urgencyLabel}
+                  </Badge>
+                  <Badge tone={PROC_TIER_TONE[po.tier]} variant="outline">
+                    {PROC_TIER_LABEL[po.tier]}
+                  </Badge>
+                </div>
+                <div className="min-w-0 flex-1">
+                  <div className="truncate text-sm font-semibold text-fg-strong">
+                    {po.supplier_snapshot}
+                  </div>
+                  <div className="mt-0.5 text-xs leading-relaxed text-fg-muted">
+                    {liveLines} line{liveLines !== 1 ? "s" : ""}
+                    {" · "}
+                    <span className="font-mono tabular-nums">
+                      {fmtCost(po.total_cost, po.currency)}
+                    </span>
+                  </div>
+                  <div className="mt-1 text-2xs text-fg-faint" title={po.order_by_date}>
+                    Order by {fmtPlanDate(po.order_by_date)}
+                    {po.status === "approved" ? " · approved, not yet placed" : ""}
+                  </div>
+                </div>
+                <Link
+                  href="/planning/purchase-session"
+                  className={cn(
+                    "inline-flex shrink-0 items-center gap-1 self-start rounded text-xs font-semibold hover:underline focus-visible:outline-none focus-visible:ring-2 sm:self-center",
+                    isDanger
+                      ? "text-danger-fg focus-visible:ring-danger/40"
+                      : "text-fg-strong focus-visible:ring-accent/40",
+                  )}
+                >
+                  Open
+                  <ArrowRight className="h-3 w-3" strokeWidth={2} />
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </SectionCard>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Hidden helper to consume children prop from SectionCard if no child renders.
 // (Not actually used — kept inline.)
 // ---------------------------------------------------------------------------
@@ -1563,6 +1796,11 @@ export default function DashboardPage() {
   const now = useMemo(() => new Date(), []);
   const week = useMemo(() => weekRange(), []);
   const { session } = useSession();
+
+  // The Urgent Procurement block reads the planner-scoped purchase session.
+  // Gate it here so the query never mounts for viewers/operators.
+  const role = session?.role ?? "viewer";
+  const canSeePurchasing = role === "planner" || role === "admin";
 
   // Inventory flow drives Stock Health + Shortage Risk + on-hand context.
   const flowQ = useInventoryFlow({});
@@ -1777,12 +2015,17 @@ export default function DashboardPage() {
       <div className="reveal reveal-delay-2">
         <CriticalTodayBlock now={now} />
       </div>
-      <div className="reveal reveal-delay-3">
+      {canSeePurchasing ? (
+        <div className="reveal reveal-delay-3">
+          <UrgentProcurementBlock now={now} />
+        </div>
+      ) : null}
+      <div className="reveal reveal-delay-4">
         <SlippedPlansBlock now={now} />
       </div>
 
       {/* Hero KPI strip — the five numbers the factory is run by. */}
-      <div className="reveal reveal-delay-4 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      <div className="reveal reveal-delay-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <ValueCard
           label="RM Inventory Value"
           value={rmValue != null ? fmtILS(rmValue) : null}
@@ -1845,7 +2088,7 @@ export default function DashboardPage() {
       </div>
 
       {/* Shortage risk + stock health + planning. */}
-      <div className="reveal reveal-delay-5 grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
+      <div className="reveal reveal-delay-6 grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
         <ShortageRisk items={flowItems} loading={flowQ.isLoading} />
         <div className="flex flex-col gap-4">
           <StockDonut
