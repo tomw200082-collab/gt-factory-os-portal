@@ -37,6 +37,7 @@ import { useQuery } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { UOMS, type Uom } from "@/lib/contracts/enums";
+import { componentItemType } from "@/lib/contracts/components";
 import { cn } from "@/lib/cn";
 
 // ---------------------------------------------------------------------------
@@ -104,6 +105,9 @@ interface ComponentRow {
   component_id: string;
   component_name: string;
   status: string;
+  // Drives the goods-receipt item_type (RM vs PKG). The API rejects a line
+  // whose item_type does not match this class — see componentItemType().
+  component_class: string | null;
   inventory_uom: string | null;
   purchase_uom: string | null;
   bom_uom: string | null;
@@ -172,7 +176,9 @@ type ReceivableRow = {
   id: string;
   label: string;
   default_uom: Uom;
-  item_type: ItemType;
+  // null when a component's component_class is unknown/missing — the line is
+  // blocked at submit rather than sent with a guessed item_type the API 409s.
+  item_type: ItemType | null;
 };
 
 function nowLocalDateTime(): string {
@@ -534,8 +540,10 @@ export default function GoodsReceiptPage() {
       id: c.component_id,
       label: `${c.component_name} · ${c.component_id}`,
       default_uom: toUom(c.inventory_uom ?? c.bom_uom ?? c.purchase_uom),
-      // Conservative default — API will 409 ITEM_TYPE_MISMATCH if wrong.
-      item_type: "RM",
+      // Resolve item_type from the component's class so packaging components
+      // submit as PKG, not RM. Mirrors the API's COMPONENT_CLASS_BY_ITEM_TYPE;
+      // null (unknown/missing class) blocks the line at submit.
+      item_type: componentItemType(c.component_class),
     }));
     return [...itemRows, ...compRows].sort((a, b) =>
       a.label.localeCompare(b.label),
@@ -735,6 +743,13 @@ export default function GoodsReceiptPage() {
         setDone({
           kind: "error",
           message: `Line ${i + 1}: choose an item or component.`,
+        });
+        return;
+      }
+      if (row.item_type === null) {
+        setDone({
+          kind: "error",
+          message: `Line ${i + 1}: "${row.label}" is missing a component classification and can't be received. Ask an admin to set its component class.`,
         });
         return;
       }
