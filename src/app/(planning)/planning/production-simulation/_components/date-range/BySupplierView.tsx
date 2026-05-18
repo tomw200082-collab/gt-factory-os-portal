@@ -7,14 +7,17 @@ import type { MaterialComponentLine } from "./types";
 import {
   CoverageBadge,
   DateChip,
+  coverageRow,
   fmtQtyStr,
   isShortStatus,
 } from "./shared";
+import { ComponentCard } from "./ComponentCard";
 
 // ---------------------------------------------------------------------------
 // BySupplierView — components grouped under their primary supplier. Each
-// supplier is a collapsible card; suppliers with something to order are
-// listed first and open by default, so the planner sees the active work.
+// supplier is a collapsible card; suppliers with something to order are listed
+// first and open by default, so the planner sees the active work. Inside, a
+// dense table on desktop (lg+) and stacked cards below the 1024px breakpoint.
 // ---------------------------------------------------------------------------
 
 interface SupplierGroup {
@@ -138,7 +141,7 @@ export function BySupplierView({
               />
               <span className="min-w-0 flex-1">
                 <span className="block truncate text-sm font-bold text-fg-strong">
-                  {group.supplierName}
+                  <bdi>{group.supplierName}</bdi>
                 </span>
                 {group.supplierPhone ? (
                   <span className="flex items-center gap-1 text-2xs text-fg-faint">
@@ -170,7 +173,18 @@ export function BySupplierView({
             </button>
 
             {isOpen ? (
-              <SupplierComponentTable components={group.components} />
+              <>
+                {/* Desktop — dense table. */}
+                <div className="hidden overflow-x-auto border-t border-border/50 bg-bg-subtle/20 lg:block">
+                  <SupplierComponentTable components={group.components} />
+                </div>
+                {/* Mobile — stacked cards. */}
+                <div className="flex flex-col gap-2 border-t border-border/50 bg-bg-subtle/20 p-3 lg:hidden">
+                  {group.components.map((c) => (
+                    <ComponentCard key={c.component_id} component={c} />
+                  ))}
+                </div>
+              </>
             ) : null}
           </div>
         );
@@ -185,78 +199,75 @@ function SupplierComponentTable({
   components: MaterialComponentLine[];
 }) {
   return (
-    <div className="overflow-x-auto border-t border-border/50 bg-bg-subtle/20">
-      <table className="w-full">
-        <thead>
-          <tr className="text-2xs font-bold uppercase tracking-sops text-fg-subtle">
-            <th className="px-4 py-2 text-left sm:px-5">Component</th>
-            <th className="px-4 py-2 text-left">First needed</th>
-            <th className="px-4 py-2 text-right">Required</th>
-            <th className="px-4 py-2 text-right">On hand</th>
-            <th className="px-4 py-2 text-right">To order</th>
-            <th className="px-4 py-2 text-left">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {components.map((c) => {
-            const short = isShortStatus(c.coverage_status);
-            const netShortage = parseFloat(c.net_shortage_qty);
-            return (
-              <tr
-                key={c.component_id}
-                data-testid="supplier-component-row"
-                className={cn(
-                  "border-t border-border/40",
-                  short && "bg-danger-softer/25",
-                )}
-              >
-                <td className="px-4 py-3 sm:px-5">
-                  <div className="text-sm font-semibold text-fg-strong">
-                    {c.component_name}
-                  </div>
-                  <div className="font-mono text-2xs text-fg-faint">
-                    {c.component_class ? `${c.component_class} · ` : ""}
-                    {c.component_id}
-                  </div>
-                </td>
-                <td className="px-4 py-3">
-                  <DateChip iso={c.first_needed_date} />
-                </td>
-                <td className="whitespace-nowrap px-4 py-3 text-right text-sm tabular-nums text-fg-muted">
-                  {fmtQtyStr(c.total_required_qty, c.component_uom)}{" "}
-                  <span className="text-2xs text-fg-faint">
-                    {c.component_uom}
-                  </span>
-                </td>
-                <td className="whitespace-nowrap px-4 py-3 text-right text-sm tabular-nums text-fg-muted">
-                  {c.coverage_status === "no_stock_data"
-                    ? "—"
-                    : fmtQtyStr(c.on_hand_qty, c.component_uom)}
-                </td>
-                <td className="whitespace-nowrap px-4 py-3 text-right">
-                  {netShortage > 0 ? (
-                    <>
-                      <span className="text-lg font-bold tabular-nums text-danger-fg">
-                        {fmtQtyStr(c.net_shortage_qty, c.component_uom)}
-                      </span>{" "}
-                      <span className="text-xs font-semibold text-fg-muted">
-                        {c.component_uom}
-                      </span>
-                    </>
-                  ) : (
-                    <span className="text-sm font-semibold text-success-fg">
-                      —
+    <table className="w-full">
+      <thead>
+        <tr className="text-2xs font-bold uppercase tracking-sops text-fg-subtle">
+          <th className="px-4 py-2 text-left sm:px-5">Component</th>
+          <th className="px-4 py-2 text-left">First needed</th>
+          <th className="px-4 py-2 text-right">Required</th>
+          <th className="px-4 py-2 text-right">On hand</th>
+          <th className="px-4 py-2 text-right">To order</th>
+          <th className="px-4 py-2 text-left">Status</th>
+        </tr>
+      </thead>
+      <tbody>
+        {components.map((c) => {
+          const netShortage = parseFloat(c.net_shortage_qty);
+          return (
+            <tr
+              key={c.component_id}
+              data-testid="supplier-component-row"
+              className={cn(
+                "border-t border-border/40",
+                coverageRow(c.coverage_status),
+              )}
+            >
+              <td className="px-4 py-3 sm:px-5">
+                <div className="text-sm font-semibold text-fg-strong">
+                  <bdi>{c.component_name}</bdi>
+                </div>
+                <div className="font-mono text-2xs text-fg-faint">
+                  {c.component_class ? `${c.component_class} · ` : ""}
+                  {c.component_id}
+                </div>
+              </td>
+              <td className="px-4 py-3">
+                <DateChip iso={c.first_needed_date} />
+              </td>
+              <td className="whitespace-nowrap px-4 py-3 text-right text-sm tabular-nums text-fg-muted">
+                {fmtQtyStr(c.total_required_qty, c.component_uom)}{" "}
+                <span className="text-2xs text-fg-faint">
+                  {c.component_uom}
+                </span>
+              </td>
+              <td className="whitespace-nowrap px-4 py-3 text-right text-sm tabular-nums text-fg-muted">
+                {c.coverage_status === "no_stock_data"
+                  ? "—"
+                  : fmtQtyStr(c.on_hand_qty, c.component_uom)}
+              </td>
+              <td className="whitespace-nowrap px-4 py-3 text-right">
+                {netShortage > 0 ? (
+                  <>
+                    <span className="text-lg font-bold tabular-nums text-danger-fg">
+                      {fmtQtyStr(c.net_shortage_qty, c.component_uom)}
+                    </span>{" "}
+                    <span className="text-xs font-semibold text-fg-muted">
+                      {c.component_uom}
                     </span>
-                  )}
-                </td>
-                <td className="px-4 py-3">
-                  <CoverageBadge status={c.coverage_status} />
-                </td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-    </div>
+                  </>
+                ) : (
+                  <span className="text-sm font-semibold text-success-fg">
+                    —
+                  </span>
+                )}
+              </td>
+              <td className="px-4 py-3">
+                <CoverageBadge status={c.coverage_status} />
+              </td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
   );
 }

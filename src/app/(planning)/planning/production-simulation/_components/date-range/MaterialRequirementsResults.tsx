@@ -8,6 +8,7 @@ import {
   Truck,
   Boxes,
   PackageSearch,
+  RotateCw,
 } from "lucide-react";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { cn } from "@/lib/cn";
@@ -95,13 +96,18 @@ export function MaterialRequirementsResults({ from, to }: Props) {
   if (query.isLoading) {
     return (
       <SectionCard eyebrow="Step 2" title="Aggregating planned production…">
-        <div className="space-y-2.5" aria-hidden>
-          {[0, 1, 2, 3, 4].map((i) => (
-            <div
-              key={i}
-              className="h-9 animate-pulse rounded bg-bg-subtle/80"
-            />
-          ))}
+        <div role="status">
+          <span className="sr-only">
+            Aggregating planned production — this may take a few seconds.
+          </span>
+          <div className="space-y-2.5" aria-hidden>
+            {[0, 1, 2, 3, 4].map((i) => (
+              <div
+                key={i}
+                className="h-9 animate-pulse rounded bg-bg-subtle/80"
+              />
+            ))}
+          </div>
         </div>
       </SectionCard>
     );
@@ -110,17 +116,30 @@ export function MaterialRequirementsResults({ from, to }: Props) {
   if (query.isError) {
     return (
       <SectionCard eyebrow="Step 2" title="Simulation failed" tone="danger">
-        <div className="flex items-start gap-2.5 text-sm text-danger-fg">
-          <AlertTriangle
-            className="mt-0.5 h-5 w-5 shrink-0"
-            strokeWidth={2}
-            aria-hidden
-          />
-          <p>
-            {query.error instanceof Error
-              ? query.error.message
-              : "Could not aggregate the planned production. Try again."}
-          </p>
+        <div className="flex flex-col gap-3">
+          <div className="flex items-start gap-2.5 text-sm text-danger-fg">
+            <AlertTriangle
+              className="mt-0.5 h-5 w-5 shrink-0"
+              strokeWidth={2}
+              aria-hidden
+            />
+            <p>
+              {query.error instanceof Error
+                ? query.error.message
+                : "Could not aggregate the planned production. Try again."}
+            </p>
+          </div>
+          <div>
+            <button
+              type="button"
+              className="btn btn-sm gap-1.5"
+              onClick={() => void query.refetch()}
+              data-testid="production-simulation-range-retry"
+            >
+              <RotateCw className="h-3.5 w-3.5" strokeWidth={2.25} aria-hidden />
+              Try again
+            </button>
+          </div>
         </div>
       </SectionCard>
     );
@@ -175,7 +194,12 @@ export function MaterialRequirementsResults({ from, to }: Props) {
           Step 2 · Purchasing requirements
         </div>
         <h2 className="mt-1.5 text-2xl font-bold tracking-tight text-fg-strong sm:text-3xl">
-          {formatPlanDateLong(from)} → {formatPlanDateLong(to)}
+          {formatPlanDateLong(from)}
+          <span className="px-1.5 font-normal text-fg-faint" aria-hidden>
+            →
+          </span>
+          <span className="sr-only">to </span>
+          {formatPlanDateLong(to)}
         </h2>
         <p className="mt-1 text-sm text-fg-muted">
           <span className="font-semibold text-fg-strong">
@@ -236,7 +260,7 @@ export function MaterialRequirementsResults({ from, to }: Props) {
               >
                 <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                   <span className="text-sm font-semibold text-fg-strong">
-                    {p.item_name ?? p.item_id ?? "Unknown item"}
+                    <bdi>{p.item_name ?? p.item_id ?? "Unknown item"}</bdi>
                   </span>
                   <span className="text-2xs text-fg-faint">
                     {formatPlanDateLong(p.plan_date)}
@@ -253,7 +277,9 @@ export function MaterialRequirementsResults({ from, to }: Props) {
       {data.warnings.length > 0 ? (
         <div className="space-y-1 rounded-md border border-warning/40 bg-warning-softer/40 px-4 py-3 text-xs text-warning-fg">
           {data.warnings.map((w, i) => (
-            <div key={i}>{w}</div>
+            <div key={i}>
+              <bdi>{w}</bdi>
+            </div>
           ))}
         </div>
       ) : null}
@@ -269,7 +295,7 @@ export function MaterialRequirementsResults({ from, to }: Props) {
         actions={
           <div
             className="flex items-center gap-1 rounded-md border border-border/70 bg-bg-subtle/60 p-1"
-            role="tablist"
+            role="group"
             aria-label="Requirements view"
           >
             <ViewTab
@@ -350,19 +376,19 @@ function ViewTab({
   return (
     <button
       type="button"
-      role="tab"
-      aria-selected={active}
+      aria-pressed={active}
+      aria-label={label}
       onClick={onClick}
       data-testid={testId}
       className={cn(
-        "flex items-center gap-1.5 rounded px-3 py-1.5 text-xs font-bold transition-colors",
+        "flex items-center gap-1.5 rounded px-3 py-2 text-xs font-bold transition-colors",
         active
           ? "bg-bg-raised text-fg-strong shadow-sm"
           : "text-fg-muted hover:text-fg-strong",
       )}
     >
       {icon}
-      {label}
+      <span className="hidden sm:inline">{label}</span>
     </button>
   );
 }

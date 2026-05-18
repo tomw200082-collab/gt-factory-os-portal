@@ -43,7 +43,7 @@ export function SimulationModeShell() {
     <div className="mt-5 flex flex-col gap-5">
       <div
         className="grid grid-cols-1 gap-2 sm:grid-cols-2"
-        role="tablist"
+        role="group"
         aria-label="Simulation mode"
       >
         {MODES.map((m) => {
@@ -53,8 +53,7 @@ export function SimulationModeShell() {
             <button
               key={m.id}
               type="button"
-              role="tab"
-              aria-selected={active}
+              aria-pressed={active}
               onClick={() => setMode(m.id)}
               data-testid={`production-simulation-mode-${m.id}`}
               className={cn(

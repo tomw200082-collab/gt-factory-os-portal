@@ -151,6 +151,36 @@ export function isShortStatus(status: CoverageStatus): boolean {
 }
 
 // ---------------------------------------------------------------------------
+// Coverage accent — one colour vocabulary for emphasis, applied as a left
+// strip on mobile cards and a left border + tint on desktop rows. Keeps the
+// "what needs action" signal loud and identical across both layouts.
+// ---------------------------------------------------------------------------
+
+const COVERAGE_STRIP: Record<CoverageStatus, string> = {
+  not_covered: "bg-danger",
+  partial: "bg-warning",
+  no_stock_data: "bg-fg-faint",
+  covered: "bg-success/60",
+};
+
+/** Tailwind bg class for the 1px/1.5px left accent strip on a mobile card. */
+export function coverageStrip(status: CoverageStatus): string {
+  return COVERAGE_STRIP[status];
+}
+
+const COVERAGE_ROW: Record<CoverageStatus, string> = {
+  not_covered: "border-l-2 border-l-danger bg-danger-softer/30",
+  partial: "border-l-2 border-l-warning bg-warning-softer/25",
+  no_stock_data: "border-l-2 border-l-fg-faint/50 bg-bg-subtle/50",
+  covered: "border-l-2 border-l-transparent",
+};
+
+/** Tailwind classes for a desktop table row, emphasising what needs action. */
+export function coverageRow(status: CoverageStatus): string {
+  return COVERAGE_ROW[status];
+}
+
+// ---------------------------------------------------------------------------
 // Material group labels.
 // ---------------------------------------------------------------------------
 

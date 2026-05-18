@@ -113,13 +113,13 @@ function DateField({
   testId: string;
 }) {
   return (
-    <label className="flex flex-col gap-2">
+    <label className="flex w-full flex-col gap-2 sm:w-auto">
       <span className="text-xs font-bold uppercase tracking-sops text-fg-subtle">
         {label}
       </span>
       <input
         type="date"
-        className="h-12 rounded-md border border-border/70 bg-bg-raised px-4 text-base font-semibold tabular-nums text-fg-strong outline-none transition-colors focus:border-accent"
+        className="h-12 w-full rounded-md border border-border/70 bg-bg-raised px-4 text-base font-semibold tabular-nums text-fg-strong outline-none transition-colors focus:border-accent sm:w-auto"
         value={value}
         onChange={(e) => onChange(e.target.value)}
         data-testid={testId}
@@ -159,19 +159,29 @@ export function DateRangePlanShell() {
       >
         <div className="flex flex-col gap-4">
           <div className="flex flex-wrap items-center gap-2">
-            {PRESETS.map((p) => (
-              <button
-                key={p.label}
-                type="button"
-                className="rounded-md border border-border/70 bg-bg-raised px-3 py-1.5 text-xs font-semibold text-fg-muted transition-colors hover:border-accent hover:text-fg-strong"
-                onClick={() => applyPreset(p)}
-                data-testid={`production-simulation-range-preset-${p.label
-                  .toLowerCase()
-                  .replace(/\s+/g, "-")}`}
-              >
-                {p.label}
-              </button>
-            ))}
+            {PRESETS.map((p) => {
+              const r = p.range();
+              const isActive = r.from === draftFrom && r.to === draftTo;
+              return (
+                <button
+                  key={p.label}
+                  type="button"
+                  aria-pressed={isActive}
+                  className={cn(
+                    "rounded-md border px-3 py-2 text-xs font-semibold transition-colors",
+                    isActive
+                      ? "border-accent bg-accent-softer/50 text-accent"
+                      : "border-border/70 bg-bg-raised text-fg-muted hover:border-accent hover:text-fg-strong",
+                  )}
+                  onClick={() => applyPreset(p)}
+                  data-testid={`production-simulation-range-preset-${p.label
+                    .toLowerCase()
+                    .replace(/\s+/g, "-")}`}
+                >
+                  {p.label}
+                </button>
+              );
+            })}
           </div>
 
           <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:gap-4">
@@ -195,7 +205,7 @@ export function DateRangePlanShell() {
             />
             <button
               type="button"
-              className="btn btn-primary h-12 gap-2 px-6 text-base font-bold"
+              className="btn btn-primary h-12 w-full gap-2 px-6 text-base font-bold sm:w-auto"
               onClick={handleSimulate}
               disabled={!canSimulate}
               data-testid="production-simulation-range-simulate-button"

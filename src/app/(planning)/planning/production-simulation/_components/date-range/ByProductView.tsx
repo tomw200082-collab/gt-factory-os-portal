@@ -7,17 +7,20 @@ import type { MaterialComponentLine, MaterialGroup } from "./types";
 import {
   CoverageBadge,
   DateChip,
+  coverageRow,
   fmtQtyStr,
   formatPlanDateLong,
   GROUP_LABEL,
   GROUP_ORDER,
   isShortStatus,
 } from "./shared";
+import { ComponentCard } from "./ComponentCard";
 
 // ---------------------------------------------------------------------------
 // ByProductView — every component across the plan, grouped by material type.
-// Each row expands to show which products consume it, on which dates, and how
-// much — the per-product breakdown the planner needs to trace a shortage.
+// Each component opens to the per-product breakdown the planner needs to trace
+// a shortage. A dense table on desktop (lg+); stacked cards below the 1024px
+// breakpoint so the data surface never scrolls sideways.
 // ---------------------------------------------------------------------------
 
 function sortComponents(
@@ -57,31 +60,61 @@ export function ByProductView({
   }
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full">
-        <thead>
-          <tr className="border-b border-border/70 text-2xs font-bold uppercase tracking-sops text-fg-subtle">
-            <th className="px-4 py-3 text-left sm:px-5">Component</th>
-            <th className="px-4 py-3 text-left">First needed</th>
-            <th className="px-4 py-3 text-right">Required</th>
-            <th className="px-4 py-3 text-right">On hand</th>
-            <th className="px-4 py-3 text-right">To order</th>
-            <th className="px-4 py-3 text-left">Status</th>
-          </tr>
-        </thead>
-        <tbody>
-          {groups.map(({ group, rows }) => (
-            <GroupSection
-              key={group}
-              group={group}
-              rows={rows}
-              expanded={expanded}
-              onToggle={toggle}
-            />
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <>
+      {/* Desktop — dense table. */}
+      <div className="hidden overflow-x-auto lg:block">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-border/70 text-2xs font-bold uppercase tracking-sops text-fg-subtle">
+              <th className="px-4 py-3 text-left sm:px-5">Component</th>
+              <th className="px-4 py-3 text-left">First needed</th>
+              <th className="px-4 py-3 text-right">Required</th>
+              <th className="px-4 py-3 text-right">On hand</th>
+              <th className="px-4 py-3 text-right">To order</th>
+              <th className="px-4 py-3 text-left">Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map(({ group, rows }) => (
+              <GroupSection
+                key={group}
+                group={group}
+                rows={rows}
+                expanded={expanded}
+                onToggle={toggle}
+              />
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Mobile — stacked cards, grouped by material type. */}
+      <div className="flex flex-col gap-4 p-3 lg:hidden">
+        {groups.map(({ group, rows }) => (
+          <div key={group} className="flex flex-col gap-2">
+            <div className="flex items-baseline gap-2 px-0.5">
+              <span className="text-xs font-bold uppercase tracking-sops text-fg-strong">
+                {GROUP_LABEL[group]}
+              </span>
+              <span className="text-2xs font-semibold text-fg-faint">
+                {rows.length}
+              </span>
+            </div>
+            {rows.map((c) => (
+              <ComponentCard
+                key={c.component_id}
+                component={c}
+                showSupplier
+                expandable
+                expanded={expanded.has(c.component_id)}
+                onToggle={() => toggle(c.component_id)}
+                detail={<ComponentDetail component={c} />}
+              />
+            ))}
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -130,7 +163,6 @@ function ComponentRow({
   open: boolean;
   onToggle: () => void;
 }) {
-  const short = isShortStatus(c.coverage_status);
   const netShortage = parseFloat(c.net_shortage_qty);
 
   return (
@@ -149,8 +181,7 @@ function ComponentRow({
         aria-expanded={open}
         className={cn(
           "cursor-pointer border-b border-border/40 transition-colors hover:bg-bg-subtle/40",
-          "focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent",
-          short && "bg-danger-softer/25 hover:bg-danger-softer/40",
+          coverageRow(c.coverage_status),
         )}
       >
         <td className="px-4 py-3 sm:px-5">
@@ -165,7 +196,7 @@ function ComponentRow({
             />
             <div className="min-w-0">
               <div className="text-sm font-semibold text-fg-strong">
-                {c.component_name}
+                <bdi>{c.component_name}</bdi>
               </div>
               <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
                 <span className="font-mono text-2xs text-fg-faint">
@@ -175,7 +206,7 @@ function ComponentRow({
                 {c.supplier_short ? (
                   <span className="inline-flex items-center gap-1 text-2xs text-fg-faint">
                     <Truck className="h-3 w-3" strokeWidth={2} aria-hidden />
-                    {c.supplier_short}
+                    <bdi>{c.supplier_short}</bdi>
                   </span>
                 ) : null}
               </div>
@@ -257,7 +288,7 @@ function ComponentDetail({
             >
               <div className="min-w-0">
                 <div className="truncate text-sm font-semibold text-fg-strong">
-                  {s.item_name ?? s.item_id ?? "Unknown product"}
+                  <bdi>{s.item_name ?? s.item_id ?? "Unknown product"}</bdi>
                 </div>
                 <div className="text-2xs text-fg-faint">
                   {formatPlanDateLong(s.plan_date)}
