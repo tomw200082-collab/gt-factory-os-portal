@@ -3,23 +3,28 @@
 // ---------------------------------------------------------------------------
 // /planning/production-simulation — Production Simulation.
 //
-// Pick a finished product and a target quantity; the page combines its PACK
-// recipe and (when linked) its BASE recipe and shows exactly how much of
-// every ingredient and packaging component the run needs, in the recipe's
-// exact ratios, with on-hand stock coverage.
+// Two modes, picked at the top of the page:
 //
-// All data is read live from the API (/api/boms/heads, /api/items,
-// /api/boms/heads/:id/simulate, /net-requirements). The page is a what-if
-// surface only — it never writes inventory and is not the production
-// planning source of truth. The nav entry is admin-gated; the URL stays
-// reachable for planners and dev.
+//   • Single product — pick one finished product and a target quantity; the
+//     page combines its PACK and (when linked) BASE recipe and shows how much
+//     of every component the run needs, in exact recipe ratios.
+//
+//   • Date range plan — pick a date range; the page pulls every planned
+//     production job in that window from the daily production plan, explodes
+//     each recipe, aggregates the component demand, nets it against on-hand
+//     stock, and shows what to buy — grouped by supplier or by product, with
+//     the date each component is first needed.
+//
+// All data is read live from the API. The page is a what-if surface only — it
+// never writes inventory and is not the production planning source of truth.
+// The nav entry is admin-gated; the URL stays reachable for planners and dev.
 // ---------------------------------------------------------------------------
 
 import { Suspense } from "react";
 import { Info } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { LoadingState } from "@/components/feedback/states";
-import { ProductionSimulatorShell } from "./_components/ProductionSimulatorShell";
+import { SimulationModeShell } from "./_components/SimulationModeShell";
 
 export default function ProductionSimulationPage() {
   return (
@@ -27,7 +32,7 @@ export default function ProductionSimulationPage() {
       <WorkflowHeader
         eyebrow="Planner workspace"
         title="Production simulation"
-        description="Pick a finished product and a target quantity. The page breaks the run down into every ingredient and packaging component you would need — in exact recipe ratios — and checks it against on-hand stock."
+        description="Break planned production down into every ingredient and packaging component you need — for one product, or for everything planned across a date range — and check it against on-hand stock."
       />
 
       <div
@@ -55,7 +60,7 @@ export default function ProductionSimulationPage() {
           </div>
         }
       >
-        <ProductionSimulatorShell />
+        <SimulationModeShell />
       </Suspense>
     </>
   );
