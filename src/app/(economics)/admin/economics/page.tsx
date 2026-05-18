@@ -151,6 +151,15 @@ function marginTone(value: string | number | null): string {
   return "text-fg-strong";
 }
 
+// Seed an edit input from an API NUMERIC string. The API returns money as
+// fixed 4-dp text ("53.0000"); show it as a clean number ("53") so editors
+// are not confronted with trailing zeros. NULL → "" (the unset state).
+function toEditValue(raw: string | null): string {
+  if (raw == null) return "";
+  const n = Number(raw);
+  return Number.isFinite(n) ? String(n) : raw;
+}
+
 function formatRelativeShort(iso: string | null): string {
   if (!iso) return "—";
   const then = new Date(iso).getTime();
@@ -263,7 +272,7 @@ interface CostEditCellProps {
 
 function CostEditCell({ row, canEdit, onSaved }: CostEditCellProps): JSX.Element {
   const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState<string>(() => row.fallback_cost ?? "");
+  const [value, setValue] = useState<string>(() => toEditValue(row.fallback_cost));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState(false);
@@ -285,7 +294,7 @@ function CostEditCell({ row, canEdit, onSaved }: CostEditCellProps): JSX.Element
 
   const startEdit = () => {
     if (!canEdit) return;
-    setValue(row.fallback_cost ?? "");
+    setValue(toEditValue(row.fallback_cost));
     setError(null);
     setEditing(true);
   };
@@ -293,7 +302,7 @@ function CostEditCell({ row, canEdit, onSaved }: CostEditCellProps): JSX.Element
   const cancel = () => {
     setEditing(false);
     setError(null);
-    setValue(row.fallback_cost ?? "");
+    setValue(toEditValue(row.fallback_cost));
   };
 
   const commit = async () => {
@@ -424,7 +433,7 @@ function SalePriceEditCell({
   onSaved,
 }: SalePriceEditCellProps): JSX.Element {
   const [editing, setEditing] = useState(false);
-  const [value, setValue] = useState<string>(() => row.avg_sale_price_ils ?? "");
+  const [value, setValue] = useState<string>(() => toEditValue(row.avg_sale_price_ils));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState(false);
@@ -433,7 +442,7 @@ function SalePriceEditCell({
 
   const startEdit = () => {
     if (!canEdit) return;
-    setValue(row.avg_sale_price_ils ?? "");
+    setValue(toEditValue(row.avg_sale_price_ils));
     setError(null);
     setEditing(true);
   };
@@ -441,7 +450,7 @@ function SalePriceEditCell({
   const cancel = () => {
     setEditing(false);
     setError(null);
-    setValue(row.avg_sale_price_ils ?? "");
+    setValue(toEditValue(row.avg_sale_price_ils));
   };
 
   const commit = async () => {
