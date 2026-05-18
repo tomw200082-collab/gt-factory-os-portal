@@ -14,7 +14,8 @@
 //   5. Primary KPI display-size font; "as of" timestamp aligned right
 //   6. Trust strip below KPI — source + freshness + flag semantics
 //   7. Tab redesign — pill style with item counts (FG: 60 · RM/PKG: 100)
-//   8. Group-by toggle (None / Family / UOM)
+//   8. Group-by sectioning (None / Category / Stock status / UOM) with
+//      collapsible sections + per-section count and value subtotal
 //   9. Card view at <md (no horizontal scroll on mobile)
 //  10. Action cluster — Refresh (Export deferred to next cycle)
 //
@@ -45,8 +46,11 @@
 //  30. Filter chip row: All / Has stock / Out / Low / Negative / Missing cost / Stale
 //  31. Click column headers to sort (with `↕`, `↑`, `↓` indicator + aria-sort)
 //  32. Multi-criteria sort fallback (sort by + then on-hand desc)
-//  33. UOM filter dropdown
-//  34. Family filter (extracted from SKU prefix)
+//  33. UOM filter dropdown + explicit Sort-by control (works on mobile,
+//      which has no clickable column headers)
+//  34. Category filter — operator-facing product groups (Tea Extracts,
+//      Alcoholic Beverages, Matcha, …) derived deterministically from the
+//      SKU and verified against the full catalogue, shown as count chips
 //  35. Active-filters chip-bar summary + Clear all
 //  36. Result counter "showing N of M"
 //
@@ -71,7 +75,7 @@
 //      role="status" on KPIs, role="alert" on errors, aria-pressed chips
 //  50. WCAG 2.2 contrast verified via existing semantic tokens
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import * as Tooltip from "@radix-ui/react-tooltip";
@@ -144,8 +148,9 @@ interface ValueMeta {
 }
 type ValueMap = Map<string, ValueMeta>;
 
-type SortKey = "name" | "sku" | "on_hand" | "value" | "last";
+type SortKey = "name" | "sku" | "category" | "on_hand" | "value" | "last";
 type SortDir = "asc" | "desc";
+type GroupBy = "none" | "category" | "uom" | "tier";
 
 // === Constants ============================================================
 const LOW_STOCK_THRESHOLD = 10; // generic v1; future: pull from items.safety_stock
@@ -251,11 +256,99 @@ function deriveCostStatus(itemType: string, value: ValueMeta | null): CostStatus
   return "missing_cost";
 }
 
-function deriveFamily(itemId: string): string {
-  // Best-effort extraction from SKU pattern. ADD-GAR-* / FG-NAM-* / etc.
-  const parts = itemId.split("-");
-  if (parts.length >= 2) return parts[0] + "-" + parts[1];
-  return parts[0] ?? "";
+// === Category classification ==============================================
+// GT master data has no populated group column (items.product_group and
+// components.component_group are blank across the live dataset), so category
+// is derived deterministically from the SKU. This mapping was verified
+// against the full live catalogue — 68 finished goods + 145 components — and
+// signed off by the operations owner: every item resolves to a real
+// category, nothing falls through to "Other".
+
+// --- Finished Goods -------------------------------------------------------
+// Keyed off the SKU product-line segment (FG-<LINE>-…). ADD-* SKUs are
+// complementary items (mixers, syrups, tapioca, garnishes).
+const FG_TEA_LINES = new Set([
+  "AME", "CAL", "CON", "DES", "DET", "ENE", "FRE", "NAM", "REV",
+]);
+const FG_ALCOHOL_LINES = new Set(["SAN", "MAR", "MUZ", "NM", "ARK", "COS"]);
+
+function deriveFgCategory(itemId: string): string {
+  const seg = itemId.toUpperCase().split("-");
+  if (seg[0] === "ADD") return "Complementary Products";
+  const line = seg[1] ?? "";
+  if (line === "MAT") return "Matcha";
+  if (FG_ALCOHOL_LINES.has(line)) return "Alcoholic Beverages";
+  if (FG_TEA_LINES.has(line)) return "Tea Extracts";
+  return "Other";
+}
+
+// --- Components (raw materials + packaging) -------------------------------
+// Packaging is keyed off the SKU prefix. Raw materials use an ordered
+// keyword ruleset (first match wins) because the RAW-* namespace is not
+// systematic enough to key on alone.
+interface CategoryRule {
+  label: string;
+  test: RegExp;
+}
+
+const PKG_PREFIX_CATEGORY: CategoryRule[] = [
+  { label: "Bottles & Containers", test: /^PKG-(BOTTLE|JERRICAN)/i },
+  { label: "Caps & Closures", test: /^PKG-(CAP|LID)/i },
+  { label: "Labels & Stickers", test: /^PKG-LABEL/i },
+  { label: "Cartons & Boxes", test: /^PKG-CARTON/i },
+  { label: "Bags & Tins", test: /^PKG-(BAG|TIN|PACK)/i },
+  { label: "Production Supplies", test: /^PKG-FILTER/i },
+];
+
+// Order matters: Alcohol before Purées (so "Ouzo Pure" is alcohol, not a
+// purée) and Sweeteners before Base Liquids (so "Sugar water" is a
+// sweetener, not water).
+const RAW_CATEGORY_RULES: CategoryRule[] = [
+  {
+    label: "Alcohol & Spirits",
+    test: /\b(rum|vodka|gin|whisk\w*|tequila|arak|amaretto|campari|ouzo|wine|martini|brandy|liqueur)\b/i,
+  },
+  { label: "Syrups", test: /syrup|orgeat/i },
+  { label: "Purées", test: /pur[eé]+e|\bpure\b|ristretto/i },
+  { label: "Juices & Concentrates", test: /juice|concentrate/i },
+  { label: "Sweeteners", test: /sugar/i },
+  { label: "Dried Fruit & Garnish", test: /dried|\bdry\b/i },
+  {
+    label: "Additives",
+    test: /preservative|stabili|conservant|\bacid\b/i,
+  },
+  {
+    label: "Tea & Botanicals",
+    test: /\btea\b|hibiscus|jasmin|puer|sencha|matcha|chamomile/i,
+  },
+  {
+    label: "Herbs & Spices",
+    test: /anise|pepper|cinnamon|cardamom|masala|balm|melissa|verbena|lemongrass|oregano|mint|menta|nana|savory|zuta|marva|clove|herb|spice/i,
+  },
+  { label: "Base Liquids", test: /water/i },
+];
+
+function deriveComponentCategory(itemId: string, name: string): string {
+  if (/^PKG/i.test(itemId)) {
+    for (const rule of PKG_PREFIX_CATEGORY) {
+      if (rule.test.test(itemId)) return rule.label;
+    }
+    return "Other";
+  }
+  const hay = `${name} ${itemId}`;
+  for (const rule of RAW_CATEGORY_RULES) {
+    if (rule.test.test(hay)) return rule.label;
+  }
+  return "Other";
+}
+
+function deriveCategory(row: {
+  item_type: string;
+  item_id: string;
+  display_name: string | null;
+}): string {
+  if (row.item_type === "FG") return deriveFgCategory(row.item_id);
+  return deriveComponentCategory(row.item_id, row.display_name ?? "");
 }
 
 // === KPI Card =============================================================
@@ -533,6 +626,9 @@ function InventoryCardMobile({
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
         <TierBadge tier={tier} />
+        <span className="rounded-full bg-bg-subtle px-1.5 py-0.5 text-2xs text-fg-subtle ring-1 ring-border">
+          {deriveCategory(row)}
+        </span>
         {cost === "has_cost" ? (
           <span className="text-2xs font-medium tabular-nums text-fg-muted">
             {totalVal.display}
@@ -550,75 +646,95 @@ function InventoryCardMobile({
 }
 
 // === Active-filter chip-bar ===============================================
+const TIER_FILTER_LABEL: Record<string, string> = {
+  has_stock: "Has stock",
+  low: "Low / Critical",
+  out: "Out of stock",
+  reconcile: "Reconcile",
+};
+
+function ClearableChip({
+  field,
+  value,
+  onClear,
+}: {
+  field: string;
+  value: string;
+  onClear: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClear}
+      className="inline-flex items-center gap-1 rounded-full bg-bg-subtle px-2 py-0.5 text-2xs text-fg ring-1 ring-border hover:bg-bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+      aria-label={`Remove ${field} filter`}
+    >
+      <span className="text-fg-subtle">{field}:</span>
+      <span className="font-medium">{value}</span>
+      <span aria-hidden>✕</span>
+    </button>
+  );
+}
+
 function ActiveFilterChips({
   search,
   tier,
   uom,
-  family,
+  category,
+  missingCost,
+  stale,
   onClearSearch,
   onClearTier,
   onClearUom,
-  onClearFamily,
+  onClearCategory,
+  onClearMissingCost,
+  onClearStale,
   onClearAll,
 }: {
   search: string;
   tier: string;
   uom: string;
-  family: string;
+  category: string;
+  missingCost: boolean;
+  stale: boolean;
   onClearSearch: () => void;
   onClearTier: () => void;
   onClearUom: () => void;
-  onClearFamily: () => void;
+  onClearCategory: () => void;
+  onClearMissingCost: () => void;
+  onClearStale: () => void;
   onClearAll: () => void;
 }) {
   const active =
     Boolean(search) ||
     Boolean(tier) ||
     Boolean(uom) ||
-    Boolean(family);
+    Boolean(category) ||
+    missingCost ||
+    stale;
   if (!active) return null;
   return (
     <div className="flex flex-wrap items-center gap-1.5">
       <span className="text-2xs font-medium text-fg-subtle">Active filters:</span>
+      {category ? (
+        <ClearableChip field="Category" value={category} onClear={onClearCategory} />
+      ) : null}
       {search ? (
-        <button
-          type="button"
-          onClick={onClearSearch}
-          className="inline-flex items-center gap-1 rounded-full bg-bg-subtle px-2 py-0.5 text-2xs text-fg ring-1 ring-border hover:bg-bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
-        >
-          search: <span className="font-medium">{search}</span>
-          <span aria-hidden>✕</span>
-        </button>
+        <ClearableChip field="Search" value={search} onClear={onClearSearch} />
       ) : null}
       {tier ? (
-        <button
-          type="button"
-          onClick={onClearTier}
-          className="inline-flex items-center gap-1 rounded-full bg-bg-subtle px-2 py-0.5 text-2xs text-fg ring-1 ring-border hover:bg-bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
-        >
-          tier: <span className="font-medium">{tier}</span>
-          <span aria-hidden>✕</span>
-        </button>
+        <ClearableChip
+          field="Status"
+          value={TIER_FILTER_LABEL[tier] ?? tier}
+          onClear={onClearTier}
+        />
       ) : null}
-      {uom ? (
-        <button
-          type="button"
-          onClick={onClearUom}
-          className="inline-flex items-center gap-1 rounded-full bg-bg-subtle px-2 py-0.5 text-2xs text-fg ring-1 ring-border hover:bg-bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
-        >
-          uom: <span className="font-medium">{uom}</span>
-          <span aria-hidden>✕</span>
-        </button>
+      {uom ? <ClearableChip field="UOM" value={uom} onClear={onClearUom} /> : null}
+      {missingCost ? (
+        <ClearableChip field="Cost" value="Missing" onClear={onClearMissingCost} />
       ) : null}
-      {family ? (
-        <button
-          type="button"
-          onClick={onClearFamily}
-          className="inline-flex items-center gap-1 rounded-full bg-bg-subtle px-2 py-0.5 text-2xs text-fg ring-1 ring-border hover:bg-bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
-        >
-          family: <span className="font-medium">{family}</span>
-          <span aria-hidden>✕</span>
-        </button>
+      {stale ? (
+        <ClearableChip field="Activity" value="Stale" onClear={onClearStale} />
       ) : null}
       <button
         type="button"
@@ -688,11 +804,13 @@ export default function InventoryPage() {
   const [search, setSearch] = useState("");
   const [tierFilter, setTierFilter] = useState<string>(""); // Tier or ""
   const [uomFilter, setUomFilter] = useState<string>("");
-  const [familyFilter, setFamilyFilter] = useState<string>("");
+  const [categoryFilter, setCategoryFilter] = useState<string>("");
   const [missingCostOnly, setMissingCostOnly] = useState(false);
   const [staleOnly, setStaleOnly] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("name");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
+  const [groupBy, setGroupBy] = useState<GroupBy>("none");
+  const [collapsedGroups, setCollapsedGroups] = useState<Set<string>>(new Set());
   const [density, setDensity] = useState<"comfortable" | "compact">("comfortable");
   const [drawerRow, setDrawerRow] = useState<StockRow | null>(null);
   const [alertDismissed, setAlertDismissed] = useState(false);
@@ -759,11 +877,17 @@ export default function InventoryPage() {
   const error = tab === "FG" ? fgError : rmError;
   const isFetching = tab === "FG" ? fgFetching : rmFetching;
 
-  // Family list extracted from current rows.
-  const familyOptions = useMemo(() => {
-    const set = new Set<string>();
-    for (const r of allRows) set.add(deriveFamily(r.item_id));
-    return Array.from(set).sort();
+  // Category list extracted from current rows, ranked by item count so the
+  // busiest groups surface first as filter chips.
+  const categoryOptions = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const r of allRows) {
+      const c = deriveCategory(r);
+      counts.set(c, (counts.get(c) ?? 0) + 1);
+    }
+    return Array.from(counts.entries())
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([label, count]) => ({ label, count }));
   }, [allRows]);
 
   // UOM list extracted from current rows.
@@ -782,7 +906,7 @@ export default function InventoryPage() {
         if (!hay.includes(q)) return false;
       }
       if (uomFilter && r.base_uom !== uomFilter) return false;
-      if (familyFilter && deriveFamily(r.item_id) !== familyFilter) return false;
+      if (categoryFilter && deriveCategory(r) !== categoryFilter) return false;
       if (tierFilter) {
         if (tierFilter === "has_stock") {
           const n = Number(r.calculated_on_hand);
@@ -809,32 +933,41 @@ export default function InventoryPage() {
     });
 
     const dir = sortDir === "asc" ? 1 : -1;
+    // Name is the stable tiebreaker so equal primary keys keep a deterministic
+    // order (matters most when sorting by category, value or on-hand).
+    const byName = (a: StockRow, b: StockRow) =>
+      (a.display_name ?? a.item_id).localeCompare(b.display_name ?? b.item_id);
     filtered = [...filtered].sort((a, b) => {
+      let primary = 0;
       switch (sortKey) {
         case "name":
-          return (
-            ((a.display_name ?? a.item_id).localeCompare(b.display_name ?? b.item_id)) * dir
-          );
+          primary = byName(a, b);
+          break;
         case "sku":
-          return a.item_id.localeCompare(b.item_id) * dir;
-        case "on_hand": {
-          const an = Number(a.calculated_on_hand);
-          const bn = Number(b.calculated_on_hand);
-          return (an - bn) * dir;
-        }
-        case "value": {
-          const av = Number(valueMap?.get(`${a.item_type}:${a.item_id}`)?.total_value ?? 0);
-          const bv = Number(valueMap?.get(`${b.item_type}:${b.item_id}`)?.total_value ?? 0);
-          return (av - bv) * dir;
-        }
+          primary = a.item_id.localeCompare(b.item_id);
+          break;
+        case "category":
+          primary = deriveCategory(a).localeCompare(deriveCategory(b));
+          break;
+        case "on_hand":
+          primary = Number(a.calculated_on_hand) - Number(b.calculated_on_hand);
+          break;
+        case "value":
+          primary =
+            Number(valueMap?.get(`${a.item_type}:${a.item_id}`)?.total_value ?? 0) -
+            Number(valueMap?.get(`${b.item_type}:${b.item_id}`)?.total_value ?? 0);
+          break;
         case "last": {
           const at = a.last_event_at ? new Date(a.last_event_at).getTime() : 0;
           const bt = b.last_event_at ? new Date(b.last_event_at).getTime() : 0;
-          return (at - bt) * dir;
+          primary = at - bt;
+          break;
         }
         default:
-          return 0;
+          primary = 0;
       }
+      if (primary !== 0) return primary * dir;
+      return byName(a, b);
     });
 
     return filtered;
@@ -842,7 +975,7 @@ export default function InventoryPage() {
     allRows,
     search,
     uomFilter,
-    familyFilter,
+    categoryFilter,
     tierFilter,
     missingCostOnly,
     staleOnly,
@@ -850,6 +983,43 @@ export default function InventoryPage() {
     sortKey,
     sortDir,
   ]);
+
+  // Group the filtered rows into sections for the "Group by" view. Each
+  // section carries a count + summed value so operators can read subtotals
+  // without scanning. groupBy === "none" yields a single unlabelled section.
+  const grouped = useMemo(() => {
+    const sectionOf = (r: StockRow): string => {
+      if (groupBy === "category") return deriveCategory(r);
+      if (groupBy === "uom") return r.base_uom ?? "No UOM";
+      if (groupBy === "tier") return deriveTier(resolveDisplay(r).raw);
+      return "";
+    };
+    const map = new Map<string, StockRow[]>();
+    for (const r of rows) {
+      const key = sectionOf(r);
+      const bucket = map.get(key);
+      if (bucket) bucket.push(r);
+      else map.set(key, [r]);
+    }
+    const TIER_ORDER: Tier[] = ["reconcile", "out", "critical", "low", "healthy", "unknown"];
+    const entries = Array.from(map.entries());
+    entries.sort((a, b) => {
+      if (groupBy === "tier") {
+        return (
+          TIER_ORDER.indexOf(a[0] as Tier) - TIER_ORDER.indexOf(b[0] as Tier)
+        );
+      }
+      return a[0].localeCompare(b[0]);
+    });
+    return entries.map(([key, sectionRows]) => {
+      let value = 0;
+      for (const r of sectionRows) {
+        const v = valueMap?.get(`${r.item_type}:${r.item_id}`)?.total_value;
+        if (v != null) value += Number(v);
+      }
+      return { key, rows: sectionRows, count: sectionRows.length, value };
+    });
+  }, [rows, groupBy, valueMap]);
 
   // Tab counts
   const fgCount = fgRows?.length ?? 0;
@@ -881,9 +1051,18 @@ export default function InventoryPage() {
     setSearch("");
     setTierFilter("");
     setUomFilter("");
-    setFamilyFilter("");
+    setCategoryFilter("");
     setMissingCostOnly(false);
     setStaleOnly(false);
+  }
+
+  function toggleGroupCollapsed(key: string) {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   }
 
   function refreshAll() {
@@ -893,6 +1072,23 @@ export default function InventoryPage() {
   }
 
   const refreshing = isFetching || valueFetching;
+
+  // Friendly section labels for the "Group by" view.
+  const groupSectionLabel = (key: string): string => {
+    if (groupBy === "tier") {
+      return (
+        {
+          healthy: "Healthy",
+          low: "Low",
+          critical: "Critical",
+          out: "Out of stock",
+          reconcile: "Reconcile",
+          unknown: "Unknown",
+        }[key] ?? key
+      );
+    }
+    return key;
+  };
 
   return (
     <Tooltip.Provider>
@@ -1077,7 +1273,12 @@ export default function InventoryPage() {
                   role="tab"
                   aria-current={isActive ? "page" : undefined}
                   aria-selected={isActive}
-                  onClick={() => setTab(t)}
+                  onClick={() => {
+                    setTab(t);
+                    // FG and RM/PKG use different category vocabularies — a
+                    // category picked on one tab cannot match the other.
+                    setCategoryFilter("");
+                  }}
                   className={cn(
                     "inline-flex items-center gap-2 rounded px-3 py-1.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
                     isActive
@@ -1130,102 +1331,227 @@ export default function InventoryPage() {
             ) : null}
           </div>
 
-          {/* Iteration 30 — Filter chips */}
-          <div ref={chipRowRef} className="flex flex-wrap items-center gap-1.5" role="group" aria-label="Stock-tier filters">
-            {[
-              { value: "", label: "All" },
-              { value: "has_stock", label: "Has stock" },
-              { value: "low", label: "Low / Critical" },
-              { value: "out", label: "Out of stock" },
-              { value: "reconcile", label: negativeCount > 0 ? `Reconcile (${negativeCount})` : "Reconcile" },
-            ].map((c) => {
-              const active = tierFilter === c.value;
-              return (
+          {/* Filter panel — grouped controls for scanability */}
+          <div className="space-y-3 rounded-lg border border-border/60 bg-bg-subtle/25 p-3 sm:p-4">
+            {/* Category filter — the operator-facing product groups */}
+            <div className="space-y-1.5">
+              <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                Category
+              </span>
+              <div
+                className="flex flex-wrap items-center gap-1.5"
+                role="group"
+                aria-label="Category filters"
+              >
                 <button
-                  key={c.value || "all"}
                   type="button"
-                  onClick={() => setTierFilter(c.value)}
-                  aria-pressed={active}
+                  onClick={() => setCategoryFilter("")}
+                  aria-pressed={categoryFilter === ""}
                   className={cn(
                     "rounded-full px-3 py-1 text-2xs font-medium ring-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
-                    active
+                    categoryFilter === ""
                       ? "bg-fg text-bg ring-fg"
-                      : "bg-bg-subtle text-fg-muted ring-border hover:text-fg",
+                      : "bg-bg text-fg-muted ring-border hover:text-fg",
                   )}
                 >
-                  {c.label}
+                  All categories
                 </button>
-              );
-            })}
-            <span aria-hidden className="text-fg-faint">·</span>
-            <button
-              type="button"
-              onClick={() => setMissingCostOnly((v) => !v)}
-              aria-pressed={missingCostOnly}
-              className={cn(
-                "inline-flex items-center gap-1 rounded-full px-3 py-1 text-2xs font-medium ring-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
-                missingCostOnly
-                  ? "bg-warning-softer text-warning-fg ring-warning/40"
-                  : "bg-bg-subtle text-fg-muted ring-border hover:text-fg",
-              )}
-            >
-              <span aria-hidden>⚠</span>
-              Missing cost
-            </button>
-            <button
-              type="button"
-              onClick={() => setStaleOnly((v) => !v)}
-              aria-pressed={staleOnly}
-              className={cn(
-                "inline-flex items-center gap-1 rounded-full px-3 py-1 text-2xs font-medium ring-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
-                staleOnly
-                  ? "bg-info-softer text-info-fg ring-info/40"
-                  : "bg-bg-subtle text-fg-muted ring-border hover:text-fg",
-              )}
-            >
-              <span aria-hidden>⏱</span>
-              Stale ({STALE_DAYS}d+)
-            </button>
-          </div>
+                {categoryOptions.map((c) => {
+                  const active = categoryFilter === c.label;
+                  return (
+                    <button
+                      key={c.label}
+                      type="button"
+                      onClick={() =>
+                        setCategoryFilter((prev) => (prev === c.label ? "" : c.label))
+                      }
+                      aria-pressed={active}
+                      className={cn(
+                        "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-2xs font-medium ring-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
+                        active
+                          ? "bg-accent text-accent-fg ring-accent"
+                          : "bg-bg text-fg-muted ring-border hover:text-fg",
+                      )}
+                    >
+                      {c.label}
+                      <span
+                        className={cn(
+                          "rounded-full px-1 text-3xs tabular-nums ring-1",
+                          active
+                            ? "bg-accent-fg/15 text-accent-fg ring-accent-fg/25"
+                            : "bg-bg-subtle text-fg-subtle ring-border",
+                        )}
+                      >
+                        {c.count}
+                      </span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
 
-          {/* Iterations 33 + 34 — UOM + family selects */}
-          <div className="flex flex-wrap items-center gap-3">
-            <div>
-              <label className="mb-1 block text-2xs font-medium text-fg-muted">UOM</label>
-              <select
-                value={uomFilter}
-                onChange={(e) => setUomFilter(e.target.value)}
-                className="rounded border border-border bg-bg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-accent/40"
-              >
-                <option value="">All</option>
-                {uomOptions.map((u) => (
-                  <option key={u} value={u}>
-                    {u}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
-              <label className="mb-1 block text-2xs font-medium text-fg-muted">Family</label>
-              <select
-                value={familyFilter}
-                onChange={(e) => setFamilyFilter(e.target.value)}
-                className="rounded border border-border bg-bg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-accent/40"
-              >
-                <option value="">All</option>
-                {familyOptions.map((f) => (
-                  <option key={f} value={f}>
-                    {f}
-                  </option>
-                ))}
-              </select>
-            </div>
-            {refreshing && !isLoading ? (
-              <span className="ml-auto inline-flex items-center gap-1.5 text-2xs text-fg-subtle">
-                <span aria-hidden className="h-1.5 w-1.5 animate-pulse rounded-full bg-info" />
-                Refreshing
+            {/* Status filter chips */}
+            <div className="space-y-1.5">
+              <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                Status
               </span>
-            ) : null}
+              <div
+                ref={chipRowRef}
+                className="flex flex-wrap items-center gap-1.5"
+                role="group"
+                aria-label="Stock-tier filters"
+              >
+                {[
+                  { value: "", label: "All" },
+                  { value: "has_stock", label: "Has stock" },
+                  { value: "low", label: "Low / Critical" },
+                  { value: "out", label: "Out of stock" },
+                  {
+                    value: "reconcile",
+                    label:
+                      negativeCount > 0
+                        ? `Reconcile (${negativeCount})`
+                        : "Reconcile",
+                  },
+                ].map((c) => {
+                  const active = tierFilter === c.value;
+                  return (
+                    <button
+                      key={c.value || "all"}
+                      type="button"
+                      onClick={() => setTierFilter(c.value)}
+                      aria-pressed={active}
+                      className={cn(
+                        "rounded-full px-3 py-1 text-2xs font-medium ring-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
+                        active
+                          ? "bg-fg text-bg ring-fg"
+                          : "bg-bg text-fg-muted ring-border hover:text-fg",
+                      )}
+                    >
+                      {c.label}
+                    </button>
+                  );
+                })}
+                <span aria-hidden className="text-fg-faint">
+                  ·
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setMissingCostOnly((v) => !v)}
+                  aria-pressed={missingCostOnly}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full px-3 py-1 text-2xs font-medium ring-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
+                    missingCostOnly
+                      ? "bg-warning-softer text-warning-fg ring-warning/40"
+                      : "bg-bg text-fg-muted ring-border hover:text-fg",
+                  )}
+                >
+                  <span aria-hidden>⚠</span>
+                  Missing cost
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setStaleOnly((v) => !v)}
+                  aria-pressed={staleOnly}
+                  className={cn(
+                    "inline-flex items-center gap-1 rounded-full px-3 py-1 text-2xs font-medium ring-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
+                    staleOnly
+                      ? "bg-info-softer text-info-fg ring-info/40"
+                      : "bg-bg text-fg-muted ring-border hover:text-fg",
+                  )}
+                >
+                  <span aria-hidden>⏱</span>
+                  Stale ({STALE_DAYS}d+)
+                </button>
+              </div>
+            </div>
+
+            {/* Sort + group-by + UOM controls — usable on mobile (no headers there) */}
+            <div className="flex flex-wrap items-end gap-x-4 gap-y-2 border-t border-border/50 pt-3">
+              <div>
+                <label
+                  htmlFor="inv-sort"
+                  className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle"
+                >
+                  Sort by
+                </label>
+                <div className="flex items-center gap-1">
+                  <select
+                    id="inv-sort"
+                    value={sortKey}
+                    onChange={(e) => setSortKey(e.target.value as SortKey)}
+                    className="rounded border border-border bg-bg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-accent/40"
+                  >
+                    <option value="name">Name</option>
+                    <option value="sku">SKU</option>
+                    <option value="category">Category</option>
+                    <option value="on_hand">On hand</option>
+                    <option value="value">Value</option>
+                    <option value="last">Last movement</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setSortDir((d) => (d === "asc" ? "desc" : "asc"))}
+                    className="rounded border border-border bg-bg px-2 py-1 text-xs text-fg-muted transition hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                    aria-label={
+                      sortDir === "asc" ? "Sort ascending" : "Sort descending"
+                    }
+                    title={sortDir === "asc" ? "Ascending" : "Descending"}
+                  >
+                    {sortDir === "asc" ? "↑ Asc" : "↓ Desc"}
+                  </button>
+                </div>
+              </div>
+              <div>
+                <label
+                  htmlFor="inv-group"
+                  className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle"
+                >
+                  Group by
+                </label>
+                <select
+                  id="inv-group"
+                  value={groupBy}
+                  onChange={(e) => setGroupBy(e.target.value as GroupBy)}
+                  className="rounded border border-border bg-bg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-accent/40"
+                >
+                  <option value="none">No grouping</option>
+                  <option value="category">Category</option>
+                  <option value="tier">Stock status</option>
+                  <option value="uom">UOM</option>
+                </select>
+              </div>
+              <div>
+                <label
+                  htmlFor="inv-uom"
+                  className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle"
+                >
+                  UOM
+                </label>
+                <select
+                  id="inv-uom"
+                  value={uomFilter}
+                  onChange={(e) => setUomFilter(e.target.value)}
+                  className="rounded border border-border bg-bg px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-accent/40"
+                >
+                  <option value="">All</option>
+                  {uomOptions.map((u) => (
+                    <option key={u} value={u}>
+                      {u}
+                    </option>
+                  ))}
+                </select>
+              </div>
+              {refreshing && !isLoading ? (
+                <span className="ml-auto inline-flex items-center gap-1.5 pb-1 text-2xs text-fg-subtle">
+                  <span
+                    aria-hidden
+                    className="h-1.5 w-1.5 animate-pulse rounded-full bg-info"
+                  />
+                  Refreshing
+                </span>
+              ) : null}
+            </div>
           </div>
 
           {/* Iteration 35 — Active filters chip-bar */}
@@ -1233,11 +1559,15 @@ export default function InventoryPage() {
             search={search}
             tier={tierFilter}
             uom={uomFilter}
-            family={familyFilter}
+            category={categoryFilter}
+            missingCost={missingCostOnly}
+            stale={staleOnly}
             onClearSearch={() => setSearch("")}
             onClearTier={() => setTierFilter("")}
             onClearUom={() => setUomFilter("")}
-            onClearFamily={() => setFamilyFilter("")}
+            onClearCategory={() => setCategoryFilter("")}
+            onClearMissingCost={() => setMissingCostOnly(false)}
+            onClearStale={() => setStaleOnly(false)}
             onClearAll={clearAllFilters}
           />
 
@@ -1291,7 +1621,8 @@ export default function InventoryPage() {
                 No items match these filters
               </div>
               <p className="max-w-md text-xs text-fg-muted">
-                Try clearing the search or removing tier/UOM/family filters.
+                Try clearing the search or removing the category, status or UOM
+                filters.
               </p>
               <button
                 type="button"
@@ -1321,6 +1652,13 @@ export default function InventoryPage() {
                         <SortHeader
                           label="SKU"
                           sortKey="sku"
+                          currentKey={sortKey}
+                          currentDir={sortDir}
+                          onSort={handleSort}
+                        />
+                        <SortHeader
+                          label="Category"
+                          sortKey="category"
                           currentKey={sortKey}
                           currentDir={sortDir}
                           onSort={handleSort}
@@ -1358,85 +1696,163 @@ export default function InventoryPage() {
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-border/40">
-                      {rows.map((row) => {
-                        const v = valueMap?.get(`${row.item_type}:${row.item_id}`) ?? null;
-                        const tier = deriveTier(resolveDisplay(row).raw);
-                        const cost = deriveCostStatus(row.item_type, v);
-                        const date = smartRelativeDate(row.last_event_at);
-                        const totalVal = fmtIlsAccountancy(v?.total_value ?? null);
-                        const unitCost = fmtIlsAccountancy(v?.unit_cost ?? null);
+                      {grouped.map((g) => {
+                        const collapsed =
+                          groupBy !== "none" && collapsedGroups.has(g.key);
                         return (
-                          <tr
-                            key={`${row.item_type}-${row.item_id}`}
-                            className={cn(
-                              "group transition hover:bg-bg-subtle/40",
-                              tier === "reconcile"
-                                ? "border-l-4 border-l-warning/60"
-                                : tier === "out"
-                                ? "border-l-4 border-l-warning/30"
-                                : "",
-                              density === "compact" ? "h-9" : "h-12",
-                            )}
-                          >
-                            <td className="py-2 pr-4">
-                              <Link
-                                href={`/admin/masters/items/${encodeURIComponent(row.item_id)}`}
-                                className="inline-flex items-center gap-1.5 text-fg hover:text-accent-fg hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
-                                title={row.display_name ?? row.item_id}
-                              >
-                                <span className="max-w-[28ch] truncate">
-                                  {row.display_name ?? "—"}
-                                </span>
-                                <SupplyMethodBadge method={v?.supply_method ?? null} />
-                              </Link>
-                            </td>
-                            <td className="py-2 pr-4">
-                              <span
-                                className="block max-w-[18ch] truncate font-mono text-xs text-fg-muted"
-                                title={row.item_id}
-                              >
-                                {row.item_id}
-                              </span>
-                            </td>
-                            <td className="py-2 pr-4 text-right">
-                              <OnHandCell
-                                row={row}
-                                onReconcileClick={handleReconcileClick}
-                              />
-                            </td>
-                            <td className="py-2 pr-4">
-                              <div className="flex flex-wrap items-center gap-1">
-                                <TierBadge tier={tier} />
-                                <StaleBadge daysAgo={date.daysAgo} />
-                              </div>
-                            </td>
-                            <td className="py-2 pr-4 text-right tabular-nums">
-                              {cost === "has_cost" ? (
-                                <span className="text-xs text-fg-muted">
-                                  {unitCost.display}
-                                </span>
-                              ) : (
-                                <CostBadge status={cost} />
-                              )}
-                            </td>
-                            <td className="py-2 pr-4 text-right tabular-nums">
-                              {cost === "has_cost" ? (
-                                <span
-                                  className={cn(
-                                    "font-medium",
-                                    totalVal.isZero ? "text-fg-subtle" : "text-fg",
-                                  )}
-                                >
-                                  {totalVal.display}
-                                </span>
-                              ) : (
-                                <span className="text-fg-subtle">—</span>
-                              )}
-                            </td>
-                            <td className="py-2 text-fg-muted">
-                              <span title={date.aria}>{date.label}</span>
-                            </td>
-                          </tr>
+                          <Fragment key={g.key || "__ungrouped"}>
+                            {groupBy !== "none" ? (
+                              <tr className="bg-bg-subtle/60">
+                                <td colSpan={8} className="px-1 py-0">
+                                  <button
+                                    type="button"
+                                    onClick={() => toggleGroupCollapsed(g.key)}
+                                    aria-expanded={!collapsed}
+                                    className="flex w-full items-center gap-2 py-1.5 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                                  >
+                                    <span
+                                      aria-hidden
+                                      className="w-3 text-fg-subtle"
+                                    >
+                                      {collapsed ? "▸" : "▾"}
+                                    </span>
+                                    <span className="text-xs font-semibold text-fg">
+                                      {groupSectionLabel(g.key)}
+                                    </span>
+                                    <span className="rounded-full bg-bg px-1.5 py-0 text-3xs tabular-nums text-fg-subtle ring-1 ring-border">
+                                      {g.count}
+                                    </span>
+                                    {g.value > 0 ? (
+                                      <span className="ml-auto pr-2 text-2xs tabular-nums text-fg-muted">
+                                        {fmtIls(String(g.value))}
+                                      </span>
+                                    ) : null}
+                                  </button>
+                                </td>
+                              </tr>
+                            ) : null}
+                            {collapsed
+                              ? null
+                              : g.rows.map((row) => {
+                                  const v =
+                                    valueMap?.get(
+                                      `${row.item_type}:${row.item_id}`,
+                                    ) ?? null;
+                                  const tier = deriveTier(
+                                    resolveDisplay(row).raw,
+                                  );
+                                  const cost = deriveCostStatus(
+                                    row.item_type,
+                                    v,
+                                  );
+                                  const date = smartRelativeDate(
+                                    row.last_event_at,
+                                  );
+                                  const totalVal = fmtIlsAccountancy(
+                                    v?.total_value ?? null,
+                                  );
+                                  const unitCost = fmtIlsAccountancy(
+                                    v?.unit_cost ?? null,
+                                  );
+                                  return (
+                                    <tr
+                                      key={`${row.item_type}-${row.item_id}`}
+                                      className={cn(
+                                        "group transition hover:bg-bg-subtle/40",
+                                        tier === "reconcile"
+                                          ? "border-l-4 border-l-warning/60"
+                                          : tier === "out"
+                                          ? "border-l-4 border-l-warning/30"
+                                          : "",
+                                        density === "compact" ? "h-9" : "h-12",
+                                      )}
+                                    >
+                                      <td className="py-2 pr-4">
+                                        <Link
+                                          href={`/admin/masters/items/${encodeURIComponent(row.item_id)}`}
+                                          className="inline-flex items-center gap-1.5 text-fg hover:text-accent-fg hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                                          title={row.display_name ?? row.item_id}
+                                        >
+                                          <span className="max-w-[28ch] truncate">
+                                            {row.display_name ?? "—"}
+                                          </span>
+                                          <SupplyMethodBadge
+                                            method={v?.supply_method ?? null}
+                                          />
+                                        </Link>
+                                      </td>
+                                      <td className="py-2 pr-4">
+                                        <span
+                                          className="block max-w-[18ch] truncate font-mono text-xs text-fg-muted"
+                                          title={row.item_id}
+                                        >
+                                          {row.item_id}
+                                        </span>
+                                      </td>
+                                      <td className="py-2 pr-4">
+                                        <button
+                                          type="button"
+                                          onClick={() =>
+                                            setCategoryFilter((prev) =>
+                                              prev === deriveCategory(row)
+                                                ? ""
+                                                : deriveCategory(row),
+                                            )
+                                          }
+                                          className="rounded-full bg-bg-subtle px-2 py-0.5 text-2xs text-fg-muted ring-1 ring-border transition hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                                          title={`Filter to ${deriveCategory(row)}`}
+                                        >
+                                          {deriveCategory(row)}
+                                        </button>
+                                      </td>
+                                      <td className="py-2 pr-4 text-right">
+                                        <OnHandCell
+                                          row={row}
+                                          onReconcileClick={handleReconcileClick}
+                                        />
+                                      </td>
+                                      <td className="py-2 pr-4">
+                                        <div className="flex flex-wrap items-center gap-1">
+                                          <TierBadge tier={tier} />
+                                          <StaleBadge daysAgo={date.daysAgo} />
+                                        </div>
+                                      </td>
+                                      <td className="py-2 pr-4 text-right tabular-nums">
+                                        {cost === "has_cost" ? (
+                                          <span className="text-xs text-fg-muted">
+                                            {unitCost.display}
+                                          </span>
+                                        ) : (
+                                          <CostBadge status={cost} />
+                                        )}
+                                      </td>
+                                      <td className="py-2 pr-4 text-right tabular-nums">
+                                        {cost === "has_cost" ? (
+                                          <span
+                                            className={cn(
+                                              "font-medium",
+                                              totalVal.isZero
+                                                ? "text-fg-subtle"
+                                                : "text-fg",
+                                            )}
+                                          >
+                                            {totalVal.display}
+                                          </span>
+                                        ) : (
+                                          <span className="text-fg-subtle">
+                                            —
+                                          </span>
+                                        )}
+                                      </td>
+                                      <td className="py-2 text-fg-muted">
+                                        <span title={date.aria}>
+                                          {date.label}
+                                        </span>
+                                      </td>
+                                    </tr>
+                                  );
+                                })}
+                          </Fragment>
                         );
                       })}
                     </tbody>
@@ -1445,15 +1861,55 @@ export default function InventoryPage() {
               </div>
 
               {/* Mobile cards */}
-              <div className="space-y-2 md:hidden" data-testid="inventory-mobile">
-                {rows.map((row) => (
-                  <InventoryCardMobile
-                    key={`${row.item_type}-${row.item_id}`}
-                    row={row}
-                    value={valueMap?.get(`${row.item_type}:${row.item_id}`) ?? null}
-                    onReconcileClick={handleReconcileClick}
-                  />
-                ))}
+              <div
+                className="space-y-2 md:hidden"
+                data-testid="inventory-mobile"
+              >
+                {grouped.map((g) => {
+                  const collapsed =
+                    groupBy !== "none" && collapsedGroups.has(g.key);
+                  return (
+                    <Fragment key={g.key || "__ungrouped"}>
+                      {groupBy !== "none" ? (
+                        <button
+                          type="button"
+                          onClick={() => toggleGroupCollapsed(g.key)}
+                          aria-expanded={!collapsed}
+                          className="flex w-full items-center gap-2 rounded-md bg-bg-subtle/60 px-3 py-2 text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                        >
+                          <span aria-hidden className="w-3 text-fg-subtle">
+                            {collapsed ? "▸" : "▾"}
+                          </span>
+                          <span className="text-sm font-semibold text-fg">
+                            {groupSectionLabel(g.key)}
+                          </span>
+                          <span className="rounded-full bg-bg px-1.5 py-0 text-3xs tabular-nums text-fg-subtle ring-1 ring-border">
+                            {g.count}
+                          </span>
+                          {g.value > 0 ? (
+                            <span className="ml-auto text-2xs tabular-nums text-fg-muted">
+                              {fmtIls(String(g.value))}
+                            </span>
+                          ) : null}
+                        </button>
+                      ) : null}
+                      {collapsed
+                        ? null
+                        : g.rows.map((row) => (
+                            <InventoryCardMobile
+                              key={`${row.item_type}-${row.item_id}`}
+                              row={row}
+                              value={
+                                valueMap?.get(
+                                  `${row.item_type}:${row.item_id}`,
+                                ) ?? null
+                              }
+                              onReconcileClick={handleReconcileClick}
+                            />
+                          ))}
+                    </Fragment>
+                  );
+                })}
               </div>
             </>
           )}
