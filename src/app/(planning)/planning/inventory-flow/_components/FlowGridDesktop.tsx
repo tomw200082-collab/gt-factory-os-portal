@@ -309,7 +309,7 @@ function ItemRow({
         <polyline
           points={pts}
           fill="none"
-          stroke="#3b82f6"
+          className="stroke-info"
           strokeWidth={1.5}
           strokeLinecap="round"
           strokeLinejoin="round"

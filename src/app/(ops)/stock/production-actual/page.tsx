@@ -1973,7 +1973,7 @@ export default function ProductionActualPage() {
                           </div>
                         ) : null}
                       </div>
-                      <span className="chip shrink-0 border border-info/30 bg-info-softer text-info-fg text-3xs">
+                      <span className="chip chip-info shrink-0 text-3xs">
                         {supplyMethodLabel(selectedItem.supply_method)}
                       </span>
                     </div>
@@ -2030,7 +2030,7 @@ export default function ProductionActualPage() {
                         </div>
                       ) : null}
                     </div>
-                    <span className="chip shrink-0 border border-info/30 bg-info-softer text-info-fg text-3xs">
+                    <span className="chip chip-info shrink-0 text-3xs">
                       {supplyMethodLabel(snapshot.supply_method)}
                     </span>
                   </div>

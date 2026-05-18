@@ -3,6 +3,7 @@ import { RoleGate } from "@/lib/auth/role-gate";
 import { SeedGate } from "@/lib/repositories/seed-gate";
 import { AppShellChrome } from "@/components/layout/AppShellChrome";
 import { AppPageShell } from "@/components/layout/AppPageShell";
+import { PlanningSubNav } from "@/components/layout/PlanningSubNav";
 
 // Planning read capability — admin + planner + viewer pass. Viewer is
 // read-only by lattice construction; write-path mutations are gated
@@ -12,7 +13,10 @@ export default function PlanningLayout({ children }: { children: ReactNode }) {
     <AppShellChrome>
       <RoleGate minimum="planning:read">
         <SeedGate>
-          <AppPageShell>{children}</AppPageShell>
+          <AppPageShell>
+            <PlanningSubNav />
+            {children}
+          </AppPageShell>
         </SeedGate>
       </RoleGate>
     </AppShellChrome>

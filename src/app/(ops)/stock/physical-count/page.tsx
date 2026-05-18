@@ -942,7 +942,7 @@ export default function PhysicalCountPage() {
                                         setSearchQuery("");
                                       }}
                                     >
-                                      <span className="chip shrink-0 text-3xs bg-info-softer text-info-fg">FG</span>
+                                      <span className="chip chip-info shrink-0 text-3xs">FG</span>
                                       <span className="min-w-0 flex-1 truncate">{r.label}</span>
                                       {selKey === `${r.kind}:${r.id}` && (
                                         <svg className="h-4 w-4 shrink-0 text-accent" viewBox="0 0 16 16" fill="none">
@@ -1004,7 +1004,7 @@ export default function PhysicalCountPage() {
                                         setSearchQuery("");
                                       }}
                                     >
-                                      <span className="chip shrink-0 text-3xs bg-warning-softer text-warning-fg">PKG</span>
+                                      <span className="chip chip-warning shrink-0 text-3xs">PKG</span>
                                       <span className="min-w-0 flex-1 truncate">{r.label}</span>
                                       {selKey === `${r.kind}:${r.id}` && (
                                         <svg className="h-4 w-4 shrink-0 text-accent" viewBox="0 0 16 16" fill="none">
@@ -1121,7 +1121,7 @@ export default function PhysicalCountPage() {
                       {snapshot.item_type}
                     </span>
                     {snapshot.idempotent_open ? (
-                      <span className="chip text-3xs bg-warning-softer text-warning-fg">
+                      <span className="chip chip-warning text-3xs">
                         Resumed existing snapshot
                       </span>
                     ) : null}
