@@ -138,8 +138,18 @@ function ComponentRow({
       <tr
         data-testid="product-component-row"
         onClick={onToggle}
+        onKeyDown={(e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            onToggle();
+          }
+        }}
+        role="button"
+        tabIndex={0}
+        aria-expanded={open}
         className={cn(
           "cursor-pointer border-b border-border/40 transition-colors hover:bg-bg-subtle/40",
+          "focus-visible:outline focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-accent",
           short && "bg-danger-softer/25 hover:bg-danger-softer/40",
         )}
       >
@@ -173,10 +183,7 @@ function ComponentRow({
           </div>
         </td>
         <td className="px-4 py-3">
-          <DateChip
-            iso={c.first_needed_date}
-            tone={short ? "soon" : "neutral"}
-          />
+          <DateChip iso={c.first_needed_date} />
         </td>
         <td className="whitespace-nowrap px-4 py-3 text-right text-sm tabular-nums text-fg-muted">
           {fmtQtyStr(c.total_required_qty, c.component_uom)}{" "}

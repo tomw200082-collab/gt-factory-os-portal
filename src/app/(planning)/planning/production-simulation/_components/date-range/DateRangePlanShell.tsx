@@ -82,8 +82,14 @@ function defaultRange(): { from: string; to: string } {
 
 function rangeError(from: string, to: string): string | null {
   if (!from || !to) return "Pick a start and end date.";
-  const fromMs = new Date(from + "T00:00:00").getTime();
-  const toMs = new Date(to + "T00:00:00").getTime();
+  // Parse as UTC midnight so the day-count never drifts across a DST
+  // boundary — this mirrors the backend's `T00:00:00Z` range check exactly.
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/;
+  const f = m.exec(from);
+  const t = m.exec(to);
+  if (!f || !t) return "Pick a valid start and end date.";
+  const fromMs = Date.UTC(+f[1], +f[2] - 1, +f[3]);
+  const toMs = Date.UTC(+t[1], +t[2] - 1, +t[3]);
   if (!Number.isFinite(fromMs) || !Number.isFinite(toMs)) {
     return "Pick a valid start and end date.";
   }

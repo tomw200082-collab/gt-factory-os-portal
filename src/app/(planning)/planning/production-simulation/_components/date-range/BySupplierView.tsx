@@ -220,10 +220,7 @@ function SupplierComponentTable({
                   </div>
                 </td>
                 <td className="px-4 py-3">
-                  <DateChip
-                    iso={c.first_needed_date}
-                    tone={short ? "soon" : "neutral"}
-                  />
+                  <DateChip iso={c.first_needed_date} />
                 </td>
                 <td className="whitespace-nowrap px-4 py-3 text-right text-sm tabular-nums text-fg-muted">
                   {fmtQtyStr(c.total_required_qty, c.component_uom)}{" "}

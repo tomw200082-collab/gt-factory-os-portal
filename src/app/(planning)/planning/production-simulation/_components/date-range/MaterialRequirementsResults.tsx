@@ -304,7 +304,9 @@ export function MaterialRequirementsResults({ from, to }: Props) {
               aria-hidden
             />
             <p className="text-sm text-fg-muted">
-              The simulated jobs produced no component lines.
+              {data.plans_skipped.length > 0
+                ? "None of the planned jobs could be simulated — resolve the issues listed above, then simulate again."
+                : "The simulated jobs produced no component lines."}
             </p>
           </div>
         ) : view === "supplier" ? (

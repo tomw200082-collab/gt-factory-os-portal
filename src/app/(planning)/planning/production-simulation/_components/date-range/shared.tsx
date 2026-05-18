@@ -62,23 +62,24 @@ export function relativeDayLabel(iso: string): string {
 
 // ---------------------------------------------------------------------------
 // DateChip — the small "when is this needed" marker shown next to a component.
+//
+// Its tone is driven purely by how soon the date is, not by stock status: a
+// component first needed within a week (or already overdue) reads as amber so
+// the planner can time the purchase; anything further out stays neutral.
+// Shortage is communicated separately by the row, so the chip never goes red.
 // ---------------------------------------------------------------------------
 
 export function DateChip({
   iso,
   label = "Needed",
-  tone = "neutral",
 }: {
   iso: string;
   label?: string;
-  tone?: "neutral" | "soon" | "danger";
 }) {
-  const toneCls =
-    tone === "danger"
-      ? "border-danger/40 bg-danger-softer/50 text-danger-fg"
-      : tone === "soon"
-        ? "border-warning/40 bg-warning-softer/50 text-warning-fg"
-        : "border-border/70 bg-bg-subtle/70 text-fg-muted";
+  const soon = daysFromToday(iso) <= 7;
+  const toneCls = soon
+    ? "border-warning/40 bg-warning-softer/50 text-warning-fg"
+    : "border-border/70 bg-bg-subtle/70 text-fg-muted";
   return (
     <span
       className={cn(

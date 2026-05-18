@@ -21,12 +21,6 @@ export interface MaterialDemandSource {
   qty: string;
 }
 
-/** Demand for a component bucketed on a single plan date. */
-export interface MaterialDemandBucket {
-  date: string; // YYYY-MM-DD
-  qty: string;
-}
-
 export interface MaterialComponentLine {
   component_id: string;
   component_name: string;
@@ -37,14 +31,11 @@ export interface MaterialComponentLine {
   on_hand_qty: string;
   net_shortage_qty: string;
   coverage_status: CoverageStatus;
-  coverage_pct: string;
   first_needed_date: string; // YYYY-MM-DD
   shortage_date: string | null; // YYYY-MM-DD
   supplier_id: string | null;
   supplier_short: string | null;
   supplier_phone: string | null;
-  lead_time_days: number | null;
-  demand_by_date: MaterialDemandBucket[];
   sources: MaterialDemandSource[];
 }
 
