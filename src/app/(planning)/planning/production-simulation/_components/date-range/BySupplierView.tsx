@@ -20,7 +20,7 @@ import { ComponentCard } from "./ComponentCard";
 // dense table on desktop (lg+) and stacked cards below the 1024px breakpoint.
 // ---------------------------------------------------------------------------
 
-interface SupplierGroup {
+export interface SupplierGroup {
   key: string;
   supplierId: string | null;
   supplierName: string;
@@ -30,9 +30,11 @@ interface SupplierGroup {
   earliestNeeded: string | null;
 }
 
-const NO_SUPPLIER_KEY = "__no_supplier__";
+export const NO_SUPPLIER_KEY = "__no_supplier__";
 
-function buildGroups(components: MaterialComponentLine[]): SupplierGroup[] {
+export function buildGroups(
+  components: MaterialComponentLine[],
+): SupplierGroup[] {
   const map = new Map<string, SupplierGroup>();
 
   for (const c of components) {

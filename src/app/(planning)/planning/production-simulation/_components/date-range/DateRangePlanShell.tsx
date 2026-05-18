@@ -217,6 +217,7 @@ export function DateRangePlanShell() {
 
           {error ? (
             <div
+              role="alert"
               className="flex items-center gap-2 text-xs font-semibold text-danger-fg"
               data-testid="production-simulation-range-error"
             >
@@ -228,8 +229,9 @@ export function DateRangePlanShell() {
               Window:{" "}
               <span className="font-semibold text-fg-muted">
                 {formatPlanDateLong(draftFrom)}
-              </span>{" "}
-              →{" "}
+              </span>
+              <span aria-hidden> → </span>
+              <span className="sr-only"> to </span>
               <span className="font-semibold text-fg-muted">
                 {formatPlanDateLong(draftTo)}
               </span>

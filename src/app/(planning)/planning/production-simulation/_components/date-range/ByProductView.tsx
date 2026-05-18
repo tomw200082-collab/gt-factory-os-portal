@@ -23,7 +23,7 @@ import { ComponentCard } from "./ComponentCard";
 // breakpoint so the data surface never scrolls sideways.
 // ---------------------------------------------------------------------------
 
-function sortComponents(
+export function sortComponents(
   rows: MaterialComponentLine[],
 ): MaterialComponentLine[] {
   return [...rows].sort((a, b) => {
