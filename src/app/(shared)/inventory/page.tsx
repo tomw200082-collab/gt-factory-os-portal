@@ -48,8 +48,9 @@
 //  32. Multi-criteria sort fallback (sort by + then on-hand desc)
 //  33. UOM filter dropdown + explicit Sort-by control (works on mobile,
 //      which has no clickable column headers)
-//  34. Category filter — operator-facing product groups (Cocktails, Iced
-//      Tea, Matcha, …) derived from item name + SKU, shown as count chips
+//  34. Category filter — operator-facing product groups (Tea Extracts,
+//      Alcoholic Beverages, Matcha, …) derived deterministically from the
+//      SKU and verified against the full catalogue, shown as count chips
 //  35. Active-filters chip-bar summary + Clear all
 //  36. Result counter "showing N of M"
 //
@@ -256,54 +257,98 @@ function deriveCostStatus(itemType: string, value: ValueMeta | null): CostStatus
 }
 
 // === Category classification ==============================================
-// Inventory master data has no populated group column — items.product_group
-// and components.component_group are blank across the live dataset. We derive
-// an operator-facing category from the item name + SKU so the floor team can
-// filter by the words they actually think in ("Cocktails", "Iced Tea",
-// "Matcha") instead of raw SKU prefixes. Rules are ordered: first match wins.
-// Each rule's regex is tested against a normalized "name + SKU" haystack.
+// GT master data has no populated group column (items.product_group and
+// components.component_group are blank across the live dataset), so category
+// is derived deterministically from the SKU. This mapping was verified
+// against the full live catalogue — 68 finished goods + 145 components — and
+// signed off by the operations owner: every item resolves to a real
+// category, nothing falls through to "Other".
+
+// --- Finished Goods -------------------------------------------------------
+// Keyed off the SKU product-line segment (FG-<LINE>-…). ADD-* SKUs are
+// complementary items (mixers, syrups, tapioca, garnishes).
+const FG_TEA_LINES = new Set([
+  "AME", "CAL", "CON", "DES", "DET", "ENE", "FRE", "NAM", "REV",
+]);
+const FG_ALCOHOL_LINES = new Set(["SAN", "MAR", "MUZ", "NM", "ARK", "COS"]);
+
+function deriveFgCategory(itemId: string): string {
+  const seg = itemId.toUpperCase().split("-");
+  if (seg[0] === "ADD") return "Complementary Products";
+  const line = seg[1] ?? "";
+  if (line === "MAT") return "Matcha";
+  if (FG_ALCOHOL_LINES.has(line)) return "Alcoholic Beverages";
+  if (FG_TEA_LINES.has(line)) return "Tea Extracts";
+  return "Other";
+}
+
+// --- Components (raw materials + packaging) -------------------------------
+// Packaging is keyed off the SKU prefix. Raw materials use an ordered
+// keyword ruleset (first match wins) because the RAW-* namespace is not
+// systematic enough to key on alone.
 interface CategoryRule {
   label: string;
   test: RegExp;
 }
 
-// Finished Goods — operator-facing product families.
-const FG_CATEGORY_RULES: CategoryRule[] = [
-  { label: "Cocktails", test: /cocktail|mojito|margarita|negroni|spritz|sangria|daiquiri|colada/i },
-  { label: "Iced Tea", test: /iced?\s*tea|\btea\b|fg-tea/i },
-  { label: "Matcha", test: /matcha|fg-mat/i },
-  { label: "Smoothies", test: /smoothie|fg-smo/i },
-  { label: "Lemonade", test: /lemonade|fg-lem/i },
-  { label: "Sparkling Water", test: /sparkling|seltzer|tonic|soda|\bwater\b/i },
-  { label: "Juices", test: /juice|nectar|fg-jui/i },
-  { label: "Coffee", test: /coffee|espresso|cold\s*brew|latte/i },
+const PKG_PREFIX_CATEGORY: CategoryRule[] = [
+  { label: "Bottles & Containers", test: /^PKG-(BOTTLE|JERRICAN)/i },
+  { label: "Caps & Closures", test: /^PKG-(CAP|LID)/i },
+  { label: "Labels & Stickers", test: /^PKG-LABEL/i },
+  { label: "Cartons & Boxes", test: /^PKG-CARTON/i },
+  { label: "Bags & Tins", test: /^PKG-(BAG|TIN|PACK)/i },
+  { label: "Production Supplies", test: /^PKG-FILTER/i },
 ];
 
-// Raw materials & packaging — procurement-facing families.
-const RM_CATEGORY_RULES: CategoryRule[] = [
-  { label: "Spirits & Alcohol", test: /\brum\b|tequila|vodka|\bgin\b|whisk|liqueur|brandy|alcohol|spirit/i },
-  { label: "Juices & Concentrates", test: /juice|concentrate|cordial|syrup/i },
-  { label: "Purées & Pulp", test: /pur[eé]e|pulp/i },
-  { label: "Fresh Produce", test: /fresh|mint|leaves|herb|fruit|\blime\b|lemon|citrus|peach/i },
-  { label: "Tea & Botanicals", test: /\btea\b|matcha|botanical|infusion/i },
-  { label: "Dry Goods", test: /sugar|powder|\bsalt\b|\bdry\b|flour|starch/i },
-  { label: "Bottles", test: /bottle|\bbtl\b/i },
-  { label: "Closures", test: /\bcap\b|closure|\bcork\b|\blid\b|\bclo\b/i },
-  { label: "Labels", test: /label|sticker|\blbl\b/i },
-  { label: "Cartons & Packaging", test: /carton|\bbox\b|tray|film|wrap|sleeve|shrink/i },
+// Order matters: Alcohol before Purées (so "Ouzo Pure" is alcohol, not a
+// purée) and Sweeteners before Base Liquids (so "Sugar water" is a
+// sweetener, not water).
+const RAW_CATEGORY_RULES: CategoryRule[] = [
+  {
+    label: "Alcohol & Spirits",
+    test: /\b(rum|vodka|gin|whisk\w*|tequila|arak|amaretto|campari|ouzo|wine|martini|brandy|liqueur)\b/i,
+  },
+  { label: "Syrups", test: /syrup|orgeat/i },
+  { label: "Purées", test: /pur[eé]+e|\bpure\b|ristretto/i },
+  { label: "Juices & Concentrates", test: /juice|concentrate/i },
+  { label: "Sweeteners", test: /sugar/i },
+  { label: "Dried Fruit & Garnish", test: /dried|\bdry\b/i },
+  {
+    label: "Additives",
+    test: /preservative|stabili|conservant|\bacid\b/i,
+  },
+  {
+    label: "Tea & Botanicals",
+    test: /\btea\b|hibiscus|jasmin|puer|sencha|matcha|chamomile/i,
+  },
+  {
+    label: "Herbs & Spices",
+    test: /anise|pepper|cinnamon|cardamom|masala|balm|melissa|verbena|lemongrass|oregano|mint|menta|nana|savory|zuta|marva|clove|herb|spice/i,
+  },
+  { label: "Base Liquids", test: /water/i },
 ];
+
+function deriveComponentCategory(itemId: string, name: string): string {
+  if (/^PKG/i.test(itemId)) {
+    for (const rule of PKG_PREFIX_CATEGORY) {
+      if (rule.test.test(itemId)) return rule.label;
+    }
+    return "Other";
+  }
+  const hay = `${name} ${itemId}`;
+  for (const rule of RAW_CATEGORY_RULES) {
+    if (rule.test.test(hay)) return rule.label;
+  }
+  return "Other";
+}
 
 function deriveCategory(row: {
   item_type: string;
   item_id: string;
   display_name: string | null;
 }): string {
-  const hay = `${row.display_name ?? ""} ${row.item_id}`;
-  const rules = row.item_type === "FG" ? FG_CATEGORY_RULES : RM_CATEGORY_RULES;
-  for (const rule of rules) {
-    if (rule.test.test(hay)) return rule.label;
-  }
-  return "Other";
+  if (row.item_type === "FG") return deriveFgCategory(row.item_id);
+  return deriveComponentCategory(row.item_id, row.display_name ?? "");
 }
 
 // === KPI Card =============================================================
