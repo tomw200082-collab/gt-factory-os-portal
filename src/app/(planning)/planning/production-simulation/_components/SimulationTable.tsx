@@ -40,6 +40,27 @@ const GROUP_LABEL: Record<MaterialGroup, string> = {
   other: "Other components",
 };
 
+// Coverage accent — a left strip on mobile cards, a left border + tint on
+// desktop rows. Same emphasis vocabulary as the date-range plan views.
+const COVERAGE_STRIP: Record<CoverageStatus, string> = {
+  not_covered: "bg-danger",
+  partial: "bg-warning",
+  no_stock_data: "bg-fg-faint",
+  covered: "bg-success/60",
+};
+
+const COVERAGE_ROW: Record<CoverageStatus, string> = {
+  not_covered: "border-l-2 border-l-danger bg-danger-softer/30",
+  partial: "border-l-2 border-l-warning bg-warning-softer/25",
+  no_stock_data: "border-l-2 border-l-fg-faint/50 bg-bg-subtle/50",
+  covered: "border-l-2 border-l-transparent",
+};
+
+/** A line's effective coverage status — null coverage means no stock data. */
+function lineStatus(l: SimulationLine): CoverageStatus {
+  return l.coverage?.status ?? "no_stock_data";
+}
+
 function CoverageCell({ status }: { status: CoverageStatus }) {
   const map: Record<
     CoverageStatus,
@@ -69,7 +90,10 @@ function CoverageCell({ status }: { status: CoverageStatus }) {
   const c = map[status];
   return (
     <span
-      className={cn("inline-flex items-center gap-1.5 text-sm font-semibold", c.cls)}
+      className={cn(
+        "inline-flex shrink-0 items-center gap-1.5 text-sm font-semibold",
+        c.cls,
+      )}
     >
       {c.icon}
       {c.label}
@@ -92,24 +116,46 @@ export function SimulationTable({ lines }: { lines: SimulationLine[] }) {
   })).filter((g) => g.rows.length > 0);
 
   return (
-    <div className="overflow-x-auto">
-      <table className="w-full">
-        <thead>
-          <tr className="border-b border-border/70 text-2xs font-bold uppercase tracking-sops text-fg-subtle">
-            <th className="px-5 py-3 text-left">Component</th>
-            <th className="px-5 py-3 text-right">Per unit</th>
-            <th className="px-5 py-3 text-right">Required</th>
-            <th className="px-5 py-3 text-right">On hand</th>
-            <th className="px-5 py-3 text-left">Coverage</th>
-          </tr>
-        </thead>
-        <tbody>
-          {groups.map(({ group, rows }) => (
-            <GroupSection key={group} group={group} rows={rows} />
-          ))}
-        </tbody>
-      </table>
-    </div>
+    <>
+      {/* Desktop — dense table. */}
+      <div className="hidden overflow-x-auto lg:block">
+        <table className="w-full">
+          <thead>
+            <tr className="border-b border-border/70 text-2xs font-bold uppercase tracking-sops text-fg-subtle">
+              <th className="px-5 py-3 text-left">Component</th>
+              <th className="px-5 py-3 text-right">Per unit</th>
+              <th className="px-5 py-3 text-right">Required</th>
+              <th className="px-5 py-3 text-right">On hand</th>
+              <th className="px-5 py-3 text-left">Coverage</th>
+            </tr>
+          </thead>
+          <tbody>
+            {groups.map(({ group, rows }) => (
+              <GroupSection key={group} group={group} rows={rows} />
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {/* Mobile — stacked cards, grouped by material type. */}
+      <div className="flex flex-col gap-4 p-3 lg:hidden">
+        {groups.map(({ group, rows }) => (
+          <div key={group} className="flex flex-col gap-2">
+            <div className="flex items-baseline gap-2 px-0.5">
+              <span className="text-xs font-bold uppercase tracking-sops text-fg-strong">
+                {GROUP_LABEL[group]}
+              </span>
+              <span className="text-2xs font-semibold text-fg-faint">
+                {rows.length}
+              </span>
+            </div>
+            {rows.map((l) => (
+              <LineCard key={l.id} line={l} />
+            ))}
+          </div>
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -133,20 +179,19 @@ function GroupSection({
       </tr>
       {rows.map((l) => {
         const cov = l.coverage;
-        const isShort =
-          cov?.status === "partial" || cov?.status === "not_covered";
+        const status = lineStatus(l);
         return (
           <tr
             key={l.id}
             data-testid="simulation-line-row"
             className={cn(
               "border-b border-border/40 last:border-0",
-              isShort && "bg-danger-softer/25",
+              COVERAGE_ROW[status],
             )}
           >
             <td className="px-5 py-3">
               <div className="text-sm font-semibold text-fg-strong">
-                {l.componentName}
+                <bdi>{l.componentName}</bdi>
               </div>
               <div className="font-mono text-2xs text-fg-faint">
                 {l.componentClass ? `${l.componentClass} · ` : ""}
@@ -171,22 +216,105 @@ function GroupSection({
                 : "—"}
             </td>
             <td className="px-5 py-3">
-              {cov ? (
-                <div className="flex flex-col gap-0.5">
-                  <CoverageCell status={cov.status} />
-                  {cov.netShortageQty > 0 ? (
-                    <span className="text-2xs font-semibold text-danger-fg">
-                      Short {formatQty(cov.netShortageQty, l.uom)} {l.uom}
-                    </span>
-                  ) : null}
-                </div>
-              ) : (
-                <CoverageCell status="no_stock_data" />
-              )}
+              <div className="flex flex-col gap-0.5">
+                <CoverageCell status={status} />
+                {cov && cov.netShortageQty > 0 ? (
+                  <span className="text-2xs font-semibold text-danger-fg">
+                    Short {formatQty(cov.netShortageQty, l.uom)} {l.uom}
+                  </span>
+                ) : null}
+              </div>
             </td>
           </tr>
         );
       })}
     </>
+  );
+}
+
+function MiniStat({
+  label,
+  value,
+  uom,
+  tone,
+}: {
+  label: string;
+  value: string;
+  uom: string;
+  tone: string;
+}) {
+  return (
+    <div className="flex min-w-0 flex-col gap-0.5">
+      <span className="text-3xs font-bold uppercase tracking-sops text-fg-subtle">
+        {label}
+      </span>
+      <span className={cn("truncate text-sm font-bold tabular-nums", tone)}>
+        {value}
+        {value !== "—" ? (
+          <span className="text-2xs font-medium text-fg-faint"> {uom}</span>
+        ) : null}
+      </span>
+    </div>
+  );
+}
+
+function LineCard({ line: l }: { line: SimulationLine }) {
+  const cov = l.coverage;
+  const status = lineStatus(l);
+  return (
+    <div
+      data-testid="simulation-line-card"
+      className="flex overflow-hidden rounded-md border border-border/60 bg-bg-raised shadow-raised"
+    >
+      <span
+        className={cn("w-1 shrink-0", COVERAGE_STRIP[status])}
+        aria-hidden
+      />
+      <div className="min-w-0 flex-1 p-3">
+        <div className="flex items-start justify-between gap-2">
+          <div className="min-w-0">
+            <div className="text-sm font-semibold text-fg-strong">
+              <bdi>{l.componentName}</bdi>
+            </div>
+            <div className="truncate font-mono text-3xs text-fg-faint">
+              {l.componentClass ? `${l.componentClass} · ` : ""}
+              {l.componentId}
+            </div>
+          </div>
+          <CoverageCell status={status} />
+        </div>
+
+        {cov && cov.netShortageQty > 0 ? (
+          <div className="mt-2 rounded border border-danger/30 bg-danger-softer/30 px-2 py-1 text-2xs font-semibold text-danger-fg">
+            Short {formatQty(cov.netShortageQty, l.uom)} {l.uom}
+          </div>
+        ) : null}
+
+        <div className="mt-2.5 grid grid-cols-3 gap-2 rounded-md border border-border/50 bg-bg-subtle/40 px-2.5 py-2">
+          <MiniStat
+            label="Per unit"
+            value={formatQty(l.qtyPerUnit, l.uom)}
+            uom={l.uom}
+            tone="text-fg-muted"
+          />
+          <MiniStat
+            label="Required"
+            value={formatQty(l.requiredQty, l.uom)}
+            uom={l.uom}
+            tone="text-fg-strong"
+          />
+          <MiniStat
+            label="On hand"
+            value={
+              cov && cov.status !== "no_stock_data"
+                ? formatQty(cov.availableQty, l.uom)
+                : "—"
+            }
+            uom={l.uom}
+            tone="text-fg-muted"
+          />
+        </div>
+      </div>
+    </div>
   );
 }

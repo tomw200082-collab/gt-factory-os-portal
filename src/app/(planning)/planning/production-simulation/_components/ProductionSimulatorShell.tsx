@@ -217,7 +217,7 @@ export function ProductionSimulatorShell() {
   }
 
   return (
-    <div className="mt-5 flex flex-col gap-5">
+    <div className="flex flex-col gap-5">
       <SectionCard
         eyebrow="Step 1"
         title="Choose a product and target quantity"
