@@ -37,10 +37,12 @@ import {
   Cpu,
   Layers,
   ListChecks,
+  Loader2,
   PackageCheck,
   PlayCircle,
   Wifi,
   WifiOff,
+  XCircle,
 } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
@@ -442,6 +444,8 @@ export default function PlanningOverviewPage() {
   });
 
   // --- Planning runs list --------------------------------------------------
+  // While a run is in progress the overview polls every 5s so the pipeline
+  // reflects completion without a manual refresh.
   const runsQuery = useQuery<{ rows: PlanningRunSummaryRow[]; total: number }>({
     queryKey: ["planning", "overview", "runs"],
     queryFn: async () => {
@@ -453,6 +457,12 @@ export default function PlanningOverviewPage() {
       }>;
     },
     staleTime: 2 * 60 * 1000,
+    refetchInterval: (q) => {
+      const data = q.state.data as
+        | { rows: PlanningRunSummaryRow[] }
+        | undefined;
+      return data?.rows?.some((r) => r.status === "running") ? 5000 : false;
+    },
   });
 
   const latestRun = runsQuery.data?.rows?.[0] ?? null;
@@ -469,6 +479,7 @@ export default function PlanningOverviewPage() {
     },
     enabled: !!latestRun?.run_id,
     staleTime: 2 * 60 * 1000,
+    refetchInterval: latestRun?.status === "running" ? 5000 : false,
   });
 
   // --- Blockers — fetch a wide page so we can group by category ------------
@@ -540,15 +551,17 @@ export default function PlanningOverviewPage() {
     !forecastQuery.isLoading &&
     !jobsQuery.isLoading &&
     !runsQuery.isLoading &&
-    !blockersQuery.isLoading;
+    !blockersQuery.isLoading &&
+    !coverageQuery.isLoading;
 
   // Overall planning health — feeds the header status pill.
+  // Critical = the engine cannot produce a trustworthy plan.
+  // Attention = the plan stands but an input or output needs a look.
   const isCritical =
     queriesSettled &&
     (!latestForecast ||
       latestRun?.status === "failed" ||
-      criticalBlockers > 0 ||
-      lionwheelJob?.last_status === "failed");
+      criticalBlockers > 0);
 
   const isAttention =
     queriesSettled &&
@@ -556,6 +569,7 @@ export default function PlanningOverviewPage() {
     ((blockerCount !== null && blockerCount > 0) ||
       coverage?.is_partial === true ||
       latestRun?.status === "running" ||
+      lionwheelJob?.last_status === "failed" ||
       Number(lionwheelJob?.failed_count_24h ?? 0) > 0);
 
   // ----- render ------------------------------------------------------------
@@ -776,6 +790,32 @@ export default function PlanningOverviewPage() {
             />
           ) : (
             <div className="space-y-5">
+              {latestRun.status === "failed" ? (
+                <div className="flex items-start gap-2 rounded-lg border border-danger/30 bg-danger-softer px-3 py-2 text-xs text-danger-fg">
+                  <XCircle
+                    className="mt-0.5 h-3.5 w-3.5 shrink-0"
+                    strokeWidth={2}
+                    aria-hidden
+                  />
+                  <span>
+                    This run failed before completing — its recommendations may
+                    be incomplete. Open the run for the failure detail.
+                  </span>
+                </div>
+              ) : latestRun.status === "running" ? (
+                <div className="flex items-start gap-2 rounded-lg border border-warning/30 bg-warning-softer px-3 py-2 text-xs text-warning-fg">
+                  <Loader2
+                    className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin"
+                    strokeWidth={2}
+                    aria-hidden
+                  />
+                  <span>
+                    This run is still in progress — the numbers below update
+                    live.
+                  </span>
+                </div>
+              ) : null}
+
               {/* Recommendations split */}
               <div className="space-y-2.5">
                 <div className="flex items-baseline justify-between gap-3">

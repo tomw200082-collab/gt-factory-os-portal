@@ -33,10 +33,12 @@ import { ArrowDown, ArrowUp, BarChart2, CalendarCheck } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { useBlockers } from "./_lib/useBlockers";
-import type {
-  BlockerCategory,
-  BlockerRow as BlockerRowData,
-  BlockerSeverity,
+import {
+  BLOCKER_CATEGORY_VALUES,
+  BLOCKER_SEVERITY_VALUES,
+  type BlockerCategory,
+  type BlockerRow as BlockerRowData,
+  type BlockerSeverity,
 } from "./_lib/types";
 import {
   BLOCKER_CATEGORY_LABEL,
@@ -94,8 +96,20 @@ export default function PlanningBlockersPage() {
   const explicitRunId = searchParams?.get("run_id") ?? undefined;
   const explicitItemId = searchParams?.get("item_id") ?? undefined;
 
-  const [severity, setSeverity] = useState<BlockerSeverity[]>([]);
-  const [category, setCategory] = useState<BlockerCategory[]>([]);
+  // Severity / category may be pre-set via the URL — e.g. the planning
+  // overview deep-links into a single category. Unknown values are dropped.
+  const [severity, setSeverity] = useState<BlockerSeverity[]>(() =>
+    (searchParams?.getAll("severity") ?? []).filter(
+      (s): s is BlockerSeverity =>
+        (BLOCKER_SEVERITY_VALUES as readonly string[]).includes(s),
+    ),
+  );
+  const [category, setCategory] = useState<BlockerCategory[]>(() =>
+    (searchParams?.getAll("category") ?? []).filter(
+      (c): c is BlockerCategory =>
+        (BLOCKER_CATEGORY_VALUES as readonly string[]).includes(c),
+    ),
+  );
   const [itemSearch, setItemSearch] = useState<string>(explicitItemId ?? "");
   const [sortKey, setSortKey] = useState<SortKey>("severity");
   const [sortDir, setSortDir] = useState<SortDir>("asc");
