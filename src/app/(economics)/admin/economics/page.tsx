@@ -548,7 +548,7 @@ function SalePriceEditCell({
           <span className="text-3xs text-danger-fg">{error}</span>
         ) : (
           <span className="text-3xs text-fg-subtle">
-            Blank clears the price.
+            Enter the price excluding VAT. Blank clears it.
           </span>
         )}
       </div>
@@ -988,8 +988,8 @@ export default function AdminEconomicsPage(): JSX.Element {
                       <HelpHint text="Cost of goods sold per unit — the sum of every BOM component's effective cost. Computed by the COGS snapshot job; run a snapshot to refresh it." />
                     </th>
                     <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      Avg sale price
-                      <HelpHint text="Manually-entered average sale price per unit. Click a cell to edit. Drives the margin and inventory-at-sale columns immediately." />
+                      Avg sale price (excl. VAT)
+                      <HelpHint text="Manually-entered average sale price per unit, net of VAT — enter prices excluding VAT so the margin against COGS is like-for-like. Click a cell to edit. Drives the margin and inventory-at-sale columns immediately." />
                     </th>
                     <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                       Margin / unit
