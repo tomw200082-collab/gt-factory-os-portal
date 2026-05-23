@@ -6,15 +6,19 @@
 // The planner's once-a-week procurement ritual. The daily-MRP purchase
 // engine produces one consolidated PO draft per supplier; the planner
 // reviews, edits, approves (which generates a ready-to-send Hebrew order
-// document), and confirms placement (which creates the real PO).
+// document for the supplier), and places the order (which creates the
+// real PO record and notifies downstream tracking).
 //
 // Tiers vs the weekly release fence:
 //   urgent       — order date already passed / stock already short
 //   must         — must be ordered before the next session
 //   recommended  — worth pulling forward to consolidate
 //
-// Hebrew operator UI (planning corridor convention). No mock data — every
-// loading / empty / error state is honest.
+// English-only UI per portal_ux_standard.md §1 (locked 2026-04-30). The
+// rendered order-document body remains Hebrew because it is a supplier-
+// facing artifact, wrapped in <article lang="he" dir="rtl"> with an
+// English caption above it. No mock data — every loading / empty / error
+// state is honest.
 // ---------------------------------------------------------------------------
 
 import Link from "next/link";
@@ -36,20 +40,26 @@ import type {
   PoTier,
   PoStatus,
 } from "./_lib/types";
+import { TierCardSkeleton } from "./_components/TierCardSkeleton";
+import { ProgressBreakdown } from "./_components/ProgressBreakdown";
 
 // ---------------------------------------------------------------------------
-// Label maps
+// Label maps — English per portal_ux_standard.md §1
 // ---------------------------------------------------------------------------
 const TIER_LABEL: Record<PoTier, string> = {
-  urgent: "דחוף",
-  must: "חובה השבוע",
-  recommended: "מומלץ להקדים",
+  urgent: "Urgent",
+  must: "Must this week",
+  recommended: "Recommended to advance",
 };
 const STATUS_LABEL: Record<PoStatus, string> = {
-  proposed: "מוצע",
-  approved: "אושר — מוכן לשליחה",
-  placed: "בוצע",
-  skipped: "דולג",
+  proposed: "Proposed",
+  approved: "Approved — pending place",
+  placed: "Placed",
+  skipped: "Skipped",
+};
+const SESSION_STATUS_LABEL: Record<"completed" | "superseded", string> = {
+  completed: "Completed",
+  superseded: "Superseded",
 };
 const TIER_ORDER: PoTier[] = ["urgent", "must", "recommended"];
 
@@ -71,13 +81,11 @@ export default function PurchaseSessionPage() {
 
   const session = data?.session ?? null;
 
-  // Starting a new session while one is still open supersedes it — confirm
-  // first so a stray click cannot discard an in-progress review.
   function handleStart() {
     if (
       session?.status === "open" &&
       !window.confirm(
-        "קיים מושב רכש פתוח. הרצת מושב חדש תחליף אותו וכל פעולה שלא נשמרה תאבד. להמשיך?",
+        "A purchase session is already open. Starting a new one will close it and discard any unsaved actions. Continue?",
       )
     ) {
       return;
@@ -88,9 +96,11 @@ export default function PurchaseSessionPage() {
   return (
     <div className="space-y-5">
       <WorkflowHeader
-        eyebrow="מרחב התכנון"
-        title="מושב הרכש השבועי"
-        description="פעם בשבוע: סקירה, אישור וביצוע של כל הזמנות הרכש במרוכז — הזמנה אחת מאוחדת לכל ספק."
+        eyebrow="Planning"
+        title="Purchase Session"
+        description="The weekly procurement ritual: review consolidated supplier POs, approve, and place. One PO draft per supplier."
+        backHref="/planning"
+        backLabel="Planning overview"
         meta={
           <button
             type="button"
@@ -101,12 +111,19 @@ export default function PurchaseSessionPage() {
               "bg-accent text-accent-fg hover:bg-accent/90 disabled:opacity-60",
             )}
             data-testid="purchase-session-start"
+            title={
+              startMut.isPending
+                ? "Generating the next purchase session"
+                : session
+                  ? "Close the open session and run a new one"
+                  : "Run the weekly purchase engine and start a new session"
+            }
           >
             {startMut.isPending
-              ? "מריץ…"
+              ? "Starting…"
               : session
-                ? "הרצת מושב חדש"
-                : "התחל מושב רכש"}
+                ? "Start New Session"
+                : "Start Session"}
           </button>
         }
       />
@@ -119,11 +136,11 @@ export default function PurchaseSessionPage() {
       ) : null}
 
       {isLoading ? (
-        <LoadingState />
+        <TierCardSkeleton count={3} />
       ) : isError ? (
         <ErrorBanner
           message={
-            (error as Error)?.message ?? "לא ניתן לטעון את מושב הרכש."
+            (error as Error)?.message ?? "Could not load the purchase session."
           }
           onRetry={() => void refetch()}
         />
@@ -152,8 +169,9 @@ function SessionBody({ session }: { session: PurchaseSession }) {
 
   const placed = session.totals.by_status.placed;
   const skipped = session.totals.by_status.skipped;
-  const resolved = placed + skipped;
   const total = session.totals.po_count;
+  const pending = Math.max(0, total - placed - skipped);
+  const sessionComplete = total > 0 && pending === 0;
 
   return (
     <div className="space-y-5">
@@ -161,41 +179,30 @@ function SessionBody({ session }: { session: PurchaseSession }) {
       <div className="card p-4 space-y-3" data-testid="purchase-session-summary">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <div className="text-sm text-fg">
-            מושב מתאריך{" "}
+            Session dated{" "}
             <span className="font-semibold">{session.session_date}</span>
             {session.status !== "open" ? (
-              <span className="mr-2 text-fg-muted">
-                ({session.status === "completed" ? "הושלם" : "הוחלף"})
+              <span className="ml-2 text-fg-muted">
+                ({SESSION_STATUS_LABEL[session.status]})
               </span>
             ) : null}
           </div>
-          <div className="text-xs text-fg-muted">
-            {session.release_fence
-              ? `גדר השחרור: ${session.release_fence}`
-              : null}
-          </div>
-        </div>
-
-        {/* Progress meter */}
-        <div className="space-y-1">
-          <div className="flex items-baseline justify-between text-xs">
-            <span className="text-fg-muted">
-              {`${resolved} מתוך ${total} הזמנות טופלו`}
-            </span>
-            <span className="font-mono tabular-nums text-fg">
+          <div className="flex items-baseline gap-3 text-xs">
+            {session.release_fence ? (
+              <span className="text-fg-muted">
+                Release fence:{" "}
+                <span className="font-mono tabular-nums text-fg">
+                  {session.release_fence}
+                </span>
+              </span>
+            ) : null}
+            <span className="font-mono tabular-nums text-sm font-semibold text-fg">
               {fmtMoney(session.totals.total_cost)}
             </span>
           </div>
-          <div className="h-2 w-full overflow-hidden rounded-full bg-bg-subtle">
-            <div
-              className="h-full bg-accent/70"
-              style={{
-                width: `${total > 0 ? Math.round((resolved / total) * 100) : 0}%`,
-              }}
-              aria-hidden
-            />
-          </div>
         </div>
+
+        <ProgressBreakdown placed={placed} skipped={skipped} pending={pending} />
 
         {/* Tier counts */}
         <div className="flex flex-wrap gap-2">
@@ -212,6 +219,19 @@ function SessionBody({ session }: { session: PurchaseSession }) {
           ))}
         </div>
       </div>
+
+      {/* Session-complete banner */}
+      {sessionComplete ? (
+        <div
+          className="rounded-lg border border-success/40 bg-success-softer px-3 py-2 text-xs text-success-fg"
+          data-testid="purchase-session-complete"
+          role="status"
+        >
+          <span className="font-semibold">Session complete</span> — all purchase
+          orders for this horizon are placed or skipped. Start a new session
+          when you&apos;re ready for next week.
+        </div>
+      ) : null}
 
       {/* Warnings */}
       {session.warnings.length > 0 ? (
@@ -231,9 +251,16 @@ function SessionBody({ session }: { session: PurchaseSession }) {
       {/* Tier sections */}
       {total === 0 ? (
         <div className="card flex flex-col items-center gap-3 p-6 text-center text-sm text-fg-muted">
-          <div>המנוע רץ בהצלחה — אין כרגע הזמנות רכש שדורשות פעולה בתוך האופק.</div>
-          <Link href="/planning/purchase-calendar" className="btn btn-sm btn-outline">
-            ללוח הרכש ←
+          <div>
+            The engine ran successfully — no purchase orders need action within
+            this horizon. Open the purchase calendar to see the wider window,
+            or start a new session next week.
+          </div>
+          <Link
+            href="/planning/purchase-calendar"
+            className="btn btn-sm btn-outline"
+          >
+            Open Purchase Calendar →
           </Link>
         </div>
       ) : (
@@ -300,7 +327,8 @@ function PoCard({
     (skipMut.error as Error | null)?.message ??
     null;
 
-  const canMutate = sessionOpen && (po.status === "proposed" || po.status === "approved");
+  const canMutate =
+    sessionOpen && (po.status === "proposed" || po.status === "approved");
 
   function beginEdit() {
     const q: Record<string, string> = {};
@@ -321,7 +349,8 @@ function PoCard({
       // which JSON-encodes to null). Fall back to the current quantity.
       const raw = draftQty[l.session_po_line_id];
       const parsed = raw === undefined || raw.trim() === "" ? NaN : Number(raw);
-      const finalQty = Number.isFinite(parsed) && parsed >= 0 ? parsed : l.final_qty;
+      const finalQty =
+        Number.isFinite(parsed) && parsed >= 0 ? parsed : l.final_qty;
       return {
         session_po_line_id: l.session_po_line_id,
         final_qty: finalQty,
@@ -359,11 +388,11 @@ function PoCard({
           onClick={() => setExpanded((v) => !v)}
           aria-expanded={expanded}
           aria-controls={`po-detail-${po.session_po_id}`}
-          className="text-right"
+          className="text-left"
         >
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <span className="text-sm font-semibold text-fg-strong">
-              {po.supplier_snapshot}
+              <bdi>{po.supplier_snapshot}</bdi>
             </span>
             <span
               className={cn(
@@ -383,13 +412,13 @@ function PoCard({
             </span>
           </div>
           <div className="mt-0.5 text-xs text-fg-muted">
-            {`${activeLines.length} פריטים · להזמין עד ${po.order_by_date}`}
+            {`${activeLines.length} component${activeLines.length === 1 ? "" : "s"} · order by ${po.order_by_date}`}
             {po.covered_through_date
-              ? ` · מכוסה עד ${po.covered_through_date}`
+              ? ` · covers until ${po.covered_through_date}`
               : ""}
           </div>
         </button>
-        <div className="text-left">
+        <div className="text-right">
           <div className="font-mono tabular-nums text-sm font-semibold text-fg">
             {fmtMoney(po.total_cost)}
           </div>
@@ -402,7 +431,7 @@ function PoCard({
       {/* Blocking issues */}
       {po.blocking_issues.length > 0 ? (
         <div className="rounded-md border border-warning/40 bg-warning-softer px-2 py-1 text-3xs text-warning-fg">
-          {po.blocking_issues.length} התראות על שורות — בדקו לפני אישור.
+          {`Review ${po.blocking_issues.length} blocking issue${po.blocking_issues.length === 1 ? "" : "s"} before approval.`}
         </div>
       ) : null}
 
@@ -413,13 +442,13 @@ function PoCard({
             <table className="w-full text-xs">
               <thead className="border-b border-border/60 text-3xs uppercase tracking-sops text-fg-subtle">
                 <tr>
-                  <th className="px-2 py-1 text-right font-semibold">פריט</th>
-                  <th className="px-2 py-1 text-left font-semibold">מומלץ</th>
-                  <th className="px-2 py-1 text-left font-semibold">כמות</th>
-                  <th className="px-2 py-1 text-left font-semibold">יחידה</th>
-                  <th className="px-2 py-1 text-left font-semibold">עלות</th>
+                  <th className="px-2 py-1 text-left font-semibold">Component</th>
+                  <th className="px-2 py-1 text-right font-semibold">Recommended</th>
+                  <th className="px-2 py-1 text-right font-semibold">Final qty</th>
+                  <th className="px-2 py-1 text-left font-semibold">UOM</th>
+                  <th className="px-2 py-1 text-right font-semibold">Line cost</th>
                   {editing ? (
-                    <th className="px-2 py-1 text-left font-semibold">הסר</th>
+                    <th className="px-2 py-1 text-left font-semibold">Drop</th>
                   ) : null}
                 </tr>
               </thead>
@@ -449,28 +478,37 @@ function PoCard({
             </table>
           </div>
 
-          {/* Order document (after approval) */}
+          {/* Order document (after approval).
+              The body is generated in Hebrew because it is sent to the
+              supplier. The surrounding chrome is English; the bidi context
+              is made explicit via <article lang="he" dir="rtl">. */}
           {po.order_document_text ? (
-            <div className="space-y-1">
+            <section
+              dir="ltr"
+              aria-label="Order document"
+              data-testid={`purchase-po-doc-${po.session_po_id}`}
+            >
               <div className="flex items-center justify-between">
-                <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  מסמך הזמנה — מוכן לשליחה לספק
-                </span>
+                <h3 className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Order document (Hebrew, sent to supplier)
+                </h3>
                 <button
                   type="button"
                   onClick={copyDoc}
                   className="rounded-full border border-border/60 px-2 py-0.5 text-3xs text-fg-muted hover:text-fg"
+                  title="Copy order document to clipboard"
                 >
-                  {copied ? "הועתק ✓" : "העתק"}
+                  {copied ? "Copied ✓" : "Copy"}
                 </button>
               </div>
-              <pre
+              <article
+                lang="he"
                 dir="rtl"
-                className="whitespace-pre-wrap rounded-lg bg-bg-subtle p-3 text-xs text-fg"
+                className="mt-1 whitespace-pre-wrap rounded-lg bg-bg-subtle p-3 text-xs text-fg"
               >
                 {po.order_document_text}
-              </pre>
-            </div>
+              </article>
+            </section>
           ) : null}
 
           {/* Action error */}
@@ -485,13 +523,15 @@ function PoCard({
                     onClick={saveEdit}
                     disabled={busy}
                     variant="primary"
-                    label={editMut.isPending ? "שומר…" : "שמור שינויים"}
+                    label={editMut.isPending ? "Saving…" : "Save changes"}
+                    title="Save the edited quantities for this PO"
                   />
                   <ActionButton
                     onClick={() => setEditing(false)}
                     disabled={busy}
                     variant="ghost"
-                    label="ביטול"
+                    label="Cancel"
+                    title="Discard your edits and return to the read-only view"
                   />
                 </>
               ) : (
@@ -500,7 +540,8 @@ function PoCard({
                     onClick={beginEdit}
                     disabled={busy}
                     variant="ghost"
-                    label="עריכה"
+                    label="Edit lines"
+                    title="Adjust quantities or drop lines before approval"
                   />
                   {po.status === "proposed" ? (
                     <ActionButton
@@ -509,7 +550,12 @@ function PoCard({
                       }
                       disabled={busy}
                       variant="primary"
-                      label={approveMut.isPending ? "מאשר…" : "אשר והפק מסמך"}
+                      label={
+                        approveMut.isPending
+                          ? "Approving…"
+                          : "Approve & Generate Document"
+                      }
+                      title="Lock the PO and generate the supplier-facing Hebrew order document"
                     />
                   ) : null}
                   {po.status === "approved" ? (
@@ -517,14 +563,16 @@ function PoCard({
                       onClick={() => setShowPlace((v) => !v)}
                       disabled={busy}
                       variant="primary"
-                      label="סמן כבוצע"
+                      label="Place Order"
+                      title="Record the PO as placed and notify downstream tracking"
                     />
                   ) : null}
                   <ActionButton
                     onClick={() => skipMut.mutate({ poId: po.session_po_id })}
                     disabled={busy}
                     variant="ghost"
-                    label={skipMut.isPending ? "מדלג…" : "דלג"}
+                    label={skipMut.isPending ? "Skipping…" : "Skip"}
+                    title="Skip this PO in the current session (it will not be ordered now)"
                   />
                 </>
               )}
@@ -533,12 +581,17 @@ function PoCard({
 
           {/* Place confirmation */}
           {showPlace && po.status === "approved" ? (
-            <div className="rounded-lg border border-border/60 bg-bg-subtle p-3 space-y-2">
-              <div className="text-xs text-fg">
-                אישור שההזמנה נשלחה לספק. רשומת ה-PO תיווצר במערכת.
+            <div
+              className="rounded-lg border border-border/60 bg-bg-subtle p-3 space-y-2"
+              data-testid={`purchase-po-place-confirm-${po.session_po_id}`}
+            >
+              <div className="text-xs font-semibold text-fg">Place this order?</div>
+              <div className="text-xs text-fg-muted">
+                This records the PO as placed and notifies downstream tracking.
+                You will not be able to re-edit lines after placement.
               </div>
               <label className="flex items-center gap-2 text-xs text-fg-muted">
-                תאריך אספקה צפוי:
+                Expected receive date:
                 <input
                   type="date"
                   value={placeDate}
@@ -556,13 +609,15 @@ function PoCard({
                   }
                   disabled={busy}
                   variant="primary"
-                  label={placeMut.isPending ? "יוצר PO…" : "אישור — ההזמנה בוצעה"}
+                  label={placeMut.isPending ? "Placing…" : "Place Order"}
+                  title="Confirm placement and create the real PO record"
                 />
                 <ActionButton
                   onClick={() => setShowPlace(false)}
                   disabled={busy}
                   variant="ghost"
-                  label="ביטול"
+                  label="Cancel"
+                  title="Close this dialog without placing the order"
                 />
               </div>
             </div>
@@ -599,16 +654,16 @@ function LineRow({
         dropped ? "opacity-40 line-through" : "",
       )}
     >
-      <td className="px-2 py-1 text-right text-fg">
-        {line.line_label}
+      <td className="px-2 py-1 text-left text-fg">
+        <bdi>{line.line_label}</bdi>
         {line.is_user_added ? (
-          <span className="mr-1 text-3xs text-accent">(נוסף)</span>
+          <span className="ml-1 text-3xs text-accent">(added)</span>
         ) : null}
       </td>
-      <td className="px-2 py-1 text-left font-mono tabular-nums text-fg-subtle">
+      <td className="px-2 py-1 text-right font-mono tabular-nums text-fg-subtle">
         {fmtQty(line.recommended_qty)}
       </td>
-      <td className="px-2 py-1 text-left font-mono tabular-nums text-fg">
+      <td className="px-2 py-1 text-right font-mono tabular-nums text-fg">
         {editing ? (
           <input
             type="number"
@@ -616,14 +671,15 @@ function LineRow({
             step="any"
             value={draftQty ?? String(line.final_qty)}
             onChange={(e) => onQty(e.target.value)}
-            className="w-20 rounded border border-border/60 bg-bg px-1 py-0.5 text-xs"
+            className="w-20 rounded border border-border/60 bg-bg px-1 py-0.5 text-xs text-right"
+            aria-label="Final quantity"
           />
         ) : (
           fmtQty(line.final_qty)
         )}
       </td>
       <td className="px-2 py-1 text-left text-fg-muted">{line.uom}</td>
-      <td className="px-2 py-1 text-left font-mono tabular-nums text-fg">
+      <td className="px-2 py-1 text-right font-mono tabular-nums text-fg">
         {fmtMoney(line.line_cost)}
       </td>
       {editing ? (
@@ -632,7 +688,7 @@ function LineRow({
             type="checkbox"
             checked={draftDrop ?? line.is_dropped}
             onChange={(e) => onDrop(e.target.checked)}
-            aria-label="הסר שורה"
+            aria-label="Drop this line"
           />
         </td>
       ) : null}
@@ -648,17 +704,20 @@ function ActionButton({
   disabled,
   variant,
   label,
+  title,
 }: {
   onClick: () => void;
   disabled: boolean;
   variant: "primary" | "ghost";
   label: string;
+  title?: string;
 }) {
   return (
     <button
       type="button"
       onClick={onClick}
       disabled={disabled}
+      title={title}
       className={cn(
         "rounded-full px-3 py-1 text-xs font-semibold transition-colors disabled:opacity-60",
         variant === "primary"
@@ -683,38 +742,43 @@ function statusChipClass(s: PoStatus): string {
   return "bg-bg-subtle text-fg-muted";
 }
 function warningTitle(code: string): string {
-  if (code === "stale_stock_input") return "מלאי לא מעודכן";
-  if (code === "components_without_supplier") return "רכיבים ללא ספק";
-  if (code === "no_orders_needed") return "אין הזמנות נדרשות";
-  return "שים לב";
+  if (code === "stale_stock_input") return "Stock input is stale";
+  if (code === "components_without_supplier")
+    return "Components without supplier";
+  if (code === "no_orders_needed") return "No orders needed";
+  return "Heads up";
 }
 
-function LoadingState() {
-  return (
-    <div className="card p-6 text-center text-sm text-fg-muted">
-      טוען את מושב הרכש…
-    </div>
-  );
-}
 function EmptyNoSession() {
   return (
-    <div className="card p-6 text-center text-sm text-fg-muted">
-      עדיין לא הורץ מושב רכש. לחצו על &quot;התחל מושב רכש&quot; כדי להפיק את
-      רשימת ההזמנות לשבוע.
+    <div
+      className="card flex flex-col items-center gap-2 p-6 text-center text-sm text-fg-muted"
+      data-testid="purchase-session-empty"
+    >
+      <div className="text-sm font-semibold text-fg-strong">
+        No purchase session yet
+      </div>
+      <div className="max-w-md text-xs text-fg-muted">
+        Start a session to run the weekly purchase engine and generate the
+        consolidated PO drafts.
+      </div>
     </div>
   );
 }
 function ErrorBanner({
   message,
   onRetry,
-  retryLabel = "נסו שוב",
+  retryLabel = "Try again",
 }: {
   message: string;
   onRetry?: () => void;
   retryLabel?: string;
 }) {
   return (
-    <div className="rounded-lg border border-danger/40 bg-danger-softer px-3 py-2 text-xs text-danger-fg">
+    <div
+      className="rounded-lg border border-danger/40 bg-danger-softer px-3 py-2 text-xs text-danger-fg"
+      role="alert"
+    >
       <div>{message}</div>
       {onRetry ? (
         <button

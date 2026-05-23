@@ -20,10 +20,12 @@ const SESSION_KEY = ["purchase-session", "current"];
 
 async function jsonOrThrow(res: Response): Promise<unknown> {
   if (res.status === 401) {
-    throw new Error("ההתחברות פגה — יש להתחבר מחדש.");
+    throw new Error("Session expired — please sign in again.");
   }
   if (res.status === 503) {
-    throw new Error("הכתיבה מושהית כעת (מצב break-glass). נסו שוב מאוחר יותר.");
+    throw new Error(
+      "Writes are paused right now (break-glass mode). Try again in a moment.",
+    );
   }
   let body: unknown = null;
   try {
@@ -35,7 +37,7 @@ async function jsonOrThrow(res: Response): Promise<unknown> {
     const b = body as { reason_code?: string; detail?: string; error?: string } | null;
     const msg = b?.reason_code
       ? `${b.reason_code}${b.detail ? ` — ${b.detail}` : ""}`
-      : (b?.error ?? `הבקשה נכשלה (${res.status})`);
+      : (b?.error ?? `Request failed (${res.status}).`);
     throw new Error(String(msg));
   }
   return body;

@@ -25,6 +25,8 @@ This list inventories every surface that currently violates the standard in `doc
 | Route / Surface | Current | Severity | Recommended fix |
 |---|---|---|---|
 | `/planning/production-plan` | **English/LTR** ✓ (Gate 4.2 just normalized) | — | Done in this tranche |
+| `/planning/purchase-session` | **English/LTR** ✓ (tranche 020 normalized; lexicon-aligned CTAs; supplier-facing Hebrew order document wrapped in `<article lang="he">` with English caption) | — | Done 2026-05-23 |
+| `/planning/purchase-calendar` | Hebrew operator labels (`דחוף`, `חובה השבוע`, `מומלץ להקדים`); same convention as `purchase-session` before tranche 020 | **P0** | Normalize in next tranche (sister surface to `purchase-session`) |
 | `/planning` (Planning Overview) | Mostly English; Hebrew may be in copy | P1 | Normalize in Phase 2 (next 5 loops) |
 | `/planning/forecast` | Mixed — Hebrew "תחזית פעילה" banner; freeze copy in Hebrew | **P0** | Normalize in Phase 2 (Daily Production Plan adjacency) |
 | `/planning/forecast/[version_id]` | Mostly English UI; banner + supply_method chips Hebrew (ייצור / רכש) | **P0** | Normalize in Phase 2 |
