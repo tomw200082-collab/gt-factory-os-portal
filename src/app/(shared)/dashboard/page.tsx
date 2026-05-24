@@ -97,6 +97,7 @@ import type {
   PoTier,
   PurchaseSessionPo,
 } from "@/app/(planning)/planning/purchase-session/_lib/types";
+import { FactoryStateChip } from "./_components/FactoryStateChip";
 
 // ---------------------------------------------------------------------------
 // Cadence — keep low for the morning view; refresh on tab focus is the default.
@@ -539,6 +540,35 @@ function TitleCount({ n, tone = "neutral" }: { n: number; tone?: "neutral" | "da
   );
 }
 
+// All-clear ribbon — premium healthy/empty state used inside Critical
+// Today / Urgent Procurement / Slipped Plans when there is nothing to act
+// on. Replaces the default dashed EmptyState in those specific contexts
+// with a calm, intentional success ribbon (left accent rail, soft halo,
+// success icon chip). Calm — not alarming, not blank.
+function AllClearRibbon({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="dash-allclear">
+      <div className="dash-allclear-icon">
+        <CheckCircle2 className="h-5 w-5" strokeWidth={2.25} aria-hidden />
+      </div>
+      <div className="relative min-w-0 flex-1">
+        <div className="text-sm font-semibold tracking-tightish text-success-fg">
+          {title}
+        </div>
+        <div className="mt-1 text-xs leading-relaxed text-fg-muted">
+          {description}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function ErrorAlert({ label, onRetry }: { label: string; onRetry: () => void }) {
   return (
     <div
@@ -588,11 +618,19 @@ function QuickActionsLauncher() {
             <Link
               key={a.href}
               href={a.href}
-              className="inline-flex shrink-0 items-center gap-2 rounded border border-border/70 bg-bg-raised px-3 py-2 text-xs font-semibold text-fg-strong hover:border-accent/60 hover:bg-accent-soft hover:text-accent"
+              className="group inline-flex shrink-0 items-center gap-2 rounded-md border border-border/70 bg-bg-raised px-3 py-2 text-xs font-semibold text-fg-strong shadow-raised transition-all duration-150 ease-out-quart hover:-translate-y-0.5 hover:border-accent/60 hover:bg-accent-soft hover:text-accent hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
               title={a.blurb}
             >
-              <Icon className="h-4 w-4" strokeWidth={2} />
+              <Icon
+                className="h-4 w-4 text-fg-subtle transition-colors duration-150 ease-out-quart group-hover:text-accent"
+                strokeWidth={2}
+              />
               {a.label}
+              <ArrowRight
+                className="h-3 w-3 -translate-x-1 opacity-0 transition-all duration-150 ease-out-quart group-hover:translate-x-0 group-hover:opacity-100 motion-reduce:transition-none"
+                strokeWidth={2}
+                aria-hidden
+              />
             </Link>
           );
         })}
@@ -663,17 +701,11 @@ function ValueCard({
     info: "text-info",
     warning: "text-warning",
   };
-  const TONE_BAR: Record<typeof tone, string> = {
-    accent: "bg-accent",
-    success: "bg-success",
-    info: "bg-info",
-    warning: "bg-warning",
-  };
   const TONE_ICON: Record<typeof tone, string> = {
-    accent: "bg-accent-soft text-accent",
-    success: "bg-success-soft text-success",
-    info: "bg-info-soft text-info",
-    warning: "bg-warning-soft text-warning",
+    accent: "border-accent/30 bg-accent-soft text-accent",
+    success: "border-success/30 bg-success-soft text-success",
+    info: "border-info/30 bg-info-soft text-info",
+    warning: "border-warning/30 bg-warning-soft text-warning",
   };
   const body = (
     <>
@@ -689,7 +721,7 @@ function ValueCard({
         {icon ? (
           <div
             className={cn(
-              "flex h-8 w-8 shrink-0 items-center justify-center rounded-md transition-transform duration-150 ease-out-quart group-hover:scale-110 motion-reduce:transition-none motion-reduce:group-hover:scale-100",
+              "flex h-9 w-9 shrink-0 items-center justify-center rounded-md border transition-transform duration-200 ease-out-quart group-hover:scale-105 motion-reduce:transition-none motion-reduce:group-hover:scale-100",
               TONE_ICON[tone],
             )}
             aria-hidden
@@ -699,27 +731,46 @@ function ValueCard({
         ) : null}
       </div>
       {loading ? (
-        <Skel h={36} w="80%" />
+        <Skel h={40} w="80%" />
       ) : (
-        <div className="text-3xl font-semibold tabular-nums tracking-tighter text-fg-strong">
+        <div className="text-[2rem] font-semibold leading-[1.05] tabular-nums tracking-tighter text-fg-strong sm:text-4xl">
           {value ?? "—"}
         </div>
       )}
-      <div className="text-xs text-fg-muted">{sub}</div>
-      <div className={cn("mt-auto h-0.5 w-full rounded opacity-60", TONE_BAR[tone])} aria-hidden />
+      <div className="text-xs leading-relaxed text-fg-muted">{sub}</div>
+      {href ? (
+        <div className="mt-auto flex items-center justify-between pt-1">
+          <span className="text-3xs font-semibold uppercase tracking-sops text-fg-faint">
+            Open
+          </span>
+          <ArrowRight
+            className={cn(
+              "h-3.5 w-3.5 shrink-0 transition-transform duration-200 ease-out-quart group-hover:translate-x-0.5 motion-reduce:transition-none motion-reduce:group-hover:translate-x-0",
+              TONE_CHIP[tone],
+            )}
+            strokeWidth={2}
+            aria-hidden
+          />
+        </div>
+      ) : null}
     </>
   );
   if (href) {
     return (
       <Link
         href={href}
-        className="card group flex flex-col gap-3 p-5 transition-all duration-150 ease-out-quart hover:-translate-y-0.5 hover:border-accent/50 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+        data-tone={tone}
+        className="kpi-tile is-link group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
       >
         {body}
       </Link>
     );
   }
-  return <div className="card flex flex-col gap-3 p-5">{body}</div>;
+  return (
+    <div data-tone={tone} className="kpi-tile">
+      {body}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -770,13 +821,21 @@ function StockDonut({
   const hShare = (healthy / Math.max(1, total)) * circ;
   const wShare = (watch / Math.max(1, total)) * circ;
 
+  const tone: "accent" | "warning" | "danger" =
+    critical > 0 ? "danger" : watch > 0 ? "warning" : "accent";
   return (
     <Link
       href="/planning/inventory-flow"
-      className="card group block p-5 transition-all duration-150 ease-out-quart hover:-translate-y-0.5 hover:border-accent/50 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+      data-tone={tone}
+      className="kpi-tile is-link group block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
     >
-      <div className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-        Stock health
+      <div className="flex items-center justify-between">
+        <div className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+          Stock health
+        </div>
+        <span className="text-3xs font-semibold uppercase tracking-sops text-fg-faint">
+          {total} items
+        </span>
       </div>
       {loading ? (
         <div className="mt-4 flex items-center gap-5">
@@ -854,28 +913,40 @@ function ExceptionsCard({
 }) {
   const total = criticalN + warningN + infoN;
   const hot = criticalN > 0;
+  const tone = hot ? "danger" : "info";
   return (
     <Link
       href="/inbox"
-      className={cn(
-        "card group flex flex-col gap-3 p-5 transition-all duration-150 ease-out-quart hover:-translate-y-0.5 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 motion-reduce:transition-none motion-reduce:hover:translate-y-0",
-        hot ? "border-danger/40 bg-danger-softer" : "hover:border-accent/50",
-      )}
+      data-tone={tone}
+      className="kpi-tile is-link group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
     >
-      <div
-        className={cn(
-          "text-3xs font-semibold uppercase tracking-sops",
-          hot ? "text-danger" : "text-fg-subtle",
-        )}
-      >
-        Exceptions
+      <div className="flex items-start justify-between gap-3">
+        <div
+          className={cn(
+            "text-3xs font-semibold uppercase tracking-sops",
+            hot ? "text-danger" : "text-info",
+          )}
+        >
+          Exceptions
+        </div>
+        <div
+          className={cn(
+            "flex h-9 w-9 shrink-0 items-center justify-center rounded-md border transition-transform duration-200 ease-out-quart group-hover:scale-105 motion-reduce:transition-none motion-reduce:group-hover:scale-100",
+            hot
+              ? "border-danger/40 bg-danger-soft text-danger"
+              : "border-info/30 bg-info-soft text-info",
+          )}
+          aria-hidden
+        >
+          <Inbox className="h-4 w-4" strokeWidth={2} />
+        </div>
       </div>
       {loading ? (
-        <Skel h={46} w="60%" />
+        <Skel h={40} w="60%" />
       ) : (
         <div
           className={cn(
-            "text-4xl font-semibold tabular-nums tracking-tighter",
+            "text-[2rem] font-semibold leading-[1.05] tabular-nums tracking-tighter sm:text-4xl",
             hot ? "text-danger" : "text-fg-strong",
           )}
         >
@@ -889,10 +960,19 @@ function ExceptionsCard({
           <Legend dotClass="bg-info" label="Info" n={infoN} />
         </div>
       )}
-      <span className="inline-flex items-center gap-1 self-start text-xs font-semibold text-accent group-hover:underline">
-        Open inbox
-        <ArrowRight className="h-3 w-3" strokeWidth={2} />
-      </span>
+      <div className="mt-auto flex items-center justify-between pt-1">
+        <span className="text-3xs font-semibold uppercase tracking-sops text-fg-faint">
+          Open inbox
+        </span>
+        <ArrowRight
+          className={cn(
+            "h-3.5 w-3.5 shrink-0 transition-transform duration-200 ease-out-quart group-hover:translate-x-0.5 motion-reduce:transition-none motion-reduce:group-hover:translate-x-0",
+            hot ? "text-danger" : "text-info",
+          )}
+          strokeWidth={2}
+          aria-hidden
+        />
+      </div>
     </Link>
   );
 }
@@ -1419,8 +1499,7 @@ function CriticalTodayBlock({ now }: { now: Date }) {
       ) : query.isError ? (
         <ErrorAlert label="Critical issues unavailable." onRetry={() => query.refetch()} />
       ) : rows.length === 0 ? (
-        <EmptyState
-          icon={<CheckCircle2 className="h-5 w-5 text-success" strokeWidth={2} />}
+        <AllClearRibbon
           title="All clear · no critical issues today."
           description="No stockouts, no fail-hard planning exceptions, no critical-stale integrations, no active break-glass."
         />
@@ -1512,8 +1591,7 @@ function SlippedPlansBlock({ now }: { now: Date }) {
       ) : query.isError ? (
         <ErrorAlert label="Slipped plans unavailable." onRetry={() => query.refetch()} />
       ) : rows.length === 0 ? (
-        <EmptyState
-          icon={<CheckCircle2 className="h-5 w-5 text-success" strokeWidth={2} />}
+        <AllClearRibbon
           title={`No slipped plans in the past ${windowDays} days.`}
           description="Every past plan in this window has a posted actual or was cancelled by the planner."
         />
@@ -1707,8 +1785,7 @@ function UrgentProcurementBlock({ now }: { now: Date }) {
           description="Start the weekly procurement session to generate consolidated supplier order drafts."
         />
       ) : rows.length === 0 ? (
-        <EmptyState
-          icon={<CheckCircle2 className="h-5 w-5 text-success" strokeWidth={2} />}
+        <AllClearRibbon
           title="All procurement is on track."
           description="No supplier orders are overdue, due today, or flagged urgent. Upcoming orders appear on the purchase calendar."
         />
@@ -1862,6 +1939,22 @@ export default function DashboardPage() {
     refetchInterval: STALE_TIME_MS,
   });
 
+  // Mirror queries for the at-a-glance factory-state chip. These share
+  // queryKeys with the inline block components (CriticalTodayBlock and
+  // SlippedPlansBlock), so React Query dedupes — no extra network traffic.
+  const criticalTodayQ = useQuery({
+    queryKey: QK_CRITICAL_TODAY,
+    queryFn: ({ signal }) =>
+      fetchJson<CriticalTodayResponse>("/api/dashboard/critical-today", signal),
+    staleTime: STALE_TIME_MS,
+  });
+  const slippedPlansQ = useQuery({
+    queryKey: QK_SLIPPED_PLANS,
+    queryFn: ({ signal }) =>
+      fetchJson<SlippedPlansResponse>("/api/dashboard/slipped-plans", signal),
+    staleTime: STALE_TIME_MS,
+  });
+
   // Derived: stock health from inventory-flow.
   const flowItems = flowQ.data?.items ?? [];
   const healthy = flowItems.filter((i) => i.risk_tier === "healthy").length;
@@ -1968,14 +2061,28 @@ export default function DashboardPage() {
   const totalInventoryValue =
     rmValue != null || fgValue != null ? (rmValue ?? 0) + (fgValue ?? 0) : null;
 
+  // At-a-glance factory-state counts for the hero chip. null while still
+  // loading so we never paint unknown as healthy.
+  const criticalCount = criticalTodayQ.isLoading
+    ? null
+    : criticalTodayQ.data?.rows?.length ?? 0;
+  const slippedCount = slippedPlansQ.isLoading
+    ? null
+    : slippedPlansQ.data?.rows?.length ?? 0;
+
   return (
-    <div className="flex flex-col gap-6 sm:gap-8">
+    <div className="dashboard-canvas flex flex-col gap-6 sm:gap-8">
       <WorkflowHeader
         eyebrow="Factory floor"
         title="Dashboard"
         description={`${greeting(now, session?.display_name)} — here is the state of the factory on ${fmtToday(now)}.`}
         meta={
           <MetaRow>
+            <FactoryStateChip
+              critical={criticalCount}
+              slipped={slippedCount}
+              procurementUrgent={null}
+            />
             <FreshnessBadge
               label="Stock value"
               lastAt={valueAsOf ?? undefined}
@@ -1983,24 +2090,25 @@ export default function DashboardPage() {
               failAfterMinutes={120}
             />
             {totalInventoryValue != null ? (
-              <span className="inline-flex items-center gap-1.5 rounded-full border border-border/70 bg-bg-subtle px-2.5 py-1 text-2xs font-semibold text-fg-muted">
-                <Coins className="h-3.5 w-3.5 text-accent" strokeWidth={2} />
-                Total inventory{" "}
+              <span
+                className="dash-chip"
+                title="Combined value of RM + PKG + FG stock from the latest stock-value snapshot."
+              >
+                <Coins className="h-3.5 w-3.5 text-accent" strokeWidth={2} aria-hidden />
+                <span className="text-fg-muted">Total inventory</span>
                 <span className="tabular-nums text-fg-strong">
                   {fmtILS(totalInventoryValue)}
                 </span>
               </span>
             ) : null}
-            {/* Iteration 10 — live affordance: the dashboard polls in the
-                background; this pill tells the operator the numbers are fresh. */}
+            {/* Live affordance — instrument-cluster ping confirms the
+                dashboard is polling in the background. */}
             <span
-              className="inline-flex items-center gap-1.5 rounded-full border border-accent/30 bg-accent-soft px-2.5 py-1 text-2xs font-semibold text-accent"
+              className="dash-chip"
+              data-tone="accent"
               title="Key panels re-fetch automatically every 60 seconds."
             >
-              <span className="relative flex h-1.5 w-1.5" aria-hidden>
-                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-accent opacity-60 motion-reduce:hidden" />
-                <span className="relative inline-flex h-1.5 w-1.5 rounded-full bg-accent" />
-              </span>
+              <span className="dash-live-dot" aria-hidden />
               Auto-refreshing
             </span>
           </MetaRow>
