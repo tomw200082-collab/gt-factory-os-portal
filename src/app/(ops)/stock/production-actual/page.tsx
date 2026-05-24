@@ -921,7 +921,7 @@ export default function ProductionActualPage() {
           setDone({
             kind: "success",
             message: committed.idempotent_replay
-              ? "Production already recorded."
+              ? "Already posted earlier — no duplicate created."
               : "Inventory has been updated.",
             committed,
             committedItemName: snapshot.item_name,

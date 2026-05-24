@@ -864,7 +864,7 @@ export default function GoodsReceiptPage() {
         setDone({
           kind: "success",
           message: committed.idempotent_replay
-            ? "Receipt already recorded."
+            ? "Already posted earlier — no duplicate created."
             : "Receipt posted successfully.",
           itemSummary,
           detail: `ref: ${committed.submission_id} · ${committed.lines.length} line${committed.lines.length !== 1 ? "s" : ""}`,

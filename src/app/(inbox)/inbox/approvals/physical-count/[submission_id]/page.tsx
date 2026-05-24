@@ -111,6 +111,29 @@ async function callReject(
   }
 }
 
+function friendlyPhysicalCountConflict(reasonCode: string, fallbackDetail: string): string {
+  switch (reasonCode) {
+    case "SELF_APPROVAL_FORBIDDEN":
+      return "You cannot approve your own count. Admin and planner roles may self-approve their own count; operator and viewer cannot. Ask another reviewer if you do not have the right role.";
+    case "NOT_PENDING":
+      return "This count is no longer pending — another reviewer may have already actioned it. Refresh the inbox.";
+    case "IDEMPOTENCY_KEY_REUSED":
+      return "This action was already submitted. Refresh the inbox to see the result.";
+    case "SUBMISSION_NOT_FOUND":
+      return "Submission not found. It may have been removed.";
+    case "SNAPSHOT_EXPIRED":
+      return "The count snapshot has expired. The operator must open a new snapshot and recount.";
+    case "SNAPSHOT_ALREADY_CONSUMED":
+      return "This snapshot has already been used for a submission.";
+    case "SNAPSHOT_OWNER_MISMATCH":
+      return "The snapshot was opened by a different operator. Only the operator who opened the snapshot can submit against it.";
+    case "THRESHOLD_NOT_CONFIGURED":
+      return "Auto-post threshold is not configured for this item type. Ask an admin to set the policy.";
+    default:
+      return fallbackDetail || "This submission cannot be actioned in its current state. Refresh the page and try again.";
+  }
+}
+
 function DetailRow({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="flex gap-2 text-xs">
@@ -166,10 +189,17 @@ export default function PhysicalCountReviewPage() {
   };
 
   if (outcome?.kind === "approved") {
+    const itemLabel = d?.item_display_name ?? d?.item_id ?? "item";
+    const counted = d ? `${fmtNumStr(d.counted_quantity)} ${d.unit}` : "the counted quantity";
+    const deltaText = d?.computed_delta != null ? formatDelta(d.computed_delta, d.unit) : null;
     return (
       <SuccessState
-        title="Approved. New anchor applied."
-        description={`Submission ${outcome.body.submission_id} posted. Anchor source ${outcome.body.anchor_source}. Exception ${outcome.body.exception_id} resolved.`}
+        title="Approved — new anchor applied"
+        description={
+          deltaText
+            ? `${itemLabel}: counted ${counted} (delta ${deltaText}). Snapshot replaced and is now the authoritative balance for this item.`
+            : `${itemLabel}: counted ${counted}. Snapshot replaced and is now the authoritative balance for this item.`
+        }
         action={
           <Link href="/inbox" className="btn btn-sm btn-primary">
             Back to inbox
@@ -179,10 +209,11 @@ export default function PhysicalCountReviewPage() {
     );
   }
   if (outcome?.kind === "rejected") {
+    const itemLabel = d?.item_display_name ?? d?.item_id ?? "count";
     return (
       <SuccessState
-        title="Rejected. Anchor unchanged."
-        description={`Submission ${outcome.body.submission_id} rejected. Reason: ${outcome.body.rejection_reason}. Exception ${outcome.body.exception_id} resolved. No anchor replacement.`}
+        title="Rejected — anchor unchanged"
+        description={`${itemLabel}: no anchor replacement. Reason: ${outcome.body.rejection_reason}`}
         tone="warning"
         action={
           <Link href="/inbox" className="btn btn-sm btn-primary">
@@ -193,10 +224,11 @@ export default function PhysicalCountReviewPage() {
     );
   }
   if (outcome?.kind === "conflict") {
+    const friendly = friendlyPhysicalCountConflict(outcome.body.reason_code, outcome.body.detail);
     return (
       <SuccessState
         title="Action refused"
-        description={outcome.body.detail || "This submission cannot be actioned in its current state. Refresh the page and try again."}
+        description={friendly}
         tone="warning"
         action={
           <>

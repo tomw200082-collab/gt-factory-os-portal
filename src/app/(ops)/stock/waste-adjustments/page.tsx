@@ -496,9 +496,9 @@ export default function WasteAdjustmentPage() {
         setDone({
           kind: "success",
           message: body.idempotent_replay
-            ? "Adjustment already recorded."
+            ? "Already posted earlier — no duplicate created."
             : "Adjustment posted successfully.",
-          itemSummary: `${row.label} · ${direction === "loss" ? "−" : "+"}${qtyNumLocal} ${unit} · ${String(reasonCode).replace(/_/g, " ")}`,
+          itemSummary: `${row.label} · ${direction === "loss" ? "−" : "+"}${qtyNumLocal} ${unit} · ${REASON_LABELS[reasonCode as WasteReasonCode] ?? String(reasonCode).replace(/_/g, " ")}`,
           detail: `ref: ${body.submission_id}`,
         });
         setQuantity("");
@@ -509,7 +509,7 @@ export default function WasteAdjustmentPage() {
         setDone({
           kind: "pending",
           message: "Adjustment submitted — held for planner approval.",
-          itemSummary: `${row.label} · ${direction === "loss" ? "−" : "+"}${qtyNumLocal} ${unit} · ${String(reasonCode).replace(/_/g, " ")}`,
+          itemSummary: `${row.label} · ${direction === "loss" ? "−" : "+"}${qtyNumLocal} ${unit} · ${REASON_LABELS[reasonCode as WasteReasonCode] ?? String(reasonCode).replace(/_/g, " ")}`,
           detail: `ref: ${sid}`,
           href: sid
             ? `/inbox/approvals/waste/${encodeURIComponent(sid)}`
@@ -644,10 +644,11 @@ export default function WasteAdjustmentPage() {
                   {done.detail}
                 </div>
               ) : null}
-              {/* Pending callout */}
+              {/* Pending callout — make the most dangerous semantic trap
+                  (pending vs posted) unmistakable. */}
               {done.kind === "pending" && (
                 <div className="mt-2 text-xs opacity-80">
-                  A planner will review this adjustment. You&apos;ll see it in Approvals when it&apos;s ready.
+                  <strong>Stock has not changed yet.</strong> A planner will review this adjustment; stock updates only once it&apos;s approved.
                 </div>
               )}
             </div>

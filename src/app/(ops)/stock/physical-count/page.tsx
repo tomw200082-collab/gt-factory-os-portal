@@ -490,7 +490,7 @@ export default function PhysicalCountPage() {
         setDone({
           kind: "success",
           message: body.idempotent_replay
-            ? "Count already recorded."
+            ? "Already posted earlier — no duplicate created."
             : "Count posted successfully.",
           itemName: snapshot?.item_display_name,
           delta: body.computed_delta,
@@ -684,7 +684,7 @@ export default function PhysicalCountPage() {
                 </div>
                 <div>
                   <div className="font-semibold text-base">{done.itemName ?? "Count submitted"}</div>
-                  <div className="text-sm opacity-90">This count has a large variance and is held for planner approval.</div>
+                  <div className="text-sm opacity-90">This count has a large variance and is held for planner approval. <strong>Stock has not changed yet</strong> — the new anchor is applied only after approval.</div>
                 </div>
               </div>
               {done.delta && (

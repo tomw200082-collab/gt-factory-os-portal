@@ -455,21 +455,39 @@ export function ApprovalInlineCard({
       {detail == null && !loadError ? (
         <div className="text-xs text-fg-muted animate-pulse">טוען פרטים…</div>
       ) : loadError ? (
-        <div className="text-xs text-fg-muted">לא ניתן לטעון פרטים. ניתן לאשר או לדחות בכל זאת.</div>
+        <div
+          className="rounded-md border border-warning/40 bg-warning-softer/60 p-3 text-sm text-warning-fg"
+          data-testid="approval-inline-load-error"
+        >
+          <div className="font-medium">לא ניתן לטעון פרטים</div>
+          <div className="mt-1 text-xs text-warning-fg/90">
+            אישור או דחייה ללא צפייה בפרטים אינם מותרים. פתחו את הפעולה במסך המלא לבדיקה לפני אישור.
+          </div>
+          <a
+            href={row.deep_link}
+            className="btn btn-sm mt-2 border-warning/50 text-warning-fg hover:bg-warning-softer"
+            data-testid="approval-inline-load-error-open"
+          >
+            פתח לבדיקה
+          </a>
+        </div>
       ) : detail && kind === "waste" ? (
         <WasteFactGrid d={detail as WasteDetail} now={now} />
       ) : detail && kind === "physical_count" ? (
         <PhysicalCountFactGrid d={detail as PhysicalCountDetail} now={now} />
       ) : null}
 
-      {/* Actions */}
-      {!showReject ? (
+      {/* Actions — blocked until detail loads. Blind approval/rejection is
+          unsafe (operator would post stock changes they have not seen). On
+          load error the user is routed to the full detail page via the link
+          above. */}
+      {!showReject && !loadError ? (
         <div className="flex flex-wrap items-center gap-2">
           <button
             type="button"
             className="btn btn-sm btn-primary gap-1.5"
             data-testid="approval-inline-approve"
-            disabled={busy}
+            disabled={busy || detail == null}
             onClick={async () => {
               setBusy(true);
               const result = await postApprove(kind, submissionId, null);
@@ -484,7 +502,7 @@ export function ApprovalInlineCard({
             type="button"
             className="btn btn-sm border-danger/40 text-danger hover:bg-danger-softer"
             data-testid="approval-inline-reject-open"
-            disabled={busy}
+            disabled={busy || detail == null}
             onClick={() => setShowReject(true)}
           >
             דחה

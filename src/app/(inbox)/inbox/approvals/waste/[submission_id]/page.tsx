@@ -104,6 +104,25 @@ async function callReject(
   }
 }
 
+function friendlyWasteConflict(reasonCode: string, fallbackDetail: string): string {
+  switch (reasonCode) {
+    case "SELF_APPROVAL_FORBIDDEN":
+      return "You cannot approve your own submission. Ask another planner or admin to review it.";
+    case "NOT_PENDING":
+      return "This submission is no longer pending — another reviewer may have already actioned it. Refresh the inbox.";
+    case "IDEMPOTENCY_KEY_REUSED":
+      return "This action was already submitted. Refresh the inbox to see the result.";
+    case "SUBMISSION_NOT_FOUND":
+      return "Submission not found. It may have been removed.";
+    case "COUNT_FREEZE_ACTIVE":
+      return "A physical count is in progress for this item. Wait for the count to be approved or rejected before posting this adjustment.";
+    case "THRESHOLD_NOT_CONFIGURED":
+      return "Auto-post threshold is not configured for this item type. Ask an admin to set the policy.";
+    default:
+      return fallbackDetail || "This submission cannot be actioned in its current state. Refresh the page and try again.";
+  }
+}
+
 function DetailRow({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="flex gap-2 text-xs">
@@ -152,10 +171,14 @@ export default function WasteReviewPage() {
   };
 
   if (outcome?.kind === "approved") {
+    const itemLabel = d?.item_display_name ?? d?.item_id ?? "item";
+    const directionVerb = d?.direction === "loss" ? "decreased by" : "increased by";
+    const amount = d ? `${d.quantity} ${d.unit}` : "the submitted amount";
+    const shortLedger = outcome.body.stock_ledger_movement_id.slice(0, 8);
     return (
       <SuccessState
-        title="Approved"
-        description={`Submission ${outcome.body.submission_id} posted. Ledger ${outcome.body.stock_ledger_movement_id}. Exception ${outcome.body.exception_id} resolved.`}
+        title="Approved — stock updated"
+        description={`${itemLabel} ${directionVerb} ${amount}. Ledger ref ${shortLedger}…`}
         action={
           <Link href="/inbox" className="btn btn-sm btn-primary">
             Back to inbox
@@ -165,10 +188,11 @@ export default function WasteReviewPage() {
     );
   }
   if (outcome?.kind === "rejected") {
+    const itemLabel = d?.item_display_name ?? d?.item_id ?? "submission";
     return (
       <SuccessState
-        title="Rejected"
-        description={`Submission ${outcome.body.submission_id} rejected. Reason: ${outcome.body.rejection_reason}. Exception ${outcome.body.exception_id} resolved. No ledger row created.`}
+        title="Rejected — stock unchanged"
+        description={`${itemLabel}: no ledger row created. Reason: ${outcome.body.rejection_reason}`}
         tone="warning"
         action={
           <Link href="/inbox" className="btn btn-sm btn-primary">
@@ -179,10 +203,13 @@ export default function WasteReviewPage() {
     );
   }
   if (outcome?.kind === "conflict") {
+    // The 409 conflict response carries a typed `reason_code` per
+    // src/lib/contracts/waste-adjustments.ts WasteConflictReason.
+    const friendly = friendlyWasteConflict(outcome.body.reason_code, outcome.body.detail);
     return (
       <SuccessState
         title="Action refused"
-        description={outcome.body.detail || "This submission cannot be actioned in its current state. Refresh the page and try again."}
+        description={friendly}
         tone="warning"
         action={
           <>
