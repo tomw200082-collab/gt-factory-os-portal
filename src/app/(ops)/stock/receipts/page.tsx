@@ -47,6 +47,9 @@ import type { ReceiptTrack } from "./_components/types";
 // Tranche 022 — strip 8-dp noise from prefill values before they hit
 // the number input.
 import { fmtNumStr } from "@/lib/utils/format-quantity";
+// Tranche 023 — Lucide icons replace decorative emojis for a more
+// professional surface.
+import { FilePen, Lightbulb, ArrowDown, Lock } from "lucide-react";
 
 // ---------------------------------------------------------------------------
 // Goods Receipt contract — inlined.
@@ -1414,7 +1417,7 @@ export default function GoodsReceiptPage() {
               data-testid="receipts-manual-context-strip"
             >
               <span className="inline-flex items-center gap-1.5 rounded-full bg-bg-raised px-2 py-0.5 font-medium text-fg">
-                <span aria-hidden="true">📝</span>
+                <FilePen className="h-3.5 w-3.5" aria-hidden="true" />
                 Manual receipt — no PO
               </span>
               <span className="text-fg-muted">
@@ -1445,7 +1448,7 @@ export default function GoodsReceiptPage() {
               role="status"
               data-testid="receipts-manual-supplier-hint"
             >
-              <span aria-hidden="true">💡</span>
+              <Lightbulb className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
               <span>
                 <span className="font-semibold">
                   {selectedSupplierName || "This supplier"}
@@ -1525,7 +1528,10 @@ export default function GoodsReceiptPage() {
                     Supplier *
                     {/* #7: Lock icon when urlPoLocked */}
                     {urlPoLocked ? (
-                      <span title="Supplier locked to PO" aria-label="Supplier locked" className="ml-1">🔒</span>
+                      <Lock
+                        className="ml-1 inline h-3 w-3 text-fg-muted"
+                        aria-label="Supplier locked"
+                      />
                     ) : null}
                   </span>
                   {/* #5: Searchable supplier combobox */}
@@ -1664,7 +1670,7 @@ export default function GoodsReceiptPage() {
                   role="note"
                   data-testid="receipt-lines-empty-state"
                 >
-                  <span aria-hidden="true">👇</span>
+                  <ArrowDown className="h-3.5 w-3.5 shrink-0 mt-0.5" aria-hidden="true" />
                   <span>
                     Pick an item or component on the line below to get
                     started. Quantity prefills from PO when matched.
