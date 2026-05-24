@@ -803,6 +803,15 @@ export default function ProductionActualPage() {
   // the item is already known. Fires once: when from_plan_id is in the URL,
   // the selected item is confirmed producible, and the form is still on Step 1.
   const autoOpenFiredRef = useRef(false);
+  // Auto-focus the output_qty input on Step 2 so the operator can type
+  // immediately after item selection. Mirrors the physical-count pattern.
+  const outputQtyInputRef = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (phase === "entering") {
+      const t = setTimeout(() => outputQtyInputRef.current?.focus(), 0);
+      return () => clearTimeout(t);
+    }
+  }, [phase]);
   useEffect(() => {
     if (autoOpenFiredRef.current) return;
     if (!fromPlanIdParam) return;
@@ -2167,6 +2176,7 @@ export default function ProductionActualPage() {
                       −
                     </button>
                     <input
+                      ref={outputQtyInputRef}
                       type="number"
                       inputMode="decimal"
                       step="any"
