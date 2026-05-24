@@ -23,6 +23,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import { Truck, Search, Plus, ChevronDown, ChevronUp, CornerDownLeft } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { fmtNumStr } from "@/lib/utils/format-quantity";
 import {
@@ -138,11 +139,11 @@ export function ReceiptLandingPicker({
         <div className="flex items-center justify-between gap-3 border-b border-border/70 bg-gradient-to-b from-bg-raised to-bg/40 px-4 py-3 sm:px-5">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-lg" aria-hidden="true">🚚</span>
+              <Truck className="h-4 w-4 text-fg-muted" aria-hidden="true" />
               <h3 className="text-sm font-semibold text-fg-strong">
                 Expected today &amp; this week
               </h3>
-              <span className="inline-flex items-center rounded-full bg-bg-subtle px-2 py-0.5 text-3xs font-medium text-fg-muted">
+              <span className="inline-flex items-center rounded-full bg-bg-subtle px-2 py-0.5 text-3xs font-medium text-fg-muted tabular-nums">
                 {isLoadingPos ? "…" : expectedSoon.length}
               </span>
             </div>
@@ -254,11 +255,11 @@ export function ReceiptLandingPicker({
         <div className="flex items-center justify-between gap-3 border-b border-border/70 bg-gradient-to-b from-bg-raised to-bg/40 px-4 py-3 sm:px-5">
           <div className="min-w-0">
             <div className="flex items-center gap-2">
-              <span className="text-lg" aria-hidden="true">🔍</span>
+              <Search className="h-4 w-4 text-fg-muted" aria-hidden="true" />
               <h3 className="text-sm font-semibold text-fg-strong">Find a PO</h3>
               {/* Live match count — only when searching. */}
               {query.trim() && !isLoadingPos ? (
-                <span className="inline-flex items-center rounded-full bg-bg-subtle px-2 py-0.5 text-3xs font-medium text-fg-muted">
+                <span className="inline-flex items-center rounded-full bg-bg-subtle px-2 py-0.5 text-3xs font-medium text-fg-muted tabular-nums">
                   {searchResults.length} match
                   {searchResults.length !== 1 ? "es" : ""}
                 </span>
@@ -270,8 +271,8 @@ export function ReceiptLandingPicker({
           </div>
           {/* Keyboard hint — visually subtle but useful for power users. */}
           <span className="hidden items-center gap-1 text-3xs text-fg-subtle sm:flex">
-            <kbd className="rounded border border-border/70 bg-bg-raised px-1.5 py-0.5 font-mono">
-              ↵
+            <kbd className="inline-flex h-5 items-center gap-0.5 rounded border border-border/70 bg-bg-raised px-1.5 font-mono">
+              <CornerDownLeft className="h-3 w-3" aria-hidden="true" />
             </kbd>
             <span>top match</span>
           </span>
@@ -367,9 +368,9 @@ export function ReceiptLandingPicker({
                             </span>
                           ) : null}
                           {isTopMatch ? (
-                            <span className="hidden items-center gap-1 text-3xs text-accent sm:flex">
-                              <kbd className="rounded border border-accent/30 bg-accent-soft px-1 py-0.5 font-mono">
-                                ↵
+                            <span className="hidden items-center text-3xs text-accent sm:flex">
+                              <kbd className="inline-flex h-4 items-center rounded border border-accent/30 bg-accent-soft px-1 font-mono">
+                                <CornerDownLeft className="h-2.5 w-2.5" aria-hidden="true" />
                               </kbd>
                             </span>
                           ) : null}
@@ -398,7 +399,7 @@ export function ReceiptLandingPicker({
       >
         <div className="border-b border-border/70 bg-gradient-to-b from-bg-raised to-bg/40 px-4 py-3 sm:px-5">
           <div className="flex items-center gap-2">
-            <span className="text-lg" aria-hidden="true">➕</span>
+            <Plus className="h-4 w-4 text-fg-muted" aria-hidden="true" />
             <h3 className="text-sm font-semibold text-fg-strong">
               Receive without a PO
             </h3>
@@ -467,7 +468,7 @@ function POCardContents({ poId }: { poId: string }) {
     <div className="mt-1.5 px-3 pb-2">
       <button
         type="button"
-        className="text-3xs font-medium text-fg-muted underline-offset-2 transition-colors hover:text-accent hover:underline focus:outline-none focus-visible:underline focus-visible:text-accent"
+        className="inline-flex items-center gap-1 text-3xs font-medium text-fg-muted underline-offset-2 transition-colors hover:text-accent hover:underline focus:outline-none focus-visible:underline focus-visible:text-accent"
         onClick={(e) => {
           // Don't bubble to the card button above us — operator might
           // tap the chevron to peek without committing to the PO.
@@ -477,7 +478,12 @@ function POCardContents({ poId }: { poId: string }) {
         aria-expanded={expanded}
         data-testid={`receipt-landing-po-contents-toggle-${poId}`}
       >
-        {expanded ? "Hide items ↑" : "Show items ↓"}
+        {expanded ? "Hide items" : "Show items"}
+        {expanded ? (
+          <ChevronUp className="h-3 w-3" aria-hidden="true" />
+        ) : (
+          <ChevronDown className="h-3 w-3" aria-hidden="true" />
+        )}
       </button>
       {expanded ? (
         <div className="mt-1.5">
