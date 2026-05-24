@@ -1,7 +1,9 @@
 # Tranche 020: economics-page-ux-polish
 
-status: active
+status: landed-pending-review
 created: 2026-05-24
+landed: 2026-05-24
+pr: https://github.com/tomw200082-collab/gt-factory-os-portal/pull/38
 scorecard_target_category: economics_surface
 expected_delta: +3 (filtering, drill-down, publish affordance)
 sizing: M (1 page file, large diff)
@@ -59,4 +61,7 @@ Revert the single tranche commit; the page reverts to the existing 3-tab layout 
 - [x] Tom approves this plan (session directive 2026-05-24: "תשפר את הדף ECONOMICS" + multi-select confirming A+B+C+D scope and missing-only drawer).
 
 ## Actual evidence
-Filled in post-land.
+- typecheck: `npx tsc --noEmit` → exit 0 (2026-05-24).
+- diff scope: 1 source file (`src/app/(economics)/admin/economics/page.tsx`, +1713 / −285), plus tranche manifest + `_active.txt`.
+- branch: `claude/brave-rubin-SnYk1` (commit 12b16e3).
+- PR: https://github.com/tomw200082-collab/gt-factory-os-portal/pull/38.
