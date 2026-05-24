@@ -442,6 +442,8 @@ export function ApprovalInlineCard({
       <div
         className="mt-3 flex items-center gap-2 rounded-md border border-success/40 bg-success-subtle/30 px-3 py-2.5 text-sm text-success-fg"
         data-testid="approval-inline-success"
+        role="status"
+        aria-live="polite"
       >
         <CheckCircle2 className="h-4 w-4 shrink-0" strokeWidth={2} />
         <span className="flex-1">
@@ -458,6 +460,8 @@ export function ApprovalInlineCard({
       <div
         className="mt-3 flex items-center gap-2 rounded-md border border-danger/30 bg-danger-softer/40 px-3 py-2.5 text-sm text-danger-fg"
         data-testid="approval-inline-rejected"
+        role="status"
+        aria-live="polite"
       >
         <XCircle className="h-4 w-4 shrink-0" strokeWidth={2} />
         <span className="flex-1">
@@ -475,7 +479,11 @@ export function ApprovalInlineCard({
         ? friendlyInlineConflict(kind, outcome.reasonCode, outcome.detail)
         : outcome.message;
     return (
-      <div className="mt-3 rounded-md border border-warning/40 bg-warning-softer px-3 py-2.5 text-sm text-warning-fg">
+      <div
+        className="mt-3 rounded-md border border-warning/40 bg-warning-softer px-3 py-2.5 text-sm text-warning-fg"
+        role="alert"
+        aria-live="assertive"
+      >
         {text}
       </div>
     );
