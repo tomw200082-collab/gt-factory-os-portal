@@ -101,6 +101,10 @@ interface StockRow {
   is_below_floor?: boolean;
   floor_gap?: string;
   last_event_at: string | null;
+  // True for an ACTIVE master row that has never had a balance/ledger event.
+  // Distinguishes "we counted 0" from "we haven't counted yet". Optional for
+  // back-compat with old API deploys (treated as false).
+  never_counted?: boolean;
 }
 
 function resolveDisplay(row: StockRow): {
@@ -138,7 +142,7 @@ interface StockValueResponse {
 }
 
 type TabType = "FG" | "RM_PKG";
-type Tier = "healthy" | "low" | "critical" | "out" | "reconcile" | "unknown";
+type Tier = "healthy" | "low" | "critical" | "out" | "reconcile" | "uncounted" | "unknown";
 type CostStatus = "has_cost" | "missing_cost" | "pending_rollup" | "na";
 
 interface ValueMeta {
@@ -239,7 +243,10 @@ function smartRelativeDate(iso: string | null): { label: string; aria: string; d
   return { label, aria: fullDate, daysAgo: days };
 }
 
-function deriveTier(onHandRaw: string): Tier {
+function deriveTier(onHandRaw: string, neverCounted?: boolean): Tier {
+  // "Uncounted" wins over "Out" so the operator can tell at a glance that the
+  // zero is "we haven't measured this yet" rather than "we measured 0".
+  if (neverCounted) return "uncounted";
   const n = Number(onHandRaw);
   if (isNaN(n)) return "unknown";
   if (n < 0) return "reconcile";
@@ -417,6 +424,7 @@ function TierBadge({ tier }: { tier: Tier }) {
     critical:  { label: "Critical",  cls: "bg-warning-softer text-warning-fg ring-warning/40", glyph: "◑" },
     out:       { label: "Out",       cls: "bg-danger-softer text-danger-fg ring-danger/30",    glyph: "◯" },
     reconcile: { label: "Reconcile", cls: "bg-warning-softer text-warning-fg ring-warning/50", glyph: "◈" },
+    uncounted: { label: "Not counted", cls: "bg-bg-subtle text-fg-subtle ring-border italic",  glyph: "∅" },
     unknown:   { label: "Unknown",   cls: "bg-bg-subtle text-fg-subtle ring-border",            glyph: "?" },
   };
   const m = meta[tier];
@@ -502,7 +510,7 @@ function OnHandCell({
   onReconcileClick: (row: StockRow) => void;
 }) {
   const resolved = resolveDisplay(row);
-  const tier = deriveTier(resolved.raw);
+  const tier = deriveTier(resolved.raw, row.never_counted);
   const displayN = Number(resolved.display);
   return (
     <span className="inline-flex items-baseline justify-end gap-1.5 tabular-nums">
@@ -590,7 +598,7 @@ function InventoryCardMobile({
   value: ValueMeta | null;
   onReconcileClick: (row: StockRow) => void;
 }) {
-  const tier = deriveTier(resolveDisplay(row).raw);
+  const tier = deriveTier(resolveDisplay(row).raw, row.never_counted);
   const cost = deriveCostStatus(row.item_type, value);
   const date = smartRelativeDate(row.last_event_at);
   const totalVal = fmtIlsAccountancy(value?.total_value ?? null);
@@ -651,6 +659,7 @@ const TIER_FILTER_LABEL: Record<string, string> = {
   low: "Low / Critical",
   out: "Out of stock",
   reconcile: "Reconcile",
+  uncounted: "Not counted",
 };
 
 function ClearableChip({
@@ -876,6 +885,9 @@ export default function InventoryPage() {
   const isLoading = tab === "FG" ? fgLoading : rmLoading;
   const error = tab === "FG" ? fgError : rmError;
   const isFetching = tab === "FG" ? fgFetching : rmFetching;
+  // Tab-spanning loading for the top KPI strip: the "Items tracked" total
+  // covers both tabs, so we must wait for both before showing a real number.
+  const allStockLoading = fgLoading || rmLoading;
 
   // Category list extracted from current rows, ranked by item count so the
   // busiest groups surface first as filter chips.
@@ -912,12 +924,15 @@ export default function InventoryPage() {
           const n = Number(r.calculated_on_hand);
           if (!(n > 0)) return false;
         } else if (tierFilter === "out") {
-          if (Number(r.calculated_on_hand) !== 0) return false;
+          // Counted-at-zero, not uncounted (uncounted has its own chip).
+          if (Number(r.calculated_on_hand) !== 0 || r.never_counted) return false;
         } else if (tierFilter === "low") {
-          const t = deriveTier(r.calculated_on_hand);
+          const t = deriveTier(r.calculated_on_hand, r.never_counted);
           if (t !== "low" && t !== "critical") return false;
         } else if (tierFilter === "reconcile") {
           if (Number(r.calculated_on_hand) >= 0) return false;
+        } else if (tierFilter === "uncounted") {
+          if (!r.never_counted) return false;
         }
       }
       if (missingCostOnly) {
@@ -991,7 +1006,7 @@ export default function InventoryPage() {
     const sectionOf = (r: StockRow): string => {
       if (groupBy === "category") return deriveCategory(r);
       if (groupBy === "uom") return r.base_uom ?? "No UOM";
-      if (groupBy === "tier") return deriveTier(resolveDisplay(r).raw);
+      if (groupBy === "tier") return deriveTier(resolveDisplay(r).raw, r.never_counted);
       return "";
     };
     const map = new Map<string, StockRow[]>();
@@ -1001,7 +1016,7 @@ export default function InventoryPage() {
       if (bucket) bucket.push(r);
       else map.set(key, [r]);
     }
-    const TIER_ORDER: Tier[] = ["reconcile", "out", "critical", "low", "healthy", "unknown"];
+    const TIER_ORDER: Tier[] = ["reconcile", "out", "critical", "low", "healthy", "uncounted", "unknown"];
     const entries = Array.from(map.entries());
     entries.sort((a, b) => {
       if (groupBy === "tier") {
@@ -1024,16 +1039,34 @@ export default function InventoryPage() {
   // Tab counts
   const fgCount = fgRows?.length ?? 0;
   const rmCount = rmRows?.length ?? 0;
+  // Uncounted per tab, computed off the raw rows so tab numbers stay in sync
+  // with the "Not counted" chip and group-by section regardless of filter state.
+  const fgUncountedCount = useMemo(
+    () => (fgRows ?? []).filter((r) => r.never_counted).length,
+    [fgRows],
+  );
+  const rmUncountedCount = useMemo(
+    () => (rmRows ?? []).filter((r) => r.never_counted).length,
+    [rmRows],
+  );
+  const totalUncountedCount = fgUncountedCount + rmUncountedCount;
 
   // KPI metrics
   const totalValue = valueData?.total_value_ils ?? "0";
   const itemsWithCost = valueData?.items_with_cost ?? 0;
   const itemsMissing = valueData?.items_without_cost ?? 0;
-  const totalItems = valueData?.row_count ?? fgCount + rmCount;
+  // Use the live list count (includes never-counted items) over value-handler's
+  // row_count (which currently mirrors current_balances and excludes uncounted).
+  const totalItems = fgCount + rmCount;
 
   // Reconcile (below-floor) count scoped to the active tab.
   const negativeCount = useMemo(() => {
     return allRows.filter((r) => Number(r.calculated_on_hand) < 0).length;
+  }, [allRows]);
+
+  // Uncounted count scoped to the active tab. Same shape as negativeCount.
+  const uncountedCount = useMemo(() => {
+    return allRows.filter((r) => r.never_counted).length;
   }, [allRows]);
 
   function handleSort(key: SortKey) {
@@ -1083,6 +1116,7 @@ export default function InventoryPage() {
           critical: "Critical",
           out: "Out of stock",
           reconcile: "Reconcile",
+          uncounted: "Not counted yet",
           unknown: "Unknown",
         }[key] ?? key
       );
@@ -1136,7 +1170,7 @@ export default function InventoryPage() {
             </span>
           ) : null}
           <span className="text-fg-muted">
-            Items below the physical floor (red) need investigation · Items without a configured cost show no value
+            Items below the physical floor (red) need investigation · Items without a configured cost show no value · ACTIVE master items that have never been counted appear at 0 with a "Not counted" badge
           </span>
         </div>
       </WorkflowHeader>
@@ -1152,8 +1186,12 @@ export default function InventoryPage() {
         <KpiCard
           label="Items tracked"
           primary={totalItems.toLocaleString()}
-          secondary={`${fgCount} FG · ${rmCount} RM/PKG`}
-          loading={!valueData}
+          secondary={
+            totalUncountedCount > 0
+              ? `${fgCount} FG · ${rmCount} RM/PKG · ${totalUncountedCount} not counted yet`
+              : `${fgCount} FG · ${rmCount} RM/PKG`
+          }
+          loading={allStockLoading}
         />
         <KpiCard
           label="With cost data"
@@ -1265,6 +1303,7 @@ export default function InventoryPage() {
             {(["FG", "RM_PKG"] as const).map((t) => {
               const isActive = tab === t;
               const count = t === "FG" ? fgCount : rmCount;
+              const uncounted = t === "FG" ? fgUncountedCount : rmUncountedCount;
               const label = t === "FG" ? "Finished Goods" : "Raw Materials & Packaging";
               return (
                 <button
@@ -1285,6 +1324,11 @@ export default function InventoryPage() {
                       ? "bg-bg text-fg shadow-sm"
                       : "text-fg-muted hover:text-fg",
                   )}
+                  title={
+                    uncounted > 0
+                      ? `${count} items · ${uncounted} not counted yet`
+                      : `${count} items`
+                  }
                 >
                   {label}
                   <span
@@ -1297,6 +1341,14 @@ export default function InventoryPage() {
                   >
                     {count}
                   </span>
+                  {uncounted > 0 ? (
+                    <span
+                      className="rounded-full bg-bg-subtle px-1 py-0 text-3xs tabular-nums text-fg-subtle ring-1 ring-border"
+                      aria-label={`${uncounted} not counted yet`}
+                    >
+                      <span aria-hidden>∅</span> {uncounted}
+                    </span>
+                  ) : null}
                 </button>
               );
             })}
@@ -1412,6 +1464,13 @@ export default function InventoryPage() {
                       negativeCount > 0
                         ? `Reconcile (${negativeCount})`
                         : "Reconcile",
+                  },
+                  {
+                    value: "uncounted",
+                    label:
+                      uncountedCount > 0
+                        ? `Not counted (${uncountedCount})`
+                        : "Not counted",
                   },
                 ].map((c) => {
                   const active = tierFilter === c.value;
@@ -1740,6 +1799,7 @@ export default function InventoryPage() {
                                     ) ?? null;
                                   const tier = deriveTier(
                                     resolveDisplay(row).raw,
+                                    row.never_counted,
                                   );
                                   const cost = deriveCostStatus(
                                     row.item_type,
