@@ -2205,7 +2205,10 @@ export default function ProductionActualPage() {
                   </div>
                 </div>
 
-                {/* Scrap quantity — with steppers */}
+                {/* Scrap quantity — with steppers. The inline hint surfaces
+                    the v1 scrap semantic (GAP-011): scrap reduces FG only,
+                    NOT RM consumption — RM consumption is based on the
+                    output_qty above. Operators MUST understand this. */}
                 <div className="block min-w-0">
                   <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Scrap quantity
@@ -2249,6 +2252,9 @@ export default function ProductionActualPage() {
                     >
                       +
                     </button>
+                  </div>
+                  <div className="mt-1 text-3xs text-fg-muted">
+                    Scrap reduces finished-goods output only. Raw-material consumption stays based on the output quantity above.
                   </div>
                 </div>
 
