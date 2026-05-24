@@ -39,6 +39,11 @@ import { SectionCard } from "@/components/workflow/SectionCard";
 import { UOMS, type Uom } from "@/lib/contracts/enums";
 import { componentItemType } from "@/lib/contracts/components";
 import { cn } from "@/lib/cn";
+// Tranche 020 — Smart-picker UX for PO linkage.
+import { ReceiptLandingPicker } from "./_components/ReceiptLandingPicker";
+import { POLedgerHeader } from "./_components/POLedgerHeader";
+import { POLineMatchCard } from "./_components/POLineMatchCard";
+import type { ReceiptTrack } from "./_components/types";
 
 // ---------------------------------------------------------------------------
 // Goods Receipt contract — inlined.
@@ -591,6 +596,21 @@ export default function GoodsReceiptPage() {
   // last-resort defense, but we don't want them to even attempt it.
   const urlPoLocked = Boolean(urlPoId);
 
+  // Tranche 020 — track state machine. Gates the Smart Landing Picker.
+  //  - undecided: render <ReceiptLandingPicker> at the top, hide the form.
+  //  - po:        render <POLedgerHeader>, form active, per-line match cards on.
+  //  - manual:    no PO header; form active; supplier-level PO hint surfaces.
+  // URL-driven prefill jumps straight to "po"; the manual button below
+  // jumps to "manual". A reset returns to "undecided".
+  const [manualConfirmed, setManualConfirmed] = useState(false);
+  const track: ReceiptTrack = urlPoLocked
+    ? "po"
+    : poId
+      ? "po"
+      : manualConfirmed
+        ? "manual"
+        : "undecided";
+
   // Lazy-load the chosen PO's detail to populate the per-line
   // po_line_id picker. enabled only when poId is set so we don't
   // hammer the proxy when no PO is referenced.
@@ -633,15 +653,25 @@ export default function GoodsReceiptPage() {
   // adds/removes lines after prefill, those edits stick.
   const [prefillApplied, setPrefillApplied] = useState(false);
   useEffect(() => {
-    if (!urlPoLocked) return;
+    // Tranche 020 — extended to also run for landing-picked POs (not
+    // just URL-driven). Resolves supplier from either the URL header
+    // fetch or the open-POs list, so picking a PO from the Smart Picker
+    // yields the same prefilled receipt drafts as arriving with ?po_id=.
+    if (!poId) return;
     if (prefillApplied) return;
-    if (urlPoTerminal) return;
-    if (!urlPoHeader) return;
+    if (urlPoLocked && urlPoTerminal) return;
+    if (urlPoLocked && !urlPoHeader) return; // wait for header in URL flow
     if (poDetailQuery.isLoading) return;
-    // Lock supplier from PO header.
-    if (!supplierId) {
-      setSupplierId(urlPoHeader.supplier_id);
+    if (poLines.length === 0) return; // wait for lines
+
+    // Sync supplier from whichever source is available.
+    const landingPick = openPosQuery.data?.rows.find((p) => p.po_id === poId);
+    const supplierFromPo =
+      urlPoHeader?.supplier_id ?? landingPick?.supplier_id ?? "";
+    if (supplierFromPo && supplierId !== supplierFromPo) {
+      setSupplierId(supplierFromPo);
     }
+
     // Build one line per OPEN/PARTIAL PO line; received_qty default = open_qty.
     // Receivable resolution: try component_id first, then item_id; fall back
     // to leaving the line picker empty (the operator can correct, then the
@@ -675,12 +705,14 @@ export default function GoodsReceiptPage() {
     setLines(drafts);
     setPrefillApplied(true);
   }, [
+    poId,
     urlPoLocked,
     prefillApplied,
     urlPoTerminal,
     urlPoHeader,
     poDetailQuery.isLoading,
     poLines,
+    openPosQuery.data,
     supplierId,
   ]);
 
@@ -689,13 +721,20 @@ export default function GoodsReceiptPage() {
   // still change it; the API will 409 SUPPLIER_MISMATCH if so.
   function handlePoChange(nextPoId: string): void {
     setPoId(nextPoId);
+    // Tranche 020 — reset prefill flag so the new PO's lines can seed
+    // the receipt drafts (Smart Landing path mirrors the URL-driven
+    // path's prefill behavior). The guard in the effect still prevents
+    // re-stomping after the operator has edited.
+    setPrefillApplied(false);
     if (!nextPoId) {
       // Clear per-line po_line_id selections when un-linking the PO.
       setLines((prev) => prev.map((l) => ({ ...l, po_line_id: "" })));
       return;
     }
     const picked = openPosQuery.data?.rows.find((p) => p.po_id === nextPoId);
-    if (picked && !supplierId) {
+    if (picked) {
+      // Always sync supplier to the picked PO. Diverging here would just
+      // trip the SUPPLIER_MISMATCH 409 at submit.
       setSupplierId(picked.supplier_id);
     }
     // Reset per-line po_line_id since they refer to the previous PO.
@@ -866,13 +905,20 @@ export default function GoodsReceiptPage() {
     return () => clearInterval(id);
   }, [eventAt]);
 
-  // #22: Auto-focus supplier combobox on mount
+  // #22: Auto-focus supplier combobox.
+  // Tranche 020 — Refire on track transition. Previously this only fired
+  // once when masters finished loading; with the Smart Landing Picker
+  // gating the form, the supplier input doesn't mount until the operator
+  // commits to a track, so the original effect no-op'd. Now: focus when
+  // the form first appears in manual mode (PO track auto-fills supplier,
+  // so leave focus alone there).
   const supplierInputRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
-    if (!loading && !urlPoLocked) {
-      supplierInputRef.current?.focus();
-    }
-  }, [loading, urlPoLocked]);
+    if (loading) return;
+    if (urlPoLocked) return;
+    if (track !== "manual") return;
+    supplierInputRef.current?.focus();
+  }, [loading, urlPoLocked, track]);
 
   // #23: Keyboard shortcut ⌘↵ / Ctrl↵ to submit
   const formRef = useRef<HTMLFormElement>(null);
@@ -899,6 +945,24 @@ export default function GoodsReceiptPage() {
 
   // #24: Green dot when at least one complete line
   const hasCompleteLine = completeLinesCount > 0;
+
+  // Tranche 020 — Count of lines that will post as an over-receipt.
+  // A line is an over-receipt when its quantity exceeds the matched PO
+  // line's open_qty. Matters for the sticky submit-bar warning so the
+  // operator sees the exception count before tapping submit.
+  const overReceiptCount = useMemo(() => {
+    if (!poId || poLines.length === 0) return 0;
+    let n = 0;
+    for (const l of lines) {
+      if (!l.po_line_id) continue;
+      const pl = poLines.find((p) => p.po_line_id === l.po_line_id);
+      if (!pl) continue;
+      const q = Number(l.quantity) || 0;
+      const open = Number(pl.open_qty) || 0;
+      if (q > open) n++;
+    }
+    return n;
+  }, [lines, poLines, poId]);
 
   // #12: Duplicate line detection
   const duplicateKeys = useMemo(() => {
@@ -956,6 +1020,16 @@ export default function GoodsReceiptPage() {
   const selectedSupplierName = useMemo(() => {
     return suppliersQuery.data?.rows.find((s) => s.supplier_id === supplierId)?.supplier_name_official ?? "";
   }, [suppliersQuery.data, supplierId]);
+
+  // Tranche 020 — open POs for the selected supplier. Used by the manual-
+  // track supplier hint and by future per-line SKU suggestions. Reuses
+  // the already-loaded openPosQuery; no extra fetches.
+  const supplierOpenPos = useMemo(() => {
+    if (!supplierId) return [];
+    return (openPosQuery.data?.rows ?? []).filter(
+      (p) => p.supplier_id === supplierId,
+    );
+  }, [openPosQuery.data, supplierId]);
 
   // Selected PO display (improvement #8)
   const selectedPo = useMemo(() => {
@@ -1070,44 +1144,38 @@ export default function GoodsReceiptPage() {
         </SectionCard>
       ) : null}
 
-      {/* #25: PO context strip with shimmer/gradient background */}
-      {urlPoLocked && !urlPoTerminal && urlPoHeader ? (
-        <div
-          className="relative mb-4 overflow-hidden rounded-md border border-info/30 px-4 py-3 text-sm"
-          style={{
-            background: "linear-gradient(90deg, hsl(var(--info-softer)) 0%, hsl(var(--bg-raised)) 50%, hsl(var(--info-softer)) 100%)",
-            backgroundSize: "200% 100%",
-            animation: "shimmer 3s ease-in-out infinite",
-          }}
-          role="note"
-          data-testid="receipts-po-context-strip"
-        >
-          {/* Shimmer keyframes injected inline */}
-          <style>{`@keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }`}</style>
-          <div className="flex flex-wrap items-center gap-3">
-            <span className="font-medium text-fg">
-              Receiving against PO{" "}
-              <span className="font-mono">{urlPoHeader.po_number}</span>
-            </span>
-            <span className="text-fg-muted">
-              {urlPoHeader.supplier_name ?? urlPoHeader.supplier_id}
-            </span>
-            {urlPoHeader.expected_receive_date ? (
-              <span className="text-fg-muted">
-                expected {urlPoHeader.expected_receive_date}
-              </span>
-            ) : null}
-            <span className="ml-auto flex items-center gap-2">
-              <Link
-                href={`/purchase-orders/${encodeURIComponent(urlPoHeader.po_id)}`}
-                className="btn btn-ghost btn-sm transition-colors duration-150"
-                data-testid="receipts-po-back-to-po"
-              >
-                ← Back to PO
-              </Link>
-            </span>
-          </div>
-        </div>
+      {/* Tranche 020 — Unified PO Ledger Header. Replaces the Cycle 16
+          shimmer strip. Renders for any PO-track receipt (URL-locked or
+          operator-picked) and shows aggregate progress instead of a flat
+          identity strip. Hidden in terminal-status path (above) and in
+          manual / undecided tracks. */}
+      {track === "po" && !urlPoTerminal && selectedPo ? (
+        <POLedgerHeader
+          poId={selectedPo.po_id}
+          poNumber={selectedPo.po_number}
+          supplierName={
+            urlPoHeader?.supplier_name ??
+            suppliersQuery.data?.rows.find(
+              (s) => s.supplier_id === selectedPo.supplier_id,
+            )?.supplier_name_official ??
+            selectedPo.supplier_id
+          }
+          expectedReceiveDate={selectedPo.expected_receive_date}
+          status={selectedPo.status}
+          poLines={poLines}
+          urlLocked={urlPoLocked}
+          onSwitch={
+            urlPoLocked
+              ? undefined
+              : () => {
+                  // Clear PO selection and return to landing.
+                  handlePoChange("");
+                  setManualConfirmed(false);
+                  setLines([emptyLine()]);
+                }
+          }
+          isLoading={poDetailQuery.isLoading}
+        />
       ) : null}
 
       {/* Success / error banner */}
@@ -1216,6 +1284,12 @@ export default function GoodsReceiptPage() {
                       setLines([emptyLine()]);
                       setNotes("");
                       setPoId("");
+                      // Tranche 020 — also reset the track so the operator
+                      // lands back on the Smart Picker (unless URL-locked,
+                      // in which case track stays "po" via the urlPoLocked
+                      // branch in the track derivation).
+                      setManualConfirmed(false);
+                      setSupplierId("");
                       setDone(null);
                       setPhase("idle");
                     }}
@@ -1304,8 +1378,110 @@ export default function GoodsReceiptPage() {
             </button>
           </div>
         </SectionCard>
-      ) : urlPoLocked && urlPoTerminal ? null : (
+      ) : urlPoLocked && urlPoTerminal ? null : track === "undecided" ? (
+        /* Tranche 020 — Smart Landing Picker. Hidden when URL-driven (jumps
+            straight to PO track) or when the operator has already chosen a
+            track via the picker. */
+        <ReceiptLandingPicker
+          openPos={openPosQuery.data?.rows ?? []}
+          suppliers={suppliersQuery.data?.rows ?? []}
+          isLoadingPos={openPosQuery.isLoading}
+          onSelectPo={(po) => {
+            handlePoChange(po.po_id);
+            setLines([emptyLine()]);
+          }}
+          onStartManual={() => {
+            setManualConfirmed(true);
+            // Manual mode: clear any prior PO selection.
+            if (poId) handlePoChange("");
+          }}
+        />
+      ) : (
         <>
+          {/* Tranche 020 — Manual-track context strip (shown when operator
+              chose "Receive without PO" on the Landing Picker). Gives a
+              clear way back to the picker so the choice doesn't feel
+              one-way. */}
+          {track === "manual" ? (
+            <div
+              className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-border/60 bg-bg-subtle/60 px-3 py-2 text-xs"
+              role="note"
+              data-testid="receipts-manual-context-strip"
+            >
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-bg-raised px-2 py-0.5 font-medium text-fg">
+                <span aria-hidden="true">📝</span>
+                Manual receipt — no PO
+              </span>
+              <span className="text-fg-muted">
+                You can switch to a PO at any time.
+              </span>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm ml-auto transition-colors duration-150"
+                onClick={() => {
+                  setManualConfirmed(false);
+                  if (poId) handlePoChange("");
+                  setLines([emptyLine()]);
+                }}
+                data-testid="receipts-manual-back-to-picker"
+              >
+                ← Pick a PO instead
+              </button>
+            </div>
+          ) : null}
+
+          {/* Tranche 020 — Supplier-level PO hint. When the operator is in
+              manual mode and has picked a supplier with open POs, surface
+              a one-tap nudge to link before submitting. Uses already-
+              loaded openPosQuery data; no extra fetches. */}
+          {track === "manual" && supplierId && supplierOpenPos.length > 0 ? (
+            <div
+              className="mb-4 flex flex-wrap items-center gap-2 rounded-md border border-info/40 bg-info-softer px-3 py-2 text-xs text-info-fg"
+              role="status"
+              data-testid="receipts-manual-supplier-hint"
+            >
+              <span aria-hidden="true">💡</span>
+              <span>
+                <span className="font-semibold">
+                  {selectedSupplierName || "This supplier"}
+                </span>{" "}
+                has{" "}
+                <span className="font-semibold">
+                  {supplierOpenPos.length} open PO
+                  {supplierOpenPos.length !== 1 ? "s" : ""}
+                </span>
+                . Link this receipt to one?
+              </span>
+              <div className="ml-auto flex items-center gap-1">
+                {supplierOpenPos.length === 1 ? (
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-primary transition-colors duration-150"
+                    onClick={() => {
+                      handlePoChange(supplierOpenPos[0].po_id);
+                      setManualConfirmed(false);
+                    }}
+                    data-testid="receipts-manual-supplier-hint-link"
+                  >
+                    Link to {supplierOpenPos[0].po_number} →
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="btn btn-sm btn-primary transition-colors duration-150"
+                    onClick={() => {
+                      setManualConfirmed(false);
+                      // Drop back to landing so the operator can pick from the list.
+                    }}
+                    data-testid="receipts-manual-supplier-hint-browse"
+                  >
+                    Browse {supplierOpenPos.length} →
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : null}
+
           {/* #1: 3-step progress indicator (client-side visual only) */}
           <StepIndicator
             steps={["Header", "Lines", "Review"]}
@@ -1374,86 +1550,25 @@ export default function GoodsReceiptPage() {
                   ) : null}
                 </label>
 
-                {/* #8: PO reference — cleaner display */}
-                <div className="block min-w-0 sm:col-span-2">
-                  <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    Reference PO (optional)
-                  </span>
-                  {urlPoLocked ? (
-                    /* Locked path: show styled PO chip */
-                    <div className="flex items-center gap-2">
-                      {selectedPo ? (
-                        <span className="inline-flex items-center gap-1.5 rounded-md border border-accent/30 bg-accent-soft px-3 py-1.5 text-sm font-medium text-accent">
-                          <span className="font-mono">{selectedPo.po_number}</span>
-                          <span className={cn(
-                            "rounded-full px-1.5 py-0.5 text-3xs font-semibold uppercase",
-                            selectedPo.status === "OPEN"
-                              ? "bg-success-softer text-success-fg"
-                              : selectedPo.status === "PARTIAL"
-                                ? "bg-warning-softer text-warning-fg"
-                                : "bg-bg-subtle text-fg-muted",
-                          )}>
-                            {selectedPo.status}
-                          </span>
-                        </span>
-                      ) : (
-                        <span className="text-sm text-fg-muted">No PO reference</span>
-                      )}
-                    </div>
-                  ) : (
-                    /* Manual path: combobox with "no PO" option */
-                    <>
-                      <Combobox
-                        options={[
-                          { value: "", label: "— manual receipt (no PO) —" },
-                          ...poOptions,
-                        ]}
-                        value={poId}
-                        onChange={handlePoChange}
-                        placeholder="— manual receipt (no PO) —"
-                        disabled={phase === "submitting"}
-                        data-testid="receipt-po-select"
-                      />
-                      {/* Show PO chip if selected */}
-                      {poId && selectedPo ? (
-                        <div className="mt-1.5 flex items-center gap-1.5">
-                          <span className="inline-flex items-center gap-1.5 rounded-md border border-accent/30 bg-accent-soft px-2 py-1 text-xs font-medium text-accent">
-                            <span className="font-mono">{selectedPo.po_number}</span>
-                            <span className={cn(
-                              "rounded-full px-1.5 py-0.5 text-3xs font-semibold uppercase",
-                              selectedPo.status === "OPEN"
-                                ? "bg-success-softer text-success-fg"
-                                : selectedPo.status === "PARTIAL"
-                                  ? "bg-warning-softer text-warning-fg"
-                                  : "bg-bg-subtle text-fg-muted",
-                            )}>
-                              {selectedPo.status}
-                            </span>
-                          </span>
-                        </div>
-                      ) : !poId ? (
-                        <span className="mt-1 block text-3xs text-fg-muted">No PO reference</span>
-                      ) : null}
-                    </>
-                  )}
-                  {poId && poDetailQuery.isError ? (
-                    <span className="mt-1 block text-3xs text-warning-fg">
-                      Couldn&apos;t load PO lines — picker will fall back to
-                      unmatched. Try refreshing if this persists.
-                    </span>
-                  ) : null}
-                  {poId && poDetailQuery.isLoading ? (
-                    <span className="mt-1 block text-3xs text-fg-muted">
-                      Loading PO lines…
-                    </span>
-                  ) : null}
-                  {poId && !poDetailQuery.isLoading && poLines.length === 0 ? (
-                    <span className="mt-1 block text-3xs text-warning-fg">
-                      Selected PO returned no lines — receipt will post with
-                      po_id but each line will be unmatched.
-                    </span>
-                  ) : null}
-                </div>
+                {/* Tranche 020 — PO reference field removed from form.
+                    Identity + status + progress are now shown by the
+                    sticky <POLedgerHeader> at top; track changes via the
+                    Smart Landing Picker or its "Switch" affordance.
+                    Only inline error / loading callouts for the PO-lines
+                    fetch remain here, so picker degradation is still
+                    surfaced to the operator. */}
+                {poId && poDetailQuery.isError ? (
+                  <div className="sm:col-span-2 rounded-md border border-warning/40 bg-warning-softer px-3 py-2 text-xs text-warning-fg">
+                    Couldn&apos;t load PO lines — per-line match will fall
+                    back to unmatched. Try refreshing if this persists.
+                  </div>
+                ) : null}
+                {poId && !poDetailQuery.isLoading && !poDetailQuery.isError && poLines.length === 0 ? (
+                  <div className="sm:col-span-2 rounded-md border border-warning/40 bg-warning-softer px-3 py-2 text-xs text-warning-fg">
+                    Selected PO returned no lines — receipt will post with
+                    po_id but each line will be unmatched.
+                  </div>
+                ) : null}
 
                 {/* #9: Prefill banner */}
                 {poId && prefillApplied && lines.some((l) => l.receivable_key) ? (
@@ -1533,6 +1648,24 @@ export default function GoodsReceiptPage() {
                   </button>
                 ) : null}
               </div>
+              {/* Tranche 020 — Empty-state nudge. When the operator hasn't
+                  filled in any line yet (fresh form, single empty draft),
+                  give them an unmissable hint at what to do next. Common
+                  in manual track; rare in PO track because prefill seeds
+                  lines from the PO. */}
+              {lines.length === 1 && !lines[0].receivable_key ? (
+                <div
+                  className="mb-3 flex items-start gap-2 rounded-md border border-dashed border-info/40 bg-info-softer/60 px-3 py-2.5 text-xs text-info-fg"
+                  role="note"
+                  data-testid="receipt-lines-empty-state"
+                >
+                  <span aria-hidden="true">👇</span>
+                  <span>
+                    Pick an item or component on the line below to get
+                    started. Quantity prefills from PO when matched.
+                  </span>
+                </div>
+              ) : null}
               <div className="space-y-3">
                 {lines.map((line, idx) => {
                   const isComplete = !!(line.receivable_key && Number(line.quantity) > 0);
@@ -1549,10 +1682,20 @@ export default function GoodsReceiptPage() {
                         isComplete && "border-l-2 border-l-accent",
                       )}
                     >
-                      {/* #14: Line number badge */}
+                      {/* #14: Line number badge — Tranche 020: bigger,
+                          more visible, color-coded by completion state
+                          so the operator can count at a glance. The
+                          smaller -2/-2 outward offset keeps the badge
+                          inside the SectionCard's p-4 padding even on
+                          a 320px viewport. */}
                       <span
-                        className="absolute -left-3 -top-2.5 flex h-5 w-5 items-center justify-center rounded-full bg-bg-raised border border-border text-3xs font-semibold text-fg-muted shadow-sm"
-                        aria-label={`Line ${idx + 1}`}
+                        className={cn(
+                          "absolute -left-2 -top-2 flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold shadow-sm transition-colors",
+                          isComplete
+                            ? "bg-accent text-white"
+                            : "bg-bg-raised border border-border text-fg",
+                        )}
+                        aria-label={`Line ${idx + 1}${isComplete ? " — complete" : ""}`}
                       >
                         {idx + 1}
                       </span>
@@ -1699,60 +1842,39 @@ export default function GoodsReceiptPage() {
                         <span className="sr-only">Remove</span>
                       </button>
 
-                      {poId ? (
-                        <label
-                          className="block col-span-full"
-                          data-testid={`receipt-line-${idx}-po-line`}
-                        >
-                          <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                            PO line (optional)
-                          </span>
-                          <select
-                            className="input transition-colors duration-150"
-                            value={line.po_line_id}
-                            onChange={(e) => {
-                              const newPoLineId = e.target.value;
-                              const pl = poLines.find((l) => l.po_line_id === newPoLineId);
-                              const patch: Partial<LineDraft> = { po_line_id: newPoLineId };
-                              if (pl && Number(pl.open_qty) > 0) {
-                                patch.quantity = pl.open_qty;
-                                if ((UOMS as readonly string[]).includes(pl.uom)) {
-                                  patch.unit = pl.uom as Uom;
-                                }
-                              }
-                              updateLine(idx, patch);
-                            }}
-                            disabled={poDetailQuery.isLoading || poLines.length === 0 || phase === "submitting"}
-                          >
-                            <option value="">— unmatched —</option>
-                            {poLines.map((pl) => {
-                              const nameLabel = pl.component_name ?? pl.item_name ?? pl.component_id ?? pl.item_id ?? "—";
-                              const statusNote = pl.line_status === "CLOSED" ? " [CLOSED]" : pl.line_status === "CANCELLED" ? " [CANCELLED]" : "";
-                              return (
-                                <option key={pl.po_line_id} value={pl.po_line_id}>
-                                  #{pl.line_number} · {nameLabel} · {pl.open_qty} open / {pl.ordered_qty} ordered {pl.uom}{statusNote}
-                                </option>
-                              );
-                            })}
-                          </select>
-                          {(() => {
-                            if (!line.po_line_id) return null;
-                            const selectedPl = poLines.find((pl) => pl.po_line_id === line.po_line_id);
-                            if (!selectedPl) return null;
-                            if (Number(selectedPl.open_qty) <= 0) {
-                              return (
-                                <span className="mt-1 block text-3xs text-warning-fg">
-                                  This line is fully received (open qty: 0) — posting will create an over-receipt.
-                                </span>
-                              );
+                      {/* Tranche 020 — Per-line PO match card. Replaces
+                          the inline native <select> with progress pills
+                          (Ordered / Received / Now / Left), a stacked
+                          progress bar, and a bold over-receipt callout.
+                          The picker itself is friendlier than the
+                          previous select — clear line numbers, item
+                          names, open/ordered chips, and status. */}
+                      {track === "po" && poId ? (
+                        <POLineMatchCard
+                          mode="po"
+                          poLines={poLines}
+                          selectedPoLineId={line.po_line_id}
+                          receivingQty={line.quantity}
+                          onChangeMatch={(poLineId, autoFillQty, autoFillUom) => {
+                            const patch: Partial<LineDraft> = {
+                              po_line_id: poLineId,
+                            };
+                            if (autoFillQty !== undefined) {
+                              patch.quantity = autoFillQty;
                             }
-                            return (
-                              <span className="mt-1 block text-3xs text-fg-muted">
-                                Still outstanding: {selectedPl.open_qty} {selectedPl.uom}
-                              </span>
-                            );
-                          })()}
-                        </label>
+                            if (
+                              autoFillUom &&
+                              (UOMS as readonly string[]).includes(autoFillUom)
+                            ) {
+                              patch.unit = autoFillUom as Uom;
+                            }
+                            updateLine(idx, patch);
+                          }}
+                          disabled={
+                            poDetailQuery.isLoading || phase === "submitting"
+                          }
+                          testIdPrefix={`receipt-line-${idx}`}
+                        />
                       ) : null}
                     </div>
                   );
@@ -1774,25 +1896,74 @@ export default function GoodsReceiptPage() {
             <div
               className="sticky bottom-0 z-10 -mx-4 border-t border-border bg-bg-raised/90 px-4 py-3 backdrop-blur-sm sm:-mx-6 sm:px-6"
             >
-              {/* #4: Receipt summary preview */}
+              {/* #4: Receipt summary preview + Tranche 020 over-receipt summary. */}
               {(supplierId || lines.some((l) => l.receivable_key)) ? (
-                <div className="mb-2 flex items-center gap-2 text-xs text-fg-muted">
+                <div
+                  className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-muted"
+                  // aria-live so screen readers announce completion count
+                  // changes as the operator fills the form.
+                  aria-live="polite"
+                  data-testid="receipt-summary-bar"
+                >
                   <span>Summary:</span>
                   {selectedSupplierName ? (
                     <span className="font-medium text-fg">{selectedSupplierName}</span>
                   ) : null}
                   {lines.some((l) => l.receivable_key) ? (
                     <>
-                      <span>·</span>
+                      <span aria-hidden="true">·</span>
                       <span>{lines.filter((l) => l.receivable_key).length} line{lines.filter((l) => l.receivable_key).length !== 1 ? "s" : ""}</span>
-                      <span>·</span>
+                      <span aria-hidden="true">·</span>
                       <span>{completeLinesCount} complete</span>
                     </>
+                  ) : null}
+                  {overReceiptCount > 0 ? (
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full bg-danger-softer px-2 py-0.5 text-3xs font-semibold text-danger-fg"
+                      data-testid="receipt-summary-over-receipt"
+                    >
+                      <svg
+                        className="h-3 w-3"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                        aria-hidden="true"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                      {overReceiptCount} over-receipt
+                      {overReceiptCount !== 1 ? "s" : ""}
+                    </span>
                   ) : null}
                 </div>
               ) : null}
 
-              <div className="flex items-center justify-end gap-2">
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {/* Tranche 020 — quick exit back to the Smart Picker. The
+                    Reset button below also returns to Picker, but its
+                    label suggests destruction; this affordance is the
+                    explicit, friendly path. Hidden in URL-locked flows
+                    (no Picker to go back to). */}
+                {!urlPoLocked ? (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm mr-auto transition-colors duration-150"
+                    onClick={() => {
+                      setLines([emptyLine()]);
+                      setNotes("");
+                      setPoId("");
+                      setManualConfirmed(false);
+                      setDone(null);
+                    }}
+                    disabled={phase === "submitting"}
+                    data-testid="receipt-back-to-picker"
+                  >
+                    ← Pick again
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className="btn transition-colors duration-150"
@@ -1800,6 +1971,10 @@ export default function GoodsReceiptPage() {
                     setLines([emptyLine()]);
                     setNotes("");
                     setPoId("");
+                    // Tranche 020 — also unwind the track so reset takes
+                    // the operator back to the Smart Picker (unless
+                    // URL-locked).
+                    setManualConfirmed(false);
                     setDone(null);
                   }}
                   disabled={phase === "submitting"}

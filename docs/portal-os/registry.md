@@ -64,3 +64,4 @@ Index of every operating artifact. Entries use repo-root-relative paths so the P
 - `docs/portal-os/tranches/018-public-landing-preview-resilience.md` — public landing at / resilient to auth failures
 - `docs/portal-os/tranches/019-bulletproof-root.md` — hardened root page (static, middleware-bypass)
 - `docs/portal-os/tranches/020-economics-page-ux-polish.md` — Economics page filters + cost-gaps drawer + publish affordance + UX sweep
+- `docs/portal-os/tranches/021-receipt-smart-picker.md` — Smart Picker + PO Ledger + per-line progress pills for /stock/receipts
