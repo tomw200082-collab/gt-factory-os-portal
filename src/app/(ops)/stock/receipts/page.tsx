@@ -905,13 +905,20 @@ export default function GoodsReceiptPage() {
     return () => clearInterval(id);
   }, [eventAt]);
 
-  // #22: Auto-focus supplier combobox on mount
+  // #22: Auto-focus supplier combobox.
+  // Tranche 020 — Refire on track transition. Previously this only fired
+  // once when masters finished loading; with the Smart Landing Picker
+  // gating the form, the supplier input doesn't mount until the operator
+  // commits to a track, so the original effect no-op'd. Now: focus when
+  // the form first appears in manual mode (PO track auto-fills supplier,
+  // so leave focus alone there).
   const supplierInputRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
-    if (!loading && !urlPoLocked) {
-      supplierInputRef.current?.focus();
-    }
-  }, [loading, urlPoLocked]);
+    if (loading) return;
+    if (urlPoLocked) return;
+    if (track !== "manual") return;
+    supplierInputRef.current?.focus();
+  }, [loading, urlPoLocked, track]);
 
   // #23: Keyboard shortcut ⌘↵ / Ctrl↵ to submit
   const formRef = useRef<HTMLFormElement>(null);

@@ -232,6 +232,14 @@ export function ReceiptLandingPicker({
             placeholder="e.g. PO-0042  or  Acme Foods"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onKeyDown={(e) => {
+              // Press Enter to commit to the top match — saves a click on
+              // desktop and avoids fat-fingering on mobile.
+              if (e.key === "Enter" && searchResults.length > 0) {
+                e.preventDefault();
+                onSelectPo(searchResults[0]);
+              }
+            }}
             aria-label="Search open purchase orders"
             data-testid="receipt-landing-search-input"
             disabled={isLoadingPos}
