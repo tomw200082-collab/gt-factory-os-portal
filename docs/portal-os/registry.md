@@ -67,3 +67,6 @@ Index of every operating artifact. Entries use repo-root-relative paths so the P
 - `docs/portal-os/tranches/021-receipt-smart-picker.md` — Smart Picker + PO Ledger + per-line progress pills for /stock/receipts
 - `docs/portal-os/tranches/022-format-qty-sweep.md` — fmtNumStr() applied portal-wide to strip 8-dp noise from qty displays
 - `docs/portal-os/tranches/023-ux-pro-polish.md` — replace emoji decorations with Lucide icons across receipts surface
+- `docs/portal-os/tranches/024-operator-forms-design-pass.md` — operator forms: hero numerics, typography, primary CTA, step-indicator
+- `docs/portal-os/tranches/025-physical-count-pro-redesign.md` — physical-count: pro-grade redesign, unified banner, cancel polish
+- `docs/portal-os/tranches/026-economics-pl-coverage.md` — Economics Overview: P&L Coverage frame (dual-axis revenue+SKU), demand-weighted sort, chip taxonomy split, honest inventory totals
