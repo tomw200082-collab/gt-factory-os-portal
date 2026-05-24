@@ -1,7 +1,7 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// Economics — Phase 10A.
+// Economics — Phase 10A + Tranche 020 polish (2026-05-24).
 //
 // Access: planner + admin (the (economics) route group gates on
 // planning:execute). Lifted out of the (admin) group 2026-05-17 so planners
@@ -10,9 +10,21 @@
 // Three-tab view onto the economics pipeline:
 //   - Overview        : COGS per SKU, editable average sale price, derived
 //                       material margin, inventory valued at cost / sale,
-//                       plus a whole-factory valuation summary.
-//   - Component Costs : effective cost per component + inline fallback edit.
+//                       plus a whole-factory valuation summary. Incomplete
+//                       rows expose a "Cost gaps" drill-down (drawer) that
+//                       lists the missing components by name with inline
+//                       cost editors so editors can publish a fallback
+//                       price without leaving the page.
+//   - Component Costs : effective cost per component + inline fallback edit
+//                       + a sticky "Recalc affected products now" toast
+//                       after a save so the edit is visible in COGS without
+//                       waiting for the 04:00 UTC cron.
 //   - Raw Materials   : RM / packaging inventory valued at effective cost.
+//
+// All three tabs ship with a shared <FilterChipBar> (chip toggles + counts +
+// clear-all + visible-row counter) plus sortable column headers, so an
+// operator can slice by status, source, class, and on-hand without grepping
+// a 200-row table.
 //
 // Source of truth:
 //   GET  /api/economics                          → economics rows (per item)
@@ -34,14 +46,29 @@
 // when the component has a primary supplier — the supplier_items row wins.
 // That nuance is surfaced on the row and inside the edit cell so editors do
 // not silently edit a value with no effect.
+//
+// The Cost-gaps drawer is intentionally scoped to the components the snapshot
+// job already flagged as missing (in `missing_cost_components`). A full
+// BOM-with-costs walk would need a new backend endpoint and lives in a future
+// W1 tranche — deferred per Tom 2026-05-24 to keep this change frontend-only.
 // ---------------------------------------------------------------------------
 
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Play, X, Info } from "lucide-react";
+import {
+  Play,
+  X,
+  Info,
+  ChevronRight,
+  ChevronsUpDown,
+  ChevronUp,
+  ChevronDown,
+  AlertTriangle,
+} from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
+import { Drawer } from "@/components/overlays/Drawer";
 import { useCapability } from "@/lib/auth/role-gate";
 import { formatIls, formatPct, formatQtyInt } from "@/lib/utils/format-money";
 import { fmtNumStr } from "@/lib/utils/format-quantity";
@@ -166,6 +193,54 @@ function formatRelativeShort(iso: string | null): string {
   return new Date(iso).toLocaleDateString();
 }
 
+// Numeric coercion that treats null/NaN as null so it sorts to the end and is
+// excluded from min/max comparisons.
+function num(value: string | number | null | undefined): number | null {
+  if (value == null) return null;
+  const n = typeof value === "number" ? value : Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+// Generic comparator that puts nulls last for both asc and desc.
+function cmp(
+  a: number | string | null,
+  b: number | string | null,
+  dir: "asc" | "desc",
+): number {
+  if (a === null && b === null) return 0;
+  if (a === null) return 1;
+  if (b === null) return -1;
+  if (typeof a === "number" && typeof b === "number") {
+    return dir === "asc" ? a - b : b - a;
+  }
+  const s = String(a).localeCompare(String(b));
+  return dir === "asc" ? s : -s;
+}
+
+// ---------------------------------------------------------------------------
+// Friendlier labels for the `missing_cost_components.reason` enum so editors
+// see plain English instead of snake_case from the backend.
+// ---------------------------------------------------------------------------
+
+function missingReasonLabel(reason: string): string {
+  switch (reason) {
+    case "no_primary_supplier_cost":
+      return "Primary supplier price not set";
+    case "primary_supplier_cost_null":
+      return "Primary supplier row is missing a price";
+    case "bought_finished_no_primary_supplier_cost":
+      return "Bought-finished item with no supplier price";
+    case "no_bom_lines":
+      return "Recipe has no BOM lines";
+    case "no_active_bom_version":
+      return "Recipe has no active BOM version";
+    case "unknown_supply_method":
+      return "Item has an unknown supply method";
+    default:
+      return reason.replace(/_/g, " ");
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Snapshot status badge (overview tab)
 // ---------------------------------------------------------------------------
@@ -201,7 +276,7 @@ function SnapshotStatusBadge({ row }: { row: EconomicsRow }): JSX.Element {
     ids.length > 0
       ? `Missing cost for ${ids.length} component${
           ids.length === 1 ? "" : "s"
-        }: ${ids.join(", ")}. Add a cost on the Component Costs tab, then re-run the snapshot.`
+        }. Click "Open gaps" to fix them inline.`
       : "COGS is incomplete — one or more component costs are missing.";
   return (
     <span title={tip}>
@@ -252,7 +327,8 @@ function CostSourceBadge({
 }
 
 // ---------------------------------------------------------------------------
-// CostEditCell — the star of the component-costs tab
+// CostEditCell — inline editor for a component's fallback cost.
+// Used both on the Component Costs tab and inside the Cost-gaps drawer.
 // ---------------------------------------------------------------------------
 
 interface CostEditCellProps {
@@ -461,12 +537,12 @@ function SalePriceEditCell({
       }
       payload = null;
     } else {
-      const num = Number(trimmed);
-      if (!Number.isFinite(num) || num < 0) {
+      const n = Number(trimmed);
+      if (!Number.isFinite(n) || n < 0) {
         setError("Price must be a number ≥ 0, or blank to clear.");
         return;
       }
-      payload = num;
+      payload = n;
     }
     setBusy(true);
     setError(null);
@@ -675,6 +751,636 @@ function StatTile({
 }
 
 // ---------------------------------------------------------------------------
+// FilterChip — toggle chip with active state + count. Variant tone is
+// derived from the chip's semantic meaning so the bar visually mirrors
+// the status badges that appear in the table rows.
+// ---------------------------------------------------------------------------
+
+type ChipTone =
+  | "neutral"
+  | "success"
+  | "warning"
+  | "danger"
+  | "info"
+  | "accent";
+
+interface FilterChipProps {
+  label: string;
+  count: number;
+  active: boolean;
+  tone?: ChipTone;
+  title?: string;
+  onToggle: () => void;
+}
+
+const CHIP_TONE_INACTIVE: Record<ChipTone, string> = {
+  neutral: "border-border/70 bg-bg-subtle text-fg-muted hover:bg-bg-subtle/80",
+  success:
+    "border-success/30 bg-success-softer/50 text-success-fg hover:bg-success-softer",
+  warning:
+    "border-warning/30 bg-warning-softer/50 text-warning-fg hover:bg-warning-softer",
+  danger:
+    "border-danger/30 bg-danger-softer/50 text-danger-fg hover:bg-danger-softer",
+  info: "border-info/30 bg-info-softer/50 text-info-fg hover:bg-info-softer",
+  accent:
+    "border-accent/30 bg-accent-soft/40 text-accent hover:bg-accent-soft/70",
+};
+
+const CHIP_TONE_ACTIVE: Record<ChipTone, string> = {
+  neutral: "border-fg/40 bg-fg/10 text-fg-strong",
+  success: "border-success bg-success-soft text-success-fg",
+  warning: "border-warning bg-warning-soft text-warning-fg",
+  danger: "border-danger bg-danger-soft text-danger-fg",
+  info: "border-info bg-info-soft text-info-fg",
+  accent: "border-accent bg-accent-soft text-accent",
+};
+
+function FilterChip({
+  label,
+  count,
+  active,
+  tone = "neutral",
+  title,
+  onToggle,
+}: FilterChipProps): JSX.Element {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      title={title}
+      aria-pressed={active}
+      className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors ${
+        active ? CHIP_TONE_ACTIVE[tone] : CHIP_TONE_INACTIVE[tone]
+      }`}
+    >
+      <span>{label}</span>
+      <span
+        className={`tabular-nums ${
+          active ? "opacity-90" : "opacity-70"
+        }`}
+      >
+        {count}
+      </span>
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// FilterChipBar — wraps a row of FilterChips with a sticky "Clear all" + a
+// visible/total counter so the planner always knows what slice they are
+// looking at.
+// ---------------------------------------------------------------------------
+
+function FilterChipBar({
+  children,
+  visible,
+  total,
+  hasActiveFilters,
+  onClear,
+}: {
+  children: React.ReactNode;
+  visible: number;
+  total: number;
+  hasActiveFilters: boolean;
+  onClear: () => void;
+}): JSX.Element {
+  return (
+    <div className="flex flex-wrap items-center gap-2 -mx-0.5">
+      {children}
+      <div className="ml-auto flex items-center gap-3 pl-2">
+        <span className="text-3xs tabular-nums text-fg-subtle">
+          Showing <span className="font-semibold text-fg-strong">{visible}</span>{" "}
+          of {total}
+        </span>
+        {hasActiveFilters ? (
+          <button
+            type="button"
+            onClick={onClear}
+            className="text-3xs font-medium uppercase tracking-sops text-fg-subtle underline-offset-2 hover:text-accent hover:underline"
+          >
+            Clear filters
+          </button>
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// SortHeader — clickable column header. Cycles asc → desc → none. Renders a
+// subtle direction arrow so the user can see what they're sorting by.
+// ---------------------------------------------------------------------------
+
+interface SortState<Col extends string> {
+  col: Col;
+  dir: "asc" | "desc";
+}
+
+function SortHeader<Col extends string>({
+  col,
+  label,
+  align = "left",
+  sort,
+  onSort,
+  hint,
+}: {
+  col: Col;
+  label: string;
+  align?: "left" | "right";
+  sort: SortState<Col> | null;
+  onSort: (next: SortState<Col> | null) => void;
+  hint?: string;
+}): JSX.Element {
+  const isActive = sort?.col === col;
+  const dir = isActive ? sort?.dir : null;
+  const ariaSort =
+    isActive && dir === "asc"
+      ? "ascending"
+      : isActive && dir === "desc"
+        ? "descending"
+        : "none";
+  const cycle = () => {
+    if (!isActive) {
+      onSort({ col, dir: "asc" });
+    } else if (dir === "asc") {
+      onSort({ col, dir: "desc" });
+    } else {
+      onSort(null);
+    }
+  };
+  return (
+    <th
+      scope="col"
+      aria-sort={ariaSort}
+      className={`sticky top-0 z-10 bg-bg-subtle/95 px-3 py-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle backdrop-blur ${
+        align === "right" ? "text-right" : "text-left"
+      }`}
+    >
+      <button
+        type="button"
+        onClick={cycle}
+        className={`group inline-flex items-center gap-1 rounded px-1 py-0.5 transition-colors hover:text-fg-strong ${
+          align === "right" ? "ml-auto" : ""
+        } ${isActive ? "text-fg-strong" : ""}`}
+        title={hint ?? "Click to sort"}
+      >
+        <span>{label}</span>
+        {hint ? <HelpHint text={hint} /> : null}
+        {isActive ? (
+          dir === "asc" ? (
+            <ChevronUp className="h-3 w-3" strokeWidth={2.5} />
+          ) : (
+            <ChevronDown className="h-3 w-3" strokeWidth={2.5} />
+          )
+        ) : (
+          <ChevronsUpDown
+            className="h-3 w-3 opacity-30 group-hover:opacity-70"
+            strokeWidth={2.5}
+          />
+        )}
+      </button>
+    </th>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Overview filter taxonomy. Each predicate is a row → boolean function. The
+// chip bar OR-combines selected predicates within a single chip group; the
+// text query AND-combines with the chip selection.
+// ---------------------------------------------------------------------------
+
+type OverviewStatusKey =
+  | "complete"
+  | "incomplete"
+  | "no_snapshot"
+  | "no_supplier_cost"
+  | "no_sale_price"
+  | "negative_margin";
+
+const OVERVIEW_STATUS_DEFS: Array<{
+  key: OverviewStatusKey;
+  label: string;
+  tone: ChipTone;
+  title: string;
+  match: (r: EconomicsRow) => boolean;
+}> = [
+  {
+    key: "complete",
+    label: "Complete",
+    tone: "success",
+    title: "Products whose COGS is fully computed.",
+    match: (r) => r.cogs_complete,
+  },
+  {
+    key: "incomplete",
+    label: "Incomplete",
+    tone: "warning",
+    title:
+      "Products with a snapshot but at least one missing component cost. Open the Cost-gaps drawer to fix.",
+    match: (r) => !r.cogs_complete && r.cogs_snapshot_at != null,
+  },
+  {
+    key: "no_snapshot",
+    label: "No snapshot",
+    tone: "neutral",
+    title:
+      "Products that have never had a COGS snapshot run. Click Run Snapshot Now.",
+    match: (r) => r.cogs_snapshot_at == null,
+  },
+  {
+    key: "no_supplier_cost",
+    label: "Missing supplier cost",
+    tone: "danger",
+    title:
+      "Bought-finished products with no primary supplier cost. Add a supplier price for the item to unblock its COGS.",
+    match: (r) =>
+      !r.cogs_complete &&
+      (r.missing_cost_components ?? []).some(
+        (m) => m.reason === "bought_finished_no_primary_supplier_cost",
+      ),
+  },
+  {
+    key: "no_sale_price",
+    label: "No sale price",
+    tone: "info",
+    title:
+      "Products where the average sale price has not been entered yet — margin and inventory-at-sale read blank for these.",
+    match: (r) => r.avg_sale_price_ils == null,
+  },
+  {
+    key: "negative_margin",
+    label: "Negative margin",
+    tone: "danger",
+    title:
+      "Products whose avg sale price is below the COGS per unit — the unit currently sells at a material loss.",
+    match: (r) => {
+      const m = num(r.material_margin_ils);
+      return m != null && m < 0;
+    },
+  },
+];
+
+type OverviewSortCol =
+  | "name"
+  | "cogs"
+  | "sale_price"
+  | "margin"
+  | "margin_pct"
+  | "on_hand"
+  | "inv_cost"
+  | "inv_sale"
+  | "snapshot";
+
+// ---------------------------------------------------------------------------
+// Component Costs filter taxonomy.
+// ---------------------------------------------------------------------------
+
+type ComponentSourceKey =
+  | "supplier"
+  | "fallback"
+  | "missing"
+  | "recipe_rollup";
+
+const COMPONENT_SOURCE_DEFS: Array<{
+  key: ComponentSourceKey;
+  label: string;
+  tone: ChipTone;
+  title: string;
+  match: (r: ComponentCostRow) => boolean;
+}> = [
+  {
+    key: "supplier",
+    label: "Primary supplier",
+    tone: "success",
+    title:
+      "Effective cost comes from the primary supplier_items row (most-recently updated).",
+    match: (r) => !r.is_semi_base && r.cost_source === "supplier_items_primary",
+  },
+  {
+    key: "fallback",
+    label: "Fallback",
+    tone: "warning",
+    title:
+      "No primary supplier — effective cost comes from the components.std_cost_per_inv_uom fallback.",
+    match: (r) => !r.is_semi_base && r.cost_source === "components_fallback",
+  },
+  {
+    key: "missing",
+    label: "Missing",
+    tone: "danger",
+    title: "Neither a supplier price nor a fallback cost is set.",
+    match: (r) => !r.is_semi_base && r.cost_source === "missing",
+  },
+  {
+    key: "recipe_rollup",
+    label: "Recipe rollup",
+    tone: "info",
+    title:
+      "In-house semi-finished base. Cost is derived from its recipe BOM by the snapshot job — not manually editable.",
+    match: (r) => r.is_semi_base,
+  },
+];
+
+type ComponentSortCol = "name" | "class" | "uom" | "effective_cost" | "source";
+
+// ---------------------------------------------------------------------------
+// Raw Materials filter taxonomy.
+// ---------------------------------------------------------------------------
+
+type RmTypeKey = "RM" | "PKG";
+
+const RM_TYPE_DEFS: Array<{
+  key: RmTypeKey;
+  label: string;
+  tone: ChipTone;
+  title: string;
+}> = [
+  {
+    key: "RM",
+    label: "Raw material",
+    tone: "accent",
+    title: "Items typed as RM in the items table.",
+  },
+  {
+    key: "PKG",
+    label: "Packaging",
+    tone: "info",
+    title: "Items typed as PKG in the items table.",
+  },
+];
+
+type RmSortCol = "name" | "type" | "uom" | "on_hand" | "unit_cost" | "value";
+
+// ---------------------------------------------------------------------------
+// CostGapsDrawer — drill-down for an incomplete Overview row. Lists the
+// missing components enriched with names + classes from the component-costs
+// query, with inline cost editors so editors can publish without leaving
+// the page. Includes a "Recalc this product" affordance that fires the
+// existing global recalc endpoint.
+// ---------------------------------------------------------------------------
+
+interface CostGapsDrawerProps {
+  product: EconomicsRow | null;
+  canEdit: boolean;
+  costsByComponentId: Map<string, ComponentCostRow>;
+  onClose: () => void;
+  onRecalc: () => void;
+  recalcBusy: boolean;
+  onCostSaved: () => void;
+}
+
+function CostGapsDrawer({
+  product,
+  canEdit,
+  costsByComponentId,
+  onClose,
+  onRecalc,
+  recalcBusy,
+  onCostSaved,
+}: CostGapsDrawerProps): JSX.Element {
+  const open = product != null;
+  const missing = product?.missing_cost_components ?? [];
+
+  // Buckets so editors see the supplier-blocked items grouped separately
+  // from component fallback gaps. Both are actionable but in different
+  // places (supplier_items vs. components.std_cost_per_inv_uom).
+  const supplierBlocked = missing.filter(
+    (m) => m.reason === "bought_finished_no_primary_supplier_cost",
+  );
+  const componentGaps = missing.filter(
+    (m) =>
+      m.reason !== "bought_finished_no_primary_supplier_cost" &&
+      m.component_id != null,
+  );
+  const structural = missing.filter(
+    (m) =>
+      m.reason !== "bought_finished_no_primary_supplier_cost" &&
+      m.component_id == null,
+  );
+
+  return (
+    <Drawer
+      open={open}
+      onClose={onClose}
+      title={product ? `Cost gaps — ${product.item_name}` : "Cost gaps"}
+      description={
+        product
+          ? `${missing.length} blocker${missing.length === 1 ? "" : "s"} stop COGS from completing. Fix each one below, then recalc this product.`
+          : undefined
+      }
+      width="lg"
+    >
+      {product ? (
+        <div className="flex h-full flex-col">
+          <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
+            <div className="rounded-md border border-border/60 bg-bg-subtle/50 p-3">
+              <div className="grid grid-cols-2 gap-3 text-xs">
+                <div>
+                  <div className="text-3xs uppercase tracking-sops text-fg-subtle">
+                    Product
+                  </div>
+                  <div
+                    className="mt-0.5 font-medium text-fg-strong"
+                    dir="auto"
+                  >
+                    {product.item_name}
+                  </div>
+                  <div className="font-mono text-3xs text-fg-subtle">
+                    {product.item_id}
+                  </div>
+                </div>
+                <div>
+                  <div className="text-3xs uppercase tracking-sops text-fg-subtle">
+                    COGS / unit
+                  </div>
+                  <div className="mt-0.5 font-medium tabular-nums text-fg-strong">
+                    {formatIls(product.cogs_per_unit_ils)}
+                  </div>
+                  <div className="text-3xs text-fg-subtle">
+                    Last snapshot: {formatRelativeShort(product.cogs_snapshot_at)}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {supplierBlocked.length > 0 ? (
+              <section>
+                <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Bought-finished item · supplier price missing
+                </h3>
+                <p className="mb-2 text-xs text-fg-muted">
+                  This is a bought-finished product. Add a primary supplier
+                  cost for the item itself on the Items / Supplier-items page
+                  — fallback costs do not apply here.
+                </p>
+                <div className="rounded border border-danger/40 bg-danger-softer/60 p-3 text-xs text-danger-fg">
+                  <div className="flex items-start gap-2">
+                    <AlertTriangle
+                      className="mt-0.5 h-3.5 w-3.5 shrink-0"
+                      strokeWidth={2.5}
+                    />
+                    <span>
+                      Set a primary supplier price for{" "}
+                      <code className="font-mono text-3xs">
+                        {product.item_id}
+                      </code>{" "}
+                      on the supplier-items page, then return and recalc.
+                    </span>
+                  </div>
+                </div>
+              </section>
+            ) : null}
+
+            {componentGaps.length > 0 ? (
+              <section>
+                <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Missing component costs ({componentGaps.length})
+                </h3>
+                <p className="mb-2 text-xs text-fg-muted">
+                  Each row below is a component used by this product's recipe
+                  that currently has no effective cost. Type a fallback price
+                  to publish — the value lands in components.std_cost_per_inv_uom
+                  and feeds COGS on the next recalc.
+                </p>
+                <div className="overflow-hidden rounded border border-border/60">
+                  <table className="w-full border-collapse text-sm">
+                    <thead>
+                      <tr className="border-b border-border/60 bg-bg-subtle/60">
+                        <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                          Component
+                        </th>
+                        <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                          Reason
+                        </th>
+                        <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                          Fallback cost (₪)
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {componentGaps.map((m) => {
+                        const cid = m.component_id as string;
+                        const enriched = costsByComponentId.get(cid);
+                        return (
+                          <tr
+                            key={cid}
+                            className="border-b border-border/40 last:border-b-0"
+                          >
+                            <td className="px-3 py-2">
+                              <span
+                                className="block text-sm font-medium leading-snug text-fg-strong"
+                                dir="auto"
+                              >
+                                {enriched?.component_name ?? cid}
+                              </span>
+                              <span className="block font-mono text-3xs text-fg-subtle">
+                                {cid}
+                                {enriched?.component_class
+                                  ? ` · ${enriched.component_class}`
+                                  : ""}
+                              </span>
+                            </td>
+                            <td className="px-3 py-2 text-xs text-fg-muted">
+                              {missingReasonLabel(m.reason)}
+                            </td>
+                            <td className="px-3 py-2 text-right">
+                              {enriched ? (
+                                <CostEditCell
+                                  row={enriched}
+                                  canEdit={canEdit}
+                                  onSaved={onCostSaved}
+                                />
+                              ) : (
+                                <span
+                                  className="text-3xs text-fg-subtle"
+                                  title="This component is not in the active components list — likely SEMI base or quarantined. Open Component Costs to investigate."
+                                >
+                                  not editable here
+                                </span>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              </section>
+            ) : null}
+
+            {structural.length > 0 ? (
+              <section>
+                <h3 className="mb-1.5 text-xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Recipe-level issues ({structural.length})
+                </h3>
+                <ul className="space-y-1 text-xs text-fg-muted">
+                  {structural.map((m, i) => (
+                    <li
+                      key={i}
+                      className="rounded border border-warning/30 bg-warning-softer/60 p-2 text-warning-fg"
+                    >
+                      <div className="flex items-start gap-2">
+                        <AlertTriangle
+                          className="mt-0.5 h-3.5 w-3.5 shrink-0"
+                          strokeWidth={2.5}
+                        />
+                        <span>
+                          {missingReasonLabel(m.reason)}
+                          {" — "}
+                          fix on the recipe / BOM editor, then recalc.
+                        </span>
+                      </div>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            ) : null}
+
+            {missing.length === 0 ? (
+              <div className="rounded border border-success/40 bg-success-softer p-3 text-xs text-success-fg">
+                No gaps recorded on the last snapshot — this product is ready
+                to recalc.
+              </div>
+            ) : null}
+          </div>
+
+          <div className="border-t border-border/70 bg-bg-subtle/40 px-5 py-3">
+            <div className="flex items-center justify-between gap-3">
+              <div className="text-3xs text-fg-subtle">
+                Recalc runs across all products today — a per-item recalc
+                endpoint is planned for a future tranche.
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={onClose}
+                  className="btn btn-ghost btn-sm"
+                >
+                  Close
+                </button>
+                {canEdit ? (
+                  <button
+                    type="button"
+                    onClick={onRecalc}
+                    disabled={recalcBusy}
+                    className="btn-primary inline-flex items-center gap-1.5"
+                  >
+                    <Play className="h-3.5 w-3.5" strokeWidth={2.5} />
+                    {recalcBusy ? "Running…" : "Recalc this product"}
+                  </button>
+                ) : null}
+              </div>
+            </div>
+          </div>
+        </div>
+      ) : (
+        <div />
+      )}
+    </Drawer>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 
@@ -695,7 +1401,39 @@ export default function AdminEconomicsPage(): JSX.Element {
   >(null);
   const [costSavedHint, setCostSavedHint] = useState(false);
   const [priceSavedHint, setPriceSavedHint] = useState(false);
+
+  // --- Overview filters + sort -------------------------------------------
+  const [overviewQuery, setOverviewQuery] = useState("");
+  const [overviewStatus, setOverviewStatus] = useState<Set<OverviewStatusKey>>(
+    () => new Set(),
+  );
+  const [overviewSort, setOverviewSort] =
+    useState<SortState<OverviewSortCol> | null>(null);
+
+  // --- Component-costs filters + sort ------------------------------------
   const [componentQuery, setComponentQuery] = useState("");
+  const [componentSources, setComponentSources] = useState<
+    Set<ComponentSourceKey>
+  >(() => new Set());
+  const [componentClasses, setComponentClasses] = useState<Set<string>>(
+    () => new Set(),
+  );
+  const [componentZeroOnly, setComponentZeroOnly] = useState(false);
+  const [componentSort, setComponentSort] =
+    useState<SortState<ComponentSortCol> | null>(null);
+
+  // --- Raw-materials filters + sort --------------------------------------
+  const [rmQuery, setRmQuery] = useState("");
+  const [rmTypes, setRmTypes] = useState<Set<RmTypeKey>>(() => new Set());
+  const [rmSources, setRmSources] = useState<Set<ComponentSourceKey>>(
+    () => new Set(),
+  );
+  const [rmZeroOnly, setRmZeroOnly] = useState(false);
+  const [rmHasStockOnly, setRmHasStockOnly] = useState(false);
+  const [rmSort, setRmSort] = useState<SortState<RmSortCol> | null>(null);
+
+  // --- Cost-gaps drawer state --------------------------------------------
+  const [gapsProductId, setGapsProductId] = useState<string | null>(null);
 
   // --- Overview data ------------------------------------------------------
 
@@ -729,6 +1467,7 @@ export default function AdminEconomicsPage(): JSX.Element {
         kind: "success",
         message: `Snapshot complete — ${complete} items complete, ${missing} missing cost.`,
       });
+      setCostSavedHint(false);
       void queryClient.invalidateQueries({ queryKey: ["admin", "economics"] });
       void queryClient.invalidateQueries({
         queryKey: ["admin", "economics", "component-costs"],
@@ -756,6 +1495,25 @@ export default function AdminEconomicsPage(): JSX.Element {
     queryFn: () =>
       fetchJson<RawMaterialEconomicsResponse>("/api/economics/raw-materials"),
   });
+
+  // Index components by id so the gaps drawer can enrich missing rows
+  // (names, classes, current effective cost) without a second fetch.
+  const costsByComponentId = useMemo(() => {
+    const m = new Map<string, ComponentCostRow>();
+    for (const r of costsQuery.data?.rows ?? []) m.set(r.component_id, r);
+    return m;
+  }, [costsQuery.data]);
+
+  // Set of distinct component classes seen in the component-costs response.
+  // Used to render the class-filter chips. We keep the order stable by
+  // sorting alphabetically.
+  const componentClassesAvailable = useMemo(() => {
+    const set = new Set<string>();
+    for (const r of costsQuery.data?.rows ?? []) {
+      if (r.component_class) set.add(r.component_class);
+    }
+    return Array.from(set).sort();
+  }, [costsQuery.data]);
 
   // Overview valuation summary + footer totals. Sums skip NULL values so a
   // product with no COGS / no sale price simply does not contribute.
@@ -788,19 +1546,296 @@ export default function AdminEconomicsPage(): JSX.Element {
     };
   }, [economicsQuery.data]);
 
-  // Filtered component-costs (client-side text search)
+  // --- Filtered + sorted Overview ----------------------------------------
+
+  const filteredOverview = useMemo(() => {
+    const rows = economicsQuery.data?.rows ?? [];
+    const q = overviewQuery.trim().toLowerCase();
+    const statusKeys = overviewStatus;
+    const filtered = rows.filter((r) => {
+      if (q) {
+        const hit =
+          r.item_name.toLowerCase().includes(q) ||
+          r.item_id.toLowerCase().includes(q);
+        if (!hit) return false;
+      }
+      if (statusKeys.size > 0) {
+        const matches = OVERVIEW_STATUS_DEFS.some(
+          (d) => statusKeys.has(d.key) && d.match(r),
+        );
+        if (!matches) return false;
+      }
+      return true;
+    });
+    if (overviewSort) {
+      const { col, dir } = overviewSort;
+      filtered.sort((a, b) => {
+        switch (col) {
+          case "name":
+            return cmp(a.item_name, b.item_name, dir);
+          case "cogs":
+            return cmp(num(a.cogs_per_unit_ils), num(b.cogs_per_unit_ils), dir);
+          case "sale_price":
+            return cmp(num(a.avg_sale_price_ils), num(b.avg_sale_price_ils), dir);
+          case "margin":
+            return cmp(
+              num(a.material_margin_ils),
+              num(b.material_margin_ils),
+              dir,
+            );
+          case "margin_pct":
+            return cmp(
+              num(a.material_margin_pct),
+              num(b.material_margin_pct),
+              dir,
+            );
+          case "on_hand":
+            return cmp(num(a.qty_on_hand), num(b.qty_on_hand), dir);
+          case "inv_cost":
+            return cmp(
+              num(a.fg_inventory_value_at_cost),
+              num(b.fg_inventory_value_at_cost),
+              dir,
+            );
+          case "inv_sale":
+            return cmp(
+              num(a.fg_inventory_value_at_sale_price),
+              num(b.fg_inventory_value_at_sale_price),
+              dir,
+            );
+          case "snapshot":
+            return cmp(
+              a.cogs_snapshot_at ? new Date(a.cogs_snapshot_at).getTime() : null,
+              b.cogs_snapshot_at ? new Date(b.cogs_snapshot_at).getTime() : null,
+              dir,
+            );
+          default:
+            return 0;
+        }
+      });
+    }
+    return filtered;
+  }, [economicsQuery.data, overviewQuery, overviewStatus, overviewSort]);
+
+  // Counts shown on each Overview chip — derived from the raw list so the
+  // counts do not collapse when a filter is active.
+  const overviewStatusCounts = useMemo(() => {
+    const rows = economicsQuery.data?.rows ?? [];
+    const out: Record<OverviewStatusKey, number> = {
+      complete: 0,
+      incomplete: 0,
+      no_snapshot: 0,
+      no_supplier_cost: 0,
+      no_sale_price: 0,
+      negative_margin: 0,
+    };
+    for (const r of rows) {
+      for (const d of OVERVIEW_STATUS_DEFS) {
+        if (d.match(r)) out[d.key] += 1;
+      }
+    }
+    return out;
+  }, [economicsQuery.data]);
+
+  // --- Filtered + sorted Component Costs ---------------------------------
+
   const filteredCosts = useMemo(() => {
     const rows = costsQuery.data?.rows ?? [];
-    if (!componentQuery) return rows;
-    const q = componentQuery.toLowerCase();
-    return rows.filter(
-      (r) =>
-        r.component_name.toLowerCase().includes(q) ||
-        r.component_id.toLowerCase().includes(q),
+    const q = componentQuery.trim().toLowerCase();
+    const filtered = rows.filter((r) => {
+      if (q) {
+        const hit =
+          r.component_name.toLowerCase().includes(q) ||
+          r.component_id.toLowerCase().includes(q);
+        if (!hit) return false;
+      }
+      if (componentSources.size > 0) {
+        const matches = COMPONENT_SOURCE_DEFS.some(
+          (d) => componentSources.has(d.key) && d.match(r),
+        );
+        if (!matches) return false;
+      }
+      if (componentClasses.size > 0) {
+        if (!r.component_class || !componentClasses.has(r.component_class)) {
+          return false;
+        }
+      }
+      if (componentZeroOnly) {
+        const eff = num(r.effective_cost);
+        if (eff == null || eff !== 0) return false;
+      }
+      return true;
+    });
+    if (componentSort) {
+      const { col, dir } = componentSort;
+      filtered.sort((a, b) => {
+        switch (col) {
+          case "name":
+            return cmp(a.component_name, b.component_name, dir);
+          case "class":
+            return cmp(a.component_class, b.component_class, dir);
+          case "uom":
+            return cmp(a.inventory_uom, b.inventory_uom, dir);
+          case "effective_cost":
+            return cmp(num(a.effective_cost), num(b.effective_cost), dir);
+          case "source": {
+            // Render order: supplier → fallback → recipe → missing.
+            const rank = (r: ComponentCostRow) =>
+              r.is_semi_base
+                ? 2
+                : r.cost_source === "supplier_items_primary"
+                  ? 0
+                  : r.cost_source === "components_fallback"
+                    ? 1
+                    : 3;
+            return cmp(rank(a), rank(b), dir);
+          }
+          default:
+            return 0;
+        }
+      });
+    }
+    return filtered;
+  }, [
+    costsQuery.data,
+    componentQuery,
+    componentSources,
+    componentClasses,
+    componentZeroOnly,
+    componentSort,
+  ]);
+
+  const componentSourceCounts = useMemo(() => {
+    const rows = costsQuery.data?.rows ?? [];
+    const out: Record<ComponentSourceKey, number> = {
+      supplier: 0,
+      fallback: 0,
+      missing: 0,
+      recipe_rollup: 0,
+    };
+    for (const r of rows) {
+      for (const d of COMPONENT_SOURCE_DEFS) {
+        if (d.match(r)) out[d.key] += 1;
+      }
+    }
+    return out;
+  }, [costsQuery.data]);
+
+  // --- Filtered + sorted Raw Materials -----------------------------------
+
+  const filteredRm = useMemo(() => {
+    const rows = rawMaterialsQuery.data?.rows ?? [];
+    const q = rmQuery.trim().toLowerCase();
+    const filtered = rows.filter((r) => {
+      if (q) {
+        const name = (r.component_name ?? "").toLowerCase();
+        const id = r.component_id.toLowerCase();
+        if (!name.includes(q) && !id.includes(q)) return false;
+      }
+      if (rmTypes.size > 0) {
+        if (!rmTypes.has(r.item_type as RmTypeKey)) return false;
+      }
+      if (rmSources.size > 0) {
+        const sourceKey: ComponentSourceKey =
+          r.cost_source === "supplier_items_primary"
+            ? "supplier"
+            : r.cost_source === "components_fallback"
+              ? "fallback"
+              : "missing";
+        if (!rmSources.has(sourceKey)) return false;
+      }
+      if (rmZeroOnly) {
+        const eff = num(r.effective_cost_ils);
+        if (eff == null || eff !== 0) return false;
+      }
+      if (rmHasStockOnly) {
+        const q2 = num(r.qty_on_hand);
+        if (q2 == null || q2 <= 0) return false;
+      }
+      return true;
+    });
+    if (rmSort) {
+      const { col, dir } = rmSort;
+      filtered.sort((a, b) => {
+        switch (col) {
+          case "name":
+            return cmp(a.component_name ?? a.component_id, b.component_name ?? b.component_id, dir);
+          case "type":
+            return cmp(a.item_type, b.item_type, dir);
+          case "uom":
+            return cmp(a.inventory_uom, b.inventory_uom, dir);
+          case "on_hand":
+            return cmp(num(a.qty_on_hand), num(b.qty_on_hand), dir);
+          case "unit_cost":
+            return cmp(num(a.effective_cost_ils), num(b.effective_cost_ils), dir);
+          case "value":
+            return cmp(num(a.inventory_value_ils), num(b.inventory_value_ils), dir);
+          default:
+            return 0;
+        }
+      });
+    }
+    return filtered;
+  }, [
+    rawMaterialsQuery.data,
+    rmQuery,
+    rmTypes,
+    rmSources,
+    rmZeroOnly,
+    rmHasStockOnly,
+    rmSort,
+  ]);
+
+  const rmTypeCounts = useMemo(() => {
+    const rows = rawMaterialsQuery.data?.rows ?? [];
+    const out: Record<RmTypeKey, number> = { RM: 0, PKG: 0 };
+    for (const r of rows) {
+      if (r.item_type === "RM") out.RM += 1;
+      else if (r.item_type === "PKG") out.PKG += 1;
+    }
+    return out;
+  }, [rawMaterialsQuery.data]);
+
+  const rmSourceCounts = useMemo(() => {
+    const rows = rawMaterialsQuery.data?.rows ?? [];
+    const out: Record<ComponentSourceKey, number> = {
+      supplier: 0,
+      fallback: 0,
+      missing: 0,
+      recipe_rollup: 0,
+    };
+    for (const r of rows) {
+      const key: ComponentSourceKey =
+        r.cost_source === "supplier_items_primary"
+          ? "supplier"
+          : r.cost_source === "components_fallback"
+            ? "fallback"
+            : "missing";
+      out[key] += 1;
+    }
+    return out;
+  }, [rawMaterialsQuery.data]);
+
+  // Resolve the active gaps drawer product from the live query so the drawer
+  // re-reads after every recalc / save and the underlying row stays fresh.
+  const gapsProduct = useMemo(() => {
+    if (!gapsProductId) return null;
+    return (
+      economicsQuery.data?.rows.find((r) => r.item_id === gapsProductId) ?? null
     );
-  }, [costsQuery.data, componentQuery]);
+  }, [gapsProductId, economicsQuery.data]);
 
   // ----------------------------------------------------------------------
+
+  // Toggle helpers — receive a set + key, return a new set with the key
+  // toggled. Keeping these inline avoids creating a generic hook just for
+  // three chip groups.
+  function toggleSet<T>(set: Set<T>, key: T): Set<T> {
+    const next = new Set(set);
+    if (next.has(key)) next.delete(key);
+    else next.add(key);
+    return next;
+  }
 
   const headerActions = canEdit ? (
     <button
@@ -817,12 +1852,26 @@ export default function AdminEconomicsPage(): JSX.Element {
     </button>
   ) : null;
 
+  const overviewHasFilters =
+    overviewQuery.length > 0 || overviewStatus.size > 0;
+  const componentHasFilters =
+    componentQuery.length > 0 ||
+    componentSources.size > 0 ||
+    componentClasses.size > 0 ||
+    componentZeroOnly;
+  const rmHasFilters =
+    rmQuery.length > 0 ||
+    rmTypes.size > 0 ||
+    rmSources.size > 0 ||
+    rmZeroOnly ||
+    rmHasStockOnly;
+
   return (
     <>
       <WorkflowHeader
         eyebrow="Economics"
         title="Economics"
-        description="COGS, average sale price and material margin per SKU, plus component cost management. Enter sale prices on the Overview tab; edit raw material costs on Component Costs."
+        description="COGS, average sale price and material margin per SKU, plus component cost management. Enter sale prices on the Overview tab; edit raw material costs on Component Costs; drill into a product to see exactly which gaps are blocking its COGS."
         meta={
           <>
             <Badge tone="info" dotted>
@@ -882,252 +1931,428 @@ export default function AdminEconomicsPage(): JSX.Element {
 
       {activeTab === "overview" ? (
         <>
-        <SectionCard
-          eyebrow="Valuation summary"
-          title="Whole-factory valuation"
-          description="Live totals across finished goods and raw materials. Finished-good figures need a COGS snapshot and an average sale price per product."
-        >
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            <StatTile
-              label="FG inventory at cost"
-              value={formatIls(overviewTotals.cost)}
-              hint="Sum of COGS per unit × on-hand units across every finished good."
-              sub={`${overviewTotals.cogsCount} of ${overviewTotals.productCount} products have a COGS`}
-            />
-            <StatTile
-              label="FG inventory at sale price"
-              value={formatIls(overviewTotals.sale)}
-              hint="Sum of avg sale price × on-hand units across every finished good."
-              sub={`${overviewTotals.pricedCount} of ${overviewTotals.productCount} products have a sale price`}
-            />
-            <StatTile
-              label="Embedded margin in stock"
-              value={formatIls(overviewTotals.embeddedMargin)}
-              hint="FG inventory at sale price minus FG inventory at cost — the material margin locked up in finished-goods stock."
-              tone={overviewTotals.embeddedMargin < 0 ? "danger" : "default"}
-            />
-            <StatTile
-              label="Raw-material inventory"
-              value={
-                rawMaterialsQuery.data
-                  ? formatIls(
-                      rawMaterialsQuery.data.totals.total_inventory_value_ils,
-                    )
-                  : rawMaterialsQuery.isError
-                    ? "—"
-                    : "…"
-              }
-              hint="Raw material + packaging on hand valued at effective cost (primary supplier, then fallback). Full breakdown on the Raw Materials tab."
-              sub={
-                rawMaterialsQuery.data
-                  ? `RM ${formatIls(rawMaterialsQuery.data.totals.rm_inventory_value_ils)} · PKG ${formatIls(rawMaterialsQuery.data.totals.pkg_inventory_value_ils)}`
-                  : undefined
-              }
-            />
-          </div>
-        </SectionCard>
-        <SectionCard
-          eyebrow="Economics"
-          title="COGS, sale price & margin per product"
-          description="Per-unit COGS, the editable average sale price, and the material margin derived from the two. Click an Avg sale price cell to enter or update it — margins recompute immediately, no snapshot run required."
-          contentClassName="p-0"
-        >
-          {economicsQuery.isLoading ? (
-            <TableSkeleton />
-          ) : economicsQuery.isError ? (
-            <ErrorCard
-              message={(economicsQuery.error as Error).message}
-              onRetry={() => economicsQuery.refetch()}
-            />
-          ) : (economicsQuery.data?.rows ?? []).length === 0 ? (
-            <div className="p-10">
-              <div className="mx-auto max-w-sm rounded-lg border border-border/60 bg-bg-subtle/50 p-6 text-center">
-                <div className="mb-1 text-sm font-semibold text-fg-strong">
-                  No snapshot rows yet
-                </div>
-                <div className="mb-4 text-xs text-fg-muted">
-                  Run the snapshot to compute COGS for every product.
-                </div>
-                {canEdit ? (
+          <SectionCard
+            eyebrow="Valuation summary"
+            title="Whole-factory valuation"
+            description="Live totals across finished goods and raw materials. Finished-good figures need a COGS snapshot and an average sale price per product."
+          >
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+              <StatTile
+                label="FG inventory at cost"
+                value={formatIls(overviewTotals.cost)}
+                hint="Sum of COGS per unit × on-hand units across every finished good."
+                sub={`${overviewTotals.cogsCount} of ${overviewTotals.productCount} products have a COGS`}
+              />
+              <StatTile
+                label="FG inventory at sale price"
+                value={formatIls(overviewTotals.sale)}
+                hint="Sum of avg sale price × on-hand units across every finished good."
+                sub={`${overviewTotals.pricedCount} of ${overviewTotals.productCount} products have a sale price`}
+              />
+              <StatTile
+                label="Embedded margin in stock"
+                value={formatIls(overviewTotals.embeddedMargin)}
+                hint="FG inventory at sale price minus FG inventory at cost — the material margin locked up in finished-goods stock."
+                tone={overviewTotals.embeddedMargin < 0 ? "danger" : "default"}
+              />
+              <StatTile
+                label="Raw-material inventory"
+                value={
+                  rawMaterialsQuery.data
+                    ? formatIls(
+                        rawMaterialsQuery.data.totals.total_inventory_value_ils,
+                      )
+                    : rawMaterialsQuery.isError
+                      ? "—"
+                      : "…"
+                }
+                hint="Raw material + packaging on hand valued at effective cost (primary supplier, then fallback). Full breakdown on the Raw Materials tab."
+                sub={
+                  rawMaterialsQuery.data
+                    ? `RM ${formatIls(rawMaterialsQuery.data.totals.rm_inventory_value_ils)} · PKG ${formatIls(rawMaterialsQuery.data.totals.pkg_inventory_value_ils)}`
+                    : undefined
+                }
+              />
+            </div>
+          </SectionCard>
+
+          <SectionCard title="Filter" density="compact">
+            <div className="space-y-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <input
+                  className="input w-full sm:max-w-xs"
+                  value={overviewQuery}
+                  onChange={(e) => setOverviewQuery(e.target.value)}
+                  placeholder="Search products…"
+                  dir="auto"
+                  aria-label="Search products"
+                />
+                {overviewQuery ? (
                   <button
                     type="button"
-                    className="btn-primary inline-flex items-center gap-1.5"
-                    onClick={() => {
-                      setBanner(null);
-                      recalculateMutation.mutate();
-                    }}
-                    disabled={recalculateMutation.isPending}
+                    className="btn btn-ghost btn-sm shrink-0"
+                    onClick={() => setOverviewQuery("")}
                   >
-                    <Play className="h-3.5 w-3.5" strokeWidth={2.5} />
-                    {recalculateMutation.isPending
-                      ? "Running…"
-                      : "Run Snapshot Now"}
+                    Clear search
                   </button>
                 ) : null}
               </div>
+              <FilterChipBar
+                visible={filteredOverview.length}
+                total={economicsQuery.data?.rows.length ?? 0}
+                hasActiveFilters={overviewHasFilters}
+                onClear={() => {
+                  setOverviewQuery("");
+                  setOverviewStatus(new Set());
+                }}
+              >
+                {OVERVIEW_STATUS_DEFS.map((d) => (
+                  <FilterChip
+                    key={d.key}
+                    label={d.label}
+                    tone={d.tone}
+                    title={d.title}
+                    count={overviewStatusCounts[d.key]}
+                    active={overviewStatus.has(d.key)}
+                    onToggle={() =>
+                      setOverviewStatus((s) => toggleSet(s, d.key))
+                    }
+                  />
+                ))}
+              </FilterChipBar>
             </div>
-          ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse text-sm">
-                <thead>
-                  <tr className="border-b border-border/70 bg-bg-subtle/60">
-                    <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      Product
-                    </th>
-                    <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      COGS / unit
-                      <HelpHint text="Cost of goods sold per unit — the sum of every BOM component's effective cost. Computed by the COGS snapshot job; run a snapshot to refresh it." />
-                    </th>
-                    <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      Avg sale price
-                      <HelpHint text="Manually-entered average sale price per unit. Click a cell to edit. Drives the margin and inventory-at-sale columns immediately." />
-                    </th>
-                    <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      Margin / unit
-                      <HelpHint text="Avg sale price minus COGS per unit. Negative means the unit sells below its material cost." />
-                    </th>
-                    <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      Margin %
-                      <HelpHint text="Margin per unit as a percentage of the avg sale price (margin / sale price × 100)." />
-                    </th>
-                    <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      On hand
-                      <HelpHint text="Finished-good units currently in stock (current_balances)." />
-                    </th>
-                    <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      Inventory at cost
-                      <HelpHint text="COGS per unit × on-hand units — the stock's value at material cost." />
-                    </th>
-                    <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      Inventory at sale price
-                      <HelpHint text="Avg sale price × on-hand units — the stock's value at sale price." />
-                    </th>
-                    <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      Status
-                    </th>
-                    <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      Last snapshot
-                    </th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(economicsQuery.data?.rows ?? []).map((r) => (
-                    <tr
-                      key={r.item_id}
-                      className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
+          </SectionCard>
+
+          <SectionCard
+            eyebrow="Economics"
+            title="COGS, sale price & margin per product"
+            description="Per-unit COGS, the editable average sale price, and the material margin derived from the two. Click an Avg sale price cell to enter or update it — margins recompute immediately, no snapshot run required. Click 'Open gaps' on an incomplete row to drill into the missing components and publish fallback prices inline."
+            contentClassName="p-0"
+          >
+            {economicsQuery.isLoading ? (
+              <TableSkeleton />
+            ) : economicsQuery.isError ? (
+              <ErrorCard
+                message={(economicsQuery.error as Error).message}
+                onRetry={() => economicsQuery.refetch()}
+              />
+            ) : (economicsQuery.data?.rows ?? []).length === 0 ? (
+              <div className="p-10">
+                <div className="mx-auto max-w-sm rounded-lg border border-border/60 bg-bg-subtle/50 p-6 text-center">
+                  <div className="mb-1 text-sm font-semibold text-fg-strong">
+                    No snapshot rows yet
+                  </div>
+                  <div className="mb-4 text-xs text-fg-muted">
+                    Run the snapshot to compute COGS for every product.
+                  </div>
+                  {canEdit ? (
+                    <button
+                      type="button"
+                      className="btn-primary inline-flex items-center gap-1.5"
+                      onClick={() => {
+                        setBanner(null);
+                        recalculateMutation.mutate();
+                      }}
+                      disabled={recalculateMutation.isPending}
                     >
-                      <td className="px-3 py-2">
-                        <span
-                          className="block text-sm font-medium leading-snug text-fg-strong"
-                          dir="auto"
+                      <Play className="h-3.5 w-3.5" strokeWidth={2.5} />
+                      {recalculateMutation.isPending
+                        ? "Running…"
+                        : "Run Snapshot Now"}
+                    </button>
+                  ) : null}
+                </div>
+              </div>
+            ) : filteredOverview.length === 0 ? (
+              <div className="p-10">
+                <div className="mx-auto max-w-sm rounded-lg border border-border/60 bg-bg-subtle/50 p-6 text-center">
+                  <div className="mb-1 text-sm font-semibold text-fg-strong">
+                    No products match
+                  </div>
+                  <div className="mb-4 text-xs text-fg-muted">
+                    Try clearing the filters or text search.
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => {
+                      setOverviewQuery("");
+                      setOverviewStatus(new Set());
+                    }}
+                  >
+                    Clear filters
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-sm">
+                  <thead>
+                    <tr className="border-b border-border/70">
+                      <SortHeader
+                        col="name"
+                        label="Product"
+                        sort={overviewSort}
+                        onSort={setOverviewSort}
+                      />
+                      <SortHeader
+                        col="cogs"
+                        label="COGS / unit"
+                        align="right"
+                        sort={overviewSort}
+                        onSort={setOverviewSort}
+                        hint="Cost of goods sold per unit — the sum of every BOM component's effective cost. Computed by the COGS snapshot job; run a snapshot to refresh it."
+                      />
+                      <SortHeader
+                        col="sale_price"
+                        label="Avg sale price"
+                        align="right"
+                        sort={overviewSort}
+                        onSort={setOverviewSort}
+                        hint="Manually-entered average sale price per unit. Click a cell to edit. Drives the margin and inventory-at-sale columns immediately."
+                      />
+                      <SortHeader
+                        col="margin"
+                        label="Margin / unit"
+                        align="right"
+                        sort={overviewSort}
+                        onSort={setOverviewSort}
+                        hint="Avg sale price minus COGS per unit. Negative means the unit sells below its material cost."
+                      />
+                      <SortHeader
+                        col="margin_pct"
+                        label="Margin %"
+                        align="right"
+                        sort={overviewSort}
+                        onSort={setOverviewSort}
+                        hint="Margin per unit as a percentage of the avg sale price (margin / sale price × 100)."
+                      />
+                      <SortHeader
+                        col="on_hand"
+                        label="On hand"
+                        align="right"
+                        sort={overviewSort}
+                        onSort={setOverviewSort}
+                        hint="Finished-good units currently in stock (current_balances)."
+                      />
+                      <SortHeader
+                        col="inv_cost"
+                        label="Inventory at cost"
+                        align="right"
+                        sort={overviewSort}
+                        onSort={setOverviewSort}
+                        hint="COGS per unit × on-hand units — the stock's value at material cost."
+                      />
+                      <SortHeader
+                        col="inv_sale"
+                        label="Inventory at sale price"
+                        align="right"
+                        sort={overviewSort}
+                        onSort={setOverviewSort}
+                        hint="Avg sale price × on-hand units — the stock's value at sale price."
+                      />
+                      <th
+                        scope="col"
+                        className="sticky top-0 z-10 bg-bg-subtle/95 px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle backdrop-blur"
+                      >
+                        Status
+                      </th>
+                      <SortHeader
+                        col="snapshot"
+                        label="Last snapshot"
+                        sort={overviewSort}
+                        onSort={setOverviewSort}
+                      />
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredOverview.map((r) => {
+                      const blockerCount = (r.missing_cost_components ?? [])
+                        .length;
+                      const showGaps = !r.cogs_complete && blockerCount > 0;
+                      return (
+                        <tr
+                          key={r.item_id}
+                          className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
                         >
-                          {r.item_name}
-                        </span>
-                        <span className="block font-mono text-3xs text-fg-subtle">
-                          {r.item_id}
-                        </span>
-                      </td>
-                      <td className="px-3 py-2 text-right text-sm tabular-nums">
-                        {formatIls(r.cogs_per_unit_ils)}
-                      </td>
-                      <td className="px-3 py-2 text-right">
-                        <SalePriceEditCell
-                          row={r}
-                          canEdit={canEdit}
-                          onSaved={() => {
-                            setPriceSavedHint(true);
-                            void queryClient.invalidateQueries({
-                              queryKey: ["admin", "economics"],
-                            });
-                          }}
-                        />
-                      </td>
+                          <td className="px-3 py-2">
+                            <span
+                              className="block text-sm font-medium leading-snug text-fg-strong"
+                              dir="auto"
+                            >
+                              {r.item_name}
+                            </span>
+                            <span className="block font-mono text-3xs text-fg-subtle">
+                              {r.item_id}
+                            </span>
+                          </td>
+                          <td className="px-3 py-2 text-right text-sm tabular-nums">
+                            {formatIls(r.cogs_per_unit_ils)}
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            <SalePriceEditCell
+                              row={r}
+                              canEdit={canEdit}
+                              onSaved={() => {
+                                setPriceSavedHint(true);
+                                void queryClient.invalidateQueries({
+                                  queryKey: ["admin", "economics"],
+                                });
+                              }}
+                            />
+                          </td>
+                          <td
+                            className={`px-3 py-2 text-right text-sm tabular-nums ${marginTone(
+                              r.material_margin_ils,
+                            )}`}
+                          >
+                            {formatIls(r.material_margin_ils)}
+                          </td>
+                          <td
+                            className={`px-3 py-2 text-right text-sm tabular-nums ${marginTone(
+                              r.material_margin_pct,
+                            )}`}
+                          >
+                            {formatPct(r.material_margin_pct)}
+                          </td>
+                          <td className="px-3 py-2 text-right text-sm tabular-nums text-fg-muted">
+                            {formatQtyInt(r.qty_on_hand)}
+                          </td>
+                          <td className="px-3 py-2 text-right text-sm tabular-nums">
+                            {formatIls(r.fg_inventory_value_at_cost)}
+                          </td>
+                          <td className="px-3 py-2 text-right text-sm tabular-nums">
+                            {formatIls(r.fg_inventory_value_at_sale_price)}
+                          </td>
+                          <td className="px-3 py-2">
+                            <div className="flex items-center gap-2">
+                              <SnapshotStatusBadge row={r} />
+                              {showGaps ? (
+                                <button
+                                  type="button"
+                                  onClick={() => setGapsProductId(r.item_id)}
+                                  className="inline-flex items-center gap-0.5 rounded text-3xs font-semibold uppercase tracking-sops text-accent hover:underline"
+                                  title="Open the Cost-gaps drawer for this product"
+                                >
+                                  Open gaps
+                                  <ChevronRight
+                                    className="h-3 w-3"
+                                    strokeWidth={2.5}
+                                  />
+                                </button>
+                              ) : null}
+                            </div>
+                          </td>
+                          <td className="px-3 py-2 text-xs text-fg-muted">
+                            {formatRelativeShort(r.cogs_snapshot_at)}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                  <tfoot>
+                    <tr className="border-t border-border/70 bg-bg-subtle/60">
                       <td
-                        className={`px-3 py-2 text-right text-sm tabular-nums ${marginTone(
-                          r.material_margin_ils,
-                        )}`}
+                        colSpan={10}
+                        className="px-3 py-2 text-right text-sm font-semibold text-fg-strong tabular-nums"
                       >
-                        {formatIls(r.material_margin_ils)}
-                      </td>
-                      <td
-                        className={`px-3 py-2 text-right text-sm tabular-nums ${marginTone(
-                          r.material_margin_pct,
-                        )}`}
-                      >
-                        {formatPct(r.material_margin_pct)}
-                      </td>
-                      <td className="px-3 py-2 text-right text-sm tabular-nums text-fg-muted">
-                        {formatQtyInt(r.qty_on_hand)}
-                      </td>
-                      <td className="px-3 py-2 text-right text-sm tabular-nums">
-                        {formatIls(r.fg_inventory_value_at_cost)}
-                      </td>
-                      <td className="px-3 py-2 text-right text-sm tabular-nums">
-                        {formatIls(r.fg_inventory_value_at_sale_price)}
-                      </td>
-                      <td className="px-3 py-2">
-                        <SnapshotStatusBadge row={r} />
-                      </td>
-                      <td className="px-3 py-2 text-xs text-fg-muted">
-                        {formatRelativeShort(r.cogs_snapshot_at)}
+                        Total inventory — at cost:{" "}
+                        {formatIls(overviewTotals.cost)}
+                        <span className="mx-2 text-fg-subtle">·</span>
+                        at sale price:{" "}
+                        {formatIls(overviewTotals.sale)}
                       </td>
                     </tr>
-                  ))}
-                </tbody>
-                <tfoot>
-                  <tr className="border-t border-border/70 bg-bg-subtle/60">
-                    <td
-                      colSpan={10}
-                      className="px-3 py-2 text-right text-sm font-semibold text-fg-strong tabular-nums"
-                    >
-                      Total inventory — at cost:{" "}
-                      {formatIls(overviewTotals.cost)}
-                      <span className="mx-2 text-fg-subtle">·</span>
-                      at sale price:{" "}
-                      {formatIls(overviewTotals.sale)}
-                    </td>
-                  </tr>
-                </tfoot>
-              </table>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </SectionCard>
+          {priceSavedHint ? (
+            <div className="text-xs text-fg-muted">
+              Average sale price saved — margin and inventory-at-sale columns
+              have been refreshed.
             </div>
-          )}
-        </SectionCard>
-        {priceSavedHint ? (
-          <div className="text-xs text-fg-muted">
-            Average sale price saved — margin and inventory-at-sale columns
-            have been refreshed.
-          </div>
-        ) : null}
+          ) : null}
         </>
       ) : null}
 
       {activeTab === "component-costs" ? (
         <>
           <SectionCard title="Filter" density="compact">
-            <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
-              <div className="block sm:col-span-2">
-                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Search components
-                </span>
-                <div className="flex gap-2">
+            <div className="space-y-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <input
+                  className="input w-full sm:max-w-xs"
+                  value={componentQuery}
+                  onChange={(e) => setComponentQuery(e.target.value)}
+                  placeholder="Search components…"
+                  dir="auto"
+                  aria-label="Search components"
+                />
+                {componentQuery ? (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm shrink-0"
+                    onClick={() => setComponentQuery("")}
+                  >
+                    Clear search
+                  </button>
+                ) : null}
+                <label className="ml-0 inline-flex items-center gap-1.5 text-xs text-fg-muted sm:ml-2">
                   <input
-                    className="input flex-1"
-                    value={componentQuery}
-                    onChange={(e) => setComponentQuery(e.target.value)}
-                    placeholder="Search components…"
-                    dir="auto"
+                    type="checkbox"
+                    checked={componentZeroOnly}
+                    onChange={(e) => setComponentZeroOnly(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-border/70"
                   />
-                  {componentQuery ? (
-                    <button
-                      type="button"
-                      className="btn btn-ghost btn-sm shrink-0"
-                      onClick={() => setComponentQuery("")}
-                    >
-                      Clear
-                    </button>
-                  ) : null}
-                </div>
+                  Zero-cost only
+                </label>
               </div>
+              <FilterChipBar
+                visible={filteredCosts.length}
+                total={costsQuery.data?.rows.length ?? 0}
+                hasActiveFilters={componentHasFilters}
+                onClear={() => {
+                  setComponentQuery("");
+                  setComponentSources(new Set());
+                  setComponentClasses(new Set());
+                  setComponentZeroOnly(false);
+                }}
+              >
+                {COMPONENT_SOURCE_DEFS.map((d) => (
+                  <FilterChip
+                    key={d.key}
+                    label={d.label}
+                    tone={d.tone}
+                    title={d.title}
+                    count={componentSourceCounts[d.key]}
+                    active={componentSources.has(d.key)}
+                    onToggle={() =>
+                      setComponentSources((s) => toggleSet(s, d.key))
+                    }
+                  />
+                ))}
+                {componentClassesAvailable.map((cls) => {
+                  const count =
+                    costsQuery.data?.rows.filter(
+                      (r) => r.component_class === cls,
+                    ).length ?? 0;
+                  return (
+                    <FilterChip
+                      key={`class-${cls}`}
+                      label={cls}
+                      tone="neutral"
+                      title={`Components classified as ${cls}.`}
+                      count={count}
+                      active={componentClasses.has(cls)}
+                      onToggle={() =>
+                        setComponentClasses((s) => toggleSet(s, cls))
+                      }
+                    />
+                  );
+                })}
+              </FilterChipBar>
             </div>
           </SectionCard>
 
@@ -1155,30 +2380,58 @@ export default function AdminEconomicsPage(): JSX.Element {
                     No components match
                   </div>
                   <div className="mb-4 text-xs text-fg-muted">
-                    Try clearing the search.
+                    Try clearing the filters or text search.
                   </div>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => {
+                      setComponentQuery("");
+                      setComponentSources(new Set());
+                      setComponentClasses(new Set());
+                      setComponentZeroOnly(false);
+                    }}
+                  >
+                    Clear filters
+                  </button>
                 </div>
               </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse text-sm">
                   <thead>
-                    <tr className="border-b border-border/70 bg-bg-subtle/60">
-                      <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                        Component
-                      </th>
-                      <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                        Class
-                      </th>
-                      <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                        Unit
-                      </th>
-                      <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                        Effective cost (₪)
-                      </th>
-                      <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                        Source
-                      </th>
+                    <tr className="border-b border-border/70">
+                      <SortHeader
+                        col="name"
+                        label="Component"
+                        sort={componentSort}
+                        onSort={setComponentSort}
+                      />
+                      <SortHeader
+                        col="class"
+                        label="Class"
+                        sort={componentSort}
+                        onSort={setComponentSort}
+                      />
+                      <SortHeader
+                        col="uom"
+                        label="Unit"
+                        sort={componentSort}
+                        onSort={setComponentSort}
+                      />
+                      <SortHeader
+                        col="effective_cost"
+                        label="Effective cost (₪)"
+                        align="right"
+                        sort={componentSort}
+                        onSort={setComponentSort}
+                      />
+                      <SortHeader
+                        col="source"
+                        label="Source"
+                        sort={componentSort}
+                        onSort={setComponentSort}
+                      />
                     </tr>
                   </thead>
                   <tbody>
@@ -1236,9 +2489,39 @@ export default function AdminEconomicsPage(): JSX.Element {
           </SectionCard>
 
           {costSavedHint ? (
-            <div className="text-xs text-fg-muted">
-              Cost saved. New COGS will recalculate tonight at 04:00 UTC — or
-              click Run Snapshot Now.
+            <div className="sticky bottom-3 z-10 flex items-center justify-between gap-3 rounded-md border border-accent/40 bg-accent-soft p-3 text-sm text-accent shadow-raised">
+              <div>
+                <div className="font-semibold">Cost saved.</div>
+                <div className="text-xs">
+                  COGS still shows the previous value until you recalc. The
+                  nightly snapshot runs at 04:00 UTC.
+                </div>
+              </div>
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => setCostSavedHint(false)}
+                  className="btn btn-ghost btn-sm"
+                >
+                  Dismiss
+                </button>
+                {canEdit ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setBanner(null);
+                      recalculateMutation.mutate();
+                    }}
+                    disabled={recalculateMutation.isPending}
+                    className="btn-primary inline-flex items-center gap-1.5"
+                  >
+                    <Play className="h-3.5 w-3.5" strokeWidth={2.5} />
+                    {recalculateMutation.isPending
+                      ? "Running…"
+                      : "Recalc affected products now"}
+                  </button>
+                ) : null}
+              </div>
             </div>
           ) : null}
         </>
@@ -1246,6 +2529,85 @@ export default function AdminEconomicsPage(): JSX.Element {
 
       {activeTab === "raw-materials" ? (
         <>
+          <SectionCard title="Filter" density="compact">
+            <div className="space-y-2">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center">
+                <input
+                  className="input w-full sm:max-w-xs"
+                  value={rmQuery}
+                  onChange={(e) => setRmQuery(e.target.value)}
+                  placeholder="Search raw materials & packaging…"
+                  dir="auto"
+                  aria-label="Search raw materials"
+                />
+                {rmQuery ? (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm shrink-0"
+                    onClick={() => setRmQuery("")}
+                  >
+                    Clear search
+                  </button>
+                ) : null}
+                <label className="ml-0 inline-flex items-center gap-1.5 text-xs text-fg-muted sm:ml-2">
+                  <input
+                    type="checkbox"
+                    checked={rmZeroOnly}
+                    onChange={(e) => setRmZeroOnly(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-border/70"
+                  />
+                  Zero-cost only
+                </label>
+                <label className="inline-flex items-center gap-1.5 text-xs text-fg-muted">
+                  <input
+                    type="checkbox"
+                    checked={rmHasStockOnly}
+                    onChange={(e) => setRmHasStockOnly(e.target.checked)}
+                    className="h-3.5 w-3.5 rounded border-border/70"
+                  />
+                  On-hand &gt; 0 only
+                </label>
+              </div>
+              <FilterChipBar
+                visible={filteredRm.length}
+                total={rawMaterialsQuery.data?.rows.length ?? 0}
+                hasActiveFilters={rmHasFilters}
+                onClear={() => {
+                  setRmQuery("");
+                  setRmTypes(new Set());
+                  setRmSources(new Set());
+                  setRmZeroOnly(false);
+                  setRmHasStockOnly(false);
+                }}
+              >
+                {RM_TYPE_DEFS.map((d) => (
+                  <FilterChip
+                    key={d.key}
+                    label={d.label}
+                    tone={d.tone}
+                    title={d.title}
+                    count={rmTypeCounts[d.key]}
+                    active={rmTypes.has(d.key)}
+                    onToggle={() => setRmTypes((s) => toggleSet(s, d.key))}
+                  />
+                ))}
+                {COMPONENT_SOURCE_DEFS.filter(
+                  (d) => d.key !== "recipe_rollup",
+                ).map((d) => (
+                  <FilterChip
+                    key={`rm-${d.key}`}
+                    label={d.label}
+                    tone={d.tone}
+                    title={d.title}
+                    count={rmSourceCounts[d.key]}
+                    active={rmSources.has(d.key)}
+                    onToggle={() => setRmSources((s) => toggleSet(s, d.key))}
+                  />
+                ))}
+              </FilterChipBar>
+            </div>
+          </SectionCard>
+
           <SectionCard
             eyebrow="Raw materials"
             title="Raw-material & packaging inventory value"
@@ -1271,39 +2633,87 @@ export default function AdminEconomicsPage(): JSX.Element {
                   </div>
                 </div>
               </div>
+            ) : filteredRm.length === 0 ? (
+              <div className="p-10">
+                <div className="mx-auto max-w-sm rounded-lg border border-border/60 bg-bg-subtle/50 p-6 text-center">
+                  <div className="mb-1 text-sm font-semibold text-fg-strong">
+                    No rows match
+                  </div>
+                  <div className="mb-4 text-xs text-fg-muted">
+                    Try clearing the filters or text search.
+                  </div>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    onClick={() => {
+                      setRmQuery("");
+                      setRmTypes(new Set());
+                      setRmSources(new Set());
+                      setRmZeroOnly(false);
+                      setRmHasStockOnly(false);
+                    }}
+                  >
+                    Clear filters
+                  </button>
+                </div>
+              </div>
             ) : (
               <div className="overflow-x-auto">
                 <table className="w-full border-collapse text-sm">
                   <thead>
-                    <tr className="border-b border-border/70 bg-bg-subtle/60">
-                      <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                        Component
-                      </th>
-                      <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                        Type
-                      </th>
-                      <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                        Unit
-                      </th>
-                      <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                        On hand
-                        <HelpHint text="Quantity currently in stock, in the component's inventory unit of measure." />
-                      </th>
-                      <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                        Unit cost
-                        <HelpHint text="Effective cost per inventory unit: the primary supplier price, or the components fallback cost when no supplier price is set." />
-                      </th>
-                      <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                        Inventory value
-                        <HelpHint text="On-hand quantity × effective unit cost." />
-                      </th>
-                      <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    <tr className="border-b border-border/70">
+                      <SortHeader
+                        col="name"
+                        label="Component"
+                        sort={rmSort}
+                        onSort={setRmSort}
+                      />
+                      <SortHeader
+                        col="type"
+                        label="Type"
+                        sort={rmSort}
+                        onSort={setRmSort}
+                      />
+                      <SortHeader
+                        col="uom"
+                        label="Unit"
+                        sort={rmSort}
+                        onSort={setRmSort}
+                      />
+                      <SortHeader
+                        col="on_hand"
+                        label="On hand"
+                        align="right"
+                        sort={rmSort}
+                        onSort={setRmSort}
+                        hint="Quantity currently in stock, in the component's inventory unit of measure."
+                      />
+                      <SortHeader
+                        col="unit_cost"
+                        label="Unit cost"
+                        align="right"
+                        sort={rmSort}
+                        onSort={setRmSort}
+                        hint="Effective cost per inventory unit: the primary supplier price, or the components fallback cost when no supplier price is set."
+                      />
+                      <SortHeader
+                        col="value"
+                        label="Inventory value"
+                        align="right"
+                        sort={rmSort}
+                        onSort={setRmSort}
+                        hint="On-hand quantity × effective unit cost."
+                      />
+                      <th
+                        scope="col"
+                        className="sticky top-0 z-10 bg-bg-subtle/95 px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle backdrop-blur"
+                      >
                         Cost source
                       </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {(rawMaterialsQuery.data?.rows ?? []).map((r) => {
+                    {filteredRm.map((r) => {
                       const effNum =
                         r.effective_cost_ils != null
                           ? Number(r.effective_cost_ils)
@@ -1407,6 +2817,24 @@ export default function AdminEconomicsPage(): JSX.Element {
           ) : null}
         </>
       ) : null}
+
+      <CostGapsDrawer
+        product={gapsProduct}
+        canEdit={canEdit}
+        costsByComponentId={costsByComponentId}
+        onClose={() => setGapsProductId(null)}
+        onRecalc={() => {
+          setBanner(null);
+          recalculateMutation.mutate();
+        }}
+        recalcBusy={recalculateMutation.isPending}
+        onCostSaved={() => {
+          setCostSavedHint(true);
+          void queryClient.invalidateQueries({
+            queryKey: ["admin", "economics", "component-costs"],
+          });
+        }}
+      />
     </>
   );
 }
