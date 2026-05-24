@@ -24,6 +24,7 @@
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/cn";
+import { fmtNumStr } from "@/lib/utils/format-quantity";
 import {
   type PoOption,
   type SupplierOption,
@@ -525,7 +526,7 @@ function POCardContents({ poId }: { poId: string }) {
                           : "bg-bg-subtle text-fg-muted",
                       )}
                     >
-                      {pl.open_qty} / {pl.ordered_qty} {pl.uom}
+                      {fmtNumStr(pl.open_qty)} / {fmtNumStr(pl.ordered_qty)} {pl.uom}
                     </span>
                   </li>
                 );

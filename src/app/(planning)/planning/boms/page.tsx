@@ -69,6 +69,7 @@ import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
 import { BomSimulator } from "@/components/bom/BomSimulator";
 import { BomNetRequirements } from "@/components/bom/BomNetRequirements";
+import { fmtNumStr } from "@/lib/utils/format-quantity";
 
 // --- Types ------------------------------------------------------------------
 
@@ -1556,7 +1557,7 @@ export default function PlanningBomsPage(): JSX.Element {
                         </div>
                         {rec.required_qty && rec.current_stock_bal ? (
                           <div className="mt-0.5 text-3xs text-fg-muted">
-                            Need {rec.required_qty}{rec.uom ? ` ${rec.uom}` : ""} · On hand {rec.current_stock_bal}{rec.uom ? ` ${rec.uom}` : ""}
+                            Need {fmtNumStr(rec.required_qty)}{rec.uom ? ` ${rec.uom}` : ""} · On hand {fmtNumStr(rec.current_stock_bal)}{rec.uom ? ` ${rec.uom}` : ""}
                           </div>
                         ) : null}
                       </div>
@@ -3136,7 +3137,7 @@ export default function PlanningBomsPage(): JSX.Element {
                                 {displayName(h)}
                               </div>
                               <div className="text-3xs font-mono text-fg-subtle">
-                                {h.bom_head_id} · base {h.final_bom_output_qty}{" "}
+                                {h.bom_head_id} · base {fmtNumStr(h.final_bom_output_qty)}{" "}
                                 {h.final_bom_output_uom ?? ""}
                               </div>
                             </div>
@@ -3322,7 +3323,7 @@ export default function PlanningBomsPage(): JSX.Element {
                 </div>
                 <div className="text-3xs font-mono text-fg-subtle">
                   {selectedHead.bom_head_id} · base{" "}
-                  {selectedHead.final_bom_output_qty}{" "}
+                  {fmtNumStr(selectedHead.final_bom_output_qty)}{" "}
                   {selectedHead.final_bom_output_uom ?? ""}
                 </div>
               </div>

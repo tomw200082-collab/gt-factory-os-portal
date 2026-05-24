@@ -490,7 +490,7 @@ export default function AdminMastersBomVersionDetailPage({
         { label: "Last updated", value: fmtDateTime(version.updated_at) },
         {
           label: "Base batch output",
-          value: `${head.final_bom_output_qty} ${head.final_bom_output_uom ?? ""}`,
+          value: `${fmtNumStr(head.final_bom_output_qty)} ${head.final_bom_output_uom ?? ""}`,
           mono: true,
         },
       ];
@@ -563,7 +563,7 @@ export default function AdminMastersBomVersionDetailPage({
           contentClassName="p-0"
           description={
             head
-              ? `Per batch of ${head.final_bom_output_qty} ${head.final_bom_output_uom ?? ""}`
+              ? `Per batch of ${fmtNumStr(head.final_bom_output_qty)} ${head.final_bom_output_uom ?? ""}`
               : undefined
           }
         >
@@ -575,7 +575,7 @@ export default function AdminMastersBomVersionDetailPage({
                   <Th>#</Th>
                   <Th>Component</Th>
                   <Th align="right">
-                    Qty per{head ? ` ${head.final_bom_output_qty} ${head.final_bom_output_uom ?? ""}` : " batch"}
+                    Qty per{head ? ` ${fmtNumStr(head.final_bom_output_qty)} ${head.final_bom_output_uom ?? ""}` : " batch"}
                   </Th>
                   <Th>Unit</Th>
                 </tr>

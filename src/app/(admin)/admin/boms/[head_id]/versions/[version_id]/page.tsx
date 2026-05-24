@@ -70,7 +70,7 @@ import { QuickCreateComponent } from "@/components/admin/quick-create/QuickCreat
 import { InlineEditCell } from "@/components/tables/InlineEditCell";
 import { ReadinessCard } from "@/components/readiness/ReadinessCard";
 import { ReadinessPill } from "@/components/readiness/ReadinessPill";
-import { formatQty } from "@/lib/utils/format-quantity";
+import { formatQty, fmtNumStr } from "@/lib/utils/format-quantity";
 
 function recipeLabel(bomKind: string): string {
   if (bomKind === "PACK") return "Pack recipe";
@@ -934,7 +934,7 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
               Base output
             </span>
             <span className="font-mono font-semibold tabular-nums text-fg">
-              {head.final_bom_output_qty}{" "}
+              {fmtNumStr(head.final_bom_output_qty)}{" "}
               <span className="text-fg-muted">{head.final_bom_output_uom ?? "units"}</span>
             </span>
           </div>
@@ -943,7 +943,7 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
               All line quantities below are
             </span>
             <span className="rounded bg-bg-subtle px-2 py-0.5 text-xs font-medium text-fg-muted">
-              per {head.final_bom_output_qty} {head.final_bom_output_uom ?? "units"} of output
+              per {fmtNumStr(head.final_bom_output_qty)} {head.final_bom_output_uom ?? "units"} of output
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -1003,7 +1003,7 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
                   <Th>#</Th>
                   <Th>Component</Th>
                   <Th align="right">
-                    Qty per {head.final_bom_output_qty}{" "}
+                    Qty per {fmtNumStr(head.final_bom_output_qty)}{" "}
                     {head.final_bom_output_uom ?? "units"}
                   </Th>
                   <Th align="right">Rate per unit</Th>

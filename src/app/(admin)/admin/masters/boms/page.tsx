@@ -32,6 +32,7 @@ import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
 import { fmtSupplyMethod } from "@/lib/display";
+import { fmtNumStr } from "@/lib/utils/format-quantity";
 
 function relativeTime(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -459,7 +460,7 @@ function BomHeadListRow({
         ) : null}
       </td>
       <td className="px-3 py-2 text-right font-mono text-xs tabular-nums text-fg-muted">
-        {head.final_bom_output_qty}
+        {fmtNumStr(head.final_bom_output_qty)}
         {head.final_bom_output_uom ? (
           <span className="ml-1 font-sans text-3xs text-fg-subtle">
             {head.final_bom_output_uom}

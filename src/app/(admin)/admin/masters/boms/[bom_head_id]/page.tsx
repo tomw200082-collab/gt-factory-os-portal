@@ -25,6 +25,7 @@ import { SectionCard } from "@/components/workflow/SectionCard";
 import { MasterSummaryCard, type KpiStat } from "@/components/admin/MasterSummaryCard";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { fmtNumStr } from "@/lib/utils/format-quantity";
 
 // --- Types (mirrored from upstream schemas) ------------------------------
 
@@ -239,7 +240,7 @@ function TechnicalDetailsCollapsible({
                 Base batch output
               </span>
               <span className="font-mono text-fg">
-                {head.final_bom_output_qty} {head.final_bom_output_uom ?? ""}
+                {fmtNumStr(head.final_bom_output_qty)} {head.final_bom_output_uom ?? ""}
               </span>
             </div>
           </div>
@@ -387,7 +388,7 @@ export default function AdminMastersBomHeadDetailPage({
         </Badge>
       )}
       <Badge tone="neutral" dotted>
-        {head.final_bom_output_qty} {head.final_bom_output_uom ?? ""}
+        {fmtNumStr(head.final_bom_output_qty)} {head.final_bom_output_uom ?? ""}
       </Badge>
     </>
   ) : null;
@@ -488,7 +489,7 @@ export default function AdminMastersBomHeadDetailPage({
           label: "Base batch output",
           value: (
             <span className="font-mono">
-              {head.final_bom_output_qty}
+              {fmtNumStr(head.final_bom_output_qty)}
               {head.final_bom_output_uom ? ` ${head.final_bom_output_uom}` : ""}
             </span>
           ),

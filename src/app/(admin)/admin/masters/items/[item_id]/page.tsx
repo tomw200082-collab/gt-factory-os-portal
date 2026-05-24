@@ -51,6 +51,7 @@ import type { EntityOption } from "@/components/fields/EntityPickerPlus";
 import { AdminMutationError, patchEntity, postStatus } from "@/lib/admin/mutations";
 import { useSession } from "@/lib/auth/session-provider";
 import { BomDraftEditorPage } from "@/components/bom-edit/BomDraftEditorPage";
+import { fmtNumStr } from "@/lib/utils/format-quantity";
 
 // --- Types (mirrored from upstream schemas) ------------------------------
 
@@ -1607,7 +1608,7 @@ function BomSection({
     { label: "Pack size", value: head.pack_size },
     {
       label: "Output quantity",
-      value: `${head.final_bom_output_qty} ${head.final_bom_output_uom}`,
+      value: `${fmtNumStr(head.final_bom_output_qty)} ${head.final_bom_output_uom}`,
       mono: true,
     },
     {

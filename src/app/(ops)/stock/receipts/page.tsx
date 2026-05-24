@@ -44,6 +44,9 @@ import { ReceiptLandingPicker } from "./_components/ReceiptLandingPicker";
 import { POLedgerHeader } from "./_components/POLedgerHeader";
 import { POLineMatchCard } from "./_components/POLineMatchCard";
 import type { ReceiptTrack } from "./_components/types";
+// Tranche 022 — strip 8-dp noise from prefill values before they hit
+// the number input.
+import { fmtNumStr } from "@/lib/utils/format-quantity";
 
 // ---------------------------------------------------------------------------
 // Goods Receipt contract — inlined.
@@ -696,7 +699,9 @@ export default function GoodsReceiptPage() {
         : "UNIT";
       return {
         receivable_key: key,
-        quantity: pl.open_qty,
+        // Tranche 022 — prefilled qty enters a number input; strip the
+        // 8-dp noise so the operator sees "10" not "10.00000000".
+        quantity: fmtNumStr(pl.open_qty),
         unit,
         notes: "",
         po_line_id: pl.po_line_id,
@@ -1860,7 +1865,9 @@ export default function GoodsReceiptPage() {
                               po_line_id: poLineId,
                             };
                             if (autoFillQty !== undefined) {
-                              patch.quantity = autoFillQty;
+                              // Tranche 022 — strip 8-dp noise so the qty
+                              // input shows "10" not "10.00000000".
+                              patch.quantity = fmtNumStr(autoFillQty);
                             }
                             if (
                               autoFillUom &&
