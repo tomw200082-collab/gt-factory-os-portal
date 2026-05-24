@@ -654,12 +654,23 @@ export default function WasteAdjustmentPage() {
             </div>
           </div>
 
-          {/* Reset button on success/pending */}
+          {/* Action affordances on success/pending — matches the pattern
+              used on physical-count and goods-receipt success banners so
+              the operator's next-action set is consistent across forms. */}
           {(done.kind === "success" || done.kind === "pending") && (
-            <div className="mt-3 border-t border-current/10 pt-3">
+            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-current/10 pt-3">
+              {done.kind === "success" ? (
+                <Link
+                  href="/stock/movement-log"
+                  className="btn btn-sm transition-colors duration-150"
+                  data-testid="waste-adjustment-success-movement-log"
+                >
+                  View posted ledger →
+                </Link>
+              ) : null}
               <button
                 type="button"
-                className="btn btn-sm transition-colors duration-150"
+                className="btn btn-sm btn-ghost transition-colors duration-150"
                 onClick={handleReset}
               >
                 Submit another adjustment
