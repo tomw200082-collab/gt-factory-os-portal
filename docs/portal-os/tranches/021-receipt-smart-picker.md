@@ -1,4 +1,8 @@
-# Tranche 020: receipt smart-picker + PO ledger
+# Tranche 021: receipt smart-picker + PO ledger
+# (Originally drafted as Tranche 020; renumbered to 021 because
+#  PR #38 "economics-page-ux-polish" landed Tranche 020 on main while
+#  this PR was open. Same scope, same manifest, just the file
+#  number changed.)
 
 status: in-progress
 created: 2026-05-24
