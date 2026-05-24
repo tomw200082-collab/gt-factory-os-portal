@@ -63,3 +63,4 @@ Index of every operating artifact. Entries use repo-root-relative paths so the P
 - `docs/portal-os/tranches/017-deploy-unblock-dashboard-dynamic.md` — (superseded by main's Tranche C making dashboard "use client")
 - `docs/portal-os/tranches/018-public-landing-preview-resilience.md` — public landing at / resilient to auth failures
 - `docs/portal-os/tranches/019-bulletproof-root.md` — hardened root page (static, middleware-bypass)
+- `docs/portal-os/tranches/020-economics-page-ux-polish.md` — Economics page filters + cost-gaps drawer + publish affordance + UX sweep
