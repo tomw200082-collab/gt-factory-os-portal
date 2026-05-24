@@ -157,6 +157,8 @@ interface DoneState {
   delta?: string;
   href?: string;
   hrefLabel?: string;
+  /** Short snapshot id (first 8 chars) for audit-trail correlation. */
+  snapshotIdShort?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -496,6 +498,7 @@ export default function PhysicalCountPage() {
           delta: body.computed_delta,
           itemSummary: `${itemLabel} · counted: ${qtyNum} ${unit} · adjustment: ${body.computed_delta ?? "?"}`,
           detail: `ref: ${body.submission_id}`,
+          snapshotIdShort: snapshot?.snapshot_id?.slice(0, 8),
         });
         resetFlow();
       } else if (body && body.status === "pending") {
@@ -515,6 +518,7 @@ export default function PhysicalCountPage() {
             ? `/inbox/approvals/physical-count/${encodeURIComponent(sid)}`
             : undefined,
           hrefLabel: "Open approval",
+          snapshotIdShort: snapshot?.snapshot_id?.slice(0, 8),
         });
         resetFlow();
       } else {
@@ -654,7 +658,14 @@ export default function PhysicalCountPage() {
                 </div>
               )}
               {done.detail && (
-                <div className="font-mono text-xs opacity-60">{done.detail}</div>
+                <div className="font-mono text-xs opacity-60">
+                  {done.detail}
+                  {done.snapshotIdShort ? (
+                    <span className="ml-2 opacity-70">
+                      · snapshot {done.snapshotIdShort}…
+                    </span>
+                  ) : null}
+                </div>
               )}
               <div className="flex items-center gap-2 flex-wrap">
                 <Link
@@ -718,7 +729,14 @@ export default function PhysicalCountPage() {
                 </button>
               </div>
               {done.detail && (
-                <div className="font-mono text-xs opacity-60">{done.detail}</div>
+                <div className="font-mono text-xs opacity-60">
+                  {done.detail}
+                  {done.snapshotIdShort ? (
+                    <span className="ml-2 opacity-70">
+                      · snapshot {done.snapshotIdShort}…
+                    </span>
+                  ) : null}
+                </div>
               )}
             </div>
           ) : (
@@ -1276,6 +1294,43 @@ export default function PhysicalCountPage() {
               </label>
             </div>
           </SectionCard>
+
+          {/* Pre-submit "what will happen" panel — addresses the spec
+              requirement that every operator form must clearly answer
+              before submit what the stock effect will be. The exact
+              auto-post vs approval routing depends on the variance
+              threshold (uncalibrated per GAP-010), so the copy gives
+              both outcomes without quoting a percentage. */}
+          {snapshot && countedQty && Number.isFinite(parseFloat(countedQty)) ? (
+            <div
+              className="rounded-lg border border-info/40 bg-info-softer/50 px-4 py-3 text-sm text-info-fg transition-all duration-150"
+              role="note"
+              data-testid="physical-count-pre-submit-effect"
+            >
+              <div className="flex items-start gap-2">
+                <svg className="h-4 w-4 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
+                  <path d="M12 8h.01M11 12h1v5h1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <div className="flex-1 space-y-1">
+                  <div>
+                    On submit, the system will compare{" "}
+                    <strong className="font-mono">{countedQty} {unit}</strong>{" "}
+                    against the snapshot taken when you opened this count.
+                  </div>
+                  <ul className="ml-4 list-disc text-xs opacity-90 space-y-0.5">
+                    <li>
+                      If the variance is small, the count <strong>posts immediately</strong> and replaces the stock anchor for{" "}
+                      <strong>{snapshot.item_display_name}</strong>.
+                    </li>
+                    <li>
+                      If the variance is large, the count is <strong>held for planner approval</strong> — stock will not change until approval completes.
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           {/* Cancel confirm inline mini-prompt */}
           {cancelConfirm ? (
