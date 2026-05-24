@@ -310,6 +310,7 @@ export default function PhysicalCountPage() {
   // ---------------------------------------------------------------------------
   const [searchQuery, setSearchQuery] = useState<string>("");
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const countedQtyInputRef = useRef<HTMLInputElement>(null);
   // Anchor for the portaled dropdown — wraps the input row so we can measure
   // its viewport rect and position the panel directly below it. The wrapper
   // is a stable target across phase transitions (no remount on input refocus).
@@ -368,6 +369,17 @@ export default function PhysicalCountPage() {
       searchInputRef.current?.focus();
     }
   }, [phase, loading, loadErr]);
+
+  // Auto-focus the counted-quantity input the moment Step 2 renders so the
+  // operator can start typing without a tap. Important on mobile where any
+  // extra tap means an extra second per count.
+  useEffect(() => {
+    if (phase === "counting") {
+      // Small delay to let the input mount after the phase transition.
+      const t = setTimeout(() => countedQtyInputRef.current?.focus(), 0);
+      return () => clearTimeout(t);
+    }
+  }, [phase]);
 
   // Position-tracking for the portaled dropdown.
   // We portal the dropdown to <body> so it can never be clipped by an
@@ -1203,6 +1215,7 @@ export default function PhysicalCountPage() {
                     −
                   </button>
                   <input
+                    ref={countedQtyInputRef}
                     type="number"
                     inputMode="decimal"
                     step="any"
