@@ -1220,16 +1220,26 @@ export default function GoodsReceiptPage() {
             )}
             <div className="flex-1">
               <div className="font-medium">{done.message}</div>
-              {/* #19: Bulleted list of posted lines */}
+              {/* Per-line stock effect — reinforces the invariant that a
+                  posted goods receipt INCREASES stock immediately. The
+                  earlier bullet list rendered "Item × qty unit" which
+                  implied the direction but did not state it. */}
               {done.kind === "success" && done.postedLineDetails && done.postedLineDetails.length > 0 ? (
-                <ul className="mt-2 space-y-0.5">
-                  {done.postedLineDetails.map((ld, i) => (
-                    <li key={i} className="flex items-center gap-1 text-xs opacity-90">
-                      <span className="text-success-fg">•</span>
-                      <span>{ld.label} × {ld.quantity} {ld.unit}</span>
-                    </li>
-                  ))}
-                </ul>
+                <>
+                  <div className="mt-2 text-xs font-medium opacity-90">
+                    Stock increased:
+                  </div>
+                  <ul className="mt-1 space-y-0.5">
+                    {done.postedLineDetails.map((ld, i) => (
+                      <li key={i} className="flex items-center gap-1 text-xs opacity-90">
+                        <span className="text-success-fg">+</span>
+                        <span>
+                          {ld.quantity} {ld.unit} of <strong>{ld.label}</strong>
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+                </>
               ) : null}
               {done.itemSummary && !(done.postedLineDetails && done.postedLineDetails.length > 0) ? (
                 <div className="mt-1 text-xs font-medium opacity-90">

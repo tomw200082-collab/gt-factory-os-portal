@@ -1049,6 +1049,42 @@ export default function WasteAdjustmentPage() {
           )}
 
           {/* ---------------------------------------------------------------- */}
+          {/* Pre-submit "what will change" panel for the LOSS direction.       */}
+          {/* Positive direction already has its own confirm panel above.       */}
+          {/* Renders only when the form has enough state to describe the       */}
+          {/* effect; loss auto-posts under threshold OR holds for approval     */}
+          {/* above it (threshold uncalibrated per GAP-010 → no % quoted).      */}
+          {/* ---------------------------------------------------------------- */}
+          {direction === "loss" &&
+          selectedRow &&
+          Number.isFinite(qtyNum) &&
+          qtyNum > 0 &&
+          reasonCode ? (
+            <div
+              className="rounded-md border border-info/40 bg-info-softer/50 px-4 py-3 text-sm text-info-fg transition-all duration-150"
+              role="note"
+              data-testid="waste-pre-submit-effect"
+            >
+              <div className="flex items-start gap-2">
+                <svg className="h-4 w-4 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
+                  <path d="M12 8h.01M11 12h1v5h1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <div className="flex-1 space-y-1">
+                  <div>
+                    On submit, <strong>{selectedRow.label}</strong> stock will{" "}
+                    <strong>decrease by {qtyNum} {unit}</strong>{" "}
+                    (reason: {REASON_LABELS[reasonCode] ?? reasonCode}).
+                  </div>
+                  <div className="text-xs opacity-90">
+                    Small losses post to the ledger immediately. Larger losses are held for planner approval; in that case stock does not change until approval completes.
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
+
+          {/* ---------------------------------------------------------------- */}
           {/* Sticky submit bar                                                 */}
           {/* ---------------------------------------------------------------- */}
           <div
