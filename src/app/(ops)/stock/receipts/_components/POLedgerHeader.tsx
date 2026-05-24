@@ -70,9 +70,11 @@ export function POLedgerHeader({
       ? Math.min(100, Math.round((totalReceived / totalOrdered) * 100))
       : 0;
 
+  const isComplete = active.length > 0 && closed === active.length;
+
   return (
     <div
-      className="sticky top-0 z-20 -mx-4 mb-4 border-b border-info/30 bg-bg-raised/95 px-4 py-3 backdrop-blur-sm sm:-mx-6 sm:px-6"
+      className="sticky top-0 z-20 -mx-4 mb-4 border-b border-info/30 bg-bg-raised/95 px-4 py-3 shadow-[0_4px_8px_-6px_hsl(var(--shadow-color)/0.18)] backdrop-blur-sm sm:-mx-6 sm:px-6"
       role="region"
       aria-label="Purchase order progress"
       data-testid="receipt-po-ledger-header"
@@ -100,15 +102,38 @@ export function POLedgerHeader({
           <span
             className={cn(
               "inline-flex items-center rounded-full px-2 py-0.5 text-3xs font-medium",
-              bucket.tier === "now"
-                ? "bg-warning-softer text-warning-fg"
-                : bucket.tier === "soon"
-                  ? "bg-info-softer text-info-fg"
-                  : "bg-bg-subtle text-fg-muted",
+              bucket.overdue
+                ? "bg-danger-softer text-danger-fg"
+                : bucket.tier === "now"
+                  ? "bg-warning-softer text-warning-fg"
+                  : bucket.tier === "soon"
+                    ? "bg-info-softer text-info-fg"
+                    : "bg-bg-subtle text-fg-muted",
             )}
             title={`Expected: ${expectedReceiveDate}`}
           >
-            expected {bucket.label}
+            {bucket.overdue ? "" : "expected "}
+            {bucket.longLabel}
+          </span>
+        ) : null}
+        {isComplete ? (
+          <span
+            className="inline-flex items-center gap-1 rounded-full bg-success-softer px-2 py-0.5 text-3xs font-semibold uppercase tracking-wide text-success-fg"
+            data-testid="receipt-po-ledger-complete-badge"
+          >
+            <svg
+              className="h-2.5 w-2.5"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+              aria-hidden="true"
+            >
+              <path
+                fillRule="evenodd"
+                d="M16.707 5.293a1 1 0 010 1.414L8 15.414l-4.707-4.707a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+                clipRule="evenodd"
+              />
+            </svg>
+            Fully received
           </span>
         ) : null}
         <div className="ml-auto flex items-center gap-1.5">

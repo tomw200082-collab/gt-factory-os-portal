@@ -155,13 +155,19 @@ export function ReceiptLandingPicker({
                         "group w-full rounded-md border border-border/60 bg-bg-raised px-3 py-2.5 text-left transition-colors duration-150",
                         "hover:border-accent/50 hover:bg-accent-soft/30",
                         "focus:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+                        // Overdue gets a strong left-rail and red accent on
+                        // hover so it can't be missed in a long list.
+                        bucket.overdue &&
+                          "border-l-4 border-l-danger pl-2.5 hover:border-l-danger hover:border-danger/50",
                       )}
                       onClick={() => onSelectPo(po)}
                       data-testid={`receipt-landing-expected-row-${po.po_id}`}
                     >
                       <div className="flex flex-wrap items-center gap-2">
-                        <span className="font-mono text-sm font-semibold text-fg-strong">
-                          {po.po_number}
+                        {/* Lead with supplier name — operators recognize the
+                            truck by who's driving it, not by PO number. */}
+                        <span className="truncate text-sm font-semibold text-fg-strong">
+                          {sName}
                         </span>
                         <span
                           className={cn(
@@ -175,21 +181,23 @@ export function ReceiptLandingPicker({
                         <span
                           className={cn(
                             "rounded-full px-2 py-0.5 text-3xs font-medium",
-                            bucket.tier === "now"
-                              ? "bg-warning-softer text-warning-fg"
-                              : bucket.tier === "soon"
-                                ? "bg-info-softer text-info-fg"
-                                : "bg-bg-subtle text-fg-muted",
+                            bucket.overdue
+                              ? "bg-danger-softer text-danger-fg"
+                              : bucket.tier === "now"
+                                ? "bg-warning-softer text-warning-fg"
+                                : bucket.tier === "soon"
+                                  ? "bg-info-softer text-info-fg"
+                                  : "bg-bg-subtle text-fg-muted",
                           )}
                         >
-                          {bucket.label}
+                          {bucket.longLabel}
                         </span>
                         <span className="ml-auto text-3xs text-fg-subtle transition-colors group-hover:text-accent">
                           Receive →
                         </span>
                       </div>
-                      <div className="mt-1 truncate text-xs text-fg-muted">
-                        {sName}
+                      <div className="mt-1 truncate font-mono text-xs text-fg-muted">
+                        {po.po_number}
                       </div>
                     </button>
                   </li>
@@ -216,14 +224,30 @@ export function ReceiptLandingPicker({
 
       {/* Card 2 — Find a PO */}
       <div className="card overflow-hidden" data-testid="receipt-landing-search">
-        <div className="border-b border-border/70 bg-gradient-to-b from-bg-raised to-bg/40 px-4 py-3 sm:px-5">
-          <div className="flex items-center gap-2">
-            <span className="text-lg" aria-hidden="true">🔍</span>
-            <h3 className="text-sm font-semibold text-fg-strong">Find a PO</h3>
+        <div className="flex items-center justify-between gap-3 border-b border-border/70 bg-gradient-to-b from-bg-raised to-bg/40 px-4 py-3 sm:px-5">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2">
+              <span className="text-lg" aria-hidden="true">🔍</span>
+              <h3 className="text-sm font-semibold text-fg-strong">Find a PO</h3>
+              {/* Live match count — only when searching. */}
+              {query.trim() && !isLoadingPos ? (
+                <span className="inline-flex items-center rounded-full bg-bg-subtle px-2 py-0.5 text-3xs font-medium text-fg-muted">
+                  {searchResults.length} match
+                  {searchResults.length !== 1 ? "es" : ""}
+                </span>
+              ) : null}
+            </div>
+            <p className="mt-0.5 text-xs text-fg-muted">
+              Search by PO number or supplier name.
+            </p>
           </div>
-          <p className="mt-0.5 text-xs text-fg-muted">
-            Search by PO number or supplier name.
-          </p>
+          {/* Keyboard hint — visually subtle but useful for power users. */}
+          <span className="hidden items-center gap-1 text-3xs text-fg-subtle sm:flex">
+            <kbd className="rounded border border-border/70 bg-bg-raised px-1.5 py-0.5 font-mono">
+              ↵
+            </kbd>
+            <span>top match</span>
+          </span>
         </div>
         <div className="p-3 sm:p-4">
           <input
@@ -248,15 +272,31 @@ export function ReceiptLandingPicker({
           {query.trim() ? (
             <ul className="mt-2 space-y-1.5">
               {searchResults.length === 0 ? (
-                <li className="rounded border border-dashed border-border/60 px-3 py-3 text-center text-xs text-fg-muted">
-                  No matching open POs. Try a different term, or use a
-                  manual receipt below.
+                <li className="rounded border border-dashed border-border/60 px-3 py-4 text-center text-xs">
+                  <div className="text-fg-muted">
+                    No matching open POs for{" "}
+                    <span className="font-medium text-fg">
+                      &ldquo;{query.trim()}&rdquo;
+                    </span>
+                    .
+                  </div>
+                  {!hasNoOpenPos ? (
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm mt-2"
+                      onClick={() => setQuery("")}
+                      data-testid="receipt-landing-search-clear"
+                    >
+                      Clear search →
+                    </button>
+                  ) : null}
                 </li>
               ) : (
-                searchResults.map((po) => {
+                searchResults.map((po, i) => {
                   const bucket = expectedBucketLabel(po.expected_receive_date);
                   const sName =
                     supplierName.get(po.supplier_id) ?? po.supplier_id;
+                  const isTopMatch = i === 0;
                   return (
                     <li key={po.po_id}>
                       <button
@@ -265,13 +305,18 @@ export function ReceiptLandingPicker({
                           "group w-full rounded-md border border-border/60 bg-bg-raised px-3 py-2.5 text-left transition-colors duration-150",
                           "hover:border-accent/50 hover:bg-accent-soft/30",
                           "focus:outline-none focus-visible:ring-2 focus-visible:ring-accent",
+                          // Subtle highlight on the top match so the
+                          // Enter-to-select binding has a visible target.
+                          isTopMatch && "border-accent/30",
+                          bucket.overdue &&
+                            "border-l-4 border-l-danger pl-2.5",
                         )}
                         onClick={() => onSelectPo(po)}
                         data-testid={`receipt-landing-search-row-${po.po_id}`}
                       >
                         <div className="flex flex-wrap items-center gap-2">
-                          <span className="font-mono text-sm font-semibold text-fg-strong">
-                            {po.po_number}
+                          <span className="truncate text-sm font-semibold text-fg-strong">
+                            {sName}
                           </span>
                           <span
                             className={cn(
@@ -283,16 +328,30 @@ export function ReceiptLandingPicker({
                             {po.status}
                           </span>
                           {po.expected_receive_date ? (
-                            <span className="text-3xs text-fg-muted">
-                              {bucket.label}
+                            <span
+                              className={cn(
+                                "rounded-full px-2 py-0.5 text-3xs font-medium",
+                                bucket.overdue
+                                  ? "bg-danger-softer text-danger-fg"
+                                  : "text-fg-muted",
+                              )}
+                            >
+                              {bucket.longLabel}
+                            </span>
+                          ) : null}
+                          {isTopMatch ? (
+                            <span className="hidden items-center gap-1 text-3xs text-accent sm:flex">
+                              <kbd className="rounded border border-accent/30 bg-accent-soft px-1 py-0.5 font-mono">
+                                ↵
+                              </kbd>
                             </span>
                           ) : null}
                           <span className="ml-auto text-3xs text-fg-subtle transition-colors group-hover:text-accent">
                             Receive →
                           </span>
                         </div>
-                        <div className="mt-1 truncate text-xs text-fg-muted">
-                          {sName}
+                        <div className="mt-1 truncate font-mono text-xs text-fg-muted">
+                          {po.po_number}
                         </div>
                       </button>
                     </li>

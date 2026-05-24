@@ -70,17 +70,65 @@ export function daysFromToday(isoDate: string | null): number | null {
   }
 }
 
+// Short weekday name for a YYYY-MM-DD ISO date. Returns "" if invalid.
+// Used in card pills to ground "in 3 days" with the actual day-of-week.
+export function weekdayShort(isoDate: string | null): string {
+  if (!isoDate) return "";
+  try {
+    const d = new Date(`${isoDate}T00:00:00Z`);
+    return d.toLocaleDateString("en-US", { weekday: "short", timeZone: "UTC" });
+  } catch {
+    return "";
+  }
+}
+
 // Human label for the expected_receive_date bucket.
 export function expectedBucketLabel(isoDate: string | null): {
+  // Short form for chips ("today", "in 3d").
   label: string;
+  // Long form for callouts ("today · Mon", "in 3d · Thu").
+  // Always >= label in width; consumers pick which fits.
+  longLabel: string;
   // Visual urgency tier: "now" = today or overdue, "soon" = this week, "later" = beyond, "unknown" = no date.
   tier: "now" | "soon" | "later" | "unknown";
+  // Overdue is a sub-tier of "now" — call it out explicitly so callers
+  // can paint it distinctly from same-day arrivals.
+  overdue: boolean;
 } {
   const d = daysFromToday(isoDate);
-  if (d === null) return { label: "no date set", tier: "unknown" };
-  if (d < 0) return { label: `overdue · ${-d}d`, tier: "now" };
-  if (d === 0) return { label: "today", tier: "now" };
-  if (d === 1) return { label: "tomorrow", tier: "soon" };
-  if (d <= 7) return { label: `in ${d} days`, tier: "soon" };
-  return { label: `in ${d} days`, tier: "later" };
+  const wd = weekdayShort(isoDate);
+  const withDay = (s: string) => (wd ? `${s} · ${wd}` : s);
+  if (d === null)
+    return {
+      label: "no date set",
+      longLabel: "no date set",
+      tier: "unknown",
+      overdue: false,
+    };
+  if (d < 0) {
+    const s = `overdue · ${-d}d`;
+    return { label: s, longLabel: withDay(s), tier: "now", overdue: true };
+  }
+  if (d === 0) {
+    return {
+      label: "today",
+      longLabel: withDay("today"),
+      tier: "now",
+      overdue: false,
+    };
+  }
+  if (d === 1) {
+    return {
+      label: "tomorrow",
+      longLabel: withDay("tomorrow"),
+      tier: "soon",
+      overdue: false,
+    };
+  }
+  if (d <= 7) {
+    const s = `in ${d}d`;
+    return { label: s, longLabel: withDay(s), tier: "soon", overdue: false };
+  }
+  const s = `in ${d}d`;
+  return { label: s, longLabel: withDay(s), tier: "later", overdue: false };
 }

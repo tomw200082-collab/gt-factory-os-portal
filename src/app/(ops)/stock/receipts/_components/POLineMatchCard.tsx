@@ -26,7 +26,7 @@
 // parent passes `onChangeMatch` to react to picker changes.
 // ---------------------------------------------------------------------------
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
 import type { PoLineOption } from "./types";
 
@@ -151,6 +151,44 @@ export function POLineMatchCard({
   );
 
   const [pickerOpen, setPickerOpen] = useState(false);
+  // Keyboard navigation within the picker list.
+  const [highlightIdx, setHighlightIdx] = useState(0);
+  const listRef = useRef<HTMLUListElement>(null);
+
+  // Auto-expand the picker the first time it has matching candidates
+  // and the operator hasn't picked one yet. Saves a click on the most
+  // common path: PO chosen from landing → form opens → operator
+  // immediately sees the line options.
+  const autoExpandedRef = useRef(false);
+  useEffect(() => {
+    if (autoExpandedRef.current) return;
+    if (selectedPoLineId) return; // already matched
+    if (poLines.length === 0) return;
+    if (disabled) return;
+    autoExpandedRef.current = true;
+    setPickerOpen(true);
+  }, [selectedPoLineId, poLines, disabled]);
+
+  // Focus the list when it opens so keyboard nav works without a click.
+  useEffect(() => {
+    if (pickerOpen) {
+      // Start highlight on the first real option (index 1), not the
+      // "unmatched" pseudo-row, so ↵ picks the most useful default.
+      setHighlightIdx(1);
+      // Defer focus until after paint so the listbox is mounted.
+      const id = requestAnimationFrame(() => listRef.current?.focus());
+      return () => cancelAnimationFrame(id);
+    }
+  }, [pickerOpen]);
+
+  // Scroll the highlighted option into view as the operator arrow-keys.
+  useEffect(() => {
+    if (!pickerOpen || !listRef.current) return;
+    const el = listRef.current.children[highlightIdx] as
+      | HTMLLIElement
+      | undefined;
+    el?.scrollIntoView({ block: "nearest" });
+  }, [highlightIdx, pickerOpen]);
 
   // Numbers for the progress pills.
   const ordered = selected ? Number(selected.ordered_qty) || 0 : 0;
@@ -159,6 +197,11 @@ export function POLineMatchCard({
   const remainingBefore = selected ? Number(selected.open_qty) || 0 : 0;
   const remainingAfter = remainingBefore - receivingNow;
   const isOver = selected !== null && remainingAfter < 0;
+  // Severity tier for over-receipt: minor (≤50% over) vs major (>50%).
+  // Both submit successfully; major just warns more loudly.
+  const overPctOfOrdered =
+    isOver && ordered > 0 ? (Math.abs(remainingAfter) / ordered) * 100 : 0;
+  const isMajorOver = isOver && overPctOfOrdered > 50;
 
   // Two-band progress: dark band = received-before, light band = receiving-now.
   const totalAfter = receivedBefore + receivingNow;
@@ -183,10 +226,12 @@ export function POLineMatchCard({
     <div
       className={cn(
         "col-span-full space-y-2 rounded-md border px-3 py-2.5",
+        // Stronger left rail signals match state at a glance: red for
+        // over-receipt, accent for matched, neutral for unmatched.
         isOver
-          ? "border-danger/40 bg-danger-softer"
+          ? "border-danger/40 border-l-4 border-l-danger bg-danger-softer pl-2.5"
           : selected
-            ? "border-accent/30 bg-accent-soft/30"
+            ? "border-accent/30 border-l-4 border-l-accent bg-accent-soft/30 pl-2.5"
             : "border-border/60 bg-bg-subtle/30",
       )}
       data-testid={`${testIdPrefix}-match-card`}
@@ -221,32 +266,75 @@ export function POLineMatchCard({
         </button>
       </div>
 
-      {/* Inline picker — expanded list of PO lines, friendlier than <select>. */}
+      {/* Inline picker — expanded list of PO lines, friendlier than <select>.
+          Keyboard nav: ↑↓ move highlight, Enter selects, Esc closes. */}
       {pickerOpen ? (
         <ul
-          className="max-h-60 space-y-1 overflow-y-auto rounded border border-border/60 bg-bg-raised p-1"
+          ref={listRef}
+          className="max-h-60 space-y-1 overflow-y-auto rounded border border-border/60 bg-bg-raised p-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           role="listbox"
+          tabIndex={0}
           data-testid={`${testIdPrefix}-match-list`}
+          aria-activedescendant={
+            orderedLines[highlightIdx]
+              ? `${testIdPrefix}-match-opt-${orderedLines[highlightIdx].po_line_id}`
+              : undefined
+          }
+          onKeyDown={(e) => {
+            // -1 reserved for "unmatched" pseudo-row at index 0.
+            const total = orderedLines.length + 1; // +1 for unmatched
+            if (e.key === "ArrowDown") {
+              e.preventDefault();
+              setHighlightIdx((i) => Math.min(i + 1, total - 1));
+            } else if (e.key === "ArrowUp") {
+              e.preventDefault();
+              setHighlightIdx((i) => Math.max(i - 1, 0));
+            } else if (e.key === "Enter") {
+              e.preventDefault();
+              if (highlightIdx === 0) {
+                onChangeMatch("");
+              } else {
+                const pl = orderedLines[highlightIdx - 1];
+                if (!pl) return;
+                const open = Number(pl.open_qty) || 0;
+                onChangeMatch(
+                  pl.po_line_id,
+                  open > 0 ? pl.open_qty : undefined,
+                  pl.uom,
+                );
+              }
+              setPickerOpen(false);
+            } else if (e.key === "Escape") {
+              e.preventDefault();
+              setPickerOpen(false);
+            }
+          }}
         >
-          <li>
+          <li
+            id={`${testIdPrefix}-match-opt-unmatched`}
+            role="option"
+            aria-selected={!selectedPoLineId}
+          >
             <button
               type="button"
               className={cn(
                 "w-full rounded px-2 py-1.5 text-left text-xs transition-colors",
-                !selectedPoLineId
-                  ? "bg-bg-subtle font-semibold text-fg"
-                  : "hover:bg-bg-subtle",
+                !selectedPoLineId && "bg-bg-subtle font-semibold text-fg",
+                highlightIdx === 0 &&
+                  "ring-1 ring-accent ring-offset-1 ring-offset-bg-raised",
+                "hover:bg-bg-subtle",
               )}
               onClick={() => {
                 onChangeMatch("");
                 setPickerOpen(false);
               }}
+              onMouseEnter={() => setHighlightIdx(0)}
               data-testid={`${testIdPrefix}-match-pick-unmatched`}
             >
               — unmatched —
             </button>
           </li>
-          {orderedLines.map((pl) => {
+          {orderedLines.map((pl, i) => {
             const name =
               pl.component_name ??
               pl.item_name ??
@@ -256,28 +344,43 @@ export function POLineMatchCard({
             const closed =
               pl.line_status === "CLOSED" || pl.line_status === "CANCELLED";
             const open = Number(pl.open_qty) || 0;
+            const isHighlighted = highlightIdx === i + 1;
+            const isSelected = pl.po_line_id === selectedPoLineId;
             return (
-              <li key={pl.po_line_id}>
+              <li
+                key={pl.po_line_id}
+                id={`${testIdPrefix}-match-opt-${pl.po_line_id}`}
+                role="option"
+                aria-selected={isSelected}
+              >
                 <button
                   type="button"
                   className={cn(
                     "group w-full rounded px-2 py-1.5 text-left text-xs transition-colors",
-                    pl.po_line_id === selectedPoLineId
+                    isSelected
                       ? "bg-accent-soft font-semibold text-accent"
                       : closed
                         ? "text-fg-muted hover:bg-bg-subtle"
                         : "hover:bg-bg-subtle",
+                    isHighlighted &&
+                      !isSelected &&
+                      "ring-1 ring-accent ring-offset-1 ring-offset-bg-raised",
                   )}
                   onClick={() => {
-                    const autoQty =
-                      open > 0 ? pl.open_qty : undefined;
+                    const autoQty = open > 0 ? pl.open_qty : undefined;
                     onChangeMatch(pl.po_line_id, autoQty, pl.uom);
                     setPickerOpen(false);
                   }}
+                  onMouseEnter={() => setHighlightIdx(i + 1)}
                   data-testid={`${testIdPrefix}-match-pick-${pl.po_line_id}`}
                 >
                   <div className="flex flex-wrap items-center gap-1.5">
-                    <span className="font-mono text-3xs text-fg-muted group-[.font-semibold]:text-accent">
+                    <span
+                      className={cn(
+                        "font-mono text-3xs",
+                        isSelected ? "text-accent" : "text-fg-muted",
+                      )}
+                    >
                       #{pl.line_number}
                     </span>
                     <span className="truncate">{name}</span>
@@ -342,6 +445,27 @@ export function POLineMatchCard({
             />
           </div>
 
+          {/* Quick-fill: receive the full remaining qty in one tap. Most
+              common path on a same-day, single-shipment line. Only shows
+              when the operator hasn't yet entered a quantity and there's
+              something to receive — avoids cluttering the partial path. */}
+          {!isOver && receivingNow === 0 && remainingBefore > 0 ? (
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm self-start text-3xs transition-colors duration-150"
+              onClick={() =>
+                onChangeMatch(
+                  selected.po_line_id,
+                  String(remainingBefore),
+                  selected.uom,
+                )
+              }
+              data-testid={`${testIdPrefix}-receive-remaining`}
+            >
+              ⇥ Receive remaining ({remainingBefore} {selected.uom})
+            </button>
+          ) : null}
+
           {/* Stacked progress bar: received-before band + receiving-now band + over-receipt overlay */}
           <div
             className="relative h-2 w-full overflow-hidden rounded-full bg-bg-subtle"
@@ -370,12 +494,22 @@ export function POLineMatchCard({
             ) : null}
           </div>
 
-          {/* Over-receipt callout */}
+          {/* Over-receipt callout. Two severity tiers:
+              - Minor (≤50% over): standard warning, post-allowed.
+              - Major (>50% over):  same allow-policy, but louder copy
+                                    nudging the operator to double-check
+                                    the quantity before submitting. */}
           {isOver ? (
             <div
-              className="flex items-start gap-2 rounded border-l-2 border-danger bg-danger-softer/80 px-2 py-1.5 text-xs text-danger-fg"
+              className={cn(
+                "flex items-start gap-2 rounded px-2 py-1.5 text-xs",
+                isMajorOver
+                  ? "border-l-4 border-danger bg-danger-softer text-danger-fg"
+                  : "border-l-2 border-danger bg-danger-softer/80 text-danger-fg",
+              )}
               role="alert"
               data-testid={`${testIdPrefix}-over-receipt`}
+              data-over-severity={isMajorOver ? "major" : "minor"}
             >
               <svg
                 className="mt-0.5 h-3.5 w-3.5 shrink-0"
@@ -391,12 +525,14 @@ export function POLineMatchCard({
               </svg>
               <div>
                 <div className="font-semibold">
-                  Over-receipt by {Math.abs(remainingAfter)} {selected.uom}
+                  {isMajorOver
+                    ? `⚠ Over-receipt by ${Math.abs(remainingAfter)} ${selected.uom} — ${Math.round(overPctOfOrdered)}% over ordered`
+                    : `Over-receipt by ${Math.abs(remainingAfter)} ${selected.uom}`}
                 </div>
                 <div className="opacity-90">
-                  This line was {receivedBefore > 0 ? "partially " : ""}
-                  fulfilled — receiving more than ordered. Logged as an
-                  exception on submit; ledger still posts.
+                  {isMajorOver
+                    ? `That's significantly more than ordered (${selected.ordered_qty} ${selected.uom}). Double-check the quantity before submitting — this will still post, but a large over-receipt is unusual and gets flagged for review.`
+                    : `This line was ${receivedBefore > 0 ? "partially " : ""}fulfilled — receiving more than ordered. Logged as an exception on submit; ledger still posts.`}
                 </div>
               </div>
             </div>

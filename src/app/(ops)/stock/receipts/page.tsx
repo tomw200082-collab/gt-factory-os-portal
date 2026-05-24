@@ -946,6 +946,24 @@ export default function GoodsReceiptPage() {
   // #24: Green dot when at least one complete line
   const hasCompleteLine = completeLinesCount > 0;
 
+  // Tranche 020 — Count of lines that will post as an over-receipt.
+  // A line is an over-receipt when its quantity exceeds the matched PO
+  // line's open_qty. Matters for the sticky submit-bar warning so the
+  // operator sees the exception count before tapping submit.
+  const overReceiptCount = useMemo(() => {
+    if (!poId || poLines.length === 0) return 0;
+    let n = 0;
+    for (const l of lines) {
+      if (!l.po_line_id) continue;
+      const pl = poLines.find((p) => p.po_line_id === l.po_line_id);
+      if (!pl) continue;
+      const q = Number(l.quantity) || 0;
+      const open = Number(pl.open_qty) || 0;
+      if (q > open) n++;
+    }
+    return n;
+  }, [lines, poLines, poId]);
+
   // #12: Duplicate line detection
   const duplicateKeys = useMemo(() => {
     const seen = new Map<string, number>();
@@ -1630,6 +1648,24 @@ export default function GoodsReceiptPage() {
                   </button>
                 ) : null}
               </div>
+              {/* Tranche 020 — Empty-state nudge. When the operator hasn't
+                  filled in any line yet (fresh form, single empty draft),
+                  give them an unmissable hint at what to do next. Common
+                  in manual track; rare in PO track because prefill seeds
+                  lines from the PO. */}
+              {lines.length === 1 && !lines[0].receivable_key ? (
+                <div
+                  className="mb-3 flex items-start gap-2 rounded-md border border-dashed border-info/40 bg-info-softer/60 px-3 py-2.5 text-xs text-info-fg"
+                  role="note"
+                  data-testid="receipt-lines-empty-state"
+                >
+                  <span aria-hidden="true">👇</span>
+                  <span>
+                    Pick an item or component on the line below to get
+                    started. Quantity prefills from PO when matched.
+                  </span>
+                </div>
+              ) : null}
               <div className="space-y-3">
                 {lines.map((line, idx) => {
                   const isComplete = !!(line.receivable_key && Number(line.quantity) > 0);
@@ -1646,10 +1682,17 @@ export default function GoodsReceiptPage() {
                         isComplete && "border-l-2 border-l-accent",
                       )}
                     >
-                      {/* #14: Line number badge */}
+                      {/* #14: Line number badge — Tranche 020: bigger,
+                          more visible, color-coded by completion state
+                          so the operator can count at a glance. */}
                       <span
-                        className="absolute -left-3 -top-2.5 flex h-5 w-5 items-center justify-center rounded-full bg-bg-raised border border-border text-3xs font-semibold text-fg-muted shadow-sm"
-                        aria-label={`Line ${idx + 1}`}
+                        className={cn(
+                          "absolute -left-3.5 -top-3 flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold shadow-sm transition-colors",
+                          isComplete
+                            ? "bg-accent text-white"
+                            : "bg-bg-raised border border-border text-fg",
+                        )}
+                        aria-label={`Line ${idx + 1}${isComplete ? " — complete" : ""}`}
                       >
                         {idx + 1}
                       </span>
@@ -1850,25 +1893,74 @@ export default function GoodsReceiptPage() {
             <div
               className="sticky bottom-0 z-10 -mx-4 border-t border-border bg-bg-raised/90 px-4 py-3 backdrop-blur-sm sm:-mx-6 sm:px-6"
             >
-              {/* #4: Receipt summary preview */}
+              {/* #4: Receipt summary preview + Tranche 020 over-receipt summary. */}
               {(supplierId || lines.some((l) => l.receivable_key)) ? (
-                <div className="mb-2 flex items-center gap-2 text-xs text-fg-muted">
+                <div
+                  className="mb-2 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-fg-muted"
+                  // aria-live so screen readers announce completion count
+                  // changes as the operator fills the form.
+                  aria-live="polite"
+                  data-testid="receipt-summary-bar"
+                >
                   <span>Summary:</span>
                   {selectedSupplierName ? (
                     <span className="font-medium text-fg">{selectedSupplierName}</span>
                   ) : null}
                   {lines.some((l) => l.receivable_key) ? (
                     <>
-                      <span>·</span>
+                      <span aria-hidden="true">·</span>
                       <span>{lines.filter((l) => l.receivable_key).length} line{lines.filter((l) => l.receivable_key).length !== 1 ? "s" : ""}</span>
-                      <span>·</span>
+                      <span aria-hidden="true">·</span>
                       <span>{completeLinesCount} complete</span>
                     </>
+                  ) : null}
+                  {overReceiptCount > 0 ? (
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full bg-danger-softer px-2 py-0.5 text-3xs font-semibold text-danger-fg"
+                      data-testid="receipt-summary-over-receipt"
+                    >
+                      <svg
+                        className="h-3 w-3"
+                        viewBox="0 0 20 20"
+                        fill="currentColor"
+                        aria-hidden="true"
+                      >
+                        <path
+                          fillRule="evenodd"
+                          d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z"
+                          clipRule="evenodd"
+                        />
+                      </svg>
+                      {overReceiptCount} over-receipt
+                      {overReceiptCount !== 1 ? "s" : ""}
+                    </span>
                   ) : null}
                 </div>
               ) : null}
 
-              <div className="flex items-center justify-end gap-2">
+              <div className="flex flex-wrap items-center justify-end gap-2">
+                {/* Tranche 020 — quick exit back to the Smart Picker. The
+                    Reset button below also returns to Picker, but its
+                    label suggests destruction; this affordance is the
+                    explicit, friendly path. Hidden in URL-locked flows
+                    (no Picker to go back to). */}
+                {!urlPoLocked ? (
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm mr-auto transition-colors duration-150"
+                    onClick={() => {
+                      setLines([emptyLine()]);
+                      setNotes("");
+                      setPoId("");
+                      setManualConfirmed(false);
+                      setDone(null);
+                    }}
+                    disabled={phase === "submitting"}
+                    data-testid="receipt-back-to-picker"
+                  >
+                    ← Pick again
+                  </button>
+                ) : null}
                 <button
                   type="button"
                   className="btn transition-colors duration-150"
