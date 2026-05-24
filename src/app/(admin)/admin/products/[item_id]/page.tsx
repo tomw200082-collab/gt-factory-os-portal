@@ -1194,7 +1194,7 @@ function AdminProduct360PageInner({ params }: PageProps): JSX.Element {
                     ["Family", head.display_family ?? "—"],
                     [
                       "Output",
-                      `${head.final_bom_output_qty} ${head.final_bom_output_uom ?? ""}`.trim(),
+                      `${fmtNumStr(head.final_bom_output_qty)} ${head.final_bom_output_uom ?? ""}`.trim(),
                     ],
                     ["Status", head.status],
                   ] as [string, string][]

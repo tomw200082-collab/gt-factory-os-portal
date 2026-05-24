@@ -993,7 +993,7 @@ export default function ProductionActualPage() {
           const shortfallLines = (insuffBody.shortfalls ?? [])
             .map(
               (s) =>
-                `${s.component_id}: need ${s.required_qty}, have ${s.available_qty}`,
+                `${s.component_id}: need ${fmtNumStr(s.required_qty)}, have ${fmtNumStr(s.available_qty)}`,
             )
             .join("; ");
           setDone({

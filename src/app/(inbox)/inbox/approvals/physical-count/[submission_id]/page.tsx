@@ -26,6 +26,7 @@ import type {
   PhysicalCountConflictResponse,
 } from "@/lib/contracts/physical-count";
 import type { Session } from "@/lib/auth/fake-auth";
+import { fmtNumStr } from "@/lib/utils/format-quantity";
 
 interface PhysicalCountDetail {
   submission_id: string;
@@ -237,7 +238,7 @@ export default function PhysicalCountReviewPage() {
         title="Physical Count"
         description={
           d
-            ? `${d.item_display_name ?? d.item_id} · counted: ${d.counted_quantity} ${d.unit} · delta: ${formatDelta(d.computed_delta, d.unit)}`
+            ? `${d.item_display_name ?? d.item_id} · counted: ${fmtNumStr(d.counted_quantity)} ${d.unit} · delta: ${formatDelta(d.computed_delta, d.unit)}`
             : `Submission ${submissionId}`
         }
         meta={
@@ -269,10 +270,10 @@ export default function PhysicalCountReviewPage() {
                 : d.item_id
             }
           />
-          <DetailRow label="Counted" value={`${d.counted_quantity} ${d.unit}`} />
+          <DetailRow label="Counted" value={`${fmtNumStr(d.counted_quantity)} ${d.unit}`} />
           <DetailRow
             label="System expected"
-            value={d.snapshot_quantity != null ? `${d.snapshot_quantity} ${d.unit}` : "—"}
+            value={d.snapshot_quantity != null ? `${fmtNumStr(d.snapshot_quantity)} ${d.unit}` : "—"}
           />
           <DetailRow
             label="Delta"

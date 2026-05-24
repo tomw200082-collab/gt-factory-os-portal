@@ -33,6 +33,7 @@ import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { Drawer } from "@/components/overlays/Drawer";
 import { AdminMutationError } from "@/lib/admin/mutations";
 import { useSession } from "@/lib/auth/session-provider";
+import { fmtNumStr } from "@/lib/utils/format-quantity";
 
 function recipeLabel(bomKind: string): string {
   if (bomKind === "PACK") return "Pack recipe";
@@ -291,7 +292,7 @@ export default function AdminBomHeadDetailPage({
               {recipeLabel(head.bom_kind)}
             </Badge>
             <Badge tone="neutral" dotted>
-              {head.final_bom_output_qty} {head.final_bom_output_uom ?? ""}
+              {fmtNumStr(head.final_bom_output_qty)} {head.final_bom_output_uom ?? ""}
             </Badge>
           </>
         }

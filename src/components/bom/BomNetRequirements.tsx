@@ -27,6 +27,7 @@ import {
 } from "lucide-react";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
+import { fmtNumStr } from "@/lib/utils/format-quantity";
 
 type CoverageStatus = "covered" | "partial" | "not_covered" | "no_stock_data";
 
@@ -240,7 +241,7 @@ export function BomNetRequirements({
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border border-info/30 bg-info-softer/50 px-3 py-2 text-xs">
           <span className="font-medium text-fg">{demandContext.source}</span>
           <span className="text-fg-muted">
-            Quantity needed: <span className="font-mono font-semibold text-fg">{demandContext.required_qty}{demandContext.uom ? ` ${demandContext.uom}` : ""}</span>
+            Quantity needed: <span className="font-mono font-semibold text-fg">{formatQty(demandContext.required_qty)}{demandContext.uom ? ` ${demandContext.uom}` : ""}</span>
           </span>
           {demandContext.shortage_date ? (
             <span className="text-warning-fg">
@@ -313,7 +314,7 @@ export function BomNetRequirements({
               </span>
             ) : null}
             <Badge tone="info" dotted>
-              {result.target_qty} {result.output_uom ?? "units"}
+              {fmtNumStr(result.target_qty)} {result.output_uom ?? "units"}
             </Badge>
             <Badge tone="success" dotted>
               v{result.version_label}
@@ -396,10 +397,10 @@ export function BomNetRequirements({
                   <div className="flex flex-wrap items-center gap-2">
                     <span className="font-medium text-fg">Max producible now:</span>
                     <span className="font-mono font-semibold tabular-nums text-fg">
-                      {maxProducible} {result.output_uom ?? "units"}
+                      {fmtNumStr(maxProducible)} {result.output_uom ?? "units"}
                     </span>
                     <span className="text-fg-muted">
-                      ({((minFactor) * 100).toFixed(0)}% of {result.target_qty} {result.output_uom ?? "units"})
+                      ({((minFactor) * 100).toFixed(0)}% of {fmtNumStr(result.target_qty)} {result.output_uom ?? "units"})
                     </span>
                   </div>
                 )}
@@ -503,7 +504,7 @@ export function BomNetRequirements({
                     (l) => l.coverage_status === "not_covered" || l.coverage_status === "partial",
                   );
                   const ts = new Date().toLocaleString();
-                  const header = `Shortage list — ${result.item_name ?? result.bom_head_id} (v${result.version_label}) — ${result.target_qty} ${result.output_uom ?? "units"} — ${ts}`;
+                  const header = `Shortage list — ${result.item_name ?? result.bom_head_id} (v${result.version_label}) — ${fmtNumStr(result.target_qty)} ${result.output_uom ?? "units"} — ${ts}`;
                   const rows = shortLines.map((l) => {
                     const shortage = parseFloat(l.net_shortage_qty) > 0
                       ? `short ${formatQty(l.net_shortage_qty)} ${l.component_uom ?? ""}`.trim()

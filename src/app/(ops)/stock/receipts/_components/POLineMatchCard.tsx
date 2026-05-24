@@ -28,6 +28,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import { cn } from "@/lib/cn";
+import { fmtNumStr } from "@/lib/utils/format-quantity";
 import type { PoLineOption } from "./types";
 
 export interface POLineMatchSuggestion {
@@ -92,7 +93,7 @@ export function POLineMatchCard({
           </span>{" "}
           ({suggestion.supplier_name}) — line #{suggestion.line_number},{" "}
           <span className="font-semibold">
-            {suggestion.open_qty} {suggestion.uom}
+            {fmtNumStr(suggestion.open_qty)} {suggestion.uom}
           </span>{" "}
           outstanding.
         </span>
@@ -400,7 +401,7 @@ export function POLineMatchCard({
                     >
                       {closed
                         ? pl.line_status
-                        : `${pl.open_qty} / ${pl.ordered_qty} ${pl.uom}`}
+                        : `${fmtNumStr(pl.open_qty)} / ${fmtNumStr(pl.ordered_qty)} ${pl.uom}`}
                     </span>
                   </div>
                 </button>
@@ -419,25 +420,25 @@ export function POLineMatchCard({
           >
             <Pill
               label="Ordered"
-              value={`${selected.ordered_qty} ${selected.uom}`}
+              value={`${fmtNumStr(selected.ordered_qty)} ${selected.uom}`}
               tone="neutral"
             />
             <Pill
               label="Received"
-              value={selected.received_qty}
+              value={fmtNumStr(selected.received_qty)}
               tone={receivedBefore > 0 ? "info" : "neutral"}
             />
             <Pill
               label="Now"
-              value={receivingNow > 0 ? `+${receivingQty || 0}` : "—"}
+              value={receivingNow > 0 ? `+${fmtNumStr(receivingQty || "0")}` : "—"}
               tone={receivingNow > 0 ? "accent" : "neutral"}
             />
             <Pill
               label={isOver ? "Over by" : "Left"}
               value={
                 isOver
-                  ? `${Math.abs(remainingAfter)} ${selected.uom}`
-                  : `${remainingAfter} ${selected.uom}`
+                  ? `${fmtNumStr(Math.abs(remainingAfter))} ${selected.uom}`
+                  : `${fmtNumStr(remainingAfter)} ${selected.uom}`
               }
               tone={
                 isOver
@@ -466,7 +467,7 @@ export function POLineMatchCard({
               }
               data-testid={`${testIdPrefix}-receive-remaining`}
             >
-              ⇥ Receive remaining ({remainingBefore} {selected.uom})
+              ⇥ Receive remaining ({fmtNumStr(remainingBefore)} {selected.uom})
             </button>
           ) : null}
 
@@ -530,12 +531,12 @@ export function POLineMatchCard({
               <div>
                 <div className="font-semibold">
                   {isMajorOver
-                    ? `⚠ Over-receipt by ${Math.abs(remainingAfter)} ${selected.uom} — ${Math.round(overPctOfOrdered)}% over ordered`
-                    : `Over-receipt by ${Math.abs(remainingAfter)} ${selected.uom}`}
+                    ? `⚠ Over-receipt by ${fmtNumStr(Math.abs(remainingAfter))} ${selected.uom} — ${Math.round(overPctOfOrdered)}% over ordered`
+                    : `Over-receipt by ${fmtNumStr(Math.abs(remainingAfter))} ${selected.uom}`}
                 </div>
                 <div className="opacity-90">
                   {isMajorOver
-                    ? `That's significantly more than ordered (${selected.ordered_qty} ${selected.uom}). Double-check the quantity before submitting — this will still post, but a large over-receipt is unusual and gets flagged for review.`
+                    ? `That's significantly more than ordered (${fmtNumStr(selected.ordered_qty)} ${selected.uom}). Double-check the quantity before submitting — this will still post, but a large over-receipt is unusual and gets flagged for review.`
                     : `This line was ${receivedBefore > 0 ? "partially " : ""}fulfilled — receiving more than ordered. Logged as an exception on submit; ledger still posts.`}
                 </div>
               </div>

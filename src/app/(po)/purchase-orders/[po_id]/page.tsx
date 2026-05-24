@@ -31,6 +31,7 @@ import {
   type FieldRow,
 } from "@/components/patterns/DetailPage";
 import { Badge } from "@/components/badges/StatusBadge";
+import { fmtNumStr } from "@/lib/utils/format-quantity";
 
 // --- Types (mirrors of upstream schemas) ------------------------------------
 
@@ -769,11 +770,11 @@ export default function PurchaseOrderDetailPage({
                 const name = l.component_name ?? l.item_name ?? l.component_id ?? l.item_id ?? "—";
                 return (
                   <li key={l.po_line_id} className="flex items-baseline gap-1.5">
-                    <span className="font-medium text-warning-fg tabular-nums">{l.open_qty}</span>
+                    <span className="font-medium text-warning-fg tabular-nums">{fmtNumStr(l.open_qty)}</span>
                     <span>{l.uom}</span>
                     <span className="text-fg-subtle">of</span>
                     <span className="font-medium text-fg">{name}</span>
-                    <span className="text-fg-faint">(ordered {l.ordered_qty}, received {l.received_qty})</span>
+                    <span className="text-fg-faint">(ordered {fmtNumStr(l.ordered_qty)}, received {fmtNumStr(l.received_qty)})</span>
                   </li>
                 );
               })}

@@ -20,6 +20,7 @@ import { useState, useEffect, useRef, type ReactNode } from "react";
 import { CheckCircle2, XCircle } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { InboxRow } from "@/features/inbox/types";
+import { fmtNumStr } from "@/lib/utils/format-quantity";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -273,10 +274,10 @@ function PhysicalCountFactGrid({ d, now }: { d: PhysicalCountDetail; now: Date }
         </span>
       </FactRow>
       <FactRow label="נספר">
-        {d.counted_quantity} {d.unit}
+        {fmtNumStr(d.counted_quantity)} {d.unit}
       </FactRow>
       <FactRow label="צפוי במערכת">
-        {d.snapshot_quantity != null ? `${d.snapshot_quantity} ${d.unit}` : "—"}
+        {d.snapshot_quantity != null ? `${fmtNumStr(d.snapshot_quantity)} ${d.unit}` : "—"}
       </FactRow>
       <FactRow label="הפרש">
         <span className={cn("font-medium", deltaColor)}>
