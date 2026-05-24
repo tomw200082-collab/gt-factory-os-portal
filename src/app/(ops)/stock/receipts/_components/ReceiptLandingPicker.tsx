@@ -9,7 +9,10 @@
 // not yet committed to a track. Three stacked cards (mobile-first):
 //
 //   1. Expected today / this week — POs whose expected_receive_date is
-//      within the next 7 days. Tap to enter PO track.
+//      within the next 7 days. Tap to enter PO track. Each card has a
+//      lazy "Show items ↓" expander that fetches po_lines on demand so
+//      the operator can confirm "this is the truck I'm receiving"
+//      before committing.
 //   2. Find a PO — free-text search across po_number, supplier name,
 //      and (lazily) item names. Tap a result to enter PO track.
 //   3. Receive without PO — primary CTA into manual track.
@@ -19,6 +22,7 @@
 // ---------------------------------------------------------------------------
 
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import { cn } from "@/lib/cn";
 import {
   type PoOption,
@@ -27,6 +31,25 @@ import {
   expectedBucketLabel,
   daysFromToday,
 } from "./types";
+
+// Lazy-loaded PO contents shape — narrow subset of /api/purchase-order-lines
+// response. Kept local because the expander is the only caller in this
+// component.
+interface PoLinePreview {
+  po_line_id: string;
+  line_number: number;
+  component_name: string | null;
+  item_name: string | null;
+  component_id: string | null;
+  item_id: string | null;
+  ordered_qty: string;
+  open_qty: string;
+  uom: string;
+  line_status: string;
+}
+interface PoLinesPreviewResponse {
+  rows: PoLinePreview[];
+}
 
 interface ReceiptLandingPickerProps {
   openPos: PoOption[];
@@ -202,6 +225,7 @@ export function ReceiptLandingPicker({
                         {po.po_number}
                       </div>
                     </button>
+                    <POCardContents poId={po.po_id} />
                   </li>
                 );
               })}
@@ -356,6 +380,7 @@ export function ReceiptLandingPicker({
                           {po.po_number}
                         </div>
                       </button>
+                      <POCardContents poId={po.po_id} />
                     </li>
                   );
                 })
@@ -394,5 +419,132 @@ export function ReceiptLandingPicker({
         </div>
       </div>
     </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// POCardContents — lazy expander showing the item lines on a PO card.
+//
+// Tranche 020 follow-up. The Landing Picker initially renders only the
+// PO identity (supplier, status, expected date, PO#) — enough to spot
+// the right truck on the dock. When the operator wants to confirm
+// "this is the one I'm receiving" before committing, they tap "Show
+// items" and we fetch po_lines for that PO and render a compact
+// preview: line count, item names, qty remaining vs ordered.
+//
+// Fetches lazily (enabled: expanded) and caches for 60s so reopening
+// the same card is instant. Renders inline beneath the card so the
+// outer button's "tap-anywhere-to-select" semantics stay intact.
+// ---------------------------------------------------------------------------
+function POCardContents({ poId }: { poId: string }) {
+  const [expanded, setExpanded] = useState(false);
+  const linesQuery = useQuery<PoLinesPreviewResponse>({
+    queryKey: ["ops", "receipts", "landing-po-lines-preview", poId],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/purchase-order-lines?po_id=${encodeURIComponent(poId)}`,
+        { headers: { Accept: "application/json" } },
+      );
+      if (!res.ok) {
+        throw new Error(`Could not load PO lines (HTTP ${res.status}).`);
+      }
+      return (await res.json()) as PoLinesPreviewResponse;
+    },
+    enabled: expanded,
+    staleTime: 60_000,
+  });
+
+  // Hide CLOSED/CANCELLED lines — operator only cares about what's still
+  // receivable. Show CLOSED in a final "+N closed" tally instead.
+  const rows = linesQuery.data?.rows ?? [];
+  const active = rows.filter(
+    (r) => r.line_status === "OPEN" || r.line_status === "PARTIAL",
+  );
+  const closedCount = rows.length - active.length;
+
+  return (
+    <div className="mt-1.5 px-3 pb-2">
+      <button
+        type="button"
+        className="text-3xs font-medium text-fg-muted underline-offset-2 transition-colors hover:text-accent hover:underline focus:outline-none focus-visible:underline focus-visible:text-accent"
+        onClick={(e) => {
+          // Don't bubble to the card button above us — operator might
+          // tap the chevron to peek without committing to the PO.
+          e.stopPropagation();
+          setExpanded((v) => !v);
+        }}
+        aria-expanded={expanded}
+        data-testid={`receipt-landing-po-contents-toggle-${poId}`}
+      >
+        {expanded ? "Hide items ↑" : "Show items ↓"}
+      </button>
+      {expanded ? (
+        <div className="mt-1.5">
+          {linesQuery.isLoading ? (
+            <div className="space-y-1" aria-busy="true">
+              <div className="h-3 w-3/4 animate-pulse rounded bg-bg-subtle" />
+              <div
+                className="h-3 w-2/3 animate-pulse rounded bg-bg-subtle"
+                style={{ animationDelay: "100ms" }}
+              />
+            </div>
+          ) : linesQuery.isError ? (
+            <div className="text-3xs text-warning-fg">
+              Couldn&apos;t load items. Tap again to retry.
+            </div>
+          ) : rows.length === 0 ? (
+            <div className="text-3xs text-fg-muted">No lines on this PO.</div>
+          ) : (
+            <ul className="space-y-1 text-3xs">
+              {active.slice(0, 6).map((pl) => {
+                const name =
+                  pl.component_name ??
+                  pl.item_name ??
+                  pl.component_id ??
+                  pl.item_id ??
+                  "—";
+                return (
+                  <li
+                    key={pl.po_line_id}
+                    className="flex items-baseline gap-1.5"
+                  >
+                    <span
+                      className="font-mono text-fg-subtle"
+                      aria-label={`Line ${pl.line_number}`}
+                    >
+                      #{pl.line_number}
+                    </span>
+                    <span className="min-w-0 flex-1 truncate text-fg">
+                      {name}
+                    </span>
+                    <span
+                      className={cn(
+                        "shrink-0 rounded-full px-1.5 py-0.5 font-medium",
+                        Number(pl.open_qty) > 0
+                          ? "bg-success-softer text-success-fg"
+                          : "bg-bg-subtle text-fg-muted",
+                      )}
+                    >
+                      {pl.open_qty} / {pl.ordered_qty} {pl.uom}
+                    </span>
+                  </li>
+                );
+              })}
+              {active.length > 6 ? (
+                <li className="text-fg-subtle">
+                  + {active.length - 6} more line
+                  {active.length - 6 !== 1 ? "s" : ""}
+                </li>
+              ) : null}
+              {closedCount > 0 ? (
+                <li className="text-fg-subtle">
+                  + {closedCount} fully received
+                </li>
+              ) : null}
+            </ul>
+          )}
+        </div>
+      ) : null}
+    </div>
   );
 }
