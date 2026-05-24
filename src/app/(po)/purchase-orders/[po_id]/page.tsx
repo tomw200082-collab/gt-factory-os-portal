@@ -321,9 +321,27 @@ function AttachedGrCard({
                 : line.po_line_id
                   ? "Line item"
                   : "—";
+              // Prefer the human-readable name resolved from the matched PO
+              // line; fall back to the raw item_id (short hash + secondary
+              // class) only when the GR line is not PO-linked or the lookup
+              // missed (matches the same name-first pattern used elsewhere
+              // on this page, e.g. lines 770 / 824).
+              const itemName =
+                poLine?.component_name ?? poLine?.item_name ?? null;
               return (
                 <tr key={line.line_id} className="border-b border-border/20 last:border-b-0 hover:bg-bg-subtle/30">
-                  <td className="px-4 py-2 font-mono text-xs text-fg">{line.item_id}</td>
+                  <td className="px-4 py-2 text-xs text-fg">
+                    {itemName ? (
+                      <span className="flex flex-col">
+                        <span className="font-medium">{itemName}</span>
+                        <span className="font-mono text-3xs text-fg-muted">
+                          {line.item_id.slice(0, 8)}…
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="font-mono text-xs">{line.item_id}</span>
+                    )}
+                  </td>
                   <td className="px-4 py-2 text-right font-mono text-xs tabular-nums text-fg">{fmtQty(line.quantity)}</td>
                   <td className="px-4 py-2 text-xs text-fg-muted">{line.unit}</td>
                   <td className="px-4 py-2 text-xs text-fg-muted">{line.item_type}</td>

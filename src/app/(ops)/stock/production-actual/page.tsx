@@ -1488,46 +1488,95 @@ export default function ProductionActualPage() {
                 ) : null}
               </div>
 
-              {/* Consumption breakdown table */}
-              {done.committed.consumption.length > 0 ? (
-                <div className="overflow-x-auto rounded border border-success/20 bg-success-softer/20">
-                  <table className="w-full border-collapse text-xs">
-                    <thead>
-                      <tr className="border-b border-success/20">
-                        <th className="px-3 py-1.5 text-left text-3xs font-semibold uppercase tracking-wide opacity-70">
-                          Component
-                        </th>
-                        <th className="px-3 py-1.5 text-right text-3xs font-semibold uppercase tracking-wide opacity-70">
-                          Consumed
-                        </th>
-                        <th className="px-3 py-1.5 text-left text-3xs font-semibold uppercase tracking-wide opacity-70">
-                          Unit
-                        </th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {done.committed.consumption.map((c) => (
-                        <tr
-                          key={c.stock_ledger_movement_id}
-                          className="border-b border-success/10 last:border-b-0"
-                        >
-                          <td className="px-3 py-1.5 font-mono text-3xs opacity-80">
-                            {c.component_id}
-                          </td>
-                          <td className="px-3 py-1.5 text-right font-mono tabular-nums">
-                            {fmtNumStr(c.consumption_qty)}
-                          </td>
-                          <td className="px-3 py-1.5 opacity-70">
-                            {c.component_uom ?? "—"}
-                          </td>
+              {/* Consumption breakdown table — resolves component_id back
+                  to component_name + source (pack/base) using the snapshot's
+                  bom_lines that drove the explosion. Falls back to the raw
+                  id if the snapshot has been reset before render. */}
+              {done.committed.consumption.length > 0 ? (() => {
+                const bomLookup = new Map<
+                  string,
+                  { name: string; source: "pack" | "base" }
+                >();
+                if (snapshot) {
+                  for (const bl of snapshot.bom_lines) {
+                    // Pack and base may share a component_id in principle;
+                    // last write wins for the name (they'd be the same), and
+                    // the source is taken from the consumed row itself below.
+                    bomLookup.set(bl.component_id, {
+                      name: bl.component_name,
+                      source: bl.source,
+                    });
+                  }
+                }
+                return (
+                  <div className="overflow-x-auto rounded border border-success/20 bg-success-softer/20">
+                    <table className="w-full border-collapse text-xs">
+                      <thead>
+                        <tr className="border-b border-success/20">
+                          <th className="px-3 py-1.5 text-left text-3xs font-semibold uppercase tracking-wide opacity-70">
+                            Component
+                          </th>
+                          <th className="px-3 py-1.5 text-right text-3xs font-semibold uppercase tracking-wide opacity-70">
+                            Consumed
+                          </th>
+                          <th className="px-3 py-1.5 text-left text-3xs font-semibold uppercase tracking-wide opacity-70">
+                            Unit
+                          </th>
                         </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              ) : (
+                      </thead>
+                      <tbody>
+                        {done.committed.consumption.map((c) => {
+                          const info = bomLookup.get(c.component_id);
+                          const source = info?.source;
+                          return (
+                            <tr
+                              key={c.stock_ledger_movement_id}
+                              className="border-b border-success/10 last:border-b-0"
+                            >
+                              <td className="px-3 py-1.5 text-3xs">
+                                {info?.name ? (
+                                  <span className="flex flex-wrap items-baseline gap-x-2">
+                                    <span className="font-medium">{info.name}</span>
+                                    {source ? (
+                                      <span className="rounded-sm border border-success/30 px-1 py-px text-[10px] uppercase tracking-wide opacity-70">
+                                        {source}
+                                      </span>
+                                    ) : null}
+                                  </span>
+                                ) : (
+                                  <span className="font-mono opacity-80">
+                                    {c.component_id}
+                                  </span>
+                                )}
+                              </td>
+                              <td className="px-3 py-1.5 text-right font-mono tabular-nums">
+                                {fmtNumStr(c.consumption_qty)}
+                              </td>
+                              <td className="px-3 py-1.5 opacity-70">
+                                {c.component_uom ?? "—"}
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </table>
+                    {/* Scrap-vs-RM clarification (GAP-011 operator-training
+                        note). Per locked decision: scrap reduces FG output
+                        only; RM consumption is computed from output_qty, not
+                        from output_qty + scrap_qty. */}
+                    {Number(done.committed.scrap_qty) > 0 ? (
+                      <div className="border-t border-success/20 px-3 py-2 text-3xs opacity-75">
+                        Scrap reduced finished-goods output only.
+                        Raw-material consumption is computed from output, not
+                        from output + scrap (the system does not consume extra
+                        RM to cover scrapped units in v1).
+                      </div>
+                    ) : null}
+                  </div>
+                );
+              })() : (
                 <div className="opacity-70">
-                  {done.committed.consumption.length} components consumed
+                  No components consumed.
                 </div>
               )}
 
@@ -2402,15 +2451,33 @@ export default function ProductionActualPage() {
               ) : null}
             </SectionCard>
 
-            {/* Sticky submit area with backdrop blur */}
-            <div className="sticky bottom-0 z-10 -mx-4 flex items-center justify-end gap-2 border-t border-border bg-bg-raised/90 px-4 py-3 backdrop-blur-sm sm:-mx-6 sm:px-6">
-              <button type="button" className="btn" onClick={resetFlow}>
+            {/* Sticky submit area with backdrop blur. Always-on keyboard
+                shortcut hint (hidden on touch / coarse-pointer devices)
+                surfaces the Cmd/Ctrl+Enter shortcut without forcing the
+                user to hover for the tooltip. */}
+            <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center justify-end gap-2 border-t border-border bg-bg-raised/90 px-4 py-3 backdrop-blur-sm sm:-mx-6 sm:px-6">
+              {canSubmit && phase !== "submitting" ? (
+                <span
+                  className="mr-auto hidden text-3xs text-fg-subtle [@media(pointer:fine)]:inline-flex items-center gap-1"
+                  aria-hidden="true"
+                >
+                  <kbd className="rounded border border-border bg-bg px-1 py-px font-mono text-[10px]">⌘</kbd>
+                  <span>+</span>
+                  <kbd className="rounded border border-border bg-bg px-1 py-px font-mono text-[10px]">Enter</kbd>
+                  <span>to submit</span>
+                </span>
+              ) : null}
+              <button
+                type="button"
+                className="btn focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:outline-none"
+                onClick={resetFlow}
+              >
                 Cancel and start over
               </button>
               <button
                 type="submit"
                 className={cn(
-                  "btn btn-primary gap-1.5",
+                  "btn btn-primary gap-1.5 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:outline-none",
                   (!canSubmit || phase === "submitting") && "cursor-not-allowed opacity-60",
                 )}
                 disabled={phase === "submitting" || !canSubmit}
@@ -2427,7 +2494,10 @@ export default function ProductionActualPage() {
                   "Submitting…"
                 ) : !canSubmit ? (
                   <>
-                    <span aria-hidden>🔒</span>
+                    <svg className="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                      <rect x="5" y="11" width="14" height="10" rx="2" stroke="currentColor" strokeWidth="2" />
+                      <path d="M8 11V8a4 4 0 0 1 8 0v3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
                     Read-only — operator role required
                   </>
                 ) : (

@@ -120,8 +120,32 @@ type ApprovalKind = "waste" | "physical_count";
 type Outcome =
   | { kind: "approved" }
   | { kind: "rejected" }
-  | { kind: "conflict"; detail: string }
+  | { kind: "conflict"; reasonCode: string | null; detail: string }
   | { kind: "error"; message: string };
+
+function friendlyInlineConflict(
+  kind: ApprovalKind,
+  reasonCode: string | null,
+  fallback: string,
+): string {
+  if (!reasonCode) return fallback;
+  // Shared messages — both forms use these reason codes verbatim.
+  if (reasonCode === "NOT_PENDING") {
+    return "טופל כבר — רענן את התיבה.";
+  }
+  if (reasonCode === "IDEMPOTENCY_KEY_REUSED") {
+    return "כבר נשלח. רענן את התיבה כדי לראות את התוצאה.";
+  }
+  if (reasonCode === "SUBMISSION_NOT_FOUND") {
+    return "ההגשה לא נמצאה. ייתכן שנמחקה.";
+  }
+  if (reasonCode === "SELF_APPROVAL_FORBIDDEN") {
+    return kind === "physical_count"
+      ? "אינך יכול לאשר את הספירה שלך. רק מנהל או מתכנן רשאים אישור עצמי. בקש מבודק אחר לפתוח את ההגשה."
+      : "אינך יכול לאשר את ההגשה שלך. בקש ממתכנן או מנהל אחר לבדוק.";
+  }
+  return fallback;
+}
 
 // ---------------------------------------------------------------------------
 // Fetch helpers
@@ -166,11 +190,11 @@ async function postApprove(
     const body = await res.json().catch(() => undefined);
     if (res.status === 200) return { kind: "approved" };
     if (res.status === 409) {
+      const b = body as { reason_code?: string; detail?: string } | undefined;
       return {
         kind: "conflict",
-        detail:
-          (body as { detail?: string })?.detail ??
-          "This submission cannot be actioned in its current state.",
+        reasonCode: b?.reason_code ?? null,
+        detail: b?.detail ?? "ההגשה אינה במצב שניתן לפעול עליה כעת.",
       };
     }
     return { kind: "error", message: "Action failed. Check your connection and try again." };
@@ -200,11 +224,11 @@ async function postReject(
     const body = await res.json().catch(() => undefined);
     if (res.status === 200) return { kind: "rejected" };
     if (res.status === 409) {
+      const b = body as { reason_code?: string; detail?: string } | undefined;
       return {
         kind: "conflict",
-        detail:
-          (body as { detail?: string })?.detail ??
-          "This submission cannot be actioned in its current state.",
+        reasonCode: b?.reason_code ?? null,
+        detail: b?.detail ?? "ההגשה אינה במצב שניתן לפעול עליה כעת.",
       };
     }
     return { kind: "error", message: "Action failed. Check your connection and try again." };
@@ -410,7 +434,9 @@ export function ApprovalInlineCard({
 
   if (!kind || !submissionId) return null;
 
-  // Post-action states
+  // Post-action states. Include audit-trail context (short submission ref
+  // + "just now" timestamp) so the reviewer can confirm what they just
+  // actioned without leaving the inbox.
   if (outcome?.kind === "approved") {
     return (
       <div
@@ -418,7 +444,12 @@ export function ApprovalInlineCard({
         data-testid="approval-inline-success"
       >
         <CheckCircle2 className="h-4 w-4 shrink-0" strokeWidth={2} />
-        אושר — הפעולה הועברה למחסן
+        <span className="flex-1">
+          אושר — הפעולה הועברה למחסן
+          <span className="ml-2 text-3xs opacity-70">
+            ({submissionId.slice(0, 8)}… · כעת)
+          </span>
+        </span>
       </div>
     );
   }
@@ -429,16 +460,23 @@ export function ApprovalInlineCard({
         data-testid="approval-inline-rejected"
       >
         <XCircle className="h-4 w-4 shrink-0" strokeWidth={2} />
-        נדחה — הפעולה לא בוצעה
+        <span className="flex-1">
+          נדחה — הפעולה לא בוצעה
+          <span className="ml-2 text-3xs opacity-70">
+            ({submissionId.slice(0, 8)}… · כעת)
+          </span>
+        </span>
       </div>
     );
   }
   if (outcome?.kind === "conflict" || outcome?.kind === "error") {
+    const text =
+      outcome.kind === "conflict"
+        ? friendlyInlineConflict(kind, outcome.reasonCode, outcome.detail)
+        : outcome.message;
     return (
       <div className="mt-3 rounded-md border border-warning/40 bg-warning-softer px-3 py-2.5 text-sm text-warning-fg">
-        {outcome.kind === "conflict"
-          ? outcome.detail
-          : outcome.message}
+        {text}
       </div>
     );
   }
