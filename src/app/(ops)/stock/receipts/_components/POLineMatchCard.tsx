@@ -317,8 +317,12 @@ export function POLineMatchCard({
           >
             <button
               type="button"
+              // min-h-[44px]: Apple HIG / Material spec for thumb-tappable
+              // targets. The flat <select> we replaced rendered native
+              // platform rows already comfortably tappable; the custom
+              // list must match.
               className={cn(
-                "w-full rounded px-2 py-1.5 text-left text-xs transition-colors",
+                "flex w-full min-h-[44px] items-center rounded px-2 py-2 text-left text-sm transition-colors",
                 !selectedPoLineId && "bg-bg-subtle font-semibold text-fg",
                 highlightIdx === 0 &&
                   "ring-1 ring-accent ring-offset-1 ring-offset-bg-raised",
@@ -356,7 +360,7 @@ export function POLineMatchCard({
                 <button
                   type="button"
                   className={cn(
-                    "group w-full rounded px-2 py-1.5 text-left text-xs transition-colors",
+                    "group flex w-full min-h-[44px] items-center rounded px-2 py-2 text-left text-sm transition-colors",
                     isSelected
                       ? "bg-accent-soft font-semibold text-accent"
                       : closed
@@ -374,7 +378,7 @@ export function POLineMatchCard({
                   onMouseEnter={() => setHighlightIdx(i + 1)}
                   data-testid={`${testIdPrefix}-match-pick-${pl.po_line_id}`}
                 >
-                  <div className="flex flex-wrap items-center gap-1.5">
+                  <div className="flex w-full flex-wrap items-center gap-1.5">
                     <span
                       className={cn(
                         "font-mono text-3xs",
@@ -383,7 +387,7 @@ export function POLineMatchCard({
                     >
                       #{pl.line_number}
                     </span>
-                    <span className="truncate">{name}</span>
+                    <span className="min-w-0 flex-1 truncate">{name}</span>
                     <span
                       className={cn(
                         "ml-auto rounded-full px-1.5 py-0.5 text-3xs font-medium",

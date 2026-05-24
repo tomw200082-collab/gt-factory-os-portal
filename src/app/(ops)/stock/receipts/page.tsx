@@ -1684,10 +1684,13 @@ export default function GoodsReceiptPage() {
                     >
                       {/* #14: Line number badge — Tranche 020: bigger,
                           more visible, color-coded by completion state
-                          so the operator can count at a glance. */}
+                          so the operator can count at a glance. The
+                          smaller -2/-2 outward offset keeps the badge
+                          inside the SectionCard's p-4 padding even on
+                          a 320px viewport. */}
                       <span
                         className={cn(
-                          "absolute -left-3.5 -top-3 flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold shadow-sm transition-colors",
+                          "absolute -left-2 -top-2 flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold shadow-sm transition-colors",
                           isComplete
                             ? "bg-accent text-white"
                             : "bg-bg-raised border border-border text-fg",

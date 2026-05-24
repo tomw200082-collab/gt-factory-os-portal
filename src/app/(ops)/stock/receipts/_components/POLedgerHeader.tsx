@@ -74,7 +74,10 @@ export function POLedgerHeader({
 
   return (
     <div
-      className="sticky top-0 z-20 -mx-4 mb-4 border-b border-info/30 bg-bg-raised/95 px-4 py-3 shadow-[0_4px_8px_-6px_hsl(var(--shadow-color)/0.18)] backdrop-blur-sm sm:-mx-6 sm:px-6"
+      // Sticky offset matches the TopBar height (h-16 = 64px, z-40) so
+      // this header lands flush beneath it on scroll instead of getting
+      // covered. z-20 keeps us below modals/drawers but above page body.
+      className="sticky top-16 z-20 -mx-4 mb-4 border-b border-info/30 bg-bg-raised/95 px-4 py-3 shadow-[0_4px_8px_-6px_hsl(var(--shadow-color)/0.18)] backdrop-blur-sm sm:-mx-6 sm:px-6"
       role="region"
       aria-label="Purchase order progress"
       data-testid="receipt-po-ledger-header"
@@ -95,7 +98,10 @@ export function POLedgerHeader({
             {status}
           </span>
         </span>
-        <span className="truncate text-sm font-medium text-fg">
+        {/* min-w-0 lets truncate actually kick in inside flex-wrap; without
+            it the span claims its intrinsic width and pushes siblings off
+            the right edge on narrow phones. */}
+        <span className="min-w-0 flex-1 truncate text-sm font-medium text-fg">
           {supplierName}
         </span>
         {expectedReceiveDate ? (

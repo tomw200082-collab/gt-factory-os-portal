@@ -152,7 +152,7 @@ export function ReceiptLandingPicker({
                     <button
                       type="button"
                       className={cn(
-                        "group w-full rounded-md border border-border/60 bg-bg-raised px-3 py-2.5 text-left transition-colors duration-150",
+                        "group flex w-full min-h-[64px] flex-col justify-center rounded-md border border-border/60 bg-bg-raised px-3 py-2.5 text-left transition-colors duration-150",
                         "hover:border-accent/50 hover:bg-accent-soft/30",
                         "focus:outline-none focus-visible:ring-2 focus-visible:ring-accent",
                         // Overdue gets a strong left-rail and red accent on
@@ -165,8 +165,10 @@ export function ReceiptLandingPicker({
                     >
                       <div className="flex flex-wrap items-center gap-2">
                         {/* Lead with supplier name — operators recognize the
-                            truck by who's driving it, not by PO number. */}
-                        <span className="truncate text-sm font-semibold text-fg-strong">
+                            truck by who's driving it, not by PO number.
+                            min-w-0 flex-1 lets truncate work inside the
+                            wrapping flex parent on narrow viewports. */}
+                        <span className="min-w-0 flex-1 truncate text-sm font-semibold text-fg-strong">
                           {sName}
                         </span>
                         <span
@@ -302,7 +304,7 @@ export function ReceiptLandingPicker({
                       <button
                         type="button"
                         className={cn(
-                          "group w-full rounded-md border border-border/60 bg-bg-raised px-3 py-2.5 text-left transition-colors duration-150",
+                          "group flex w-full min-h-[64px] flex-col justify-center rounded-md border border-border/60 bg-bg-raised px-3 py-2.5 text-left transition-colors duration-150",
                           "hover:border-accent/50 hover:bg-accent-soft/30",
                           "focus:outline-none focus-visible:ring-2 focus-visible:ring-accent",
                           // Subtle highlight on the top match so the
