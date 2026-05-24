@@ -35,6 +35,7 @@ interface WasteAdjustmentDetail {
   unit: string;
   reason_code: string;
   notes: string | null;
+  submitted_by_user_id: string | null;
   submitted_by_display_name: string | null;
   event_at: string;
   submitted_at: string;
@@ -329,6 +330,23 @@ export default function WasteReviewPage() {
         </div>
       ) : null}
 
+      {/* Preemptive self-approval guard. Waste forbids self-approval for
+          every role (handler enforces 409 SELF_APPROVAL_FORBIDDEN). Disable
+          the action sections in the UI when the reviewer is the submitter
+          so they don't have to learn the rule by hitting a 409. */}
+      {d?.submitted_by_user_id && d.submitted_by_user_id === session.user_id ? (
+        <div
+          className="mb-5 rounded-md border border-warning/40 bg-warning-softer/60 p-4 text-sm text-warning-fg"
+          data-testid="waste-review-self-approval-block"
+        >
+          <div className="font-semibold">You cannot approve your own submission</div>
+          <div className="mt-1 text-xs">
+            Waste adjustments must be reviewed by a different planner or admin.
+            Ask another reviewer to open this submission from the inbox.
+          </div>
+        </div>
+      ) : null}
+
       <SectionCard
         eyebrow="Approve"
         title="Accept this adjustment"
@@ -347,7 +365,7 @@ export default function WasteReviewPage() {
             type="button"
             data-testid="waste-review-approve"
             className="btn btn-primary"
-            disabled={busy}
+            disabled={busy || (d?.submitted_by_user_id != null && d.submitted_by_user_id === session.user_id)}
             onClick={handleApprove}
           >
             {busy ? "Submitting…" : "Approve"}
@@ -373,7 +391,7 @@ export default function WasteReviewPage() {
             type="button"
             data-testid="waste-review-reject"
             className="btn btn-sm btn-danger"
-            disabled={busy || !rejectionReason.trim()}
+            disabled={busy || !rejectionReason.trim() || (d?.submitted_by_user_id != null && d.submitted_by_user_id === session.user_id)}
             onClick={handleReject}
           >
             {busy ? "Submitting…" : "Reject"}

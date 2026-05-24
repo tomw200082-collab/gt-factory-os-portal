@@ -39,6 +39,7 @@ interface PhysicalCountDetail {
   snapshot_quantity: string | null;
   computed_delta: string | null;
   notes: string | null;
+  submitted_by_user_id: string | null;
   submitted_by_display_name: string | null;
   event_at: string;
   submitted_at: string;
@@ -351,6 +352,27 @@ export default function PhysicalCountReviewPage() {
         </div>
       ) : null}
 
+      {/* Preemptive self-approval guard for physical count.
+          Per design 2026-04-30 §A.3 admin and planner roles may self-approve
+          their own count; operator and viewer cannot. The handler enforces
+          this via 409 SELF_APPROVAL_FORBIDDEN; this UI block matches the
+          policy so the disallowed roles don't have to learn it by trying. */}
+      {d?.submitted_by_user_id &&
+      d.submitted_by_user_id === session.user_id &&
+      session.role !== "admin" &&
+      session.role !== "planner" ? (
+        <div
+          className="mb-5 rounded-md border border-warning/40 bg-warning-softer/60 p-4 text-sm text-warning-fg"
+          data-testid="pc-review-self-approval-block"
+        >
+          <div className="font-semibold">You cannot approve your own count</div>
+          <div className="mt-1 text-xs">
+            Only admin or planner roles may self-approve a count. Ask a planner
+            or admin to review your submission from the inbox.
+          </div>
+        </div>
+      ) : null}
+
       <SectionCard
         eyebrow="Approve"
         title="Accept this count"
@@ -369,7 +391,13 @@ export default function PhysicalCountReviewPage() {
             type="button"
             data-testid="pc-review-approve"
             className="btn btn-primary"
-            disabled={busy}
+            disabled={
+              busy ||
+              (d?.submitted_by_user_id != null &&
+                d.submitted_by_user_id === session.user_id &&
+                session.role !== "admin" &&
+                session.role !== "planner")
+            }
             onClick={handleApprove}
           >
             {busy ? "Submitting…" : "Approve"}
@@ -395,7 +423,14 @@ export default function PhysicalCountReviewPage() {
             type="button"
             data-testid="pc-review-reject"
             className="btn btn-sm btn-danger"
-            disabled={busy || !rejectionReason.trim()}
+            disabled={
+              busy ||
+              !rejectionReason.trim() ||
+              (d?.submitted_by_user_id != null &&
+                d.submitted_by_user_id === session.user_id &&
+                session.role !== "admin" &&
+                session.role !== "planner")
+            }
             onClick={handleReject}
           >
             {busy ? "Submitting…" : "Reject"}
