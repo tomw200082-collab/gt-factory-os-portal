@@ -623,7 +623,7 @@ export default function PhysicalCountPage() {
       <WorkflowHeader
         eyebrow="Operator form"
         title="Physical Count"
-        description="Blind count — enter what you actually see. Expected quantities are hidden to keep the count unbiased."
+        description="Blind count — enter what you see. Expected quantities stay hidden."
       />
 
       {/* ----------------------------------------------------------------
@@ -828,7 +828,7 @@ export default function PhysicalCountPage() {
 
           <SectionCard
             title="Step 1 — choose what to count"
-            description="Select the item you are about to count. The expected quantity is not shown to keep the count unbiased."
+            description="Pick the item to count. Expected quantity stays hidden."
           >
             {/* ------------------------------------------------------------------
                 Search / combobox — client-side only. No API calls.

@@ -39,20 +39,20 @@ export function SectionCard({
       className={cn("card", TONE_CLASSES[tone], className)}
     >
       {(title || actions || eyebrow) && (
-        <div className="flex items-start justify-between gap-4 rounded-t-md border-b border-border/70 bg-gradient-to-b from-bg-raised to-bg/40 px-4 py-3 sm:px-5 sm:py-4">
+        <div className="flex items-start justify-between gap-4 rounded-t-md border-b border-border/70 bg-gradient-to-b from-bg-raised to-bg/40 px-5 py-4 sm:px-6 sm:py-5">
           <div className="min-w-0">
             {eyebrow ? (
-              <div className="mb-1 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+              <div className="mb-1.5 text-2xs font-semibold uppercase tracking-sops text-accent">
                 {eyebrow}
               </div>
             ) : null}
             {title ? (
-              <h2 className="text-base font-semibold tracking-tightish text-fg-strong">
+              <h2 className="text-lg font-bold tracking-tight text-fg-strong">
                 {title}
               </h2>
             ) : null}
             {description ? (
-              <div className="mt-1 text-xs leading-relaxed text-fg-muted">
+              <div className="mt-1.5 text-sm leading-relaxed text-fg-muted">
                 {description}
               </div>
             ) : null}
@@ -64,7 +64,7 @@ export function SectionCard({
       )}
       <div
         className={cn(
-          density === "compact" ? "p-3 sm:p-4" : "p-4 sm:p-5",
+          density === "compact" ? "p-4 sm:p-5" : "p-5 sm:p-6",
           contentClassName
         )}
       >

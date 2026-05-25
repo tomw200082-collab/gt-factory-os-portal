@@ -1291,7 +1291,7 @@ export default function ProductionActualPage() {
       <WorkflowHeader
         eyebrow="Operator form"
         title="Production Report"
-        description="Report what you produced and any scrap. The system computes component consumption from the active BOM."
+        description="Report output and any scrap. Component consumption is computed from the active BOM."
       />
 
       {/* ======================================================================
@@ -1893,7 +1893,7 @@ export default function ProductionActualPage() {
           <form onSubmit={handleOpen} className="space-y-5 pb-20">
             <SectionCard
               title="Step 1 — Pick the item being produced"
-              description="Only manufactured or repacked items are listed. If the BOM is updated after this form opens, you will need to reopen before submitting."
+              description="Only manufactured or repacked items appear. If the BOM changes after you open the form, reopen before submitting."
             >
               <div className="grid grid-cols-1 gap-4">
                 {/* Searchable combobox */}
@@ -2073,7 +2073,7 @@ export default function ProductionActualPage() {
           <form onSubmit={handleSubmit} className="space-y-5 pb-20">
             <SectionCard
               title="Step 2 — Enter the produced quantity"
-              description="Output = good units produced. Scrap = material consumed but not usable as finished goods. Both are required; scrap defaults to 0."
+              description="Output = good units. Scrap = consumed but not usable."
             >
               {snapshot ? (
                 <div className="mb-4 rounded-md border border-border/60 bg-bg-subtle/40 p-4">
@@ -2298,7 +2298,7 @@ export default function ProductionActualPage() {
 
             <SectionCard
               title="Preview — expected component consumption"
-              description="Estimated component consumption from the BOM and quantities entered. The final value is computed at submit time."
+              description="Estimated component consumption from the BOM. Final values are computed at submit."
             >
               {/* Toggle button styled as a tab with arrow indicator and count badge */}
               <button
