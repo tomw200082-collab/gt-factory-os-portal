@@ -641,7 +641,7 @@ function ManualPoFormInner(): JSX.Element {
         {/* Section 1 — Order details */}
         <SectionCard>
           <div className="px-6 py-4 border-b border-border/60">
-            <h2 className="text-xs font-semibold text-fg">Order details</h2>
+            <h2 className="text-base font-bold text-fg">Order details</h2>
             <p className="mt-0.5 text-3xs text-fg-faint">
               Who you are ordering from, when you expect it, and why this is a
               manual order.
@@ -653,7 +653,7 @@ function ManualPoFormInner(): JSX.Element {
               <div className="space-y-1">
                 <label
                   htmlFor="po-new-supplier-trigger"
-                  className="block text-xs font-semibold text-fg"
+                  className="block text-sm font-semibold text-fg"
                 >
                   Supplier
                   {REQUIRED_LABEL}
@@ -681,7 +681,7 @@ function ManualPoFormInner(): JSX.Element {
               <div className="space-y-1">
                 <label
                   htmlFor="po-new-expected-date"
-                  className="block text-xs font-semibold text-fg"
+                  className="block text-sm font-semibold text-fg"
                 >
                   Expected delivery date
                   {REQUIRED_LABEL}
@@ -710,7 +710,7 @@ function ManualPoFormInner(): JSX.Element {
             <div className="space-y-1">
               <label
                 htmlFor="po-new-reason"
-                className="block text-xs font-semibold text-fg"
+                className="block text-sm font-semibold text-fg"
               >
                 Reason for manual order
                 {REQUIRED_LABEL}
@@ -744,7 +744,7 @@ function ManualPoFormInner(): JSX.Element {
         <SectionCard>
           <div className="px-6 py-4 border-b border-border/60 flex items-center justify-between gap-3">
             <div>
-              <h2 className="text-xs font-semibold text-fg">Order lines</h2>
+              <h2 className="text-base font-bold text-fg">Order lines</h2>
               <p className="mt-0.5 text-3xs text-fg-faint">
                 Items or components to purchase. Quantity is in the unit you
                 pick on each line.
@@ -794,7 +794,7 @@ function ManualPoFormInner(): JSX.Element {
 
                   {/* Item / component picker */}
                   <div className="space-y-1">
-                    <label className="block text-xs font-semibold text-fg">
+                    <label className="block text-sm font-semibold text-fg">
                       Item or component
                       {REQUIRED_LABEL}
                     </label>
@@ -825,7 +825,7 @@ function ManualPoFormInner(): JSX.Element {
                     <div className="space-y-1">
                       <label
                         htmlFor={`po-new-line-qty-${idx}`}
-                        className="block text-xs font-semibold text-fg"
+                        className="block text-sm font-semibold text-fg"
                       >
                         Quantity
                         {REQUIRED_LABEL}
@@ -857,7 +857,7 @@ function ManualPoFormInner(): JSX.Element {
                     <div className="space-y-1">
                       <label
                         htmlFor={`po-new-line-uom-${idx}`}
-                        className="block text-xs font-semibold text-fg"
+                        className="block text-sm font-semibold text-fg"
                       >
                         UoM
                         {REQUIRED_LABEL}

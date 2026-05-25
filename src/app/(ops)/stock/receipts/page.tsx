@@ -1186,40 +1186,43 @@ export default function GoodsReceiptPage() {
         />
       ) : null}
 
-      {/* Success / error banner */}
+      {/* Success / error banner — hero icon badge + bold title */}
       {done ? (
         <div
           className={cn(
-            "mb-4 rounded-md border px-4 py-3 text-sm",
+            "mb-6 rounded-xl border px-5 py-5",
             done.kind === "success"
               ? "border-success/40 bg-success-softer text-success-fg"
               : "border-danger/40 bg-danger-softer text-danger-fg",
           )}
           role="status"
+          aria-live="polite"
           data-testid={
             done.kind === "success"
               ? "receipt-success-panel"
               : "receipt-error-panel"
           }
         >
-          <div className="flex items-start gap-3">
-            {/* #18: Large green checkmark SVG on success */}
-            {done.kind === "success" && (
-              <svg
-                className="mt-0.5 h-5 w-5 shrink-0 text-success-fg"
-                viewBox="0 0 20 20"
-                fill="currentColor"
-                aria-hidden="true"
-              >
-                <path
-                  fillRule="evenodd"
-                  d="M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z"
-                  clipRule="evenodd"
-                />
-              </svg>
-            )}
+          <div className="flex items-start gap-4">
+            <span
+              className={cn(
+                "flex h-12 w-12 shrink-0 items-center justify-center rounded-full",
+                done.kind === "success" ? "bg-success/15" : "bg-danger/15",
+              )}
+            >
+              {done.kind === "success" ? (
+                <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              ) : (
+                <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
+                  <path d="M9 9l6 6M15 9l-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+              )}
+            </span>
             <div className="flex-1">
-              <div className="font-medium">{done.message}</div>
+              <div className="text-lg font-bold leading-tight">{done.message}</div>
               {/* Per-line stock effect — reinforces the invariant that a
                   posted goods receipt INCREASES stock immediately. The
                   earlier bullet list rendered "Item × qty unit" which
@@ -1514,7 +1517,7 @@ export default function GoodsReceiptPage() {
             <SectionCard title="Receipt context">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <label className="block min-w-0">
-                  <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <span className="mb-2 block text-sm font-semibold text-fg">
                     Event time *
                   </span>
                   <div className="flex items-center gap-2">
@@ -1534,7 +1537,7 @@ export default function GoodsReceiptPage() {
                   </div>
                 </label>
                 <label className="block min-w-0">
-                  <span className="mb-1 flex items-center gap-1 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <span className="mb-2 flex items-center gap-2 text-sm font-semibold text-fg">
                     Supplier *
                     {/* #7: Lock icon when urlPoLocked */}
                     {urlPoLocked ? (
@@ -1604,7 +1607,7 @@ export default function GoodsReceiptPage() {
                 ) : null}
 
                 <label className="block min-w-0 sm:col-span-2">
-                  <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <span className="mb-2 block text-sm font-semibold text-fg">
                     Header notes
                   </span>
                   <div className="relative">
@@ -1732,7 +1735,7 @@ export default function GoodsReceiptPage() {
                       ) : null}
 
                       <label className="block min-w-0">
-                        <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle md:hidden">
+                        <span className="mb-2 block text-sm font-semibold text-fg md:hidden">
                           Item or component *
                         </span>
                         {/* #10: Searchable per-line combobox */}
@@ -1753,15 +1756,15 @@ export default function GoodsReceiptPage() {
                       </label>
 
                       <label className="block min-w-0">
-                        <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle md:hidden">
+                        <span className="mb-2 block text-sm font-semibold text-fg md:hidden">
                           Quantity *
                         </span>
-                        {/* #11: +/- stepper alongside quantity input */}
+                        {/* Quantity hero — bigger steppers, bolder numeric input. */}
                         <div className="flex items-center gap-1">
                           <button
                             type="button"
                             aria-label="Decrease quantity"
-                            className="flex h-11 w-11 shrink-0 items-center justify-center rounded border border-border text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors duration-150 disabled:opacity-40"
+                            className="flex h-12 w-12 shrink-0 items-center justify-center rounded border border-border text-lg font-bold leading-none text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors duration-150 disabled:opacity-40"
                             disabled={phase === "submitting"}
                             onClick={() => {
                               const cur = Number(line.quantity) || 0;
@@ -1775,7 +1778,7 @@ export default function GoodsReceiptPage() {
                             inputMode="decimal"
                             step="any"
                             min="0"
-                            className="input flex-1 min-w-0 transition-colors duration-150"
+                            className="input flex-1 min-w-0 h-12 text-center text-xl font-mono font-semibold tabular-nums transition-colors duration-150"
                             placeholder="Qty"
                             value={line.quantity}
                             onChange={(e) =>
@@ -1787,7 +1790,7 @@ export default function GoodsReceiptPage() {
                           <button
                             type="button"
                             aria-label="Increase quantity"
-                            className="flex h-11 w-11 shrink-0 items-center justify-center rounded border border-border text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors duration-150 disabled:opacity-40"
+                            className="flex h-12 w-12 shrink-0 items-center justify-center rounded border border-border text-lg font-bold leading-none text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors duration-150 disabled:opacity-40"
                             disabled={phase === "submitting"}
                             onClick={() => {
                               const cur = Number(line.quantity) || 0;
@@ -1800,7 +1803,7 @@ export default function GoodsReceiptPage() {
                       </label>
 
                       <label className="block min-w-0">
-                        <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle md:hidden">
+                        <span className="mb-2 block text-sm font-semibold text-fg md:hidden">
                           Unit
                         </span>
                         <select
@@ -1826,7 +1829,7 @@ export default function GoodsReceiptPage() {
                       </label>
 
                       <label className="block min-w-0">
-                        <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle md:hidden">
+                        <span className="mb-2 block text-sm font-semibold text-fg md:hidden">
                           Line notes
                         </span>
                         <input
