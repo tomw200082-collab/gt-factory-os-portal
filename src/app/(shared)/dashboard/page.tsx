@@ -106,7 +106,12 @@ import { StockHealthCard } from "./_components/StockHealthCard";
 const STALE_TIME_MS = 60_000;
 
 // Cache keys — canonical post-graduation namespace under "dashboard".
-const QK_VALUE = ["dashboard", "stock", "value"] as const;
+// Stock value query key is shared with /inventory so React Query
+// dedupes — one fetch, one cache, identical numbers on both pages.
+// Previously this lived under ["dashboard", "stock", "value"] which made
+// the two pages fetch independently and show different numbers when
+// master-data costs were edited between the two requests.
+const QK_VALUE = ["stock", "value"] as const;
 const QK_EXCEPTIONS = ["dashboard", "exceptions", "open"] as const;
 const QK_PLANNING_LATEST = ["dashboard", "planning", "runs", "latest"] as const;
 const QK_PRODUCTION_PLAN = ["dashboard", "production-plan"] as const;
