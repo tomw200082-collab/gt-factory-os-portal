@@ -433,23 +433,27 @@ function stringDiv(num: string, denom: string, prodQty: number): string {
 function StepIndicator({ phase }: { phase: Phase }) {
   const step = phase === "pick" ? 1 : 2;
   return (
-    <div className="mb-6 flex items-center gap-3" aria-label="Form progress">
+    <div className="mb-8 flex items-center gap-3" aria-label="Form progress">
       {/* Step 1 */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2.5">
         <div
           className={cn(
-            "flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold transition-colors",
+            "flex h-10 w-10 items-center justify-center rounded-full text-base font-bold transition-colors shadow-sm",
             step === 1
               ? "bg-accent text-white"
               : "bg-success text-white",
           )}
           aria-current={step === 1 ? "step" : undefined}
         >
-          {step > 1 ? "✓" : "1"}
+          {step > 1 ? (
+            <svg className="h-5 w-5" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M3 8l3.5 3.5L13 4.5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          ) : "1"}
         </div>
         <span
           className={cn(
-            "text-sm font-medium",
+            "text-sm font-semibold",
             step === 1 ? "text-fg" : "text-fg-muted",
           )}
         >
@@ -460,19 +464,19 @@ function StepIndicator({ phase }: { phase: Phase }) {
       {/* Connector */}
       <div
         className={cn(
-          "h-px flex-1 transition-colors",
+          "h-1 flex-1 rounded-full transition-colors",
           step > 1 ? "bg-success/60" : "bg-border",
         )}
       />
 
       {/* Step 2 */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2.5">
         <div
           className={cn(
-            "flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold transition-colors",
+            "flex h-10 w-10 items-center justify-center rounded-full text-base font-bold transition-colors shadow-sm",
             step === 2
               ? "bg-accent text-white"
-              : "border border-border bg-bg-subtle text-fg-muted",
+              : "border-2 border-border bg-bg text-fg-muted",
           )}
           aria-current={step === 2 ? "step" : undefined}
         >
@@ -480,7 +484,7 @@ function StepIndicator({ phase }: { phase: Phase }) {
         </div>
         <span
           className={cn(
-            "text-sm font-medium",
+            "text-sm font-semibold",
             step === 2 ? "text-fg" : "text-fg-muted",
           )}
         >
@@ -1291,7 +1295,7 @@ export default function ProductionActualPage() {
       <WorkflowHeader
         eyebrow="Operator form"
         title="Production Report"
-        description="Report what you produced and any scrap. The system computes component consumption from the active BOM."
+        description="Report output and any scrap. Component consumption is computed from the active BOM."
       />
 
       {/* ======================================================================
@@ -1893,12 +1897,12 @@ export default function ProductionActualPage() {
           <form onSubmit={handleOpen} className="space-y-5 pb-20">
             <SectionCard
               title="Step 1 — Pick the item being produced"
-              description="Only manufactured or repacked items are listed. If the BOM is updated after this form opens, you will need to reopen before submitting."
+              description="Only manufactured or repacked items appear. If the BOM changes after you open the form, reopen before submitting."
             >
               <div className="grid grid-cols-1 gap-4">
                 {/* Searchable combobox */}
                 <div>
-                  <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <span className="mb-2 block text-sm font-semibold text-fg">
                     Item *
                   </span>
                   <div className="relative" ref={comboboxRef}>
@@ -2054,10 +2058,10 @@ export default function ProductionActualPage() {
                 </div>
               </div>
             </SectionCard>
-            <div className="sticky bottom-0 z-10 -mx-4 flex items-center justify-end gap-2 border-t border-border bg-bg-raised/90 px-4 py-3 backdrop-blur-sm sm:-mx-6 sm:px-6">
+            <div className="sticky bottom-0 z-10 -mx-4 flex items-center justify-end gap-2 border-t border-border bg-bg-raised/95 px-4 py-4 backdrop-blur-md sm:-mx-6 sm:px-6">
               <button
                 type="submit"
-                className="btn btn-primary"
+                className="btn btn-lg btn-primary"
                 disabled={!selectedItemId}
               >
                 Open production form →
@@ -2073,7 +2077,7 @@ export default function ProductionActualPage() {
           <form onSubmit={handleSubmit} className="space-y-5 pb-20">
             <SectionCard
               title="Step 2 — Enter the produced quantity"
-              description="Output = good units produced. Scrap = material consumed but not usable as finished goods. Both are required; scrap defaults to 0."
+              description="Output = good units. Scrap = consumed but not usable."
             >
               {snapshot ? (
                 <div className="mb-4 rounded-md border border-border/60 bg-bg-subtle/40 p-4">
@@ -2116,7 +2120,7 @@ export default function ProductionActualPage() {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {/* Event time */}
                 <label className="block min-w-0">
-                  <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <span className="mb-2 block text-sm font-semibold text-fg">
                     Event time *
                   </span>
                   <input
@@ -2139,7 +2143,7 @@ export default function ProductionActualPage() {
 
                 {/* Unit of measure — readonly display with pinned label */}
                 <label className="block min-w-0">
-                  <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <span className="mb-2 block text-sm font-semibold text-fg">
                     Unit of measure *
                   </span>
                   <input
@@ -2156,13 +2160,13 @@ export default function ProductionActualPage() {
 
                 {/* Output quantity — hero-sized with steppers */}
                 <div className="block min-w-0">
-                  <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <span className="mb-2 block text-sm font-semibold text-fg">
                     Output quantity *
                   </span>
                   <div className="flex items-stretch gap-0">
                     <button
                       type="button"
-                      className="btn btn-sm rounded-r-none border-r-0 px-3 font-mono text-base leading-none"
+                      className="btn rounded-r-none border-r-0 h-14 px-4 text-2xl font-bold leading-none"
                       data-testid="production-actual-output-stepper-minus"
                       onClick={() => stepNum(outputQty, -1, setOutputQty)}
                       onKeyDown={(e) => {
@@ -2181,7 +2185,7 @@ export default function ProductionActualPage() {
                       inputMode="decimal"
                       step="any"
                       min="0"
-                      className="input rounded-none text-3xl font-mono tabular-nums text-center flex-1 min-w-0"
+                      className="input rounded-none h-14 text-4xl font-mono font-bold tabular-nums text-center flex-1 min-w-0"
                       value={outputQty}
                       data-testid="production-actual-output-qty"
                       onChange={(e) => setOutputQty(e.target.value)}
@@ -2189,7 +2193,7 @@ export default function ProductionActualPage() {
                     />
                     <button
                       type="button"
-                      className="btn btn-sm rounded-l-none border-l-0 px-3 font-mono text-base leading-none"
+                      className="btn rounded-l-none border-l-0 h-14 px-4 text-2xl font-bold leading-none"
                       data-testid="production-actual-output-stepper-plus"
                       onClick={() => stepNum(outputQty, 1, setOutputQty)}
                       onKeyDown={(e) => {
@@ -2210,13 +2214,13 @@ export default function ProductionActualPage() {
                     NOT RM consumption — RM consumption is based on the
                     output_qty above. Operators MUST understand this. */}
                 <div className="block min-w-0">
-                  <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <span className="mb-2 block text-sm font-semibold text-fg">
                     Scrap quantity
                   </span>
                   <div className="flex items-stretch gap-0">
                     <button
                       type="button"
-                      className="btn btn-sm rounded-r-none border-r-0 px-3 font-mono text-base leading-none"
+                      className="btn rounded-r-none border-r-0 h-12 px-3 text-lg font-bold leading-none"
                       onClick={() => stepNum(scrapQty, -1, setScrapQty)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
@@ -2233,14 +2237,14 @@ export default function ProductionActualPage() {
                       inputMode="decimal"
                       step="any"
                       min="0"
-                      className="input rounded-none font-mono tabular-nums text-center flex-1 min-w-0"
+                      className="input rounded-none h-12 text-xl font-mono font-semibold tabular-nums text-center flex-1 min-w-0"
                       value={scrapQty}
                       data-testid="production-actual-scrap-qty"
                       onChange={(e) => setScrapQty(e.target.value)}
                     />
                     <button
                       type="button"
-                      className="btn btn-sm rounded-l-none border-l-0 px-3 font-mono text-base leading-none"
+                      className="btn rounded-l-none border-l-0 h-12 px-3 text-lg font-bold leading-none"
                       onClick={() => stepNum(scrapQty, 1, setScrapQty)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
@@ -2253,8 +2257,8 @@ export default function ProductionActualPage() {
                       +
                     </button>
                   </div>
-                  <div className="mt-1 text-3xs text-fg-muted">
-                    Scrap reduces finished-goods output only. Raw-material consumption stays based on the output quantity above.
+                  <div className="mt-2 text-xs text-fg-muted leading-snug">
+                    Scrap reduces finished-goods output only — raw-material consumption stays based on output.
                   </div>
                 </div>
 
@@ -2276,7 +2280,7 @@ export default function ProductionActualPage() {
 
                 {/* Notes with live character count */}
                 <div className="block min-w-0 sm:col-span-2">
-                  <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <span className="mb-2 block text-sm font-semibold text-fg">
                     Notes
                   </span>
                   <div className="relative">
@@ -2298,7 +2302,7 @@ export default function ProductionActualPage() {
 
             <SectionCard
               title="Preview — expected component consumption"
-              description="Estimated component consumption from the BOM and quantities entered. The final value is computed at submit time."
+              description="Estimated component consumption from the BOM. Final values are computed at submit."
             >
               {/* Toggle button styled as a tab with arrow indicator and count badge */}
               <button
@@ -2493,7 +2497,7 @@ export default function ProductionActualPage() {
               <button
                 type="submit"
                 className={cn(
-                  "btn btn-primary gap-1.5 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:outline-none",
+                  "btn btn-lg btn-primary gap-1.5 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:outline-none",
                   (!canSubmit || phase === "submitting") && "cursor-not-allowed opacity-60",
                 )}
                 disabled={phase === "submitting" || !canSubmit}

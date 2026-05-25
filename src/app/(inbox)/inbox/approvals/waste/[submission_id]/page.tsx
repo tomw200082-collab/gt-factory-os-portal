@@ -126,8 +126,8 @@ function friendlyWasteConflict(reasonCode: string, fallbackDetail: string): stri
 
 function DetailRow({ label, value }: { label: string; value: ReactNode }) {
   return (
-    <div className="flex gap-2 text-xs">
-      <span className="w-32 shrink-0 text-fg-subtle">{label}</span>
+    <div className="flex gap-3 text-sm">
+      <span className="w-32 shrink-0 font-medium text-fg-muted">{label}</span>
       <span className="text-fg">{value}</span>
     </div>
   );
@@ -272,8 +272,8 @@ export default function WasteReviewPage() {
           Could not load submission details. You may still approve or reject below, but context is unavailable.
         </div>
       ) : d ? (
-        <div className="mb-5 rounded-md border border-border/60 bg-bg-subtle/40 p-4 space-y-1.5">
-          <div className="mb-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+        <div className="mb-6 rounded-xl border border-border/60 bg-bg-subtle/40 p-5 space-y-2">
+          <div className="mb-3 text-base font-bold text-fg">
             Submission details
           </div>
           <DetailRow
@@ -350,25 +350,25 @@ export default function WasteReviewPage() {
       <SectionCard
         eyebrow="Approve"
         title="Accept this adjustment"
-        description="Approving posts the submission to the ledger (positive adjustments as +qty, loss as −qty) and resolves the open exception."
+        description="Posts the submission to the ledger and resolves the open exception."
       >
-        <label className="text-xs font-semibold text-fg-muted">
-          Approval notes (optional)
+        <label className="block mb-2 text-sm font-semibold text-fg">
+          Approval notes <span className="font-normal text-fg-muted">(optional)</span>
         </label>
         <NotesBox
           value={approvalNotes}
           onChange={(e) => setApprovalNotes(e.target.value)}
           placeholder="Internal audit trail."
         />
-        <div className="mt-4">
+        <div className="mt-5">
           <button
             type="button"
             data-testid="waste-review-approve"
-            className="btn btn-primary"
+            className="btn btn-lg btn-primary"
             disabled={busy || (d?.submitted_by_user_id != null && d.submitted_by_user_id === session.user_id)}
             onClick={handleApprove}
           >
-            {busy ? "Submitting…" : "Approve"}
+            {busy ? "Submitting…" : "Approve adjustment"}
           </button>
         </div>
       </SectionCard>
@@ -376,25 +376,25 @@ export default function WasteReviewPage() {
       <SectionCard
         eyebrow="Reject"
         title="Refuse this adjustment"
-        description="Rejecting keeps the previous anchor/ledger state. Reason is required and surfaces on the exception row."
+        description="Keeps stock unchanged. Reason is required and surfaces on the audit trail."
       >
-        <label className="text-xs font-semibold text-fg-muted">
-          Rejection reason (required)
+        <label className="block mb-2 text-sm font-semibold text-fg">
+          Rejection reason <span className="font-normal text-danger-fg">*</span>
         </label>
         <NotesBox
           value={rejectionReason}
           onChange={(e) => setRejectionReason(e.target.value)}
-          placeholder="Shown on the audit trail and the submitter's notification."
+          placeholder="Shown on the audit trail and to the submitter."
         />
-        <div className="mt-4">
+        <div className="mt-5">
           <button
             type="button"
             data-testid="waste-review-reject"
-            className="btn btn-sm btn-danger"
+            className="btn btn-lg btn-danger"
             disabled={busy || !rejectionReason.trim() || (d?.submitted_by_user_id != null && d.submitted_by_user_id === session.user_id)}
             onClick={handleReject}
           >
-            {busy ? "Submitting…" : "Reject"}
+            {busy ? "Submitting…" : "Reject adjustment"}
           </button>
         </div>
       </SectionCard>

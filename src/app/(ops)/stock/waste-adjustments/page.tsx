@@ -598,7 +598,7 @@ export default function WasteAdjustmentPage() {
       <WorkflowHeader
         eyebrow="Operator form"
         title="Waste / Adjustment"
-        description="Report a stock loss or positive correction. Positive corrections are held for planner approval before taking effect."
+        description="Report a loss or positive correction."
       />
 
       {/* ------------------------------------------------------------------ */}
@@ -607,62 +607,77 @@ export default function WasteAdjustmentPage() {
       {done ? (
         <div
           className={cn(
-            "mb-4 rounded-md border px-4 py-3 text-sm transition-colors duration-150",
+            "mb-6 rounded-xl border px-5 py-5 transition-colors duration-150",
             done.kind === "success" && "border-success/40 bg-success-softer text-success-fg",
             done.kind === "pending" && "border-warning/40 bg-warning-softer text-warning-fg",
-            done.kind === "error" && "border-l-4 border-danger bg-danger-softer text-danger-fg pl-4"
+            done.kind === "error" && "border-l-4 border-danger bg-danger-softer text-danger-fg pl-5"
           )}
           role="status"
+          aria-live="polite"
         >
-          <div className="flex items-start gap-3">
-            {/* Icon */}
-            <span className="mt-0.5 shrink-0">
-              {done.kind === "success" && <IconCheck />}
-              {done.kind === "pending" && <IconClock />}
-              {done.kind === "error" && <IconX />}
+          <div className="flex items-start gap-4">
+            {/* Hero icon — large, recognisable from a glance. */}
+            <span
+              className={cn(
+                "flex h-12 w-12 shrink-0 items-center justify-center rounded-full",
+                done.kind === "success" && "bg-success/15",
+                done.kind === "pending" && "bg-warning/15",
+                done.kind === "error" && "bg-danger/15",
+              )}
+            >
+              {done.kind === "success" && (
+                <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+              )}
+              {done.kind === "pending" && (
+                <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
+                  <path d="M12 7v5l3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+              )}
+              {done.kind === "error" && (
+                <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
+                  <path d="M9 9l6 6M15 9l-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                </svg>
+              )}
             </span>
             <div className="flex-1 min-w-0">
-              <div className="flex items-center justify-between gap-3">
-                <div className="font-medium">{done.message}</div>
-                {done.href ? (
-                  <Link
-                    href={done.href}
-                    className="shrink-0 text-xs font-semibold underline underline-offset-2 hover:no-underline transition-colors duration-150"
-                    data-testid="waste-adjustment-banner-link"
-                  >
-                    {done.hrefLabel ?? "Open"}
-                  </Link>
-                ) : null}
-              </div>
+              <div className="text-lg font-bold leading-tight">{done.message}</div>
               {done.itemSummary ? (
-                <div className="mt-1 text-xs font-medium opacity-90">
+                <div className="mt-1.5 text-sm font-medium opacity-90">
                   {done.itemSummary}
                 </div>
               ) : null}
+              {done.kind === "pending" && (
+                <div className="mt-2 text-sm leading-snug opacity-90">
+                  <strong>Stock has not changed yet.</strong> A planner reviews this; stock updates only after approval.
+                </div>
+              )}
               {done.detail ? (
-                <div className="mt-1 font-mono text-xs opacity-60">
+                <div className="mt-2 font-mono text-xs opacity-50">
                   {done.detail}
                 </div>
               ) : null}
-              {/* Pending callout — make the most dangerous semantic trap
-                  (pending vs posted) unmistakable. */}
-              {done.kind === "pending" && (
-                <div className="mt-2 text-xs opacity-80">
-                  <strong>Stock has not changed yet.</strong> A planner will review this adjustment; stock updates only once it&apos;s approved.
-                </div>
-              )}
             </div>
+            {done.href ? (
+              <Link
+                href={done.href}
+                className="btn btn-sm shrink-0"
+                data-testid="waste-adjustment-banner-link"
+              >
+                {done.hrefLabel ?? "Open"}
+              </Link>
+            ) : null}
           </div>
 
-          {/* Action affordances on success/pending — matches the pattern
-              used on physical-count and goods-receipt success banners so
-              the operator's next-action set is consistent across forms. */}
           {(done.kind === "success" || done.kind === "pending") && (
-            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-current/10 pt-3">
+            <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-current/10 pt-4">
               {done.kind === "success" ? (
                 <Link
                   href="/stock/movement-log"
-                  className="btn btn-sm transition-colors duration-150"
+                  className="btn btn-sm"
                   data-testid="waste-adjustment-success-movement-log"
                 >
                   View posted ledger →
@@ -670,21 +685,19 @@ export default function WasteAdjustmentPage() {
               ) : null}
               <button
                 type="button"
-                className="btn btn-sm btn-ghost transition-colors duration-150"
+                className="btn btn-sm btn-ghost"
                 onClick={handleReset}
               >
-                Submit another adjustment
+                Submit another
               </button>
             </div>
           )}
 
-          {/* Dismiss on error — the form stays mounted below, so clearing the
-              banner lets the operator correct and resubmit. */}
           {done.kind === "error" && (
-            <div className="mt-3 border-t border-current/10 pt-3">
+            <div className="mt-4 border-t border-current/10 pt-4">
               <button
                 type="button"
-                className="btn btn-sm transition-colors duration-150"
+                className="btn btn-sm"
                 onClick={() => setDone(null)}
                 data-testid="waste-adjustment-error-dismiss"
               >
@@ -726,19 +739,16 @@ export default function WasteAdjustmentPage() {
           {/* ---------------------------------------------------------------- */}
           {/* Direction selector                                                */}
           {/* ---------------------------------------------------------------- */}
-          <SectionCard
-            title="Direction"
-            description="Loss = breakage/spoilage/spillage (auto-posts below threshold). Positive = found stock / correction (always held for approval)."
-          >
+          <SectionCard title="Direction">
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
               {/* Loss card */}
               <label
                 data-testid="waste-direction-loss"
                 className={cn(
-                  "flex flex-1 cursor-pointer items-start gap-3 rounded-md border px-3 py-3 text-sm transition-all duration-200",
+                  "group relative flex cursor-pointer items-center gap-4 rounded-lg border-2 px-4 py-4 transition-all duration-150",
                   direction === "loss"
-                    ? "border-accent bg-accent-soft"
-                    : "border-border/80 hover:border-fg-muted"
+                    ? "border-danger bg-danger-softer/40 ring-2 ring-danger/20"
+                    : "border-border/70 hover:border-fg-muted"
                 )}
               >
                 <input
@@ -752,13 +762,20 @@ export default function WasteAdjustmentPage() {
                   }}
                   className="sr-only"
                 />
-                <span className="mt-0.5 text-danger-fg shrink-0">
+                <span
+                  className={cn(
+                    "flex h-12 w-12 shrink-0 items-center justify-center rounded-full transition-colors duration-150",
+                    direction === "loss"
+                      ? "bg-danger text-white"
+                      : "bg-bg-subtle text-danger-fg",
+                  )}
+                >
                   <IconArrowDown />
                 </span>
-                <span>
-                  <span className="block font-semibold">Loss / write-down</span>
-                  <span className="block text-xs text-fg-muted mt-0.5">
-                    breakage, spoilage, spillage
+                <span className="flex-1">
+                  <span className="block text-lg font-bold leading-tight">Loss</span>
+                  <span className="block text-sm text-fg-muted mt-0.5">
+                    Breakage, spoilage, spillage
                   </span>
                 </span>
               </label>
@@ -767,10 +784,10 @@ export default function WasteAdjustmentPage() {
               <label
                 data-testid="waste-direction-positive"
                 className={cn(
-                  "flex flex-1 cursor-pointer items-start gap-3 rounded-md border px-3 py-3 text-sm transition-all duration-200",
+                  "group relative flex cursor-pointer items-center gap-4 rounded-lg border-2 px-4 py-4 transition-all duration-150",
                   direction === "positive"
-                    ? "border-warning bg-warning-softer"
-                    : "border-border/80 hover:border-fg-muted"
+                    ? "border-warning bg-warning-softer/60 ring-2 ring-warning/20"
+                    : "border-border/70 hover:border-fg-muted"
                 )}
               >
                 <input
@@ -784,16 +801,20 @@ export default function WasteAdjustmentPage() {
                   }}
                   className="sr-only"
                 />
-                <span className="mt-0.5 text-warning-fg shrink-0">
+                <span
+                  className={cn(
+                    "flex h-12 w-12 shrink-0 items-center justify-center rounded-full transition-colors duration-150",
+                    direction === "positive"
+                      ? "bg-warning text-white"
+                      : "bg-bg-subtle text-warning-fg",
+                  )}
+                >
                   <IconArrowUp />
                 </span>
-                <span>
-                  <span className="block font-semibold">Positive correction</span>
-                  <span className="block text-xs text-fg-muted mt-0.5">
-                    found stock, correction
-                  </span>
-                  <span className="mt-1.5 inline-block rounded-sm border border-warning/40 bg-warning-soft px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-sops text-warning-fg">
-                    Approval required
+                <span className="flex-1">
+                  <span className="block text-lg font-bold leading-tight">Positive correction</span>
+                  <span className="block text-sm text-fg-muted mt-0.5">
+                    Found stock, correction
                   </span>
                 </span>
               </label>
@@ -821,7 +842,7 @@ export default function WasteAdjustmentPage() {
 
               {/* Event time */}
               <label className="block min-w-0">
-                <span className="mb-1 flex items-center gap-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                <span className="mb-2 flex items-center gap-2 text-sm font-semibold text-fg">
                   Event time *
                   {relativeTime && (
                     <span className="font-normal lowercase normal-case tracking-normal text-fg-muted">
@@ -840,7 +861,7 @@ export default function WasteAdjustmentPage() {
 
               {/* Item / component combobox */}
               <div className="block min-w-0">
-                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                <span className="mb-2 block text-sm font-semibold text-fg">
                   Item / component *
                 </span>
                 <ItemCombobox
@@ -861,15 +882,15 @@ export default function WasteAdjustmentPage() {
                 )}
               </div>
 
-              {/* Quantity */}
+              {/* Quantity — hero numeric input */}
               <div className="block min-w-0">
-                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                <span className="mb-2 block text-sm font-semibold text-fg">
                   Quantity *
                 </span>
                 <div className="flex items-center gap-2">
                   <button
                     type="button"
-                    className="btn btn-sm shrink-0 h-11 w-11 min-w-[2.75rem] flex items-center justify-center transition-colors duration-150"
+                    className="btn shrink-0 h-14 w-14 flex items-center justify-center text-2xl font-bold leading-none transition-colors duration-150"
                     aria-label="Decrease quantity by 1"
                     onClick={() =>
                       setQuantity((v) => {
@@ -886,7 +907,7 @@ export default function WasteAdjustmentPage() {
                     inputMode="decimal"
                     step="any"
                     min="0"
-                    className="input flex-1 transition-colors duration-150"
+                    className="input flex-1 h-14 text-center text-3xl font-mono font-bold tabular-nums transition-colors duration-150"
                     value={quantity}
                     onChange={(e) => setQuantity(e.target.value)}
                     required
@@ -894,7 +915,7 @@ export default function WasteAdjustmentPage() {
                   />
                   <button
                     type="button"
-                    className="btn btn-sm shrink-0 h-11 w-11 min-w-[2.75rem] flex items-center justify-center transition-colors duration-150"
+                    className="btn shrink-0 h-14 w-14 flex items-center justify-center text-2xl font-bold leading-none transition-colors duration-150"
                     aria-label="Increase quantity by 1"
                     onClick={() =>
                       setQuantity((v) => {
@@ -911,7 +932,7 @@ export default function WasteAdjustmentPage() {
                 {qtyValid && (
                   <div
                     className={cn(
-                      "mt-1.5 text-xs font-semibold",
+                      "mt-2 text-base font-bold tabular-nums",
                       direction === "loss" ? "text-danger-fg" : "text-success-fg"
                     )}
                   >
@@ -923,7 +944,7 @@ export default function WasteAdjustmentPage() {
 
               {/* Unit */}
               <label className="block min-w-0">
-                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                <span className="mb-2 block text-sm font-semibold text-fg">
                   Unit
                 </span>
                 <select
@@ -941,7 +962,7 @@ export default function WasteAdjustmentPage() {
 
               {/* Reason chips */}
               <div className="block min-w-0 sm:col-span-2">
-                <span className="mb-2 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                <span className="mb-2 block text-sm font-semibold text-fg">
                   Reason *
                 </span>
                 <div
@@ -955,10 +976,10 @@ export default function WasteAdjustmentPage() {
                       key={r}
                       type="button"
                       className={cn(
-                        "chip cursor-pointer px-3 py-1 text-xs font-medium rounded-full border transition-colors duration-150",
+                        "cursor-pointer rounded-full border-2 px-4 py-2 text-sm font-semibold transition-all duration-150",
                         reasonCode === r
-                          ? "bg-accent text-white border-accent"
-                          : "border-border/60 bg-bg-subtle text-fg hover:border-fg-muted"
+                          ? "border-accent bg-accent text-white shadow-sm"
+                          : "border-border bg-bg text-fg hover:border-fg-muted"
                       )}
                       onClick={() => setReasonCode(r)}
                       aria-pressed={reasonCode === r}
@@ -967,10 +988,9 @@ export default function WasteAdjustmentPage() {
                     </button>
                   ))}
                 </div>
-                {/* Notes-required hint */}
                 {reasonCode && REASON_CODES_REQUIRING_NOTES.includes(reasonCode) && (
-                  <div className="mt-1.5 flex items-center gap-1 text-xs text-info-fg">
-                    <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2"/><path d="M12 8h.01M11 12h1v5h1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                  <div className="mt-2 flex items-center gap-1.5 text-sm font-medium text-info-fg">
+                    <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2"/><path d="M12 8h.01M11 12h1v5h1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     Notes required for this reason
                   </div>
                 )}
@@ -978,7 +998,7 @@ export default function WasteAdjustmentPage() {
 
               {/* Notes */}
               <div className="block min-w-0 sm:col-span-2">
-                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                <span className="mb-2 block text-sm font-semibold text-fg">
                   Notes {notesRequired ? "*" : ""}
                 </span>
                 <div className="relative">
@@ -1095,15 +1115,13 @@ export default function WasteAdjustmentPage() {
             </div>
           ) : null}
 
-          {/* ---------------------------------------------------------------- */}
-          {/* Sticky submit bar                                                 */}
-          {/* ---------------------------------------------------------------- */}
+          {/* Sticky submit bar — prominent primary action. */}
           <div
-            className="sticky bottom-0 z-40 -mx-4 px-4 py-3 backdrop-blur-sm bg-bg-raised/90 border-t border-border/50 shadow-[0_-2px_8px_rgba(0,0,0,0.06)] flex items-center justify-end gap-2 sm:-mx-6 sm:px-6"
+            className="sticky bottom-0 z-40 -mx-4 px-4 py-4 backdrop-blur-md bg-bg-raised/95 border-t border-border/60 shadow-[0_-4px_12px_rgba(0,0,0,0.08)] flex items-center justify-end gap-3 sm:-mx-6 sm:px-6"
           >
             <button
               type="button"
-              className="btn btn-ghost transition-colors duration-150"
+              className="btn btn-ghost text-sm transition-colors duration-150"
               onClick={handleReset}
             >
               Reset
@@ -1111,7 +1129,7 @@ export default function WasteAdjustmentPage() {
             <button
               type="submit"
               className={cn(
-                "btn btn-primary transition-colors duration-150",
+                "btn btn-lg btn-primary transition-colors duration-150",
                 phase === "submitting" && "cursor-wait"
               )}
               disabled={phase === "submitting" || confirmPending}

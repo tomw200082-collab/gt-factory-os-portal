@@ -69,11 +69,11 @@ function FactRow({
   children: ReactNode;
 }) {
   return (
-    <div className="flex flex-col gap-0.5">
-      <div className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+    <div className="flex flex-col gap-1">
+      <div className="text-xs font-semibold text-fg-muted">
         {label}
       </div>
-      <div className="text-sm leading-snug text-fg">{children}</div>
+      <div className="text-base leading-snug text-fg">{children}</div>
     </div>
   );
 }
@@ -528,10 +528,10 @@ export function ApprovalInlineCard({
           load error the user is routed to the full detail page via the link
           above. */}
       {!showReject && !loadError ? (
-        <div className="flex flex-wrap items-center gap-2">
+        <div className="flex flex-wrap items-center gap-2 pt-1">
           <button
             type="button"
-            className="btn btn-sm btn-primary gap-1.5"
+            className="btn btn-lg btn-primary gap-2"
             data-testid="approval-inline-approve"
             disabled={busy || detail == null}
             onClick={async () => {
@@ -541,12 +541,12 @@ export function ApprovalInlineCard({
               setBusy(false);
             }}
           >
-            <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2.25} />
+            <CheckCircle2 className="h-4 w-4" strokeWidth={2.25} />
             {busy ? "שולח…" : "אשר"}
           </button>
           <button
             type="button"
-            className="btn btn-sm border-danger/40 text-danger hover:bg-danger-softer"
+            className="btn btn-lg border-2 border-danger/50 text-danger hover:bg-danger-softer"
             data-testid="approval-inline-reject-open"
             disabled={busy || detail == null}
             onClick={() => setShowReject(true)}

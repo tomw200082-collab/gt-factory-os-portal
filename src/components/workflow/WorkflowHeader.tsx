@@ -54,11 +54,11 @@ export function WorkflowHeader({
               </div>
             </div>
           ) : null}
-          <h1 className="text-2xl font-semibold tracking-tighter text-fg-strong sm:text-3xl">
+          <h1 className="text-3xl font-bold tracking-tight text-fg-strong sm:text-4xl">
             {title}
           </h1>
           {description ? (
-            <p className="mt-2 max-w-2xl text-sm leading-relaxed text-fg-muted">
+            <p className="mt-3 max-w-2xl text-base leading-relaxed text-fg-muted">
               {description}
             </p>
           ) : null}
