@@ -284,7 +284,32 @@ function toNum(v: number | string | null | undefined): number {
 
 function fmtILS(n: number | null | undefined): string {
   if (n == null) return "—";
-  return "₪ " + n.toLocaleString("he-IL", { maximumFractionDigits: 0 });
+  // NBSP between currency symbol and number so they never wrap apart at
+  // large font sizes inside narrow KPI tiles.
+  return "₪ " + n.toLocaleString("he-IL", { maximumFractionDigits: 0 });
+}
+
+// Compact ILS formatter — used inside the KPI tile primary value, where
+// the card is narrow at lg+ (4-col layout collapses each tile to ~160px
+// wide). Truthful: shows the same number in a more compact form (M / K
+// suffix). The full value is still surfaced via the `title` tooltip on
+// the KPI tile so nothing is hidden from the operator.
+function fmtILSCompact(n: number | null | undefined): string {
+  if (n == null) return "—";
+  const abs = Math.abs(n);
+  if (abs >= 1_000_000) {
+    // 107,885,432 → "₪ 107.9M" — drop trailing ".0" so round millions
+    // read as "₪ 5M" not "₪ 5.0M".
+    const millions = n / 1_000_000;
+    const formatted = millions.toFixed(1).replace(/\.0$/, "");
+    return "₪ " + formatted + "M";
+  }
+  if (abs >= 10_000) {
+    // 12,345 → "₪ 12K" — only K for amounts >= 10K so smaller numbers
+    // keep full precision.
+    return "₪ " + Math.round(n / 1000) + "K";
+  }
+  return "₪ " + n.toLocaleString("he-IL", { maximumFractionDigits: 0 });
 }
 
 function fmtRelative(iso: string | null | undefined, now: Date): string {
@@ -1854,7 +1879,8 @@ export default function DashboardPage() {
       <div className="reveal reveal-delay-2 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
         <KpiTile
           label="RM Inventory Value"
-          value={rmValue != null ? fmtILS(rmValue) : null}
+          value={rmValue != null ? fmtILSCompact(rmValue) : null}
+          valueFull={rmValue != null ? fmtILS(rmValue) : null}
           sub={
             <span>
               {rmSkus} raw material &amp; packaging SKUs
@@ -1871,7 +1897,8 @@ export default function DashboardPage() {
         />
         <KpiTile
           label="FG Inventory Value"
-          value={fgValue != null ? fmtILS(fgValue) : null}
+          value={fgValue != null ? fmtILSCompact(fgValue) : null}
+          valueFull={fgValue != null ? fmtILS(fgValue) : null}
           sub={
             <span>
               {fgSkus} finished good SKUs
@@ -1891,7 +1918,7 @@ export default function DashboardPage() {
           value={String(poStats.openCount)}
           sub={
             <span>
-              {fmtILS(poStats.openValue)} open value
+              {fmtILSCompact(poStats.openValue)} open value
               {poStats.lateCount > 0 ? (
                 <>
                   {" · "}
