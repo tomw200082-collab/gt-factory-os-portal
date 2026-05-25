@@ -15,6 +15,7 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { CountUp } from "./CountUp";
 
 export type KpiTone = "accent" | "success" | "info" | "warning" | "danger";
 
@@ -80,7 +81,9 @@ export function KpiTile({
           </div>
         )
       ) : (
-        <div className="kpi-tile-value">{value ?? "—"}</div>
+        <div className="kpi-tile-value">
+          <CountUp value={value} />
+        </div>
       )}
       <div className="kpi-tile-sub">{sub}</div>
       {href ? (
@@ -164,7 +167,7 @@ export function KpiTileBreakdown({
         </div>
       ) : (
         <div className={cn("kpi-tile-value", tone === "danger" ? "text-danger" : "")}>
-          {value ?? "—"}
+          <CountUp value={value} />
         </div>
       )}
       {!loading && <div className="flex flex-col gap-1.5">{legend}</div>}

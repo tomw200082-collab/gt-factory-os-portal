@@ -608,6 +608,7 @@ function QuickActionsLauncher() {
 
   return (
     <SectionCard
+      className="dash-panel"
       eyebrow="Quick actions"
       title="Jump to a workflow"
       description="Most-used workflows for your role."
@@ -728,6 +729,7 @@ function ShortageRisk({ items, loading }: { items: FlowItem[]; loading?: boolean
 
   return (
     <SectionCard
+      className="dash-panel"
       eyebrow="Shortage risk"
       title={
         <span>
@@ -809,6 +811,7 @@ function PlanningCard({ run, loading }: { run: PlanningRunRow | null; loading?: 
 
   return (
     <SectionCard
+      className="dash-panel"
       eyebrow="Planning run"
       title="Latest completed run"
       description="Recommendations, exceptions, and timing of the last run."
@@ -887,6 +890,7 @@ const TONE_BG_CYCLE = ["bg-accent", "bg-success", "bg-info", "bg-warning", "bg-d
 function ProductionWeek({ rows, loading }: { rows: ProdWeekItem[]; loading?: boolean }) {
   return (
     <SectionCard
+      className="dash-panel"
       eyebrow="Production this week"
       title={
         <span>
@@ -965,6 +969,7 @@ function RecentProduction({
 }) {
   return (
     <SectionCard
+      className="dash-panel"
       eyebrow="Recent production"
       title={
         <span>
@@ -1067,6 +1072,7 @@ function RecentMovements({
 
   return (
     <SectionCard
+      className="dash-panel"
       eyebrow="Stock ledger"
       title={
         <span className="inline-flex items-center gap-2">
@@ -1176,7 +1182,7 @@ function CriticalTodayBlock({ now }: { now: Date }) {
   return (
     <SectionCard
       tone={hot ? "danger" : "default"}
-      className={cn("dash-live-block", hot && "is-hot shadow-pop")}
+      className={cn("dash-panel dash-live-block", hot && "is-hot shadow-pop")}
       eyebrow="Live"
       title={
         <span className="inline-flex items-center gap-2">
@@ -1277,7 +1283,7 @@ function SlippedPlansBlock({ now }: { now: Date }) {
   return (
     <SectionCard
       tone={hasRows ? "warning" : "default"}
-      className={cn("dash-live-block", hasRows && "is-warm")}
+      className={cn("dash-panel dash-live-block", hasRows && "is-warm")}
       eyebrow="Live"
       title={
         <span className="inline-flex items-center gap-2">
@@ -1440,7 +1446,7 @@ function UrgentProcurementBlock({ now }: { now: Date }) {
     <SectionCard
       tone={tone}
       className={cn(
-        "dash-live-block",
+        "dash-panel dash-live-block",
         hot && "is-hot shadow-pop",
         hasWarm && "is-warm",
       )}

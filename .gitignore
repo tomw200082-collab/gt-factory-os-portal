@@ -19,3 +19,9 @@ coverage/
 playwright-report/
 
 .vercel
+
+# Local design-intelligence tooling (ui-ux-pro-max skill installed via
+# `uipro init --ai claude` for design system queries). Skill artefacts
+# are local tooling, not portal source — don't ship them.
+.claude/skills/
+design-system/

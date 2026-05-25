@@ -3340,31 +3340,44 @@
 
   /* ── Premium Hero: command-bridge feel. The hero gets its own card-like
      surface that contrasts with the canvas — gives the page a real
-     "you have arrived at the command center" moment. */
+     "you have arrived at the command center" moment.
+     v3 (ui-ux-pro-max skill pass): bumped to rounded-2xl per the Bento
+     Box Grid recommendation, deeper backdrop-blur with saturate filter
+     per the Liquid Glass recommendation. */
   .dash-hero {
-    @apply relative overflow-hidden rounded-xl border border-border/70
-           bg-bg-raised/80 px-6 py-7 sm:px-8 sm:py-8;
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
+    @apply relative overflow-hidden rounded-2xl border border-border/70
+           bg-bg-raised/75 px-6 py-7 sm:px-8 sm:py-9;
+    backdrop-filter: blur(16px) saturate(1.4);
+    -webkit-backdrop-filter: blur(16px) saturate(1.4);
     box-shadow:
-      0 1px 0 0 hsl(0 0% 100% / 0.04) inset,
-      0 1px 2px 0 hsl(var(--shadow-color) / 0.3),
-      0 16px 40px -16px hsl(var(--shadow-color-deep) / 0.10);
+      0 1px 0 0 hsl(0 0% 100% / 0.05) inset,
+      0 1px 2px 0 hsl(var(--shadow-color) / 0.30),
+      0 24px 56px -20px hsl(var(--shadow-color-deep) / 0.14);
   }
   :root.dark .dash-hero {
-    background-color: hsl(var(--bg-raised) / 0.7);
+    background-color: hsl(var(--bg-raised) / 0.65);
   }
   .dash-hero::before {
-    /* Inner top glow — accent halo */
+    /* Inner top glow — accent halo with a slow breathing motion that
+       reads as "factory pulse". Subtle: a 6-second cycle, not a
+       distracting strobe. */
     content: "";
     position: absolute;
     inset: -1px -1px auto -1px;
-    height: 160px;
+    height: 200px;
     pointer-events: none;
     z-index: 0;
     background:
-      radial-gradient(60% 100% at 20% 0%, hsl(var(--accent) / 0.18) 0%, transparent 65%),
-      radial-gradient(40% 100% at 90% 0%, hsl(var(--info) / 0.12) 0%, transparent 70%);
+      radial-gradient(65% 100% at 18% 0%, hsl(var(--accent) / 0.22) 0%, transparent 65%),
+      radial-gradient(45% 100% at 88% 0%, hsl(var(--info) / 0.14) 0%, transparent 70%);
+    animation: dash-hero-breathe 6s ease-in-out infinite;
+  }
+  @keyframes dash-hero-breathe {
+    0%, 100% { opacity: 0.85; }
+    50%      { opacity: 1.00; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dash-hero::before { animation: none; opacity: 0.9; }
   }
   .dash-hero::after {
     /* Hairline accent at the very top edge */
@@ -3434,18 +3447,24 @@
   .kpi-tile[data-tone="danger"]  { --kpi-tone: var(--danger); }
 
   /* ── KPI tile — dramatic upgrade. Tone-driven gradient background,
-     glowing icon halo, much larger number, refined hover. */
+     glowing icon halo, much larger number, refined hover.
+     v3 (ui-ux-pro-max skill): rounded-xl per Bento Box recommendation,
+     smoother 300ms transition per Liquid Glass anti-pattern "Cheap
+     visuals + Fast animations" guidance. */
   .kpi-tile {
-    @apply card relative flex flex-col gap-4 overflow-hidden p-5 sm:p-6
-           transition-all duration-200 ease-out-quart;
+    @apply relative flex flex-col gap-4 overflow-hidden rounded-xl border
+           border-border/70 bg-bg-raised p-5 shadow-raised
+           transition-all duration-300 ease-out-quart sm:p-6;
     background:
       linear-gradient(
         160deg,
         hsl(var(--bg-raised)) 0%,
-        hsl(var(--bg-raised) / 0.96) 60%,
+        hsl(var(--bg-raised) / 0.96) 55%,
         var(--kpi-bg) 100%
       );
+    cursor: default;
   }
+  .kpi-tile.is-link { cursor: pointer; }
   .kpi-tile::before {
     /* Thicker top accent rail — fades along its length */
     content: "";
@@ -3501,10 +3520,18 @@
       0 0 0 6px hsl(var(--kpi-tone, var(--accent)) / 0.08);
   }
 
-  /* The big number on a KPI tile — dramatic, magazine-cover scale. */
+  /* The big number on a KPI tile — dramatic, magazine-cover scale.
+     v3: subtle gradient-ink for richness without losing legibility. */
   .kpi-tile-value {
     @apply text-[2.5rem] font-semibold leading-[1] tabular-nums tracking-tighter
            text-fg-strong sm:text-[2.75rem] lg:text-[3rem];
+    background-image: linear-gradient(
+      180deg,
+      hsl(var(--fg-strong)) 0%,
+      hsl(var(--fg) / 0.92) 100%
+    );
+    -webkit-background-clip: text;
+            background-clip: text;
   }
   .kpi-tile-label {
     @apply text-3xs font-semibold uppercase tracking-sops;
@@ -3516,12 +3543,14 @@
 
   .kpi-tile.is-link:hover,
   .kpi-tile.is-link:focus-visible {
-    transform: translateY(-3px);
+    /* Bento Box recommendation: subtle scale + lift. The scale is gentle
+       (1.015) so cards don't visually jump or clip neighbours. */
+    transform: translateY(-3px) scale(1.015);
     box-shadow:
       0 2px 6px -1px hsl(var(--shadow-color-deep) / 0.10),
-      0 16px 36px -8px hsl(var(--shadow-color-deep) / 0.14),
-      0 0 0 1px hsl(var(--kpi-tone, var(--accent)) / 0.40);
-    border-color: hsl(var(--kpi-tone, var(--accent)) / 0.55);
+      0 20px 44px -10px hsl(var(--shadow-color-deep) / 0.18),
+      0 0 0 1px hsl(var(--kpi-tone, var(--accent)) / 0.42);
+    border-color: hsl(var(--kpi-tone, var(--accent)) / 0.60);
   }
   .kpi-tile.is-link:hover::before,
   .kpi-tile.is-link:focus-visible::before {
@@ -3554,6 +3583,38 @@
   @media (prefers-reduced-motion: reduce) {
     .kpi-tile-cta-arrow,
     .kpi-tile:hover .kpi-tile-cta-arrow { transition: none; transform: none; }
+  }
+
+  /* ── Dashboard section panel — bigger Bento-style radius + softer
+     elevation. Composes on top of the shared .card surface from
+     SectionCard; applied via className prop. */
+  .dash-panel {
+    border-radius: 12px;
+    box-shadow:
+      0 1px 0 0 hsl(var(--shadow-color) / 0.40),
+      0 2px 8px -2px hsl(var(--shadow-color-deep) / 0.04),
+      0 12px 32px -16px hsl(var(--shadow-color-deep) / 0.06);
+    transition: box-shadow 200ms ease-out, border-color 200ms ease-out;
+  }
+  .dash-panel:hover {
+    border-color: hsl(var(--border-strong) / 1);
+    box-shadow:
+      0 1px 0 0 hsl(var(--shadow-color) / 0.40),
+      0 4px 12px -2px hsl(var(--shadow-color-deep) / 0.05),
+      0 16px 40px -12px hsl(var(--shadow-color-deep) / 0.10);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dash-panel { transition: none; }
+    .dash-panel:hover { box-shadow: inherit; }
+  }
+  /* Match the inner header rounded corner to the outer panel radius. */
+  .dash-panel > div:first-child {
+    border-top-left-radius: 12px;
+    border-top-right-radius: 12px;
+  }
+  .dash-panel > div:last-child {
+    border-bottom-left-radius: 12px;
+    border-bottom-right-radius: 12px;
   }
 
   /* ── Section card chrome — premium leading-icon header treatment.
