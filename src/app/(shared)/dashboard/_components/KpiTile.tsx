@@ -21,7 +21,13 @@ export type KpiTone = "accent" | "success" | "info" | "warning" | "danger";
 
 export interface KpiTileProps {
   label: string;
+  /** Compact value shown in the big number slot (e.g. "₪ 107.9M").
+   *  Must be narrow enough to fit a ~160px-wide card at lg+. */
   value: string | null;
+  /** Full, uncompacted value shown as a `title` tooltip so the operator
+   *  can always see the exact number on hover. Optional — when omitted
+   *  the compact value is its own tooltip. */
+  valueFull?: string | null;
   sub: ReactNode;
   tone: KpiTone;
   icon?: ReactNode;
@@ -41,6 +47,7 @@ export interface KpiTileProps {
 export function KpiTile({
   label,
   value,
+  valueFull,
   sub,
   tone,
   icon,
@@ -50,6 +57,10 @@ export function KpiTile({
   loading,
   skeleton,
 }: KpiTileProps) {
+  // Tooltip on the primary value: when a compact form is shown, surface
+  // the full number on hover so the operator can read the exact value
+  // without leaving the dashboard.
+  const valueTitle = valueFull && valueFull !== value ? valueFull : undefined;
   const body = (
     <>
       <div className="flex items-start justify-between gap-3">
@@ -81,7 +92,7 @@ export function KpiTile({
           </div>
         )
       ) : (
-        <div className="kpi-tile-value">
+        <div className="kpi-tile-value" title={valueTitle}>
           <CountUp value={value} />
         </div>
       )}

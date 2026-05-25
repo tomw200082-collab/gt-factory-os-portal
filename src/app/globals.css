@@ -3450,11 +3450,14 @@
      glowing icon halo, much larger number, refined hover.
      v3 (ui-ux-pro-max skill): rounded-xl per Bento Box recommendation,
      smoother 300ms transition per Liquid Glass anti-pattern "Cheap
-     visuals + Fast animations" guidance. */
+     visuals + Fast animations" guidance.
+     v4: tighter padding at lg (4-col) so the value has more room
+     before the inner edge. */
   .kpi-tile {
-    @apply relative flex flex-col gap-4 overflow-hidden rounded-xl border
+    @apply relative flex flex-col gap-3 overflow-hidden rounded-xl border
            border-border/70 bg-bg-raised p-5 shadow-raised
-           transition-all duration-300 ease-out-quart sm:p-6;
+           transition-all duration-300 ease-out-quart sm:gap-4 sm:p-6
+           lg:p-4 xl:p-5 2xl:p-6;
     background:
       linear-gradient(
         160deg,
@@ -3500,10 +3503,11 @@
   }
   .kpi-tile > * { position: relative; z-index: 2; }
 
-  /* Glowing icon halo for KPI tiles */
+  /* Glowing icon halo for KPI tiles. Slightly smaller at lg so it
+     doesn't dominate the narrow 4-col tile. */
   .kpi-tile-icon {
-    @apply relative flex h-11 w-11 shrink-0 items-center justify-center rounded-lg
-           border;
+    @apply relative flex h-9 w-9 shrink-0 items-center justify-center rounded-lg
+           border sm:h-11 sm:w-11 lg:h-9 lg:w-9 xl:h-10 xl:w-10 2xl:h-11 2xl:w-11;
     color: hsl(var(--kpi-tone, var(--accent)));
     background-color: hsl(var(--kpi-tone, var(--accent)) / 0.08);
     border-color: hsl(var(--kpi-tone, var(--accent)) / 0.25);
@@ -3520,11 +3524,19 @@
       0 0 0 6px hsl(var(--kpi-tone, var(--accent)) / 0.08);
   }
 
-  /* The big number on a KPI tile — dramatic, magazine-cover scale.
-     v3: subtle gradient-ink for richness without losing legibility. */
+  /* The big number on a KPI tile — dramatic but width-safe. The 4-col
+     layout at lg makes each tile ~160px wide (inner ~112px) — too narrow
+     for 48px tabular numerics with multi-digit ILS values. Sizes per
+     column-count below are tuned so the worst-case 9-char compact value
+     ("₪ 999.9M") fits without truncation at every breakpoint.
+
+     v4: prevent currency-symbol breaking with overflow-wrap-anywhere as
+     a last-resort safety. min-w-0 on the parent allows flex shrink. */
   .kpi-tile-value {
-    @apply text-[2.5rem] font-semibold leading-[1] tabular-nums tracking-tighter
-           text-fg-strong sm:text-[2.75rem] lg:text-[3rem];
+    @apply font-semibold leading-[1.05] tabular-nums tracking-tight text-fg-strong;
+    font-size: 2rem; /* 32px — mobile 1-col, lots of room */
+    overflow-wrap: anywhere;
+    min-width: 0;
     background-image: linear-gradient(
       180deg,
       hsl(var(--fg-strong)) 0%,
@@ -3532,6 +3544,22 @@
     );
     -webkit-background-clip: text;
             background-clip: text;
+  }
+  @media (min-width: 640px) and (max-width: 1023px) {
+    /* 2-col tablet — each tile is ~340px wide, plenty of room. */
+    .kpi-tile-value { font-size: 2.25rem; }
+  }
+  @media (min-width: 1024px) and (max-width: 1279px) {
+    /* 4-col lg — tightest column-count; shrink hard. */
+    .kpi-tile-value { font-size: 1.5rem; }
+  }
+  @media (min-width: 1280px) and (max-width: 1535px) {
+    /* 4-col xl — a bit more room. */
+    .kpi-tile-value { font-size: 1.875rem; }
+  }
+  @media (min-width: 1536px) {
+    /* 4-col 2xl — most generous 4-col width. */
+    .kpi-tile-value { font-size: 2.125rem; }
   }
   .kpi-tile-label {
     @apply text-3xs font-semibold uppercase tracking-sops;
