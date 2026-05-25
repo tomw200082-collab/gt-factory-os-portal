@@ -135,12 +135,21 @@ interface StockValueTypeBucket {
   unpriced_sku_count: number;
   total_sku_count: number;
 }
+interface StockValueUtilityRow {
+  component_id: string;
+  component_name: string | null;
+  uom: string | null;
+  unit_cost_ils: string | null;
+}
 interface StockValueResponse {
   as_of?: string | null;
   total_value_ils?: string | null;
   items_with_cost?: number | null;
   items_without_cost?: number | null;
   by_type?: StockValueTypeBucket[] | null;
+  // Utility components (water etc.) — excluded from total_value_ils /
+  // by_type, surfaced separately. See ADR-2026-05-25.
+  utilities?: StockValueUtilityRow[] | null;
 }
 
 interface ExceptionRow {
@@ -1743,6 +1752,12 @@ export default function DashboardPage() {
   const rmSkus = stockValue.rmSkus;
   const fgSkus = stockValue.fgSkus;
   const valueAsOf = valueQ.data?.as_of ?? null;
+  // Utility components (water etc.) are excluded from rmValue by the
+  // backend — surfaced here so the tile can say so. See ADR-2026-05-25.
+  const utilityNames = useMemo(() => {
+    const utils = valueQ.data?.utilities ?? [];
+    return utils.map((u) => u.component_name ?? u.component_id);
+  }, [valueQ.data]);
 
   // Derived: exceptions.
   const excRows = exceptionsQ.data?.rows ?? exceptionsQ.data?.data ?? [];
@@ -1891,6 +1906,9 @@ export default function DashboardPage() {
               {rmSkus} raw material &amp; packaging SKUs
               {stockValue.rmUnpriced > 0 ? (
                 <span className="text-fg-faint"> · {stockValue.rmUnpriced} unpriced</span>
+              ) : null}
+              {utilityNames.length > 0 ? (
+                <span className="text-fg-faint"> · excludes {utilityNames.join(", ")}</span>
               ) : null}
             </span>
           }

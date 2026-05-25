@@ -130,6 +130,20 @@ interface StockValueRow {
   unit_cost_ils: string | null;
   total_value_ils: string | null;
   supply_method: string | null;
+  // Always false in `rows` — utilities are surfaced separately. Mirrors the
+  // backend schema (gt-factory-os/api/src/stock/schemas.ts).
+  is_utility_expense_on_consumption?: boolean;
+}
+
+// Utility components (e.g. RAW-WATER) are surfaced separately by the
+// /api/stock/value endpoint: they have a unit cost (used for FG COGS via
+// BOM explosion) but no tracked quantity. They are excluded from
+// total_value_ils and from every `by_type` bucket. See ADR-2026-05-25.
+interface StockValueUtilityRow {
+  component_id: string;
+  component_name: string | null;
+  uom: string | null;
+  unit_cost_ils: string | null;
 }
 
 interface StockValueResponse {
@@ -139,6 +153,7 @@ interface StockValueResponse {
   items_with_cost: number;
   items_without_cost: number;
   row_count: number;
+  utilities?: StockValueUtilityRow[];
 }
 
 type TabType = "FG" | "RM_PKG";
@@ -1055,6 +1070,10 @@ export default function InventoryPage() {
   const totalValue = valueData?.total_value_ils ?? "0";
   const itemsWithCost = valueData?.items_with_cost ?? 0;
   const itemsMissing = valueData?.items_without_cost ?? 0;
+  // Utility components (water etc.) — expensed on consumption, excluded
+  // from totals above, surfaced in a small section below. See
+  // ADR-2026-05-25 / gt-factory-os migration 0210.
+  const utilities = valueData?.utilities ?? [];
   // Use the live list count (includes never-counted items) over value-handler's
   // row_count (which currently mirrors current_balances and excludes uncounted).
   const totalItems = fgCount + rmCount;
@@ -1180,7 +1199,13 @@ export default function InventoryPage() {
         <KpiCard
           label="Total inventory value"
           primary={fmtIls(totalValue)}
-          secondary="Sums every item with a configured cost. Items without a cost are excluded."
+          secondary={
+            utilities.length > 0
+              ? `Sums every stocked item with a configured cost. Utilities (${utilities
+                  .map((u) => u.component_name ?? u.component_id)
+                  .join(", ")}) are expensed on consumption and excluded.`
+              : "Sums every item with a configured cost. Items without a cost are excluded."
+          }
           loading={!valueData}
         />
         <KpiCard
@@ -1249,6 +1274,45 @@ export default function InventoryPage() {
             ×
           </button>
         </div>
+      ) : null}
+
+      {/* Utilities (expense on consumption) — water and any future generic
+          utility component. They contribute cost via BOM explosion → FG
+          COGS, but carry no tracked quantity and are excluded from the
+          inventory-value totals above. See ADR-2026-05-25. */}
+      {utilities.length > 0 ? (
+        <SectionCard
+          eyebrow="Utilities"
+          title="Expense on consumption"
+          description="These materials behave like utilities: cost is recognised when consumed (it flows into FOODCOST / COGS through the BOM), but quantity is not tracked and they do not contribute to inventory value above."
+          density="compact"
+        >
+          <ul className="divide-y divide-border/40">
+            {utilities.map((u) => (
+              <li
+                key={u.component_id}
+                className="flex items-center justify-between gap-3 py-2.5 text-sm"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="font-medium text-fg-strong">
+                    {u.component_name ?? u.component_id}
+                  </div>
+                  <div className="text-xs text-fg-muted">
+                    {u.component_id}
+                  </div>
+                </div>
+                <div className="shrink-0 text-right">
+                  <div className="font-medium text-fg-strong tabular-nums">
+                    {u.unit_cost_ils !== null
+                      ? `${fmtIls(u.unit_cost_ils)} / ${u.uom ?? "unit"}`
+                      : "— / unit"}
+                  </div>
+                  <div className="text-xs text-fg-muted">unit cost</div>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </SectionCard>
       ) : null}
 
       <SectionCard
