@@ -321,9 +321,27 @@ function AttachedGrCard({
                 : line.po_line_id
                   ? "Line item"
                   : "—";
+              // Prefer the human-readable name resolved from the matched PO
+              // line; fall back to the raw item_id (short hash + secondary
+              // class) only when the GR line is not PO-linked or the lookup
+              // missed (matches the same name-first pattern used elsewhere
+              // on this page, e.g. lines 770 / 824).
+              const itemName =
+                poLine?.component_name ?? poLine?.item_name ?? null;
               return (
                 <tr key={line.line_id} className="border-b border-border/20 last:border-b-0 hover:bg-bg-subtle/30">
-                  <td className="px-4 py-2 font-mono text-xs text-fg">{line.item_id}</td>
+                  <td className="px-4 py-2 text-xs text-fg">
+                    {itemName ? (
+                      <span className="flex flex-col">
+                        <span className="font-medium">{itemName}</span>
+                        <span className="font-mono text-3xs text-fg-muted">
+                          {line.item_id.slice(0, 8)}…
+                        </span>
+                      </span>
+                    ) : (
+                      <span className="font-mono text-xs">{line.item_id}</span>
+                    )}
+                  </td>
                   <td className="px-4 py-2 text-right font-mono text-xs tabular-nums text-fg">{fmtQty(line.quantity)}</td>
                   <td className="px-4 py-2 text-xs text-fg-muted">{line.unit}</td>
                   <td className="px-4 py-2 text-xs text-fg-muted">{line.item_type}</td>
@@ -889,7 +907,8 @@ export default function PurchaseOrderDetailPage({
                             className="inline-flex items-center gap-1 text-3xs text-warning-fg hover:underline"
                             title="Over-receipt exception open — check exceptions inbox"
                           >
-                            ⚠ Over-received
+                            <svg className="h-3 w-3" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                            Over-received
                           </Link>
                         )}
                       </div>

@@ -35,6 +35,7 @@ interface WasteAdjustmentDetail {
   unit: string;
   reason_code: string;
   notes: string | null;
+  submitted_by_user_id: string | null;
   submitted_by_display_name: string | null;
   event_at: string;
   submitted_at: string;
@@ -104,6 +105,25 @@ async function callReject(
   }
 }
 
+function friendlyWasteConflict(reasonCode: string, fallbackDetail: string): string {
+  switch (reasonCode) {
+    case "SELF_APPROVAL_FORBIDDEN":
+      return "You cannot approve your own submission. Ask another planner or admin to review it.";
+    case "NOT_PENDING":
+      return "This submission is no longer pending — another reviewer may have already actioned it. Refresh the inbox.";
+    case "IDEMPOTENCY_KEY_REUSED":
+      return "This action was already submitted. Refresh the inbox to see the result.";
+    case "SUBMISSION_NOT_FOUND":
+      return "Submission not found. It may have been removed.";
+    case "COUNT_FREEZE_ACTIVE":
+      return "A physical count is in progress for this item. Wait for the count to be approved or rejected before posting this adjustment.";
+    case "THRESHOLD_NOT_CONFIGURED":
+      return "Auto-post threshold is not configured for this item type. Ask an admin to set the policy.";
+    default:
+      return fallbackDetail || "This submission cannot be actioned in its current state. Refresh the page and try again.";
+  }
+}
+
 function DetailRow({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="flex gap-2 text-xs">
@@ -152,10 +172,14 @@ export default function WasteReviewPage() {
   };
 
   if (outcome?.kind === "approved") {
+    const itemLabel = d?.item_display_name ?? d?.item_id ?? "item";
+    const directionVerb = d?.direction === "loss" ? "decreased by" : "increased by";
+    const amount = d ? `${d.quantity} ${d.unit}` : "the submitted amount";
+    const shortLedger = outcome.body.stock_ledger_movement_id.slice(0, 8);
     return (
       <SuccessState
-        title="Approved"
-        description={`Submission ${outcome.body.submission_id} posted. Ledger ${outcome.body.stock_ledger_movement_id}. Exception ${outcome.body.exception_id} resolved.`}
+        title="Approved — stock updated"
+        description={`${itemLabel} ${directionVerb} ${amount}. Ledger ref ${shortLedger}…`}
         action={
           <Link href="/inbox" className="btn btn-sm btn-primary">
             Back to inbox
@@ -165,10 +189,11 @@ export default function WasteReviewPage() {
     );
   }
   if (outcome?.kind === "rejected") {
+    const itemLabel = d?.item_display_name ?? d?.item_id ?? "submission";
     return (
       <SuccessState
-        title="Rejected"
-        description={`Submission ${outcome.body.submission_id} rejected. Reason: ${outcome.body.rejection_reason}. Exception ${outcome.body.exception_id} resolved. No ledger row created.`}
+        title="Rejected — stock unchanged"
+        description={`${itemLabel}: no ledger row created. Reason: ${outcome.body.rejection_reason}`}
         tone="warning"
         action={
           <Link href="/inbox" className="btn btn-sm btn-primary">
@@ -179,10 +204,13 @@ export default function WasteReviewPage() {
     );
   }
   if (outcome?.kind === "conflict") {
+    // The 409 conflict response carries a typed `reason_code` per
+    // src/lib/contracts/waste-adjustments.ts WasteConflictReason.
+    const friendly = friendlyWasteConflict(outcome.body.reason_code, outcome.body.detail);
     return (
       <SuccessState
         title="Action refused"
-        description={outcome.body.detail || "This submission cannot be actioned in its current state. Refresh the page and try again."}
+        description={friendly}
         tone="warning"
         action={
           <>
@@ -302,6 +330,23 @@ export default function WasteReviewPage() {
         </div>
       ) : null}
 
+      {/* Preemptive self-approval guard. Waste forbids self-approval for
+          every role (handler enforces 409 SELF_APPROVAL_FORBIDDEN). Disable
+          the action sections in the UI when the reviewer is the submitter
+          so they don't have to learn the rule by hitting a 409. */}
+      {d?.submitted_by_user_id && d.submitted_by_user_id === session.user_id ? (
+        <div
+          className="mb-5 rounded-md border border-warning/40 bg-warning-softer/60 p-4 text-sm text-warning-fg"
+          data-testid="waste-review-self-approval-block"
+        >
+          <div className="font-semibold">You cannot approve your own submission</div>
+          <div className="mt-1 text-xs">
+            Waste adjustments must be reviewed by a different planner or admin.
+            Ask another reviewer to open this submission from the inbox.
+          </div>
+        </div>
+      ) : null}
+
       <SectionCard
         eyebrow="Approve"
         title="Accept this adjustment"
@@ -320,7 +365,7 @@ export default function WasteReviewPage() {
             type="button"
             data-testid="waste-review-approve"
             className="btn btn-primary"
-            disabled={busy}
+            disabled={busy || (d?.submitted_by_user_id != null && d.submitted_by_user_id === session.user_id)}
             onClick={handleApprove}
           >
             {busy ? "Submitting…" : "Approve"}
@@ -346,7 +391,7 @@ export default function WasteReviewPage() {
             type="button"
             data-testid="waste-review-reject"
             className="btn btn-sm btn-danger"
-            disabled={busy || !rejectionReason.trim()}
+            disabled={busy || !rejectionReason.trim() || (d?.submitted_by_user_id != null && d.submitted_by_user_id === session.user_id)}
             onClick={handleReject}
           >
             {busy ? "Submitting…" : "Reject"}

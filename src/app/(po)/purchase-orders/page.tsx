@@ -933,8 +933,14 @@ export default function PurchaseOrdersListPage() {
                       </td>
                       <td className="px-3 py-2.5 text-xs text-fg">
                         {r.supplier_name ?? (
-                          <span className="font-mono text-fg-muted">
-                            {r.supplier_id}
+                          <span
+                            className="text-fg-muted italic"
+                            title={`supplier_id ${r.supplier_id}`}
+                          >
+                            Unknown supplier
+                            <span className="ml-1 font-mono text-3xs opacity-70">
+                              ({r.supplier_id.slice(0, 8)}…)
+                            </span>
                           </span>
                         )}
                       </td>

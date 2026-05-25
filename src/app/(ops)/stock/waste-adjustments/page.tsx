@@ -496,9 +496,9 @@ export default function WasteAdjustmentPage() {
         setDone({
           kind: "success",
           message: body.idempotent_replay
-            ? "Adjustment already recorded."
+            ? "Already posted earlier — no duplicate created."
             : "Adjustment posted successfully.",
-          itemSummary: `${row.label} · ${direction === "loss" ? "−" : "+"}${qtyNumLocal} ${unit} · ${String(reasonCode).replace(/_/g, " ")}`,
+          itemSummary: `${row.label} · ${direction === "loss" ? "−" : "+"}${qtyNumLocal} ${unit} · ${REASON_LABELS[reasonCode as WasteReasonCode] ?? String(reasonCode).replace(/_/g, " ")}`,
           detail: `ref: ${body.submission_id}`,
         });
         setQuantity("");
@@ -509,7 +509,7 @@ export default function WasteAdjustmentPage() {
         setDone({
           kind: "pending",
           message: "Adjustment submitted — held for planner approval.",
-          itemSummary: `${row.label} · ${direction === "loss" ? "−" : "+"}${qtyNumLocal} ${unit} · ${String(reasonCode).replace(/_/g, " ")}`,
+          itemSummary: `${row.label} · ${direction === "loss" ? "−" : "+"}${qtyNumLocal} ${unit} · ${REASON_LABELS[reasonCode as WasteReasonCode] ?? String(reasonCode).replace(/_/g, " ")}`,
           detail: `ref: ${sid}`,
           href: sid
             ? `/inbox/approvals/waste/${encodeURIComponent(sid)}`
@@ -644,21 +644,33 @@ export default function WasteAdjustmentPage() {
                   {done.detail}
                 </div>
               ) : null}
-              {/* Pending callout */}
+              {/* Pending callout — make the most dangerous semantic trap
+                  (pending vs posted) unmistakable. */}
               {done.kind === "pending" && (
                 <div className="mt-2 text-xs opacity-80">
-                  A planner will review this adjustment. You&apos;ll see it in Approvals when it&apos;s ready.
+                  <strong>Stock has not changed yet.</strong> A planner will review this adjustment; stock updates only once it&apos;s approved.
                 </div>
               )}
             </div>
           </div>
 
-          {/* Reset button on success/pending */}
+          {/* Action affordances on success/pending — matches the pattern
+              used on physical-count and goods-receipt success banners so
+              the operator's next-action set is consistent across forms. */}
           {(done.kind === "success" || done.kind === "pending") && (
-            <div className="mt-3 border-t border-current/10 pt-3">
+            <div className="mt-3 flex flex-wrap items-center gap-2 border-t border-current/10 pt-3">
+              {done.kind === "success" ? (
+                <Link
+                  href="/stock/movement-log"
+                  className="btn btn-sm transition-colors duration-150"
+                  data-testid="waste-adjustment-success-movement-log"
+                >
+                  View posted ledger →
+                </Link>
+              ) : null}
               <button
                 type="button"
-                className="btn btn-sm transition-colors duration-150"
+                className="btn btn-sm btn-ghost transition-colors duration-150"
                 onClick={handleReset}
               >
                 Submit another adjustment
@@ -793,7 +805,7 @@ export default function WasteAdjustmentPage() {
           {/* ---------------------------------------------------------------- */}
           {direction === "positive" && (
             <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning-softer px-4 py-3 text-sm text-warning-fg transition-all duration-200">
-              <span className="shrink-0 text-base" aria-hidden="true">⚠️</span>
+              <svg className="h-4 w-4 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
               <span>
                 <span className="font-semibold">Approval required.</span>{" "}
                 Positive adjustments are held for planner approval before affecting stock.
@@ -958,7 +970,7 @@ export default function WasteAdjustmentPage() {
                 {/* Notes-required hint */}
                 {reasonCode && REASON_CODES_REQUIRING_NOTES.includes(reasonCode) && (
                   <div className="mt-1.5 flex items-center gap-1 text-xs text-info-fg">
-                    <span aria-hidden="true">ℹ</span>
+                    <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2"/><path d="M12 8h.01M11 12h1v5h1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                     Notes required for this reason
                   </div>
                 )}
@@ -1009,7 +1021,7 @@ export default function WasteAdjustmentPage() {
               data-testid="waste-confirm-panel"
             >
               <div className="flex items-start gap-2 mb-3">
-                <span className="text-base shrink-0" aria-hidden="true">⚠️</span>
+                <svg className="h-4 w-4 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 <p className="font-medium">
                   You are about to add{" "}
                   <span className="font-bold">
@@ -1046,6 +1058,42 @@ export default function WasteAdjustmentPage() {
               </div>
             </div>
           )}
+
+          {/* ---------------------------------------------------------------- */}
+          {/* Pre-submit "what will change" panel for the LOSS direction.       */}
+          {/* Positive direction already has its own confirm panel above.       */}
+          {/* Renders only when the form has enough state to describe the       */}
+          {/* effect; loss auto-posts under threshold OR holds for approval     */}
+          {/* above it (threshold uncalibrated per GAP-010 → no % quoted).      */}
+          {/* ---------------------------------------------------------------- */}
+          {direction === "loss" &&
+          selectedRow &&
+          Number.isFinite(qtyNum) &&
+          qtyNum > 0 &&
+          reasonCode ? (
+            <div
+              className="rounded-md border border-info/40 bg-info-softer/50 px-4 py-3 text-sm text-info-fg transition-all duration-150"
+              role="note"
+              data-testid="waste-pre-submit-effect"
+            >
+              <div className="flex items-start gap-2">
+                <svg className="h-4 w-4 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
+                  <path d="M12 8h.01M11 12h1v5h1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                <div className="flex-1 space-y-1">
+                  <div>
+                    On submit, <strong>{selectedRow.label}</strong> stock will{" "}
+                    <strong>decrease by {qtyNum} {unit}</strong>{" "}
+                    (reason: {REASON_LABELS[reasonCode] ?? reasonCode}).
+                  </div>
+                  <div className="text-xs opacity-90">
+                    Small losses post to the ledger immediately. Larger losses are held for planner approval; in that case stock does not change until approval completes.
+                  </div>
+                </div>
+              </div>
+            </div>
+          ) : null}
 
           {/* ---------------------------------------------------------------- */}
           {/* Sticky submit bar                                                 */}
