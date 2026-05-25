@@ -230,29 +230,33 @@ function StepIndicator({ step }: { step: 1 | 2 }) {
   );
 }
 
-/** Blind count banner — full on step 1, compact badge on step 2 */
-function BlindCountBanner({ compact }: { compact?: boolean }) {
+/**
+ * Blind-count signpost — slim, calm, present. Communicates the most
+ * important rule on this page (expected qty is intentionally hidden)
+ * without overwhelming the eye.
+ */
+function BlindCountBanner({ compact = false }: { compact?: boolean }) {
   if (compact) {
     return (
-      <div className="mb-4 inline-flex items-center gap-1.5 rounded-full border border-border/60 bg-bg-raised px-3 py-1 text-xs font-medium text-fg-muted">
-        {/* eye-slash icon */}
+      <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-bg-raised/70 px-3 py-1 text-xs font-semibold text-fg-muted">
         <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-          <path d="M2.5 2.5l15 15M8.34 8.34A2.5 2.5 0 0013.66 11.66M6.25 6.25C4.7 7.26 3.5 8.5 2.5 10c1.5 2.5 4.5 5 7.5 5a7.4 7.4 0 003.25-.75M10 5c.84 0 1.65.14 2.41.4C14.1 6.2 15.6 7.9 17.5 10c-.5.83-1.1 1.6-1.75 2.25" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
+          <path d="M2.5 2.5l15 15M8.34 8.34A2.5 2.5 0 0013.66 11.66M6.25 6.25C4.7 7.26 3.5 8.5 2.5 10c1.5 2.5 4.5 5 7.5 5a7.4 7.4 0 003.25-.75M10 5c.84 0 1.65.14 2.41.4C14.1 6.2 15.6 7.9 17.5 10c-.5.83-1.1 1.6-1.75 2.25" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
-        Blind count active
+        Blind count
       </div>
     );
   }
   return (
-    <div className="mb-5 flex items-start gap-3 rounded-lg border border-border bg-bg-raised px-4 py-3">
-      {/* eye-slash icon */}
-      <svg className="mt-0.5 h-5 w-5 shrink-0 text-fg-muted" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-        <path d="M2.5 2.5l15 15M8.34 8.34A2.5 2.5 0 0013.66 11.66M6.25 6.25C4.7 7.26 3.5 8.5 2.5 10c1.5 2.5 4.5 5 7.5 5a7.4 7.4 0 003.25-.75M10 5c.84 0 1.65.14 2.41.4C14.1 6.2 15.6 7.9 17.5 10c-.5.83-1.1 1.6-1.75 2.25" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round" />
-      </svg>
-      <div>
-        <div className="text-sm font-semibold text-fg">BLIND COUNT</div>
-        <div className="mt-0.5 text-xs text-fg-muted">
-          You are counting blind — the expected quantity is hidden to keep your count unbiased.
+    <div className="mb-6 flex items-center gap-3 rounded-xl border border-border/60 bg-bg-raised/60 px-4 py-3">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-bg-subtle text-fg-muted">
+        <svg className="h-5 w-5" viewBox="0 0 20 20" fill="none" aria-hidden="true">
+          <path d="M2.5 2.5l15 15M8.34 8.34A2.5 2.5 0 0013.66 11.66M6.25 6.25C4.7 7.26 3.5 8.5 2.5 10c1.5 2.5 4.5 5 7.5 5a7.4 7.4 0 003.25-.75M10 5c.84 0 1.65.14 2.41.4C14.1 6.2 15.6 7.9 17.5 10c-.5.83-1.1 1.6-1.75 2.25" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
+        </svg>
+      </span>
+      <div className="min-w-0">
+        <div className="text-base font-bold text-fg leading-tight">Blind count</div>
+        <div className="mt-0.5 text-sm text-fg-muted leading-snug">
+          The expected quantity is hidden on purpose. Count what you see.
         </div>
       </div>
     </div>
@@ -623,169 +627,161 @@ export default function PhysicalCountPage() {
       <WorkflowHeader
         eyebrow="Operator form"
         title="Physical Count"
-        description="Blind count — enter what you see. Expected quantities stay hidden."
+        description="Pick an item, count what you see, submit."
       />
 
-      {/* ----------------------------------------------------------------
-          Result banner — success / pending / error
-          ---------------------------------------------------------------- */}
-      {done ? (
-        <div
-          className={cn(
-            "mb-6 rounded-xl border px-5 py-4 transition-all duration-150",
-            done.kind === "success"
-              ? "border-success/40 bg-success-softer text-success-fg"
-              : done.kind === "pending"
-                ? "border-warning/40 bg-warning-softer text-warning-fg"
-                : "border-danger/40 bg-danger-softer text-danger-fg",
-          )}
-          role="status"
-        >
-          {done.kind === "success" ? (
-            <div className="space-y-4">
-              {/* Hero check — wide, confident, sized for a quick glance. */}
-              <div className="flex items-center gap-4">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-success/15">
-                  <svg className="h-7 w-7 text-success-fg" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      {/* Result banner — unified layout across success / pending / error.
+          A 14x14 colored icon badge anchors the eye; an outcome title
+          + supporting detail line read top-down; the delta lands as a
+          prominent chip when the API returned one; primary action is
+          left-most, secondary action is a ghost button to its right;
+          ref/snapshot id sits as a faint mono trailer. */}
+      {done ? (() => {
+        const isSuccess = done.kind === "success";
+        const isPending = done.kind === "pending";
+        const isError = done.kind === "error";
+        const tone = isSuccess
+          ? "border-success/40 bg-success-softer text-success-fg"
+          : isPending
+            ? "border-warning/40 bg-warning-softer text-warning-fg"
+            : "border-danger/40 bg-danger-softer text-danger-fg";
+        const badgeTone = isSuccess
+          ? "bg-success/15 text-success-fg"
+          : isPending
+            ? "bg-warning/20 text-warning-fg"
+            : "bg-danger/15 text-danger-fg";
+        const title = isPending
+          ? "Held for planner approval"
+          : isError
+            ? "Count not submitted"
+            : done.message;
+        const sub = isPending
+          ? <>Large variance vs the snapshot. <strong>Stock has not changed yet</strong> — the new anchor is applied only after approval.</>
+          : isError
+            ? done.message
+            : done.itemName;
+        const deltaSign = parseDeltaSign(done.delta);
+        return (
+          <div
+            className={cn(
+              "mb-6 rounded-2xl border px-5 py-5 transition-all duration-150 sm:px-6",
+              tone,
+            )}
+            role="status"
+            aria-live="polite"
+          >
+            <div className="flex items-start gap-4">
+              <span className={cn("flex h-14 w-14 shrink-0 items-center justify-center rounded-full", badgeTone)}>
+                {isSuccess && (
+                  <svg className="h-8 w-8" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-lg font-bold leading-tight">{done.message}</div>
-                  {done.itemName && (
-                    <div className="mt-0.5 text-sm font-medium opacity-90 truncate">{done.itemName}</div>
-                  )}
-                </div>
-              </div>
-              {done.delta && (
-                <div className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold",
-                  parseDeltaSign(done.delta) === "positive"
-                    ? "bg-success/20 text-success-fg"
-                    : parseDeltaSign(done.delta) === "negative"
-                      ? "bg-danger/20 text-danger-fg"
-                      : "bg-bg-raised text-fg-muted",
-                )}>
-                  Adjustment: {done.delta}
-                </div>
-              )}
-              {done.detail && (
-                <div className="font-mono text-xs opacity-60">
-                  {done.detail}
-                  {done.snapshotIdShort ? (
-                    <span className="ml-2 opacity-70">
-                      · snapshot {done.snapshotIdShort}…
+                )}
+                {isPending && (
+                  <svg className="h-8 w-8" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
+                    <path d="M12 7v5l3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                )}
+                {isError && (
+                  <svg className="h-8 w-8" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
+                    <path d="M9 9l6 6M15 9l-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                )}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-lg font-bold leading-tight sm:text-xl">{title}</div>
+                {sub ? (
+                  <div className="mt-1 text-sm leading-snug opacity-90">
+                    {isSuccess && done.itemName ? (
+                      <span className="font-semibold">{done.itemName}</span>
+                    ) : sub}
+                  </div>
+                ) : null}
+
+                {/* Delta chip — center stage for any non-zero adjustment. */}
+                {done.delta ? (
+                  <div className={cn(
+                    "mt-3 inline-flex items-baseline gap-1.5 rounded-full px-3 py-1 text-base font-bold tabular-nums",
+                    deltaSign === "positive"
+                      ? "bg-success/20 text-success-fg"
+                      : deltaSign === "negative"
+                        ? "bg-danger/20 text-danger-fg"
+                        : "bg-bg-raised text-fg-muted",
+                  )}>
+                    <span className="text-xs font-semibold uppercase tracking-sops opacity-75">
+                      Adjustment
                     </span>
-                  ) : null}
-                </div>
-              )}
-              <div className="flex items-center gap-2 flex-wrap">
+                    <span>{done.delta}</span>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            {/* Action row */}
+            <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-current/10 pt-4">
+              {isSuccess && (
                 <Link
                   href="/stock/movement-log"
-                  className="btn btn-primary btn-sm transition-all duration-150"
+                  className="btn btn-primary btn-sm"
                   data-testid="physical-count-success-movement-log"
                 >
                   View posted ledger →
                 </Link>
+              )}
+              {isPending && done.href && (
+                <Link
+                  href={done.href}
+                  className="btn btn-primary btn-sm"
+                  data-testid="physical-count-banner-link"
+                >
+                  {done.hrefLabel ?? "Open approval"}
+                </Link>
+              )}
+              {isError && snapshot && (
+                <button
+                  type="button"
+                  onClick={() => void handleSubmit({ preventDefault: () => {} } as React.FormEvent)}
+                  className="btn btn-primary btn-sm"
+                  data-testid="physical-count-error-retry"
+                >
+                  Try again
+                </button>
+              )}
+              {!isError && (
                 <button
                   type="button"
                   onClick={() => setDone(null)}
-                  className="btn btn-ghost btn-sm transition-all duration-150"
+                  className="btn btn-ghost btn-sm"
                 >
                   Count another item
                 </button>
-              </div>
-            </div>
-          ) : done.kind === "pending" ? (
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-warning/20">
-                  <svg className="h-6 w-6 text-warning-fg" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
-                    <path d="M12 7v5l3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                  </svg>
-                </div>
-                <div>
-                  <div className="font-semibold text-base">{done.itemName ?? "Count submitted"}</div>
-                  <div className="text-sm opacity-90">This count has a large variance and is held for planner approval. <strong>Stock has not changed yet</strong> — the new anchor is applied only after approval.</div>
-                </div>
-              </div>
-              {done.delta && (
-                <div className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold",
-                  parseDeltaSign(done.delta) === "positive"
-                    ? "bg-success/20 text-success-fg"
-                    : parseDeltaSign(done.delta) === "negative"
-                      ? "bg-danger/20 text-danger-fg"
-                      : "bg-bg-raised text-fg-muted",
-                )}>
-                  Adjustment: {done.delta}
-                </div>
               )}
-              <div className="flex items-center gap-2 flex-wrap">
-                {done.href ? (
-                  <Link
-                    href={done.href}
-                    className="btn btn-primary btn-sm transition-all duration-150"
-                    data-testid="physical-count-banner-link"
-                  >
-                    {done.hrefLabel ?? "Open approval"}
-                  </Link>
-                ) : null}
+              {isError && (
                 <button
                   type="button"
                   onClick={() => setDone(null)}
-                  className="btn btn-ghost btn-sm transition-all duration-150"
-                >
-                  Count another item
-                </button>
-              </div>
-              {done.detail && (
-                <div className="font-mono text-xs opacity-60">
-                  {done.detail}
-                  {done.snapshotIdShort ? (
-                    <span className="ml-2 opacity-70">
-                      · snapshot {done.snapshotIdShort}…
-                    </span>
-                  ) : null}
-                </div>
-              )}
-            </div>
-          ) : (
-            /* Error */
-            <div>
-              <div className="flex items-center justify-between gap-3">
-                <div className="font-medium">{done.message}</div>
-              </div>
-              {done.itemSummary ? (
-                <div className="mt-1 text-xs font-medium opacity-90">{done.itemSummary}</div>
-              ) : null}
-              {done.detail ? (
-                <div className="mt-1 font-mono text-xs opacity-60">{done.detail}</div>
-              ) : null}
-              <div className="mt-3 flex items-center gap-2 flex-wrap">
-                {snapshot ? (
-                  <button
-                    type="button"
-                    onClick={() => void handleSubmit({ preventDefault: () => {} } as React.FormEvent)}
-                    className="btn btn-primary btn-sm transition-all duration-150"
-                    data-testid="physical-count-error-retry"
-                  >
-                    Try again
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => setDone(null)}
-                  className="btn btn-ghost btn-sm transition-all duration-150"
+                  className="btn btn-ghost btn-sm"
                 >
                   Dismiss
                 </button>
-              </div>
+              )}
+
+              {/* ref + snapshot trailer — faint mono so it doesn't
+                  compete; on mobile it stacks under the action buttons. */}
+              {(done.detail || done.snapshotIdShort) ? (
+                <div className="ml-auto font-mono text-3xs opacity-60">
+                  {done.detail}
+                  {done.snapshotIdShort ? (
+                    <span className="ml-2 opacity-80">· snapshot {done.snapshotIdShort}…</span>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
-          )}
-        </div>
-      ) : null}
+          </div>
+        );
+      })() : null}
 
       {/* ----------------------------------------------------------------
           Loading / error skeleton
@@ -822,48 +818,40 @@ export default function PhysicalCountPage() {
         /* ----------------------------------------------------------------
            STEP 1 — Pick item
            ---------------------------------------------------------------- */
-        <form onSubmit={handleOpen} className="space-y-5 pb-20" data-testid="physical-count-step-1">
+        <form onSubmit={handleOpen} className="space-y-6 pb-24" data-testid="physical-count-step-1">
           <StepIndicator step={1} />
           <BlindCountBanner />
 
           <SectionCard
-            title="Step 1 — choose what to count"
-            description="Pick the item to count. Expected quantity stays hidden."
+            title="What are you counting?"
+            description="Search by name, code, or scan."
           >
-            {/* ------------------------------------------------------------------
-                Search / combobox — client-side only. No API calls.
-                Filtering changes render visibility only. selKey is stored in
-                separate state and is NEVER cleared or mutated by searchQuery.
-                countedQty is stored separately from any search state, so
-                values entered in the count field persist across search
-                interactions (see invariant comment in state declarations above).
-                ------------------------------------------------------------------ */}
-            <div className="mb-4 space-y-1">
-              <span className="block text-sm font-semibold text-fg">
-                Item / component *
-              </span>
-
-              {/* Selected chip */}
+            <div className="space-y-3">
+              {/* Selected chip — shows the locked-in choice. Tappable to
+                  change. */}
               {selectedRow && !comboOpen ? (
-                <div className="flex items-center gap-2">
-                  <div className="flex min-w-0 flex-1 items-center gap-2 rounded-lg border border-accent/40 bg-accent/5 px-3 py-2 transition-all duration-150">
-                    <svg className="h-4 w-4 shrink-0 text-accent" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                      <path d="M3 8l3.5 3.5L13 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                <div
+                  className="flex items-center gap-3 rounded-xl border-2 border-accent/40 bg-accent/5 px-4 py-3 transition-all duration-150"
+                  data-testid="physical-count-selected"
+                >
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-white">
+                    <svg className="h-5 w-5" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                      <path d="M3 8l3.5 3.5L13 4.5" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
-                    <span className={cn(
-                      "chip shrink-0 text-3xs",
-                      selectedRow.item_type === "FG"
-                        ? "bg-info-softer text-info-fg"
-                        : selectedRow.item_type === "PKG"
-                          ? "bg-warning-softer text-warning-fg"
-                          : "bg-bg-raised text-fg-muted",
-                    )}>
-                      {selectedRow.item_type}
-                    </span>
-                    <span className="min-w-0 truncate text-sm font-medium text-fg">
-                      {selectedRow.label}
-                    </span>
-                  </div>
+                  </span>
+                  <span className={cn(
+                    "shrink-0 rounded-full px-2.5 py-0.5 text-2xs font-bold uppercase tracking-sops",
+                    selectedRow.item_type === "FG"
+                      ? "bg-info-softer text-info-fg"
+                      : selectedRow.item_type === "PKG"
+                        ? "bg-warning-softer text-warning-fg"
+                        : "bg-bg-raised text-fg-muted",
+                  )}>
+                    {selectedRow.item_type}
+                  </span>
+                  <span className="min-w-0 flex-1 truncate text-base font-semibold text-fg">
+                    {selectedRow.label}
+                  </span>
                   <button
                     type="button"
                     className="btn btn-ghost btn-sm shrink-0 transition-all duration-150"
@@ -877,17 +865,27 @@ export default function PhysicalCountPage() {
                   </button>
                 </div>
               ) : (
-                /* Combobox input */
+                /* Combobox input — bigger, with leading search icon and
+                    clear button as an inline chip. */
                 <div className="relative">
                   <div
                     ref={comboAnchorRef}
-                    className="flex min-w-0 items-center gap-2"
+                    className="relative flex min-w-0 items-center"
                     data-testid="physical-count-combobox"
                   >
+                    <svg
+                      className="pointer-events-none absolute left-4 h-5 w-5 text-fg-muted"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      aria-hidden="true"
+                    >
+                      <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
+                      <path d="m20 20-3.5-3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                    </svg>
                     <input
                       ref={searchInputRef}
                       type="search"
-                      className="input min-w-0 flex-1"
+                      className="input h-12 w-full pl-12 pr-12 text-base"
                       placeholder="Search items and components…"
                       value={searchQuery}
                       onChange={(e) => {
@@ -902,7 +900,7 @@ export default function PhysicalCountPage() {
                     {searchQuery ? (
                       <button
                         type="button"
-                        className="btn shrink-0 whitespace-nowrap text-xs transition-all duration-150"
+                        className="absolute right-3 flex h-7 w-7 items-center justify-center rounded-full text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors duration-150"
                         onClick={() => {
                           setSearchQuery("");
                           searchInputRef.current?.focus();
@@ -910,7 +908,9 @@ export default function PhysicalCountPage() {
                         aria-label="Clear search"
                         data-testid="physical-count-search-clear"
                       >
-                        Clear
+                        <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                          <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                        </svg>
                       </button>
                     ) : null}
                   </div>
@@ -918,7 +918,7 @@ export default function PhysicalCountPage() {
                   {/* Result count */}
                   {searchQuery.trim() ? (
                     <p
-                      className="mt-1 text-xs text-fg-muted"
+                      className="mt-2 text-xs text-fg-muted"
                       aria-live="polite"
                       data-testid="physical-count-search-result-count"
                     >
@@ -936,10 +936,10 @@ export default function PhysicalCountPage() {
                   {comboOpen && comboRect && typeof document !== "undefined"
                     ? createPortal(
                         <div
-                          className="z-50 max-h-72 overflow-auto rounded-lg border border-border bg-bg shadow-lg"
+                          className="z-50 max-h-80 overflow-auto rounded-xl border border-border bg-bg shadow-xl ring-1 ring-black/5"
                           style={{
                             position: "fixed",
-                            top: comboRect.top + 4,
+                            top: comboRect.top + 6,
                             left: comboRect.left,
                             width: comboRect.width,
                           }}
@@ -954,7 +954,7 @@ export default function PhysicalCountPage() {
                             <>
                               {fgItems.length > 0 && (
                                 <div>
-                                  <div className="sticky top-0 bg-bg-raised px-3 py-1.5 text-3xs font-semibold uppercase tracking-sops text-fg-muted border-b border-border/50">
+                                  <div className="sticky top-0 z-10 bg-bg-raised px-4 py-2 text-2xs font-bold uppercase tracking-sops text-fg-muted border-b border-border/60">
                                     Finished Goods
                                   </div>
                                   {fgItems.map((r) => (
@@ -962,8 +962,8 @@ export default function PhysicalCountPage() {
                                       key={`${r.kind}:${r.id}`}
                                       type="button"
                                       className={cn(
-                                        "flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm hover:bg-bg-subtle transition-all duration-150",
-                                        selKey === `${r.kind}:${r.id}` && "bg-accent/5 text-accent",
+                                        "flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-medium transition-colors duration-150 hover:bg-bg-subtle",
+                                        selKey === `${r.kind}:${r.id}` && "bg-accent/10 text-accent",
                                       )}
                                       onClick={() => {
                                         setSelKey(`${r.kind}:${r.id}`);
@@ -972,7 +972,7 @@ export default function PhysicalCountPage() {
                                         setSearchQuery("");
                                       }}
                                     >
-                                      <span className="chip chip-info shrink-0 text-3xs">FG</span>
+                                      <span className="shrink-0 rounded-full bg-info-softer px-2 py-0.5 text-2xs font-bold uppercase text-info-fg">FG</span>
                                       <span className="min-w-0 flex-1 truncate">{r.label}</span>
                                       {selKey === `${r.kind}:${r.id}` && (
                                         <svg className="h-4 w-4 shrink-0 text-accent" viewBox="0 0 16 16" fill="none">
@@ -985,7 +985,7 @@ export default function PhysicalCountPage() {
                               )}
                               {rmItems.length > 0 && (
                                 <div>
-                                  <div className="sticky top-0 bg-bg-raised px-3 py-1.5 text-3xs font-semibold uppercase tracking-sops text-fg-muted border-b border-border/50">
+                                  <div className="sticky top-0 z-10 bg-bg-raised px-4 py-2 text-2xs font-bold uppercase tracking-sops text-fg-muted border-b border-border/60">
                                     Raw Materials
                                   </div>
                                   {rmItems.map((r) => (
@@ -993,8 +993,8 @@ export default function PhysicalCountPage() {
                                       key={`${r.kind}:${r.id}`}
                                       type="button"
                                       className={cn(
-                                        "flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm hover:bg-bg-subtle transition-all duration-150",
-                                        selKey === `${r.kind}:${r.id}` && "bg-accent/5 text-accent",
+                                        "flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-medium transition-colors duration-150 hover:bg-bg-subtle",
+                                        selKey === `${r.kind}:${r.id}` && "bg-accent/10 text-accent",
                                       )}
                                       onClick={() => {
                                         setSelKey(`${r.kind}:${r.id}`);
@@ -1003,7 +1003,7 @@ export default function PhysicalCountPage() {
                                         setSearchQuery("");
                                       }}
                                     >
-                                      <span className="chip shrink-0 text-3xs bg-bg-raised text-fg-muted">RM</span>
+                                      <span className="shrink-0 rounded-full bg-bg-subtle px-2 py-0.5 text-2xs font-bold uppercase text-fg-muted">RM</span>
                                       <span className="min-w-0 flex-1 truncate">{r.label}</span>
                                       {selKey === `${r.kind}:${r.id}` && (
                                         <svg className="h-4 w-4 shrink-0 text-accent" viewBox="0 0 16 16" fill="none">
@@ -1016,7 +1016,7 @@ export default function PhysicalCountPage() {
                               )}
                               {pkgItems.length > 0 && (
                                 <div>
-                                  <div className="sticky top-0 bg-bg-raised px-3 py-1.5 text-3xs font-semibold uppercase tracking-sops text-fg-muted border-b border-border/50">
+                                  <div className="sticky top-0 z-10 bg-bg-raised px-4 py-2 text-2xs font-bold uppercase tracking-sops text-fg-muted border-b border-border/60">
                                     Packaging
                                   </div>
                                   {pkgItems.map((r) => (
@@ -1024,8 +1024,8 @@ export default function PhysicalCountPage() {
                                       key={`${r.kind}:${r.id}`}
                                       type="button"
                                       className={cn(
-                                        "flex w-full items-center gap-2 px-3 py-2.5 text-left text-sm hover:bg-bg-subtle transition-all duration-150",
-                                        selKey === `${r.kind}:${r.id}` && "bg-accent/5 text-accent",
+                                        "flex w-full items-center gap-3 px-4 py-3 text-left text-sm font-medium transition-colors duration-150 hover:bg-bg-subtle",
+                                        selKey === `${r.kind}:${r.id}` && "bg-accent/10 text-accent",
                                       )}
                                       onClick={() => {
                                         setSelKey(`${r.kind}:${r.id}`);
@@ -1034,7 +1034,7 @@ export default function PhysicalCountPage() {
                                         setSearchQuery("");
                                       }}
                                     >
-                                      <span className="chip chip-warning shrink-0 text-3xs">PKG</span>
+                                      <span className="shrink-0 rounded-full bg-warning-softer px-2 py-0.5 text-2xs font-bold uppercase text-warning-fg">PKG</span>
                                       <span className="min-w-0 flex-1 truncate">{r.label}</span>
                                       {selKey === `${r.kind}:${r.id}` && (
                                         <svg className="h-4 w-4 shrink-0 text-accent" viewBox="0 0 16 16" fill="none">
@@ -1130,147 +1130,151 @@ export default function PhysicalCountPage() {
         /* ----------------------------------------------------------------
            STEP 2 — Enter counted quantity
            ---------------------------------------------------------------- */
-        <form onSubmit={handleSubmit} className="space-y-5 pb-20" data-testid="physical-count-step-2">
+        <form onSubmit={handleSubmit} className="space-y-6 pb-24" data-testid="physical-count-step-2">
           <StepIndicator step={2} />
           <BlindCountBanner compact />
 
-          {/* Hero snapshot context card */}
+          {/* Snapshot pill — horizontal, calm, never louder than the
+              hero qty below. Item identity dominates; snapshot id and
+              opened-at are intentionally faint. The chip color codes
+              FG / RM / PKG. "Resumed" is signalled only when relevant.
+              The full snapshot id is on the title attribute of the
+              copy button so curious admins can read it on hover. */}
           {snapshot ? (
-            <div className="rounded-xl border border-border bg-bg-raised px-5 py-4 transition-all duration-150">
-              <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-start sm:justify-between">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className={cn(
-                      "chip text-3xs",
-                      snapshot.item_type === "FG"
-                        ? "bg-info-softer text-info-fg"
-                        : snapshot.item_type === "PKG"
-                          ? "bg-warning-softer text-warning-fg"
-                          : "bg-bg-subtle text-fg-muted",
-                    )}>
-                      {snapshot.item_type}
-                    </span>
-                    {snapshot.idempotent_open ? (
-                      <span className="chip chip-warning text-3xs">
-                        Resumed existing snapshot
-                      </span>
-                    ) : null}
-                  </div>
-                  <div className="mt-1.5 text-xl font-bold text-fg leading-tight">
-                    {snapshot.item_display_name}
-                  </div>
-                  <div className="mt-1 text-xs text-fg-muted">
-                    {snapshot.item_id}
-                  </div>
+            <div
+              className="flex items-center gap-3 rounded-2xl border border-border/70 bg-bg-raised px-5 py-3.5 sm:gap-4 sm:px-6"
+              data-testid="physical-count-snapshot-pill"
+            >
+              <span className={cn(
+                "shrink-0 rounded-full px-2.5 py-1 text-2xs font-bold uppercase tracking-sops",
+                snapshot.item_type === "FG"
+                  ? "bg-info-softer text-info-fg"
+                  : snapshot.item_type === "PKG"
+                    ? "bg-warning-softer text-warning-fg"
+                    : "bg-bg-subtle text-fg-muted",
+              )}>
+                {snapshot.item_type}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="truncate text-base font-bold text-fg leading-tight sm:text-lg">
+                  {snapshot.item_display_name}
                 </div>
-                <div className="shrink-0 text-right">
-                  <div className="text-3xs font-semibold uppercase tracking-sops text-fg-muted mb-1">
-                    Snapshot ID
-                  </div>
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-mono text-xs text-fg">
-                      {snapshot.snapshot_id.slice(0, 8)}…
-                    </span>
-                    <button
-                      type="button"
-                      title="Copy snapshot ID"
-                      className="btn btn-ghost btn-sm p-1 transition-all duration-150"
-                      onClick={() => void navigator.clipboard.writeText(snapshot.snapshot_id)}
-                    >
-                      <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                        <rect x="5" y="5" width="9" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.5" />
-                        <path d="M11 5V3.5A1.5 1.5 0 009.5 2h-7A1.5 1.5 0 001 3.5v7A1.5 1.5 0 002.5 12H4" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                      </svg>
-                    </button>
-                  </div>
-                  <div className="mt-1 text-3xs text-fg-muted">
-                    Count started {formatRelative(snapshot.opened_at)}
-                  </div>
+                <div className="mt-0.5 flex items-center gap-2 text-xs text-fg-muted">
+                  <span>Started {formatRelative(snapshot.opened_at)}</span>
+                  {snapshot.idempotent_open ? (
+                    <>
+                      <span aria-hidden>·</span>
+                      <span className="text-warning-fg font-medium">resumed</span>
+                    </>
+                  ) : null}
                 </div>
               </div>
+              <button
+                type="button"
+                title={`Snapshot ${snapshot.snapshot_id}`}
+                className="shrink-0 rounded-full p-2 text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors duration-150 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                onClick={() => void navigator.clipboard.writeText(snapshot.snapshot_id)}
+                aria-label="Copy snapshot id"
+              >
+                <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                  <rect x="5" y="5" width="9" height="9" rx="1.5" stroke="currentColor" strokeWidth="1.6" />
+                  <path d="M11 5V3.5A1.5 1.5 0 009.5 2h-7A1.5 1.5 0 001 3.5v7A1.5 1.5 0 002.5 12H4" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+                </svg>
+              </button>
             </div>
           ) : null}
 
-          <SectionCard
-            title="Step 2 — enter counted quantity"
-            description="Type what you physically counted. Do not adjust for what you expect."
-          >
-            <div className="space-y-6">
-              {/* Hero quantity input — large stepper for confident counting */}
-              <div>
-                <span className="mb-3 block text-sm font-semibold text-fg">
-                  Counted quantity *
-                </span>
-                <div className="flex items-center justify-center gap-3" data-testid="physical-count-qty">
-                  <button
-                    type="button"
-                    className="btn flex h-16 w-16 items-center justify-center rounded-full text-3xl font-bold leading-none transition-all duration-150"
-                    onClick={() => {
-                      const n = parseFloat(countedQty) || 0;
-                      setCountedQty(String(Math.max(0, n - 1)));
-                    }}
-                    aria-label="Decrease quantity"
-                    disabled={phase === "submitting"}
-                  >
-                    −
-                  </button>
-                  <input
-                    ref={countedQtyInputRef}
-                    type="number"
-                    inputMode="decimal"
-                    step="any"
-                    min="0"
-                    className="input h-16 w-44 text-center text-4xl font-mono font-bold tabular-nums"
-                    value={countedQty}
-                    onChange={(e) => setCountedQty(e.target.value)}
-                    required
-                    disabled={phase === "submitting"}
-                  />
-                  <button
-                    type="button"
-                    className="btn flex h-16 w-16 items-center justify-center rounded-full text-3xl font-bold leading-none transition-all duration-150"
-                    onClick={() => {
-                      const n = parseFloat(countedQty) || 0;
-                      setCountedQty(String(n + 1));
-                    }}
-                    aria-label="Increase quantity"
-                    disabled={phase === "submitting"}
-                  >
-                    +
-                  </button>
-                </div>
+          {/* Hero quantity block — owns the page. No surrounding
+              SectionCard chrome competing for attention; the input
+              itself IS the section. */}
+          <div className="py-4">
+            <div className="text-center">
+              <div className="text-sm font-semibold uppercase tracking-sops text-fg-muted">
+                How many did you count?
               </div>
+            </div>
+            <div className="mt-5 flex items-center justify-center gap-3 sm:gap-4" data-testid="physical-count-qty">
+              <button
+                type="button"
+                className="btn flex h-16 w-16 items-center justify-center rounded-full text-3xl font-bold leading-none transition-all duration-150 sm:h-20 sm:w-20 sm:text-4xl"
+                onClick={() => {
+                  const n = parseFloat(countedQty) || 0;
+                  setCountedQty(String(Math.max(0, n - 1)));
+                }}
+                aria-label="Decrease quantity"
+                disabled={phase === "submitting"}
+              >
+                −
+              </button>
+              <input
+                ref={countedQtyInputRef}
+                type="number"
+                inputMode="decimal"
+                step="any"
+                min="0"
+                placeholder="0"
+                className="input h-20 w-44 text-center text-5xl font-mono font-bold tabular-nums placeholder:text-fg-faint/40 sm:h-24 sm:w-56 sm:text-6xl"
+                value={countedQty}
+                onChange={(e) => setCountedQty(e.target.value)}
+                required
+                disabled={phase === "submitting"}
+                aria-label="Counted quantity"
+              />
+              <button
+                type="button"
+                className="btn flex h-16 w-16 items-center justify-center rounded-full text-3xl font-bold leading-none transition-all duration-150 sm:h-20 sm:w-20 sm:text-4xl"
+                onClick={() => {
+                  const n = parseFloat(countedQty) || 0;
+                  setCountedQty(String(n + 1));
+                }}
+                aria-label="Increase quantity"
+                disabled={phase === "submitting"}
+              >
+                +
+              </button>
+            </div>
 
-              {/* Unit — chip row */}
-              <div>
-                <span className="mb-2 block text-sm font-semibold text-fg">
-                  Unit
-                </span>
-                <div className="flex flex-wrap gap-2" data-testid="physical-count-unit">
-                  {UOMS.map((u) => (
-                    <button
-                      key={u}
-                      type="button"
-                      className={cn(
-                        "cursor-pointer rounded-full border-2 px-4 py-2 text-sm font-semibold transition-all duration-150",
-                        unit === u
-                          ? "border-accent bg-accent text-white shadow-sm"
-                          : "border-border bg-bg text-fg hover:border-fg-muted",
-                      )}
-                      onClick={() => setUnit(u as Uom)}
-                      disabled={phase === "submitting"}
-                    >
-                      {u}
-                    </button>
-                  ))}
-                </div>
-              </div>
+            {/* Unit chips — centered under the hero, equal visual rhythm. */}
+            <div className="mt-6 flex flex-wrap items-center justify-center gap-2" data-testid="physical-count-unit">
+              {UOMS.map((u) => (
+                <button
+                  key={u}
+                  type="button"
+                  className={cn(
+                    "cursor-pointer rounded-full border-2 px-4 py-2 text-sm font-semibold transition-all duration-150",
+                    unit === u
+                      ? "border-accent bg-accent text-white shadow-sm"
+                      : "border-border bg-bg text-fg hover:border-fg-muted",
+                  )}
+                  onClick={() => setUnit(u as Uom)}
+                  disabled={phase === "submitting"}
+                >
+                  {u}
+                </button>
+              ))}
+            </div>
+          </div>
 
-              {/* Event time */}
+          {/* Secondary details — collapsed by default. Event time and
+              notes are needed in &lt; 10% of counts; surfacing them on
+              demand keeps the primary path uncluttered. */}
+          <details className="group rounded-xl border border-border/60 bg-bg-raised/40 [&[open]]:bg-bg-raised">
+            <summary className="flex cursor-pointer list-none items-center justify-between gap-3 px-5 py-3 text-sm font-semibold text-fg hover:bg-bg-subtle/50 rounded-xl group-[&[open]]:rounded-b-none transition-colors duration-150">
+              <span className="flex items-center gap-2">
+                <svg className="h-4 w-4 text-fg-muted transition-transform duration-200 group-open:rotate-90" viewBox="0 0 12 12" fill="none" aria-hidden="true">
+                  <path d="M4 2l4 4-4 4" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
+                </svg>
+                Event time &amp; notes
+              </span>
+              <span className="text-xs font-normal text-fg-muted">
+                {notes.trim() ? "1 note" : formatEventAtRelative(eventAt)}
+              </span>
+            </summary>
+            <div className="border-t border-border/40 px-5 py-4 space-y-4">
               <label className="block min-w-0">
                 <div className="mb-2 flex items-center justify-between">
                   <span className="text-sm font-semibold text-fg">
-                    Event time *
+                    Event time
                   </span>
                   <span className="text-xs text-fg-muted">
                     {formatEventAtRelative(eventAt)}
@@ -1286,18 +1290,17 @@ export default function PhysicalCountPage() {
                 />
               </label>
 
-              {/* Notes with char count */}
               <label className="block min-w-0">
                 <span className="mb-2 block text-sm font-semibold text-fg">
                   Notes
                 </span>
                 <div className="relative">
                   <textarea
-                    className="input min-h-[3rem] w-full resize-y pb-5"
+                    className="input min-h-[3.5rem] w-full resize-y pb-5"
                     rows={2}
                     value={notes}
                     onChange={(e) => setNotes(e.target.value)}
-                    placeholder="Optional — note any discrepancies or counting conditions"
+                    placeholder="Optional — note any discrepancy or condition."
                     disabled={phase === "submitting"}
                   />
                   <span className="absolute bottom-1.5 right-2.5 text-3xs text-fg-muted pointer-events-none">
@@ -1306,94 +1309,84 @@ export default function PhysicalCountPage() {
                 </div>
               </label>
             </div>
-          </SectionCard>
+          </details>
 
-          {/* Pre-submit "what will happen" panel — addresses the spec
-              requirement that every operator form must clearly answer
-              before submit what the stock effect will be. The exact
-              auto-post vs approval routing depends on the variance
-              threshold (uncalibrated per GAP-010), so the copy gives
-              both outcomes without quoting a percentage. */}
+          {/* Pre-submit tip — calm, single line. Small variance auto-
+              posts; large variance is held for planner approval. The
+              threshold is uncalibrated (GAP-010); the copy describes
+              both outcomes without quoting a number. */}
           {snapshot && countedQty && Number.isFinite(parseFloat(countedQty)) ? (
             <div
-              className="rounded-lg border border-info/40 bg-info-softer/50 px-4 py-3 text-sm text-info-fg transition-all duration-150"
+              className="flex items-center gap-3 rounded-xl bg-bg-subtle/60 px-4 py-3 text-sm text-fg-muted"
               role="note"
               data-testid="physical-count-pre-submit-effect"
             >
-              <div className="flex items-start gap-2">
-                <svg className="h-4 w-4 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
-                  <path d="M12 8h.01M11 12h1v5h1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
-                <div className="flex-1 space-y-1">
-                  <div>
-                    On submit, the system will compare{" "}
-                    <strong className="font-mono">{countedQty} {unit}</strong>{" "}
-                    against the snapshot taken when you opened this count.
-                  </div>
-                  <ul className="ml-4 list-disc text-xs opacity-90 space-y-0.5">
-                    <li>
-                      If the variance is small, the count <strong>posts immediately</strong> and replaces the stock anchor for{" "}
-                      <strong>{snapshot.item_display_name}</strong>.
-                    </li>
-                    <li>
-                      If the variance is large, the count is <strong>held for planner approval</strong> — stock will not change until approval completes.
-                    </li>
-                  </ul>
-                </div>
-              </div>
+              <svg className="h-4 w-4 shrink-0 text-info-fg" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
+                <path d="M12 8h.01M11 12h1v5h1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+              </svg>
+              <span className="leading-snug">
+                Small variance posts now and replaces the stock anchor for <strong className="text-fg">{snapshot.item_display_name}</strong>. Large variance is held for planner approval — stock will not change until approved.
+              </span>
             </div>
           ) : null}
 
-          {/* Cancel confirm inline mini-prompt */}
+          {/* Cancel-snapshot confirm — inline, danger-toned, two clear
+              choices. Keep counting is the obvious primary because the
+              destructive path is the rarer intent. */}
           {cancelConfirm ? (
             <div
-              className="rounded-lg border border-danger/30 bg-danger-softer px-4 py-3 transition-all duration-150"
+              className="rounded-xl border border-danger/40 bg-danger-softer px-5 py-4 transition-all duration-150"
               data-testid="physical-count-cancel-confirm"
+              role="alertdialog"
             >
-              <div className="text-sm font-medium text-danger-fg">
-                Cancel this count? The snapshot will be released and you&apos;ll need to start over.
+              <div className="text-base font-bold text-danger-fg leading-tight">
+                Cancel this count?
               </div>
-              <div className="mt-3 flex items-center gap-2">
+              <div className="mt-1 text-sm text-danger-fg/90 leading-snug">
+                The snapshot will be released. Anything you typed is lost.
+              </div>
+              <div className="mt-4 flex items-center gap-2">
                 <button
                   type="button"
-                  className="btn btn-sm bg-danger text-white hover:bg-danger/90 transition-all duration-150"
+                  className="btn btn-sm btn-primary"
+                  onClick={() => setCancelConfirm(false)}
+                  autoFocus
+                >
+                  Keep counting
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-danger"
                   onClick={() => void handleCancel()}
                   disabled={phase === "submitting"}
                   data-testid="physical-count-cancel-proceed"
                 >
                   Yes, cancel
                 </button>
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm transition-all duration-150"
-                  onClick={() => setCancelConfirm(false)}
-                >
-                  Keep counting
-                </button>
               </div>
             </div>
           ) : null}
 
-          <div className="sticky bottom-0 z-10 -mx-4 flex items-center justify-between gap-2 border-t border-border bg-bg-raised/90 px-4 py-3 backdrop-blur-sm sm:-mx-6 sm:px-6">
-            {/* Cancel — ghost/danger, shows confirm prompt */}
+          {/* Sticky action bar. Submit dominates; cancel is a ghost
+              link-style button so it doesn't compete visually, but
+              uses danger tone on the confirm step so the destructive
+              action is clearly marked. */}
+          <div className="sticky bottom-0 z-10 -mx-4 flex items-center justify-between gap-3 border-t border-border bg-bg-raised/95 px-4 py-4 backdrop-blur-md sm:-mx-6 sm:px-6">
             <button
               type="button"
-              title="This will release the open snapshot"
-              className="btn btn-ghost btn-sm flex items-center gap-1.5 text-danger-fg hover:bg-danger-softer transition-all duration-150"
+              title="This releases the open snapshot. You will start over."
+              className="btn btn-ghost btn-sm text-fg-muted hover:text-danger-fg transition-colors duration-150"
               onClick={() => setCancelConfirm(true)}
               disabled={phase === "submitting" || cancelConfirm}
             >
-              <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none" aria-hidden="true">
-                <path d="M4 4l8 8M12 4l-8 8" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-              </svg>
               Cancel snapshot
             </button>
 
             <button
               type="submit"
               className="btn btn-lg btn-primary transition-all duration-150"
-              disabled={phase === "submitting"}
+              disabled={phase === "submitting" || !countedQty}
               data-testid="physical-count-submit"
             >
               {phase === "submitting" ? (
@@ -1405,7 +1398,12 @@ export default function PhysicalCountPage() {
                   Submitting…
                 </>
               ) : (
-                "Submit count"
+                <>
+                  Submit count
+                  <svg className="ml-1.5 h-4 w-4" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                    <path d="M3 8h10M9 4l4 4-4 4" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+                  </svg>
+                </>
               )}
             </button>
           </div>
