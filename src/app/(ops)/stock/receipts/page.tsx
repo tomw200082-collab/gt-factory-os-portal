@@ -2012,7 +2012,7 @@ export default function GoodsReceiptPage() {
                 <span className="hidden text-3xs text-fg-subtle sm:block">{shortcutHint}</span>
                 <button
                   type="submit"
-                  className="btn btn-primary flex items-center gap-2 transition-colors duration-150"
+                  className="btn btn-lg btn-primary flex items-center gap-2 transition-colors duration-150"
                   disabled={phase === "submitting"}
                   data-testid="receipt-submit"
                 >

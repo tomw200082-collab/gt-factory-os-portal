@@ -1129,7 +1129,7 @@ export default function WasteAdjustmentPage() {
             <button
               type="submit"
               className={cn(
-                "btn btn-primary text-base font-semibold px-6 py-3 h-auto transition-colors duration-150",
+                "btn btn-lg btn-primary transition-colors duration-150",
                 phase === "submitting" && "cursor-wait"
               )}
               disabled={phase === "submitting" || confirmPending}

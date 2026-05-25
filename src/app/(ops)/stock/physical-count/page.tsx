@@ -165,23 +165,23 @@ interface DoneState {
 // Sub-components
 // ---------------------------------------------------------------------------
 
-/** 2-step progress indicator */
+/** 2-step progress indicator — bigger, friendlier, accessible. */
 function StepIndicator({ step }: { step: 1 | 2 }) {
   return (
-    <div className="mb-6 flex items-center justify-center gap-0">
+    <div className="mb-8 flex items-center justify-center gap-0">
       {/* Step 1 */}
-      <div className="flex flex-col items-center gap-1">
+      <div className="flex flex-col items-center gap-2">
         <div
           className={cn(
-            "flex h-8 w-8 items-center justify-center rounded-full border-2 text-sm font-bold transition-all duration-150",
+            "flex h-10 w-10 items-center justify-center rounded-full border-2 text-base font-bold transition-all duration-150",
             step >= 1
-              ? "border-accent bg-accent text-white"
+              ? "border-accent bg-accent text-white shadow-sm"
               : "border-border bg-bg text-fg-muted",
           )}
         >
           {step > 1 ? (
-            <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none">
-              <path d="M3 8l3.5 3.5L13 4.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
+            <svg className="h-5 w-5" viewBox="0 0 16 16" fill="none">
+              <path d="M3 8l3.5 3.5L13 4.5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
             </svg>
           ) : (
             "1"
@@ -189,7 +189,7 @@ function StepIndicator({ step }: { step: 1 | 2 }) {
         </div>
         <span
           className={cn(
-            "text-xs font-medium transition-all duration-150",
+            "text-sm font-semibold transition-all duration-150",
             step === 1 ? "text-accent" : "text-fg-muted",
           )}
         >
@@ -200,18 +200,18 @@ function StepIndicator({ step }: { step: 1 | 2 }) {
       {/* Connector line */}
       <div
         className={cn(
-          "mb-5 h-0.5 w-16 transition-all duration-300",
+          "mb-6 h-1 w-20 rounded-full transition-all duration-300",
           step > 1 ? "bg-accent" : "bg-border",
         )}
       />
 
       {/* Step 2 */}
-      <div className="flex flex-col items-center gap-1">
+      <div className="flex flex-col items-center gap-2">
         <div
           className={cn(
-            "flex h-8 w-8 items-center justify-center rounded-full border-2 text-sm font-bold transition-all duration-150",
+            "flex h-10 w-10 items-center justify-center rounded-full border-2 text-base font-bold transition-all duration-150",
             step >= 2
-              ? "border-accent bg-accent text-white"
+              ? "border-accent bg-accent text-white shadow-sm"
               : "border-border bg-bg text-fg-muted",
           )}
         >
@@ -219,7 +219,7 @@ function StepIndicator({ step }: { step: 1 | 2 }) {
         </div>
         <span
           className={cn(
-            "text-xs font-medium transition-all duration-150",
+            "text-sm font-semibold transition-all duration-150",
             step === 2 ? "text-accent" : "text-fg-muted",
           )}
         >
@@ -1098,11 +1098,11 @@ export default function PhysicalCountPage() {
             </div>
           </SectionCard>
 
-          <div className="flex items-center justify-end gap-2 py-3">
+          <div className="flex items-center justify-end gap-2 py-4">
             <button
               type="submit"
               className={cn(
-                "btn btn-primary transition-all duration-150",
+                "btn btn-lg btn-primary transition-all duration-150",
                 !selKey && "opacity-50 cursor-not-allowed",
               )}
               disabled={!selKey || isStep1Submitting}
@@ -1392,7 +1392,7 @@ export default function PhysicalCountPage() {
 
             <button
               type="submit"
-              className="btn btn-primary transition-all duration-150"
+              className="btn btn-lg btn-primary transition-all duration-150"
               disabled={phase === "submitting"}
               data-testid="physical-count-submit"
             >

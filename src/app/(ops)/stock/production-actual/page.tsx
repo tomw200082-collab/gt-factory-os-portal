@@ -433,23 +433,27 @@ function stringDiv(num: string, denom: string, prodQty: number): string {
 function StepIndicator({ phase }: { phase: Phase }) {
   const step = phase === "pick" ? 1 : 2;
   return (
-    <div className="mb-6 flex items-center gap-3" aria-label="Form progress">
+    <div className="mb-8 flex items-center gap-3" aria-label="Form progress">
       {/* Step 1 */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2.5">
         <div
           className={cn(
-            "flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold transition-colors",
+            "flex h-10 w-10 items-center justify-center rounded-full text-base font-bold transition-colors shadow-sm",
             step === 1
               ? "bg-accent text-white"
               : "bg-success text-white",
           )}
           aria-current={step === 1 ? "step" : undefined}
         >
-          {step > 1 ? "✓" : "1"}
+          {step > 1 ? (
+            <svg className="h-5 w-5" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <path d="M3 8l3.5 3.5L13 4.5" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+            </svg>
+          ) : "1"}
         </div>
         <span
           className={cn(
-            "text-sm font-medium",
+            "text-sm font-semibold",
             step === 1 ? "text-fg" : "text-fg-muted",
           )}
         >
@@ -460,19 +464,19 @@ function StepIndicator({ phase }: { phase: Phase }) {
       {/* Connector */}
       <div
         className={cn(
-          "h-px flex-1 transition-colors",
+          "h-1 flex-1 rounded-full transition-colors",
           step > 1 ? "bg-success/60" : "bg-border",
         )}
       />
 
       {/* Step 2 */}
-      <div className="flex items-center gap-2">
+      <div className="flex items-center gap-2.5">
         <div
           className={cn(
-            "flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold transition-colors",
+            "flex h-10 w-10 items-center justify-center rounded-full text-base font-bold transition-colors shadow-sm",
             step === 2
               ? "bg-accent text-white"
-              : "border border-border bg-bg-subtle text-fg-muted",
+              : "border-2 border-border bg-bg text-fg-muted",
           )}
           aria-current={step === 2 ? "step" : undefined}
         >
@@ -480,7 +484,7 @@ function StepIndicator({ phase }: { phase: Phase }) {
         </div>
         <span
           className={cn(
-            "text-sm font-medium",
+            "text-sm font-semibold",
             step === 2 ? "text-fg" : "text-fg-muted",
           )}
         >
@@ -2054,10 +2058,10 @@ export default function ProductionActualPage() {
                 </div>
               </div>
             </SectionCard>
-            <div className="sticky bottom-0 z-10 -mx-4 flex items-center justify-end gap-2 border-t border-border bg-bg-raised/90 px-4 py-3 backdrop-blur-sm sm:-mx-6 sm:px-6">
+            <div className="sticky bottom-0 z-10 -mx-4 flex items-center justify-end gap-2 border-t border-border bg-bg-raised/95 px-4 py-4 backdrop-blur-md sm:-mx-6 sm:px-6">
               <button
                 type="submit"
-                className="btn btn-primary"
+                className="btn btn-lg btn-primary"
                 disabled={!selectedItemId}
               >
                 Open production form →
@@ -2493,7 +2497,7 @@ export default function ProductionActualPage() {
               <button
                 type="submit"
                 className={cn(
-                  "btn btn-primary gap-1.5 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:outline-none",
+                  "btn btn-lg btn-primary gap-1.5 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:outline-none",
                   (!canSubmit || phase === "submitting") && "cursor-not-allowed opacity-60",
                 )}
                 disabled={phase === "submitting" || !canSubmit}

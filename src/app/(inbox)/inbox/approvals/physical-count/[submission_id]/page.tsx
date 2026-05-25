@@ -390,7 +390,7 @@ export default function PhysicalCountReviewPage() {
           <button
             type="button"
             data-testid="pc-review-approve"
-            className="btn btn-primary text-base font-semibold px-6 py-3 h-auto"
+            className="btn btn-lg btn-primary"
             disabled={
               busy ||
               (d?.submitted_by_user_id != null &&
@@ -422,7 +422,7 @@ export default function PhysicalCountReviewPage() {
           <button
             type="button"
             data-testid="pc-review-reject"
-            className="btn btn-danger text-base font-semibold px-6 py-3 h-auto"
+            className="btn btn-lg btn-danger"
             disabled={
               busy ||
               !rejectionReason.trim() ||

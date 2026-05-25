@@ -956,7 +956,7 @@ function ManualPoFormInner(): JSX.Element {
           <button
             type="submit"
             data-testid="po-new-submit"
-            className="btn btn-accent w-full sm:w-auto"
+            className="btn btn-lg btn-accent w-full sm:w-auto"
             disabled={phase === "submitting" || masterDataLoading || masterDataError}
           >
             {phase === "submitting" ? "Creating…" : "Create purchase order"}

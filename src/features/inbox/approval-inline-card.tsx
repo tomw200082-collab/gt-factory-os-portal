@@ -531,7 +531,7 @@ export function ApprovalInlineCard({
         <div className="flex flex-wrap items-center gap-2 pt-1">
           <button
             type="button"
-            className="btn btn-primary gap-2 text-sm font-semibold px-5 py-2.5 h-auto"
+            className="btn btn-lg btn-primary gap-2"
             data-testid="approval-inline-approve"
             disabled={busy || detail == null}
             onClick={async () => {
@@ -546,7 +546,7 @@ export function ApprovalInlineCard({
           </button>
           <button
             type="button"
-            className="btn border-2 border-danger/50 text-danger hover:bg-danger-softer text-sm font-semibold px-5 py-2.5 h-auto"
+            className="btn btn-lg border-2 border-danger/50 text-danger hover:bg-danger-softer"
             data-testid="approval-inline-reject-open"
             disabled={busy || detail == null}
             onClick={() => setShowReject(true)}
