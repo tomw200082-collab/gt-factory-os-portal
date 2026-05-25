@@ -642,18 +642,18 @@ export default function PhysicalCountPage() {
           role="status"
         >
           {done.kind === "success" ? (
-            <div className="space-y-3">
-              {/* Animated checkmark */}
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-success/20">
-                  <svg className="h-6 w-6 text-success-fg" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+            <div className="space-y-4">
+              {/* Hero check — wide, confident, sized for a quick glance. */}
+              <div className="flex items-center gap-4">
+                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-success/15">
+                  <svg className="h-7 w-7 text-success-fg" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                 </div>
-                <div>
-                  <div className="font-semibold text-base">{done.message}</div>
+                <div className="flex-1 min-w-0">
+                  <div className="text-lg font-bold leading-tight">{done.message}</div>
                   {done.itemName && (
-                    <div className="text-sm font-medium opacity-90">{done.itemName}</div>
+                    <div className="mt-0.5 text-sm font-medium opacity-90 truncate">{done.itemName}</div>
                   )}
                 </div>
               </div>
@@ -839,7 +839,7 @@ export default function PhysicalCountPage() {
                 interactions (see invariant comment in state declarations above).
                 ------------------------------------------------------------------ */}
             <div className="mb-4 space-y-1">
-              <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+              <span className="block text-sm font-semibold text-fg">
                 Item / component *
               </span>
 
@@ -1073,7 +1073,7 @@ export default function PhysicalCountPage() {
               {advancedOpen && (
                 <div className="mt-3">
                   <label className="block min-w-0">
-                    <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    <span className="mb-2 block text-sm font-semibold text-fg">
                       Item type override (optional)
                     </span>
                     <select
@@ -1193,18 +1193,18 @@ export default function PhysicalCountPage() {
 
           <SectionCard
             title="Step 2 — enter counted quantity"
-            description="Counted quantity is what you just physically measured. Do not adjust it for what you expect to be there."
+            description="Type what you physically counted. Do not adjust for what you expect."
           >
-            <div className="space-y-5">
-              {/* Hero quantity input with stepper */}
+            <div className="space-y-6">
+              {/* Hero quantity input — large stepper for confident counting */}
               <div>
-                <span className="mb-2 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                <span className="mb-3 block text-sm font-semibold text-fg">
                   Counted quantity *
                 </span>
                 <div className="flex items-center justify-center gap-3" data-testid="physical-count-qty">
                   <button
                     type="button"
-                    className="btn btn-ghost flex h-12 w-12 items-center justify-center rounded-full text-2xl font-bold transition-all duration-150"
+                    className="btn flex h-16 w-16 items-center justify-center rounded-full text-3xl font-bold leading-none transition-all duration-150"
                     onClick={() => {
                       const n = parseFloat(countedQty) || 0;
                       setCountedQty(String(Math.max(0, n - 1)));
@@ -1220,7 +1220,7 @@ export default function PhysicalCountPage() {
                     inputMode="decimal"
                     step="any"
                     min="0"
-                    className="input w-36 text-center text-2xl font-mono font-bold"
+                    className="input h-16 w-44 text-center text-4xl font-mono font-bold tabular-nums"
                     value={countedQty}
                     onChange={(e) => setCountedQty(e.target.value)}
                     required
@@ -1228,7 +1228,7 @@ export default function PhysicalCountPage() {
                   />
                   <button
                     type="button"
-                    className="btn btn-ghost flex h-12 w-12 items-center justify-center rounded-full text-2xl font-bold transition-all duration-150"
+                    className="btn flex h-16 w-16 items-center justify-center rounded-full text-3xl font-bold leading-none transition-all duration-150"
                     onClick={() => {
                       const n = parseFloat(countedQty) || 0;
                       setCountedQty(String(n + 1));
@@ -1243,7 +1243,7 @@ export default function PhysicalCountPage() {
 
               {/* Unit — chip row */}
               <div>
-                <span className="mb-2 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                <span className="mb-2 block text-sm font-semibold text-fg">
                   Unit
                 </span>
                 <div className="flex flex-wrap gap-2" data-testid="physical-count-unit">
@@ -1252,10 +1252,10 @@ export default function PhysicalCountPage() {
                       key={u}
                       type="button"
                       className={cn(
-                        "chip cursor-pointer transition-all duration-150",
+                        "cursor-pointer rounded-full border-2 px-4 py-2 text-sm font-semibold transition-all duration-150",
                         unit === u
-                          ? "bg-accent text-white border-accent"
-                          : "bg-bg-raised text-fg-muted hover:bg-bg-subtle",
+                          ? "border-accent bg-accent text-white shadow-sm"
+                          : "border-border bg-bg text-fg hover:border-fg-muted",
                       )}
                       onClick={() => setUnit(u as Uom)}
                       disabled={phase === "submitting"}
@@ -1268,8 +1268,8 @@ export default function PhysicalCountPage() {
 
               {/* Event time */}
               <label className="block min-w-0">
-                <div className="mb-1 flex items-center justify-between">
-                  <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                <div className="mb-2 flex items-center justify-between">
+                  <span className="text-sm font-semibold text-fg">
                     Event time *
                   </span>
                   <span className="text-xs text-fg-muted">
@@ -1288,7 +1288,7 @@ export default function PhysicalCountPage() {
 
               {/* Notes with char count */}
               <label className="block min-w-0">
-                <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                <span className="mb-2 block text-sm font-semibold text-fg">
                   Notes
                 </span>
                 <div className="relative">

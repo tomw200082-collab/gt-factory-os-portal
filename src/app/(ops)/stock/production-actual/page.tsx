@@ -1898,7 +1898,7 @@ export default function ProductionActualPage() {
               <div className="grid grid-cols-1 gap-4">
                 {/* Searchable combobox */}
                 <div>
-                  <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <span className="mb-2 block text-sm font-semibold text-fg">
                     Item *
                   </span>
                   <div className="relative" ref={comboboxRef}>
@@ -2116,7 +2116,7 @@ export default function ProductionActualPage() {
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 {/* Event time */}
                 <label className="block min-w-0">
-                  <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <span className="mb-2 block text-sm font-semibold text-fg">
                     Event time *
                   </span>
                   <input
@@ -2139,7 +2139,7 @@ export default function ProductionActualPage() {
 
                 {/* Unit of measure — readonly display with pinned label */}
                 <label className="block min-w-0">
-                  <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <span className="mb-2 block text-sm font-semibold text-fg">
                     Unit of measure *
                   </span>
                   <input
@@ -2156,13 +2156,13 @@ export default function ProductionActualPage() {
 
                 {/* Output quantity — hero-sized with steppers */}
                 <div className="block min-w-0">
-                  <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <span className="mb-2 block text-sm font-semibold text-fg">
                     Output quantity *
                   </span>
                   <div className="flex items-stretch gap-0">
                     <button
                       type="button"
-                      className="btn btn-sm rounded-r-none border-r-0 px-3 font-mono text-base leading-none"
+                      className="btn rounded-r-none border-r-0 h-14 px-4 text-2xl font-bold leading-none"
                       data-testid="production-actual-output-stepper-minus"
                       onClick={() => stepNum(outputQty, -1, setOutputQty)}
                       onKeyDown={(e) => {
@@ -2181,7 +2181,7 @@ export default function ProductionActualPage() {
                       inputMode="decimal"
                       step="any"
                       min="0"
-                      className="input rounded-none text-3xl font-mono tabular-nums text-center flex-1 min-w-0"
+                      className="input rounded-none h-14 text-4xl font-mono font-bold tabular-nums text-center flex-1 min-w-0"
                       value={outputQty}
                       data-testid="production-actual-output-qty"
                       onChange={(e) => setOutputQty(e.target.value)}
@@ -2189,7 +2189,7 @@ export default function ProductionActualPage() {
                     />
                     <button
                       type="button"
-                      className="btn btn-sm rounded-l-none border-l-0 px-3 font-mono text-base leading-none"
+                      className="btn rounded-l-none border-l-0 h-14 px-4 text-2xl font-bold leading-none"
                       data-testid="production-actual-output-stepper-plus"
                       onClick={() => stepNum(outputQty, 1, setOutputQty)}
                       onKeyDown={(e) => {
@@ -2210,13 +2210,13 @@ export default function ProductionActualPage() {
                     NOT RM consumption — RM consumption is based on the
                     output_qty above. Operators MUST understand this. */}
                 <div className="block min-w-0">
-                  <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <span className="mb-2 block text-sm font-semibold text-fg">
                     Scrap quantity
                   </span>
                   <div className="flex items-stretch gap-0">
                     <button
                       type="button"
-                      className="btn btn-sm rounded-r-none border-r-0 px-3 font-mono text-base leading-none"
+                      className="btn rounded-r-none border-r-0 h-12 px-3 text-lg font-bold leading-none"
                       onClick={() => stepNum(scrapQty, -1, setScrapQty)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
@@ -2233,14 +2233,14 @@ export default function ProductionActualPage() {
                       inputMode="decimal"
                       step="any"
                       min="0"
-                      className="input rounded-none font-mono tabular-nums text-center flex-1 min-w-0"
+                      className="input rounded-none h-12 text-xl font-mono font-semibold tabular-nums text-center flex-1 min-w-0"
                       value={scrapQty}
                       data-testid="production-actual-scrap-qty"
                       onChange={(e) => setScrapQty(e.target.value)}
                     />
                     <button
                       type="button"
-                      className="btn btn-sm rounded-l-none border-l-0 px-3 font-mono text-base leading-none"
+                      className="btn rounded-l-none border-l-0 h-12 px-3 text-lg font-bold leading-none"
                       onClick={() => stepNum(scrapQty, 1, setScrapQty)}
                       onKeyDown={(e) => {
                         if (e.key === "Enter") {
@@ -2253,8 +2253,8 @@ export default function ProductionActualPage() {
                       +
                     </button>
                   </div>
-                  <div className="mt-1 text-3xs text-fg-muted">
-                    Scrap reduces finished-goods output only. Raw-material consumption stays based on the output quantity above.
+                  <div className="mt-2 text-xs text-fg-muted leading-snug">
+                    Scrap reduces finished-goods output only — raw-material consumption stays based on output.
                   </div>
                 </div>
 
@@ -2276,7 +2276,7 @@ export default function ProductionActualPage() {
 
                 {/* Notes with live character count */}
                 <div className="block min-w-0 sm:col-span-2">
-                  <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <span className="mb-2 block text-sm font-semibold text-fg">
                     Notes
                   </span>
                   <div className="relative">
