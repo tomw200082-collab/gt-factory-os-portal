@@ -61,7 +61,7 @@
 // ---------------------------------------------------------------------------
 
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -82,7 +82,6 @@ import {
 
 import { useInventoryFlow } from "@/app/(planning)/planning/inventory-flow/_lib/useInventoryFlow";
 import type { FlowItem } from "@/app/(planning)/planning/inventory-flow/_lib/types";
-import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
 import { FreshnessBadge } from "@/components/badges/FreshnessBadge";
@@ -97,7 +96,9 @@ import type {
   PoTier,
   PurchaseSessionPo,
 } from "@/app/(planning)/planning/purchase-session/_lib/types";
-import { FactoryStateChip } from "./_components/FactoryStateChip";
+import { DashboardHero } from "./_components/DashboardHero";
+import { KpiTile, KpiTileBreakdown } from "./_components/KpiTile";
+import { StockHealthCard } from "./_components/StockHealthCard";
 
 // ---------------------------------------------------------------------------
 // Cadence — keep low for the morning view; refresh on tab focus is the default.
@@ -611,14 +612,14 @@ function QuickActionsLauncher() {
       title="Jump to a workflow"
       description="Most-used workflows for your role."
     >
-      <div className="-mx-1 flex gap-2 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:px-0 sm:pb-0">
+      <div className="-mx-1 flex gap-2.5 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:px-0 sm:pb-0">
         {visible.map((a) => {
           const Icon = a.icon;
           return (
             <Link
               key={a.href}
               href={a.href}
-              className="group inline-flex shrink-0 items-center gap-2 rounded-md border border-border/70 bg-bg-raised px-3 py-2 text-xs font-semibold text-fg-strong shadow-raised transition-all duration-150 ease-out-quart hover:-translate-y-0.5 hover:border-accent/60 hover:bg-accent-soft hover:text-accent hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 motion-reduce:transition-none motion-reduce:hover:translate-y-0"
+              className="dash-quick-action group"
               title={a.blurb}
             >
               <Icon
@@ -675,217 +676,6 @@ function BreakGlassBanner() {
   );
 }
 
-// ---------------------------------------------------------------------------
-// Stat tiles — Tailwind tokens only, no inline hex.
-// ---------------------------------------------------------------------------
-function ValueCard({
-  label,
-  value,
-  sub,
-  tone,
-  icon,
-  href,
-  loading,
-}: {
-  label: string;
-  value: string | null;
-  sub: ReactNode;
-  tone: "accent" | "success" | "info" | "warning";
-  icon?: ReactNode;
-  href?: string;
-  loading?: boolean;
-}) {
-  const TONE_CHIP: Record<typeof tone, string> = {
-    accent: "text-accent",
-    success: "text-success",
-    info: "text-info",
-    warning: "text-warning",
-  };
-  const TONE_ICON: Record<typeof tone, string> = {
-    accent: "border-accent/30 bg-accent-soft text-accent",
-    success: "border-success/30 bg-success-soft text-success",
-    info: "border-info/30 bg-info-soft text-info",
-    warning: "border-warning/30 bg-warning-soft text-warning",
-  };
-  const body = (
-    <>
-      <div className="flex items-start justify-between gap-3">
-        <div
-          className={cn(
-            "text-3xs font-semibold uppercase tracking-sops",
-            TONE_CHIP[tone],
-          )}
-        >
-          {label}
-        </div>
-        {icon ? (
-          <div
-            className={cn(
-              "flex h-9 w-9 shrink-0 items-center justify-center rounded-md border transition-transform duration-200 ease-out-quart group-hover:scale-105 motion-reduce:transition-none motion-reduce:group-hover:scale-100",
-              TONE_ICON[tone],
-            )}
-            aria-hidden
-          >
-            {icon}
-          </div>
-        ) : null}
-      </div>
-      {loading ? (
-        <Skel h={40} w="80%" />
-      ) : (
-        <div className="text-[2rem] font-semibold leading-[1.05] tabular-nums tracking-tighter text-fg-strong sm:text-4xl">
-          {value ?? "—"}
-        </div>
-      )}
-      <div className="text-xs leading-relaxed text-fg-muted">{sub}</div>
-      {href ? (
-        <div className="mt-auto flex items-center justify-between pt-1">
-          <span className="text-3xs font-semibold uppercase tracking-sops text-fg-faint">
-            Open
-          </span>
-          <ArrowRight
-            className={cn(
-              "h-3.5 w-3.5 shrink-0 transition-transform duration-200 ease-out-quart group-hover:translate-x-0.5 motion-reduce:transition-none motion-reduce:group-hover:translate-x-0",
-              TONE_CHIP[tone],
-            )}
-            strokeWidth={2}
-            aria-hidden
-          />
-        </div>
-      ) : null}
-    </>
-  );
-  if (href) {
-    return (
-      <Link
-        href={href}
-        data-tone={tone}
-        className="kpi-tile is-link group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-      >
-        {body}
-      </Link>
-    );
-  }
-  return (
-    <div data-tone={tone} className="kpi-tile">
-      {body}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Stock health donut.
-// ---------------------------------------------------------------------------
-function StockDonut({
-  healthy,
-  watch,
-  critical,
-  total,
-  loading,
-}: {
-  healthy: number;
-  watch: number;
-  critical: number;
-  total: number;
-  loading?: boolean;
-}) {
-  const r = 40;
-  const circ = 2 * Math.PI * r;
-  const gap = 6;
-
-  // Iteration 9 — draw-in: arcs grow from zero length on first paint.
-  const [drawn, setDrawn] = useState(false);
-  useEffect(() => {
-    const raf = requestAnimationFrame(() => setDrawn(true));
-    return () => cancelAnimationFrame(raf);
-  }, []);
-
-  function arc(count: number, stroke: string, offset: number) {
-    const len = Math.max(0, (count / Math.max(1, total)) * circ - gap);
-    return (
-      <circle
-        cx={52}
-        cy={52}
-        r={r}
-        fill="none"
-        className={stroke}
-        strokeWidth={10}
-        strokeDasharray={`${drawn ? len : 0} ${circ}`}
-        strokeDashoffset={offset}
-        transform="rotate(-90 52 52)"
-        strokeLinecap="round"
-        style={{ transition: "stroke-dasharray 700ms cubic-bezier(0.165,0.84,0.44,1)" }}
-      />
-    );
-  }
-  const hShare = (healthy / Math.max(1, total)) * circ;
-  const wShare = (watch / Math.max(1, total)) * circ;
-
-  const tone: "accent" | "warning" | "danger" =
-    critical > 0 ? "danger" : watch > 0 ? "warning" : "accent";
-  return (
-    <Link
-      href="/planning/inventory-flow"
-      data-tone={tone}
-      className="kpi-tile is-link group block focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-    >
-      <div className="flex items-center justify-between">
-        <div className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-          Stock health
-        </div>
-        <span className="text-3xs font-semibold uppercase tracking-sops text-fg-faint">
-          {total} items
-        </span>
-      </div>
-      {loading ? (
-        <div className="mt-4 flex items-center gap-5">
-          <Skel h={104} w={104} className="rounded-full" />
-          <div className="flex flex-1 flex-col gap-2">
-            <Skel h={14} />
-            <Skel h={14} />
-            <Skel h={14} />
-          </div>
-        </div>
-      ) : (
-        <div className="mt-4 flex items-center gap-5">
-          <svg
-            width={104}
-            height={104}
-            viewBox="0 0 104 104"
-            role="img"
-            aria-label={`Stock health across ${total} items: ${healthy} healthy, ${watch} on watch, ${critical} critical.`}
-          >
-            <circle cx={52} cy={52} r={r} fill="none" className="stroke-border/40" strokeWidth={10} />
-            {arc(healthy, "stroke-success", 0)}
-            {arc(watch, "stroke-warning", -hShare)}
-            {arc(critical, "stroke-danger", -(hShare + wShare))}
-            <text
-              x={52}
-              y={48}
-              textAnchor="middle"
-              className="fill-fg-strong text-[22px] font-semibold"
-            >
-              {total}
-            </text>
-            <text
-              x={52}
-              y={63}
-              textAnchor="middle"
-              className="fill-fg-subtle text-[9px] uppercase tracking-widest"
-            >
-              ITEMS
-            </text>
-          </svg>
-          <div className="flex flex-1 flex-col gap-2 text-xs">
-            <Legend dotClass="bg-success" label="Healthy" n={healthy} />
-            <Legend dotClass="bg-warning" label="Watch" n={watch} />
-            <Legend dotClass="bg-danger" label="Critical" n={critical} />
-          </div>
-        </div>
-      )}
-    </Link>
-  );
-}
 
 function Legend({ dotClass, label, n }: { dotClass: string; label: string; n: number }) {
   return (
@@ -894,86 +684,6 @@ function Legend({ dotClass, label, n }: { dotClass: string; label: string; n: nu
       <span className="flex-1 text-fg-muted">{label}</span>
       <span className="font-semibold tabular-nums text-fg-strong">{n}</span>
     </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Exceptions card — FLOW-DG-007: adds Open inbox link.
-// ---------------------------------------------------------------------------
-function ExceptionsCard({
-  criticalN,
-  warningN,
-  infoN,
-  loading,
-}: {
-  criticalN: number;
-  warningN: number;
-  infoN: number;
-  loading?: boolean;
-}) {
-  const total = criticalN + warningN + infoN;
-  const hot = criticalN > 0;
-  const tone = hot ? "danger" : "info";
-  return (
-    <Link
-      href="/inbox"
-      data-tone={tone}
-      className="kpi-tile is-link group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-    >
-      <div className="flex items-start justify-between gap-3">
-        <div
-          className={cn(
-            "text-3xs font-semibold uppercase tracking-sops",
-            hot ? "text-danger" : "text-info",
-          )}
-        >
-          Exceptions
-        </div>
-        <div
-          className={cn(
-            "flex h-9 w-9 shrink-0 items-center justify-center rounded-md border transition-transform duration-200 ease-out-quart group-hover:scale-105 motion-reduce:transition-none motion-reduce:group-hover:scale-100",
-            hot
-              ? "border-danger/40 bg-danger-soft text-danger"
-              : "border-info/30 bg-info-soft text-info",
-          )}
-          aria-hidden
-        >
-          <Inbox className="h-4 w-4" strokeWidth={2} />
-        </div>
-      </div>
-      {loading ? (
-        <Skel h={40} w="60%" />
-      ) : (
-        <div
-          className={cn(
-            "text-[2rem] font-semibold leading-[1.05] tabular-nums tracking-tighter sm:text-4xl",
-            hot ? "text-danger" : "text-fg-strong",
-          )}
-        >
-          {total}
-        </div>
-      )}
-      {!loading && (
-        <div className="flex flex-col gap-1.5 text-xs">
-          <Legend dotClass="bg-danger" label="Critical" n={criticalN} />
-          <Legend dotClass="bg-warning" label="Warning" n={warningN} />
-          <Legend dotClass="bg-info" label="Info" n={infoN} />
-        </div>
-      )}
-      <div className="mt-auto flex items-center justify-between pt-1">
-        <span className="text-3xs font-semibold uppercase tracking-sops text-fg-faint">
-          Open inbox
-        </span>
-        <ArrowRight
-          className={cn(
-            "h-3.5 w-3.5 shrink-0 transition-transform duration-200 ease-out-quart group-hover:translate-x-0.5 motion-reduce:transition-none motion-reduce:group-hover:translate-x-0",
-            hot ? "text-danger" : "text-info",
-          )}
-          strokeWidth={2}
-          aria-hidden
-        />
-      </div>
-    </Link>
   );
 }
 
@@ -1466,6 +1176,7 @@ function CriticalTodayBlock({ now }: { now: Date }) {
   return (
     <SectionCard
       tone={hot ? "danger" : "default"}
+      className={cn("dash-live-block", hot && "is-hot shadow-pop")}
       eyebrow="Live"
       title={
         <span className="inline-flex items-center gap-2">
@@ -1561,9 +1272,12 @@ function SlippedPlansBlock({ now }: { now: Date }) {
   const rows = query.data?.rows ?? [];
   const asOf = query.data?.as_of;
   const windowDays = query.data?.window_days ?? 7;
+  const hasRows = rows.length > 0;
 
   return (
     <SectionCard
+      tone={hasRows ? "warning" : "default"}
+      className={cn("dash-live-block", hasRows && "is-warm")}
       eyebrow="Live"
       title={
         <span className="inline-flex items-center gap-2">
@@ -1721,9 +1435,15 @@ function UrgentProcurementBlock({ now }: { now: Date }) {
       ? "warning"
       : "default";
 
+  const hasWarm = !hot && rows.length > 0;
   return (
     <SectionCard
       tone={tone}
+      className={cn(
+        "dash-live-block",
+        hot && "is-hot shadow-pop",
+        hasWarm && "is-warm",
+      )}
       eyebrow="Live"
       title={
         <span className="inline-flex items-center gap-2">
@@ -1857,14 +1577,6 @@ function UrgentProcurementBlock({ now }: { now: Date }) {
       )}
     </SectionCard>
   );
-}
-
-// ---------------------------------------------------------------------------
-// Hidden helper to consume children prop from SectionCard if no child renders.
-// (Not actually used — kept inline.)
-// ---------------------------------------------------------------------------
-function MetaRow({ children }: { children: ReactNode }) {
-  return <div className="flex flex-wrap items-center gap-2">{children}</div>;
 }
 
 // ---------------------------------------------------------------------------
@@ -2070,19 +1782,29 @@ export default function DashboardPage() {
     ? null
     : slippedPlansQ.data?.rows?.length ?? 0;
 
+  // Compact + long date strings for the hero. Compact is shown right of the
+  // greeting; long is in the sub-line below. Locale-aware.
+  const dateLong = useMemo(() => fmtToday(now), [now]);
+  const dateCompact = useMemo(
+    () =>
+      now.toLocaleDateString(undefined, {
+        weekday: "short",
+        month: "short",
+        day: "numeric",
+      }),
+    [now],
+  );
+
   return (
-    <div className="dashboard-canvas flex flex-col gap-6 sm:gap-8">
-      <WorkflowHeader
-        eyebrow="Factory floor"
-        title="Dashboard"
-        description={`${greeting(now, session?.display_name)} — here is the state of the factory on ${fmtToday(now)}.`}
-        meta={
-          <MetaRow>
-            <FactoryStateChip
-              critical={criticalCount}
-              slipped={slippedCount}
-              procurementUrgent={null}
-            />
+    <div className="dashboard-canvas flex flex-col gap-6 sm:gap-7">
+      <DashboardHero
+        greeting={greeting(now, session?.display_name)}
+        dateLong={dateLong}
+        dateCompact={dateCompact}
+        critical={criticalCount}
+        slipped={slippedCount}
+        metaRail={
+          <>
             <FreshnessBadge
               label="Stock value"
               lastAt={valueAsOf ?? undefined}
@@ -2101,8 +1823,6 @@ export default function DashboardPage() {
                 </span>
               </span>
             ) : null}
-            {/* Live affordance — instrument-cluster ping confirms the
-                dashboard is polling in the background. */}
             <span
               className="dash-chip"
               data-tone="accent"
@@ -2111,7 +1831,7 @@ export default function DashboardPage() {
               <span className="dash-live-dot" aria-hidden />
               Auto-refreshing
             </span>
-          </MetaRow>
+          </>
         }
       />
 
@@ -2121,21 +1841,12 @@ export default function DashboardPage() {
         <QuickActionsLauncher />
       </div>
 
-      <div className="reveal reveal-delay-2">
-        <CriticalTodayBlock now={now} />
-      </div>
-      {canSeePurchasing ? (
-        <div className="reveal reveal-delay-3">
-          <UrgentProcurementBlock now={now} />
-        </div>
-      ) : null}
-      <div className="reveal reveal-delay-4">
-        <SlippedPlansBlock now={now} />
-      </div>
-
-      {/* Hero KPI strip — the five numbers the factory is run by. */}
-      <div className="reveal reveal-delay-5 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <ValueCard
+      {/* Hero KPI strip — promoted above the live blocks so the headline
+          numbers a COO opens the dashboard to see appear in the first
+          scanning zone. The live blocks (critical / urgent / slipped)
+          follow immediately below and escalate visually when active. */}
+      <div className="reveal reveal-delay-2 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <KpiTile
           label="RM Inventory Value"
           value={rmValue != null ? fmtILS(rmValue) : null}
           sub={
@@ -2147,11 +1858,12 @@ export default function DashboardPage() {
             </span>
           }
           tone="warning"
-          icon={<Coins className="h-4 w-4" strokeWidth={2} />}
+          icon={<Coins className="h-5 w-5" strokeWidth={2} />}
           href="/inventory"
+          ctaLabel="Open inventory"
           loading={valueQ.isLoading}
         />
-        <ValueCard
+        <KpiTile
           label="FG Inventory Value"
           value={fgValue != null ? fmtILS(fgValue) : null}
           sub={
@@ -2163,11 +1875,12 @@ export default function DashboardPage() {
             </span>
           }
           tone="success"
-          icon={<PackageCheck className="h-4 w-4" strokeWidth={2} />}
+          icon={<PackageCheck className="h-5 w-5" strokeWidth={2} />}
           href="/inventory"
+          ctaLabel="Open inventory"
           loading={valueQ.isLoading}
         />
-        <ValueCard
+        <KpiTile
           label="Open Purchase Orders"
           value={String(poStats.openCount)}
           sub={
@@ -2184,23 +1897,46 @@ export default function DashboardPage() {
             </span>
           }
           tone="info"
-          icon={<ClipboardList className="h-4 w-4" strokeWidth={2} />}
+          icon={<ClipboardList className="h-5 w-5" strokeWidth={2} />}
           href="/purchase-orders"
+          ctaLabel="Open POs"
           loading={purchaseOrdersQ.isLoading}
         />
-        <ExceptionsCard
-          criticalN={criticalN}
-          warningN={warningN}
-          infoN={infoN}
+        <KpiTileBreakdown
+          label="Exceptions"
+          value={String(criticalN + warningN + infoN)}
+          tone={criticalN > 0 ? "danger" : "info"}
+          icon={<Inbox className="h-5 w-5" strokeWidth={2} />}
+          href="/inbox"
+          ctaLabel="Open inbox"
           loading={exceptionsQ.isLoading}
+          legend={
+            <>
+              <Legend dotClass="bg-danger" label="Critical" n={criticalN} />
+              <Legend dotClass="bg-warning" label="Warning" n={warningN} />
+              <Legend dotClass="bg-info" label="Info" n={infoN} />
+            </>
+          }
         />
+      </div>
+
+      <div className="reveal reveal-delay-3">
+        <CriticalTodayBlock now={now} />
+      </div>
+      {canSeePurchasing ? (
+        <div className="reveal reveal-delay-4">
+          <UrgentProcurementBlock now={now} />
+        </div>
+      ) : null}
+      <div className="reveal reveal-delay-5">
+        <SlippedPlansBlock now={now} />
       </div>
 
       {/* Shortage risk + stock health + planning. */}
       <div className="reveal reveal-delay-6 grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
         <ShortageRisk items={flowItems} loading={flowQ.isLoading} />
         <div className="flex flex-col gap-4">
-          <StockDonut
+          <StockHealthCard
             healthy={healthy}
             watch={watch}
             critical={critical}
