@@ -327,7 +327,7 @@ function MeasurementCell({
             <button
               type="button"
               onClick={onOpenGaps}
-              className="inline-flex items-center gap-0.5 rounded text-3xs font-semibold uppercase tracking-sops text-accent hover:underline"
+              className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-3xs font-semibold text-accent transition-colors hover:bg-accent-soft/80"
               title="Open the Cost-gaps drawer to fix the missing component costs."
             >
               Measure
@@ -870,16 +870,14 @@ function coverageTone(pct: number | null): "success" | "warning" | "danger" | "n
 function CoverageAxisSkeleton({ label }: { label: string }): JSX.Element {
   return (
     <div className="opacity-60">
-      <div className="flex items-baseline justify-between gap-2">
-        <div className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-          {label}
-        </div>
-        <div className="text-2xl font-bold tabular-nums text-fg-subtle">—</div>
+      <div className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+        {label}
       </div>
-      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-bg-subtle">
+      <div className="mt-1 text-3xl font-bold leading-none tabular-nums text-fg-subtle">—</div>
+      <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-bg-subtle">
         <div className="h-full w-0 bg-fg-subtle" aria-hidden />
       </div>
-      <div className="mt-1 h-3 w-24 animate-pulse rounded bg-bg-subtle" />
+      <div className="mt-1.5 h-3 w-24 animate-pulse rounded bg-bg-subtle" />
     </div>
   );
 }
@@ -917,25 +915,23 @@ function CoverageAxis({
           : "text-fg-strong";
   return (
     <div>
-      <div className="flex items-baseline justify-between gap-2">
-        <div className="flex items-center text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-          {label}
-          <HelpHint text={hint} />
-        </div>
-        <div className={`text-2xl font-bold tabular-nums ${pctColor}`}>
-          {pctText}
-        </div>
+      <div className="flex items-center text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+        {label}
+        <HelpHint text={hint} />
       </div>
-      <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-bg-subtle">
+      <div className={`mt-1 text-3xl font-bold leading-none tabular-nums ${pctColor}`}>
+        {pctText}
+      </div>
+      <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-bg-subtle">
         <div
-          className={`h-full ${barColor} transition-all`}
+          className={`h-full ${barColor} rounded-r-full transition-all duration-500`}
           style={{
             width: pct == null ? "0%" : `${Math.max(0, Math.min(100, pct))}%`,
           }}
           aria-hidden
         />
       </div>
-      <div className="mt-1 text-3xs tabular-nums text-fg-subtle">
+      <div className="mt-1.5 text-3xs tabular-nums text-fg-subtle">
         <span className="font-medium text-fg-strong">{numerator}</span>
         <span className="mx-1 text-fg-subtle">of</span>
         <span>{denominator}</span>
@@ -1013,27 +1009,26 @@ function CoverageTile({
           {unmeasuredRevenue > 0 || revenueUnmeasuredSkus > 0 ? (
             <div className="mt-3 grid grid-cols-1 gap-2 border-t border-border/60 pt-3 text-3xs sm:grid-cols-2">
               {unmeasuredRevenue > 0 ? (
-                <div className="text-warning-fg">
+                <div className="rounded-md border border-warning/30 bg-warning-softer/60 px-2.5 py-1.5 text-warning-fg">
                   <span className="font-semibold tabular-nums">
                     {formatIls(unmeasuredRevenue)}
                   </span>{" "}
-                  of measurable revenue has unmeasured margin
-                  <span className="text-fg-subtle"> · </span>
-                  <span className="tabular-nums">{marginUnmeasuredSkus} SKUs</span>
+                  of measurable revenue · margin unmeasured
+                  <span className="ml-1 text-fg-subtle tabular-nums">({marginUnmeasuredSkus} SKUs)</span>
                 </div>
               ) : null}
               {revenueUnmeasuredSkus > 0 ? (
-                <div className="text-danger-fg">
+                <div className="rounded-md border border-danger/30 bg-danger-softer/60 px-2.5 py-1.5 text-danger-fg">
                   <span className="font-semibold tabular-nums">
                     {revenueUnmeasuredSkus}
                   </span>{" "}
-                  active SKUs have no sale price · revenue itself blind
+                  active SKUs · no sale price set · revenue blind
                 </div>
               ) : null}
             </div>
           ) : revenuePct != null && revenuePct >= 95 ? (
-            <div className="mt-3 border-t border-border/60 pt-3 text-center text-3xs text-success-fg">
-              Books closeable on this quarter. Nothing material to fix.
+            <div className="mt-3 rounded-md border border-success/40 bg-success-softer px-3 py-2 text-center text-xs font-medium text-success-fg">
+              Books closeable — nothing material to fix this quarter.
             </div>
           ) : null}
         </>
@@ -1079,8 +1074,9 @@ function InventoryHonestTile({
       </div>
       {unmeasuredSkus > 0 ? (
         <div className="mt-1 text-3xs text-warning-fg">
+          Missing COGS:{" "}
           <span className="tabular-nums">{formatQtyInt(String(unmeasuredUnits))}</span>{" "}
-          units · {unmeasuredSkus} SKUs unmeasured (value unknown)
+          units · {unmeasuredSkus} SKUs (value unknown)
         </div>
       ) : null}
     </div>
@@ -2391,7 +2387,7 @@ export default function AdminEconomicsPage(): JSX.Element {
       <WorkflowHeader
         eyebrow="Economics"
         title="Economics"
-        description="COGS, average sale price and material margin per SKU, plus component cost management. Enter sale prices on the Overview tab; edit raw material costs on Component Costs; drill into a product to see exactly which gaps are blocking its COGS."
+        description="Close the books on this quarter — see P&L coverage by revenue and SKU count, find the measurement gaps, and fix them inline without leaving the page."
         meta={
           <>
             <Badge tone="info" dotted>
@@ -2454,7 +2450,7 @@ export default function AdminEconomicsPage(): JSX.Element {
           <SectionCard
             eyebrow="P&L Coverage"
             title="Books closeable on this quarter"
-            description="Of the revenue that landed in the last 90 days, how much has measured margin? The page below sorts by the largest measurement gap first — fix from the top down to close the books fastest."
+            description="What share of this quarter's revenue has measured margin? The table sorts by the largest gap first — fix from the top down."
           >
             <div className="space-y-3">
               <CoverageTile
@@ -2586,8 +2582,8 @@ export default function AdminEconomicsPage(): JSX.Element {
 
           <SectionCard
             eyebrow="Economics"
-            title="P&L per product, sorted by largest measurement gap"
-            description="Default sort is Revenue 90d desc — the biggest measurement gaps surface first. Click any column to re-sort. Click Measure on a margin-unmeasured row to open the Cost-gaps drawer and publish fallback prices inline; the row's status badge carries the size of the gap underneath."
+            title="P&L per product"
+            description="Sorted by Revenue 90d by default — the largest measurement gaps first. Click any column to re-sort. Click Measure on a margin-unmeasured row to open the Cost-gaps drawer; the badge underneath shows the revenue exposure."
             contentClassName="p-0"
           >
             {economicsQuery.isLoading ? (
@@ -2726,7 +2722,7 @@ export default function AdminEconomicsPage(): JSX.Element {
                         className="sticky top-0 z-10 bg-bg-subtle/95 px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle backdrop-blur"
                       >
                         Measurement
-                        <HelpHint text="Tranche 021 P&L Coverage frame: each row's state on the measurement axis. The size line under the badge shows the row's contribution to the gap (or to the measured P&L)." />
+                        <HelpHint text="Each row's state on the P&L coverage measurement axis — whether revenue and margin are both computable. The line under the badge shows the row's contribution to the gap or to measured P&L." />
                       </th>
                     </tr>
                   </thead>
@@ -2736,10 +2732,11 @@ export default function AdminEconomicsPage(): JSX.Element {
                         .length;
                       const showGaps = !r.cogs_complete && blockerCount > 0;
                       const qtySold = num(r.qty_sold_90d) ?? 0;
+                      const inactive = !isActive90d(r);
                       return (
                         <tr
                           key={r.item_id}
-                          className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
+                          className={`border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40 ${inactive ? "opacity-55" : ""}`}
                         >
                           <td className="px-3 py-2">
                             <span
@@ -2757,13 +2754,15 @@ export default function AdminEconomicsPage(): JSX.Element {
                               <span className={qtySold === 0 ? "text-fg-muted" : "text-fg-strong"}>
                                 {formatIls(r.revenue_90d_ils)}
                               </span>
-                            ) : (
+                            ) : !inactive ? (
                               <span
-                                className="text-fg-subtle"
-                                title="Revenue not measurable — no average sale price is set."
+                                className="text-3xs font-medium text-danger-fg/80"
+                                title="No sale price set — revenue cannot be computed."
                               >
-                                —
+                                no price
                               </span>
+                            ) : (
+                              <span className="text-fg-subtle">—</span>
                             )}
                           </td>
                           <td className="px-3 py-2 text-right text-sm tabular-nums">
