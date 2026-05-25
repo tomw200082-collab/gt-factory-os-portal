@@ -627,169 +627,161 @@ export default function PhysicalCountPage() {
       <WorkflowHeader
         eyebrow="Operator form"
         title="Physical Count"
-        description="Blind count — enter what you see. Expected quantities stay hidden."
+        description="Pick an item, count what you see, submit."
       />
 
-      {/* ----------------------------------------------------------------
-          Result banner — success / pending / error
-          ---------------------------------------------------------------- */}
-      {done ? (
-        <div
-          className={cn(
-            "mb-6 rounded-xl border px-5 py-4 transition-all duration-150",
-            done.kind === "success"
-              ? "border-success/40 bg-success-softer text-success-fg"
-              : done.kind === "pending"
-                ? "border-warning/40 bg-warning-softer text-warning-fg"
-                : "border-danger/40 bg-danger-softer text-danger-fg",
-          )}
-          role="status"
-        >
-          {done.kind === "success" ? (
-            <div className="space-y-4">
-              {/* Hero check — wide, confident, sized for a quick glance. */}
-              <div className="flex items-center gap-4">
-                <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-success/15">
-                  <svg className="h-7 w-7 text-success-fg" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      {/* Result banner — unified layout across success / pending / error.
+          A 14x14 colored icon badge anchors the eye; an outcome title
+          + supporting detail line read top-down; the delta lands as a
+          prominent chip when the API returned one; primary action is
+          left-most, secondary action is a ghost button to its right;
+          ref/snapshot id sits as a faint mono trailer. */}
+      {done ? (() => {
+        const isSuccess = done.kind === "success";
+        const isPending = done.kind === "pending";
+        const isError = done.kind === "error";
+        const tone = isSuccess
+          ? "border-success/40 bg-success-softer text-success-fg"
+          : isPending
+            ? "border-warning/40 bg-warning-softer text-warning-fg"
+            : "border-danger/40 bg-danger-softer text-danger-fg";
+        const badgeTone = isSuccess
+          ? "bg-success/15 text-success-fg"
+          : isPending
+            ? "bg-warning/20 text-warning-fg"
+            : "bg-danger/15 text-danger-fg";
+        const title = isPending
+          ? "Held for planner approval"
+          : isError
+            ? "Count not submitted"
+            : done.message;
+        const sub = isPending
+          ? <>Large variance vs the snapshot. <strong>Stock has not changed yet</strong> — the new anchor is applied only after approval.</>
+          : isError
+            ? done.message
+            : done.itemName;
+        const deltaSign = parseDeltaSign(done.delta);
+        return (
+          <div
+            className={cn(
+              "mb-6 rounded-2xl border px-5 py-5 transition-all duration-150 sm:px-6",
+              tone,
+            )}
+            role="status"
+            aria-live="polite"
+          >
+            <div className="flex items-start gap-4">
+              <span className={cn("flex h-14 w-14 shrink-0 items-center justify-center rounded-full", badgeTone)}>
+                {isSuccess && (
+                  <svg className="h-8 w-8" viewBox="0 0 24 24" fill="none" aria-hidden="true">
                     <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
-                </div>
-                <div className="flex-1 min-w-0">
-                  <div className="text-lg font-bold leading-tight">{done.message}</div>
-                  {done.itemName && (
-                    <div className="mt-0.5 text-sm font-medium opacity-90 truncate">{done.itemName}</div>
-                  )}
-                </div>
-              </div>
-              {done.delta && (
-                <div className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold",
-                  parseDeltaSign(done.delta) === "positive"
-                    ? "bg-success/20 text-success-fg"
-                    : parseDeltaSign(done.delta) === "negative"
-                      ? "bg-danger/20 text-danger-fg"
-                      : "bg-bg-raised text-fg-muted",
-                )}>
-                  Adjustment: {done.delta}
-                </div>
-              )}
-              {done.detail && (
-                <div className="font-mono text-xs opacity-60">
-                  {done.detail}
-                  {done.snapshotIdShort ? (
-                    <span className="ml-2 opacity-70">
-                      · snapshot {done.snapshotIdShort}…
+                )}
+                {isPending && (
+                  <svg className="h-8 w-8" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
+                    <path d="M12 7v5l3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                )}
+                {isError && (
+                  <svg className="h-8 w-8" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                    <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
+                    <path d="M9 9l6 6M15 9l-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+                  </svg>
+                )}
+              </span>
+              <div className="min-w-0 flex-1">
+                <div className="text-lg font-bold leading-tight sm:text-xl">{title}</div>
+                {sub ? (
+                  <div className="mt-1 text-sm leading-snug opacity-90">
+                    {isSuccess && done.itemName ? (
+                      <span className="font-semibold">{done.itemName}</span>
+                    ) : sub}
+                  </div>
+                ) : null}
+
+                {/* Delta chip — center stage for any non-zero adjustment. */}
+                {done.delta ? (
+                  <div className={cn(
+                    "mt-3 inline-flex items-baseline gap-1.5 rounded-full px-3 py-1 text-base font-bold tabular-nums",
+                    deltaSign === "positive"
+                      ? "bg-success/20 text-success-fg"
+                      : deltaSign === "negative"
+                        ? "bg-danger/20 text-danger-fg"
+                        : "bg-bg-raised text-fg-muted",
+                  )}>
+                    <span className="text-xs font-semibold uppercase tracking-sops opacity-75">
+                      Adjustment
                     </span>
-                  ) : null}
-                </div>
-              )}
-              <div className="flex items-center gap-2 flex-wrap">
+                    <span>{done.delta}</span>
+                  </div>
+                ) : null}
+              </div>
+            </div>
+
+            {/* Action row */}
+            <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-current/10 pt-4">
+              {isSuccess && (
                 <Link
                   href="/stock/movement-log"
-                  className="btn btn-primary btn-sm transition-all duration-150"
+                  className="btn btn-primary btn-sm"
                   data-testid="physical-count-success-movement-log"
                 >
                   View posted ledger →
                 </Link>
+              )}
+              {isPending && done.href && (
+                <Link
+                  href={done.href}
+                  className="btn btn-primary btn-sm"
+                  data-testid="physical-count-banner-link"
+                >
+                  {done.hrefLabel ?? "Open approval"}
+                </Link>
+              )}
+              {isError && snapshot && (
+                <button
+                  type="button"
+                  onClick={() => void handleSubmit({ preventDefault: () => {} } as React.FormEvent)}
+                  className="btn btn-primary btn-sm"
+                  data-testid="physical-count-error-retry"
+                >
+                  Try again
+                </button>
+              )}
+              {!isError && (
                 <button
                   type="button"
                   onClick={() => setDone(null)}
-                  className="btn btn-ghost btn-sm transition-all duration-150"
+                  className="btn btn-ghost btn-sm"
                 >
                   Count another item
                 </button>
-              </div>
-            </div>
-          ) : done.kind === "pending" ? (
-            <div className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-warning/20">
-                  <svg className="h-6 w-6 text-warning-fg" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                    <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
-                    <path d="M12 7v5l3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                  </svg>
-                </div>
-                <div>
-                  <div className="font-semibold text-base">{done.itemName ?? "Count submitted"}</div>
-                  <div className="text-sm opacity-90">This count has a large variance and is held for planner approval. <strong>Stock has not changed yet</strong> — the new anchor is applied only after approval.</div>
-                </div>
-              </div>
-              {done.delta && (
-                <div className={cn(
-                  "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-sm font-semibold",
-                  parseDeltaSign(done.delta) === "positive"
-                    ? "bg-success/20 text-success-fg"
-                    : parseDeltaSign(done.delta) === "negative"
-                      ? "bg-danger/20 text-danger-fg"
-                      : "bg-bg-raised text-fg-muted",
-                )}>
-                  Adjustment: {done.delta}
-                </div>
               )}
-              <div className="flex items-center gap-2 flex-wrap">
-                {done.href ? (
-                  <Link
-                    href={done.href}
-                    className="btn btn-primary btn-sm transition-all duration-150"
-                    data-testid="physical-count-banner-link"
-                  >
-                    {done.hrefLabel ?? "Open approval"}
-                  </Link>
-                ) : null}
+              {isError && (
                 <button
                   type="button"
                   onClick={() => setDone(null)}
-                  className="btn btn-ghost btn-sm transition-all duration-150"
-                >
-                  Count another item
-                </button>
-              </div>
-              {done.detail && (
-                <div className="font-mono text-xs opacity-60">
-                  {done.detail}
-                  {done.snapshotIdShort ? (
-                    <span className="ml-2 opacity-70">
-                      · snapshot {done.snapshotIdShort}…
-                    </span>
-                  ) : null}
-                </div>
-              )}
-            </div>
-          ) : (
-            /* Error */
-            <div>
-              <div className="flex items-center justify-between gap-3">
-                <div className="font-medium">{done.message}</div>
-              </div>
-              {done.itemSummary ? (
-                <div className="mt-1 text-xs font-medium opacity-90">{done.itemSummary}</div>
-              ) : null}
-              {done.detail ? (
-                <div className="mt-1 font-mono text-xs opacity-60">{done.detail}</div>
-              ) : null}
-              <div className="mt-3 flex items-center gap-2 flex-wrap">
-                {snapshot ? (
-                  <button
-                    type="button"
-                    onClick={() => void handleSubmit({ preventDefault: () => {} } as React.FormEvent)}
-                    className="btn btn-primary btn-sm transition-all duration-150"
-                    data-testid="physical-count-error-retry"
-                  >
-                    Try again
-                  </button>
-                ) : null}
-                <button
-                  type="button"
-                  onClick={() => setDone(null)}
-                  className="btn btn-ghost btn-sm transition-all duration-150"
+                  className="btn btn-ghost btn-sm"
                 >
                   Dismiss
                 </button>
-              </div>
+              )}
+
+              {/* ref + snapshot trailer — faint mono so it doesn't
+                  compete; on mobile it stacks under the action buttons. */}
+              {(done.detail || done.snapshotIdShort) ? (
+                <div className="ml-auto font-mono text-3xs opacity-60">
+                  {done.detail}
+                  {done.snapshotIdShort ? (
+                    <span className="ml-2 opacity-80">· snapshot {done.snapshotIdShort}…</span>
+                  ) : null}
+                </div>
+              ) : null}
             </div>
-          )}
-        </div>
-      ) : null}
+          </div>
+        );
+      })() : null}
 
       {/* ----------------------------------------------------------------
           Loading / error skeleton
@@ -1138,7 +1130,7 @@ export default function PhysicalCountPage() {
         /* ----------------------------------------------------------------
            STEP 2 — Enter counted quantity
            ---------------------------------------------------------------- */
-        <form onSubmit={handleSubmit} className="space-y-5 pb-20" data-testid="physical-count-step-2">
+        <form onSubmit={handleSubmit} className="space-y-6 pb-24" data-testid="physical-count-step-2">
           <StepIndicator step={2} />
           <BlindCountBanner compact />
 
@@ -1339,31 +1331,38 @@ export default function PhysicalCountPage() {
             </div>
           ) : null}
 
-          {/* Cancel confirm inline mini-prompt */}
+          {/* Cancel-snapshot confirm — inline, danger-toned, two clear
+              choices. Keep counting is the obvious primary because the
+              destructive path is the rarer intent. */}
           {cancelConfirm ? (
             <div
-              className="rounded-lg border border-danger/30 bg-danger-softer px-4 py-3 transition-all duration-150"
+              className="rounded-xl border border-danger/40 bg-danger-softer px-5 py-4 transition-all duration-150"
               data-testid="physical-count-cancel-confirm"
+              role="alertdialog"
             >
-              <div className="text-sm font-medium text-danger-fg">
-                Cancel this count? The snapshot will be released and you&apos;ll need to start over.
+              <div className="text-base font-bold text-danger-fg leading-tight">
+                Cancel this count?
               </div>
-              <div className="mt-3 flex items-center gap-2">
+              <div className="mt-1 text-sm text-danger-fg/90 leading-snug">
+                The snapshot will be released. Anything you typed is lost.
+              </div>
+              <div className="mt-4 flex items-center gap-2">
                 <button
                   type="button"
-                  className="btn btn-sm bg-danger text-white hover:bg-danger/90 transition-all duration-150"
+                  className="btn btn-sm btn-primary"
+                  onClick={() => setCancelConfirm(false)}
+                  autoFocus
+                >
+                  Keep counting
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-danger"
                   onClick={() => void handleCancel()}
                   disabled={phase === "submitting"}
                   data-testid="physical-count-cancel-proceed"
                 >
                   Yes, cancel
-                </button>
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm transition-all duration-150"
-                  onClick={() => setCancelConfirm(false)}
-                >
-                  Keep counting
                 </button>
               </div>
             </div>
