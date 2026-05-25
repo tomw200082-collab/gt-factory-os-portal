@@ -3284,4 +3284,441 @@
       inset 0 1px 0 0 hsl(0 0% 100% / 0.20),
       0 0 0 4px hsl(var(--success) / 0.05);
   }
+
+  /* ══════════════════════════════════════════════════════════════════════
+     Dashboard "stunning" layer (2026-05-25, polish-77wrL stage 2)
+
+     This layer deepens the visual language to true command-bridge level:
+     a more pronounced canvas backdrop, oversized KPI tiles with
+     tone-driven gradients and glowing icons, a premium hero with
+     instrument-cluster status rail, refined section card chrome, count-up
+     KPI animation, and a dramatic critical-active state.
+
+     Everything is additive, token-driven, theme-aware (light + dark),
+     mobile-safe, and prefers-reduced-motion safe.
+     ══════════════════════════════════════════════════════════════════════ */
+
+  /* ── Deeper canvas: replace the v1 ::before with a richer radial + a
+     fine dot pattern that adds tactile depth without distracting from
+     content. Anchored at the top of the dashboard surface. */
+  .dashboard-canvas::before {
+    height: 720px;
+    background:
+      radial-gradient(75% 95% at 0% -5%, hsl(var(--accent) / 0.10) 0%, transparent 55%),
+      radial-gradient(60% 80% at 100% -5%, hsl(var(--info) / 0.07) 0%, transparent 60%),
+      radial-gradient(120% 60% at 50% 110%, hsl(var(--accent) / 0.04) 0%, transparent 70%);
+  }
+  .dashboard-canvas::after {
+    /* Subtle dot pattern overlay — taken from the existing .bg-grid
+       --dot-grid token, faded so it reads as texture not noise. */
+    top: 0;
+    height: 100%;
+    background:
+      radial-gradient(
+        circle at 1px 1px,
+        hsl(var(--dot-grid)) 0.5px,
+        transparent 1px
+      );
+    background-size: 28px 28px;
+    background-position: 0 0;
+    opacity: 0.45;
+    -webkit-mask-image: linear-gradient(
+      to bottom,
+      transparent 0%,
+      black 25%,
+      black 60%,
+      transparent 100%
+    );
+            mask-image: linear-gradient(
+      to bottom,
+      transparent 0%,
+      black 25%,
+      black 60%,
+      transparent 100%
+    );
+  }
+
+  /* ── Premium Hero: command-bridge feel. The hero gets its own card-like
+     surface that contrasts with the canvas — gives the page a real
+     "you have arrived at the command center" moment. */
+  .dash-hero {
+    @apply relative overflow-hidden rounded-xl border border-border/70
+           bg-bg-raised/80 px-6 py-7 sm:px-8 sm:py-8;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    box-shadow:
+      0 1px 0 0 hsl(0 0% 100% / 0.04) inset,
+      0 1px 2px 0 hsl(var(--shadow-color) / 0.3),
+      0 16px 40px -16px hsl(var(--shadow-color-deep) / 0.10);
+  }
+  :root.dark .dash-hero {
+    background-color: hsl(var(--bg-raised) / 0.7);
+  }
+  .dash-hero::before {
+    /* Inner top glow — accent halo */
+    content: "";
+    position: absolute;
+    inset: -1px -1px auto -1px;
+    height: 160px;
+    pointer-events: none;
+    z-index: 0;
+    background:
+      radial-gradient(60% 100% at 20% 0%, hsl(var(--accent) / 0.18) 0%, transparent 65%),
+      radial-gradient(40% 100% at 90% 0%, hsl(var(--info) / 0.12) 0%, transparent 70%);
+  }
+  .dash-hero::after {
+    /* Hairline accent at the very top edge */
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 1px;
+    background: linear-gradient(
+      to right,
+      transparent 0%,
+      hsl(var(--accent) / 0.5) 25%,
+      hsl(var(--accent) / 0.5) 75%,
+      transparent 100%
+    );
+    pointer-events: none;
+    z-index: 1;
+  }
+  .dash-hero > * { position: relative; z-index: 2; }
+
+  /* Hero title — much stronger typographic weight, subtle gradient ink. */
+  .dash-hero-title {
+    @apply text-3xl font-semibold tracking-tighter text-fg-strong sm:text-[2.5rem] sm:leading-[1.05];
+    background-image: linear-gradient(
+      180deg,
+      hsl(var(--fg-strong)) 0%,
+      hsl(var(--fg) / 0.92) 100%
+    );
+    -webkit-background-clip: text;
+            background-clip: text;
+  }
+  .dash-hero-eyebrow {
+    @apply inline-flex items-center gap-2 text-2xs font-semibold uppercase tracking-sops text-fg-muted;
+  }
+  .dash-hero-eyebrow::before {
+    content: "";
+    width: 18px;
+    height: 1px;
+    background: linear-gradient(to right, hsl(var(--accent)), transparent);
+  }
+
+  /* Date plate — shows the date in a refined typographic way. */
+  .dash-hero-date {
+    @apply inline-flex items-baseline gap-1.5 font-mono text-xs font-semibold uppercase
+           tracking-sops text-fg-muted;
+  }
+  .dash-hero-date strong {
+    @apply font-semibold tracking-tightish text-fg-strong;
+  }
+
+  /* ── Tone variables shared by .dash-card and .kpi-tile so we keep one
+     source of truth. */
+  .dash-card,
+  .kpi-tile {
+    --kpi-glow: hsl(var(--kpi-tone, var(--accent)) / 0.18);
+    --kpi-rail: hsl(var(--kpi-tone, var(--accent)) / 0.85);
+    --kpi-bg:   hsl(var(--kpi-tone, var(--accent)) / 0.04);
+  }
+  .dash-card[data-tone="accent"],
+  .kpi-tile[data-tone="accent"]  { --kpi-tone: var(--accent); }
+  .dash-card[data-tone="success"],
+  .kpi-tile[data-tone="success"] { --kpi-tone: var(--success); }
+  .dash-card[data-tone="info"],
+  .kpi-tile[data-tone="info"]    { --kpi-tone: var(--info); }
+  .dash-card[data-tone="warning"],
+  .kpi-tile[data-tone="warning"] { --kpi-tone: var(--warning); }
+  .dash-card[data-tone="danger"],
+  .kpi-tile[data-tone="danger"]  { --kpi-tone: var(--danger); }
+
+  /* ── KPI tile — dramatic upgrade. Tone-driven gradient background,
+     glowing icon halo, much larger number, refined hover. */
+  .kpi-tile {
+    @apply card relative flex flex-col gap-4 overflow-hidden p-5 sm:p-6
+           transition-all duration-200 ease-out-quart;
+    background:
+      linear-gradient(
+        160deg,
+        hsl(var(--bg-raised)) 0%,
+        hsl(var(--bg-raised) / 0.96) 60%,
+        var(--kpi-bg) 100%
+      );
+  }
+  .kpi-tile::before {
+    /* Thicker top accent rail — fades along its length */
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 3px;
+    z-index: 1;
+    pointer-events: none;
+    background: linear-gradient(
+      to right,
+      var(--kpi-rail) 0%,
+      hsl(var(--kpi-tone, var(--accent)) / 0.5) 40%,
+      transparent 100%
+    );
+    transition: height 200ms ease, opacity 200ms ease;
+  }
+  .kpi-tile::after {
+    /* Deep corner halo */
+    content: "";
+    position: absolute;
+    inset: auto -40px -40px auto;
+    width: 200px;
+    height: 200px;
+    border-radius: 9999px;
+    z-index: 0;
+    pointer-events: none;
+    background: radial-gradient(
+      circle,
+      hsl(var(--kpi-tone, var(--accent)) / 0.07) 0%,
+      transparent 70%
+    );
+    transition: opacity 200ms ease, transform 200ms ease;
+  }
+  .kpi-tile > * { position: relative; z-index: 2; }
+
+  /* Glowing icon halo for KPI tiles */
+  .kpi-tile-icon {
+    @apply relative flex h-11 w-11 shrink-0 items-center justify-center rounded-lg
+           border;
+    color: hsl(var(--kpi-tone, var(--accent)));
+    background-color: hsl(var(--kpi-tone, var(--accent)) / 0.08);
+    border-color: hsl(var(--kpi-tone, var(--accent)) / 0.25);
+    box-shadow:
+      inset 0 1px 0 0 hsl(0 0% 100% / 0.10),
+      0 0 0 4px hsl(var(--kpi-tone, var(--accent)) / 0.04);
+    transition: transform 200ms ease-out, box-shadow 200ms ease-out;
+  }
+  .kpi-tile:hover .kpi-tile-icon,
+  .kpi-tile:focus-visible .kpi-tile-icon {
+    transform: scale(1.05);
+    box-shadow:
+      inset 0 1px 0 0 hsl(0 0% 100% / 0.12),
+      0 0 0 6px hsl(var(--kpi-tone, var(--accent)) / 0.08);
+  }
+
+  /* The big number on a KPI tile — dramatic, magazine-cover scale. */
+  .kpi-tile-value {
+    @apply text-[2.5rem] font-semibold leading-[1] tabular-nums tracking-tighter
+           text-fg-strong sm:text-[2.75rem] lg:text-[3rem];
+  }
+  .kpi-tile-label {
+    @apply text-3xs font-semibold uppercase tracking-sops;
+    color: hsl(var(--kpi-tone, var(--accent)));
+  }
+  .kpi-tile-sub {
+    @apply text-xs leading-relaxed text-fg-muted;
+  }
+
+  .kpi-tile.is-link:hover,
+  .kpi-tile.is-link:focus-visible {
+    transform: translateY(-3px);
+    box-shadow:
+      0 2px 6px -1px hsl(var(--shadow-color-deep) / 0.10),
+      0 16px 36px -8px hsl(var(--shadow-color-deep) / 0.14),
+      0 0 0 1px hsl(var(--kpi-tone, var(--accent)) / 0.40);
+    border-color: hsl(var(--kpi-tone, var(--accent)) / 0.55);
+  }
+  .kpi-tile.is-link:hover::before,
+  .kpi-tile.is-link:focus-visible::before {
+    height: 4px;
+  }
+  .kpi-tile.is-link:hover::after,
+  .kpi-tile.is-link:focus-visible::after {
+    transform: scale(1.2);
+    opacity: 1.2;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .kpi-tile, .kpi-tile-icon { transition: none; }
+    .kpi-tile.is-link:hover,
+    .kpi-tile.is-link:focus-visible { transform: none; }
+    .kpi-tile.is-link:hover::after,
+    .kpi-tile.is-link:focus-visible::after { transform: none; }
+  }
+
+  /* Open-arrow affordance row on linked KPI tiles */
+  .kpi-tile-cta {
+    @apply mt-auto flex items-center justify-between gap-2 pt-2 text-3xs
+           font-semibold uppercase tracking-sops text-fg-faint;
+  }
+  .kpi-tile-cta-arrow {
+    @apply h-3.5 w-3.5 shrink-0 transition-transform duration-200 ease-out-quart;
+    color: hsl(var(--kpi-tone, var(--accent)));
+  }
+  .kpi-tile:hover .kpi-tile-cta-arrow,
+  .kpi-tile:focus-visible .kpi-tile-cta-arrow { transform: translateX(2px); }
+  @media (prefers-reduced-motion: reduce) {
+    .kpi-tile-cta-arrow,
+    .kpi-tile:hover .kpi-tile-cta-arrow { transition: none; transform: none; }
+  }
+
+  /* ── Section card chrome — premium leading-icon header treatment.
+     Applied as a className on the SectionCard primitive via its existing
+     className prop; only modifies dashboard panel chrome, not the shared
+     primitive itself. */
+  .dash-section-header-icon {
+    @apply relative inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md border;
+    background-color: hsl(var(--kpi-tone, var(--accent)) / 0.08);
+    border-color: hsl(var(--kpi-tone, var(--accent)) / 0.25);
+    color: hsl(var(--kpi-tone, var(--accent)));
+    box-shadow: inset 0 1px 0 0 hsl(0 0% 100% / 0.06);
+  }
+
+  /* ── Live procurement / critical block: when hot, give it a glowing
+     left rail + animated halo to read as "act now". */
+  .dash-live-block {
+    @apply relative overflow-hidden;
+  }
+  .dash-live-block.is-hot::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 3px;
+    z-index: 1;
+    pointer-events: none;
+    background: linear-gradient(
+      to bottom,
+      hsl(var(--danger) / 0.9) 0%,
+      hsl(var(--danger) / 0.4) 100%
+    );
+    box-shadow: 0 0 12px 0 hsl(var(--danger) / 0.4);
+  }
+  .dash-live-block.is-warm::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: 3px;
+    z-index: 1;
+    pointer-events: none;
+    background: linear-gradient(
+      to bottom,
+      hsl(var(--warning) / 0.85) 0%,
+      hsl(var(--warning) / 0.4) 100%
+    );
+  }
+
+  /* ── Refined Quick Actions — more tactile, slightly larger. The `group`
+     utility must be added via the className in TSX (Tailwind disallows it
+     inside @apply). */
+  .dash-quick-action {
+    @apply relative inline-flex shrink-0 items-center gap-2 overflow-hidden
+           rounded-md border border-border/70 bg-bg-raised px-3.5 py-2.5
+           text-xs font-semibold text-fg-strong shadow-raised
+           transition-all duration-200 ease-out-quart
+           hover:-translate-y-0.5 hover:border-accent/60 hover:bg-accent-soft
+           hover:text-accent hover:shadow-pop
+           focus-visible:outline-none focus-visible:ring-2
+           focus-visible:ring-accent/40;
+  }
+  .dash-quick-action::before {
+    /* Subtle accent fill that sweeps in on hover */
+    content: "";
+    position: absolute;
+    inset: 0;
+    z-index: 0;
+    pointer-events: none;
+    background: linear-gradient(
+      120deg,
+      hsl(var(--accent) / 0) 0%,
+      hsl(var(--accent) / 0.06) 50%,
+      hsl(var(--accent) / 0) 100%
+    );
+    transform: translateX(-100%);
+    transition: transform 400ms ease-out;
+  }
+  .dash-quick-action:hover::before,
+  .dash-quick-action:focus-visible::before { transform: translateX(100%); }
+  .dash-quick-action > * { position: relative; z-index: 1; }
+  @media (prefers-reduced-motion: reduce) {
+    .dash-quick-action,
+    .dash-quick-action::before { transition: none; }
+    .dash-quick-action:hover { transform: none; }
+  }
+
+  /* ── Hero status indicator dot — larger, glowing version of dash-live-dot
+     for the hero "Floor is clear" / "N critical" chip. */
+  .dash-hero-status {
+    @apply inline-flex items-center gap-2 rounded-full border px-3 py-1.5
+           text-2xs font-semibold tabular-nums;
+    box-shadow:
+      inset 0 1px 0 0 hsl(0 0% 100% / 0.06),
+      0 1px 2px 0 hsl(var(--shadow-color) / 0.3);
+  }
+  .dash-hero-status[data-tone="success"] {
+    @apply border-success/40 text-success-fg;
+    background-color: hsl(var(--success) / 0.10);
+  }
+  .dash-hero-status[data-tone="danger"] {
+    @apply border-danger/50 text-danger;
+    background-color: hsl(var(--danger) / 0.10);
+  }
+  .dash-hero-status[data-tone="warning"] {
+    @apply border-warning/50 text-warning-fg;
+    background-color: hsl(var(--warning) / 0.10);
+  }
+  .dash-hero-status[data-tone="neutral"] {
+    @apply border-border/70 text-fg-muted bg-bg-raised;
+  }
+  .dash-hero-status-dot {
+    position: relative;
+    display: inline-flex;
+    width: 0.5rem;
+    height: 0.5rem;
+    border-radius: 9999px;
+  }
+  .dash-hero-status[data-tone="success"] .dash-hero-status-dot {
+    background: hsl(var(--success));
+    box-shadow: 0 0 0 3px hsl(var(--success) / 0.20);
+  }
+  .dash-hero-status[data-tone="danger"] .dash-hero-status-dot {
+    background: hsl(var(--danger));
+    box-shadow: 0 0 0 3px hsl(var(--danger) / 0.25);
+    animation: dash-hero-status-pulse 1.6s ease-in-out infinite;
+  }
+  .dash-hero-status[data-tone="warning"] .dash-hero-status-dot {
+    background: hsl(var(--warning));
+    box-shadow: 0 0 0 3px hsl(var(--warning) / 0.20);
+  }
+  .dash-hero-status[data-tone="neutral"] .dash-hero-status-dot {
+    background: hsl(var(--fg-subtle));
+  }
+  @keyframes dash-hero-status-pulse {
+    0%, 100% { box-shadow: 0 0 0 3px hsl(var(--danger) / 0.20); }
+    50%      { box-shadow: 0 0 0 6px hsl(var(--danger) / 0.10); }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dash-hero-status[data-tone="danger"] .dash-hero-status-dot { animation: none; }
+  }
+
+  /* ── Refined Stock Health donut helpers (group/kpi-tile classes are
+     composed via className in the React component, since Tailwind disallows
+     them inside @apply). */
+  .dash-donut-center-value {
+    @apply fill-fg-strong font-semibold;
+    font-size: 28px;
+  }
+  .dash-donut-center-label {
+    @apply fill-fg-subtle font-semibold uppercase;
+    font-size: 9px;
+    letter-spacing: 0.15em;
+  }
+
+  /* ── Legend bar (used in StockDonut legend) — proportional fill bar
+     gives the legend extra visual weight without distorting the donut. */
+  .dash-legend-row {
+    @apply flex items-center gap-2 text-xs;
+  }
+  .dash-legend-bar-track {
+    @apply h-1 w-12 overflow-hidden rounded-full bg-bg-muted sm:w-14;
+  }
+  .dash-legend-bar-fill {
+    @apply h-full rounded-full opacity-90 transition-all duration-500 ease-out-quart;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dash-legend-bar-fill { transition: none; }
+  }
 }
