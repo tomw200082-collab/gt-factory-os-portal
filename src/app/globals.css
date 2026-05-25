@@ -3053,4 +3053,235 @@
     .fc-list-row-hero-strip-liters { font-size: 12px; }
     .fc-list-row-hero-strip-mom { font-size: 10px; padding: 0.0625rem 0.25rem; }
   }
+
+  /* ══════════════════════════════════════════════════════════════════════
+     Dashboard — control-tower visual layer (2026-05-24, polish-77wrL)
+
+     Additive only. Tokens (--accent / --info / --success / --warning /
+     --danger / --bg-raised / --border / shadow color) are reused as-is.
+     Scoped to /dashboard via the .dashboard-canvas wrapper, so no other
+     surface inherits these styles. Mobile-safe; reduced-motion-safe.
+     ══════════════════════════════════════════════════════════════════════ */
+
+  /* Soft radial backdrop sitting behind the dashboard content. Two tints
+     (accent + info) graded out toward the bottom give the page a sense of
+     "command bridge" depth without affecting card legibility. */
+  .dashboard-canvas {
+    position: relative;
+    isolation: isolate;
+  }
+  .dashboard-canvas::before {
+    content: "";
+    position: absolute;
+    top: -2rem;
+    right: -2rem;
+    left: -2rem;
+    height: 520px;
+    z-index: -1;
+    pointer-events: none;
+    background:
+      radial-gradient(70% 90% at 0% 0%, hsl(var(--accent) / 0.08) 0%, transparent 55%),
+      radial-gradient(60% 80% at 100% 0%, hsl(var(--info) / 0.06) 0%, transparent 60%);
+  }
+  .dashboard-canvas::after {
+    content: "";
+    position: absolute;
+    top: 5.25rem;
+    left: 0;
+    right: 0;
+    height: 1px;
+    z-index: -1;
+    pointer-events: none;
+    background: linear-gradient(
+      to right,
+      transparent 0%,
+      hsl(var(--border) / 0.7) 20%,
+      hsl(var(--border) / 0.5) 50%,
+      hsl(var(--border) / 0.7) 80%,
+      transparent 100%
+    );
+  }
+
+  /* Premium KPI tile — composes on top of .card. Top accent rail varies
+     by tone via the --kpi-tone CSS var. Lift + ring on hover for the
+     linked variant. */
+  .kpi-tile {
+    @apply card relative flex flex-col gap-3 overflow-hidden p-5
+           transition-all duration-200 ease-out-quart;
+    background:
+      linear-gradient(180deg, hsl(var(--bg-raised) / 1) 0%, hsl(var(--bg-raised) / 0.96) 100%);
+  }
+  .kpi-tile::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 2px;
+    z-index: 0;
+    pointer-events: none;
+    background: linear-gradient(
+      to right,
+      hsl(var(--kpi-tone, var(--accent)) / 0.85) 0%,
+      hsl(var(--kpi-tone, var(--accent)) / 0.4) 55%,
+      transparent 100%
+    );
+    transition: opacity 200ms ease, height 200ms ease;
+  }
+  .kpi-tile::after {
+    content: "";
+    position: absolute;
+    inset: auto 0 0 0;
+    height: 80px;
+    z-index: 0;
+    pointer-events: none;
+    background: radial-gradient(
+      60% 100% at 100% 100%,
+      hsl(var(--kpi-tone, var(--accent)) / 0.06) 0%,
+      transparent 70%
+    );
+  }
+  .kpi-tile[data-tone="accent"]  { --kpi-tone: var(--accent); }
+  .kpi-tile[data-tone="success"] { --kpi-tone: var(--success); }
+  .kpi-tile[data-tone="info"]    { --kpi-tone: var(--info); }
+  .kpi-tile[data-tone="warning"] { --kpi-tone: var(--warning); }
+  .kpi-tile[data-tone="danger"]  { --kpi-tone: var(--danger); }
+  .kpi-tile > * { position: relative; z-index: 1; }
+
+  .kpi-tile.is-link:hover,
+  .kpi-tile.is-link:focus-visible {
+    transform: translateY(-2px);
+    box-shadow:
+      0 2px 6px -1px hsl(var(--shadow-color-deep) / 0.08),
+      0 12px 28px -6px hsl(var(--shadow-color-deep) / 0.12),
+      0 0 0 1px hsl(var(--kpi-tone, var(--accent)) / 0.35);
+    border-color: hsl(var(--kpi-tone, var(--accent)) / 0.5);
+  }
+  .kpi-tile.is-link:hover::before,
+  .kpi-tile.is-link:focus-visible::before { height: 3px; }
+  @media (prefers-reduced-motion: reduce) {
+    .kpi-tile { transition: none; }
+    .kpi-tile.is-link:hover,
+    .kpi-tile.is-link:focus-visible { transform: none; }
+  }
+
+  /* Premium section card on the dashboard — gentle hover lift on linked
+     section CTAs and a subtle ring polish. Applied via className extension,
+     does NOT modify the shared SectionCard primitive. */
+  .dash-section {
+    @apply transition-all duration-200 ease-out-quart;
+  }
+  .dash-section:hover {
+    border-color: hsl(var(--border-strong) / 1);
+    box-shadow:
+      0 1px 0 0 hsl(var(--shadow-color) / 0.4),
+      0 8px 24px -8px hsl(var(--shadow-color-deep) / 0.08);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dash-section, .dash-section:hover { transition: none; box-shadow: none; }
+  }
+
+  /* Refined "live" indicator dot with concentric breathing — replaces the
+     plain ping for an instrument-cluster look. */
+  .dash-live-dot {
+    position: relative;
+    display: inline-flex;
+    width: 0.5rem;
+    height: 0.5rem;
+  }
+  .dash-live-dot::before {
+    content: "";
+    position: absolute;
+    inset: -3px;
+    border-radius: 9999px;
+    background: hsl(var(--accent) / 0.35);
+    animation: dash-live-ping 1.8s ease-out infinite;
+  }
+  .dash-live-dot::after {
+    content: "";
+    position: absolute;
+    inset: 0;
+    border-radius: 9999px;
+    background: hsl(var(--accent) / 1);
+    box-shadow: 0 0 0 1px hsl(var(--accent) / 0.4);
+  }
+  @keyframes dash-live-ping {
+    0%   { transform: scale(0.75); opacity: 0.9; }
+    80%  { transform: scale(1.6);  opacity: 0;   }
+    100% { transform: scale(1.6);  opacity: 0;   }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dash-live-dot::before { animation: none; opacity: 0.5; }
+  }
+
+  /* Hero meta-chip — a refined pill used in the dashboard hero meta row.
+     Slightly more elevation + a thin inset highlight than a default chip. */
+  .dash-chip {
+    @apply inline-flex items-center gap-1.5 rounded-full border border-border/70
+           bg-bg-raised px-2.5 py-1 text-2xs font-semibold text-fg-muted
+           transition-colors duration-150 ease-out-quart;
+    box-shadow:
+      inset 0 1px 0 0 hsl(0 0% 100% / 0.04),
+      0 1px 0 0 hsl(var(--shadow-color) / 0.3);
+  }
+  :root.dark .dash-chip {
+    box-shadow:
+      inset 0 1px 0 0 hsl(0 0% 100% / 0.05),
+      0 1px 0 0 hsl(0 0% 0% / 0.4);
+  }
+  .dash-chip[data-tone="accent"] {
+    @apply border-accent/30 bg-accent-soft text-accent;
+  }
+  .dash-chip[data-tone="danger"] {
+    @apply border-danger/40 text-danger;
+    background-color: hsl(var(--danger) / 0.08);
+  }
+  .dash-chip[data-tone="warning"] {
+    @apply border-warning/40 text-warning-fg;
+    background-color: hsl(var(--warning) / 0.10);
+  }
+  .dash-chip[data-tone="success"] {
+    @apply border-success/40 text-success-fg;
+    background-color: hsl(var(--success) / 0.10);
+  }
+
+  /* All-clear "success ribbon" used inside CriticalToday / UrgentProcurement
+     / SlippedPlans when there is nothing to do. Gives healthy states an
+     intentional, premium feel without screaming. */
+  .dash-allclear {
+    @apply relative flex items-start gap-4 overflow-hidden rounded
+           border border-success/30 bg-success-softer px-5 py-5;
+  }
+  .dash-allclear::before {
+    content: "";
+    position: absolute;
+    inset: 0 0 0 0;
+    width: 3px;
+    background: linear-gradient(
+      to bottom,
+      hsl(var(--success) / 0.9) 0%,
+      hsl(var(--success) / 0.4) 100%
+    );
+  }
+  .dash-allclear::after {
+    content: "";
+    position: absolute;
+    top: -40px;
+    right: -40px;
+    width: 180px;
+    height: 180px;
+    border-radius: 9999px;
+    background: radial-gradient(
+      circle,
+      hsl(var(--success) / 0.10) 0%,
+      transparent 65%
+    );
+    pointer-events: none;
+  }
+  .dash-allclear-icon {
+    @apply relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full
+           border border-success/40 text-success;
+    background-color: hsl(var(--success) / 0.12);
+    box-shadow:
+      inset 0 1px 0 0 hsl(0 0% 100% / 0.20),
+      0 0 0 4px hsl(var(--success) / 0.05);
+  }
 }
