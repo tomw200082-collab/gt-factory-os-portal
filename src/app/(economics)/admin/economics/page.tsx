@@ -97,13 +97,6 @@ interface EconomicsRow {
   fg_inventory_value_at_sale_price: string | null;
   embedded_material_margin_in_stock: string | null;
   reliability_flag: string;
-  // Trailing-90-day sales (migration 0210). qty_sold_90d defaults to '0' (never
-  // null). revenue_90d_ils is NULL when avg_sale_price_ils is NULL — that
-  // NULL excludes the row from the P&L Coverage denominator (honest
-  // representation: we cannot measure what we don't price).
-  qty_sold_90d: string;
-  order_count_90d: number;
-  revenue_90d_ils: string | null;
 }
 
 interface ComponentCostRow {
@@ -252,29 +245,18 @@ function missingReasonLabel(reason: string): string {
 // Snapshot status badge (overview tab)
 // ---------------------------------------------------------------------------
 
-// Tranche 021: classify a row under the P&L Coverage measurement axis.
-// Mirrors OVERVIEW_MEASUREMENT_DEFS but returns a single state so the
-// MeasurementCell can branch on it directly (rather than re-evaluating
-// each predicate).
+// Classify a row under the measurement axis: is its margin computable?
 type MeasurementState =
   | "fully_measured"
   | "margin_unmeasured"
-  | "revenue_unmeasured"
-  | "inactive";
+  | "price_missing";
 
 function classifyMeasurement(r: EconomicsRow): MeasurementState {
-  if (!isActive90d(r)) return "inactive";
-  if (r.avg_sale_price_ils == null) return "revenue_unmeasured";
+  if (r.avg_sale_price_ils == null) return "price_missing";
   if (!r.cogs_complete) return "margin_unmeasured";
   return "fully_measured";
 }
 
-// MeasurementCell — Tranche 021 replacement for SnapshotStatusBadge.
-// Renders the measurement badge with a SIZE indicator (revenue 90d, or
-// units, or "—") so the operator sees both the STATE and the IMPACT of
-// each row in one glance. Inactive rows render muted so the operator's
-// eye skips past them — coverage gaps that don't move the books shouldn't
-// compete for attention.
 function MeasurementCell({
   row,
   onOpenGaps,
@@ -283,8 +265,6 @@ function MeasurementCell({
   onOpenGaps?: () => void;
 }): JSX.Element {
   const state = classifyMeasurement(row);
-  const revenue = num(row.revenue_90d_ils);
-  const qtySold = num(row.qty_sold_90d) ?? 0;
   const missing = row.missing_cost_components ?? [];
   const blockerCount = missing.length;
   const snapshotText =
@@ -294,18 +274,11 @@ function MeasurementCell({
 
   if (state === "fully_measured") {
     return (
-      <div className="flex flex-col gap-0.5">
-        <span title={`Fully measured. ${snapshotText}.`}>
-          <Badge tone="success" dotted>
-            Fully measured
-          </Badge>
-        </span>
-        {revenue != null && revenue > 0 ? (
-          <span className="text-3xs tabular-nums text-fg-subtle">
-            {formatIls(revenue)} · {row.order_count_90d} orders 90d
-          </span>
-        ) : null}
-      </div>
+      <span title={`Fully measured. ${snapshotText}.`}>
+        <Badge tone="success" dotted>
+          Fully measured
+        </Badge>
+      </span>
     );
   }
 
@@ -315,74 +288,34 @@ function MeasurementCell({
         ? `Margin unmeasured — ${blockerCount} component cost${blockerCount === 1 ? "" : "s"} missing. ${snapshotText}.`
         : `Margin unmeasured — COGS incomplete. ${snapshotText}.`;
     return (
-      <div className="flex flex-col gap-0.5">
-        <div className="flex flex-wrap items-center gap-2">
-          <span title={tip}>
-            <Badge tone="warning" dotted>
-              Margin unmeasured
-              {blockerCount > 0 ? ` · ${blockerCount}` : ""}
-            </Badge>
-          </span>
-          {onOpenGaps && blockerCount > 0 ? (
-            <button
-              type="button"
-              onClick={onOpenGaps}
-              className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-3xs font-semibold text-accent transition-colors hover:bg-accent-soft/80"
-              title="Open the Cost-gaps drawer to fix the missing component costs."
-            >
-              Measure
-              <ChevronRight className="h-3 w-3" strokeWidth={2.5} />
-            </button>
-          ) : null}
-        </div>
-        {revenue != null && revenue > 0 ? (
-          <span className="text-3xs tabular-nums text-warning-fg">
-            {formatIls(revenue)} unmeasured · {row.order_count_90d} orders 90d
-          </span>
-        ) : null}
-      </div>
-    );
-  }
-
-  if (state === "revenue_unmeasured") {
-    return (
-      <div className="flex flex-col gap-0.5">
-        <span title={`No sale price set — revenue itself unknown. ${snapshotText}.`}>
-          <Badge tone="danger" dotted>
-            Revenue unmeasured
+      <div className="flex flex-wrap items-center gap-2">
+        <span title={tip}>
+          <Badge tone="warning" dotted>
+            Margin unmeasured
+            {blockerCount > 0 ? ` · ${blockerCount}` : ""}
           </Badge>
         </span>
-        {qtySold > 0 ? (
-          <span className="text-3xs tabular-nums text-danger-fg">
-            {formatQtyInt(qtySold)} units · {row.order_count_90d} orders 90d ·
-            price not set
-          </span>
+        {onOpenGaps && blockerCount > 0 ? (
+          <button
+            type="button"
+            onClick={onOpenGaps}
+            className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-2 py-0.5 text-3xs font-semibold text-accent transition-colors hover:bg-accent-soft/80"
+            title="Open the Cost-gaps drawer to fix the missing component costs."
+          >
+            Measure
+            <ChevronRight className="h-3 w-3" strokeWidth={2.5} />
+          </button>
         ) : null}
       </div>
     );
   }
 
-  // inactive — no 90d demand. Muted; the operator's eye should skip past.
-  // We still surface the COGS state subtly so editors can find quiet SKUs.
   return (
-    <div className="flex flex-col gap-0.5 opacity-60">
-      <span
-        title={`Not selling in the last 90 days — coverage gaps here don't move the books this quarter. ${snapshotText}.`}
-      >
-        <Badge tone="neutral" dotted>
-          Not selling 90d
-        </Badge>
-      </span>
-      <span className="text-3xs text-fg-subtle">
-        {row.cogs_complete
-          ? "COGS measured"
-          : blockerCount > 0
-            ? `COGS incomplete · ${blockerCount}`
-            : row.cogs_snapshot_at == null
-              ? "No snapshot"
-              : "COGS incomplete"}
-      </span>
-    </div>
+    <span title={`No sale price set — margin cannot be computed. ${snapshotText}.`}>
+      <Badge tone="danger" dotted>
+        Price missing
+      </Badge>
+    </span>
   );
 }
 
@@ -850,197 +783,9 @@ function StatTile({
 }
 
 // ---------------------------------------------------------------------------
-// CoverageTile — the Tranche 021 headline tile. Dual-axis P&L Coverage:
-//   * Revenue axis — % of MEASURABLE revenue with measured margin.
-//   * SKU axis     — % of 90d-ACTIVE SKUs fully measured.
-//
-// Each axis: label, big percent, progress bar, sublabel with absolute
-// numerator/denominator. Reads as a coverage metric to drive toward 100%
-// rather than a fear-based "risk" number. Tone is derived from coverage
-// thresholds — green ≥95%, warning 70–95%, danger <70%.
-// ---------------------------------------------------------------------------
-
-function coverageTone(pct: number | null): "success" | "warning" | "danger" | "neutral" {
-  if (pct == null) return "neutral";
-  if (pct >= 95) return "success";
-  if (pct >= 70) return "warning";
-  return "danger";
-}
-
-function CoverageAxisSkeleton({ label }: { label: string }): JSX.Element {
-  return (
-    <div className="opacity-60">
-      <div className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-        {label}
-      </div>
-      <div className="mt-1 text-3xl font-bold leading-none tabular-nums text-fg-subtle">—</div>
-      <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-bg-subtle">
-        <div className="h-full w-0 bg-fg-subtle" aria-hidden />
-      </div>
-      <div className="mt-1.5 h-3 w-24 animate-pulse rounded bg-bg-subtle" />
-    </div>
-  );
-}
-
-function CoverageAxis({
-  label,
-  pct,
-  numerator,
-  denominator,
-  hint,
-}: {
-  label: string;
-  pct: number | null;
-  numerator: string;
-  denominator: string;
-  hint: string;
-}): JSX.Element {
-  const tone = coverageTone(pct);
-  const pctText = pct == null ? "—" : `${pct.toFixed(0)}%`;
-  const barColor =
-    tone === "success"
-      ? "bg-success"
-      : tone === "warning"
-        ? "bg-warning"
-        : tone === "danger"
-          ? "bg-danger"
-          : "bg-fg-subtle";
-  const pctColor =
-    tone === "success"
-      ? "text-success-fg"
-      : tone === "warning"
-        ? "text-warning-fg"
-        : tone === "danger"
-          ? "text-danger-fg"
-          : "text-fg-strong";
-  return (
-    <div>
-      <div className="flex items-center text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-        {label}
-        <HelpHint text={hint} />
-      </div>
-      <div className={`mt-1 text-3xl font-bold leading-none tabular-nums ${pctColor}`}>
-        {pctText}
-      </div>
-      <div className="mt-2 h-2 w-full overflow-hidden rounded-full bg-bg-subtle">
-        <div
-          className={`h-full ${barColor} rounded-r-full transition-all duration-500`}
-          style={{
-            width: pct == null ? "0%" : `${Math.max(0, Math.min(100, pct))}%`,
-          }}
-          aria-hidden
-        />
-      </div>
-      <div className="mt-1.5 text-3xs tabular-nums text-fg-subtle">
-        <span className="font-medium text-fg-strong">{numerator}</span>
-        <span className="mx-1 text-fg-subtle">of</span>
-        <span>{denominator}</span>
-      </div>
-    </div>
-  );
-}
-
-function CoverageTile({
-  loading,
-  revenuePct,
-  measuredRevenue,
-  measurableRevenue,
-  unmeasuredRevenue,
-  skuPct,
-  measuredSkus,
-  activeSkus,
-  marginUnmeasuredSkus,
-  revenueUnmeasuredSkus,
-}: {
-  loading: boolean;
-  revenuePct: number | null;
-  measuredRevenue: number;
-  measurableRevenue: number;
-  unmeasuredRevenue: number;
-  skuPct: number | null;
-  measuredSkus: number;
-  activeSkus: number;
-  marginUnmeasuredSkus: number;
-  revenueUnmeasuredSkus: number;
-}): JSX.Element {
-  return (
-    <div className="rounded-lg border border-border/70 bg-bg-subtle/30 p-4">
-      <div className="mb-3 flex items-baseline justify-between gap-2">
-        <div className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-          P&amp;L Coverage · last 90 days
-        </div>
-        <div className="text-3xs text-fg-subtle">
-          {loading
-            ? "Loading…"
-            : activeSkus === 0
-              ? "No SKUs sold in the last 90 days"
-              : `${activeSkus} SKU${activeSkus === 1 ? "" : "s"} sold this quarter`}
-        </div>
-      </div>
-      {loading ? (
-        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-          <CoverageAxisSkeleton label="Revenue" />
-          <CoverageAxisSkeleton label="SKU" />
-        </div>
-      ) : activeSkus === 0 ? (
-        <div className="rounded border border-dashed border-border bg-bg-subtle/40 p-4 text-center text-xs text-fg-subtle">
-          Coverage cannot be computed without recent sales. Check that the
-          LionWheel mirror is current — see the freshness banner at the top
-          of the page.
-        </div>
-      ) : (
-        <>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
-            <CoverageAxis
-              label="Revenue"
-              pct={revenuePct}
-              numerator={formatIls(measuredRevenue)}
-              denominator={formatIls(measurableRevenue)}
-              hint="Share of measurable 90-day revenue that has a measured margin. Measurable means an avg sale price is set; measured means COGS is also complete. SKUs without a sale price are excluded from both numerator and denominator — we cannot measure what we do not price."
-            />
-            <CoverageAxis
-              label="SKU"
-              pct={skuPct}
-              numerator={String(measuredSkus)}
-              denominator={String(activeSkus)}
-              hint="Share of SKUs sold in the last 90 days that are fully measured (COGS complete and avg sale price set)."
-            />
-          </div>
-          {unmeasuredRevenue > 0 || revenueUnmeasuredSkus > 0 ? (
-            <div className="mt-3 grid grid-cols-1 gap-2 border-t border-border/60 pt-3 text-3xs sm:grid-cols-2">
-              {unmeasuredRevenue > 0 ? (
-                <div className="rounded-md border border-warning/30 bg-warning-softer/60 px-2.5 py-1.5 text-warning-fg">
-                  <span className="font-semibold tabular-nums">
-                    {formatIls(unmeasuredRevenue)}
-                  </span>{" "}
-                  of measurable revenue · margin unmeasured
-                  <span className="ml-1 text-fg-subtle tabular-nums">({marginUnmeasuredSkus} SKUs)</span>
-                </div>
-              ) : null}
-              {revenueUnmeasuredSkus > 0 ? (
-                <div className="rounded-md border border-danger/30 bg-danger-softer/60 px-2.5 py-1.5 text-danger-fg">
-                  <span className="font-semibold tabular-nums">
-                    {revenueUnmeasuredSkus}
-                  </span>{" "}
-                  active SKUs · no sale price set · revenue blind
-                </div>
-              ) : null}
-            </div>
-          ) : revenuePct != null && revenuePct >= 95 ? (
-            <div className="mt-3 rounded-md border border-success/40 bg-success-softer px-3 py-2 text-center text-xs font-medium text-success-fg">
-              Books closeable — nothing material to fix this quarter.
-            </div>
-          ) : null}
-        </>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // InventoryHonestTile — like StatTile but with a measured/unmeasured
 // decomposition so the headline number is honest about its blind spot.
-// Used for the FG-inventory-at-cost tile under Tranche 021.
+// Used for the FG-inventory-at-cost tile.
 // ---------------------------------------------------------------------------
 
 function InventoryHonestTile({
@@ -1277,46 +1022,29 @@ function SortHeader<Col extends string>({
 }
 
 // ---------------------------------------------------------------------------
-// Overview filter taxonomy — Tranche 021 P&L Coverage frame.
+// Overview filter taxonomy — two orthogonal axes:
 //
-// Replaces the old single-axis taxonomy (complete / incomplete / no_snapshot
-// / no_supplier_cost / no_sale_price / negative_margin) — which mixed
-// measurement-state and findings into one row of overlapping chips — with
-// TWO orthogonal axes:
+//   Measurement state (axis A):
+//     fully_measured     — COGS known + sale price known (margin computable).
+//     margin_unmeasured  — sale price known, COGS missing.
+//     price_missing      — sale price not set.
 //
-//   Measurement (within 90d-active SKUs):
-//     fully_measured     — selling, COGS known, sale price known.
-//     margin_unmeasured  — selling, sale price known, COGS missing.
-//     revenue_unmeasured — selling, sale price not set (revenue itself blind).
-//     inactive           — not selling in 90d (defer; doesn't move the books).
-//
-//   Findings (within fully_measured):
+//   Findings (axis B, within fully_measured):
 //     negative_margin    — sale price below COGS.
-//     low_margin         — margin %  positive but < 20.
+//     low_margin         — margin % positive but < 20.
 //     healthy_margin     — margin % ≥ 20.
 //
-// Within a group: OR. Across groups: AND. The two are orthogonal because
-// findings only make sense ON measured rows — a row that's "Margin unmeasured"
-// CANNOT have a "Negative margin" finding (we don't know its margin).
-// ---------------------------------------------------------------------------
+// Within a group: OR. Across groups: AND.
 
 type OverviewMeasurementKey =
   | "fully_measured"
   | "margin_unmeasured"
-  | "revenue_unmeasured"
-  | "inactive";
+  | "price_missing";
 
 type OverviewFindingKey =
   | "negative_margin"
   | "low_margin"
   | "healthy_margin";
-
-// Active = selling in the trailing 90d. This is the denominator of every
-// coverage metric on the page — SKUs that didn't sell don't move the books.
-function isActive90d(r: EconomicsRow): boolean {
-  const q = num(r.qty_sold_90d);
-  return q != null && q > 0;
-}
 
 const OVERVIEW_MEASUREMENT_DEFS: Array<{
   key: OverviewMeasurementKey;
@@ -1330,34 +1058,24 @@ const OVERVIEW_MEASUREMENT_DEFS: Array<{
     label: "Fully measured",
     tone: "success",
     title:
-      "Sold in the last 90 days, COGS is complete, and an average sale price is set. Margin is computable end-to-end — this row's contribution to the quarter's P&L is fully visible.",
-    match: (r) =>
-      isActive90d(r) && r.cogs_complete && r.avg_sale_price_ils != null,
+      "COGS is complete and an average sale price is set. Margin is computable end-to-end.",
+    match: (r) => r.cogs_complete && r.avg_sale_price_ils != null,
   },
   {
     key: "margin_unmeasured",
     label: "Margin unmeasured",
     tone: "warning",
     title:
-      "Sold in the last 90 days with a sale price set, but COGS is missing or incomplete. Revenue is visible, margin is not. Open Cost gaps to close.",
-    match: (r) =>
-      isActive90d(r) && !r.cogs_complete && r.avg_sale_price_ils != null,
+      "Sale price is set, but COGS is missing or incomplete. Open Cost gaps to close.",
+    match: (r) => !r.cogs_complete && r.avg_sale_price_ils != null,
   },
   {
-    key: "revenue_unmeasured",
-    label: "Revenue unmeasured",
+    key: "price_missing",
+    label: "Price missing",
     tone: "danger",
     title:
-      "Sold in the last 90 days but no average sale price is set — neither revenue nor margin is computable for this SKU. Enter a sale price to start measuring.",
-    match: (r) => isActive90d(r) && r.avg_sale_price_ils == null,
-  },
-  {
-    key: "inactive",
-    label: "Not selling 90d",
-    tone: "neutral",
-    title:
-      "No resolved-line orders for this SKU in the last 90 days. Coverage gaps here don't affect the current quarter — defer.",
-    match: (r) => !isActive90d(r),
+      "No average sale price is set — margin cannot be computed. Enter a sale price to start measuring.",
+    match: (r) => r.avg_sale_price_ils == null,
   },
 ];
 
@@ -1411,9 +1129,7 @@ type OverviewSortCol =
   | "on_hand"
   | "inv_cost"
   | "inv_sale"
-  | "snapshot"
-  | "sold_90d"
-  | "revenue_90d";
+  | "snapshot";
 
 // ---------------------------------------------------------------------------
 // Component Costs filter taxonomy.
@@ -1549,17 +1265,7 @@ function CostGapsDrawer({
       title={product ? `Measure margin — ${product.item_name}` : "Measure margin"}
       description={
         product
-          ? (() => {
-              const rev = num(product.revenue_90d_ils);
-              const qty = num(product.qty_sold_90d) ?? 0;
-              if (rev != null && rev > 0) {
-                return `${missing.length} component cost${missing.length === 1 ? "" : "s"} block COGS. ${formatIls(rev)} of 90-day revenue is currently unmeasured (margin unknown). Publish a fallback price below, then recalc.`;
-              }
-              if (qty > 0) {
-                return `${missing.length} component cost${missing.length === 1 ? "" : "s"} block COGS. This SKU sold ${formatQtyInt(qty)} units in the last 90 days — without a sale price the revenue itself is also unmeasured. Publish fallback costs below, then set the sale price.`;
-              }
-              return `${missing.length} component cost${missing.length === 1 ? "" : "s"} block COGS. Not selling in the last 90 days — this gap doesn't move the books this quarter, but closing it now means the next sale is fully measured.`;
-            })()
+          ? `${missing.length} component cost${missing.length === 1 ? "" : "s"} block COGS. Publish a fallback price below, then recalc.`
           : undefined
       }
       width="lg"
@@ -1568,7 +1274,7 @@ function CostGapsDrawer({
         <div className="flex h-full flex-col">
           <div className="flex-1 space-y-5 overflow-y-auto px-5 py-4">
             <div className="rounded-md border border-border/60 bg-bg-subtle/50 p-3">
-              <div className="grid grid-cols-3 gap-3 text-xs">
+              <div className="grid grid-cols-2 gap-3 text-xs">
                 <div>
                   <div className="text-3xs uppercase tracking-sops text-fg-subtle">
                     Product
@@ -1592,20 +1298,6 @@ function CostGapsDrawer({
                   </div>
                   <div className="text-3xs text-fg-subtle">
                     Last snapshot: {formatRelativeShort(product.cogs_snapshot_at)}
-                  </div>
-                </div>
-                <div>
-                  <div className="text-3xs uppercase tracking-sops text-fg-subtle">
-                    90-day exposure
-                  </div>
-                  <div className="mt-0.5 font-medium tabular-nums text-warning-fg">
-                    {product.revenue_90d_ils != null
-                      ? formatIls(product.revenue_90d_ils)
-                      : "—"}
-                  </div>
-                  <div className="text-3xs text-fg-subtle">
-                    {formatQtyInt(product.qty_sold_90d)} units ·{" "}
-                    {product.order_count_90d} orders
                   </div>
                 </div>
               </div>
@@ -1811,10 +1503,9 @@ export default function AdminEconomicsPage(): JSX.Element {
   const [priceSavedHint, setPriceSavedHint] = useState(false);
 
   // --- Overview filters + sort -------------------------------------------
-  // Tranche 021 P&L Coverage frame: chips split into two orthogonal groups
-  // (measurement state vs. findings). Default sort lands on revenue_90d desc
-  // so the biggest measurement gaps surface first — the page's mission, not
-  // an arbitrary alphabetical scan.
+  // Chips split into two orthogonal groups (measurement state vs. findings).
+  // Default sort: inventory-at-cost desc so the biggest dollar exposure
+  // surfaces first.
   const [overviewQuery, setOverviewQuery] = useState("");
   const [overviewMeasurement, setOverviewMeasurement] = useState<
     Set<OverviewMeasurementKey>
@@ -1824,7 +1515,7 @@ export default function AdminEconomicsPage(): JSX.Element {
   >(() => new Set());
   const [overviewSort, setOverviewSort] = useState<
     SortState<OverviewSortCol> | null
-  >({ col: "revenue_90d", dir: "desc" });
+  >({ col: "inv_cost", dir: "desc" });
 
   // --- Component-costs filters + sort ------------------------------------
   const [componentQuery, setComponentQuery] = useState("");
@@ -1931,25 +1622,12 @@ export default function AdminEconomicsPage(): JSX.Element {
     return Array.from(set).sort();
   }, [costsQuery.data]);
 
-  // Overview valuation + P&L Coverage axes. Sums skip NULL so a product with
-  // no COGS / no sale price simply does not contribute.
-  //
-  // Coverage axes (Tranche 021):
-  //   revenueCoveragePct = measuredRevenue / measurableRevenue * 100
-  //     measuredRevenue   = SUM revenue_90d_ils where cogs_complete=true
-  //     measurableRevenue = SUM revenue_90d_ils where revenue_90d_ils IS NOT NULL
-  //     (an unpriced SKU lands in NEITHER numerator nor denominator — we
-  //     can't measure what we don't price.)
-  //   skuCoveragePct = measuredSkus / activeSkus * 100
-  //     activeSkus   = count(qty_sold_90d > 0)
-  //     measuredSkus = count(qty_sold_90d > 0 AND cogs_complete AND avg_sale_price set)
-  //
-  // Inventory decomposition (Tranche 021):
+  // Overview valuation. Sums skip NULL so a product with no COGS / no sale
+  // price simply does not contribute. The on-hand decomposition keeps the
+  // headline inventory tile honest about its blind spot:
   //   unmeasuredOnHandUnits = sum(qty_on_hand) where cogs_per_unit_ils IS NULL
   //                           AND qty_on_hand > 0
   //   unmeasuredOnHandSkus  = count of the same predicate
-  //   The headline inventory tile shows BOTH `cost` (measured) and the
-  //   unmeasured-unit count so the figure is honest about its blind spot.
   const overviewTotals = useMemo(() => {
     const rows = economicsQuery.data?.rows ?? [];
     let cost = 0;
@@ -1957,14 +1635,6 @@ export default function AdminEconomicsPage(): JSX.Element {
     let embeddedMargin = 0;
     let pricedCount = 0;
     let cogsCount = 0;
-
-    let measurableRevenue = 0;
-    let measuredRevenue = 0;
-    let unmeasuredRevenue = 0; // revenue with sale price but COGS missing
-    let activeSkus = 0;
-    let measuredSkus = 0;
-    let marginUnmeasuredSkus = 0;
-    let revenueUnmeasuredSkus = 0;
 
     let unmeasuredOnHandUnits = 0;
     let unmeasuredOnHandSkus = 0;
@@ -1981,19 +1651,6 @@ export default function AdminEconomicsPage(): JSX.Element {
       if (r.avg_sale_price_ils != null) pricedCount += 1;
       if (r.cogs_per_unit_ils != null) cogsCount += 1;
 
-      const active = isActive90d(r);
-      const rev = num(r.revenue_90d_ils);
-      if (active) {
-        activeSkus += 1;
-        if (rev != null) measurableRevenue += rev;
-        if (rev != null && r.cogs_complete) measuredRevenue += rev;
-        if (rev != null && !r.cogs_complete) unmeasuredRevenue += rev;
-        if (r.cogs_complete && r.avg_sale_price_ils != null) measuredSkus += 1;
-        else if (!r.cogs_complete && r.avg_sale_price_ils != null)
-          marginUnmeasuredSkus += 1;
-        else if (r.avg_sale_price_ils == null) revenueUnmeasuredSkus += 1;
-      }
-
       const onHand = num(r.qty_on_hand) ?? 0;
       if (r.cogs_per_unit_ils == null && onHand > 0) {
         unmeasuredOnHandUnits += onHand;
@@ -2008,19 +1665,6 @@ export default function AdminEconomicsPage(): JSX.Element {
       pricedCount,
       cogsCount,
       productCount: rows.length,
-      // Coverage axes
-      measurableRevenue,
-      measuredRevenue,
-      unmeasuredRevenue,
-      revenueCoveragePct:
-        measurableRevenue > 0 ? (measuredRevenue / measurableRevenue) * 100 : null,
-      activeSkus,
-      measuredSkus,
-      marginUnmeasuredSkus,
-      revenueUnmeasuredSkus,
-      skuCoveragePct:
-        activeSkus > 0 ? (measuredSkus / activeSkus) * 100 : null,
-      // Inventory blind-spot
       unmeasuredOnHandUnits,
       unmeasuredOnHandSkus,
     };
@@ -2099,10 +1743,6 @@ export default function AdminEconomicsPage(): JSX.Element {
               b.cogs_snapshot_at ? new Date(b.cogs_snapshot_at).getTime() : null,
               dir,
             );
-          case "sold_90d":
-            return cmp(num(a.qty_sold_90d), num(b.qty_sold_90d), dir);
-          case "revenue_90d":
-            return cmp(num(a.revenue_90d_ils), num(b.revenue_90d_ils), dir);
           default:
             return 0;
         }
@@ -2125,8 +1765,7 @@ export default function AdminEconomicsPage(): JSX.Element {
     const out: Record<OverviewMeasurementKey, number> = {
       fully_measured: 0,
       margin_unmeasured: 0,
-      revenue_unmeasured: 0,
-      inactive: 0,
+      price_missing: 0,
     };
     for (const r of rows) {
       for (const d of OVERVIEW_MEASUREMENT_DEFS) {
@@ -2387,7 +2026,7 @@ export default function AdminEconomicsPage(): JSX.Element {
       <WorkflowHeader
         eyebrow="Economics"
         title="Economics"
-        description="Close the books on this quarter — see P&L coverage by revenue and SKU count, find the measurement gaps, and fix them inline without leaving the page."
+        description="COGS, sale price and margin per finished good — edit prices and fallback costs inline, then close the measurement gaps without leaving the page."
         meta={
           <>
             <Badge tone="info" dotted>
@@ -2448,23 +2087,11 @@ export default function AdminEconomicsPage(): JSX.Element {
       {activeTab === "overview" ? (
         <>
           <SectionCard
-            eyebrow="P&L Coverage"
-            title="Books closeable on this quarter"
-            description="What share of this quarter's revenue has measured margin? The table sorts by the largest gap first — fix from the top down."
+            eyebrow="FG inventory"
+            title="At-a-glance valuation"
+            description="Headline inventory and margin totals across all finished goods, with the measurement blind spot called out."
           >
             <div className="space-y-3">
-              <CoverageTile
-                loading={economicsQuery.isLoading}
-                revenuePct={overviewTotals.revenueCoveragePct}
-                measuredRevenue={overviewTotals.measuredRevenue}
-                measurableRevenue={overviewTotals.measurableRevenue}
-                unmeasuredRevenue={overviewTotals.unmeasuredRevenue}
-                skuPct={overviewTotals.skuCoveragePct}
-                measuredSkus={overviewTotals.measuredSkus}
-                activeSkus={overviewTotals.activeSkus}
-                marginUnmeasuredSkus={overviewTotals.marginUnmeasuredSkus}
-                revenueUnmeasuredSkus={overviewTotals.revenueUnmeasuredSkus}
-              />
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
                 <InventoryHonestTile
                   label="FG inventory at cost"
@@ -2582,8 +2209,8 @@ export default function AdminEconomicsPage(): JSX.Element {
 
           <SectionCard
             eyebrow="Economics"
-            title="P&L per product"
-            description="Sorted by Revenue 90d by default — the largest measurement gaps first. Click any column to re-sort. Click Measure on a margin-unmeasured row to open the Cost-gaps drawer; the badge underneath shows the revenue exposure."
+            title="Per product"
+            description="Sorted by Inventory at cost by default — biggest dollar exposure first. Click any column to re-sort. Click Measure on a margin-unmeasured row to open the Cost-gaps drawer."
             contentClassName="p-0"
           >
             {economicsQuery.isLoading ? (
@@ -2654,22 +2281,6 @@ export default function AdminEconomicsPage(): JSX.Element {
                         onSort={setOverviewSort}
                       />
                       <SortHeader
-                        col="revenue_90d"
-                        label="Revenue 90d"
-                        align="right"
-                        sort={overviewSort}
-                        onSort={setOverviewSort}
-                        hint="Sold units in the last 90 days × avg sale price. Reads ‘—’ when no sale price is set (revenue itself unmeasurable). The default sort — biggest measurement gaps first."
-                      />
-                      <SortHeader
-                        col="sold_90d"
-                        label="Sold 90d"
-                        align="right"
-                        sort={overviewSort}
-                        onSort={setOverviewSort}
-                        hint="Units sold in the last 90 days, summed from resolved LionWheel order lines (matches the Forecast Workspace numbers)."
-                      />
-                      <SortHeader
                         col="cogs"
                         label="COGS / unit"
                         align="right"
@@ -2683,7 +2294,7 @@ export default function AdminEconomicsPage(): JSX.Element {
                         align="right"
                         sort={overviewSort}
                         onSort={setOverviewSort}
-                        hint="Manually-entered average sale price per unit. Click a cell to edit. Drives Revenue 90d, margin, and inventory-at-sale immediately."
+                        hint="Manually-entered average sale price per unit. Click a cell to edit. Drives margin and inventory-at-sale immediately."
                       />
                       <SortHeader
                         col="margin"
@@ -2722,7 +2333,7 @@ export default function AdminEconomicsPage(): JSX.Element {
                         className="sticky top-0 z-10 bg-bg-subtle/95 px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle backdrop-blur"
                       >
                         Measurement
-                        <HelpHint text="Each row's state on the P&L coverage measurement axis — whether revenue and margin are both computable. The line under the badge shows the row's contribution to the gap or to measured P&L." />
+                        <HelpHint text="Whether margin can be computed for this row (COGS complete AND avg sale price set)." />
                       </th>
                     </tr>
                   </thead>
@@ -2731,12 +2342,10 @@ export default function AdminEconomicsPage(): JSX.Element {
                       const blockerCount = (r.missing_cost_components ?? [])
                         .length;
                       const showGaps = !r.cogs_complete && blockerCount > 0;
-                      const qtySold = num(r.qty_sold_90d) ?? 0;
-                      const inactive = !isActive90d(r);
                       return (
                         <tr
                           key={r.item_id}
-                          className={`border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40 ${inactive ? "opacity-55" : ""}`}
+                          className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40"
                         >
                           <td className="px-3 py-2">
                             <span
@@ -2748,36 +2357,6 @@ export default function AdminEconomicsPage(): JSX.Element {
                             <span className="block font-mono text-3xs text-fg-subtle">
                               {r.item_id}
                             </span>
-                          </td>
-                          <td className="px-3 py-2 text-right text-sm tabular-nums">
-                            {r.revenue_90d_ils != null ? (
-                              <span className={qtySold === 0 ? "text-fg-muted" : "text-fg-strong"}>
-                                {formatIls(r.revenue_90d_ils)}
-                              </span>
-                            ) : !inactive ? (
-                              <span
-                                className="text-3xs font-medium text-danger-fg/80"
-                                title="No sale price set — revenue cannot be computed."
-                              >
-                                no price
-                              </span>
-                            ) : (
-                              <span className="text-fg-subtle">—</span>
-                            )}
-                          </td>
-                          <td className="px-3 py-2 text-right text-sm tabular-nums">
-                            {qtySold > 0 ? (
-                              <>
-                                <span className="text-fg-strong">
-                                  {formatQtyInt(r.qty_sold_90d)}
-                                </span>
-                                <span className="ml-1 text-3xs text-fg-subtle">
-                                  · {r.order_count_90d} ord
-                                </span>
-                              </>
-                            ) : (
-                              <span className="text-fg-subtle">—</span>
-                            )}
                           </td>
                           <td className="px-3 py-2 text-right text-sm tabular-nums">
                             {formatIls(r.cogs_per_unit_ils)}
@@ -2831,7 +2410,7 @@ export default function AdminEconomicsPage(): JSX.Element {
                   <tfoot>
                     <tr className="border-t border-border/70 bg-bg-subtle/60">
                       <td
-                        colSpan={10}
+                        colSpan={8}
                         className="px-3 py-2 text-right text-sm font-semibold text-fg-strong tabular-nums"
                       >
                         Total inventory — at cost:{" "}
