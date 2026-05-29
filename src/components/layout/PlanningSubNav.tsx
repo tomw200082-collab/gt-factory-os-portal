@@ -17,6 +17,7 @@ import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import {
   AlertOctagon,
+  CalendarCheck,
   CalendarRange,
   Factory,
   FlaskConical,
@@ -44,6 +45,12 @@ const PLANNING_TABS: PlanningTab[] = [
     shortLabel: "Overview",
     icon: LineChart,
     exact: true,
+  },
+  {
+    href: "/planning/meeting",
+    label: "Weekly Meeting",
+    shortLabel: "Meeting",
+    icon: CalendarCheck,
   },
   {
     href: "/planning/forecast",
