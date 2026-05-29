@@ -19,6 +19,7 @@ import {
   Check,
   ClipboardCopy,
   Pencil,
+  Plus,
   SkipForward,
 } from "lucide-react";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
@@ -35,6 +36,7 @@ import type {
   PoTier,
   PurchaseSessionPo,
 } from "../../purchase-session/_lib/types";
+import { AddLineForm } from "./AddLineForm";
 
 const TIER_LABEL: Record<PoTier, string> = {
   urgent: "דחוף",
@@ -88,6 +90,7 @@ export function FocusCard({
   const skipMut = useSkipPo();
 
   const [editing, setEditing] = useState(false);
+  const [addingLine, setAddingLine] = useState(false);
   const [draftQty, setDraftQty] = useState<Record<string, string>>({});
   const [draftDrop, setDraftDrop] = useState<Record<string, boolean>>({});
   const [placeDate, setPlaceDate] = useState<string>(
@@ -233,16 +236,28 @@ export function FocusCard({
                 </button>
               </div>
             ) : (
-              <button
-                type="button"
-                onClick={beginEdit}
-                disabled={busy}
-                className="inline-flex items-center gap-1 text-3xs font-semibold uppercase tracking-sops text-fg-muted hover:text-fg transition-colors"
-                data-testid="focus-edit-lines"
-              >
-                <Pencil className="h-3 w-3" aria-hidden />
-                ערוך כמויות
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={beginEdit}
+                  disabled={busy}
+                  className="inline-flex items-center gap-1 text-3xs font-semibold uppercase tracking-sops text-fg-muted hover:text-fg transition-colors"
+                  data-testid="focus-edit-lines"
+                >
+                  <Pencil className="h-3 w-3" aria-hidden />
+                  ערוך כמויות
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setAddingLine((v) => !v)}
+                  disabled={busy}
+                  className="inline-flex items-center gap-1 text-3xs font-semibold uppercase tracking-sops text-accent hover:text-accent/80 transition-colors"
+                  data-testid="focus-add-line-toggle"
+                >
+                  <Plus className="h-3 w-3" aria-hidden />
+                  הוסף שורה
+                </button>
+              </div>
             ))}
         </div>
         <table className="w-full text-xs">
@@ -325,6 +340,20 @@ export function FocusCard({
           </tbody>
         </table>
       </div>
+
+      {/* Ad-hoc add line (Tranche 030) */}
+      {addingLine && po.status !== "placed" && po.status !== "skipped" && (
+        <AddLineForm
+          busy={editMut.isPending}
+          onCancel={() => setAddingLine(false)}
+          onAdd={(line) =>
+            editMut.mutate(
+              { poId: po.session_po_id, add_lines: [line] },
+              { onSuccess: () => setAddingLine(false) },
+            )
+          }
+        />
+      )}
 
       {/* Order document (after approval) */}
       {po.order_document_text && (

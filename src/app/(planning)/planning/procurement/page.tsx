@@ -175,17 +175,26 @@ function SessionView({
             </span>
           </div>
         </div>
-        {actionableCount > 0 && (
-          <button
-            type="button"
-            onClick={onStartFocus}
-            className="btn btn-accent"
-            data-testid="procurement-start-focus"
+        <div className="flex items-center gap-3">
+          <Link
+            href="/purchase-orders/new"
+            className="text-xs font-medium text-fg-muted underline-offset-2 hover:text-fg hover:underline"
+            data-testid="procurement-manual-order"
           >
-            <Target className="h-4 w-4" aria-hidden />
-            התחל מיקוד · {actionableCount}
-          </button>
-        )}
+            הזמנה ידנית חד-פעמית
+          </Link>
+          {actionableCount > 0 && (
+            <button
+              type="button"
+              onClick={onStartFocus}
+              className="btn btn-accent"
+              data-testid="procurement-start-focus"
+            >
+              <Target className="h-4 w-4" aria-hidden />
+              התחל מיקוד · {actionableCount}
+            </button>
+          )}
+        </div>
       </div>
 
       <ActionList pos={pos} onOpen={onOpenOrder} />
