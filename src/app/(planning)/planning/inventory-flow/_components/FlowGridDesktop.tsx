@@ -324,9 +324,17 @@ function ItemRow({
       className="grid border-b border-border/30 last:border-b-0 reveal hover:bg-bg-subtle/30"
       style={{ ...gridStyle, ...rowAnimStyle }}
     >
-      {/* Wrap StickyItemPanel in relative container so the coverage badge
-          and the detail-chevron (R-NEW-5) can be absolute-positioned. */}
-      <div className="relative">
+      {/* Sticky item column. CRITICAL: the GRID ITEM itself carries
+          `position: sticky; left: 0` (not an inner child) so its containing
+          block is the full grid — the item names stay frozen across the
+          ENTIRE horizontal scroll, not just the first ITEM_COL_W px. This
+          mirrors the sticky item-col cell in DayHeaderRow; previously the
+          sticky lived on the inner StickyItemPanel, whose containing block
+          was this 400px wrapper, so the names scrolled away after ~400px
+          (and on first paint, because the grid auto-scrolls to "today").
+          The element is also the positioning context for the absolute
+          badges/chevron below (sticky establishes a containing block). */}
+      <div className="sticky left-0 z-20 bg-bg-raised">
         <StickyItemPanel item={item} />
         {/* R-NEW-7 — Movement sparkline rendered after the cover tile */}
         {movementSparklineEl !== null ? (
