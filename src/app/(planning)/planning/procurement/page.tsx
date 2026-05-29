@@ -21,7 +21,13 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, RefreshCw, Target } from "lucide-react";
+import {
+  AlertTriangle,
+  CalendarDays,
+  ListChecks,
+  RefreshCw,
+  Target,
+} from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { cn } from "@/lib/cn";
 import {
@@ -31,6 +37,7 @@ import {
 import type { PurchaseSessionPo } from "../purchase-session/_lib/types";
 import { formatIls } from "@/lib/utils/format-money";
 import { ActionList } from "./_components/ActionList";
+import { CalendarView } from "./_components/CalendarView";
 import { FocusMode } from "./_components/FocusMode";
 import { buildFocusQueue } from "./_lib/focus-queue";
 
@@ -108,7 +115,7 @@ export default function ProcurementPage(): JSX.Element {
           sessionDate={session.session_date}
           totalCost={session.totals.total_cost}
           onStartFocus={() => openFocus(null)}
-          onOpenOrder={(po) => openFocus(po.session_po_id)}
+          onOpenById={openFocus}
         />
       )}
 
@@ -132,14 +139,15 @@ function SessionView({
   sessionDate,
   totalCost,
   onStartFocus,
-  onOpenOrder,
+  onOpenById,
 }: {
   pos: PurchaseSessionPo[];
   sessionDate: string;
   totalCost: number;
   onStartFocus: () => void;
-  onOpenOrder: (po: PurchaseSessionPo) => void;
+  onOpenById: (id: string) => void;
 }): JSX.Element {
+  const [view, setView] = useState<"list" | "calendar">("list");
   const actionableCount = buildFocusQueue(pos).length;
 
   if (pos.length === 0) {
@@ -197,7 +205,33 @@ function SessionView({
         </div>
       </div>
 
-      <ActionList pos={pos} onOpen={onOpenOrder} />
+      {/* View toggle — action list (default) vs calendar */}
+      <div
+        className="inline-flex rounded-lg border border-border/60 bg-bg-subtle/40 p-0.5"
+        role="tablist"
+        aria-label="תצוגת רכש"
+      >
+        <ViewTab
+          active={view === "list"}
+          onClick={() => setView("list")}
+          icon={<ListChecks className="h-4 w-4" aria-hidden />}
+          label="רשימת פעולה"
+          testId="procurement-view-list"
+        />
+        <ViewTab
+          active={view === "calendar"}
+          onClick={() => setView("calendar")}
+          icon={<CalendarDays className="h-4 w-4" aria-hidden />}
+          label="לוח"
+          testId="procurement-view-calendar"
+        />
+      </div>
+
+      {view === "list" ? (
+        <ActionList pos={pos} onOpen={(po) => onOpenById(po.session_po_id)} />
+      ) : (
+        <CalendarView pos={pos} onOpen={onOpenById} />
+      )}
     </div>
   );
 }
@@ -205,6 +239,39 @@ function SessionView({
 // ---------------------------------------------------------------------------
 // States
 // ---------------------------------------------------------------------------
+
+function ViewTab({
+  active,
+  onClick,
+  icon,
+  label,
+  testId,
+}: {
+  active: boolean;
+  onClick: () => void;
+  icon: JSX.Element;
+  label: string;
+  testId: string;
+}): JSX.Element {
+  return (
+    <button
+      type="button"
+      role="tab"
+      aria-selected={active}
+      onClick={onClick}
+      data-testid={testId}
+      className={cn(
+        "inline-flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-semibold transition-colors",
+        active
+          ? "bg-bg text-fg shadow-sm"
+          : "text-fg-muted hover:text-fg",
+      )}
+    >
+      {icon}
+      {label}
+    </button>
+  );
+}
 
 function LoadingState(): JSX.Element {
   return (
