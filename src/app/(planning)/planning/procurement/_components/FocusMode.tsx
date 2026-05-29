@@ -18,7 +18,8 @@
 // ---------------------------------------------------------------------------
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { CheckCircle2, X } from "lucide-react";
+import { CheckCircle2, ListChecks, X } from "lucide-react";
+import { cn } from "@/lib/cn";
 import { classifyPo, todayISO } from "../_lib/decision";
 import {
   allResolved,
@@ -26,6 +27,7 @@ import {
   isResolved,
   nextUnresolvedId,
   positionOf,
+  remainingCount,
 } from "../_lib/focus-queue";
 import type { PoStatusLike } from "../_lib/decision";
 import type { PurchaseSessionPo } from "../../purchase-session/_lib/types";
@@ -70,6 +72,7 @@ export function FocusMode({
   const [done, setDone] = useState(queueIds.length === 0);
   const [flash, setFlash] = useState<FocusResolveResult | null>(null);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
 
   const goTo = useCallback(
     (id: string | null) => {
@@ -118,6 +121,12 @@ export function FocusMode({
     [statusById, currentId, queueIds, goTo],
   );
 
+  // Jump to the first still-open order (used by the completion screen when the
+  // planner reached the end via manual "next" with work still left).
+  const resumeRemaining = useCallback(() => {
+    goTo(nextUnresolvedId(queueIds, null, statusById));
+  }, [queueIds, statusById, goTo]);
+
   useEffect(() => {
     return () => {
       if (flashTimer.current) clearTimeout(flashTimer.current);
@@ -141,6 +150,26 @@ export function FocusMode({
       if (e.key === "Escape") {
         e.preventDefault();
         onClose();
+        return;
+      }
+      // Focus trap — keep Tab cycling within the overlay.
+      if (e.key === "Tab") {
+        const root = containerRef.current;
+        if (!root) return;
+        const focusables = root.querySelectorAll<HTMLElement>(
+          'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])',
+        );
+        if (focusables.length === 0) return;
+        const first = focusables[0];
+        const last = focusables[focusables.length - 1];
+        const active = document.activeElement as HTMLElement | null;
+        if (e.shiftKey && active === first) {
+          e.preventDefault();
+          last.focus();
+        } else if (!e.shiftKey && active === last) {
+          e.preventDefault();
+          first.focus();
+        }
         return;
       }
       const t = e.target as HTMLElement | null;
@@ -171,9 +200,11 @@ export function FocusMode({
   const skippedCount = queueIds.filter(
     (id) => statusById[id] === "skipped",
   ).length;
+  const remaining = remainingCount(queueIds, statusById);
 
   return (
     <div
+      ref={containerRef}
       className="fixed inset-0 z-50 flex flex-col bg-bg/95 backdrop-blur-sm"
       role="dialog"
       aria-modal="true"
@@ -242,7 +273,9 @@ export function FocusMode({
               placed={placedCount}
               skipped={skippedCount}
               total={total}
+              remaining={remaining}
               onClose={onClose}
+              onResume={resumeRemaining}
             />
           ) : (
             <FocusCard
@@ -268,7 +301,7 @@ export function FocusMode({
           >
             → הקודם
           </button>
-          <span className="text-3xs text-fg-faint">
+          <span className="hidden text-3xs text-fg-faint sm:inline">
             Esc לסגירה · ←/→ למעבר
           </span>
           <button
@@ -289,37 +322,71 @@ function DoneSummary({
   placed,
   skipped,
   total,
+  remaining,
   onClose,
+  onResume,
 }: {
   placed: number;
   skipped: number;
   total: number;
+  remaining: number;
   onClose: () => void;
+  onResume: () => void;
 }): JSX.Element {
+  const hasRemaining = remaining > 0;
   return (
     <div
       className="flex flex-col items-center gap-4 py-12 text-center"
       data-testid="focus-done"
     >
-      <div className="flex h-16 w-16 items-center justify-center rounded-full bg-success/20">
-        <CheckCircle2 className="h-9 w-9 text-success-fg" aria-hidden />
+      <div
+        className={cn(
+          "flex h-16 w-16 items-center justify-center rounded-full",
+          hasRemaining ? "bg-warning/20" : "bg-success/20",
+        )}
+      >
+        {hasRemaining ? (
+          <ListChecks className="h-9 w-9 text-warning-fg" aria-hidden />
+        ) : (
+          <CheckCircle2 className="h-9 w-9 text-success-fg" aria-hidden />
+        )}
       </div>
       <div className="space-y-1">
-        <div className="text-lg font-bold text-fg">סיימת את מושב הרכש 🎉</div>
+        <div className="text-lg font-bold text-fg">
+          {total === 0
+            ? "אין הזמנות שדורשות פעולה"
+            : hasRemaining
+              ? "עברת על כל ההזמנות"
+              : "סיימת את מושב הרכש 🎉"}
+        </div>
         <div className="text-sm text-fg-muted">
           {total === 0
-            ? "לא היו הזמנות שדורשות פעולה."
-            : `מתוך ${total} הזמנות: ${placed} בוצעו · ${skipped} דולגו.`}
+            ? "המנוע רץ — אין כרגע מה להזמין בתוך האופק."
+            : hasRemaining
+              ? `מתוך ${total}: ${placed} בוצעו · ${skipped} דולגו · ${remaining} עדיין פתוחות.`
+              : `מתוך ${total} הזמנות: ${placed} בוצעו · ${skipped} דולגו.`}
         </div>
       </div>
-      <button
-        type="button"
-        onClick={onClose}
-        className="btn btn-accent"
-        data-testid="focus-done-close"
-      >
-        חזרה לרשימה
-      </button>
+      <div className="flex flex-wrap items-center justify-center gap-2">
+        {hasRemaining && (
+          <button
+            type="button"
+            onClick={onResume}
+            className="btn btn-accent"
+            data-testid="focus-done-resume"
+          >
+            המשך לפתוחות · {remaining}
+          </button>
+        )}
+        <button
+          type="button"
+          onClick={onClose}
+          className={cn("btn", hasRemaining ? "btn-ghost" : "btn-accent")}
+          data-testid="focus-done-close"
+        >
+          חזרה לרשימה
+        </button>
+      </div>
     </div>
   );
 }

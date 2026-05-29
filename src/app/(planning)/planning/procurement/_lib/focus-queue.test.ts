@@ -17,6 +17,7 @@ import {
   isResolved,
   nextUnresolvedId,
   positionOf,
+  remainingCount,
   type QueuePo,
 } from "./focus-queue";
 
@@ -96,5 +97,13 @@ describe("helpers", () => {
     expect(positionOf(queue, "b")).toBe(2);
     expect(positionOf(queue, "x")).toBe(0);
     expect(positionOf(queue, null)).toBe(0);
+  });
+
+  it("Q7 remainingCount counts only unresolved queued orders", () => {
+    const queue = ["a", "b", "c"];
+    expect(remainingCount(queue, { a: "placed", b: "proposed", c: "approved" })).toBe(2);
+    expect(remainingCount(queue, { a: "placed", b: "skipped", c: "placed" })).toBe(0);
+    // missing status is treated as not-remaining (unknown/absent)
+    expect(remainingCount(["a", "z"], { a: "approved" })).toBe(1);
   });
 });

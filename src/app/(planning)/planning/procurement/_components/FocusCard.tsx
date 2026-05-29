@@ -260,7 +260,8 @@ export function FocusCard({
               </div>
             ))}
         </div>
-        <table className="w-full text-xs">
+        <div className="overflow-x-auto">
+        <table className="w-full min-w-[28rem] text-xs">
           <thead className="border-b border-border/40 text-3xs uppercase tracking-sops text-fg-subtle">
             <tr>
               <th className="px-3 py-1.5 text-right font-semibold">פריט</th>
@@ -339,6 +340,7 @@ export function FocusCard({
             })}
           </tbody>
         </table>
+        </div>
       </div>
 
       {/* Ad-hoc add line (Tranche 030) */}
