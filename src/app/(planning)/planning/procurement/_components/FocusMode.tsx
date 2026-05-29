@@ -226,7 +226,14 @@ export function FocusMode({
               </span>
             )}
           </div>
-          <div className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-bg-subtle">
+          <div
+            className="mt-1.5 h-1.5 w-full overflow-hidden rounded-full bg-bg-subtle"
+            role="progressbar"
+            aria-label="התקדמות מושב הרכש"
+            aria-valuemin={0}
+            aria-valuemax={total}
+            aria-valuenow={placedCount + skippedCount}
+          >
             <div
               className="h-full rounded-full bg-accent transition-all duration-300"
               style={{

@@ -15,6 +15,7 @@
 import { describe, expect, it } from "vitest";
 import {
   classifyPo,
+  daysHe,
   groupByDecision,
   type DecisionInput,
 } from "./decision";
@@ -83,6 +84,13 @@ describe("classifyPo", () => {
     const c = classifyPo(po({ order_by_date: "n/a" }), TODAY);
     expect(c.daysUntilOrderBy).toBeNull();
     expect(c.bucket).toBe("can_wait");
+  });
+
+  it("C9 daysHe uses correct Hebrew grammar (1=יום, 2=יומיים, else N ימים)", () => {
+    expect(daysHe(1)).toBe("יום");
+    expect(daysHe(-1)).toBe("יום");
+    expect(daysHe(2)).toBe("יומיים");
+    expect(daysHe(9)).toBe("9 ימים");
   });
 });
 
