@@ -26,8 +26,10 @@
 // (whitespace + muted secondary lines); shadcn-ui sticky-column inset
 // shadow discussion #4202; NN/g frozen-columns guidance.
 //
-// `position: sticky; left: 0` keeps it pinned while the day columns scroll.
-// Background must remain opaque so scrolling content doesn't bleed through.
+// Pinning is owned by the parent grid item (`position: sticky; left: 0` in
+// FlowGridDesktop) so the freeze spans the full grid width. This panel fills
+// that cell; its background must remain opaque so scrolling day columns don't
+// bleed through.
 // ---------------------------------------------------------------------------
 
 import { memo, type CSSProperties } from "react";
@@ -112,7 +114,11 @@ function StickyItemPanelInner({ item }: StickyItemPanelProps) {
   return (
     <div
       role="rowheader"
-      className="sticky left-0 z-20 flex h-full items-stretch overflow-hidden bg-bg-raised relative"
+      // NOTE: stickiness now lives on the parent GRID ITEM (see
+      // FlowGridDesktop ItemRow) so the freeze spans the full grid width.
+      // This panel just fills that sticky cell and draws the visual
+      // boundary (bg + layered right shadow via styleVars).
+      className="relative flex h-full items-stretch overflow-hidden bg-bg-raised"
       style={styleVars}
     >
       {/* 3px family-color stripe — its own absolutely-positioned slab so

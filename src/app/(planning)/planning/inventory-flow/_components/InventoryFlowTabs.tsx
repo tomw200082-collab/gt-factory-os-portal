@@ -20,7 +20,7 @@ export function InventoryFlowTabs({ activeTab }: { activeTab: Tab }) {
     <nav
       role="tablist"
       aria-label="Inventory flow view"
-      className="inline-flex rounded-md border border-border bg-muted p-0.5 text-sm"
+      className="inline-flex rounded-md border border-border bg-bg-muted p-0.5 text-sm"
     >
       <Link
         role="tab"
@@ -29,8 +29,8 @@ export function InventoryFlowTabs({ activeTab }: { activeTab: Tab }) {
         className={cn(
           "px-3 py-1.5 rounded-sm font-medium transition-colors",
           activeTab === "fg"
-            ? "bg-background text-foreground shadow-sm"
-            : "text-muted-foreground hover:text-foreground",
+            ? "bg-bg-raised text-fg-strong shadow-sm"
+            : "text-fg-muted hover:text-fg",
         )}
       >
         Finished Goods
@@ -42,8 +42,8 @@ export function InventoryFlowTabs({ activeTab }: { activeTab: Tab }) {
         className={cn(
           "px-3 py-1.5 rounded-sm font-medium transition-colors",
           activeTab === "supply"
-            ? "bg-background text-foreground shadow-sm"
-            : "text-muted-foreground hover:text-foreground",
+            ? "bg-bg-raised text-fg-strong shadow-sm"
+            : "text-fg-muted hover:text-fg",
         )}
       >
         Components
