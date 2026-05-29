@@ -23,6 +23,7 @@ import {
   Layers,
   LineChart,
   ListChecks,
+  ShoppingCart,
   TrendingUp,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
@@ -62,6 +63,13 @@ const PLANNING_TABS: PlanningTab[] = [
     label: "Production Plan",
     shortLabel: "Plan",
     icon: Factory,
+  },
+  {
+    // Tranche 028 — merged procurement front door (action list by decision).
+    href: "/planning/procurement",
+    label: "Procurement",
+    shortLabel: "Procure",
+    icon: ShoppingCart,
   },
   {
     href: "/planning/production-simulation",
