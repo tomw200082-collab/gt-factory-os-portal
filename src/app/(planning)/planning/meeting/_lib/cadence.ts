@@ -65,6 +65,60 @@ export interface GenerateDraftsResponse {
   idempotent_replay: boolean;
 }
 
+export interface FirmedWeekDemandRow {
+  item_id: string;
+  item_name: string | null;
+  track: "tea_tank" | "matcha_repack";
+  fg_units: number;
+}
+
+export interface FirmedWeekDemandResponse {
+  week_start: string;
+  week_end: string;
+  as_of: string;
+  total_fg_units: number;
+  distinct_fg_count: number;
+  rows: FirmedWeekDemandRow[];
+}
+
+// Client-side FG rollup of the *draft* week — the pre-firm "if you firm this
+// week, here's what we commit to produce" preview. Mirrors the backend
+// firmed-week-demand view but over the drafts already in hand (no extra call):
+// tea rows contribute their resolved packs; matcha rows contribute planned_qty.
+export interface FgRollupEntry {
+  item_id: string;
+  item_name: string | null;
+  units: number;
+  track: "tea_tank" | "matcha_repack";
+}
+
+export function rollupDraftFgUnits(rows: DraftWeekRow[]): FgRollupEntry[] {
+  const byItem = new Map<string, FgRollupEntry>();
+  const add = (
+    itemId: string | null,
+    itemName: string | null,
+    units: number,
+    track: "tea_tank" | "matcha_repack",
+  ) => {
+    if (!itemId || !(units > 0)) return;
+    const cur = byItem.get(itemId);
+    if (cur) {
+      cur.units += units;
+      if (cur.item_name === null && itemName !== null) cur.item_name = itemName;
+    } else {
+      byItem.set(itemId, { item_id: itemId, item_name: itemName, units, track });
+    }
+  };
+  for (const r of rows) {
+    if (r.track === "tea_tank") {
+      for (const p of r.packs) add(p.item_id, p.item_name, p.qty, "tea_tank");
+    } else {
+      add(r.item_id, r.item_name, r.planned_qty, "matcha_repack");
+    }
+  }
+  return Array.from(byItem.values()).sort((a, b) => b.units - a.units);
+}
+
 // ---------------------------------------------------------------------------
 // Date helpers (Sunday-first operator week, matching production-plan helpers)
 // ---------------------------------------------------------------------------
@@ -193,6 +247,30 @@ export function useDraftWeek(weekStart: string, enabled = true) {
         );
       }
       return (await res.json()) as DraftWeekResponse;
+    },
+    staleTime: 30_000,
+    enabled,
+    retry: (n, err) =>
+      err instanceof CadenceFetchError && (err.status === 403 || err.status === 401)
+        ? false
+        : n < 2,
+  });
+}
+
+export function useFirmedWeekDemand(weekStart: string, enabled = true) {
+  return useQuery<FirmedWeekDemandResponse, CadenceFetchError>({
+    queryKey: ["cadence", "firmed-week-demand", weekStart],
+    queryFn: async () => {
+      const res = await fetch(
+        `/api/planning/firmed-week-demand?week_start=${encodeURIComponent(weekStart)}`,
+      );
+      if (!res.ok) {
+        throw new CadenceFetchError(
+          res.status,
+          `Could not load firmed-week demand (HTTP ${res.status}).`,
+        );
+      }
+      return (await res.json()) as FirmedWeekDemandResponse;
     },
     staleTime: 30_000,
     enabled,

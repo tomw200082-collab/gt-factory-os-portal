@@ -11,7 +11,26 @@ import {
   workingDaysOf,
   familyTintVar,
   nowInIsrael,
+  rollupDraftFgUnits,
+  type DraftWeekRow,
 } from "./cadence";
+
+function teaRow(plan_id: string, packs: { item_id: string; item_name: string | null; qty: number }[]): DraftWeekRow {
+  return {
+    plan_id, plan_date: "2026-01-18", track: "tea_tank",
+    base_bom_head_id: "B1", base_name: "Base", base_family: "calm",
+    batch_size_l: 500, packs, item_id: null, item_name: null,
+    planned_qty: 500, uom: "L", notes: null,
+  };
+}
+function matchaRow(plan_id: string, item_id: string, item_name: string, qty: number): DraftWeekRow {
+  return {
+    plan_id, plan_date: "2026-01-19", track: "matcha_repack",
+    base_bom_head_id: null, base_name: null, base_family: null,
+    batch_size_l: null, packs: [], item_id, item_name,
+    planned_qty: qty, uom: "UNIT", notes: null,
+  };
+}
 
 // Reference anchors (2026 starts on a Thursday):
 //   2026-01-04 = Sunday, 2026-01-08 = Thursday, 2026-01-06 = Tuesday
@@ -123,6 +142,37 @@ describe("nowInIsrael", () => {
       day: "2-digit",
     }).format(new Date()); // YYYY-MM-DD
     expect(toIsoDate(nowInIsrael())).toBe(il);
+  });
+});
+
+describe("rollupDraftFgUnits", () => {
+  it("explodes tea packs and aggregates the same FG across batches", () => {
+    const rows = [
+      teaRow("p1", [{ item_id: "A", item_name: "Alpha", qty: 10 }, { item_id: "B", item_name: "Beta", qty: 20 }]),
+      teaRow("p2", [{ item_id: "A", item_name: "Alpha", qty: 5 }]),
+    ];
+    const out = rollupDraftFgUnits(rows);
+    const a = out.find((r) => r.item_id === "A");
+    const b = out.find((r) => r.item_id === "B");
+    expect(a?.units).toBe(15); // 10 + 5 across two batches
+    expect(b?.units).toBe(20);
+    expect(a?.track).toBe("tea_tank");
+  });
+
+  it("passes matcha single-FG planned_qty through", () => {
+    const out = rollupDraftFgUnits([matchaRow("m1", "M", "Matcha", 7)]);
+    expect(out).toHaveLength(1);
+    expect(out[0]).toMatchObject({ item_id: "M", units: 7, track: "matcha_repack" });
+  });
+
+  it("sorts by units desc and skips zero/empty", () => {
+    const rows = [
+      teaRow("p1", [{ item_id: "A", item_name: "Alpha", qty: 3 }, { item_id: "Z", item_name: "Zero", qty: 0 }]),
+      matchaRow("m1", "M", "Matcha", 50),
+    ];
+    const out = rollupDraftFgUnits(rows);
+    expect(out.map((r) => r.item_id)).toEqual(["M", "A"]); // 50 before 3
+    expect(out.find((r) => r.item_id === "Z")).toBeUndefined(); // qty 0 dropped
   });
 });
 

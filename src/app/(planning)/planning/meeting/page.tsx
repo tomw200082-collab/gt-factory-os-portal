@@ -39,6 +39,8 @@ import {
   useDraftWeek,
   useFirmWeek,
   useGenerateDrafts,
+  useFirmedWeekDemand,
+  rollupDraftFgUnits,
   defaultFirmWeekStart,
   stepForToday,
   fmtWeekRange,
@@ -185,6 +187,83 @@ function BatchChip({ row }: { row: DraftWeekRow }) {
 }
 
 // ---------------------------------------------------------------------------
+// Commitment panel — FG-unit rollup that bridges firm → procure.
+// ---------------------------------------------------------------------------
+interface CommitmentEntry {
+  item_id: string;
+  item_name: string | null;
+  units: number;
+  track: "tea_tank" | "matcha_repack";
+}
+
+function CommitmentPanel({
+  title,
+  note,
+  totalUnits,
+  entries,
+  pending,
+}: {
+  title: string;
+  note: string;
+  totalUnits: number;
+  entries: CommitmentEntry[];
+  pending: boolean;
+}) {
+  const TOP = 8;
+  const shown = entries.slice(0, TOP);
+  const more = entries.length - shown.length;
+  return (
+    <SectionCard title={title} description={note}>
+      {pending ? (
+        <div className="py-6 text-center text-sm text-fg-muted">Loading commitment…</div>
+      ) : entries.length === 0 ? (
+        <div className="py-4 text-center text-sm text-fg-muted">No finished goods committed.</div>
+      ) : (
+        <div>
+          <div className="mb-3 flex items-baseline gap-2">
+            <span className="text-2xl font-semibold tabular-nums tracking-tight">
+              {Math.round(totalUnits).toLocaleString()}
+            </span>
+            <span className="text-sm text-fg-muted">
+              units across {entries.length} product{entries.length === 1 ? "" : "s"}
+            </span>
+          </div>
+          <div className="grid grid-cols-1 gap-1.5 sm:grid-cols-2">
+            {shown.map((e) => (
+              <div
+                key={e.item_id}
+                className="flex items-center justify-between gap-2 rounded-md border border-border-faint bg-bg-subtle/40 px-3 py-1.5"
+              >
+                <span className="min-w-0 flex items-center gap-2">
+                  <span
+                    className="h-2 w-2 shrink-0 rounded-full"
+                    style={{
+                      background:
+                        e.track === "tea_tank"
+                          ? "hsl(var(--accent))"
+                          : "hsl(var(--family-matcha))",
+                    }}
+                  />
+                  <span className="truncate text-sm" dir="auto">
+                    {e.item_name ?? e.item_id}
+                  </span>
+                </span>
+                <span className="shrink-0 text-sm font-medium tabular-nums">
+                  {Math.round(e.units).toLocaleString()}
+                </span>
+              </div>
+            ))}
+          </div>
+          {more > 0 ? (
+            <div className="mt-2 text-xs text-fg-subtle">+{more} more product{more === 1 ? "" : "s"}</div>
+          ) : null}
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // FIRM panel
 // ---------------------------------------------------------------------------
 function FirmPanel({ canAct }: { canAct: boolean }) {
@@ -212,6 +291,12 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
     () => new Set(rows.map((r) => r.plan_date)).size,
     [rows],
   );
+
+  // FG commitment: pre-firm preview from the drafts in hand; once firmed (no
+  // drafts left, but locked rows exist) fetch the committed demand the Sunday
+  // session buys against.
+  const draftRollup = useMemo(() => rollupDraftFgUnits(rows), [rows]);
+  const firmedDemand = useFirmedWeekDemand(weekStart, batchCount === 0 && firmedCount > 0);
 
   const shiftWeek = (deltaWeeks: number) =>
     setWeekStart((w) => toIsoDate(addDays(parseIsoDate(w), deltaWeeks * 7)));
@@ -400,6 +485,35 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
           </div>
         )}
       </SectionCard>
+
+      {/* Production commitment — the firm → procure bridge */}
+      {batchCount > 0 && draftRollup.length > 0 ? (
+        <CommitmentPanel
+          title="If you firm this week"
+          note="These finished goods get committed to production when you firm — exactly what the Sunday procurement session buys components for."
+          totalUnits={draftRollup.reduce((a, r) => a + r.units, 0)}
+          entries={draftRollup.map((r) => ({
+            item_id: r.item_id,
+            item_name: r.item_name,
+            units: r.units,
+            track: r.track,
+          }))}
+          pending={false}
+        />
+      ) : batchCount === 0 && firmedCount > 0 ? (
+        <CommitmentPanel
+          title="Committed this week"
+          note="What this firmed week will produce — the demand Sunday procurement buys components against."
+          totalUnits={firmedDemand.data?.total_fg_units ?? 0}
+          entries={(firmedDemand.data?.rows ?? []).map((r) => ({
+            item_id: r.item_id,
+            item_name: r.item_name,
+            units: r.fg_units,
+            track: r.track,
+          }))}
+          pending={firmedDemand.isLoading}
+        />
+      ) : null}
 
       {/* Firm action */}
       <div className="flex items-center justify-end gap-3 border-t border-border-faint pt-4">
