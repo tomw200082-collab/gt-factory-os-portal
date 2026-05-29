@@ -1,0 +1,28 @@
+# Vitest CI quarantine list
+#
+# Test files in this list are EXCLUDED from the `portal-pr-guard` Vitest gate
+# because they are currently red due to pre-existing test-vs-component drift
+# (assertion drift: "multiple elements", renamed roles/labels), NOT a product
+# regression. See tranche 032 (docs/portal-os/tranches/032-procurement-test-coverage.md)
+# "Pre-existing-failure triage" for the full diagnosis: 35 failures across these
+# 11 suites, no common root cause, each needs its domain owner's judgment.
+#
+# Everything NOT in this list is gated by CI and must stay green.
+#
+# Process to retire an entry: fix the suite in a dedicated per-domain tranche,
+# confirm it passes, then delete its line here in the same PR. The goal is an
+# empty quarantine list = the full Vitest suite gating every PR.
+#
+# Format: one glob per line; blank lines and lines starting with # are ignored.
+
+**/quick-fix-drawer.test.tsx
+**/bom-draft-editor.test.tsx
+**/items-bom-display-only.test.ts
+**/recipe-health-card.test.tsx
+**/bom-line-row.test.tsx
+**/publish-confirm-modal.test.tsx
+**/readiness-panel.test.tsx
+**/version-history-section.test.tsx
+**/StockTruthDrawer.test.tsx
+**/use-enter-edit-draft.test.tsx
+**/bom-line-diff.test.tsx

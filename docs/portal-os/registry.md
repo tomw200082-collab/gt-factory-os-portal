@@ -26,7 +26,7 @@ Index of every operating artifact. Entries use repo-root-relative paths so the P
 ## Workflows
 - `.github/workflows/claude.yml` — @claude mention handler (mobile-primary entry)
 - `.github/workflows/portal-drift-weekly.yml` — weekly drift + readiness; opens issue on regression
-- `.github/workflows/portal-pr-guard.yml` — typecheck + registry presence on every PR
+- `.github/workflows/portal-pr-guard.yml` — typecheck + Vitest (quarantine-gated) + registry presence on every PR
 
 ## Canonical artifacts
 - `docs/portal-os/baseline.json` — frozen repo-truth snapshot; regression-sentinel compares against it
@@ -34,6 +34,7 @@ Index of every operating artifact. Entries use repo-root-relative paths so the P
 - `docs/portal-os/route-manifest.json` — canonical list of live routes, roles, status
 - `docs/portal-os/scorecard.json` — 10-category readiness score (machine-readable)
 - `docs/portal-os/scorecard.md` — human-readable mirror of scorecard.json
+- `docs/portal-os/vitest-quarantine.txt` — test files excluded from the portal-pr-guard Vitest gate (drifted suites, tranche 032 triage); empty list = full suite gates
 
 ## Migration docs
 - `docs/portal-os/MIGRATION-HISTORY.md` — history of OS merges onto main (what was imported, what was kept, rationale)

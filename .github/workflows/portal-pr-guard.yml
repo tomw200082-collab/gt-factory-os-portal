@@ -2,10 +2,14 @@
 #
 # Runs on every PR against main. Required check for merge.
 #
-# Minimum viable checks for bootstrap: typecheck + registry presence.
-# lint / vitest / playwright are intentionally skipped until repo-level
-# test infrastructure is set up (future tranches). Re-enable individually
-# per tranche as each layer is made CI-green.
+# Checks: typecheck + registry presence + Vitest (quarantine-gated).
+#
+# Vitest now gates every PR. It runs the full unit/component suite EXCEPT the
+# files listed in docs/portal-os/vitest-quarantine.txt — currently the 11
+# pre-existing drifted suites triaged in tranche 032. Everything else (298+
+# tests across 41 files at time of writing) must stay green. As each
+# quarantined suite is fixed in its own tranche, its line is removed and it
+# rejoins the gate. Playwright e2e remains opt-in (separate runner / live DB).
 
 name: portal-pr-guard
 
@@ -32,6 +36,23 @@ jobs:
 
       - name: Typecheck
         run: npx tsc --noEmit
+
+      - name: Vitest (quarantine-gated)
+        run: |
+          set -euo pipefail
+          QUARANTINE=docs/portal-os/vitest-quarantine.txt
+          EXCLUDES=()
+          if [ -f "$QUARANTINE" ]; then
+            while IFS= read -r line; do
+              # strip comments / blank lines
+              case "$line" in
+                ''|\#*) continue;;
+              esac
+              EXCLUDES+=(--exclude "$line")
+            done < "$QUARANTINE"
+          fi
+          echo "Excluding ${#EXCLUDES[@]} quarantined glob(s) from the Vitest gate."
+          npx vitest run "${EXCLUDES[@]}"
 
       - name: Registry presence check for new portal-os artifacts
         run: |
