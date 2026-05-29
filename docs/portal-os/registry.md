@@ -70,3 +70,4 @@ Index of every operating artifact. Entries use repo-root-relative paths so the P
 - `docs/portal-os/tranches/024-operator-forms-design-pass.md` — operator forms: hero numerics, typography, primary CTA, step-indicator
 - `docs/portal-os/tranches/025-physical-count-pro-redesign.md` — physical-count: pro-grade redesign, unified banner, cancel polish
 - `docs/portal-os/tranches/026-economics-pl-coverage.md` — Economics Overview: P&L Coverage frame (dual-axis revenue+SKU), demand-weighted sort, chip taxonomy split, honest inventory totals
+- `docs/portal-os/tranches/027-procurement-shared-line-editor.md` — extract mode-aware PoLineEditor + useOrderables from /new (pure refactor); foundation for the procurement-merge epic (028–030: unified action-list page, focus mode + inline create, ad-hoc in session)
