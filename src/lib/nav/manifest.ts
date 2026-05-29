@@ -203,16 +203,13 @@ export const NAV_MANIFEST: NavGroup[] = [
         required_capability: "planning:read",
       },
       {
-        href: "/planning/purchase-session",
-        label: "Purchase Session",
+        // Tranche 028 — merged procurement front door. Replaces the separate
+        // "Purchase Session" + "Purchase Calendar" entries with one action-list
+        // page grouped by decision. The old routes stay live and URL-reachable
+        // (de-linked) until focus mode supersedes them in Tranche 029.
+        href: "/planning/procurement",
+        label: "Procurement",
         icon: ShoppingCart,
-        min_role: "planner",
-        required_capability: "planning:read",
-      },
-      {
-        href: "/planning/purchase-calendar",
-        label: "Purchase Calendar",
-        icon: CalendarDays,
         min_role: "planner",
         required_capability: "planning:read",
       },
