@@ -10,6 +10,7 @@ import {
   defaultFirmWeekStart,
   workingDaysOf,
   familyTintVar,
+  nowInIsrael,
 } from "./cadence";
 
 // Reference anchors (2026 starts on a Thursday):
@@ -100,6 +101,28 @@ describe("workingDaysOf", () => {
     ]);
     expect(parseIsoDate(days[0]).getDay()).toBe(0); // Sunday
     expect(parseIsoDate(days[4]).getDay()).toBe(4); // Thursday
+  });
+});
+
+describe("nowInIsrael", () => {
+  it("returns a valid Date with in-range wall-clock fields", () => {
+    const d = nowInIsrael();
+    expect(d instanceof Date).toBe(true);
+    expect(Number.isNaN(d.getTime())).toBe(false);
+    expect(d.getDay()).toBeGreaterThanOrEqual(0);
+    expect(d.getDay()).toBeLessThanOrEqual(6);
+    expect(d.getHours()).toBeGreaterThanOrEqual(0);
+    expect(d.getHours()).toBeLessThanOrEqual(23);
+  });
+
+  it("agrees with the IL calendar date for the current instant", () => {
+    const il = new Intl.DateTimeFormat("en-CA", {
+      timeZone: "Asia/Jerusalem",
+      year: "numeric",
+      month: "2-digit",
+      day: "2-digit",
+    }).format(new Date()); // YYYY-MM-DD
+    expect(toIsoDate(nowInIsrael())).toBe(il);
   });
 });
 

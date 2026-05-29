@@ -45,6 +45,7 @@ export interface DraftWeekResponse {
   week_end: string;
   as_of: string;
   batch_count: number;
+  firmed_count: number;
   rows: DraftWeekRow[];
 }
 
@@ -56,6 +57,14 @@ export interface FirmWeekResponse {
   idempotent_replay: boolean;
 }
 
+export interface GenerateDraftsResponse {
+  tea_proposal_id: string | null;
+  matcha_proposal_id: string | null;
+  draft_total_upcoming: number;
+  generated_at: string;
+  idempotent_replay: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // Date helpers (Sunday-first operator week, matching production-plan helpers)
 // ---------------------------------------------------------------------------
@@ -64,6 +73,27 @@ const MONTH_NAMES = [
   "Jan", "Feb", "Mar", "Apr", "May", "Jun",
   "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
 ] as const;
+
+// "Now" anchored to the factory's wall clock (Asia/Jerusalem), so the
+// Thursday/Sunday cadence step is correct regardless of the operator's browser
+// timezone. Returns a Date whose *local* fields (getDay/getDate/…) reflect IL
+// wall-clock time — sufficient for day-of-week + week-boundary math.
+export function nowInIsrael(): Date {
+  const parts = new Intl.DateTimeFormat("en-US", {
+    timeZone: "Asia/Jerusalem",
+    year: "numeric",
+    month: "numeric",
+    day: "numeric",
+    hour: "numeric",
+    minute: "numeric",
+    second: "numeric",
+    hour12: false,
+  }).formatToParts(new Date());
+  const get = (t: string) => Number(parts.find((p) => p.type === t)?.value ?? "0");
+  // hour can come back as "24" at midnight in some engines — normalize.
+  const hour = get("hour") % 24;
+  return new Date(get("year"), get("month") - 1, get("day"), hour, get("minute"), get("second"));
+}
 
 export function toIsoDate(d: Date): string {
   const y = d.getFullYear();
@@ -114,7 +144,7 @@ export function fmtWeekRange(startIso: string): string {
 // ---------------------------------------------------------------------------
 // Which step is "today"? Thursday is the firm meeting, Sunday the procurement
 // meeting; every other day the rhythm is execution.
-export function stepForToday(today = new Date()): CadenceStep {
+export function stepForToday(today = nowInIsrael()): CadenceStep {
   const dow = today.getDay(); // 0=Sun … 4=Thu
   if (dow === 4) return "firm";
   if (dow === 0) return "procure";
@@ -125,7 +155,7 @@ export function stepForToday(today = new Date()): CadenceStep {
 // weeks out. On Thursday that is ~10 days ahead, giving the Sunday procurement
 // session a full week of lead before production begins. Anchored to the
 // current week's Sunday + 14 so it is stable across the Thu→Sun handoff.
-export function defaultFirmWeekStart(today = new Date()): string {
+export function defaultFirmWeekStart(today = nowInIsrael()): string {
   return toIsoDate(addDays(startOfWeek(today), 14));
 }
 
@@ -218,6 +248,33 @@ export function useFirmWeek() {
       // The firmed rows leave 'draft' → refetch the now-emptier draft week.
       void qc.invalidateQueries({ queryKey: ["cadence", "draft-week"] });
       void qc.invalidateQueries({ queryKey: ["production-plan"] });
+    },
+  });
+}
+
+export function useGenerateDrafts() {
+  const qc = useQueryClient();
+  return useMutation<GenerateDraftsResponse, Error, void>({
+    mutationFn: async () => {
+      const res = await fetch("/api/planning/generate-drafts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idempotency_key: genIdempotencyKey() }),
+      });
+      if (!res.ok) {
+        throw new Error(
+          res.status === 403
+            ? "You don't have permission to generate drafts (planner/admin only)."
+            : res.status === 503
+              ? "The system is locked right now (break-glass). Try again later."
+              : `Could not generate drafts (HTTP ${res.status}).`,
+        );
+      }
+      return (await res.json()) as GenerateDraftsResponse;
+    },
+    onSuccess: () => {
+      // Fresh drafts → refetch the week board.
+      void qc.invalidateQueries({ queryKey: ["cadence", "draft-week"] });
     },
   });
 }

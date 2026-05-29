@@ -27,6 +27,7 @@ import {
   ArrowRight,
   Boxes,
   Droplet,
+  RefreshCw,
 } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
@@ -37,6 +38,7 @@ import { cn } from "@/lib/cn";
 import {
   useDraftWeek,
   useFirmWeek,
+  useGenerateDrafts,
   defaultFirmWeekStart,
   stepForToday,
   fmtWeekRange,
@@ -190,8 +192,10 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
   const [confirming, setConfirming] = useState(false);
   const draft = useDraftWeek(weekStart);
   const firm = useFirmWeek();
+  const gen = useGenerateDrafts();
 
   const rows = draft.data?.rows ?? [];
+  const firmedCount = draft.data?.firmed_count ?? 0;
   const days = useMemo(() => workingDaysOf(weekStart), [weekStart]);
   const byDay = useMemo(() => {
     const m = new Map<string, DraftWeekRow[]>();
@@ -240,14 +244,45 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
             <ChevronRight className="h-4 w-4" />
           </button>
         </div>
-        <button
-          type="button"
-          onClick={() => setWeekStart(defaultFirmWeekStart())}
-          className="text-xs text-accent hover:underline"
-        >
-          Jump to this week's target
-        </button>
+        <div className="flex items-center gap-3">
+          <button
+            type="button"
+            onClick={() => setWeekStart(defaultFirmWeekStart())}
+            className="text-xs text-accent hover:underline"
+          >
+            Jump to this week's target
+          </button>
+          {canAct ? (
+            <button
+              type="button"
+              disabled={gen.isPending}
+              onClick={() => gen.mutate()}
+              className="inline-flex items-center gap-2 rounded-md border border-border bg-bg-raised px-3 py-2 text-sm font-medium text-fg shadow-hairline transition-colors hover:bg-bg-muted disabled:opacity-60"
+              title="Run the tea + matcha draft engines to (re)generate the draft horizon"
+            >
+              <RefreshCw className={cn("h-4 w-4", gen.isPending && "animate-spin")} />
+              {gen.isPending ? "Generating…" : "Generate / refresh drafts"}
+            </button>
+          ) : null}
+        </div>
       </div>
+
+      {/* Generate result / error */}
+      {gen.isSuccess ? (
+        <div className="flex items-start gap-3 rounded-lg border border-accent-border bg-accent-softer p-3 text-sm">
+          <RefreshCw className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+          <span className="text-fg">
+            {gen.data.idempotent_replay
+              ? "Drafts already up to date."
+              : `Generated drafts — ${gen.data.draft_total_upcoming} draft batch${gen.data.draft_total_upcoming === 1 ? "" : "es"} now waiting across the horizon.`}
+          </span>
+        </div>
+      ) : gen.isError ? (
+        <div className="flex items-start gap-3 rounded-lg border border-danger-border bg-danger-softer p-3 text-sm">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-danger" />
+          <span className="text-danger-fg">{(gen.error as Error).message}</span>
+        </div>
+      ) : null}
 
       {/* KPIs */}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
@@ -311,10 +346,33 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
             title="Could not load the draft week"
             description={(draft.error as Error).message}
           />
+        ) : batchCount === 0 && firmedCount > 0 ? (
+          <div className="flex items-start gap-3 rounded-lg border border-success-border bg-success-softer p-5">
+            <Lock className="mt-0.5 h-5 w-5 shrink-0 text-success" />
+            <div>
+              <div className="text-sm font-semibold text-success-fg">
+                This week is firmed — {firmedCount} batch{firmedCount === 1 ? "" : "es"} locked
+              </div>
+              <div className="mt-1 text-xs text-fg-muted">
+                The committed plan now lives in the production plan, where it can be adjusted or
+                cancelled if something changes. Re-running Generate will not touch firmed batches.
+              </div>
+              <Link
+                href="/planning/production-plan"
+                className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-accent hover:underline"
+              >
+                Open production plan to adjust <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+          </div>
         ) : batchCount === 0 ? (
           <EmptyState
             title="No draft batches for this week"
-            description="Either this week is already firmed, or the engine hasn't proposed production for it yet. Use the week arrows to check adjacent weeks."
+            description={
+              canAct
+                ? "The engine hasn't proposed production for this week yet. Click “Generate / refresh drafts” above, or use the week arrows to check adjacent weeks."
+                : "The engine hasn't proposed production for this week yet. Use the week arrows to check adjacent weeks."
+            }
           />
         ) : (
           <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
