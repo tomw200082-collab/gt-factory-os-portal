@@ -78,6 +78,17 @@ export function allResolved(
   });
 }
 
+/** How many queued orders are still unresolved (proposed/approved). */
+export function remainingCount(
+  queueIds: readonly string[],
+  statusById: Readonly<Record<string, PoStatusLike>>,
+): number {
+  return queueIds.filter((id) => {
+    const status = statusById[id];
+    return status != null && !isResolved(status);
+  }).length;
+}
+
 /** 1-based position of `id` within the queue, or 0 if absent. */
 export function positionOf(queueIds: readonly string[], id: string | null): number {
   if (id == null) return 0;
