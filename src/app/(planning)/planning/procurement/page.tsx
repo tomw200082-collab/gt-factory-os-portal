@@ -19,21 +19,34 @@
 // page and operators are blocked there — no extra gate needed here.
 // ---------------------------------------------------------------------------
 
+import { useState } from "react";
 import Link from "next/link";
-import { AlertTriangle, RefreshCw } from "lucide-react";
+import { AlertTriangle, RefreshCw, Target } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { cn } from "@/lib/cn";
 import {
   useCurrentSession,
   useStartSession,
 } from "../purchase-session/_lib/api";
+import type { PurchaseSessionPo } from "../purchase-session/_lib/types";
 import { formatIls } from "@/lib/utils/format-money";
 import { ActionList } from "./_components/ActionList";
+import { FocusMode } from "./_components/FocusMode";
+import { buildFocusQueue } from "./_lib/focus-queue";
 
 export default function ProcurementPage(): JSX.Element {
   const { data, isLoading, isError, error, refetch } = useCurrentSession();
   const startMut = useStartSession();
   const session = data?.session ?? null;
+
+  // Focus mode: open flag + the order to start on (null = first queued).
+  const [focusOpen, setFocusOpen] = useState(false);
+  const [focusStartId, setFocusStartId] = useState<string | null>(null);
+
+  function openFocus(startId: string | null): void {
+    setFocusStartId(startId);
+    setFocusOpen(true);
+  }
 
   function handleStart(): void {
     if (
@@ -94,6 +107,16 @@ export default function ProcurementPage(): JSX.Element {
           pos={session.pos}
           sessionDate={session.session_date}
           totalCost={session.totals.total_cost}
+          onStartFocus={() => openFocus(null)}
+          onOpenOrder={(po) => openFocus(po.session_po_id)}
+        />
+      )}
+
+      {focusOpen && session && (
+        <FocusMode
+          pos={session.pos}
+          startId={focusStartId}
+          onClose={() => setFocusOpen(false)}
         />
       )}
     </div>
@@ -108,11 +131,17 @@ function SessionView({
   pos,
   sessionDate,
   totalCost,
+  onStartFocus,
+  onOpenOrder,
 }: {
-  pos: React.ComponentProps<typeof ActionList>["pos"];
+  pos: PurchaseSessionPo[];
   sessionDate: string;
   totalCost: number;
+  onStartFocus: () => void;
+  onOpenOrder: (po: PurchaseSessionPo) => void;
 }): JSX.Element {
+  const actionableCount = buildFocusQueue(pos).length;
+
   if (pos.length === 0) {
     return (
       <div className="card flex flex-col items-center gap-3 p-6 text-center text-sm text-fg-muted">
@@ -135,18 +164,31 @@ function SessionView({
         className="card flex flex-wrap items-center justify-between gap-3 p-4"
         data-testid="procurement-summary"
       >
-        <div className="text-sm text-fg">
-          מושב מתאריך <span className="font-semibold">{sessionDate}</span>
+        <div className="flex flex-col gap-0.5">
+          <div className="text-sm text-fg">
+            מושב מתאריך <span className="font-semibold">{sessionDate}</span>
+          </div>
+          <div className="text-xs text-fg-muted">
+            סה״כ:{" "}
+            <span className="font-mono tabular-nums text-fg">
+              {formatIls(totalCost)}
+            </span>
+          </div>
         </div>
-        <div className="text-xs text-fg-muted">
-          סה״כ:{" "}
-          <span className="font-mono tabular-nums text-fg">
-            {formatIls(totalCost)}
-          </span>
-        </div>
+        {actionableCount > 0 && (
+          <button
+            type="button"
+            onClick={onStartFocus}
+            className="btn btn-accent"
+            data-testid="procurement-start-focus"
+          >
+            <Target className="h-4 w-4" aria-hidden />
+            התחל מיקוד · {actionableCount}
+          </button>
+        )}
       </div>
 
-      <ActionList pos={pos} />
+      <ActionList pos={pos} onOpen={onOpenOrder} />
     </div>
   );
 }
