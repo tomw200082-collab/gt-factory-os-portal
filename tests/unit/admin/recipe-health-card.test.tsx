@@ -229,7 +229,7 @@ describe("RecipeHealthCard — MANUFACTURED full data", () => {
       { wrapper: wrapQuery() },
     );
     await waitFor(() =>
-      expect(screen.queryByText(/Production-ready$/)).not.toBeNull(),
+      expect(screen.getAllByText(/Production-ready$/).length).toBeGreaterThan(0),
     );
     expect(screen.getByText("Base formula")).toBeTruthy();
     expect(screen.getByText("Pack BOM")).toBeTruthy();
@@ -253,9 +253,13 @@ describe("RecipeHealthCard — yellow when supplier missing", () => {
       { wrapper: wrapQuery() },
     );
     await waitFor(() =>
-      expect(screen.queryByText(/Production-ready with warnings/)).not.toBeNull(),
+      expect(
+        screen.getAllByText(/Production-ready with warnings/).length,
+      ).toBeGreaterThan(0),
     );
-    expect(screen.getByText(/no primary supplier|primary supplier/)).toBeTruthy();
+    expect(
+      screen.getAllByText(/no primary supplier|primary supplier/).length,
+    ).toBeGreaterThan(0);
   });
 });
 
@@ -325,9 +329,9 @@ describe("RecipeHealthCard — red when pack BOM is empty", () => {
       { wrapper: wrapQuery() },
     );
     await waitFor(() =>
-      expect(screen.queryByText(/Cannot publish/)).not.toBeNull(),
+      expect(screen.getAllByText(/Cannot publish/).length).toBeGreaterThan(0),
     );
-    expect(screen.getByText(/empty/)).toBeTruthy();
+    expect(screen.getAllByText(/empty/).length).toBeGreaterThan(0);
   });
 });
 
@@ -348,7 +352,7 @@ describe("RecipeHealthCard — admin gating", () => {
       { wrapper: wrapQuery() },
     );
     await waitFor(() =>
-      expect(screen.queryByText(/Production-ready$/)).not.toBeNull(),
+      expect(screen.getAllByText(/Production-ready$/).length).toBeGreaterThan(0),
     );
     expect(screen.getAllByRole("button", { name: /Edit recipe/ })).toHaveLength(2);
   });
@@ -369,7 +373,7 @@ describe("RecipeHealthCard — admin gating", () => {
       { wrapper: wrapQuery() },
     );
     await waitFor(() =>
-      expect(screen.queryByText(/Production-ready$/)).not.toBeNull(),
+      expect(screen.getAllByText(/Production-ready$/).length).toBeGreaterThan(0),
     );
     expect(screen.queryByRole("button", { name: /Edit recipe/ })).toBeNull();
   });
@@ -392,7 +396,7 @@ describe("RecipeHealthCard — mobile stacking class", () => {
       { wrapper: wrapQuery() },
     );
     await waitFor(() =>
-      expect(screen.queryByText(/Production-ready$/)).not.toBeNull(),
+      expect(screen.getAllByText(/Production-ready$/).length).toBeGreaterThan(0),
     );
     const grid = container.querySelector("[data-tracks-grid]");
     expect(grid).not.toBeNull();
@@ -408,9 +412,11 @@ describe("RecipeHealthCard — Edit recipe button confirmations", () => {
         return Promise.resolve(
           new Response(
             JSON.stringify({
-              bom_version_id: "BV-NEW",
-              version_label: "v4",
-              status: "DRAFT",
+              row: {
+                bom_version_id: "BV-NEW",
+                version_label: "v4",
+                status: "DRAFT",
+              },
             }),
             { status: 200 },
           ),
@@ -483,6 +489,15 @@ describe("RecipeHealthCard — Edit recipe button confirmations", () => {
     );
   });
 
+  // FIXME(tranche-034): genuine behavioral discrepancy, NOT a stale assertion.
+  // With a DRAFT version present in the mocked versions list, clicking [Edit
+  // recipe] attempts a CLONE (POST /api/boms/versions → "createDraft: 500")
+  // instead of opening the draft-exists confirm modal — i.e. baseTrack.
+  // draftVersionId resolves null at click time despite the DRAFT row. The other
+  // 14 tests (incl. the no-draft clone+navigate path) pass. Left failing on
+  // purpose and flagged for a recipe-health domain runtime triage rather than
+  // masked with it.skip or a forced pass. (Assertions below were also refreshed
+  // to the current English modal copy: "draft already exists" / "Open draft".)
   it("when a DRAFT already exists, opens confirm modal then navigates to existing draft", async () => {
     const navigate = vi.fn();
     fetchMock.mockImplementation((url: string) => {
@@ -536,8 +551,8 @@ describe("RecipeHealthCard — Edit recipe button confirmations", () => {
     const btns = await screen.findAllByRole("button", { name: /Edit recipe/ });
     fireEvent.click(btns[0]);
     const dialog = await screen.findByRole("dialog");
-    expect(dialog.textContent ?? "").toMatch(/יש כבר טיוטה/);
-    fireEvent.click(screen.getByRole("button", { name: /להמשיך/ }));
+    expect(dialog.textContent ?? "").toMatch(/draft already exists/i);
+    fireEvent.click(screen.getByRole("button", { name: /Open draft/i }));
     await waitFor(() =>
       expect(navigate).toHaveBeenCalledWith(
         "/admin/masters/boms/BH-BASE/BV-DRAFT/edit",
