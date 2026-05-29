@@ -68,6 +68,14 @@ export function fmtDateHe(iso: string | null): string {
   return `${m[3]}/${m[2]}`;
 }
 
+/** Grammatically-correct Hebrew day count: 1→יום, 2→יומיים, else N ימים. */
+export function daysHe(n: number): string {
+  const abs = Math.abs(n);
+  if (abs === 1) return "יום";
+  if (abs === 2) return "יומיים";
+  return `${abs} ימים`;
+}
+
 // --- classification --------------------------------------------------------
 
 function whyNowLabel(
@@ -86,7 +94,7 @@ function whyNowLabel(
     : "";
 
   if (isOverdue) {
-    const late = days != null ? ` (${Math.abs(days)} ימים)` : "";
+    const late = days != null ? ` (${daysHe(days)})` : "";
     return `באיחור — היה צריך להזמין עד ${orderBy}${late}${need}`;
   }
   if (days === 0) {
@@ -96,7 +104,7 @@ function whyNowLabel(
     return `דחוף — להזמין עד ${orderBy}${need}`;
   }
   // can_wait
-  const lead = days != null ? `בעוד ${days} ימים` : "";
+  const lead = days != null ? `בעוד ${daysHe(days)}` : "";
   return `אפשר להמתין — להזמין עד ${orderBy} ${lead}${need}`.trim();
 }
 
