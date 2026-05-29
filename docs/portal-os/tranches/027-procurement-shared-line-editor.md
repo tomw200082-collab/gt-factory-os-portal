@@ -1,7 +1,9 @@
 # Tranche 027: procurement-shared-line-editor
 
-status: proposed
+status: landed-pending-review
 created: 2026-05-29
+activated: 2026-05-29
+landed: 2026-05-29
 scorecard_target_category: flow_continuity
 expected_delta: +0 on flow_continuity (enabling refactor; the operator-visible delta lands in 028–030, which depend on this extraction)
 sizing: M  (5-8 files)
@@ -113,4 +115,35 @@ from this tranche); ad-hoc additions happen **inside the session**.
   in `manual` mode; reconcile against the standalone `/new` route.
 
 ## Actual evidence (filled in by /portal-tranche-fix run)
-<pasted after execution: typecheck summary, test pass count, PR URL, scorecard delta>
+
+Executed 2026-05-29 on branch `claude/procurement-forecast-review-Bv31m`.
+
+**Files delivered (exactly the manifest):**
+- `src/components/purchase-orders/types.ts` (new) — shared types + pure helpers
+  (`todayPlusDays`, `toUom`, `emptyLine`) + `validatePoDraft(draft, mode)`.
+- `src/components/purchase-orders/useOrderables.ts` (new) — master-data hook
+  (suppliers + BOUGHT_FINISHED items + active components → grouped options),
+  same query keys / staleTime / sorting as the old inline code.
+- `src/components/purchase-orders/PoLineEditor.tsx` (new) — controlled,
+  mode-aware field + line editor. `manual` renders the reason section;
+  `recommendation` hides it. All `data-testid`s preserved.
+- `src/components/purchase-orders/PoLineEditor.test.tsx` (new) — 10 vitest cases.
+- `src/app/(po)/purchase-orders/new/page.tsx` (refactor) — consumes
+  `useOrderables` + `<PoLineEditor mode="manual">`; keeps submit / 201 / 409 /
+  422-field-mapping / success+idempotent states / `RoleGate` unchanged.
+- `tests/e2e/po-new.spec.ts` (new) — structural equivalence + RoleGate guard.
+
+**Verification:**
+- typecheck: `npm run typecheck` → exit 0 (clean) after `npm ci`.
+- vitest (this tranche): `PoLineEditor.test.tsx` → 10 passed / 10.
+- full vitest: 292 passed; 35 pre-existing failures in unrelated suites
+  (bom-edit, stock, recipe-health, admin) — confirmed failing on a clean
+  `git stash` baseline, i.e. NOT introduced by this tranche. No
+  purchase-orders test among the failures.
+- e2e `po-new.spec.ts`: deterministic structural assertions; runs under
+  `portal-pr-guard` / CI (needs dev server + browsers, not run in this sandbox).
+- regression-sentinel: route surface unchanged (`/purchase-orders/new` same
+  path, same role gate); `data-testid`s preserved.
+
+**Scorecard delta:** +0 (declared; enabling refactor — operator-visible delta
+lands in 028–030).
