@@ -199,3 +199,43 @@ describe("weekly-meeting cockpit — firm panel a11y", () => {
     await waitFor(() => expect(document.activeElement).toBe(confirm));
   });
 });
+
+describe("weekly-meeting cockpit — focus visibility", () => {
+  // Every interactive control must carry a visible keyboard focus ring. These
+  // lock the consistency pass so a future control can't ship without one.
+  const RING = /focus-visible:ring-2/;
+
+  it("gives every cadence-rail step button a focus ring", () => {
+    render(<PlanningMeetingPage />);
+    const nav = screen.getByRole("navigation", { name: /weekly cadence steps/i });
+    const buttons = Array.from(nav.querySelectorAll("button"));
+    expect(buttons.length).toBe(3);
+    buttons.forEach((b) => expect(RING.test(b.className)).toBe(true));
+  });
+
+  it("gives the firm-panel week-nav arrows a focus ring", () => {
+    draftState.current = { data: draftResponse([teaRow()]), isLoading: false, isError: false };
+    render(<PlanningMeetingPage />);
+    openFirmPanel();
+    const prev = screen.getByRole("button", { name: /previous week/i });
+    const next = screen.getByRole("button", { name: /next week/i });
+    expect(RING.test(prev.className)).toBe(true);
+    expect(RING.test(next.className)).toBe(true);
+  });
+
+  it("gives every Procure navigation card a focus ring", () => {
+    render(<PlanningMeetingPage />);
+    fireEvent.click(screen.getByRole("button", { name: /Procure — Sunday/i }));
+    const cards = screen.getAllByRole("link").filter((a) => /\bgroup\b/.test(a.className));
+    expect(cards.length).toBeGreaterThanOrEqual(4);
+    cards.forEach((a) => expect(RING.test(a.className)).toBe(true));
+  });
+
+  it("gives every Execute navigation card a focus ring", () => {
+    render(<PlanningMeetingPage />);
+    fireEvent.click(screen.getByRole("button", { name: /Execute — Daily/i }));
+    const cards = screen.getAllByRole("link").filter((a) => /\bgroup\b/.test(a.className));
+    expect(cards.length).toBeGreaterThanOrEqual(2);
+    cards.forEach((a) => expect(RING.test(a.className)).toBe(true));
+  });
+});

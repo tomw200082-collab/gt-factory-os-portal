@@ -33,6 +33,13 @@ Each change is a real semantic/interaction improvement, not a restyle:
    `aria-label="<day> <date>"`) so the board is navigable by region.
 8. **Batch chip label.** `BatchChip` exposes its pack breakdown via `aria-label`
    (today it's only a hover `title`, invisible to keyboard / SR users).
+9. **Focus-ring consistency.** The first pass added focus rings to the cadence rail
+   + firm/generate buttons but left the week-nav arrows, the "jump"/"fine-tune"
+   text links, and all six Procure/Execute navigation cards with no visible focus
+   at all. Hoisted the ring to a single `focusRing` constant and applied it to
+   every interactive control so keyboard focus is always visible and identical.
+10. **Reduced motion.** The generate spinner now carries `motion-reduce:animate-none`,
+    honoring `prefers-reduced-motion`.
 
 ## Scope
 - `src/app/(planning)/planning/meeting/page.tsx` — the cockpit surface (all of the above).

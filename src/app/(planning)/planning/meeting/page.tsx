@@ -56,6 +56,12 @@ import {
   type DraftWeekRow,
 } from "./_lib/cadence";
 
+// Single source of truth for the keyboard focus ring. Applied to every
+// interactive control on this surface (buttons + nav links) so focus is always
+// visible and identical, regardless of element type (tranche 037).
+const focusRing =
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-bg-raised";
+
 // ---------------------------------------------------------------------------
 // Cadence rail — the three-step rhythm, with today highlighted.
 // ---------------------------------------------------------------------------
@@ -93,7 +99,7 @@ function CadenceRail({
               aria-label={`${s.label} — ${s.sub}${isToday ? " (today)" : ""}`}
               className={cn(
                 "group flex flex-1 items-center gap-3 rounded-lg px-3.5 py-3 text-left transition-colors",
-                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-bg-raised",
+                focusRing,
                 isActive
                   ? "bg-accent text-accent-fg shadow-raised"
                   : "text-fg-muted hover:bg-bg-muted hover:text-fg",
@@ -344,7 +350,10 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
           <button
             type="button"
             onClick={() => shiftWeek(-1)}
-            className="rounded-md border border-border bg-bg-raised p-2 text-fg-muted shadow-hairline transition-colors hover:bg-bg-muted hover:text-fg"
+            className={cn(
+              "rounded-md border border-border bg-bg-raised p-2 text-fg-muted shadow-hairline transition-colors hover:bg-bg-muted hover:text-fg",
+              focusRing,
+            )}
             aria-label="Previous week"
           >
             <ChevronLeft className="h-4 w-4" />
@@ -356,7 +365,10 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
           <button
             type="button"
             onClick={() => shiftWeek(1)}
-            className="rounded-md border border-border bg-bg-raised p-2 text-fg-muted shadow-hairline transition-colors hover:bg-bg-muted hover:text-fg"
+            className={cn(
+              "rounded-md border border-border bg-bg-raised p-2 text-fg-muted shadow-hairline transition-colors hover:bg-bg-muted hover:text-fg",
+              focusRing,
+            )}
             aria-label="Next week"
           >
             <ChevronRight className="h-4 w-4" />
@@ -366,7 +378,7 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
           <button
             type="button"
             onClick={() => setWeekStart(defaultFirmWeekStart())}
-            className="text-xs text-accent hover:underline"
+            className={cn("rounded text-xs text-accent hover:underline", focusRing)}
           >
             Jump to this week's target
           </button>
@@ -376,10 +388,13 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
               disabled={gen.isPending}
               aria-busy={gen.isPending}
               onClick={() => gen.mutate()}
-              className="inline-flex items-center gap-2 rounded-md border border-border bg-bg-raised px-3 py-2 text-sm font-medium text-fg shadow-hairline transition-colors hover:bg-bg-muted disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-bg-raised"
+              className={cn(
+                "inline-flex items-center gap-2 rounded-md border border-border bg-bg-raised px-3 py-2 text-sm font-medium text-fg shadow-hairline transition-colors hover:bg-bg-muted disabled:opacity-60",
+                focusRing,
+              )}
               title="Run the tea + matcha draft engines to (re)generate the draft horizon"
             >
-              <RefreshCw className={cn("h-4 w-4", gen.isPending && "animate-spin")} aria-hidden="true" />
+              <RefreshCw className={cn("h-4 w-4", gen.isPending && "animate-spin motion-reduce:animate-none")} aria-hidden="true" />
               {gen.isPending ? "Generating…" : "Generate / refresh drafts"}
             </button>
           ) : null}
@@ -478,7 +493,7 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
               </div>
               <Link
                 href="/planning/production-plan"
-                className="mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-accent hover:underline"
+                className={cn("mt-2 inline-flex items-center gap-1.5 rounded text-xs font-medium text-accent hover:underline", focusRing)}
               >
                 Open production plan to adjust <ArrowRight className="h-3.5 w-3.5" />
               </Link>
@@ -537,7 +552,7 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
         </div>
         <Link
           href="/planning/production-plan"
-          className="shrink-0 text-xs font-medium text-accent hover:underline"
+          className={cn("shrink-0 rounded text-xs font-medium text-accent hover:underline", focusRing)}
         >
           Fine-tune →
         </Link>
@@ -599,7 +614,10 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
                   { onSettled: () => setConfirming(false) },
                 );
               }}
-              className="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-fg shadow-raised transition-colors hover:bg-accent-hover disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-bg-raised"
+              className={cn(
+                "inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-fg shadow-raised transition-colors hover:bg-accent-hover disabled:opacity-60",
+                focusRing,
+              )}
             >
               <Lock className="h-4 w-4" aria-hidden="true" />
               {firm.isPending ? "Firming…" : "Confirm firm"}
@@ -611,7 +629,10 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
             disabled={batchCount === 0}
             onClick={() => setConfirming(true)}
             title={batchCount === 0 ? "Nothing to firm — generate drafts or pick a week with batches" : `Lock ${batchCount} batch${batchCount === 1 ? "" : "es"} for ${fmtWeekRange(weekStart)}`}
-            className="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-fg shadow-raised transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-bg-raised"
+            className={cn(
+              "inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-fg shadow-raised transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50",
+              focusRing,
+            )}
           >
             <Lock className="h-4 w-4" aria-hidden="true" />
             Firm week
@@ -655,7 +676,7 @@ function ProcurePanel() {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Link
             href="/planning/purchase-session"
-            className="group flex items-center justify-between rounded-lg border border-accent-border bg-accent-softer p-4 transition-colors hover:bg-accent-soft"
+            className={cn("group flex items-center justify-between rounded-lg border border-accent-border bg-accent-softer p-4 transition-colors hover:bg-accent-soft", focusRing)}
           >
             <span className="flex items-center gap-3">
               <ShoppingCart className="h-5 w-5 text-accent" />
@@ -668,7 +689,7 @@ function ProcurePanel() {
           </Link>
           <Link
             href="/planning/purchase-calendar"
-            className="group flex items-center justify-between rounded-lg border border-border bg-bg-raised p-4 shadow-hairline transition-colors hover:bg-bg-muted"
+            className={cn("group flex items-center justify-between rounded-lg border border-border bg-bg-raised p-4 shadow-hairline transition-colors hover:bg-bg-muted", focusRing)}
           >
             <span className="flex items-center gap-3">
               <CalendarCheck className="h-5 w-5 text-fg-subtle" />
@@ -690,7 +711,7 @@ function ProcurePanel() {
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Link
             href="/stock/receipts"
-            className="group flex items-center justify-between rounded-lg border border-border bg-bg-raised p-4 shadow-hairline transition-colors hover:bg-bg-muted"
+            className={cn("group flex items-center justify-between rounded-lg border border-border bg-bg-raised p-4 shadow-hairline transition-colors hover:bg-bg-muted", focusRing)}
           >
             <span className="flex items-center gap-3">
               <PackageCheck className="h-5 w-5 text-success" />
@@ -703,7 +724,7 @@ function ProcurePanel() {
           </Link>
           <Link
             href="/planning/inventory-flow"
-            className="group flex items-center justify-between rounded-lg border border-border bg-bg-raised p-4 shadow-hairline transition-colors hover:bg-bg-muted"
+            className={cn("group flex items-center justify-between rounded-lg border border-border bg-bg-raised p-4 shadow-hairline transition-colors hover:bg-bg-muted", focusRing)}
           >
             <span className="flex items-center gap-3">
               <Boxes className="h-5 w-5 text-fg-subtle" />
@@ -732,7 +753,7 @@ function ExecutePanel() {
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Link
           href="/planning/production-plan"
-          className="group flex items-center justify-between rounded-lg border border-accent-border bg-accent-softer p-4 transition-colors hover:bg-accent-soft"
+          className={cn("group flex items-center justify-between rounded-lg border border-accent-border bg-accent-softer p-4 transition-colors hover:bg-accent-soft", focusRing)}
         >
           <span className="flex items-center gap-3">
             <Factory className="h-5 w-5 text-accent" />
@@ -745,7 +766,7 @@ function ExecutePanel() {
         </Link>
         <Link
           href="/planning/inventory-flow"
-          className="group flex items-center justify-between rounded-lg border border-border bg-bg-raised p-4 shadow-hairline transition-colors hover:bg-bg-muted"
+          className={cn("group flex items-center justify-between rounded-lg border border-border bg-bg-raised p-4 shadow-hairline transition-colors hover:bg-bg-muted", focusRing)}
         >
           <span className="flex items-center gap-3">
             <Boxes className="h-5 w-5 text-fg-subtle" />
