@@ -9,6 +9,11 @@
 // sends a magic-link email to that address; the link redirects to
 // /auth/callback which exchanges the code for a session cookie and then
 // redirects to /dashboard (or the ?redirectTo query param).
+//
+// Conforms to docs/portal_ux_standard.md (Gate 4.2): English-only, LTR,
+// state hygiene (loading/error/sent/idle are mutually exclusive), and the
+// jargon-free language lexicon. The split-panel hero (tranche 038) is
+// presentational; all auth logic and data-testids are unchanged.
 // ---------------------------------------------------------------------------
 
 "use client";
@@ -16,7 +21,7 @@
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { Suspense, useEffect, useMemo, useState } from "react";
-import { Mail, KeyRound } from "lucide-react";
+import { Mail, KeyRound, Check } from "lucide-react";
 import { createSupabaseBrowserClient, createSupabaseOtpClient } from "@/lib/supabase/client";
 
 const DEV_SHIM_ON = process.env.NEXT_PUBLIC_ENABLE_DEV_SHIM_AUTH === "true";
@@ -34,6 +39,156 @@ function gmailDeepLink(email: string): string | null {
     return `https://mail.google.com/mail/u/?authuser=${encodeURIComponent(lower)}`;
   }
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// LoginHero — presentational only. The dark brand panel from the GT Factory OS
+// Design System ("Operational Precision") split-panel sign-in. Pure markup +
+// existing Tailwind tokens; no state, no logic, no data. Rendered only on
+// lg+ screens (the shell hides it below that) so mobile keeps the centred-card
+// experience byte-for-byte.
+// ---------------------------------------------------------------------------
+const HERO_CAPABILITIES = [
+  "Inventory Flow — 14-day visual horizon",
+  "Live planning runs · BOM tracking",
+  "Approvals inbox · exception alerts",
+] as const;
+
+// Fixed palette for the permanently-dark hero. The panel reads the same in
+// light and dark theme (it is a brand surface, not a themed surface), so it
+// uses fixed colours rather than theme-aware tokens — the same approach the
+// resilient root landing page (src/app/page.tsx) takes for its dark hero, and
+// the values the design-system handoff specifies. Petrol-teal accent matches
+// the dark-theme --accent token (hsl 186 50% 50%).
+const HERO = {
+  surface: "hsl(30 12% 9%)",
+  text: "hsl(42 18% 92%)",
+  textMuted: "hsl(42 8% 62%)",
+  textFaint: "hsl(42 6% 42%)",
+  teal: "hsl(186 50% 52%)",
+} as const;
+
+function LoginHero() {
+  return (
+    <div
+      className="relative hidden overflow-hidden lg:flex lg:w-[42%] lg:shrink-0"
+      style={{ backgroundColor: HERO.surface }}
+    >
+      {/* Warm dot-grid texture — the signature paper grain, lifted onto the
+          dark panel at low opacity. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute inset-0"
+        style={{
+          backgroundImage:
+            "radial-gradient(circle at 1px 1px, hsl(0 0% 100% / 0.06) 1px, transparent 0)",
+          backgroundSize: "24px 24px",
+        }}
+      />
+      {/* Petrol-teal glow blob — the one place the brand lets a gradient sing. */}
+      <div
+        aria-hidden
+        className="pointer-events-none absolute -left-24 top-[28%] h-[28rem] w-[28rem] rounded-full"
+        style={{
+          background:
+            "radial-gradient(circle, hsl(186 55% 46% / 0.22) 0%, transparent 62%)",
+        }}
+      />
+      <div className="relative flex h-full w-full flex-col justify-between gap-10 p-12">
+        {/* Brand */}
+        <div className="flex items-center gap-3.5">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/brand/logo.png"
+            alt="GT Everyday"
+            width={44}
+            height={44}
+            className="h-11 w-11 object-contain"
+          />
+          <div className="leading-tight">
+            <div className="text-base font-semibold tracking-tightish" style={{ color: HERO.text }}>
+              GT Factory OS
+            </div>
+            <div
+              className="mt-1 text-3xs font-semibold uppercase tracking-sops"
+              style={{ color: HERO.textMuted }}
+            >
+              Operations portal
+            </div>
+          </div>
+        </div>
+
+        {/* Promise + capability ticks */}
+        <div>
+          <div
+            aria-hidden
+            className="login-hero-rule mb-5 h-0.5 w-12 rounded-full"
+            style={{
+              background: `linear-gradient(90deg, ${HERO.teal}, hsl(186 55% 64%))`,
+            }}
+          />
+          <div
+            className="text-[1.75rem] font-bold leading-tight tracking-tighter"
+            style={{ color: HERO.text }}
+          >
+            Every shift,
+            <br />
+            every decision —
+            <br />
+            <span style={{ color: HERO.teal }}>in one view.</span>
+          </div>
+          <ul className="mt-6 flex flex-col gap-2.5">
+            {HERO_CAPABILITIES.map((cap) => (
+              <li
+                key={cap}
+                className="flex items-center gap-2.5 text-xs"
+                style={{ color: HERO.textMuted }}
+              >
+                <span
+                  className="flex h-4 w-4 shrink-0 items-center justify-center rounded-full"
+                  style={{
+                    backgroundColor: "hsl(186 50% 50% / 0.15)",
+                    border: "1px solid hsl(186 50% 50% / 0.3)",
+                  }}
+                >
+                  <Check className="h-2.5 w-2.5" strokeWidth={3} aria-hidden style={{ color: HERO.teal }} />
+                </span>
+                {cap}
+              </li>
+            ))}
+          </ul>
+        </div>
+
+        {/* Surface footer — brand eyebrow. Per the Portal UX Standard (§1) we
+            avoid system-internal terms here (e.g. "Window 2"); the company
+            wordmark is the on-brand, jargon-free choice. */}
+        <div
+          className="font-mono text-3xs uppercase tracking-sops"
+          style={{ color: HERO.textFaint }}
+        >
+          GT Everyday
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// LoginShell — two-column layout: the presentational hero (lg+ only) beside
+// the sign-in content. On small screens the hero is hidden and `children`
+// render exactly as the previous centred card did. Presentation only.
+// ---------------------------------------------------------------------------
+function LoginShell({ children }: { children: React.ReactNode }) {
+  return (
+    // dir="ltr" per Portal UX Standard §2 — this new wrapper sets direction
+    // explicitly so it can never inherit RTL from a parent surface.
+    <div dir="ltr" className="flex min-h-screen w-full">
+      <LoginHero />
+      <div className="flex min-h-screen flex-1 items-center justify-center px-4 py-12">
+        <div className="w-full max-w-md">{children}</div>
+      </div>
+    </div>
+  );
 }
 
 export default function LoginPage() {
@@ -277,11 +432,12 @@ function MagicLinkLogin() {
   const formBlocked = envError !== null;
 
   return (
-    <div className="mx-auto mt-16 max-w-md px-4">
+    <LoginShell>
       {/* Brand mark above the card. White-on-transparent logo asset; the
           `invert dark:invert-0` Tailwind pair flips to black-on-light in
-          light theme. Same convention as TopBar.BrandMark. */}
-      <div className="mb-6 flex flex-col items-center gap-2">
+          light theme. Same convention as TopBar.BrandMark. Hidden on lg+
+          where the split-panel hero already carries the brand. */}
+      <div className="mb-6 flex flex-col items-center gap-2 lg:hidden">
         {/* eslint-disable-next-line @next/next/no-img-element */}
         <img
           src="/brand/logo.png"
@@ -564,6 +720,6 @@ function MagicLinkLogin() {
           Back to portal
         </Link>
       </div>
-    </div>
+    </LoginShell>
   );
 }
