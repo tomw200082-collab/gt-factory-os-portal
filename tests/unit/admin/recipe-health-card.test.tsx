@@ -489,15 +489,9 @@ describe("RecipeHealthCard — Edit recipe button confirmations", () => {
     );
   });
 
-  // FIXME(tranche-034): genuine behavioral discrepancy, NOT a stale assertion.
-  // With a DRAFT version present in the mocked versions list, clicking [Edit
-  // recipe] attempts a CLONE (POST /api/boms/versions → "createDraft: 500")
-  // instead of opening the draft-exists confirm modal — i.e. baseTrack.
-  // draftVersionId resolves null at click time despite the DRAFT row. The other
-  // 14 tests (incl. the no-draft clone+navigate path) pass. Left failing on
-  // purpose and flagged for a recipe-health domain runtime triage rather than
-  // masked with it.skip or a forced pass. (Assertions below were also refreshed
-  // to the current English modal copy: "draft already exists" / "Open draft".)
+  // When a track HAS a draft, its button reads "Resume draft" (not "Edit
+  // recipe") — so we target that button to exercise the draft-exists modal.
+  // (Modal copy is English: "draft already exists" / "Open draft".)
   it("when a DRAFT already exists, opens confirm modal then navigates to existing draft", async () => {
     const navigate = vi.fn();
     fetchMock.mockImplementation((url: string) => {
@@ -548,8 +542,10 @@ describe("RecipeHealthCard — Edit recipe button confirmations", () => {
       />,
       { wrapper: wrapQuery() },
     );
-    const btns = await screen.findAllByRole("button", { name: /Edit recipe/ });
-    fireEvent.click(btns[0]);
+    const resumeBtn = await screen.findByRole("button", {
+      name: /Resume draft/i,
+    });
+    fireEvent.click(resumeBtn);
     const dialog = await screen.findByRole("dialog");
     expect(dialog.textContent ?? "").toMatch(/draft already exists/i);
     fireEvent.click(screen.getByRole("button", { name: /Open draft/i }));
