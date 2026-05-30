@@ -128,15 +128,16 @@ describe("weekly-meeting cockpit — commitment disclosure", () => {
 
     const toggle = screen.getByRole("button", { name: /more product/i });
     expect(toggle.getAttribute("aria-expanded")).toBe("false");
-    // collapsed: the 9th product (index 8) is beyond the TOP=8 cap → not shown
-    expect(screen.queryByText("Product 8")).toBeNull();
+    // rollupDraftFgUnits sorts by units desc; packs have qty 10+i, so Product 0
+    // (lowest qty) is the one pushed past the TOP=8 cap → hidden while collapsed.
+    expect(screen.queryByText("Product 0")).toBeNull();
 
     fireEvent.click(toggle);
     expect(toggle.getAttribute("aria-expanded")).toBe("true");
-    expect(screen.getByText("Product 8")).toBeTruthy();
+    expect(screen.getByText("Product 0")).toBeTruthy();
 
     fireEvent.click(screen.getByRole("button", { name: /show fewer/i }));
-    expect(screen.queryByText("Product 8")).toBeNull();
+    expect(screen.queryByText("Product 0")).toBeNull();
   });
 });
 
