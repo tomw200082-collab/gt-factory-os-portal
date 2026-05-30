@@ -9,6 +9,11 @@
 // sends a magic-link email to that address; the link redirects to
 // /auth/callback which exchanges the code for a session cookie and then
 // redirects to /dashboard (or the ?redirectTo query param).
+//
+// Conforms to docs/portal_ux_standard.md (Gate 4.2): English-only, LTR,
+// state hygiene (loading/error/sent/idle are mutually exclusive), and the
+// jargon-free language lexicon. The split-panel hero (tranche 038) is
+// presentational; all auth logic and data-testids are unchanged.
 // ---------------------------------------------------------------------------
 
 "use client";
@@ -154,12 +159,14 @@ function LoginHero() {
           </ul>
         </div>
 
-        {/* Surface footer */}
+        {/* Surface footer — brand eyebrow. Per the Portal UX Standard (§1) we
+            avoid system-internal terms here (e.g. "Window 2"); the company
+            wordmark is the on-brand, jargon-free choice. */}
         <div
           className="font-mono text-3xs uppercase tracking-sops"
           style={{ color: HERO.textFaint }}
         >
-          Window 2 · Portal
+          GT Everyday
         </div>
       </div>
     </div>
@@ -173,7 +180,9 @@ function LoginHero() {
 // ---------------------------------------------------------------------------
 function LoginShell({ children }: { children: React.ReactNode }) {
   return (
-    <div className="flex min-h-screen w-full">
+    // dir="ltr" per Portal UX Standard §2 — this new wrapper sets direction
+    // explicitly so it can never inherit RTL from a parent surface.
+    <div dir="ltr" className="flex min-h-screen w-full">
       <LoginHero />
       <div className="flex min-h-screen flex-1 items-center justify-center px-4 py-12">
         <div className="w-full max-w-md">{children}</div>
