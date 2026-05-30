@@ -21,6 +21,7 @@ import {
   Factory,
   ChevronLeft,
   ChevronRight,
+  ChevronDown,
   Lock,
   CheckCircle2,
   AlertTriangle,
@@ -98,7 +99,7 @@ function CadenceRail({
               aria-current={isToday ? "step" : undefined}
               aria-label={`${s.label} — ${s.sub}${isToday ? " (today)" : ""}`}
               className={cn(
-                "group flex flex-1 items-center gap-3 rounded-lg px-3.5 py-3 text-left transition-colors",
+                "group flex flex-1 items-center gap-2 rounded-lg px-2.5 py-3 text-left transition-colors sm:gap-3 sm:px-3.5",
                 focusRing,
                 isActive
                   ? "bg-accent text-accent-fg shadow-raised"
@@ -126,7 +127,7 @@ function CadenceRail({
               </span>
             </button>
             {i < STEPS.length - 1 ? (
-              <ArrowRight className="mx-1 h-4 w-4 shrink-0 text-fg-faint" aria-hidden="true" />
+              <ArrowRight className="mx-1 hidden h-4 w-4 shrink-0 text-fg-faint sm:block" aria-hidden="true" />
             ) : null}
           </div>
         );
@@ -192,21 +193,71 @@ function BatchChip({ row }: { row: DraftWeekRow }) {
   const sub = isTea
     ? `${row.batch_size_l ?? row.planned_qty} L · ${row.packs.length} pack${row.packs.length === 1 ? "" : "s"}`
     : `${row.planned_qty} ${row.uom}`;
+  const packs = isTea ? row.packs : [];
   const packBreakdown = isTea
     ? row.packs.map((p) => `${p.item_name ?? p.item_id}: ${p.qty}`).join("\n")
     : (row.notes ?? undefined);
-  return (
-    <div
-      className="rounded-md border border-border bg-bg-raised p-2.5 shadow-hairline"
-      style={{ borderLeftWidth: 3, borderLeftColor: `hsl(${tint})` }}
-      title={packBreakdown}
-      aria-label={`${title} — ${sub}${packBreakdown ? `. ${packBreakdown.replace(/\n/g, ", ")}` : ""}`}
-    >
-      <div className="flex items-center gap-1.5">
+  const [open, setOpen] = useState(false);
+  const ariaLabel = `${title} — ${sub}${packBreakdown ? `. ${packBreakdown.replace(/\n/g, ", ")}` : ""}`;
+
+  // Tea batches carry a pack breakdown that desktop reveals on hover (title) and
+  // SR users get via aria-label — but a touch user can see neither. Make those
+  // chips a disclosure button that shows the breakdown inline on tap.
+  const expandable = packs.length > 0;
+  const body = (
+    <>
+      <div className="flex items-center justify-between gap-1.5">
         <span className="truncate text-sm font-medium" dir="auto">{title}</span>
+        {expandable ? (
+          <ChevronDown
+            className={cn("h-3.5 w-3.5 shrink-0 text-fg-faint transition-transform", open && "rotate-180")}
+            aria-hidden="true"
+          />
+        ) : null}
       </div>
       <div className="mt-0.5 text-2xs uppercase tracking-ops text-fg-subtle">{sub}</div>
-    </div>
+      {expandable && open ? (
+        <ul className="mt-2 space-y-0.5 border-t border-border-faint pt-2">
+          {packs.map((p) => (
+            <li key={p.item_id} className="flex items-center justify-between gap-2 text-2xs">
+              <span className="truncate text-fg-muted" dir="auto">{p.item_name ?? p.item_id}</span>
+              <span className="shrink-0 tabular-nums text-fg">{p.qty}</span>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </>
+  );
+  const sharedStyle = { borderLeftWidth: 3, borderLeftColor: `hsl(${tint})` };
+
+  if (!expandable) {
+    return (
+      <div
+        className="rounded-md border border-border bg-bg-raised p-2.5 shadow-hairline"
+        style={sharedStyle}
+        title={packBreakdown}
+        aria-label={ariaLabel}
+      >
+        {body}
+      </div>
+    );
+  }
+
+  return (
+    <button
+      type="button"
+      onClick={() => setOpen((v) => !v)}
+      aria-expanded={open}
+      aria-label={ariaLabel}
+      title={packBreakdown}
+      style={sharedStyle}
+      className={cn(
+        "w-full rounded-md border border-border bg-bg-raised p-2.5 text-left shadow-hairline transition-colors hover:bg-bg-muted",
+        focusRing,
+      )}
+    >
+      {body}
+    </button>
   );
 }
 
@@ -234,8 +285,9 @@ function CommitmentPanel({
   pending: boolean;
 }) {
   const TOP = 8;
-  const shown = entries.slice(0, TOP);
-  const more = entries.length - shown.length;
+  const [expanded, setExpanded] = useState(false);
+  const shown = expanded ? entries : entries.slice(0, TOP);
+  const more = entries.length - TOP;
   return (
     <SectionCard title={title} description={note}>
       {pending ? (
@@ -282,7 +334,15 @@ function CommitmentPanel({
             ))}
           </div>
           {more > 0 ? (
-            <div className="mt-2 text-xs text-fg-subtle">+{more} more product{more === 1 ? "" : "s"}</div>
+            <button
+              type="button"
+              onClick={() => setExpanded((v) => !v)}
+              aria-expanded={expanded}
+              className={cn("mt-2 inline-flex items-center gap-1 rounded text-xs font-medium text-accent hover:underline", focusRing)}
+            >
+              {expanded ? "Show fewer" : `+${more} more product${more === 1 ? "" : "s"}`}
+              <ChevronDown className={cn("h-3 w-3 transition-transform", expanded && "rotate-180")} aria-hidden="true" />
+            </button>
           ) : null}
         </div>
       )}
