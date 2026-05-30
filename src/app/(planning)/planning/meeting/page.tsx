@@ -14,7 +14,7 @@
 //   • EXECUTE (daily): make today's batch and report the actual.
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CalendarCheck,
   ShoppingCart,
@@ -75,7 +75,10 @@ function CadenceRail({
   onSelect: (s: CadenceStep) => void;
 }) {
   return (
-    <div className="flex w-full items-stretch gap-2 rounded-xl border border-border bg-bg-raised p-1.5 shadow-hairline">
+    <nav
+      aria-label="Weekly cadence steps"
+      className="flex w-full items-stretch gap-2 rounded-xl border border-border bg-bg-raised p-1.5 shadow-hairline"
+    >
       {STEPS.map((s, i) => {
         const isActive = s.key === active;
         const isToday = s.key === today;
@@ -85,8 +88,12 @@ function CadenceRail({
             <button
               type="button"
               onClick={() => onSelect(s.key)}
+              aria-pressed={isActive}
+              aria-current={isToday ? "step" : undefined}
+              aria-label={`${s.label} — ${s.sub}${isToday ? " (today)" : ""}`}
               className={cn(
                 "group flex flex-1 items-center gap-3 rounded-lg px-3.5 py-3 text-left transition-colors",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-bg-raised",
                 isActive
                   ? "bg-accent text-accent-fg shadow-raised"
                   : "text-fg-muted hover:bg-bg-muted hover:text-fg",
@@ -113,12 +120,12 @@ function CadenceRail({
               </span>
             </button>
             {i < STEPS.length - 1 ? (
-              <ArrowRight className="mx-1 h-4 w-4 shrink-0 text-fg-faint" />
+              <ArrowRight className="mx-1 h-4 w-4 shrink-0 text-fg-faint" aria-hidden="true" />
             ) : null}
           </div>
         );
       })}
-    </div>
+    </nav>
   );
 }
 
@@ -152,10 +159,15 @@ function StatTile({
   }[tone];
   return (
     <div className={cn("flex items-start gap-3 rounded-lg border bg-bg-raised p-4 shadow-hairline", toneCls)}>
-      <Icon className={cn("mt-0.5 h-5 w-5 shrink-0", iconCls)} />
+      <Icon className={cn("mt-0.5 h-5 w-5 shrink-0", iconCls)} aria-hidden="true" />
       <div className="min-w-0">
         <div className="text-2xs uppercase tracking-ops text-fg-subtle">{label}</div>
-        <div className="mt-0.5 text-2xl font-semibold tabular-nums tracking-tight">{value}</div>
+        <div
+          className="mt-0.5 text-2xl font-semibold tabular-nums tracking-tight"
+          aria-label={`${label}: ${value}${meta ? ` (${meta})` : ""}`}
+        >
+          {value}
+        </div>
         {meta ? <div className="mt-0.5 text-xs text-fg-muted">{meta}</div> : null}
       </div>
     </div>
@@ -174,11 +186,15 @@ function BatchChip({ row }: { row: DraftWeekRow }) {
   const sub = isTea
     ? `${row.batch_size_l ?? row.planned_qty} L · ${row.packs.length} pack${row.packs.length === 1 ? "" : "s"}`
     : `${row.planned_qty} ${row.uom}`;
+  const packBreakdown = isTea
+    ? row.packs.map((p) => `${p.item_name ?? p.item_id}: ${p.qty}`).join("\n")
+    : (row.notes ?? undefined);
   return (
     <div
       className="rounded-md border border-border bg-bg-raised p-2.5 shadow-hairline"
       style={{ borderLeftWidth: 3, borderLeftColor: `hsl(${tint})` }}
-      title={isTea ? row.packs.map((p) => `${p.item_name ?? p.item_id}: ${p.qty}`).join("\n") : (row.notes ?? undefined)}
+      title={packBreakdown}
+      aria-label={`${title} — ${sub}${packBreakdown ? `. ${packBreakdown.replace(/\n/g, ", ")}` : ""}`}
     >
       <div className="flex items-center gap-1.5">
         <span className="truncate text-sm font-medium" dir="auto">{title}</span>
@@ -222,11 +238,14 @@ function CommitmentPanel({
         <div className="py-4 text-center text-sm text-fg-muted">No finished goods committed.</div>
       ) : (
         <div>
-          <div className="mb-3 flex items-baseline gap-2">
-            <span className="text-2xl font-semibold tabular-nums tracking-tight">
+          <div
+            className="mb-3 flex items-baseline gap-2"
+            aria-label={`${Math.round(totalUnits).toLocaleString()} units across ${entries.length} product${entries.length === 1 ? "" : "s"}`}
+          >
+            <span className="text-2xl font-semibold tabular-nums tracking-tight" aria-hidden="true">
               {Math.round(totalUnits).toLocaleString()}
             </span>
-            <span className="text-sm text-fg-muted">
+            <span className="text-sm text-fg-muted" aria-hidden="true">
               units across {entries.length} product{entries.length === 1 ? "" : "s"}
             </span>
           </div>
@@ -271,6 +290,12 @@ function CommitmentPanel({
 function FirmPanel({ canAct }: { canAct: boolean }) {
   const [weekStart, setWeekStart] = useState<string>(() => defaultFirmWeekStart());
   const [confirming, setConfirming] = useState(false);
+  const confirmBtnRef = useRef<HTMLButtonElement>(null);
+  // When the inline confirm appears, move focus to the primary action so
+  // keyboard users land on it instead of hunting for the new control.
+  useEffect(() => {
+    if (confirming) confirmBtnRef.current?.focus();
+  }, [confirming]);
   const draft = useDraftWeek(weekStart);
   const firm = useFirmWeek();
   const gen = useGenerateDrafts();
@@ -349,11 +374,12 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
             <button
               type="button"
               disabled={gen.isPending}
+              aria-busy={gen.isPending}
               onClick={() => gen.mutate()}
-              className="inline-flex items-center gap-2 rounded-md border border-border bg-bg-raised px-3 py-2 text-sm font-medium text-fg shadow-hairline transition-colors hover:bg-bg-muted disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-md border border-border bg-bg-raised px-3 py-2 text-sm font-medium text-fg shadow-hairline transition-colors hover:bg-bg-muted disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-bg-raised"
               title="Run the tea + matcha draft engines to (re)generate the draft horizon"
             >
-              <RefreshCw className={cn("h-4 w-4", gen.isPending && "animate-spin")} />
+              <RefreshCw className={cn("h-4 w-4", gen.isPending && "animate-spin")} aria-hidden="true" />
               {gen.isPending ? "Generating…" : "Generate / refresh drafts"}
             </button>
           ) : null}
@@ -362,8 +388,8 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
 
       {/* Generate result / error */}
       {gen.isSuccess ? (
-        <div className="flex items-start gap-3 rounded-lg border border-accent-border bg-accent-softer p-3 text-sm">
-          <RefreshCw className="mt-0.5 h-4 w-4 shrink-0 text-accent" />
+        <div role="status" aria-live="polite" className="flex items-start gap-3 rounded-lg border border-accent-border bg-accent-softer p-3 text-sm">
+          <RefreshCw className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden="true" />
           <span className="text-fg">
             {gen.data.idempotent_replay
               ? "Drafts already up to date."
@@ -371,8 +397,8 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
           </span>
         </div>
       ) : gen.isError ? (
-        <div className="flex items-start gap-3 rounded-lg border border-danger-border bg-danger-softer p-3 text-sm">
-          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-danger" />
+        <div role="alert" className="flex items-start gap-3 rounded-lg border border-danger-border bg-danger-softer p-3 text-sm">
+          <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-danger" aria-hidden="true" />
           <span className="text-danger-fg">{(gen.error as Error).message}</span>
         </div>
       ) : null}
@@ -405,8 +431,8 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
 
       {/* Firm result banner */}
       {result ? (
-        <div className="flex items-start gap-3 rounded-lg border border-success-border bg-success-softer p-4">
-          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success" />
+        <div role="status" aria-live="polite" className="flex items-start gap-3 rounded-lg border border-success-border bg-success-softer p-4">
+          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success" aria-hidden="true" />
           <div>
             <div className="text-sm font-semibold text-success-fg">
               {result.idempotent_replay || result.newly_firmed_count === 0
@@ -421,8 +447,8 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
       ) : null}
 
       {firm.isError ? (
-        <div className="flex items-start gap-3 rounded-lg border border-danger-border bg-danger-softer p-4">
-          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-danger" />
+        <div role="alert" className="flex items-start gap-3 rounded-lg border border-danger-border bg-danger-softer p-4">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-danger" aria-hidden="true" />
           <div className="text-sm text-danger-fg">{(firm.error as Error).message}</div>
         </div>
       ) : null}
@@ -473,14 +499,19 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
               const { dayName, dateLabel } = fmtDayHeader(parseIsoDate(d));
               const dayRows = byDay.get(d) ?? [];
               return (
-                <div key={d} className="rounded-lg border border-border-faint bg-bg-subtle/40 p-2">
+                <div
+                  key={d}
+                  role="group"
+                  aria-label={`${dayName} ${dateLabel} — ${dayRows.length === 0 ? "no batches" : `${dayRows.length} batch${dayRows.length === 1 ? "" : "es"}`}`}
+                  className="rounded-lg border border-border-faint bg-bg-subtle/40 p-2"
+                >
                   <div className="mb-2 flex items-baseline justify-between px-1">
                     <span className="text-xs font-semibold uppercase tracking-ops text-fg-muted">{dayName}</span>
                     <span className="text-2xs text-fg-subtle">{dateLabel}</span>
                   </div>
                   <div className="space-y-2">
                     {dayRows.length === 0 ? (
-                      <div className="rounded-md border border-dashed border-border-faint py-4 text-center text-2xs text-fg-faint">
+                      <div className="rounded-md border border-dashed border-border-faint py-4 text-center text-2xs text-fg-faint" aria-hidden="true">
                         —
                       </div>
                     ) : (
@@ -558,17 +589,19 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
               Cancel
             </button>
             <button
+              ref={confirmBtnRef}
               type="button"
               disabled={firm.isPending}
+              aria-busy={firm.isPending}
               onClick={() => {
                 firm.mutate(
                   { week_start: weekStart },
                   { onSettled: () => setConfirming(false) },
                 );
               }}
-              className="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-fg shadow-raised transition-colors hover:bg-accent-hover disabled:opacity-60"
+              className="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-fg shadow-raised transition-colors hover:bg-accent-hover disabled:opacity-60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-bg-raised"
             >
-              <Lock className="h-4 w-4" />
+              <Lock className="h-4 w-4" aria-hidden="true" />
               {firm.isPending ? "Firming…" : "Confirm firm"}
             </button>
           </>
@@ -577,9 +610,10 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
             type="button"
             disabled={batchCount === 0}
             onClick={() => setConfirming(true)}
-            className="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-fg shadow-raised transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
+            title={batchCount === 0 ? "Nothing to firm — generate drafts or pick a week with batches" : `Lock ${batchCount} batch${batchCount === 1 ? "" : "es"} for ${fmtWeekRange(weekStart)}`}
+            className="inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-fg shadow-raised transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-bg-raised"
           >
-            <Lock className="h-4 w-4" />
+            <Lock className="h-4 w-4" aria-hidden="true" />
             Firm week
           </button>
         )}
