@@ -1,8 +1,9 @@
 # Tranche 035: test-suite-green-sweep
 
-status: in-progress
+status: landed-pending-review
 created: 2026-05-29
 activated: 2026-05-29
+landed: 2026-05-29
 scorecard_target_category: regression_resistance
 expected_delta: +2 on regression_resistance (drive the suite to green)
 sizing: L  (test-repair sweep across the remaining red suites + the proven bugs)
@@ -59,5 +60,46 @@ Revert the PR; predominantly test-only, with any component fix called out.
 ## Operator approval
 - [ ] Tom approves (comment `@claude /portal-tranche-fix 035`)
 
+## Manifest addendum (CI gate)
+manifest:
+  - .github/workflows/portal-pr-guard.yml
+
 ## Actual evidence (filled in by /portal-tranche-fix run)
-<pasted after execution>
+
+Executed 2026-05-29 — full red→green sweep, then wired vitest into CI.
+
+**Result: full unit suite GREEN — 366 passed | 5 skipped | 0 failed** (was 35
+failed). typecheck clean; production build clean (117 pages).
+
+**Fixed (30) — all genuine staleness, components unchanged unless noted:**
+- recipe-health-card (8): draft button reads "Resume draft"; the readiness label
+  renders in two intended places (header chip + summary banner) → getAllByText.
+- use-enter-edit-draft (2) + bom-line-row PATCH: clone/version envelope is
+  `{ row: { bom_version_id } }`.
+- version-history-section (1): link label "Resume editing".
+- bom-line-row (4): formatQty strips zeros (1.0→1); qty-edit/delete are buttons
+  with aria-labels; PATCH body field `quantity_per` + ISO if_match; fixture
+  field `line_id`.
+- readiness-panel (1): formatPriceAge is English ("90 days ago").
+- publish-confirm-modal (3): blocker/heading copy English.
+- bom-line-diff (1): fmtNumStr qty ("1 → 2") via textContent.
+- StockTruthDrawer (2): floor prose changed; no-events CTA is now an enabled
+  "Post physical count" link.
+- quick-fix-drawer (3): English copy + form labels (Supplier ID / Standard cost
+  / Add sourcing link / "This row was updated…" / "I confirm").
+- bom-draft-editor (5): no Save button (auto-save); "No components" in
+  desktop+mobile; Publish on page + modal (scope to dialog); add-line drawer is
+  a search→select picker (rewrote the flow + components mock).
+
+**Skipped + documented (5) — NOT masked:** the items-bom-display-only doctrine
+anchors (`itemSchema` z.object, `BOM_DISPLAY_ONLY` marker, `bom-wiring-readonly`
+testid, create-mutation null-seed) guard an item create-FORM that migrated off
+the items page (now a read-only list) to the /admin/products surface; those exact
+markers no longer exist anywhere. The live doctrine ("no BOM register()/onChange
+on the items page") stays enforced by the 7 active tests in that file. Re-anchor
+to products is a domain decision — flagged with an `it.skip` + comment.
+
+**Phase 2 (root cause) done:** `vitest` is now a step in `portal-pr-guard.yml`,
+so the suite can't silently rot again — the reason 35 assertions had drifted.
+
+**Scorecard delta:** +2 regression_resistance (red→green suite + CI gate).

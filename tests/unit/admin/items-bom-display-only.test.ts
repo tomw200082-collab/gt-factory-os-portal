@@ -97,7 +97,15 @@ describe("admin/items — BOM display-only doctrine anchor", () => {
     },
   );
 
-  it.each(BOM_FIELDS)(
+  // OBSOLETE GUARDS (skipped, not masked): the item create-FORM (its
+  // `itemSchema` z.object, the `BOM_DISPLAY_ONLY` panel, and the create-mutation
+  // null-seeding) migrated OFF the items page — it is now a read-only LIST. The
+  // form + BOM display now live on the /admin/products surface, and the specific
+  // anchors these tests pin (itemSchema / BOM_DISPLAY_ONLY / bom-wiring-readonly)
+  // no longer exist anywhere. The live doctrine ("no BOM register()/onChange on
+  // the items page") is still enforced by the active tests above. Re-anchor
+  // these against the products surface is a domain decision — see tranche 035.
+  it.skip.each(BOM_FIELDS)(
     "BOM field %s is not declared inside the itemSchema z.object",
     (field) => {
       // itemSchema is the zod schema for the items form. Adding one of
@@ -130,7 +138,7 @@ describe("admin/items — BOM display-only doctrine anchor", () => {
     },
   );
 
-  it("the display-only sub-panel with data-testid='bom-wiring-readonly' is present", () => {
+  it.skip("the display-only sub-panel with data-testid='bom-wiring-readonly' is present", () => {
     // Pin the sub-panel that renders the three BOM fields as
     // read-only text. The comment marker BOM_DISPLAY_ONLY and the
     // data-testid must both survive any refactor; either one alone
@@ -139,7 +147,7 @@ describe("admin/items — BOM display-only doctrine anchor", () => {
     expect(source).toContain('data-testid="bom-wiring-readonly"');
   });
 
-  it("the create mutation seeds all three BOM fields to null on new rows", () => {
+  it.skip("the create mutation seeds all three BOM fields to null on new rows", () => {
     // New items must not introduce BOM refs from the items screen.
     // Tran chosen here is 'primary_bom_head_id: null'. If someone
     // removes that line, this test fails and the reviewer must

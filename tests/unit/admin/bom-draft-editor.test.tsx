@@ -553,25 +553,44 @@ describe("BomDraftEditorPage — Add line drawer", () => {
           ),
         );
       }
+      // The Add-component drawer fetches the picker's component list.
+      if (url.includes("/api/components")) {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              rows: [
+                {
+                  component_id: "C-99",
+                  component_name: "Test Component",
+                  inventory_uom: "UNIT",
+                  status: "ACTIVE",
+                },
+              ],
+            }),
+            { status: 200 },
+          ),
+        );
+      }
       return original ? original(url, init) : Promise.resolve(new Response("not mocked", { status: 500 }));
     });
     render(<BomDraftEditorPage bomHeadId="BH-1" versionId="BV-DRAFT" />, {
       wrapper: wrap(),
     });
+    // Open the drawer (page button), then drive its search → select → qty → submit.
     fireEvent.click(
       await screen.findByRole("button", { name: /Add component/i }),
     );
     const dialog = await screen.findByRole("dialog", { name: /Add component/i });
     fireEvent.change(
-      dialog.querySelector("input[name=component_id]") as HTMLInputElement,
+      within(dialog).getByPlaceholderText(/Search by name or ID/i),
       { target: { value: "C-99" } },
     );
-    fireEvent.change(
-      dialog.querySelector("input[name=qty]") as HTMLInputElement,
-      { target: { value: "3.5" } },
-    );
+    fireEvent.click(await within(dialog).findByRole("button", { name: /C-99/ }));
+    fireEvent.change(within(dialog).getByLabelText(/Quantity per batch/i), {
+      target: { value: "3.5" },
+    });
     fireEvent.click(
-      dialog.querySelector("button[type=submit]") as HTMLButtonElement,
+      within(dialog).getByRole("button", { name: /^Add component$/ }),
     );
     await waitFor(() =>
       expect(
