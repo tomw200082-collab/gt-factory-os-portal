@@ -21,6 +21,11 @@ export interface BomLineRow {
   final_component_qty: string;
   component_uom: string | null;
   updated_at: string;
+  // True when this line's component is itself produced in-house (has its own
+  // make-recipe). Such lines are sourced from production, not a supplier, so
+  // the readiness pip must not flag them as missing a supplier/price.
+  // Optional for tolerance against stale caches predating the upstream field.
+  final_component_is_manufactured?: boolean;
 }
 
 interface BomVersionRow {

@@ -72,6 +72,7 @@ function pipsForLines(
       qty: line.final_component_qty,
       component: comp,
       nowMs,
+      isManufactured: line.final_component_is_manufactured ?? false,
     });
   });
 }

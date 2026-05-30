@@ -152,3 +152,66 @@ describe("computeLinePipState — yellow (warning, not hard block)", () => {
     expect(r181.reasons.some((s) => s.startsWith("Price is very stale"))).toBe(true);
   });
 });
+
+describe("computeLinePipState — manufactured (self-produced) exemption", () => {
+  it("returns green when manufactured, even with no supplier and no price", () => {
+    const r = computeLinePipState({
+      qty: "1",
+      component: comp({
+        primary_supplier_id: null,
+        primary_supplier_name: null,
+        active_price_value: null,
+        active_price_updated_at: null,
+      }),
+      nowMs: NOW,
+      isManufactured: true,
+    });
+    expect(r.color).toBe("green");
+    expect(r.reasons).toEqual([]);
+    expect(r.warningCategories).toEqual([]);
+  });
+
+  it("does not flag a stale price for a manufactured component", () => {
+    const r = computeLinePipState({
+      qty: "1",
+      component: comp({ active_price_updated_at: "2025-10-26T12:00:00Z" }),
+      nowMs: NOW,
+      isManufactured: true,
+    });
+    expect(r.color).toBe("green");
+    expect(r.warningCategories).toEqual([]);
+  });
+
+  it("still hard-blocks a manufactured component on invalid qty", () => {
+    const r = computeLinePipState({
+      qty: "0",
+      component: comp({ primary_supplier_id: null }),
+      nowMs: NOW,
+      isManufactured: true,
+    });
+    expect(r.color).toBe("red");
+    expect(r.blockerCategories).toContain("invalid-qty");
+  });
+
+  it("still hard-blocks a manufactured component that is INACTIVE", () => {
+    const r = computeLinePipState({
+      qty: "1",
+      component: comp({ component_status: "INACTIVE", primary_supplier_id: null }),
+      nowMs: NOW,
+      isManufactured: true,
+    });
+    expect(r.color).toBe("red");
+    expect(r.blockerCategories).toContain("inactive-component");
+  });
+
+  it("non-manufactured default keeps the missing-supplier warning (no behavior drift)", () => {
+    const r = computeLinePipState({
+      qty: "1",
+      component: comp({ primary_supplier_id: null, primary_supplier_name: null }),
+      nowMs: NOW,
+      // isManufactured omitted → defaults to false
+    });
+    expect(r.color).toBe("yellow");
+    expect(r.warningCategories).toContain("missing-supplier");
+  });
+});

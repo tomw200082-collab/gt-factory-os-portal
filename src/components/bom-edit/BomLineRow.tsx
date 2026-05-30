@@ -62,6 +62,7 @@ export function BomLineRow({
         qty: line.final_component_qty,
         component: readiness,
         nowMs: Date.now(),
+        isManufactured: line.final_component_is_manufactured ?? false,
       })
     : {
         color: "yellow",
