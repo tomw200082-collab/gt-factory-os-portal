@@ -80,7 +80,7 @@ describe("ReadinessPanel", () => {
   });
 
   it("shows price age in days when present", () => {
-    render(
+    const { container } = render(
       <ReadinessPanel
         readinessMap={
           new Map([
@@ -94,7 +94,8 @@ describe("ReadinessPanel", () => {
         onFix={vi.fn()}
       />,
     );
-    expect(screen.getByText(/90 ימים/)).toBeTruthy();
+    // formatPriceAge now renders English ("90 days ago").
+    expect(container.textContent).toMatch(/90 days ago/);
   });
 
   it("does NOT show [Fix] when row is fully green (supplier + fresh price)", () => {

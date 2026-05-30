@@ -1,6 +1,6 @@
-# Portal Readiness: 86/100 (delta: +42 total, +11 this run)
+# Portal Readiness: 88/100 (delta: +44 total, +2 this session)
 
-Post-Tranche-017. Previous (start of day): 44/100. Three-session total: +42. Source audit (re-audit): [2026-04-22-all-reaudit.md](audit-reports/2026-04-22-all-reaudit.md). Backend package for the last category: [backend-package-admin-superuser-depth.md](backend-package-admin-superuser-depth.md).
+Post-Tranche-036 (procurement-merge + suite-green session). Previous: 86/100 (post-017). The +2 this session: flow_continuity 9→10 and regression_resistance 9→10 (see "What this session delivered" below). Source audit (re-audit): [2026-04-22-all-reaudit.md](audit-reports/2026-04-22-all-reaudit.md). Backend package for the last category: [backend-package-admin-superuser-depth.md](backend-package-admin-superuser-depth.md).
 
 ## Categories
 
@@ -8,14 +8,24 @@ Post-Tranche-017. Previous (start of day): 44/100. Three-session total: +42. Sou
 |---|---|---|---|
 | admin_superuser_depth | 5 | +2 | **Backend-blocked.** See [backend-package-admin-superuser-depth.md](backend-package-admin-superuser-depth.md) for the 5-deliverable package that moves this to 10. |
 | nav_integrity | 9 | +6 | Baseline freeze ritual. |
-| flow_continuity | 9 | +7 | Recent-submissions surface (backend-blocked); approval queue (backend-blocked). |
+| flow_continuity | 10 | +8 | Maintained. Live prod-backend smoke of the focus loop (the @mocked e2e is the CI proof); recent-submissions + approval queue stay backend-blocked. |
 | role_gate_correctness | 10 | +4 | Maintained. Middleware scaffold activates as layer 3 when backend populates `app_metadata.role`. |
 | data_truthfulness | 8 | +3 | Real /admin/integrations health (backend-blocked); aggregate KPIs (backend-blocked). |
 | planning_surface | 9 | +2 | Optional planning-exceptions dashboard. |
 | ops_surface | 8 | +5 | Recent-submissions (backend-blocked); auto-post deep-link target (backend-blocked). |
 | dashboard_truth | 9 | +3 | Aggregate KPIs (backend-blocked). |
 | technical_substrate | 10 | +4 | Maintained. |
-| regression_resistance | 9 | +6 | Baseline + quarantine rituals. |
+| regression_resistance | 10 | +7 | ESLint not yet in CI (no config); baseline + quarantine rituals; backend-dependent *-real e2e not gated. |
+
+## What this session delivered (Tranches 027–036)
+
+**+2 (86 → 88)** — the procurement-merge epic, then a full test-suite hardening pass.
+
+- **027–033 `procurement merge` (flow_continuity 9→10):** the scattered Sunday close (purchase session + calendar + recommendations + manual PO) became **one `/planning/procurement` page** — an action list grouped by decision (must-today / can-wait / handled) with a derived "why now"; a full-screen **focus mode** that walks approve → place → auto-advance and creates the real PO through the existing place endpoint; inline ad-hoc add-line; and the calendar folded in as a secondary view. 47 dedicated unit tests.
+- **034–035 `suite green + CI gate` (regression_resistance 9→10):** the **entire unit suite driven red→green (35 failing → 0)** — every failure diagnosed on its merits (30 genuine stale-assertion fixes, components unchanged), then **`vitest` wired into `portal-pr-guard`** to close the root cause (CI never ran it, so 35 assertions had silently rotted).
+- **036 `focus e2e + doctrine + e2e gate`:** a route-mocked **Playwright e2e proves the focus close loop** end-to-end; the obsolete items-bom doctrine was **re-anchored** to the current products architecture (0 skips); the `@mocked` e2e is now **gated in CI** (chromium + dev-shim, no backend). Suite: **371 passed / 0 skipped** across 52 files.
+
+Honest open items: live production-backend smoke of the focus loop (needs a real env), ESLint in CI (no config yet), and the backend-dependent `*-real` e2e (need Supabase).
 
 ## What this run delivered (production-control, not polish)
 

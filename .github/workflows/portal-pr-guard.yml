@@ -2,10 +2,10 @@
 #
 # Runs on every PR against main. Required check for merge.
 #
-# Minimum viable checks for bootstrap: typecheck + registry presence.
-# lint / vitest / playwright are intentionally skipped until repo-level
-# test infrastructure is set up (future tranches). Re-enable individually
-# per tranche as each layer is made CI-green.
+# Checks: typecheck + vitest + registry presence.
+# vitest was enabled in tranche 035 once the unit suite was driven fully green
+# (366 passing, 5 documented skips) — gating it stops the silent test-rot that
+# had let 35 assertions drift. lint / playwright remain for a future tranche.
 
 name: portal-pr-guard
 
@@ -16,7 +16,11 @@ on:
 jobs:
   ci:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    env:
+      # The Playwright webServer (next dev) inherits this so the dev-shim auth
+      # path is active for the @mocked e2e (no Supabase backend needed).
+      NEXT_PUBLIC_ENABLE_DEV_SHIM_AUTH: 'true'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -32,6 +36,17 @@ jobs:
 
       - name: Typecheck
         run: npx tsc --noEmit
+
+      - name: Unit tests (vitest)
+        run: npx vitest run
+
+      - name: Install Playwright (chromium)
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E — mocked focus flow (no backend)
+        # Runs only @mocked specs (browser-stubbed API), so it never depends on
+        # a live Supabase backend. Tranche 036.
+        run: npx playwright test --grep @mocked
 
       - name: Registry presence check for new portal-os artifacts
         run: |

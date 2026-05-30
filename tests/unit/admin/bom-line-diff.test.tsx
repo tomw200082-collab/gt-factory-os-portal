@@ -46,7 +46,7 @@ describe("computeBomDiff", () => {
 
 describe("BomLineDiff component", () => {
   it("renders a collapsed summary by default and expands on click", () => {
-    render(
+    const { container } = render(
       <BomLineDiff
         draftLines={[line("L1", "C-1", "2.0")]}
         activeLines={[line("L1", "C-1", "1.0")]}
@@ -54,8 +54,9 @@ describe("BomLineDiff component", () => {
       />,
     );
     expect(screen.getByText(/Changes from v3/)).toBeTruthy();
-    expect(screen.queryByText(/1\.0 → 2\.0/)).toBeNull();
+    // qty is fmtNumStr'd ("1 → 2") and split across nodes; check via textContent
+    expect(container.textContent).not.toMatch(/1 → 2/);
     fireEvent.click(screen.getByText(/Changes from v3/));
-    expect(screen.getByText(/1\.0 → 2\.0/)).toBeTruthy();
+    expect(container.textContent).toMatch(/1 → 2/);
   });
 });

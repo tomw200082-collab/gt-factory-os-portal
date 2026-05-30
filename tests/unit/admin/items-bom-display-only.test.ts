@@ -47,6 +47,10 @@ const ITEMS_PAGE_PATH = join(
   "page.tsx",
 );
 
+const ADMIN_DIR = join(__dirname, "..", "..", "..", "src", "app", "(admin)", "admin");
+const PRODUCTS_NEW_PATH = join(ADMIN_DIR, "products", "new", "page.tsx");
+const PRODUCTS_DETAIL_PATH = join(ADMIN_DIR, "products", "[item_id]", "page.tsx");
+
 const BOM_FIELDS = [
   "primary_bom_head_id",
   "base_bom_head_id",
@@ -97,55 +101,56 @@ describe("admin/items — BOM display-only doctrine anchor", () => {
     },
   );
 
+  // NOTE (tranche 036): the legacy anchors (itemSchema z.object, the
+  // BOM_DISPLAY_ONLY panel, the create-mutation null-seed) used to live on the
+  // items page. The item create-FORM has since migrated to /admin/products and
+  // the items page is now a read-only list — so the doctrine is re-anchored to
+  // the products surface in the describe block below, and the items-page guards
+  // above continue to ensure no BOM form bindings leak back here.
+});
+
+// ---------------------------------------------------------------------------
+// Re-anchored doctrine — current architecture.
+//
+// The create-product wizard (/admin/products/new) POSTs item basics only and
+// builds the BOM through SEPARATE /api/boms endpoints (it never binds BOM refs
+// as editable item fields). The product detail (/admin/products/[item_id])
+// renders the linked BOM as a read-only link to /admin/boms, never an input.
+// These replace the obsolete itemSchema / BOM_DISPLAY_ONLY / null-seed pins.
+// ---------------------------------------------------------------------------
+describe("admin/products — BOM stays out of the product form", () => {
+  const productsNew = readFileSync(PRODUCTS_NEW_PATH, "utf8");
+  const productsDetail = readFileSync(PRODUCTS_DETAIL_PATH, "utf8");
+
+  it("the products wizard + detail sources exist and are non-empty", () => {
+    expect(productsNew.length).toBeGreaterThan(100);
+    expect(productsDetail.length).toBeGreaterThan(100);
+  });
+
   it.each(BOM_FIELDS)(
-    "BOM field %s is not declared inside the itemSchema z.object",
+    "the create-product wizard does not bind %s as an editable form field",
     (field) => {
-      // itemSchema is the zod schema for the items form. Adding one of
-      // the BOM field names here would make it a form field and turn
-      // the items screen into a BOM editor. This test slices the
-      // schema declaration region and checks it explicitly.
-      const start = source.indexOf("const itemSchema = z.object({");
-      expect(start).toBeGreaterThan(-1);
-      // Find the matching closing brace at depth 0.
-      let depth = 0;
-      let end = start;
-      for (let i = start; i < source.length; i++) {
-        const ch = source[i];
-        if (ch === "{") depth++;
-        else if (ch === "}") {
-          depth--;
-          if (depth === 0) {
-            end = i;
-            break;
-          }
-        }
-      }
-      const schemaBlock = source.slice(start, end + 1);
-      if (schemaBlock.includes(`${field}:`)) {
+      const registerRe = new RegExp(`register\\(\\s*['"\`]${field}['"\`]`);
+      const setValueRe = new RegExp(`setValue\\(\\s*['"\`]${field}['"\`]`);
+      const objAssignRe = new RegExp(
+        `${field}\\s*:\\s*e\\.target\\.(?:value|checked)`,
+      );
+      if (registerRe.test(productsNew) || setValueRe.test(productsNew) || objAssignRe.test(productsNew)) {
         throw new Error(
-          `itemSchema declares "${field}" as a form field — BOM fields must stay out of the form schema.`,
+          `Create-product wizard binds "${field}" — BOM wiring must stay out of the item form (it is created via /api/boms).`,
         );
       }
-      expect(schemaBlock).not.toContain(`${field}:`);
+      expect(productsNew).not.toMatch(registerRe);
+      expect(productsNew).not.toMatch(setValueRe);
+      expect(productsNew).not.toMatch(objAssignRe);
     },
   );
 
-  it("the display-only sub-panel with data-testid='bom-wiring-readonly' is present", () => {
-    // Pin the sub-panel that renders the three BOM fields as
-    // read-only text. The comment marker BOM_DISPLAY_ONLY and the
-    // data-testid must both survive any refactor; either one alone
-    // would be fragile.
-    expect(source).toContain("BOM_DISPLAY_ONLY");
-    expect(source).toContain('data-testid="bom-wiring-readonly"');
-  });
-
-  it("the create mutation seeds all three BOM fields to null on new rows", () => {
-    // New items must not introduce BOM refs from the items screen.
-    // Tran chosen here is 'primary_bom_head_id: null'. If someone
-    // removes that line, this test fails and the reviewer must
-    // either add it back or explain why the policy changed.
-    expect(source).toMatch(/primary_bom_head_id\s*:\s*null/);
-    expect(source).toMatch(/base_bom_head_id\s*:\s*null/);
-    expect(source).toMatch(/base_fill_qty_per_unit\s*:\s*null/);
+  it("the product detail renders the linked BOM read-only (a link, not a form binding)", () => {
+    expect(productsDetail).toContain("primary_bom_head_id");
+    // Read-only navigation to the BOM editor, not an editable field.
+    expect(productsDetail).toMatch(/\/admin\/boms\//);
+    expect(productsDetail).not.toMatch(/register\(\s*['"`]primary_bom_head_id/);
+    expect(productsDetail).not.toMatch(/primary_bom_head_id\s*:\s*e\.target\./);
   });
 });

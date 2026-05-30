@@ -144,7 +144,7 @@ describe("QuickFixDrawer — Action A (set existing supplier primary)", () => {
     await screen.findByText(/Sweet Co/);
     fireEvent.click(screen.getByLabelText("Sweet Co"));
     fireEvent.click(screen.getByRole("button", { name: /^Save$/ }));
-    await screen.findByText(/הספק עודכן/);
+    await screen.findByText(/This row was updated by another user/i);
     expect(onClose).not.toHaveBeenCalled();
   });
 
@@ -230,14 +230,14 @@ describe("QuickFixDrawer — Action B (add new sourcing link)", () => {
     render(<QuickFixDrawer componentId="C-1" open onClose={onClose} />, {
       wrapper: wrap(),
     });
-    await screen.findByLabelText(/supplier_id/i);
-    fireEvent.change(screen.getByLabelText(/supplier_id/i), {
+    await screen.findByLabelText(/Supplier ID/i);
+    fireEvent.change(screen.getByLabelText(/Supplier ID/i), {
       target: { value: "SUP-N" },
     });
-    fireEvent.change(screen.getByLabelText(/std_cost/i), {
+    fireEvent.change(screen.getByLabelText(/Standard cost/i), {
       target: { value: "1.99" },
     });
-    fireEvent.click(screen.getByRole("button", { name: /Add link/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Add sourcing link/i }));
     await waitFor(() => {
       const post = fetchMock.mock.calls.find(
         ([u, i]) =>
@@ -314,7 +314,7 @@ describe("QuickFixDrawer — Action C entry path", () => {
     fireEvent.click(screen.getByLabelText("Sweet Co"));
     fireEvent.click(screen.getByRole("button", { name: /^Swap primary$/ }));
     await screen.findByText(/Current primary/);
-    expect(screen.getByText(/אני מאשר/)).toBeTruthy();
+    expect(screen.getByText(/I confirm/i)).toBeTruthy();
   });
 });
 

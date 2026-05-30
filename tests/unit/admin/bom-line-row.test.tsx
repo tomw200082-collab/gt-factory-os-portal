@@ -39,7 +39,7 @@ afterEach(() => {
 });
 
 const baseLine = {
-  bom_line_id: "L1",
+  line_id: "L1",
   final_component_id: "C-1",
   final_component_name: "Sugar",
   final_component_qty: "1.0",
@@ -68,7 +68,8 @@ describe("BomLineRow", () => {
       { wrapper: wrap() },
     );
     expect(screen.getByText("Sugar")).toBeTruthy();
-    expect(screen.getByText("1.0")).toBeTruthy();
+    // formatQty(1, UNIT) renders the integer "1" (trailing zeros stripped)
+    expect(screen.getByText("1")).toBeTruthy();
     expect(screen.getByLabelText("readiness-pip-green")).toBeTruthy();
   });
 
@@ -106,7 +107,7 @@ describe("BomLineRow", () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
-          bom_line_id: "L1",
+          line_id: "L1",
           qty: "2.0",
           updated_at: "2026-04-25T00:00:00Z",
         }),
@@ -122,7 +123,7 @@ describe("BomLineRow", () => {
       />,
       { wrapper: wrap() },
     );
-    fireEvent.click(screen.getByLabelText("qty-edit-L1"));
+    fireEvent.click(screen.getByRole("button", { name: "qty-edit-L1" }));
     const input = screen.getByRole("textbox");
     fireEvent.change(input, { target: { value: "2.0" } });
     fireEvent.blur(input);
@@ -131,8 +132,10 @@ describe("BomLineRow", () => {
     expect(url).toBe("/api/boms/versions/BV-1/lines/L1");
     expect((init as RequestInit).method).toBe("PATCH");
     const body = JSON.parse((init as RequestInit).body as string);
-    expect(body.final_component_qty).toBe("2.0");
-    expect(body.if_match_updated_at).toBe("2026-04-20T12:00:00Z");
+    // patchEntity spreads fields into the body; the qty field is quantity_per
+    // (numeric), and if_match_updated_at is normalised via Date.toISOString().
+    expect(body.quantity_per).toBe(2);
+    expect(body.if_match_updated_at).toBe("2026-04-20T12:00:00.000Z");
     expect(typeof body.idempotency_key).toBe("string");
   });
 
@@ -155,11 +158,11 @@ describe("BomLineRow", () => {
       />,
       { wrapper: wrap() },
     );
-    fireEvent.click(screen.getByLabelText("qty-edit-L1"));
+    fireEvent.click(screen.getByRole("button", { name: "qty-edit-L1" }));
     const input = screen.getByRole("textbox");
     fireEvent.change(input, { target: { value: "2.0" } });
     fireEvent.blur(input);
-    await screen.findByText(/STALE_ROW|רענן/);
+    await screen.findByText(/refresh the page|updated by another user/i);
   });
 
   it("DELETEs the line when delete button clicked and confirmed", async () => {
@@ -173,8 +176,8 @@ describe("BomLineRow", () => {
       />,
       { wrapper: wrap() },
     );
-    fireEvent.click(screen.getByRole("button", { name: /Delete|🗑/ }));
-    fireEvent.click(screen.getByRole("button", { name: /^Confirm/ }));
+    fireEvent.click(screen.getByRole("button", { name: "delete-L1" }));
+    fireEvent.click(screen.getByRole("button", { name: /^Delete$/ }));
     await waitFor(() =>
       expect(fetchMock).toHaveBeenCalledWith(
         "/api/boms/versions/BV-1/lines/L1",

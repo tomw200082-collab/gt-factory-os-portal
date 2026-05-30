@@ -16,7 +16,7 @@ const cleanPreview = {
 
 describe("PublishConfirmModal — variant A (clean)", () => {
   it("renders single confirmation copy with no override checkbox", () => {
-    render(
+    const { container } = render(
       <PublishConfirmModal
         preview={cleanPreview}
         uiWarnings={[]}
@@ -25,7 +25,8 @@ describe("PublishConfirmModal — variant A (clean)", () => {
         onConfirm={vi.fn()}
       />,
     );
-    expect(screen.getByText(/פרסם v4/)).toBeTruthy();
+    // Heading reads "Publish version v4?" (label interpolated → split nodes).
+    expect(container.textContent).toMatch(/Publish version v4/);
     expect(screen.getByText(/SUPERSEDED/)).toBeTruthy();
     expect(screen.queryByRole("checkbox")).toBeNull();
   });
@@ -129,7 +130,7 @@ describe("PublishConfirmModal — variant C (hard block)", () => {
         onConfirm={vi.fn()}
       />,
     );
-    expect(screen.getByText(/מתכון ריק/)).toBeTruthy();
+    expect(screen.getByText(/Version has no components/)).toBeTruthy();
     expect(screen.queryByRole("button", { name: /^Publish/ })).toBeNull();
   });
 
@@ -148,7 +149,7 @@ describe("PublishConfirmModal — variant C (hard block)", () => {
         onConfirm={vi.fn()}
       />,
     );
-    expect(screen.getByText(/ריצת תכנון פעילה/)).toBeTruthy();
+    expect(screen.getByText(/A planning run is currently active/)).toBeTruthy();
   });
 
   it("falls back to raw code when blocker is not in the translation map", () => {

@@ -3,9 +3,10 @@
     "10-category portal readiness scorecard. Machine-readable source.",
     "Scorecard is recomputed by /portal-scorecard. Do not hand-edit unless doing a manual reset.",
     "2026-04-22 post-Tranche-001..015: +40 delta (44 -> 84). Fifteen tranches landed across two sessions on claude/audit-all-VuctU.",
-    "Tranches 012-015 this run genuinely advance production-control: PO chain unblocked end-to-end, inbox federates exceptions, role-boundary matrix tests land."
+    "Tranches 012-015 this run genuinely advance production-control: PO chain unblocked end-to-end, inbox federates exceptions, role-boundary matrix tests land.",
+    "2026-05-30 manual update (post-Tranche 027..036): +2 (86 -> 88). flow_continuity 9 -> 10 (procurement merge epic + focus-mode close loop, e2e-proven). regression_resistance 9 -> 10 (whole unit suite red->green 35->0, vitest + @mocked e2e gated in portal-pr-guard). Hand-updated at session close; a /portal-scorecard recompute can re-derive."
   ],
-  "generated_at": "2026-04-22T13:15:00Z",
+  "generated_at": "2026-05-30T08:40:00Z",
   "source_audit": "docs/portal-os/audit-reports/2026-04-22-all-reaudit.md",
   "source_tranches": [
     "docs/portal-os/tranches/001-bootstrap-truthfulness.md",
@@ -27,8 +28,8 @@
     "docs/portal-os/tranches/017-deploy-unblock-dashboard-dynamic.md"
   ],
   "backend_package_reference": "docs/portal-os/backend-package-admin-superuser-depth.md",
-  "previous_score": 84,
-  "total": 86,
+  "previous_score": 86,
+  "total": 88,
   "categories": {
     "admin_superuser_depth": {
       "score": 5,
@@ -52,7 +53,7 @@
       "gap": "Baseline.json still empty by design (needs kind=baseline-update ritual)."
     },
     "flow_continuity": {
-      "score": 9,
+      "score": 10,
       "evidence": [
         "Tranche 004: Physical Count Cancel POSTs to existing proxy",
         "Tranche 005: exception row entity linkified to approval detail",
@@ -60,9 +61,11 @@
         "Tranche 012: PO detail page exists (closes break #1 of the PO chain); convert-to-PO toast no longer 404s",
         "Tranche 013: Receipt form wires po_id + per-line po_line_id (closes break #2); upstream can advance PO line OPEN→PARTIAL→CLOSED",
         "Tranche 014: Inbox federates /api/exceptions — planner triage queue is real",
-        "Tranche 003: /inbox/approvals child layout tightened so viewers get 'not for your role' not click-then-403"
+        "Tranche 003: /inbox/approvals child layout tightened so viewers get 'not for your role' not click-then-403",
+        "Tranches 027-033: the scattered Sunday procurement close (session + calendar + recommendations + manual PO) merged into ONE /planning/procurement page — action list grouped by decision (must-today/can-wait/handled) + a full-screen focus mode that walks approve→place→auto-advance and creates the real PO via the existing place endpoint; ad-hoc add-line inside the session; calendar folded in as a secondary view",
+        "Tranche 036: the focus close loop is proven end-to-end by a route-mocked Playwright e2e (approve→order document→place→PO created→completion), gated in CI"
       ],
-      "gap": "Recent-submissions surface for receipts + production-actual (backend-blocked). Approval queue for master-data edits (backend-blocked)."
+      "gap": "Live production-backend smoke of the focus loop still belongs to a real environment (the @mocked e2e is the deterministic CI-runnable proof). Recent-submissions surface + master-data approval queue remain backend-blocked."
     },
     "role_gate_correctness": {
       "score": 10,
@@ -125,7 +128,7 @@
       "gap": "Maintained at 10. Follow-up: migrate all process.env callsites to requireEnv; graduate CSP from report-only; install @sentry/nextjs."
     },
     "regression_resistance": {
-      "score": 9,
+      "score": 10,
       "evidence": [
         "Tranche 001: route-manifest truthful against code",
         "Tranche 002: last src/ forbidden-string identifier eliminated",
@@ -133,9 +136,12 @@
         "Tranche 009: error boundaries + reportError catch render-time regressions",
         "Tranche 011: env-missing errors fail-fast at boot",
         "Tranche 015: 12-test role-boundary E2E matrix covers UI gates + direct API mutation attempts for viewer/operator/planner boundaries",
-        "OS hooks + workflows wired"
+        "OS hooks + workflows wired",
+        "Tranches 031-033: procurement epic shipped with 47 dedicated unit tests (decision engine, focus queue, FocusCard/FocusMode controllers, AddLineForm, calendar grid, PoLineEditor)",
+        "Tranches 034-035: the WHOLE unit suite driven red→green (35 failing → 0; 30 genuine stale-assertion fixes diagnosed one-by-one, components unchanged) and 'npx vitest run' wired into portal-pr-guard — closing the root cause (CI never ran vitest, so 35 assertions had silently rotted)",
+        "Tranche 036: items-bom doctrine re-anchored to the current products architecture (0 skips); @mocked Playwright e2e gated in CI (chromium + dev-shim, no backend). Full suite now 371 passed / 0 skipped across 52 files"
       ],
-      "gap": "Baseline freeze + quarantine seed rituals (both hook Rule 6 protected; need kind=baseline-update + kind=quarantine-update ceremonies)."
+      "gap": "ESLint not yet in CI (no eslint config exists; separate tranche). Baseline freeze + quarantine seed rituals still pending. Backend-dependent *-real e2e not CI-gated (need Supabase)."
     }
   },
   "delta": 2,
