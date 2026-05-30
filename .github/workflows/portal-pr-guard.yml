@@ -16,7 +16,11 @@ on:
 jobs:
   ci:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
+    env:
+      # The Playwright webServer (next dev) inherits this so the dev-shim auth
+      # path is active for the @mocked e2e (no Supabase backend needed).
+      NEXT_PUBLIC_ENABLE_DEV_SHIM_AUTH: 'true'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -35,6 +39,14 @@ jobs:
 
       - name: Unit tests (vitest)
         run: npx vitest run
+
+      - name: Install Playwright (chromium)
+        run: npx playwright install --with-deps chromium
+
+      - name: E2E — mocked focus flow (no backend)
+        # Runs only @mocked specs (browser-stubbed API), so it never depends on
+        # a live Supabase backend. Tranche 036.
+        run: npx playwright test --grep @mocked
 
       - name: Registry presence check for new portal-os artifacts
         run: |

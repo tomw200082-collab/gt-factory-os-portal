@@ -13,6 +13,12 @@ export default defineConfig({
     baseURL: "http://127.0.0.1:3737",
     trace: "retain-on-failure",
     headless: true,
+    // Escape hatch for sandboxes that pre-provision a browser binary but can't
+    // download Playwright's pinned build. Unset in CI → Playwright uses its own
+    // downloaded browser as normal.
+    launchOptions: process.env.PW_CHROME_PATH
+      ? { executablePath: process.env.PW_CHROME_PATH }
+      : {},
   },
   projects: [
     {
