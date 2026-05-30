@@ -33,9 +33,11 @@ describe("useEnterEditDraft", () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
-          bom_version_id: "BV-NEW",
-          version_label: "v4",
-          status: "DRAFT",
+          row: {
+            bom_version_id: "BV-NEW",
+            version_label: "v4",
+            status: "DRAFT",
+          },
         }),
         { status: 200 },
       ),
@@ -75,9 +77,11 @@ describe("useEnterEditDraft", () => {
     fetchMock.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
-          bom_version_id: "BV-NEW",
-          version_label: "v1",
-          status: "DRAFT",
+          row: {
+            bom_version_id: "BV-NEW",
+            version_label: "v1",
+            status: "DRAFT",
+          },
         }),
         { status: 200 },
       ),

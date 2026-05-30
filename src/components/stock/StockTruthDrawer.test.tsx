@@ -66,7 +66,9 @@ describe('StockTruthDrawer', () => {
     });
     // Title in the canonical Drawer header.
     expect(screen.getByText('Test Beverage')).toBeInTheDocument();
-    expect(screen.getByText(/Below physical floor by 5/i)).toBeInTheDocument();
+    expect(
+      screen.getByText(/More outflows recorded than receipts/i),
+    ).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByText('WASTE_POSTED')).toBeInTheDocument();
     });
@@ -115,11 +117,14 @@ describe('StockTruthDrawer', () => {
         screen.queryByRole('link', { name: /Post corrective Goods Receipt/i }),
       ).toBeNull();
     });
-    // Disabled count-corrective span should be present.
-    expect(screen.getByText(/Post corrective count/i)).toBeInTheDocument();
-    expect(screen.getByText(/Post corrective count/i)).toHaveAttribute(
-      'aria-disabled',
-      'true',
+    // With no ledger events the corrective CTA is a physical-count link.
+    const countLink = await screen.findByRole('link', {
+      name: /Post physical count/i,
+    });
+    expect(countLink).toBeInTheDocument();
+    expect(countLink).toHaveAttribute(
+      'href',
+      expect.stringContaining('/stock/physical-count'),
     );
 
     fetchSpy.mockRestore();

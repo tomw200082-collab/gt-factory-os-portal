@@ -2,10 +2,10 @@
 #
 # Runs on every PR against main. Required check for merge.
 #
-# Minimum viable checks for bootstrap: typecheck + registry presence.
-# lint / vitest / playwright are intentionally skipped until repo-level
-# test infrastructure is set up (future tranches). Re-enable individually
-# per tranche as each layer is made CI-green.
+# Checks: typecheck + vitest + registry presence.
+# vitest was enabled in tranche 035 once the unit suite was driven fully green
+# (366 passing, 5 documented skips) — gating it stops the silent test-rot that
+# had let 35 assertions drift. lint / playwright remain for a future tranche.
 
 name: portal-pr-guard
 
@@ -32,6 +32,9 @@ jobs:
 
       - name: Typecheck
         run: npx tsc --noEmit
+
+      - name: Unit tests (vitest)
+        run: npx vitest run
 
       - name: Registry presence check for new portal-os artifacts
         run: |
