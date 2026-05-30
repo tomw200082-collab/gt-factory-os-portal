@@ -12,6 +12,7 @@ import {
   familyTintVar,
   nowInIsrael,
   rollupDraftFgUnits,
+  weekStartInWeeks,
   type DraftWeekRow,
 } from "./cadence";
 
@@ -142,6 +143,20 @@ describe("nowInIsrael", () => {
       day: "2-digit",
     }).format(new Date()); // YYYY-MM-DD
     expect(toIsoDate(nowInIsrael())).toBe(il);
+  });
+});
+
+describe("weekStartInWeeks", () => {
+  const thu = new Date(2026, 0, 15); // Thu 2026-01-15; that week's Sunday = 2026-01-11
+  it("weeks=0 is the current week's Sunday", () => {
+    expect(weekStartInWeeks(0, thu)).toBe("2026-01-11");
+  });
+  it("weeks=1 is +7 days (the incoming/near week)", () => {
+    expect(weekStartInWeeks(1, thu)).toBe("2026-01-18");
+  });
+  it("weeks=2 equals the Thursday firm target (defaultFirmWeekStart)", () => {
+    expect(weekStartInWeeks(2, thu)).toBe("2026-01-25");
+    expect(weekStartInWeeks(2, thu)).toBe(defaultFirmWeekStart(thu));
   });
 });
 

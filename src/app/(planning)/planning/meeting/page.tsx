@@ -28,6 +28,7 @@ import {
   Boxes,
   Droplet,
   RefreshCw,
+  PackageCheck,
 } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
@@ -42,6 +43,7 @@ import {
   useFirmedWeekDemand,
   rollupDraftFgUnits,
   defaultFirmWeekStart,
+  weekStartInWeeks,
   stepForToday,
   fmtWeekRange,
   fmtDayHeader,
@@ -298,6 +300,12 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
   const draftRollup = useMemo(() => rollupDraftFgUnits(rows), [rows]);
   const firmedDemand = useFirmedWeekDemand(weekStart, batchCount === 0 && firmedCount > 0);
 
+  // Two-touch Thursday: the firm panel above targets W2 (the new week entering
+  // the plan); this is the near week W1 — already firmed last Thursday, here for
+  // a final review/tweak before it produces.
+  const nearWeek = useMemo(() => weekStartInWeeks(1), []);
+  const nearDemand = useFirmedWeekDemand(nearWeek, true);
+
   const shiftWeek = (deltaWeeks: number) =>
     setWeekStart((w) => toIsoDate(addDays(parseIsoDate(w), deltaWeeks * 7)));
 
@@ -486,6 +494,24 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
         )}
       </SectionCard>
 
+      {/* Near week (W1) — final-tune the incoming, already-firmed week */}
+      <div className="flex items-center justify-between gap-3 rounded-lg border border-border-faint bg-bg-subtle/40 px-4 py-3">
+        <div className="min-w-0 text-sm">
+          <span className="font-medium">Incoming week · {fmtWeekRange(nearWeek)}</span>
+          <span className="text-fg-muted">
+            {" — "}
+            {(nearDemand.data?.total_fg_units ?? 0).toLocaleString()} units committed. Last tweaks
+            before it produces.
+          </span>
+        </div>
+        <Link
+          href="/planning/production-plan"
+          className="shrink-0 text-xs font-medium text-accent hover:underline"
+        >
+          Fine-tune →
+        </Link>
+      </div>
+
       {/* Production commitment — the firm → procure bridge */}
       {batchCount > 0 && draftRollup.length > 0 ? (
         <CommitmentPanel
@@ -566,40 +592,97 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
 // PROCURE panel — routes to the existing purchase surfaces (no rebuild here).
 // ---------------------------------------------------------------------------
 function ProcurePanel() {
+  // Two-touch Sunday: ORDER for next week (the week starting next Sunday, which
+  // was firmed last Thursday) and VERIFY arrivals for the week now producing.
+  const nextWeek = useMemo(() => weekStartInWeeks(1), []);
+  const demand = useFirmedWeekDemand(nextWeek, true);
+  const entries = (demand.data?.rows ?? []).map((r) => ({
+    item_id: r.item_id,
+    item_name: r.item_name,
+    units: r.fg_units,
+    track: r.track,
+  }));
+
   return (
-    <SectionCard
-      title="Sunday — procurement"
-      description="Buy against the week you firmed on Thursday. The purchase session consolidates supplier orders by urgency (urgent / must / recommended)."
-    >
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-        <Link
-          href="/planning/purchase-session"
-          className="group flex items-center justify-between rounded-lg border border-accent-border bg-accent-softer p-4 transition-colors hover:bg-accent-soft"
-        >
-          <span className="flex items-center gap-3">
-            <ShoppingCart className="h-5 w-5 text-accent" />
-            <span>
-              <span className="block text-sm font-semibold">Open purchase session</span>
-              <span className="block text-xs text-fg-muted">Review &amp; place supplier orders</span>
+    <div className="space-y-6">
+      {/* Order for next week (W+1) — driven by what that week firmed */}
+      <CommitmentPanel
+        title={`Order for next week · ${fmtWeekRange(nextWeek)}`}
+        note="What next week's firmed production needs. Place these supplier orders now so materials land before that week starts — long-lead items are ordered earlier by the engine."
+        totalUnits={demand.data?.total_fg_units ?? 0}
+        entries={entries}
+        pending={demand.isLoading}
+      />
+
+      <SectionCard
+        title="Place the orders"
+        description="The purchase session consolidates supplier orders by urgency (urgent / must / recommended)."
+      >
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Link
+            href="/planning/purchase-session"
+            className="group flex items-center justify-between rounded-lg border border-accent-border bg-accent-softer p-4 transition-colors hover:bg-accent-soft"
+          >
+            <span className="flex items-center gap-3">
+              <ShoppingCart className="h-5 w-5 text-accent" />
+              <span>
+                <span className="block text-sm font-semibold">Open purchase session</span>
+                <span className="block text-xs text-fg-muted">Review &amp; place supplier orders</span>
+              </span>
             </span>
-          </span>
-          <ArrowRight className="h-4 w-4 text-accent transition-transform group-hover:translate-x-0.5" />
-        </Link>
-        <Link
-          href="/planning/purchase-calendar"
-          className="group flex items-center justify-between rounded-lg border border-border bg-bg-raised p-4 shadow-hairline transition-colors hover:bg-bg-muted"
-        >
-          <span className="flex items-center gap-3">
-            <CalendarCheck className="h-5 w-5 text-fg-subtle" />
-            <span>
-              <span className="block text-sm font-semibold">Purchase calendar</span>
-              <span className="block text-xs text-fg-muted">10-week order-by view</span>
+            <ArrowRight className="h-4 w-4 text-accent transition-transform group-hover:translate-x-0.5" />
+          </Link>
+          <Link
+            href="/planning/purchase-calendar"
+            className="group flex items-center justify-between rounded-lg border border-border bg-bg-raised p-4 shadow-hairline transition-colors hover:bg-bg-muted"
+          >
+            <span className="flex items-center gap-3">
+              <CalendarCheck className="h-5 w-5 text-fg-subtle" />
+              <span>
+                <span className="block text-sm font-semibold">Purchase calendar</span>
+                <span className="block text-xs text-fg-muted">10-week order-by view</span>
+              </span>
             </span>
-          </span>
-          <ArrowRight className="h-4 w-4 text-fg-faint transition-transform group-hover:translate-x-0.5" />
-        </Link>
-      </div>
-    </SectionCard>
+            <ArrowRight className="h-4 w-4 text-fg-faint transition-transform group-hover:translate-x-0.5" />
+          </Link>
+        </div>
+      </SectionCard>
+
+      {/* Second touch: verify arrivals for the week now in production */}
+      <SectionCard
+        title="Verify this week's arrivals"
+        description="For the week now in production, confirm what you ordered has landed — receive goods as they arrive so stock and the plan stay in sync."
+      >
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+          <Link
+            href="/stock/receipts"
+            className="group flex items-center justify-between rounded-lg border border-border bg-bg-raised p-4 shadow-hairline transition-colors hover:bg-bg-muted"
+          >
+            <span className="flex items-center gap-3">
+              <PackageCheck className="h-5 w-5 text-success" />
+              <span>
+                <span className="block text-sm font-semibold">Receive goods</span>
+                <span className="block text-xs text-fg-muted">Log arrivals against open orders</span>
+              </span>
+            </span>
+            <ArrowRight className="h-4 w-4 text-fg-faint transition-transform group-hover:translate-x-0.5" />
+          </Link>
+          <Link
+            href="/planning/inventory-flow"
+            className="group flex items-center justify-between rounded-lg border border-border bg-bg-raised p-4 shadow-hairline transition-colors hover:bg-bg-muted"
+          >
+            <span className="flex items-center gap-3">
+              <Boxes className="h-5 w-5 text-fg-subtle" />
+              <span>
+                <span className="block text-sm font-semibold">Inventory flow</span>
+                <span className="block text-xs text-fg-muted">Confirm stock is covered for this week</span>
+              </span>
+            </span>
+            <ArrowRight className="h-4 w-4 text-fg-faint transition-transform group-hover:translate-x-0.5" />
+          </Link>
+        </div>
+      </SectionCard>
+    </div>
   );
 }
 

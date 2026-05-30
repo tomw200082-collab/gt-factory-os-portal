@@ -209,8 +209,16 @@ export function stepForToday(today = nowInIsrael()): CadenceStep {
 // weeks out. On Thursday that is ~10 days ahead, giving the Sunday procurement
 // session a full week of lead before production begins. Anchored to the
 // current week's Sunday + 14 so it is stable across the Thu→Sun handoff.
+// Sunday of the week `weeks` weeks ahead of `today`, ISO date. The cadence is
+// a rolling two-week-ahead commit: weeks=2 is the Thursday firm target (the new
+// week entering the plan), weeks=1 is the "near" week — fine-tuned on Thursday
+// and bought on the Sunday that starts it.
+export function weekStartInWeeks(weeks: number, today = nowInIsrael()): string {
+  return toIsoDate(addDays(startOfWeek(today), weeks * 7));
+}
+
 export function defaultFirmWeekStart(today = nowInIsrael()): string {
-  return toIsoDate(addDays(startOfWeek(today), 14));
+  return weekStartInWeeks(2, today);
 }
 
 // The five Sun–Thu working days of a week, as ISO dates.
