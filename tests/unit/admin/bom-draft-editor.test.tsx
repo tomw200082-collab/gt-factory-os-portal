@@ -7,6 +7,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
@@ -160,14 +161,15 @@ describe("BomDraftEditorPage skeleton", () => {
     expect(screen.getByText(/base formula/i)).toBeTruthy();
   });
 
-  it("renders Cancel / Save / Publish buttons", async () => {
+  it("renders Cancel / Publish buttons", async () => {
+    // The draft editor auto-saves (inline row edits + add-line drawer), so there
+    // is no explicit Save button — only Cancel + Publish.
     mockEditorApi({ draftLines: [] });
     render(<BomDraftEditorPage bomHeadId="BH-1" versionId="BV-DRAFT" />, {
       wrapper: wrap(),
     });
     await screen.findByText(/Lemon Cocktail/);
     expect(screen.getByRole("button", { name: /Cancel/i })).toBeTruthy();
-    expect(screen.getByRole("button", { name: /Save/i })).toBeTruthy();
     expect(screen.getByRole("button", { name: /Publish/i })).toBeTruthy();
   });
 
@@ -176,7 +178,7 @@ describe("BomDraftEditorPage skeleton", () => {
     render(<BomDraftEditorPage bomHeadId="BH-1" versionId="BV-DRAFT" />, {
       wrapper: wrap(),
     });
-    await screen.findByText(/No components/);
+    await screen.findAllByText(/No components/);
   });
 
   it("renders one row per draft line", async () => {
@@ -241,7 +243,7 @@ describe("BomDraftEditorPage — Add line drawer", () => {
     render(<BomDraftEditorPage bomHeadId="BH-1" versionId="BV-DRAFT" />, {
       wrapper: wrap(),
     });
-    await screen.findByText(/No components/);
+    await screen.findAllByText(/No components/);
     expect(screen.getByRole("button", { name: /Add component/i })).toBeTruthy();
   });
 
@@ -519,8 +521,12 @@ describe("BomDraftEditorPage — Add line drawer", () => {
     );
     await screen.findByText(/Lemon Cocktail/);
     fireEvent.click(screen.getByRole("button", { name: /^Publish/ }));
-    await screen.findByRole("dialog", { name: /Confirm publish/ });
-    fireEvent.click(screen.getByRole("button", { name: /^Publish$/ }));
+    const confirmDialog = await screen.findByRole("dialog", {
+      name: /Confirm publish/,
+    });
+    // Both the page header and the modal expose a "Publish" button — scope to
+    // the dialog for the confirm action.
+    fireEvent.click(within(confirmDialog).getByRole("button", { name: /^Publish$/ }));
     await waitFor(() =>
       expect(navigate).toHaveBeenCalledWith("/admin/masters/items/ITEM-1"),
     );
