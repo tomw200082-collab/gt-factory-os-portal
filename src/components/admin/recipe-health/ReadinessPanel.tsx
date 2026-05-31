@@ -17,9 +17,22 @@ interface ReadinessPanelProps {
   onFix: (componentId: string) => void;
   /** Render as a sticky bottom drawer with a warnings-count toggle. */
   mobileMode?: boolean;
+  /**
+   * Component ids that are produced in-house (have their own make-recipe).
+   * These are sourced from production, not a supplier, so they are exempt from
+   * the supplier/price "needs fix" warnings and the warning count.
+   */
+  manufacturedComponentIds?: ReadonlySet<string>;
 }
 
-function rowNeedsFix(c: ComponentReadiness, nowMs: number): boolean {
+function rowNeedsFix(
+  c: ComponentReadiness,
+  nowMs: number,
+  isManufactured = false,
+): boolean {
+  // Self-produced components are sourced from their own make-recipe, not a
+  // supplier — they never need a supplier/price "fix" here.
+  if (isManufactured) return false;
   if (c.primary_supplier_id === null) return true;
   if (c.active_price_value === null) return true;
   const days = priceAgeDays(c.active_price_updated_at, nowMs);
@@ -52,20 +65,24 @@ function RowsList({
   rows,
   nowMs,
   onFix,
+  manufacturedIds,
 }: {
   rows: ComponentReadiness[];
   nowMs: number;
   onFix: (componentId: string) => void;
+  manufacturedIds?: ReadonlySet<string>;
 }): JSX.Element {
   return (
     <ul className="divide-y divide-border">
       {rows.map((r) => {
-        const supplierOk = r.primary_supplier_id !== null;
+        const manufactured = manufacturedIds?.has(r.component_id) ?? false;
+        const supplierOk = manufactured || r.primary_supplier_id !== null;
         const priceOk =
-          r.active_price_value !== null &&
-          (priceAgeDays(r.active_price_updated_at, nowMs) ?? 0) <=
-            RECIPE_READINESS_POLICY.PRICE_AGE_WARN_DAYS;
-        const needsFix = rowNeedsFix(r, nowMs);
+          manufactured ||
+          (r.active_price_value !== null &&
+            (priceAgeDays(r.active_price_updated_at, nowMs) ?? 0) <=
+              RECIPE_READINESS_POLICY.PRICE_AGE_WARN_DAYS);
+        const needsFix = rowNeedsFix(r, nowMs, manufactured);
         return (
           <li key={r.component_id} className="px-4 py-3">
             <div className="flex items-baseline justify-between gap-2">
@@ -86,17 +103,21 @@ function RowsList({
               <StatusDot
                 ok={supplierOk}
                 label={
-                  supplierOk
-                    ? r.primary_supplier_name ?? "Primary supplier set"
-                    : "No primary supplier"
+                  manufactured
+                    ? "Made in-house"
+                    : supplierOk
+                      ? r.primary_supplier_name ?? "Primary supplier set"
+                      : "No primary supplier"
                 }
               />
               <StatusDot
                 ok={priceOk}
                 label={
-                  r.active_price_value === null
-                    ? "No active price"
-                    : `Price · ${formatPriceAge(r.active_price_updated_at, nowMs)}`
+                  manufactured
+                    ? "Cost from recipe"
+                    : r.active_price_value === null
+                      ? "No active price"
+                      : `Price · ${formatPriceAge(r.active_price_updated_at, nowMs)}`
                 }
               />
             </div>
@@ -112,9 +133,12 @@ export function ReadinessPanel({
   nowMs,
   onFix,
   mobileMode,
+  manufacturedComponentIds,
 }: ReadinessPanelProps): JSX.Element | null {
   const rows = Array.from(readinessMap.values());
-  const warningCount = rows.filter((r) => rowNeedsFix(r, nowMs)).length;
+  const warningCount = rows.filter((r) =>
+    rowNeedsFix(r, nowMs, manufacturedComponentIds?.has(r.component_id) ?? false),
+  ).length;
   const [openSheet, setOpenSheet] = useState(false);
 
   if (mobileMode) {
@@ -145,7 +169,12 @@ export function ReadinessPanel({
                   <X className="h-4 w-4" strokeWidth={2} />
                 </button>
               </header>
-              <RowsList rows={rows} nowMs={nowMs} onFix={onFix} />
+              <RowsList
+                rows={rows}
+                nowMs={nowMs}
+                onFix={onFix}
+                manufacturedIds={manufacturedComponentIds}
+              />
             </div>
           </div>
         )}
@@ -173,7 +202,12 @@ export function ReadinessPanel({
           No components on this version.
         </p>
       ) : (
-        <RowsList rows={rows} nowMs={nowMs} onFix={onFix} />
+        <RowsList
+          rows={rows}
+          nowMs={nowMs}
+          onFix={onFix}
+          manufacturedIds={manufacturedComponentIds}
+        />
       )}
     </aside>
   );

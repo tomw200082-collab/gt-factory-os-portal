@@ -45,6 +45,15 @@ export interface ComputeLinePipStateInput {
   qty: string | number;
   component: ComponentReadiness;
   nowMs: number;
+  /**
+   * True when this line's component is produced in-house (has its own
+   * make-recipe). A self-produced component is sourced from production, not a
+   * supplier, so the missing-supplier / no-price / stale-price warnings do not
+   * apply — its own readiness is evaluated separately on its recipe card.
+   * Hard blockers (invalid qty, inactive component) still apply. Defaults to
+   * false so non-manufactured lines keep their existing behavior.
+   */
+  isManufactured?: boolean;
 }
 
 export function computeLinePipState(
@@ -75,26 +84,33 @@ export function computeLinePipState(
     };
   }
 
-  if (input.component.primary_supplier_id === null) {
-    reasons.push("No primary supplier");
-    warningCategories.push("missing-supplier");
-  }
-  if (input.component.active_price_value === null) {
-    reasons.push("No active price");
-    warningCategories.push("no-active-price");
-  } else {
-    const days = priceAgeDays(
-      input.component.active_price_updated_at,
-      input.nowMs,
-    );
-    if (days !== null && days > RECIPE_READINESS_POLICY.PRICE_AGE_WARN_DAYS) {
-      const strong = days > RECIPE_READINESS_POLICY.PRICE_AGE_STRONG_WARN_DAYS;
-      if (strong) {
-        reasons.push(`Price is very stale (${days} days)`);
-        warningCategories.push("strong-stale-price");
-      } else {
-        reasons.push(`Price is stale (${days} days)`);
-        warningCategories.push("stale-price");
+  // Self-produced components are sourced from their own make-recipe, not a
+  // supplier — so supplier/price warnings do not apply to them. (Hard blockers
+  // above still ran.) A made-in-house base with no supplier is correct, not a
+  // gap; its own sourcing is evaluated on its own recipe card.
+  if (!input.isManufactured) {
+    if (input.component.primary_supplier_id === null) {
+      reasons.push("No primary supplier");
+      warningCategories.push("missing-supplier");
+    }
+    if (input.component.active_price_value === null) {
+      reasons.push("No active price");
+      warningCategories.push("no-active-price");
+    } else {
+      const days = priceAgeDays(
+        input.component.active_price_updated_at,
+        input.nowMs,
+      );
+      if (days !== null && days > RECIPE_READINESS_POLICY.PRICE_AGE_WARN_DAYS) {
+        const strong =
+          days > RECIPE_READINESS_POLICY.PRICE_AGE_STRONG_WARN_DAYS;
+        if (strong) {
+          reasons.push(`Price is very stale (${days} days)`);
+          warningCategories.push("strong-stale-price");
+        } else {
+          reasons.push(`Price is stale (${days} days)`);
+          warningCategories.push("stale-price");
+        }
       }
     }
   }

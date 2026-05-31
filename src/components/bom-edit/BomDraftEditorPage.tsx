@@ -157,6 +157,18 @@ export function BomDraftEditorPage({
       Array.from(new Set((lines ?? []).map((l) => l.final_component_id))),
     [lines],
   );
+  // Components produced in-house (own make-recipe) are sourced from production,
+  // not a supplier — exempt them from the readiness panel's supplier/price
+  // warnings so the per-line pips and the panel always agree.
+  const manufacturedComponentIds = useMemo(
+    () =>
+      new Set(
+        (lines ?? [])
+          .filter((l) => l.final_component_is_manufactured)
+          .map((l) => l.final_component_id),
+      ),
+    [lines],
+  );
   const readiness = useComponentReadinessMap(componentIds);
 
   const [addOpen, setAddOpen] = useState(false);
@@ -442,6 +454,7 @@ export function BomDraftEditorPage({
           readinessMap={readiness.map}
           nowMs={Date.now()}
           onFix={setFixComponentId}
+          manufacturedComponentIds={manufacturedComponentIds}
         />
       </aside>
     </div>
@@ -536,6 +549,7 @@ export function BomDraftEditorPage({
         nowMs={Date.now()}
         onFix={setFixComponentId}
         mobileMode
+        manufacturedComponentIds={manufacturedComponentIds}
       />
     </div>
   );
