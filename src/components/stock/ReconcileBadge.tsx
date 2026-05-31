@@ -1,5 +1,7 @@
 "use client";
 
+import { AlertTriangle } from "lucide-react";
+
 import { Badge } from "@/components/ui/Badge";
 
 export interface ReconcileBadgeProps {
@@ -20,9 +22,14 @@ export interface ReconcileBadgeProps {
  *
  * Tranche 0A consolidation (2026-05-15): this is now a thin wrapper over the
  * canonical <Badge> primitive. The button/span conditional and the Radix
- * Tooltip boilerplate moved into <Badge>. Tone, size, icon, label, tooltip
- * body and aria-label text are all preserved verbatim from the pre-
- * consolidation implementation.
+ * Tooltip boilerplate moved into <Badge>. Tone, size, label, tooltip body and
+ * aria-label text are all preserved verbatim from the pre-consolidation
+ * implementation.
+ *
+ * Tranche 039 (design-system handoff): the leading icon is now the Lucide
+ * <AlertTriangle> rather than a "⚠" unicode glyph, per the "Operational
+ * Precision" rule that status uses Lucide icons / colored dots — never emoji
+ * or unicode-as-icon. Presentation-only; tone/label/tooltip/aria unchanged.
  *
  * Spec: PRODUCTION/docs/superpowers/specs/2026-05-13-display-clamp-physical-stock-truth-design.md §4
  * Handoff: INTER-001 (Radix Tooltip + disabled prop), VISUAL-002 (ring-warning/50)
@@ -51,7 +58,7 @@ export function ReconcileBadge({
       disabled={disabled}
       tooltip={tooltipBody}
       ariaLabel={ariaLabel}
-      icon={<span className="font-mono">⚠</span>}
+      icon={<AlertTriangle className="h-3 w-3" strokeWidth={2} />}
       className={`ring-1 ring-warning/50${className ? ` ${className}` : ""}`}
     >
       Reconcile
