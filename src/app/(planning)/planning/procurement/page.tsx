@@ -68,7 +68,11 @@ export default function ProcurementPage(): JSX.Element {
   }
 
   return (
-    <div className="space-y-5">
+    // Procurement is a fully-Hebrew operator surface, so the whole page reads
+    // right-to-left. Scoped to this page root only — the app shell (TopBar,
+    // sidebar, group nav) stays LTR. Matches the existing dir="rtl" convention
+    // already used by FocusMode / FocusCard / the purchase-session screen.
+    <div dir="rtl" className="space-y-5">
       <WorkflowHeader
         eyebrow="מרחב התכנון"
         title="רכש"
