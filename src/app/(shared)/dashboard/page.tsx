@@ -61,10 +61,11 @@
 // ---------------------------------------------------------------------------
 
 import type { ReactNode } from "react";
-import { useMemo } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import {
+  Activity,
   AlertTriangle,
   ArrowLeftRight,
   ArrowRight,
@@ -73,11 +74,14 @@ import {
   Coins,
   Flame,
   Inbox,
+  LineChart,
+  Minus,
   PackageCheck,
   PackageSearch,
   RefreshCw,
   ShoppingCart,
   TrendingDown,
+  TrendingUp,
 } from "lucide-react";
 
 import { useInventoryFlow } from "@/app/(planning)/planning/inventory-flow/_lib/useInventoryFlow";
@@ -99,6 +103,21 @@ import type {
 import { DashboardHero } from "./_components/DashboardHero";
 import { KpiTile, KpiTileBreakdown } from "./_components/KpiTile";
 import { StockHealthCard } from "./_components/StockHealthCard";
+import { MovementBars, RangeSelector, TrendAreaChart } from "./_components/TrendChart";
+import {
+  bucketTotal,
+  dailyCounts,
+  dailyFlow,
+  trendDelta,
+  type DayBucket,
+  type FlowDayBucket,
+  type TrendDelta,
+} from "./_lib/trends";
+import {
+  reconstructValueSeries,
+  type ValueMovement,
+  type ValueTrendResult,
+} from "./_lib/value-trend";
 
 // ---------------------------------------------------------------------------
 // Cadence — keep low for the morning view; refresh on tab focus is the default.
@@ -121,6 +140,20 @@ const QK_SLIPPED_PLANS = ["dashboard", "slipped-plans"] as const;
 const QK_BREAK_GLASS = ["dashboard", "break-glass"] as const;
 const QK_PURCHASE_ORDERS = ["dashboard", "purchase-orders", "all"] as const;
 const QK_RECENT_MOVEMENTS = ["dashboard", "stock", "ledger", "recent"] as const;
+// Trend queries (tranche 039) — separate keys + larger windows than the
+// "recent" snapshots above, so the 3-row/5-row panels keep their own cache.
+const QK_PROD_TREND = ["dashboard", "production-actuals", "trend"] as const;
+const QK_MOVEMENTS_TREND = ["dashboard", "stock", "ledger", "trend"] as const;
+const QK_VALUE_COSTS = ["dashboard", "economics", "rm-costs"] as const;
+
+// Trend window — 14 days is the default; the band's RangeSelector lets the
+// operator switch between 7 / 14 / 30 days. 14 also gives trendDelta a clean
+// 7-vs-prior-7 split.
+const TREND_DAYS = 14;
+const TREND_RANGES = [7, 14, 30] as const;
+// Upper bound on rows pulled for the trend aggregation. Generous enough to
+// cover a busy fortnight without unbounded payloads.
+const TREND_ROW_LIMIT = 300;
 
 // ---------------------------------------------------------------------------
 // API response types.
@@ -141,6 +174,19 @@ interface StockValueResponse {
   items_with_cost?: number | null;
   items_without_cost?: number | null;
   by_type?: StockValueTypeBucket[] | null;
+}
+
+// Minimal mirror of the economics raw-materials response — used only to build
+// an item_id → current unit-cost map for the (indicative) inventory-value
+// reconstruction. Components are keyed by component_id upstream.
+interface RawMaterialCostRow {
+  component_id: string;
+  item_type?: string | null;
+  effective_cost_ils?: string | null;
+}
+interface RawMaterialCostResponse {
+  rows?: RawMaterialCostRow[];
+  data?: RawMaterialCostRow[];
 }
 
 interface ExceptionRow {
@@ -1192,6 +1238,292 @@ function RecentMovements({
 }
 
 // ---------------------------------------------------------------------------
+// Trend band (tranche 039) — the dashboard's first time-series visualisations.
+// Both charts aggregate the COUNT of postings per day (UOM-agnostic, honest)
+// rather than summed mixed-unit quantities. See _lib/trends.ts.
+// ---------------------------------------------------------------------------
+
+// Neutral direction chip — "up" means more activity, not necessarily "good",
+// so the chip stays tonally neutral (accent for movement, muted for flat) and
+// never implies a value judgement.
+function TrendChip({ delta, days }: { delta: TrendDelta; days: number }) {
+  const half = Math.floor(days / 2);
+  const Icon =
+    delta.direction === "up" ? TrendingUp : delta.direction === "down" ? TrendingDown : Minus;
+  const toneClass =
+    delta.direction === "flat"
+      ? "bg-bg-muted text-fg-subtle"
+      : "bg-accent-soft/50 text-accent";
+  const label =
+    delta.pct === null
+      ? `vs prior ${half}d`
+      : `${delta.pct >= 0 ? "+" : ""}${Math.round(delta.pct)}% vs prior ${half}d`;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-semibold tabular-nums",
+        toneClass,
+      )}
+      title={`Most recent ${half} days compared with the ${half} days before.`}
+    >
+      <Icon className="h-3 w-3" strokeWidth={2.25} aria-hidden />
+      {label}
+    </span>
+  );
+}
+
+function ChartSkeleton() {
+  return (
+    <div className="flex flex-col gap-3">
+      <Skel h={20} w="40%" />
+      <Skel h={96} />
+    </div>
+  );
+}
+
+function ProductionActivityCard({
+  buckets,
+  days,
+  loading,
+  error,
+  onRetry,
+}: {
+  buckets: DayBucket[];
+  days: number;
+  loading?: boolean;
+  error?: boolean;
+  onRetry: () => void;
+}) {
+  const total = bucketTotal(buckets);
+  const delta = trendDelta(buckets);
+  return (
+    <SectionCard
+      className="dash-panel"
+      eyebrow="Trends"
+      title={
+        <span className="inline-flex items-center gap-2">
+          <Activity className="h-4 w-4 text-accent" strokeWidth={2.25} />
+          Production activity
+        </span>
+      }
+      description={`Output postings per day · last ${days} days`}
+      footer={<span>Source: production actuals · counts per day over {days} days</span>}
+    >
+      {loading ? (
+        <ChartSkeleton />
+      ) : error ? (
+        <ErrorAlert label="Production activity unavailable." onRetry={onRetry} />
+      ) : total === 0 ? (
+        <EmptyState
+          icon={<PackageSearch className="h-5 w-5 text-fg-subtle" strokeWidth={2} />}
+          title={`No production in the last ${days} days.`}
+          description="No production-actual postings were recorded in this window."
+        />
+      ) : (
+        <div className="flex flex-col gap-3">
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <div className="text-4xl font-semibold tabular-nums tracking-tighter text-fg-strong">
+                {total.toLocaleString()}
+              </div>
+              <div className="mt-0.5 text-xs text-fg-muted">postings · last {days} days</div>
+            </div>
+            <TrendChip delta={delta} days={days} />
+          </div>
+          <TrendAreaChart
+            buckets={buckets}
+            unitLabel="postings"
+            ariaLabel={`Production postings per day over the last ${days} days. ${total} total. Use arrow keys to inspect each day.`}
+          />
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+function MovementFlowCard({
+  buckets,
+  days,
+  loading,
+  error,
+  onRetry,
+}: {
+  buckets: FlowDayBucket[];
+  days: number;
+  loading?: boolean;
+  error?: boolean;
+  onRetry: () => void;
+}) {
+  const inboundTotal = buckets.reduce((s, b) => s + b.inbound, 0);
+  const outboundTotal = buckets.reduce((s, b) => s + b.outbound, 0);
+  const total = inboundTotal + outboundTotal;
+  return (
+    <SectionCard
+      className="dash-panel"
+      eyebrow="Trends"
+      title={
+        <span className="inline-flex items-center gap-2">
+          <ArrowLeftRight className="h-4 w-4 text-accent" strokeWidth={2.25} />
+          Stock movement flow
+        </span>
+      }
+      description={`Inbound vs outbound postings per day · last ${days} days`}
+      footer={<span>Source: stock ledger · counts per day over {days} days</span>}
+    >
+      {loading ? (
+        <ChartSkeleton />
+      ) : error ? (
+        <ErrorAlert label="Stock movement flow unavailable." onRetry={onRetry} />
+      ) : total === 0 ? (
+        <EmptyState
+          icon={<Inbox className="h-5 w-5 text-fg-subtle" strokeWidth={2} />}
+          title={`No movements in the last ${days} days.`}
+          description="No rows were posted to the stock ledger in this window."
+        />
+      ) : (
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="dot bg-success" aria-hidden />
+              <span className="text-fg-muted">Inbound</span>
+              <span className="font-semibold tabular-nums text-fg-strong">
+                {inboundTotal.toLocaleString()}
+              </span>
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="dot bg-fg-subtle" aria-hidden />
+              <span className="text-fg-muted">Outbound</span>
+              <span className="font-semibold tabular-nums text-fg-strong">
+                {outboundTotal.toLocaleString()}
+              </span>
+            </span>
+          </div>
+          <MovementBars
+            buckets={buckets}
+            ariaLabel={`Stock movement postings per day over the last ${days} days: ${inboundTotal} inbound, ${outboundTotal} outbound. Use arrow keys to inspect each day.`}
+          />
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+// Indicative inventory-value trend (RM+PKG). Honest about its nature: anchored
+// to today's real snapshot value, reconstructed backward from real movements
+// priced at current cost, and degrades to a calm state when cost coverage is
+// too low to be trustworthy. Gated to cost-aware roles by the caller.
+function InventoryValueCard({
+  result,
+  anchorValue,
+  days,
+  loading,
+  error,
+  onRetry,
+}: {
+  result: ValueTrendResult | null;
+  anchorValue: number | null;
+  days: number;
+  loading?: boolean;
+  error?: boolean;
+  onRetry: () => void;
+}) {
+  const points = result?.points ?? [];
+  const coveragePct = result ? Math.round(result.coverage * 100) : 0;
+  const lowCoverage = !!result && result.movementCount > 0 && result.coverage < 0.5;
+  const first = points[0]?.value ?? null;
+  const change = anchorValue !== null && first !== null ? anchorValue - first : null;
+  const changePct = change !== null && first ? (change / first) * 100 : null;
+  const footerNote =
+    result && result.movementCount === 0
+      ? "Indicative · no stock movements in this window"
+      : `Indicative · reconstructed from movements at current cost · ${coveragePct}% cost coverage`;
+
+  return (
+    <SectionCard
+      className="dash-panel"
+      eyebrow="Trends"
+      title={
+        <span className="inline-flex items-center gap-2">
+          <LineChart className="h-4 w-4 text-info" strokeWidth={2.25} />
+          Inventory value
+          <span className="rounded-full bg-bg-muted px-1.5 py-0.5 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+            Indicative
+          </span>
+        </span>
+      }
+      description={`RM + packaging value · reconstructed · last ${days} days`}
+      footer={<span>{footerNote}</span>}
+    >
+      {loading ? (
+        <ChartSkeleton />
+      ) : error ? (
+        <ErrorAlert label="Inventory value trend unavailable." onRetry={onRetry} />
+      ) : anchorValue === null || result === null ? (
+        <EmptyState
+          icon={<Coins className="h-5 w-5 text-fg-subtle" strokeWidth={2} />}
+          title="Inventory value unavailable."
+          description="The current stock-value snapshot is needed to anchor the trend."
+        />
+      ) : lowCoverage ? (
+        <EmptyState
+          icon={<LineChart className="h-5 w-5 text-fg-subtle" strokeWidth={2} />}
+          title="Not enough cost coverage to reconstruct."
+          description={`Only ${coveragePct}% of stock movements in this window resolved to a unit cost, so a value line would be misleading.`}
+        />
+      ) : (
+        <div className="flex flex-col gap-3">
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <div
+                className="text-4xl font-semibold tabular-nums tracking-tighter text-fg-strong"
+                title={fmtILS(anchorValue)}
+              >
+                {fmtILSCompact(anchorValue)}
+              </div>
+              <div className="mt-0.5 text-xs text-fg-muted">RM + packaging · today</div>
+            </div>
+            {change !== null ? (
+              <span
+                className={cn(
+                  "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-semibold tabular-nums",
+                  Math.abs(change) < 1
+                    ? "bg-bg-muted text-fg-subtle"
+                    : change > 0
+                      ? "bg-success/15 text-success"
+                      : "bg-bg-muted text-fg-subtle",
+                )}
+                title={`Change over the last ${days} days (indicative).`}
+              >
+                {change > 0 ? (
+                  <TrendingUp className="h-3 w-3" strokeWidth={2.25} aria-hidden />
+                ) : change < 0 ? (
+                  <TrendingDown className="h-3 w-3" strokeWidth={2.25} aria-hidden />
+                ) : (
+                  <Minus className="h-3 w-3" strokeWidth={2.25} aria-hidden />
+                )}
+                {change >= 0 ? "+" : "−"}
+                {fmtILSCompact(Math.abs(change))}
+                {changePct !== null ? ` (${changePct >= 0 ? "+" : ""}${Math.round(changePct)}%)` : ""}
+              </span>
+            ) : null}
+          </div>
+          <TrendAreaChart
+            buckets={points}
+            tone="info"
+            zeroBased={false}
+            unitLabel="indicative value"
+            formatValue={(v) => fmtILSCompact(v)}
+            ariaLabel={`Indicative RM and packaging inventory value over the last ${days} days, reconstructed from stock movements. Current value ${fmtILS(
+              anchorValue,
+            )}. Use arrow keys to inspect each day.`}
+          />
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Critical Today block — graduated v2 implementation. Full state hygiene.
 // ---------------------------------------------------------------------------
 function CriticalTodayBlock({ now }: { now: Date }) {
@@ -1627,6 +1959,15 @@ export default function DashboardPage() {
   // Gate it here so the query never mounts for viewers/operators.
   const role = session?.role ?? "viewer";
   const canSeePurchasing = role === "planner" || role === "admin";
+  // The indicative inventory-value trend reads per-item unit costs from the
+  // economics surface, so it is gated to the same cost-aware roles as
+  // purchasing — viewers/operators never see (or fetch) cost data.
+  const canSeeValueTrend = role === "planner" || role === "admin";
+
+  // Shared range for the operational-trends band (7 / 14 / 30 days). The trend
+  // queries already fetch a 30-day-deep window, so switching range only
+  // re-aggregates client-side — no refetch.
+  const [rangeDays, setRangeDays] = useState<number>(TREND_DAYS);
 
   // Inventory flow drives Stock Health + Shortage Risk + on-hand context.
   const flowQ = useInventoryFlow({});
@@ -1685,6 +2026,36 @@ export default function DashboardPage() {
       fetchJson<LedgerResponse>("/api/stock/ledger?limit=3", signal),
     staleTime: STALE_TIME_MS,
     refetchInterval: STALE_TIME_MS,
+  });
+
+  // Trend queries (tranche 039) — larger windows, aggregated client-side into
+  // per-day counts. Separate query keys so the recent-snapshot panels above
+  // keep their own (smaller) caches untouched.
+  const prodTrendQ = useQuery({
+    queryKey: QK_PROD_TREND,
+    queryFn: ({ signal }) =>
+      fetchJson<ProductionActualsResponse>(
+        `/api/production-actuals/history?limit=${TREND_ROW_LIMIT}`,
+        signal,
+      ),
+    staleTime: STALE_TIME_MS,
+  });
+
+  const movementsTrendQ = useQuery({
+    queryKey: QK_MOVEMENTS_TREND,
+    queryFn: ({ signal }) =>
+      fetchJson<LedgerResponse>(`/api/stock/ledger?limit=${TREND_ROW_LIMIT}`, signal),
+    staleTime: STALE_TIME_MS,
+  });
+
+  // Per-item current unit costs for the indicative value reconstruction.
+  // Gated to cost-aware roles; the query simply never mounts otherwise.
+  const valueCostsQ = useQuery({
+    queryKey: QK_VALUE_COSTS,
+    queryFn: ({ signal }) =>
+      fetchJson<RawMaterialCostResponse>("/api/economics/raw-materials", signal),
+    staleTime: 120_000,
+    enabled: canSeeValueTrend,
   });
 
   // Mirror queries for the at-a-glance factory-state chip. These share
@@ -1790,6 +2161,58 @@ export default function DashboardPage() {
 
   // Derived: recent stock-ledger movements (3 most recent).
   const recentMovements = movementsQ.data?.rows ?? movementsQ.data?.data ?? [];
+
+  // Derived: production activity trend — count of output postings per day over
+  // the trend window (UOM-agnostic; never sums mixed-unit quantities).
+  const prodTrend = useMemo<DayBucket[]>(() => {
+    const rows = prodTrendQ.data?.rows ?? prodTrendQ.data?.data ?? [];
+    const timestamps = rows.map((r) => r.produced_at ?? r.submitted_at ?? null);
+    return dailyCounts(timestamps, rangeDays, now);
+  }, [prodTrendQ.data, now, rangeDays]);
+
+  // Derived: stock movement flow — inbound vs outbound postings per day.
+  // Direction reuses the page's single-source MOVEMENT_REGISTRY (via moveMeta);
+  // movement kinds without an explicit in/out direction fall back to the sign
+  // of qty_delta so reversals/audits still land on the correct side.
+  const movementFlow = useMemo<FlowDayBucket[]>(() => {
+    const rows = movementsTrendQ.data?.rows ?? movementsTrendQ.data?.data ?? [];
+    const mapped = rows.map((r) => {
+      const dir = moveMeta(r.movement_type).dir;
+      const direction: "in" | "out" =
+        dir === "in" ? "in" : dir === "out" ? "out" : toNum(r.qty_delta) >= 0 ? "in" : "out";
+      return { when: r.posted_at ?? r.event_at ?? null, direction };
+    });
+    return dailyFlow(mapped, rangeDays, now);
+  }, [movementsTrendQ.data, now, rangeDays]);
+
+  // Derived: indicative inventory-value trend (RM+PKG). Anchored to today's
+  // real snapshot value (stockValue.rmValue) and reconstructed backward from
+  // real stock movements priced at current unit cost. See _lib/value-trend.ts.
+  const valueTrend = useMemo<ValueTrendResult | null>(() => {
+    if (!canSeeValueTrend) return null;
+    const anchor = stockValue.rmValue;
+    if (anchor === null) return null;
+    const costRows = valueCostsQ.data?.rows ?? valueCostsQ.data?.data ?? [];
+    const costMap = new Map<string, number>();
+    for (const r of costRows) {
+      const c = r.effective_cost_ils == null ? NaN : Number(r.effective_cost_ils);
+      if (!Number.isNaN(c)) costMap.set(r.component_id, c);
+    }
+    const ledgerRows = movementsTrendQ.data?.rows ?? movementsTrendQ.data?.data ?? [];
+    const movements: ValueMovement[] = ledgerRows.map((r) => ({
+      when: r.posted_at ?? r.event_at ?? null,
+      item_id: r.item_id,
+      item_type: r.item_type,
+      qty_delta: toNum(r.qty_delta),
+    }));
+    return reconstructValueSeries(
+      anchor,
+      movements,
+      (id) => (costMap.has(id) ? (costMap.get(id) as number) : null),
+      rangeDays,
+      now,
+    );
+  }, [canSeeValueTrend, stockValue.rmValue, valueCostsQ.data, movementsTrendQ.data, rangeDays, now]);
 
   // Derived: open purchase orders. "Open" = not yet fully received, i.e.
   // status OPEN or PARTIAL. Late = an open PO whose expected receive date
@@ -1969,6 +2392,55 @@ export default function DashboardPage() {
       <div className="reveal reveal-delay-5">
         <SlippedPlansBlock now={now} />
       </div>
+
+      {/* Operational trends — the dashboard's time-series band. Activity charts
+          count postings per day (honest, UOM-agnostic); the inventory-value
+          card is an explicitly-indicative reconstruction. A shared range
+          selector drives all charts. */}
+      <section className="reveal reveal-delay-6 flex flex-col gap-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <div>
+            <div className="text-2xs font-semibold uppercase tracking-sops text-accent">
+              Operational trends
+            </div>
+            <h2 className="text-lg font-bold tracking-tight text-fg-strong">
+              The last {rangeDays} days at a glance
+            </h2>
+          </div>
+          <RangeSelector value={rangeDays} onChange={setRangeDays} options={[...TREND_RANGES]} />
+        </div>
+        <div
+          className={cn(
+            "grid grid-cols-1 gap-4",
+            canSeeValueTrend ? "lg:grid-cols-2 xl:grid-cols-3" : "lg:grid-cols-2",
+          )}
+        >
+          <ProductionActivityCard
+            buckets={prodTrend}
+            days={rangeDays}
+            loading={prodTrendQ.isLoading}
+            error={prodTrendQ.isError}
+            onRetry={() => prodTrendQ.refetch()}
+          />
+          <MovementFlowCard
+            buckets={movementFlow}
+            days={rangeDays}
+            loading={movementsTrendQ.isLoading}
+            error={movementsTrendQ.isError}
+            onRetry={() => movementsTrendQ.refetch()}
+          />
+          {canSeeValueTrend ? (
+            <InventoryValueCard
+              result={valueTrend}
+              anchorValue={stockValue.rmValue}
+              days={rangeDays}
+              loading={valueQ.isLoading || valueCostsQ.isLoading}
+              error={valueCostsQ.isError}
+              onRetry={() => valueCostsQ.refetch()}
+            />
+          ) : null}
+        </div>
+      </section>
 
       {/* Shortage risk + stock health + planning. */}
       <div className="reveal reveal-delay-6 grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
