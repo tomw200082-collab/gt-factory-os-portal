@@ -65,6 +65,7 @@ import { useMemo } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import {
+  Activity,
   AlertTriangle,
   ArrowLeftRight,
   ArrowRight,
@@ -73,11 +74,13 @@ import {
   Coins,
   Flame,
   Inbox,
+  Minus,
   PackageCheck,
   PackageSearch,
   RefreshCw,
   ShoppingCart,
   TrendingDown,
+  TrendingUp,
 } from "lucide-react";
 
 import { useInventoryFlow } from "@/app/(planning)/planning/inventory-flow/_lib/useInventoryFlow";
@@ -99,6 +102,16 @@ import type {
 import { DashboardHero } from "./_components/DashboardHero";
 import { KpiTile, KpiTileBreakdown } from "./_components/KpiTile";
 import { StockHealthCard } from "./_components/StockHealthCard";
+import { MovementBars, TrendAreaChart } from "./_components/TrendChart";
+import {
+  bucketTotal,
+  dailyCounts,
+  dailyFlow,
+  trendDelta,
+  type DayBucket,
+  type FlowDayBucket,
+  type TrendDelta,
+} from "./_lib/trends";
 
 // ---------------------------------------------------------------------------
 // Cadence — keep low for the morning view; refresh on tab focus is the default.
@@ -121,6 +134,17 @@ const QK_SLIPPED_PLANS = ["dashboard", "slipped-plans"] as const;
 const QK_BREAK_GLASS = ["dashboard", "break-glass"] as const;
 const QK_PURCHASE_ORDERS = ["dashboard", "purchase-orders", "all"] as const;
 const QK_RECENT_MOVEMENTS = ["dashboard", "stock", "ledger", "recent"] as const;
+// Trend queries (tranche 039) — separate keys + larger windows than the
+// "recent" snapshots above, so the 3-row/5-row panels keep their own cache.
+const QK_PROD_TREND = ["dashboard", "production-actuals", "trend"] as const;
+const QK_MOVEMENTS_TREND = ["dashboard", "stock", "ledger", "trend"] as const;
+
+// Trend window — 14 days lets the activity charts show a fortnight at a glance
+// and gives trendDelta a clean 7-vs-prior-7 split.
+const TREND_DAYS = 14;
+// Upper bound on rows pulled for the trend aggregation. Generous enough to
+// cover a busy fortnight without unbounded payloads.
+const TREND_ROW_LIMIT = 300;
 
 // ---------------------------------------------------------------------------
 // API response types.
@@ -1192,6 +1216,172 @@ function RecentMovements({
 }
 
 // ---------------------------------------------------------------------------
+// Trend band (tranche 039) — the dashboard's first time-series visualisations.
+// Both charts aggregate the COUNT of postings per day (UOM-agnostic, honest)
+// rather than summed mixed-unit quantities. See _lib/trends.ts.
+// ---------------------------------------------------------------------------
+
+// Neutral direction chip — "up" means more activity, not necessarily "good",
+// so the chip stays tonally neutral (accent for movement, muted for flat) and
+// never implies a value judgement.
+function TrendChip({ delta }: { delta: TrendDelta }) {
+  const Icon =
+    delta.direction === "up" ? TrendingUp : delta.direction === "down" ? TrendingDown : Minus;
+  const toneClass =
+    delta.direction === "flat"
+      ? "bg-bg-muted text-fg-subtle"
+      : "bg-accent-soft/50 text-accent";
+  const label =
+    delta.pct === null
+      ? "vs prior 7d"
+      : `${delta.pct >= 0 ? "+" : ""}${Math.round(delta.pct)}% vs prior 7d`;
+  return (
+    <span
+      className={cn(
+        "inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-2xs font-semibold tabular-nums",
+        toneClass,
+      )}
+      title="Most recent 7 days compared with the 7 days before."
+    >
+      <Icon className="h-3 w-3" strokeWidth={2.25} aria-hidden />
+      {label}
+    </span>
+  );
+}
+
+function ChartSkeleton() {
+  return (
+    <div className="flex flex-col gap-3">
+      <Skel h={20} w="40%" />
+      <Skel h={96} />
+    </div>
+  );
+}
+
+function ProductionActivityCard({
+  buckets,
+  loading,
+  error,
+  onRetry,
+}: {
+  buckets: DayBucket[];
+  loading?: boolean;
+  error?: boolean;
+  onRetry: () => void;
+}) {
+  const total = bucketTotal(buckets);
+  const delta = trendDelta(buckets);
+  return (
+    <SectionCard
+      className="dash-panel"
+      eyebrow="Trends"
+      title={
+        <span className="inline-flex items-center gap-2">
+          <Activity className="h-4 w-4 text-accent" strokeWidth={2.25} />
+          Production activity
+        </span>
+      }
+      description="Output postings per day · last 14 days"
+      footer={<span>Source: production actuals · counts per day over 14 days</span>}
+    >
+      {loading ? (
+        <ChartSkeleton />
+      ) : error ? (
+        <ErrorAlert label="Production activity unavailable." onRetry={onRetry} />
+      ) : total === 0 ? (
+        <EmptyState
+          icon={<PackageSearch className="h-5 w-5 text-fg-subtle" strokeWidth={2} />}
+          title="No production in the last 14 days."
+          description="No production-actual postings were recorded in this window."
+        />
+      ) : (
+        <div className="flex flex-col gap-3">
+          <div className="flex items-end justify-between gap-3">
+            <div>
+              <div className="text-4xl font-semibold tabular-nums tracking-tighter text-fg-strong">
+                {total.toLocaleString()}
+              </div>
+              <div className="mt-0.5 text-xs text-fg-muted">postings · last 14 days</div>
+            </div>
+            <TrendChip delta={delta} />
+          </div>
+          <TrendAreaChart
+            buckets={buckets}
+            unitLabel="postings"
+            ariaLabel={`Production postings per day over the last 14 days. ${total} total. Most recent 7 days ${delta.current}, prior 7 days ${delta.previous}.`}
+          />
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+function MovementFlowCard({
+  buckets,
+  loading,
+  error,
+  onRetry,
+}: {
+  buckets: FlowDayBucket[];
+  loading?: boolean;
+  error?: boolean;
+  onRetry: () => void;
+}) {
+  const inboundTotal = buckets.reduce((s, b) => s + b.inbound, 0);
+  const outboundTotal = buckets.reduce((s, b) => s + b.outbound, 0);
+  const total = inboundTotal + outboundTotal;
+  return (
+    <SectionCard
+      className="dash-panel"
+      eyebrow="Trends"
+      title={
+        <span className="inline-flex items-center gap-2">
+          <ArrowLeftRight className="h-4 w-4 text-accent" strokeWidth={2.25} />
+          Stock movement flow
+        </span>
+      }
+      description="Inbound vs outbound postings per day · last 14 days"
+      footer={<span>Source: stock ledger · counts per day over 14 days</span>}
+    >
+      {loading ? (
+        <ChartSkeleton />
+      ) : error ? (
+        <ErrorAlert label="Stock movement flow unavailable." onRetry={onRetry} />
+      ) : total === 0 ? (
+        <EmptyState
+          icon={<Inbox className="h-5 w-5 text-fg-subtle" strokeWidth={2} />}
+          title="No movements in the last 14 days."
+          description="No rows were posted to the stock ledger in this window."
+        />
+      ) : (
+        <div className="flex flex-col gap-3">
+          <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs">
+            <span className="inline-flex items-center gap-1.5">
+              <span className="dot bg-success" aria-hidden />
+              <span className="text-fg-muted">Inbound</span>
+              <span className="font-semibold tabular-nums text-fg-strong">
+                {inboundTotal.toLocaleString()}
+              </span>
+            </span>
+            <span className="inline-flex items-center gap-1.5">
+              <span className="dot bg-fg-subtle" aria-hidden />
+              <span className="text-fg-muted">Outbound</span>
+              <span className="font-semibold tabular-nums text-fg-strong">
+                {outboundTotal.toLocaleString()}
+              </span>
+            </span>
+          </div>
+          <MovementBars
+            buckets={buckets}
+            ariaLabel={`Stock movement postings per day over the last 14 days: ${inboundTotal} inbound, ${outboundTotal} outbound.`}
+          />
+        </div>
+      )}
+    </SectionCard>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Critical Today block — graduated v2 implementation. Full state hygiene.
 // ---------------------------------------------------------------------------
 function CriticalTodayBlock({ now }: { now: Date }) {
@@ -1687,6 +1877,26 @@ export default function DashboardPage() {
     refetchInterval: STALE_TIME_MS,
   });
 
+  // Trend queries (tranche 039) — larger windows, aggregated client-side into
+  // per-day counts. Separate query keys so the recent-snapshot panels above
+  // keep their own (smaller) caches untouched.
+  const prodTrendQ = useQuery({
+    queryKey: QK_PROD_TREND,
+    queryFn: ({ signal }) =>
+      fetchJson<ProductionActualsResponse>(
+        `/api/production-actuals/history?limit=${TREND_ROW_LIMIT}`,
+        signal,
+      ),
+    staleTime: STALE_TIME_MS,
+  });
+
+  const movementsTrendQ = useQuery({
+    queryKey: QK_MOVEMENTS_TREND,
+    queryFn: ({ signal }) =>
+      fetchJson<LedgerResponse>(`/api/stock/ledger?limit=${TREND_ROW_LIMIT}`, signal),
+    staleTime: STALE_TIME_MS,
+  });
+
   // Mirror queries for the at-a-glance factory-state chip. These share
   // queryKeys with the inline block components (CriticalTodayBlock and
   // SlippedPlansBlock), so React Query dedupes — no extra network traffic.
@@ -1790,6 +2000,29 @@ export default function DashboardPage() {
 
   // Derived: recent stock-ledger movements (3 most recent).
   const recentMovements = movementsQ.data?.rows ?? movementsQ.data?.data ?? [];
+
+  // Derived: production activity trend — count of output postings per day over
+  // the trend window (UOM-agnostic; never sums mixed-unit quantities).
+  const prodTrend = useMemo<DayBucket[]>(() => {
+    const rows = prodTrendQ.data?.rows ?? prodTrendQ.data?.data ?? [];
+    const timestamps = rows.map((r) => r.produced_at ?? r.submitted_at ?? null);
+    return dailyCounts(timestamps, TREND_DAYS, now);
+  }, [prodTrendQ.data, now]);
+
+  // Derived: stock movement flow — inbound vs outbound postings per day.
+  // Direction reuses the page's single-source MOVEMENT_REGISTRY (via moveMeta);
+  // movement kinds without an explicit in/out direction fall back to the sign
+  // of qty_delta so reversals/audits still land on the correct side.
+  const movementFlow = useMemo<FlowDayBucket[]>(() => {
+    const rows = movementsTrendQ.data?.rows ?? movementsTrendQ.data?.data ?? [];
+    const mapped = rows.map((r) => {
+      const dir = moveMeta(r.movement_type).dir;
+      const direction: "in" | "out" =
+        dir === "in" ? "in" : dir === "out" ? "out" : toNum(r.qty_delta) >= 0 ? "in" : "out";
+      return { when: r.posted_at ?? r.event_at ?? null, direction };
+    });
+    return dailyFlow(mapped, TREND_DAYS, now);
+  }, [movementsTrendQ.data, now]);
 
   // Derived: open purchase orders. "Open" = not yet fully received, i.e.
   // status OPEN or PARTIAL. Late = an open PO whose expected receive date
@@ -1968,6 +2201,23 @@ export default function DashboardPage() {
       ) : null}
       <div className="reveal reveal-delay-5">
         <SlippedPlansBlock now={now} />
+      </div>
+
+      {/* Operational trends — the dashboard's time-series band. Counts per day
+          over the last 14 days; honest UOM-agnostic activity signals. */}
+      <div className="reveal reveal-delay-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
+        <ProductionActivityCard
+          buckets={prodTrend}
+          loading={prodTrendQ.isLoading}
+          error={prodTrendQ.isError}
+          onRetry={() => prodTrendQ.refetch()}
+        />
+        <MovementFlowCard
+          buckets={movementFlow}
+          loading={movementsTrendQ.isLoading}
+          error={movementsTrendQ.isError}
+          onRetry={() => movementsTrendQ.refetch()}
+        />
       </div>
 
       {/* Shortage risk + stock health + planning. */}
