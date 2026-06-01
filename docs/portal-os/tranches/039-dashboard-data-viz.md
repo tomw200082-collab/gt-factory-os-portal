@@ -56,12 +56,24 @@ a calm empty state when there is no activity in the window.
 ## Manifest (files that may be touched)
 manifest:
   - src/app/(shared)/dashboard/_lib/trends.ts
+  - src/app/(shared)/dashboard/_lib/value-trend.ts
   - src/app/(shared)/dashboard/_components/TrendChart.tsx
   - src/app/(shared)/dashboard/page.tsx
   - tests/unit/features/dashboard-trends.test.ts
+  - tests/unit/features/dashboard-value-trend.test.ts
   - docs/portal-os/tranches/039-dashboard-data-viz.md
   - docs/portal-os/tranches/_active.txt
   - docs/portal-os/registry.md
+
+## Iteration 2 (2026-06-01) — value trend + interactivity
+Added after Tom reviewed the first cut:
+- **Inventory value trend (indicative)** — `_lib/value-trend.ts` reconstructs an
+  RM+PKG value series anchored to today's real snapshot, priced from the
+  economics surface; reports a coverage ratio and degrades to an honest empty
+  state below 50% coverage. Gated to planner/admin (cost-aware roles).
+- **Meaningful interactivity** — `TrendChart.tsx` gains a pointer/touch/keyboard
+  crosshair + tooltip, an aria-live announcement, and a shared 7/14/30-day
+  `RangeSelector` driving the whole band.
 
 ## Revive directives (if any)
 revive: []
