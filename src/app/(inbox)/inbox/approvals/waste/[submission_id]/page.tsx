@@ -108,7 +108,7 @@ async function callReject(
 function friendlyWasteConflict(reasonCode: string, fallbackDetail: string): string {
   switch (reasonCode) {
     case "SELF_APPROVAL_FORBIDDEN":
-      return "You cannot approve your own submission. Ask another planner or admin to review it.";
+      return "You cannot approve your own submission. Admin and planner roles may self-approve; operator and viewer cannot. Ask another reviewer if you do not have the right role.";
     case "NOT_PENDING":
       return "This submission is no longer pending — another reviewer may have already actioned it. Refresh the inbox.";
     case "IDEMPOTENCY_KEY_REUSED":
@@ -330,19 +330,23 @@ export default function WasteReviewPage() {
         </div>
       ) : null}
 
-      {/* Preemptive self-approval guard. Waste forbids self-approval for
-          every role (handler enforces 409 SELF_APPROVAL_FORBIDDEN). Disable
-          the action sections in the UI when the reviewer is the submitter
-          so they don't have to learn the rule by hitting a 409. */}
-      {d?.submitted_by_user_id && d.submitted_by_user_id === session.user_id ? (
+      {/* Preemptive self-approval guard. Per design 2026-04-30 §A.3 #1
+          (Tom-locked) admin and planner roles MAY self-approve their own
+          waste/adjustment; operator and viewer cannot (handler enforces 409
+          SELF_APPROVAL_FORBIDDEN). This UI block matches that policy so only
+          the disallowed roles see it — mirrors the physical-count screen. */}
+      {d?.submitted_by_user_id &&
+      d.submitted_by_user_id === session.user_id &&
+      session.role !== "admin" &&
+      session.role !== "planner" ? (
         <div
           className="mb-5 rounded-md border border-warning/40 bg-warning-softer/60 p-4 text-sm text-warning-fg"
           data-testid="waste-review-self-approval-block"
         >
           <div className="font-semibold">You cannot approve your own submission</div>
           <div className="mt-1 text-xs">
-            Waste adjustments must be reviewed by a different planner or admin.
-            Ask another reviewer to open this submission from the inbox.
+            Only admin or planner roles may self-approve a waste adjustment. Ask
+            a planner or admin to review your submission from the inbox.
           </div>
         </div>
       ) : null}
@@ -365,7 +369,13 @@ export default function WasteReviewPage() {
             type="button"
             data-testid="waste-review-approve"
             className="btn btn-lg btn-primary"
-            disabled={busy || (d?.submitted_by_user_id != null && d.submitted_by_user_id === session.user_id)}
+            disabled={
+              busy ||
+              (d?.submitted_by_user_id != null &&
+                d.submitted_by_user_id === session.user_id &&
+                session.role !== "admin" &&
+                session.role !== "planner")
+            }
             onClick={handleApprove}
           >
             {busy ? "Submitting…" : "Approve adjustment"}
@@ -391,7 +401,14 @@ export default function WasteReviewPage() {
             type="button"
             data-testid="waste-review-reject"
             className="btn btn-lg btn-danger"
-            disabled={busy || !rejectionReason.trim() || (d?.submitted_by_user_id != null && d.submitted_by_user_id === session.user_id)}
+            disabled={
+              busy ||
+              !rejectionReason.trim() ||
+              (d?.submitted_by_user_id != null &&
+                d.submitted_by_user_id === session.user_id &&
+                session.role !== "admin" &&
+                session.role !== "planner")
+            }
             onClick={handleReject}
           >
             {busy ? "Submitting…" : "Reject adjustment"}
