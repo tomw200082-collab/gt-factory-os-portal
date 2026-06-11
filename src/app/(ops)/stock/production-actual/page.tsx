@@ -418,6 +418,11 @@ interface DoneState {
   // consumption table can resolve component names after setSnapshot(null)
   // clears the live form state.
   committedSnapshot?: ProductionActualOpenResponse;
+  // Tranche 048 (C7) — the linked plan row captured at commit time.
+  // fromPlanId is cleared on success (which nulls the derived `linkedPlan`),
+  // so the success panel reads the plan from here for the variance row and
+  // the "Re-plan remainder" action.
+  committedPlan?: ProductionPlanRow | null;
 }
 
 // Decimal-string arithmetic helpers (keep server-side precision intact for
@@ -780,6 +785,14 @@ export default function ProductionActualPage() {
   const [previewExpanded, setPreviewExpanded] = useState<boolean>(true);
   const [done, setDone] = useState<DoneState | null>(null);
 
+  // Tranche 048 (C7) — inline state for the "Re-plan remainder" action on
+  // the success panel. Reset on every fresh submit and on resetFlow.
+  const [replan, setReplan] = useState<{
+    state: "idle" | "pending" | "success" | "error";
+    message?: string;
+    plannedForDate?: string;
+  }>({ state: "idle" });
+
   // Combined loading guard. Pick screen waits for items; once snapshot is
   // resolved we don't need items anymore.
   const isLoadingItems = itemsQuery.isLoading;
@@ -945,7 +958,12 @@ export default function ProductionActualPage() {
             // Tranche 041 — capture the snapshot before setSnapshot(null)
             // below, so the consumption table keeps resolving names.
             committedSnapshot: snapshot,
+            // Tranche 048 (C7) — capture the linked plan row before
+            // setFromPlanId(null) below clears the derived `linkedPlan`.
+            committedPlan: committed.linked_plan_id ? linkedPlan : null,
           });
+          // Tranche 048 (C7) — a fresh submit resets any prior re-plan state.
+          setReplan({ state: "idle" });
           // Refresh the recent-runs history so the new submission appears.
           void queryClient.invalidateQueries({
             queryKey: ["production-actuals", "history"],
@@ -1161,6 +1179,9 @@ export default function ProductionActualPage() {
       isAdmin,
       queryClient,
       router,
+      // Tranche 048 (C7) — keep the captured committedPlan in sync with the
+      // plan row visible at submit time.
+      linkedPlan,
     ],
   );
 
@@ -1193,6 +1214,71 @@ export default function ProductionActualPage() {
     setPhase("pick");
     setEventAt(nowLocalDateTime());
     setPreviewExpanded(false);
+    setReplan({ state: "idle" });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Tranche 048 (C7 Tier 1) — re-plan the under-produced remainder for
+  // tomorrow. POSTs a new production_plan row through the same endpoint and
+  // body shape the plan board's ManualAddModal uses
+  // (POST /api/production-plan, see production-plan/_lib/usePlans.ts
+  // useCreatePlan), with a note linking back to the original plan + report.
+  // Plans never write stock — this only adds a row to the board.
+  // ---------------------------------------------------------------------------
+  function computeReplanRemainder(d: DoneState): number | null {
+    if (!d.committed || !d.committedPlan) return null;
+    const planned = Number(d.committedPlan.planned_qty);
+    const output = Number(d.committed.output_qty);
+    if (!Number.isFinite(planned) || !Number.isFinite(output)) return null;
+    // Round away float dust; quantities are 4dp at most in the preview math.
+    const remainder = Math.round((planned - output) * 1e4) / 1e4;
+    return remainder > 0 ? remainder : null;
+  }
+
+  async function handleReplanRemainder(): Promise<void> {
+    if (!done?.committed || !done.committedPlan) return;
+    const remainder = computeReplanRemainder(done);
+    if (remainder === null) return;
+    const t = new Date();
+    t.setDate(t.getDate() + 1);
+    const pad = (n: number) => String(n).padStart(2, "0");
+    const tomorrow = `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`;
+    setReplan({ state: "pending" });
+    try {
+      const res = await fetch("/api/production-plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          idempotency_key: newIdempotencyKey(),
+          plan_type: "production",
+          plan_date: tomorrow,
+          item_id: done.committed.item_id,
+          planned_qty: remainder,
+          uom: done.committedPlan.uom ?? done.committed.output_uom,
+          notes: `Re-planned remainder of plan ${done.committed.linked_plan_id} (production report ${done.committed.submission_id}).`,
+        }),
+      });
+      if (!res.ok) {
+        const message =
+          res.status === 403
+            ? "You don't have permission to add plans (planner or admin role required)."
+            : res.status === 422
+              ? "The plan data was rejected. Add the remainder manually on the plan board."
+              : res.status === 503
+                ? "The system is locked right now. Try again later."
+                : `Could not add the plan (HTTP ${res.status}).`;
+        setReplan({ state: "error", message });
+        return;
+      }
+      // Refresh the board so the new row shows on next navigation.
+      void queryClient.invalidateQueries({ queryKey: ["production-plan"] });
+      setReplan({ state: "success", plannedForDate: tomorrow });
+    } catch {
+      setReplan({
+        state: "error",
+        message: "Network error adding the plan. Check your connection and try again.",
+      });
+    }
   }
 
   function restartFromStep1(): void {
@@ -1300,6 +1386,23 @@ export default function ProductionActualPage() {
     if (!Number.isFinite(out) || !Number.isFinite(scrap)) return null;
     return out + scrap;
   }, [outputQty, scrapQty]);
+
+  // ---------------------------------------------------------------------------
+  // Tranche 048 (C6) — one-tap "exactly as planned" fast path. Shown only
+  // when the form was opened from a plan card (?from_plan_id=), the plan is
+  // live, and the quantity fields are untouched (output still equals the
+  // plan's suggested quantity, no scrap). Editing the quantity hides the
+  // panel; the full form below always remains available.
+  // ---------------------------------------------------------------------------
+  const oneTapEligible =
+    Boolean(fromPlanId) &&
+    linkedPlan !== null &&
+    linkedPlan.rendered_state === "planned" &&
+    snapshot !== null &&
+    canSubmit &&
+    outputQty.trim() !== "" &&
+    Number(outputQty) === Number(linkedPlan.planned_qty) &&
+    Number(scrapQty || "0") === 0;
 
   // Stepper helpers.
   function stepNum(
@@ -1624,31 +1727,41 @@ export default function ProductionActualPage() {
                 </div>
               )}
 
-              {done.committed.linked_plan_id ? (
-                <div>
-                  Linked plan:{" "}
-                  <span className="font-mono">
-                    {done.committed.linked_plan_id}
-                  </span>
-                  {linkedPlan ? (
-                    <span className="text-fg-muted">
-                      {" "}· {fmtPlanDate(linkedPlan.plan_date)} ·{" "}
-                      {linkedPlan.item_name ?? linkedPlan.item_id}
+              {done.committed.linked_plan_id ? (() => {
+                // Tranche 048 — fromPlanId is cleared on success, so the
+                // derived `linkedPlan` is null here; read the commit-time
+                // capture instead (with the live row as a fallback).
+                const plan = done.committedPlan ?? linkedPlan;
+                return (
+                  <div>
+                    Linked plan:{" "}
+                    <span className="font-mono">
+                      {done.committed.linked_plan_id}
                     </span>
-                  ) : null}
-                </div>
-              ) : null}
+                    {plan ? (
+                      <span className="text-fg-muted">
+                        {" "}· {fmtPlanDate(plan.plan_date)} ·{" "}
+                        {plan.item_name ?? plan.item_id}
+                      </span>
+                    ) : null}
+                  </div>
+                );
+              })() : null}
 
               {/* W4 contract §4.1 — variance row on confirmation panel.
                   Shown only when the submission was linked to a plan AND
                   the form still has the linked plan in state (carries
                   planned_qty + uom). On no-link submits (§4.1.1) the
                   variance row is omitted entirely. */}
-              {done.committed.linked_plan_id && linkedPlan ? (
+              {done.committed.linked_plan_id && (done.committedPlan ?? linkedPlan) ? (
                 (() => {
+                  // Tranche 048 — read the commit-time plan capture; the
+                  // derived `linkedPlan` is already null at this point
+                  // because the success path clears fromPlanId.
+                  const plan = (done.committedPlan ?? linkedPlan)!;
                   const v = computeVariance(
                     done.committed.output_qty,
-                    linkedPlan.planned_qty,
+                    plan.planned_qty,
                   );
                   const isOnTarget = v.variance_sign === "on_target";
                   const borderColor =
@@ -1676,7 +1789,7 @@ export default function ProductionActualPage() {
                         <span>
                           Plan:{" "}
                           <span className="font-mono tabular-nums">
-                            {fmtNumStr(linkedPlan.planned_qty)} {linkedPlan.uom}
+                            {fmtNumStr(plan.planned_qty)} {plan.uom}
                           </span>
                         </span>
                         <span>
@@ -1720,6 +1833,83 @@ export default function ProductionActualPage() {
                   );
                 })()
               ) : null}
+
+              {/* Tranche 048 (C7 Tier 1) — when a plan-linked report came in
+                  under plan beyond the on-target band (±2%), offer to
+                  re-plan the remainder for tomorrow. Creates a new plan row
+                  only; stock is unaffected. */}
+              {done.committed.linked_plan_id &&
+              done.committedPlan &&
+              computeVariance(
+                done.committed.output_qty,
+                done.committedPlan.planned_qty,
+              ).variance_sign === "under" &&
+              computeReplanRemainder(done) !== null ? (() => {
+                const remainder = computeReplanRemainder(done)!;
+                const remUom =
+                  done.committedPlan!.uom ?? done.committed!.output_uom;
+                return (
+                  <div
+                    className="mt-2 rounded border border-warning/40 bg-warning-softer/30 px-3 py-2"
+                    data-testid="production-actual-replan-remainder"
+                  >
+                    {replan.state === "success" ? (
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-success-fg">
+                          Remainder of{" "}
+                          <span className="font-mono tabular-nums">
+                            {fmtNumStr(String(remainder))} {remUom}
+                          </span>{" "}
+                          planned for tomorrow
+                          {replan.plannedForDate
+                            ? ` (${fmtPlanDate(replan.plannedForDate)})`
+                            : ""}
+                          .
+                        </span>
+                        <Link
+                          href="/planning/production-plan"
+                          className="text-xs font-medium underline underline-offset-2 hover:no-underline"
+                        >
+                          View on the daily plan board
+                        </Link>
+                      </div>
+                    ) : (
+                      <>
+                        <div>
+                          Output came in{" "}
+                          <span className="font-mono tabular-nums">
+                            {fmtNumStr(String(remainder))} {remUom}
+                          </span>{" "}
+                          under plan. You can put the remainder back on
+                          tomorrow&apos;s board.
+                        </div>
+                        <div className="mt-2 flex flex-wrap items-center gap-2">
+                          <button
+                            type="button"
+                            className="btn btn-sm"
+                            disabled={replan.state === "pending"}
+                            onClick={() => void handleReplanRemainder()}
+                            data-testid="production-actual-replan-button"
+                          >
+                            {replan.state === "pending"
+                              ? "Planning…"
+                              : `Re-plan remainder (${fmtNumStr(String(remainder))} ${remUom} for tomorrow)`}
+                          </button>
+                          {replan.state === "error" && replan.message ? (
+                            <span
+                              className="text-3xs text-danger-fg"
+                              role="alert"
+                              data-testid="production-actual-replan-error"
+                            >
+                              {replan.message}
+                            </span>
+                          ) : null}
+                        </div>
+                      </>
+                    )}
+                  </div>
+                );
+              })() : null}
 
               <div className="font-mono text-3xs opacity-80">
                 ref: {done.committed.submission_id}
@@ -2104,6 +2294,41 @@ export default function ProductionActualPage() {
         <div data-testid="production-actual-step-2">
           {/* Step indicator */}
           <StepIndicator phase={phase} />
+
+          {/* Tranche 048 (C6) — one-tap confirm fast path. Same submit path
+              as the form's submit button (submitProductionActual with the
+              live plan link); the full form below stays available for
+              adjustments. */}
+          {oneTapEligible && linkedPlan ? (
+            <div
+              className="mb-5 rounded-lg border-2 border-accent/50 bg-accent/5 p-4 sm:p-5"
+              data-testid="production-actual-one-tap-panel"
+            >
+              <div className="text-base font-semibold text-fg-strong">
+                Confirm: produced{" "}
+                <span className="font-mono tabular-nums">
+                  {fmtNumStr(linkedPlan.planned_qty)}
+                </span>{" "}
+                {linkedPlan.uom} exactly as planned
+              </div>
+              <p className="mt-1 text-xs text-fg-muted">
+                One tap posts the production report with the planned quantity
+                and no scrap. Need to adjust? Use the full form below — the
+                fast path disappears once you change the quantity.
+              </p>
+              <button
+                type="button"
+                className="btn btn-lg btn-primary mt-3 w-full sm:w-auto"
+                disabled={phase === "submitting"}
+                onClick={() => void submitProductionActual(fromPlanId)}
+                data-testid="production-actual-one-tap-confirm"
+              >
+                {phase === "submitting"
+                  ? "Submitting…"
+                  : `Confirm — produced ${fmtNumStr(linkedPlan.planned_qty)} ${linkedPlan.uom}`}
+              </button>
+            </div>
+          ) : null}
 
           <form onSubmit={handleSubmit} className="space-y-5 pb-20">
             <SectionCard

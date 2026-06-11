@@ -258,11 +258,12 @@ export function ProductionJobCard({
             Report
           </Link>
 
-          {/* Edit + cancel */}
+          {/* Edit + cancel. INTER-010 (Tranche 048): min 32×32px touch
+              targets via padding only — the icon size is unchanged. */}
           <div className="flex items-center gap-1">
             <button
               type="button"
-              className="btn btn-ghost btn-xs"
+              className="btn btn-ghost btn-xs min-h-[32px] min-w-[32px]"
               onClick={() => onEdit(plan)}
               title="Edit plan"
               aria-label="Edit plan"
@@ -272,7 +273,7 @@ export function ProductionJobCard({
             </button>
             <button
               type="button"
-              className="btn btn-ghost btn-xs text-danger"
+              className="btn btn-ghost btn-xs min-h-[32px] min-w-[32px] text-danger"
               onClick={() => onCancel(plan)}
               title="Cancel plan"
               aria-label="Cancel plan"

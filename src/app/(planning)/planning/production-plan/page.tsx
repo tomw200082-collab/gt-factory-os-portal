@@ -24,6 +24,7 @@ import {
   PlayCircle,
   Boxes,
   StickyNote,
+  RefreshCw,
 } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
@@ -37,6 +38,7 @@ import {
   usePatchPlan,
   useRecommendationCandidates,
   FetchError,
+  PlanMutationError,
 } from "./_lib/usePlans";
 import {
   toIsoDate,
@@ -46,6 +48,13 @@ import {
   fmtWeekRange,
   fmtQty,
 } from "./_lib/helpers";
+import {
+  buildUomOptions,
+  computeTodaySummary,
+  fmtUpdatedTime,
+  groupFieldErrors,
+  type GroupedFieldErrors,
+} from "./_lib/board-summary";
 import { WeekTimelineRail } from "./_components/WeekTimelineRail";
 import { ProductionDayLane } from "./_components/ProductionDayLane";
 import type {
@@ -117,11 +126,47 @@ function fmtFeasibilityLabel(status: string): string {
   }
 }
 
+// Form fields the server's 422 validation errors can be mapped onto inline
+// (Tranche 048, INTER-004). Anything else lands in the general error block.
+const MANUAL_ADD_FIELDS = [
+  "plan_date",
+  "item_id",
+  "planned_qty",
+  "uom",
+  "notes",
+] as const;
+
+// Inline per-field server-error list (INTER-004).
+function ManualAddFieldErrors({
+  field,
+  serverErrors,
+}: {
+  field: string;
+  serverErrors: GroupedFieldErrors | null;
+}) {
+  const errors = serverErrors?.byField[field] ?? [];
+  if (errors.length === 0) return null;
+  return (
+    <div
+      className="mt-1 space-y-0.5"
+      data-testid={`manual-add-field-error-${field}`}
+    >
+      {errors.map((m, i) => (
+        <p key={i} className="text-3xs text-danger-fg" role="alert">
+          {m}
+        </p>
+      ))}
+    </div>
+  );
+}
+
 function ManualAddModal({
   defaultDate,
   onClose,
   onSubmit,
   isSubmitting,
+  uomOptions,
+  serverErrors,
 }: {
   defaultDate: string;
   onClose: () => void;
@@ -133,6 +178,8 @@ function ManualAddModal({
     notes?: string;
   }) => void;
   isSubmitting: boolean;
+  uomOptions: string[];
+  serverErrors: GroupedFieldErrors | null;
 }) {
   const itemsQuery = useProducibleItems();
   const [planDate, setPlanDate] = useState(defaultDate);
@@ -140,6 +187,14 @@ function ManualAddModal({
   const [qty, setQty] = useState("");
   const [uom, setUom] = useState("");
   const [notes, setNotes] = useState("");
+
+  // INTER-004 — UoM is a select over the known UoM universe. If the
+  // item-derived default (sales_uom) somehow isn't in the option list, keep
+  // it selectable rather than silently dropping the value.
+  const uomChoices = useMemo(
+    () => (uom && !uomOptions.includes(uom) ? [uom, ...uomOptions] : uomOptions),
+    [uom, uomOptions],
+  );
 
   const producibleItems = useMemo(() => {
     const rows = itemsQuery.data?.rows ?? [];
@@ -200,6 +255,7 @@ function ManualAddModal({
               onChange={(e) => setPlanDate(e.target.value)}
               required
             />
+            <ManualAddFieldErrors field="plan_date" serverErrors={serverErrors} />
           </label>
 
           <label className="block">
@@ -233,6 +289,7 @@ function ManualAddModal({
                   ))}
               </optgroup>
             </select>
+            <ManualAddFieldErrors field="item_id" serverErrors={serverErrors} />
           </label>
 
           <div className="grid grid-cols-2 gap-3">
@@ -261,17 +318,27 @@ function ManualAddModal({
                   Enter a positive quantity (greater than 0).
                 </p>
               ) : null}
+              <ManualAddFieldErrors field="planned_qty" serverErrors={serverErrors} />
             </label>
             <label className="block">
               <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                 Unit of measure *
               </span>
-              <input
+              <select
                 className="input"
                 value={uom}
                 onChange={(e) => setUom(e.target.value)}
                 required
-              />
+                data-testid="manual-add-uom"
+              >
+                <option value="">— select a unit —</option>
+                {uomChoices.map((u) => (
+                  <option key={u} value={u}>
+                    {u}
+                  </option>
+                ))}
+              </select>
+              <ManualAddFieldErrors field="uom" serverErrors={serverErrors} />
             </label>
           </div>
 
@@ -286,7 +353,21 @@ function ManualAddModal({
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Optional notes about this plan"
             />
+            <ManualAddFieldErrors field="notes" serverErrors={serverErrors} />
           </label>
+
+          {/* INTER-004 — 422 errors that don't map to a single field. */}
+          {serverErrors && serverErrors.general.length > 0 ? (
+            <div
+              className="rounded border border-danger/40 bg-danger-softer px-3 py-2 text-3xs text-danger-fg"
+              role="alert"
+              data-testid="manual-add-general-error"
+            >
+              {serverErrors.general.map((m, i) => (
+                <p key={i}>{m}</p>
+              ))}
+            </div>
+          ) : null}
 
           <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
             <button type="button" className="btn btn-sm" onClick={onClose} disabled={isSubmitting}>
@@ -443,6 +524,14 @@ function AddFromRecommendationsModal({
                     )}
                     onClick={() => setSelectedRecId(isSelected ? null : rec.recommendation_id)}
                     disabled={isBlocked}
+                    // INTER-012 — disabled rows say why they can't be added.
+                    // Rows already on the plan are filtered out server-side,
+                    // so the only block reasons here are feasibility ones.
+                    title={
+                      isBlocked
+                        ? `Can't add: ${fmtFeasibilityLabel(rec.feasibility_status)}`
+                        : undefined
+                    }
                     data-testid="rec-candidate-row"
                     data-rec-id={rec.recommendation_id}
                   >
@@ -502,6 +591,14 @@ function AddFromRecommendationsModal({
               type="button"
               className="btn btn-primary btn-sm gap-1.5"
               disabled={!canSubmit}
+              // INTER-012 — concrete reason while the button is disabled.
+              title={
+                isSubmitting
+                  ? "Adding the selected recommendation…"
+                  : !selectedRec
+                    ? "Select a recommendation from the list first"
+                    : undefined
+              }
               onClick={() => { if (selectedRec) onConfirm(selectedRec); }}
               data-testid="add-from-recs-confirm"
             >
@@ -869,7 +966,9 @@ function CancelModal({
             </button>
             <button
               type="submit"
-              className="btn btn-sm gap-1.5 text-danger"
+              // INTER-005 (Tranche 048) — destructive confirm is the filled
+              // danger pattern, matching the repo-wide btn-danger usage.
+              className="btn btn-sm btn-danger gap-1.5"
               disabled={!reason.trim() || isSubmitting}
               data-testid="cancel-submit"
             >
@@ -939,6 +1038,9 @@ export default function ProductionPlanPage() {
   const [editingPlan, setEditingPlan] = useState<ProductionPlanRow | null>(null);
   const [cancellingPlan, setCancellingPlan] = useState<ProductionPlanRow | null>(null);
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
+  // INTER-004 (Tranche 048) — server 422 field errors for the ManualAddModal,
+  // rendered inline under the matching fields instead of toast-only.
+  const [manualAddErrors, setManualAddErrors] = useState<GroupedFieldErrors | null>(null);
 
   const plansQuery = usePlans(toIsoDate(weekStart), toIsoDate(weekEnd));
   const createMut = useCreatePlan();
@@ -1010,6 +1112,29 @@ export default function ProductionPlanPage() {
 
   // Build the DayRailInfo array for the WeekTimelineRail
   const todayIso = toIsoDate(new Date());
+  const tomorrowIso = toIsoDate(addDays(new Date(), 1));
+
+  // D13 Tier 1 (Tranche 048) — Today strip numbers + tomorrow preview.
+  // The plans query only covers the visible week, so the strip renders only
+  // when today falls inside it (ISO strings compare lexicographically).
+  const todaySummary = useMemo(
+    () => computeTodaySummary(plansQuery.data?.rows ?? [], todayIso, tomorrowIso),
+    [plansQuery.data, todayIso, tomorrowIso],
+  );
+  const todayInWeek =
+    todayIso >= toIsoDate(weekStart) && todayIso <= toIsoDate(weekEnd);
+
+  // INTER-004 (Tranche 048) — UoM options for the manual-add select: UoMs
+  // present on the visible production rows first, then the contract set.
+  const uomOptions = useMemo(
+    () =>
+      buildUomOptions(
+        (plansQuery.data?.rows ?? [])
+          .filter((p) => p.plan_type === "production")
+          .map((p) => p.uom),
+      ),
+    [plansQuery.data],
+  );
   const railDays = useMemo(
     () =>
       Array.from({ length: 7 }).map((_, i) => {
@@ -1033,13 +1158,51 @@ export default function ProductionPlanPage() {
     uom: string;
     notes?: string;
   }) {
+    setManualAddErrors(null);
     createMut.mutate({ plan_type: "production", ...req }, {
       onSuccess: () => {
         flashToast("success", "Production added to the plan. Inventory has not changed.");
         setShowManualAdd(null);
       },
-      onError: (err) => { flashToast("error", err.message); },
+      onError: (err) => {
+        // INTER-004 — map server 422 validation errors onto the form fields
+        // inline; everything else keeps the existing toast behavior.
+        if (
+          err instanceof PlanMutationError &&
+          err.status === 422 &&
+          err.validationErrors.length > 0
+        ) {
+          setManualAddErrors(
+            groupFieldErrors(err.validationErrors, MANUAL_ADD_FIELDS),
+          );
+          return;
+        }
+        flashToast("error", err.message);
+      },
     });
+  }
+
+  // D13 Tier 1 (Tranche 048) — quick "Move to tomorrow" for an unreported
+  // today-plan. Reuses the existing date-edit PATCH; usePatchPlan already
+  // invalidates the production-plan queries on success.
+  function handleMoveToTomorrow(p: ProductionPlanRow) {
+    const label = `${p.item_name ?? p.item_id ?? "plan"} · ${fmtQty(p.planned_qty ?? "0", p.uom ?? "")}`;
+    if (
+      !window.confirm(
+        `Move "${label}" to tomorrow (${tomorrowIso})? Inventory is not affected.`,
+      )
+    ) {
+      return;
+    }
+    patchMut.mutate(
+      { plan_id: p.plan_id, body: { plan_date: tomorrowIso } },
+      {
+        onSuccess: () => {
+          flashToast("success", "Plan moved to tomorrow.");
+        },
+        onError: (err) => { flashToast("error", err.message); },
+      },
+    );
   }
 
   function handleAddFromRec(rec: RecommendationCandidate) {
@@ -1258,19 +1421,130 @@ export default function ProductionPlanPage() {
         <div className="text-sm font-semibold text-fg-strong tabular-nums">
           {fmtWeekRange(weekStart, weekEnd)}
         </div>
-        <button
-          type="button"
-          className="btn btn-sm"
-          onClick={() => setWeekStart(startOfWeek(new Date()))}
-        >
-          This week
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            type="button"
+            className="btn btn-sm"
+            onClick={() => setWeekStart(startOfWeek(new Date()))}
+          >
+            This week
+          </button>
+          {/* INTER-011 (Tranche 048) — the board also auto-refreshes every
+              60s (usePlans refetchInterval); this is the manual path plus a
+              freshness stamp. */}
+          {plansQuery.dataUpdatedAt > 0 ? (
+            <span
+              className="text-3xs text-fg-muted tabular-nums"
+              data-testid="plans-updated-at"
+            >
+              Updated {fmtUpdatedTime(plansQuery.dataUpdatedAt)}
+            </span>
+          ) : null}
+          <button
+            type="button"
+            className="btn btn-sm gap-1"
+            onClick={() => void plansQuery.refetch()}
+            disabled={plansQuery.isFetching}
+            title="Refresh the plan board now"
+            data-testid="plans-refresh"
+          >
+            <RefreshCw
+              className={cn("h-3 w-3", plansQuery.isFetching && "animate-spin")}
+              strokeWidth={2}
+            />
+            Refresh
+          </button>
+        </div>
       </div>
 
       {/* ── Layer 2: Week Timeline Rail ── */}
       {hasData && (
         <WeekTimelineRail days={railDays} weekMax={weekMaxVolume} />
       )}
+
+      {/* D13 Tier 1 (Tranche 048) — compact "Today" strip: today's lane
+          progress + tomorrow preview + quick "Move to tomorrow" for each
+          still-unreported today plan. Only rendered when today is inside
+          the visible week (the query window). */}
+      {hasData &&
+      todayInWeek &&
+      (todaySummary.todayPlanned > 0 || todaySummary.tomorrowJobs > 0) ? (
+        <div
+          className="mb-4 rounded-lg border border-border/50 bg-bg-raised px-4 py-3 shadow-raised"
+          data-testid="today-strip"
+        >
+          <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
+            <span className="text-[9px] font-semibold uppercase tracking-sops text-fg-subtle">
+              Today
+            </span>
+            <span data-testid="today-strip-counts">
+              planned{" "}
+              <span className="font-semibold tabular-nums text-fg-strong">
+                {todaySummary.todayPlanned}
+              </span>
+              <span className="text-fg-faint"> · </span>
+              reported{" "}
+              <span className="font-semibold tabular-nums text-success-fg">
+                {todaySummary.todayReported}
+              </span>
+              <span className="text-fg-faint"> · </span>
+              unreported{" "}
+              <span
+                className={cn(
+                  "font-semibold tabular-nums",
+                  todaySummary.todayUnreported > 0
+                    ? "text-warning-fg"
+                    : "text-fg-strong",
+                )}
+              >
+                {todaySummary.todayUnreported}
+              </span>
+            </span>
+            <span
+              className="ml-auto text-fg-muted"
+              data-testid="today-strip-tomorrow"
+            >
+              Tomorrow:{" "}
+              <span className="font-semibold tabular-nums text-fg-strong">
+                {todaySummary.tomorrowJobs}
+              </span>{" "}
+              {todaySummary.tomorrowJobs === 1 ? "job" : "jobs"},{" "}
+              <span className="font-semibold tabular-nums text-fg-strong">
+                {fmtQty(String(todaySummary.tomorrowUnits), todaySummary.tomorrowUom ?? "units")}
+              </span>
+            </span>
+          </div>
+          {canAct && todaySummary.unreportedTodayPlans.length > 0 ? (
+            <div className="mt-2 space-y-1" data-testid="today-strip-unreported">
+              {todaySummary.unreportedTodayPlans.map((p) => (
+                <div
+                  key={p.plan_id}
+                  className="flex items-center justify-between gap-2 rounded border border-border/40 bg-bg-subtle/40 px-2 py-1 text-xs"
+                  data-testid="today-strip-unreported-row"
+                  data-plan-id={p.plan_id}
+                >
+                  <span className="min-w-0 truncate text-fg">
+                    {p.item_name ?? p.item_id}{" "}
+                    <span className="font-mono tabular-nums text-fg-muted">
+                      {fmtQty(p.planned_qty ?? "0", p.uom ?? "")}
+                    </span>
+                  </span>
+                  <button
+                    type="button"
+                    className="btn btn-xs shrink-0"
+                    onClick={() => handleMoveToTomorrow(p)}
+                    disabled={patchMut.isPending}
+                    title="Move this plan to tomorrow's lane"
+                    data-testid="today-strip-move-tomorrow"
+                  >
+                    Move to tomorrow
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* ── Layer 3: Production Week Board — state-hygiene rendering ── */}
       {plansQuery.isLoading ? (
@@ -1490,9 +1764,14 @@ export default function ProductionPlanPage() {
       {showManualAdd ? (
         <ManualAddModal
           defaultDate={showManualAdd.defaultDate}
-          onClose={() => setShowManualAdd(null)}
+          onClose={() => {
+            setShowManualAdd(null);
+            setManualAddErrors(null);
+          }}
           onSubmit={handleManualAdd}
           isSubmitting={createMut.isPending}
+          uomOptions={uomOptions}
+          serverErrors={manualAddErrors}
         />
       ) : null}
 

@@ -83,6 +83,10 @@ export function usePlans(from: string, to: string) {
       return (await res.json()) as ListProductionPlanResponse;
     },
     staleTime: 30_000,
+    // INTER-011 (Tranche 048): keep the board fresh during the workday —
+    // another planner's adds / an operator's reports show up within a minute
+    // without a manual reload. The header also exposes a manual Refresh.
+    refetchInterval: 60_000,
     retry: (failureCount, err) => {
       // Don't retry auth / permission / break-glass errors — those are
       // operator-resolvable (re-login, escalate role, wait for unlock).
@@ -94,6 +98,27 @@ export function usePlans(from: string, to: string) {
       return failureCount < 2;
     },
   });
+}
+
+// ---------------------------------------------------------------------------
+// PlanMutationError — additive (Tranche 048, INTER-004). Same message text
+// the old plain Error carried (existing toast paths are unchanged), plus the
+// HTTP status and the raw 422 validation_errors so the ManualAddModal can
+// render inline per-field errors instead of toast-only.
+// ---------------------------------------------------------------------------
+export class PlanMutationError extends Error {
+  status: number;
+  validationErrors: Array<{ path?: unknown[]; message?: string }>;
+  constructor(
+    message: string,
+    status: number,
+    validationErrors: Array<{ path?: unknown[]; message?: string }> = [],
+  ) {
+    super(message);
+    this.name = "PlanMutationError";
+    this.status = status;
+    this.validationErrors = validationErrors;
+  }
 }
 
 function genIdempotencyKey(): string {
@@ -123,11 +148,15 @@ export function useCreatePlan() {
       if (!res.ok) {
         const text = await res.text().catch(() => "");
         let detail = "";
+        let validationErrors: Array<{ path?: unknown[]; message?: string }> = [];
         try {
           const parsed = JSON.parse(text) as {
             detail?: string;
             validation_errors?: Array<{ path?: unknown[]; message?: string }>;
           };
+          if (Array.isArray(parsed.validation_errors)) {
+            validationErrors = parsed.validation_errors;
+          }
           detail =
             parsed.detail ??
             parsed.validation_errors?.map((e) => `[${(e.path ?? []).join(".")}] ${e.message ?? ""}`).join(" | ") ??
@@ -135,7 +164,11 @@ export function useCreatePlan() {
         } catch {
           /* ignore */
         }
-        throw new Error(mapStatusToHebrew(res.status) + (detail && res.status === 422 ? ` (${detail})` : ""));
+        throw new PlanMutationError(
+          mapStatusToHebrew(res.status) + (detail && res.status === 422 ? ` (${detail})` : ""),
+          res.status,
+          validationErrors,
+        );
       }
       return (await res.json()) as CreateProductionPlanResponse;
     },

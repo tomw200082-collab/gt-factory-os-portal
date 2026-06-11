@@ -16,4 +16,11 @@ approved_by: Tom (2026-06-11 full-run authorization)
 tsc clean; vitest green; no regression to existing testids
 
 ## Checklist
-- [ ] Implemented  - [ ] Typecheck  - [ ] Vitest  - [ ] Pushed
+- [x] Implemented  - [x] Typecheck (tsc --noEmit clean)  - [x] Vitest (465/465 green; 451 baseline + 14 new board-summary tests)  - [ ] Pushed
+
+## Evidence (2026-06-11)
+- New pure logic: `src/app/(planning)/planning/production-plan/_lib/board-summary.ts` (buildUomOptions, computeTodaySummary, groupFieldErrors, fmtUpdatedTime) + `board-summary.test.ts` (14 tests).
+- `_lib/usePlans.ts` additive: `PlanMutationError` (status + raw validation_errors) thrown by useCreatePlan with unchanged message text; `refetchInterval: 60_000` on usePlans (INTER-011).
+- C7 note: the success-panel variance row previously read the derived `linkedPlan`, which is nulled on success (fromPlanId is cleared) — the plan row is now captured at commit time as `done.committedPlan`, which both makes the variance row reachable and feeds the re-plan remainder action.
+- Deviations: UoM option list uses the contract `UOMS` seed (src/lib/contracts/enums.ts) — "PC" does not exist in this codebase (PCS does); INTER-012 disabled-row reasons are feasibility-only because already-planned recommendations are filtered out server-side.
+- No existing data-testids removed (git diff verified).
