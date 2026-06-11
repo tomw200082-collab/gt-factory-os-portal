@@ -16,8 +16,8 @@
 // items live on the FG flow page.
 // ---------------------------------------------------------------------------
 
-import { useSearchParams } from "next/navigation";
-import { useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import {
@@ -34,6 +34,8 @@ import { InventoryFlowTabs } from "../_components/InventoryFlowTabs";
 import { MobileCardStream } from "../_components/MobileCardStream";
 import { UnmappedSkusBanner } from "../_components/UnmappedSkusBanner";
 import { useSupplyFlow } from "./_lib/useSupplyFlow";
+import { GroupFilterBar } from "@/components/filters/GroupFilterBar";
+import { useGroups } from "@/lib/taxonomy/groups";
 import type { FlowItem, FlowQueryParams } from "../_lib/types";
 import { isAtRisk } from "../_lib/risk";
 import { cn } from "@/lib/cn";
@@ -103,23 +105,57 @@ function describeSupplyFlowError(raw: string): {
 }
 
 export function SupplyFlowClient() {
+  const router = useRouter();
   const searchParams = useSearchParams();
   const [isMounted, setIsMounted] = useState(false);
   useEffect(() => setIsMounted(true), []);
 
   const isMobile = useMediaQuery("(max-width: 1023px)");
 
-  // Read filters from URL.
+  // Read filters from URL. Groups v1 (Tranche 044): material_group +
+  // used_by_product_group mirror the family/at_risk wiring — both land in
+  // the query params, so the fetch URL AND the TanStack cache key
+  // (["inventory", "supply-flow", params]) carry them.
   const params: FlowQueryParams = useMemo(() => {
     const family = searchParams.get("family") ?? undefined;
+    const materialGroup = searchParams.get("material_group") ?? undefined;
+    const usedByProductGroup =
+      searchParams.get("used_by_product_group") ?? undefined;
     const atRiskOnly = searchParams.get("at_risk_only") !== "false";
     return {
       family: family || undefined,
+      material_group: materialGroup || undefined,
+      used_by_product_group: usedByProductGroup || undefined,
       at_risk_only: atRiskOnly,
     };
   }, [searchParams]);
 
   const flowQuery = useSupplyFlow(params);
+
+  // URL param setter — same replace-without-scroll pattern as FilterBar.
+  const updateParam = useCallback(
+    (k: string, v: string | null) => {
+      const sp = new URLSearchParams(searchParams.toString());
+      if (v == null || v === "") sp.delete(k);
+      else sp.set(k, v);
+      const qs = sp.toString();
+      router.replace(qs ? `?${qs}` : "?", { scroll: false });
+    },
+    [router, searchParams],
+  );
+
+  // Groups v1 — shared vocabulary for the two group chip rows.
+  const groupsQuery = useGroups();
+  const materialGroups = useMemo(
+    () => (groupsQuery.data?.material_groups ?? []).filter((g) => g.active),
+    [groupsQuery.data],
+  );
+  const productGroups = useMemo(
+    () => (groupsQuery.data?.product_groups ?? []).filter((g) => g.active),
+    [groupsQuery.data],
+  );
+  const materialGroupParam = searchParams.get("material_group") ?? "";
+  const usedByParam = searchParams.get("used_by_product_group") ?? "";
 
   const data = flowQuery.data ?? null;
   const summary = data?.summary ?? null;
@@ -355,6 +391,43 @@ export function SupplyFlowClient() {
         ) : (
           <>
             <FilterBar families={families} items={data.items} />
+
+            {/* Groups v1 — two URL-backed single-select group chip rows:
+                "קבוצת חומר" (material_group) and "לפי קו מוצר"
+                (used_by_product_group). Both refetch server-side. */}
+            {materialGroups.length > 0 ? (
+              <GroupFilterBar
+                groups={materialGroups}
+                selected={materialGroupParam ? [materialGroupParam] : []}
+                onToggle={(key) =>
+                  updateParam(
+                    "material_group",
+                    materialGroupParam === key ? null : key,
+                  )
+                }
+                onClear={() => updateParam("material_group", null)}
+                label="קבוצת חומר"
+                ariaLabel="קבוצת חומר"
+                testId="supply-material-group-filter"
+              />
+            ) : null}
+            {productGroups.length > 0 ? (
+              <GroupFilterBar
+                groups={productGroups}
+                selected={usedByParam ? [usedByParam] : []}
+                onToggle={(key) =>
+                  updateParam(
+                    "used_by_product_group",
+                    usedByParam === key ? null : key,
+                  )
+                }
+                onClear={() => updateParam("used_by_product_group", null)}
+                label="לפי קו מוצר"
+                ariaLabel="לפי קו מוצר"
+                testId="supply-used-by-filter"
+              />
+            ) : null}
+
             {filteredItems.length === 0 ? (
               <EmptyState
                 title="All clear ✨"

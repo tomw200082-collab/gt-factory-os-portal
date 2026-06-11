@@ -43,6 +43,7 @@ import {
   Plug,
   ScrollText,
   Settings2,
+  Shapes,
   ShieldCheck,
   ShoppingCart,
   Tags,
@@ -302,6 +303,16 @@ export const NAV_MANIFEST: NavGroup[] = [
         href: "/admin/components",
         label: "Components",
         icon: Cog,
+        min_role: "admin",
+        required_capability: "admin:execute",
+      },
+      {
+        // Tranche 044 (Groups v1) — curated product/material group
+        // vocabularies that drive the Inventory category chips and the
+        // flow-page group filters.
+        href: "/admin/groups",
+        label: "Groups",
+        icon: Shapes,
         min_role: "admin",
         required_capability: "admin:execute",
       },
