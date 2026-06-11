@@ -1,6 +1,6 @@
 # Tranche 042 — Refresh/invalidation truth sweep + design P0s (Phases 2/7)
 
-status: active
+status: executed 2026-06-11 (commit c1b8d0a) — pending merge
 phase: improvement-plan-2026-06 Phase 2 (portal items 7-8) + Phase 7 item 1 (P0s)
 approved_by: Tom (2026-06-11 — plan approved; globals.css P0 edits explicitly covered by plan approval)
 
@@ -31,8 +31,8 @@ Backend price pipeline (separate gt-factory-os package), middleware/role gates, 
 - grep: `.kpi-tile` block appears once in globals.css; no `font-style: italic` in globals.css; no `api_read.` in dashboard page text nodes
 
 ## Checklist
-- [ ] Fixes implemented
-- [ ] Typecheck clean
-- [ ] Vitest green
-- [ ] Greps clean
-- [ ] One bounded commit set pushed
+- [x] Fixes implemented
+- [x] Typecheck clean
+- [x] Vitest green
+- [x] Greps clean
+- [x] One bounded commit set pushed
