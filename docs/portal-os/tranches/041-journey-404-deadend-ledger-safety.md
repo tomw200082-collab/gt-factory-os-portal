@@ -1,6 +1,6 @@
 # Tranche 041 — Journey 404s, dead-ends & ledger-safety hotfixes (Phase 1)
 
-status: active
+status: executed 2026-06-11 (commit 740e03b) — pending merge
 phase: improvement-plan-2026-06 Phase 1
 approved_by: Tom (2026-06-11, plan decisions T1-T6 resolved; group vocab approved)
 
@@ -44,8 +44,8 @@ middleware reconciliation (Phase 5), cache-invalidation sweep (Phase 2), B3 plan
 - Evidence paths in commit message
 
 ## Checklist
-- [ ] All manifest fixes implemented
-- [ ] Typecheck clean
-- [ ] Vitest green
-- [ ] Greps clean
-- [ ] Committed as one bounded commit set on claude/system-audit-improvements-7sbbg7
+- [x] All manifest fixes implemented
+- [x] Typecheck clean
+- [x] Vitest green
+- [x] Greps clean
+- [x] Committed as one bounded commit set on claude/system-audit-improvements-7sbbg7
