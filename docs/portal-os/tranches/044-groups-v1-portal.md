@@ -1,6 +1,6 @@
 # Tranche 044 — Groups v1 portal: shared taxonomy, group filters, /admin/groups (Phase 3)
 
-status: active
+status: executed 2026-06-11 — pending merge
 phase: improvement-plan-2026-06 Phase 3 (portal side) — backend landed gt-factory-os 48d2433
 approved_by: Tom (2026-06-11 — group vocabularies approved)
 
@@ -47,4 +47,4 @@ beyond per-row select.
 - [x] Implemented (2026-06-11; gate grep clean — no FG_TEA_LINES / RAW_CATEGORY_RULES / PKG_PREFIX_CATEGORY in src/)
 - [x] Typecheck clean (`npx tsc --noEmit`)
 - [x] Vitest green (451/451 = 435 baseline + 16 new taxonomy tests)
-- [ ] One bounded commit set pushed
+- [x] One bounded commit set pushed
