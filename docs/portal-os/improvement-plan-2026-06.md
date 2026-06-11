@@ -15,16 +15,68 @@
 
 ---
 
-## Decisions Tom must make (blocking inputs, ~30 minutes total)
+## Decisions (resolved 2026-06-11; T5 group list pending Tom's confirmation)
 
-| # | Decision | Blocks |
+| # | Decision | Resolution |
 |---|---|---|
-| T1 | **Scrap doctrine:** does production consume RM for output+scrap (current backend) or output only (current copy + GAP-011)? | Phase 1 (B1) |
-| T2 | **Planning runs:** demote-now agreed; within the quarter — fund the math fix or fold checks into session/projection and retire? (Recommendation: demote now, decide after Groups v1 ships.) | Phase 4 |
-| T3 | **Price write-back threshold:** auto-approve catalog price updates from PO/receipt when delta ≤ X% (suggested 25%); larger deltas stay pending in admin inbox. | Phase 2 (D3/D5) |
-| T4 | **Supplier-create role gate:** allow planner (not only admin) to create suppliers/supplier-items inline from the PO form? | Phase 6 (D4) |
-| T5 | **Group vocabularies:** approve the seeded product-group list (the existing 10) and the proposed ~12 material groups before the cleanup migration. | Phase 3 |
-| T6 | **Quarantine resolution:** /admin/users, /admin/jobs, /admin/integrations are live — accept as live (manifest ritual) or re-quarantine? (Recommendation: accept as live.) | Phase 5 |
+| T1 | Scrap doctrine | **RESOLVED: output + scrap (keep backend, fix copy).** Materials are physically consumed for scrapped units too; the ledger behavior is correct. Fix the three copy locations to state it numerically ("Consumed for 120 processed = 100 good + 20 scrap"). |
+| T2 | Planning runs | **RESOLVED: demote now → retire, don't fund the math fix.** Remove from nav + "not for ordering" banner immediately; migrate the valuable preflight/exception checks (rebuild-drift, missing-BOM, missing-supplier, po_missing_expected_delivery) into the session/projection layer during Phase 4; retire the run tables after the checks land. Rationale: the session engine is sound and already powers the real workflow; maintaining two ordering engines violates the simplicity doctrine. Final checkpoint after Groups v1 ships. |
+| T3 | Price write-back threshold | **RESOLVED: 25%.** Delta ≤25% → "update catalog price" checkbox pre-checked at place (still writes draft→approved + price_history evidence rows); >25% → unchecked + warning, stays pending in admin inbox. Threshold stored as a policy key so Tom can tune it. |
+| T4 | Supplier-create role gate | **APPROVED by Tom: planner may create a supplier inline, minimal-burden.** Only ONE required field: supplier name. Optional (collapsed "add details" section): contact name, phone, payment terms, lead time. Everything else defaults; supplier_items created as pending; admin inbox surfaces new suppliers for enrichment later. |
+| T5 | Group vocabularies | **Proposal below (§Groups) — awaiting Tom's confirmation before the cleanup migration.** |
+| T6 | Quarantine resolution | **APPROVED by Tom: /admin/users, /admin/jobs, /admin/integrations are LIVE.** Manifest ritual reclassifies them; Phase 5 upgrades them to real control surfaces (sync telemetry + sync-now, job run-now/history, role-change audit trail) — full professional admin control. |
+
+---
+
+## Groups v1 — proposed vocabularies (T5, for Tom's approval)
+
+### Product groups (תוצרת מוגמרת) — 7 groups
+Built from Tom's list (tea 500ml, tea 1L, matcha/powders, accessories, sangrias & alcohol) +
+the 68 live items, completed to full coverage. Hebrew label is the operator-facing name.
+
+| # | Hebrew | English (key) | Contents today | Count |
+|---|---|---|---|---|
+| 1 | תה — 1 ליטר | `tea_1l` | All 1L tea-extract SKUs (CALM, ENERGY, DETOX, FRESH, NAMASTEA, REVIVE, CONSCIOUSNESS, DESERTEA, AMERICAN…) incl. NO SUGAR variants | 13 |
+| 2 | תה — 500 מ"ל | `tea_500ml` | All 500ml tea-extract SKUs | 13 |
+| 3 | מאצ'ה ואבקות | `matcha_powders` | MATCHA 18g/30g/100g/500g (repack) | 4 |
+| 4 | אלכוהול וקוקטיילים | `alcohol_cocktails` | MARGARITA, SANGRIA (pink/red/white), 3.85L cocktails, ELITA (arak passion fruit, cosmo lychee), MUZA cocktails, NONOMIMI | 20 |
+| 5 | מיקסרים | `mixers` | MUZA mixers ×7, TAPIOCA ×4 (bought) | 11 |
+| 6 | סמוזי | `smoothies` | ODK mango/peach/strawberry (bought) | 3 |
+| 7 | אביזרים נלווים | `accessories` | Garnish items ×4 (bought; today product_group NULL) | 4 |
+
+Design notes: (a) brand (MUZA/ELITA/NONO MIMI) and flavor stay on `family` — group answers
+"what line is this", family answers "which product"; filters can combine both. (b) 3.85L
+cocktails fold into group 4 via the existing `pack_size` attribute — no separate group for one
+pack size. (c) Groups 1+2 deliberately split by pack size per Tom — that's how the factory
+thinks about tea; the BOM-derived RM sets will still unify on the shared tea bases.
+(d) `production_track` (tea_tank / matcha_repack / alcohol) remains the production-line axis —
+already Tom-locked, surfaced as its own filter, not duplicated into groups.
+
+### Material groups (חומרי גלם ואריזות) — 13 groups
+Cleanup migration maps the 34 dirty `component_group` strings (case/synonym variants + 4 nulls):
+
+| # | Hebrew | English (key) | Class | Today's dirty values absorbed |
+|---|---|---|---|---|
+| 1 | עלי תה | `tea_leaves` | INGREDIENT | TEA |
+| 2 | עשבי תיבול ותבלינים | `herbs_spices` | INGREDIENT | HERBS_SPICES, Herbs & Spices, Herbs |
+| 3 | מחיות ופירות | `fruit_purees` | INGREDIENT | FRUIT_PUREES |
+| 4 | סירופים | `syrups` | INGREDIENT | ADDITIVES_SYRUPS |
+| 5 | סוכר, חומצות ומשמרים | `sugar_preservatives` | INGREDIENT | ADDITIVES (sugar, lemon acid, preservative) |
+| 6 | אלכוהול | `alcohol_rm` | INGREDIENT | ALCOHOL (arak, rum, vodka, amaretto…) |
+| 7 | בסיסים ומים | `bases` | INGREDIENT | BASES |
+| 8 | בקבוקים | `bottles` | PACKAGING | BOTTLE |
+| 9 | פקקים ומכסים | `caps_lids` | PACKAGING | CAP, Cap, CAPS, LID |
+| 10 | תוויות | `labels` | PACKAGING | LABEL, Label (50 components — largest group) |
+| 11 | קרטונים | `cartons` | PACKAGING | CARTON |
+| 12 | שקיות ואריזות גמישות | `bags_flexibles` | PACKAGING | BAG (+ matcha bags) |
+| 13 | חומרי תהליך | `process_supplies` | PROCESS_SUPPLY | FILTER, PROCESS_SUPPLY |
+
+### The derived layer (automatic, no manual upkeep)
+`v_material_demand_by_product_group` (BOM explosion over ACTIVE BOMs) gives every component a
+`used_by_product_groups[]`. So the supply/inventory surfaces can answer, in one click:
+"חומרי גלם של קו התה" (all components feeding groups 1+2), "אריזות של המאצ'ה", "מה האלכוהול
+שמשרת את הקוקטיילים" — and it stays correct automatically as recipes change. Unassigned/new
+items surface in a "ללא קבוצה" chip + an admin health check, never silently hidden.
 
 ---
 
@@ -164,4 +216,4 @@ Verification per phase: `/portal-tranche-fix` discipline, vitest + @mocked e2e g
 `/portal-regression-guard`, `/portal-scorecard` recompute, evidence paths in every PASS.
 
 ---
-status: proposed · author: full-system audit 2026-06-11 · owner approval: pending (T1–T6)
+status: decisions T1-T4, T6 resolved 2026-06-11 · T5 group vocabulary awaiting Tom confirmation · author: full-system audit 2026-06-11
