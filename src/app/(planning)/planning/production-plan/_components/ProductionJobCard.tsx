@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   Ban,
   Factory,
+  FlaskConical,
   Pencil,
   Boxes,
   ChevronDown,
@@ -23,6 +24,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/badges/StatusBadge";
 import { cn } from "@/lib/cn";
+import { usePlanRecipeFlag } from "../_lib/useRecipe";
 import {
   fmtQty,
   computeVarianceSign,
@@ -45,19 +47,26 @@ interface BomImpactSnapshot {
   }>;
 }
 
-function useBomImpact(itemId: string | null) {
+function useBomImpact(itemId: string | null, planId: string | null) {
   return useQuery<BomImpactSnapshot | null>({
-    queryKey: ["bom-impact", itemId],
+    // Tranche 052 — plan id is part of the key: with from_plan_id the open
+    // response's base-source lines reflect that plan's improvised recipe,
+    // so snapshots must not be shared across plans of the same item.
+    queryKey: ["bom-impact", itemId, planId],
     queryFn: async () => {
       if (!itemId) return null;
-      const res = await fetch(
-        `/api/production-actuals/open?item_id=${encodeURIComponent(itemId)}`,
-        { headers: { Accept: "application/json" } },
-      );
+      const q = new URLSearchParams({ item_id: itemId });
+      if (planId) q.set("from_plan_id", planId);
+      const res = await fetch(`/api/production-actuals/open?${q.toString()}`, {
+        headers: { Accept: "application/json" },
+      });
       if (!res.ok) return null;
       return ((await res.json()) as BomImpactSnapshot | null) ?? null;
     },
-    enabled: false,
+    // Lazy via `enabled` (Tranche 052): both args are null while the panel
+    // is closed; opening it flips the key + enables the fetch. The previous
+    // `enabled:false` + manual refetch() raced the key change.
+    enabled: itemId !== null,
     staleTime: 5 * 60 * 1000,
   });
 }
@@ -68,12 +77,14 @@ export function ProductionJobCard({
   isToday,
   onEdit,
   onCancel,
+  onAdjustRecipe,
 }: {
   plan: ProductionPlanRow;
   canAct: boolean;
   isToday: boolean;
   onEdit: (p: ProductionPlanRow) => void;
   onCancel: (p: ProductionPlanRow) => void;
+  onAdjustRecipe: (p: ProductionPlanRow) => void;
 }) {
   const isLive = plan.rendered_state === "planned";
   const isDone = plan.rendered_state === "done";
@@ -95,11 +106,32 @@ export function ProductionJobCard({
     : (plan.item_name ?? plan.item_id);
 
   const [impactOpen, setImpactOpen] = useState(false);
-  const bomQuery = useBomImpact(impactOpen ? plan.item_id : null);
+  const bomQuery = useBomImpact(
+    impactOpen ? plan.item_id : null,
+    impactOpen ? plan.plan_id : null,
+  );
+
+  // Tranche 052 — recipe-override eligibility: MANUFACTURED single-item
+  // plans only (base-batch rows and REPACK items have no per-plan liquid
+  // override surface).
+  const recipeEligible =
+    !plan.is_base_batch &&
+    plan.item_id !== null &&
+    plan.item_supply_method === "MANUFACTURED";
+
+  // Override-flag path (Tranche 052): the plan-list DTO does NOT carry an
+  // override flag and a per-card recipe GET would be too heavy. The flag
+  // query is therefore (a) written into the cache by the save mutation and
+  // (b) lazily fetched only while the BOM-impact panel is open. Until either
+  // happens it stays undefined and no badge renders.
+  const hasCustomRecipe = usePlanRecipeFlag(plan.plan_id, {
+    enabled: impactOpen && recipeEligible,
+  });
 
   function toggleImpact() {
+    // Opening flips the useBomImpact key to (item_id, plan_id) and enables
+    // the query — no manual refetch needed (Tranche 052).
     setImpactOpen((v) => !v);
-    if (!impactOpen) void bomQuery.refetch();
   }
 
   const rmLines = useMemo(() => {
@@ -216,6 +248,19 @@ export function ProductionJobCard({
             </span>
           )}
 
+          {/* Tranche 052 — custom-recipe badge. Known lazily: after a save
+              in this session or once the impact panel fetched the recipe. */}
+          {hasCustomRecipe === true && !isCancelled && (
+            <span
+              className="chip chip-accent gap-1 text-[10px]"
+              title="This run uses an adjusted liquid recipe"
+              data-testid="plan-card-custom-recipe-chip"
+            >
+              <FlaskConical className="h-2.5 w-2.5" strokeWidth={2.5} />
+              Custom recipe
+            </span>
+          )}
+
           {/* B4 — in-production chip: firmed and currently running. */}
           {isInProduction && !isDone && !isCancelled && (
             <span
@@ -309,6 +354,21 @@ export function ProductionJobCard({
           {/* Edit + cancel. INTER-010 (Tranche 048): min 32×32px touch
               targets via padding only — the icon size is unchanged. */}
           <div className="flex items-center gap-1">
+            {/* Tranche 052 — adjust the liquid recipe for this run. Only on
+                live (unreported) MANUFACTURED plans; the strip itself already
+                hides once the plan is done or cancelled. */}
+            {recipeEligible && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-xs min-h-[32px] min-w-[32px] text-accent"
+                onClick={() => onAdjustRecipe(plan)}
+                title="Adjust recipe for this run"
+                aria-label="Adjust recipe for this run"
+                data-testid="plan-row-adjust-recipe"
+              >
+                <FlaskConical className="h-2.5 w-2.5" strokeWidth={2.5} />
+              </button>
+            )}
             <button
               type="button"
               className="btn btn-ghost btn-xs min-h-[32px] min-w-[32px]"

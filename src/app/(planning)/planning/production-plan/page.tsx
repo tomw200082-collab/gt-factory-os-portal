@@ -16,6 +16,7 @@ import {
   XCircle,
   Ban,
   Factory,
+  FlaskConical,
   ChevronLeft,
   ChevronRight,
   Sparkles,
@@ -57,6 +58,7 @@ import {
 } from "./_lib/board-summary";
 import { WeekTimelineRail } from "./_components/WeekTimelineRail";
 import { ProductionDayLane } from "./_components/ProductionDayLane";
+import { RecipeOverridePanel } from "./_components/RecipeOverridePanel";
 import type {
   ProductionPlanRow,
   RecommendationCandidate,
@@ -170,13 +172,19 @@ function ManualAddModal({
 }: {
   defaultDate: string;
   onClose: () => void;
-  onSubmit: (req: {
-    plan_date: string;
-    item_id: string;
-    planned_qty: number;
-    uom: string;
-    notes?: string;
-  }) => void;
+  // Tranche 052 — reviewRecipe=true creates the plan and immediately opens
+  // the RecipeOverridePanel for it (MANUFACTURED items only); false is the
+  // quiet one-click path (today's behavior).
+  onSubmit: (
+    req: {
+      plan_date: string;
+      item_id: string;
+      planned_qty: number;
+      uom: string;
+      notes?: string;
+    },
+    reviewRecipe: boolean,
+  ) => void;
   isSubmitting: boolean;
   uomOptions: string[];
   serverErrors: GroupedFieldErrors | null;
@@ -213,6 +221,25 @@ function ManualAddModal({
 
   const canSubmit = planDate && itemId && parseFloat(qty) > 0 && uom && !isSubmitting;
 
+  // Tranche 052 — only MANUFACTURED items have a liquid recipe to review;
+  // REPACK keeps the plain single-button submit.
+  const selectedItem = producibleItems.find((r) => r.item_id === itemId) ?? null;
+  const canReviewRecipe = selectedItem?.supply_method === "MANUFACTURED";
+
+  function doSubmit(reviewRecipe: boolean) {
+    if (!canSubmit) return;
+    onSubmit(
+      {
+        plan_date: planDate,
+        item_id: itemId,
+        planned_qty: parseFloat(qty),
+        uom,
+        notes: notes.trim() ? notes.trim() : undefined,
+      },
+      reviewRecipe,
+    );
+  }
+
   return (
     <div
       dir="ltr"
@@ -234,14 +261,9 @@ function ManualAddModal({
           className="mt-4 space-y-3"
           onSubmit={(e) => {
             e.preventDefault();
-            if (!canSubmit) return;
-            onSubmit({
-              plan_date: planDate,
-              item_id: itemId,
-              planned_qty: parseFloat(qty),
-              uom,
-              notes: notes.trim() ? notes.trim() : undefined,
-            });
+            // Tranche 052 — Enter / the primary button reviews the recipe
+            // when the item has one; otherwise it's the plain add.
+            doSubmit(canReviewRecipe);
           }}
         >
           <label className="block">
@@ -373,15 +395,43 @@ function ManualAddModal({
             <button type="button" className="btn btn-sm" onClick={onClose} disabled={isSubmitting}>
               Cancel
             </button>
-            <button
-              type="submit"
-              className="btn btn-primary btn-sm gap-1.5"
-              disabled={!canSubmit}
-              data-testid="manual-add-submit"
-            >
-              <Plus className="h-3 w-3" strokeWidth={2.5} />
-              {isSubmitting ? "Saving…" : "Add to plan"}
-            </button>
+            {/* Tranche 052 — for MANUFACTURED items the primary action steps
+                into the recipe review; a quiet secondary keeps today's
+                one-click add. REPACK items keep the single plain submit. */}
+            {canReviewRecipe ? (
+              <>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm text-fg-muted"
+                  disabled={!canSubmit}
+                  onClick={() => doSubmit(false)}
+                  title="Add to the plan with the standard recipe"
+                  data-testid="manual-add-submit-plain"
+                >
+                  Add without reviewing recipe
+                </button>
+                <button
+                  type="submit"
+                  className="btn btn-primary btn-sm gap-1.5"
+                  disabled={!canSubmit}
+                  title="Add to the plan, then review this run's recipe"
+                  data-testid="manual-add-submit"
+                >
+                  <FlaskConical className="h-3 w-3" strokeWidth={2.5} />
+                  {isSubmitting ? "Saving…" : "Review recipe"}
+                </button>
+              </>
+            ) : (
+              <button
+                type="submit"
+                className="btn btn-primary btn-sm gap-1.5"
+                disabled={!canSubmit}
+                data-testid="manual-add-submit"
+              >
+                <Plus className="h-3 w-3" strokeWidth={2.5} />
+                {isSubmitting ? "Saving…" : "Add to plan"}
+              </button>
+            )}
           </div>
         </form>
       </div>
@@ -1037,6 +1087,10 @@ export default function ProductionPlanPage() {
   const [showAddNote, setShowAddNote] = useState<{ defaultDate: string } | null>(null);
   const [editingPlan, setEditingPlan] = useState<ProductionPlanRow | null>(null);
   const [cancellingPlan, setCancellingPlan] = useState<ProductionPlanRow | null>(null);
+  // Tranche 052 — plan whose improvised liquid recipe is being edited.
+  // Opened from the ManualAdd "Review recipe" step or a card's
+  // "Adjust recipe" action.
+  const [recipePanelPlanId, setRecipePanelPlanId] = useState<string | null>(null);
   const [toast, setToast] = useState<{ kind: "success" | "error"; message: string } | null>(null);
   // INTER-004 (Tranche 048) — server 422 field errors for the ManualAddModal,
   // rendered inline under the matching fields instead of toast-only.
@@ -1151,18 +1205,26 @@ export default function ProductionPlanPage() {
   );
 
   // Handlers
-  function handleManualAdd(req: {
-    plan_date: string;
-    item_id: string;
-    planned_qty: number;
-    uom: string;
-    notes?: string;
-  }) {
+  function handleManualAdd(
+    req: {
+      plan_date: string;
+      item_id: string;
+      planned_qty: number;
+      uom: string;
+      notes?: string;
+    },
+    reviewRecipe: boolean,
+  ) {
     setManualAddErrors(null);
     createMut.mutate({ plan_type: "production", ...req }, {
-      onSuccess: () => {
+      onSuccess: (resp) => {
         flashToast("success", "Production added to the plan. Inventory has not changed.");
         setShowManualAdd(null);
+        // Tranche 052 — "Review recipe" path: the plan is created first,
+        // then the recipe panel opens immediately for that plan.
+        if (reviewRecipe && resp.plan_id) {
+          setRecipePanelPlanId(resp.plan_id);
+        }
       },
       onError: (err) => {
         // INTER-004 — map server 422 validation errors onto the form fields
@@ -1697,6 +1759,7 @@ export default function ProductionPlanPage() {
                       onAddNote={(d) => setShowAddNote({ defaultDate: toIsoDate(d) })}
                       onEdit={setEditingPlan}
                       onCancel={setCancellingPlan}
+                      onAdjustRecipe={(p) => setRecipePanelPlanId(p.plan_id)}
                     />
                   </div>
                 );
@@ -1815,6 +1878,15 @@ export default function ProductionPlanPage() {
           onClose={() => setCancellingPlan(null)}
           onSubmit={handleCancel}
           isSubmitting={patchMut.isPending}
+        />
+      ) : null}
+
+      {/* Tranche 052 — improvised liquid recipe editor */}
+      {recipePanelPlanId ? (
+        <RecipeOverridePanel
+          planId={recipePanelPlanId}
+          onClose={() => setRecipePanelPlanId(null)}
+          onSaved={(msg) => flashToast("success", msg)}
         />
       ) : null}
 

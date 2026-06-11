@@ -49,6 +49,7 @@
 
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
+import { FlaskConical } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
@@ -113,6 +114,11 @@ interface ProductionActualOpenResponse {
   base_bom_final_output_qty: string | null;
   base_bom_final_output_uom: string | null;
   base_qty_per_pack_unit: string | null;
+  // 0237 (Tranche 052) — true when the open call carried a from_plan_id
+  // whose plan has a recipe override: the base-source bom_lines below ARE
+  // the improvised liquid recipe (server-converted to batch-equivalent
+  // quantities so the existing scaling math holds). Packaging unchanged.
+  customized_recipe: boolean;
   bom_lines: BomLineSnapshot[];
 }
 
@@ -1667,6 +1673,10 @@ export default function ProductionActualPage() {
     setPhase("submitting");
     try {
       const q = new URLSearchParams({ item_id: selectedItemId });
+      // 0237 (Tranche 052) — pass the plan context so a plan-level recipe
+      // override replaces the base-source lines in the snapshot and the
+      // response flags customized_recipe.
+      if (fromPlanId) q.set("from_plan_id", fromPlanId);
       const res = await fetch(
         `/api/production-actuals/open?${q.toString()}`,
         { headers: { Accept: "application/json" } },
@@ -2146,6 +2156,33 @@ export default function ProductionActualPage() {
       const url = new URL(window.location.href);
       url.searchParams.delete("from_plan_id");
       router.replace(url.pathname + (url.search || ""));
+    }
+    // 0237 (Tranche 052) — if the snapshot was opened WITH a plan whose
+    // recipe is improvised, its base-source lines ARE the override. A submit
+    // without the link consumes per the STANDARD recipe, so submitting
+    // against this snapshot would contradict the preview. Re-open without
+    // the plan context and let the operator review before submitting again.
+    if (snapshot?.customized_recipe) {
+      try {
+        const q = new URLSearchParams({ item_id: snapshot.item_id });
+        const res = await fetch(`/api/production-actuals/open?${q.toString()}`, {
+          headers: { Accept: "application/json" },
+        });
+        const body = await res.json().catch(() => null);
+        if (res.ok && body && typeof body === "object") {
+          setSnapshot(body as ProductionActualOpenResponse);
+        }
+      } catch {
+        // Keep the prior snapshot — the server-side explosion stays
+        // authoritative either way; only the preview is affected.
+      }
+      setDone({
+        kind: "error",
+        message:
+          "Plan link removed. Without the plan, this run consumes per the STANDARD recipe — review the updated preview and submit again.",
+      });
+      setPhase("entering");
+      return;
     }
     void submitProductionActual(null);
   }
@@ -3590,6 +3627,23 @@ export default function ProductionActualPage() {
               title="Preview — expected component consumption"
               description="Estimated component consumption from the BOM. Final values are computed at submit."
             >
+              {/* 0237 (Tranche 052) — custom-recipe banner. The snapshot's
+                  base-source lines already ARE the adjusted recipe (server-
+                  side replacement); the preview math below scales those lines
+                  verbatim, so no client recomputation contradicts it. */}
+              {snapshot?.customized_recipe ? (
+                <div
+                  className="mb-3 flex items-center gap-2 rounded-md border border-accent/30 bg-accent/10 px-3 py-2 text-xs text-accent"
+                  role="note"
+                  data-testid="production-actual-custom-recipe-banner"
+                >
+                  <FlaskConical className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
+                  <span>
+                    <span className="font-semibold">This run uses a custom recipe</span>
+                    {" — materials will be consumed per the adjusted recipe."}
+                  </span>
+                </div>
+              ) : null}
               {/* Toggle button styled as a tab with arrow indicator and count badge */}
               <button
                 type="button"
