@@ -1,6 +1,6 @@
 # Tranche 046 — OS truthfulness + role-gate reconciliation (Phase 5)
 
-status: active
+status: executed 2026-06-11 — pending merge
 kind: quarantine-update + baseline-update (ritual tranche)
 phase: improvement-plan-2026-06 Phase 5
 approved_by: Tom (2026-06-11; T6 = users/jobs/integrations are LIVE; full-run authorization)
@@ -36,4 +36,4 @@ telemetry they don't have.
 - [x] Implemented (2026-06-11; "Discard changes" button located in `src/app/(admin)/admin/boms/[head_id]/versions/[version_id]/page.tsx`, not the masters edit route — the masters BOM draft editor has no such button)
 - [x] Typecheck clean (tsc --noEmit, 0 errors)
 - [x] Vitest green (451/451)
-- [ ] Pushed
+- [x] Pushed
