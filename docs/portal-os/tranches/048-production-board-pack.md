@@ -1,6 +1,6 @@
 # Tranche 048 — Production board & reporting pack (Phase 6, portal-only tier)
 
-status: active
+status: executed 2026-06-11 — pending merge
 phase: improvement-plan-2026-06 Phase 6 item 2 (portal-only items: C6, C7 Tier 1, D13 Tier 1, INTER-004/005/010/011/012)
 approved_by: Tom (2026-06-11 full-run authorization)
 

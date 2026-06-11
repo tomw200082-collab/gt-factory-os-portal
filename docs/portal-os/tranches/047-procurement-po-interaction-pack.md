@@ -1,6 +1,6 @@
 # Tranche 047 — Procurement/PO interaction pack (Phase 6, portal-only)
 
-status: active
+status: executed 2026-06-11 — pending merge
 phase: improvement-plan-2026-06 Phase 6 item 1 (D1/D2) + interaction P1s + 045 follow-ups
 approved_by: Tom (2026-06-11 full-run authorization)
 
