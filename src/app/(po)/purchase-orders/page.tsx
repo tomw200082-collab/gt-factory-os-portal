@@ -884,7 +884,95 @@ export default function PurchaseOrdersListPage() {
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto">
+          <>
+            {/* Mobile card list (<md) — Tranche 051 (FLOW-018). Same rows,
+                same sort, same filters; the table remains the md+ surface. */}
+            <div className="space-y-2 p-3 md:hidden" data-testid="po-list-cards">
+              {filtered.map((r) => {
+                const today = new Date().toISOString().slice(0, 10);
+                const isLate =
+                  (r.status === "OPEN" || r.status === "PARTIAL") &&
+                  !!r.expected_receive_date &&
+                  r.expected_receive_date < today;
+                const daysLate = isLate
+                  ? Math.floor(
+                      (Date.now() -
+                        new Date(r.expected_receive_date!).getTime()) /
+                        86400000,
+                    )
+                  : 0;
+                return (
+                  <Link
+                    key={r.po_id}
+                    href={`/purchase-orders/${encodeURIComponent(r.po_id)}`}
+                    className={cn(
+                      "flex flex-col gap-2 rounded-lg border bg-bg px-3 py-3 transition hover:bg-bg-subtle/40",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
+                      isLate
+                        ? "border-l-4 border-l-danger/50 border-y-border/70 border-r-border/70"
+                        : "border-border/70",
+                    )}
+                    data-testid="po-list-card"
+                    data-po-id={r.po_id}
+                    data-status={r.status}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-mono text-sm font-semibold text-fg">
+                          {r.po_number}
+                        </div>
+                        <div className="mt-0.5 truncate text-xs text-fg-muted">
+                          {r.supplier_name ?? (
+                            <span className="italic" title={`supplier_id ${r.supplier_id}`}>
+                              Unknown supplier
+                              <span className="ml-1 font-mono text-3xs opacity-70">
+                                ({r.supplier_id.slice(0, 8)}…)
+                              </span>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <POStatusBadge status={r.status} />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                      <span className="inline-flex items-baseline gap-1">
+                        <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                          Expected
+                        </span>
+                        {r.expected_receive_date ? (
+                          <span
+                            className={cn(
+                              "tabular-nums",
+                              isLate
+                                ? "font-semibold text-danger-fg"
+                                : "text-fg-muted",
+                            )}
+                          >
+                            {fmtDate(r.expected_receive_date)}
+                            {isLate
+                              ? ` · ${daysLate} day${daysLate === 1 ? "" : "s"} late`
+                              : ""}
+                          </span>
+                        ) : (
+                          <span className="text-fg-faint">—</span>
+                        )}
+                      </span>
+                      <span className="ml-auto inline-flex items-baseline gap-1">
+                        <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                          Total
+                        </span>
+                        <span className="font-mono tabular-nums text-fg">
+                          {fmtMoney(r.total_net, r.currency)}
+                        </span>
+                      </span>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+
+            {/* Desktop table (md+) — unchanged. */}
+            <div className="hidden overflow-x-auto md:block">
             <table className="table-base" data-testid="po-list-table">
               <thead>
                 <tr>
@@ -997,7 +1085,8 @@ export default function PurchaseOrdersListPage() {
                 })}
               </tbody>
             </table>
-          </div>
+            </div>
+          </>
         )}
       </SectionCard>
     </>

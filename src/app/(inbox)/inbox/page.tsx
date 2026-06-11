@@ -58,6 +58,7 @@ import { Badge } from "@/components/badges/StatusBadge";
 import { NotesBox } from "@/components/fields/NotesBox";
 import { useSession } from "@/lib/auth/session-provider";
 import { cn } from "@/lib/cn";
+import { ScrollFade } from "@/components/ui/ScrollFade";
 
 import {
   fetchExceptions,
@@ -492,8 +493,10 @@ function BulkActionBar({
       aria-label="Bulk actions"
       data-testid="inbox-bulk-bar"
     >
+      {/* Tranche 051 (FLOW-019): max-md:min-h-[32px] lifts the touch target to
+          ≥32px on phones; md+ rendering unchanged. */}
       <label
-        className="inline-flex items-center gap-2 font-semibold text-accent"
+        className="inline-flex items-center gap-2 font-semibold text-accent max-md:min-h-[32px]"
         data-testid="inbox-bulk-select-all"
       >
         <input
@@ -521,7 +524,7 @@ function BulkActionBar({
         {selectedCount > 0 ? (
           <button
             type="button"
-            className="btn btn-sm"
+            className="btn btn-sm max-md:min-h-[32px]"
             data-testid="inbox-bulk-clear"
             onClick={onClearSelection}
             disabled={busy}
@@ -531,7 +534,7 @@ function BulkActionBar({
         ) : null}
         <button
           type="button"
-          className="btn btn-sm btn-primary gap-1.5"
+          className="btn btn-sm btn-primary gap-1.5 max-md:min-h-[32px]"
           data-testid="inbox-bulk-resolve"
           onClick={onBulkResolve}
           disabled={selectedCount === 0 || busy}
@@ -1222,8 +1225,14 @@ export default function InboxListPage() {
           className="flex flex-wrap items-center gap-3 border-b border-border/60 px-5 py-3"
           data-testid="inbox-filter-bar"
         >
-          <div className="flex flex-wrap items-center gap-1.5">
-            <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+          {/* Tranche 051 (FLOW-019): below sm the view-chip row scrolls
+              horizontally with a right-edge fade affordance instead of
+              wrapping; sm+ unchanged. */}
+          <ScrollFade
+            className="min-w-0 max-w-full"
+            contentClassName="flex flex-wrap items-center gap-1.5 max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:pb-0.5"
+          >
+            <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle max-sm:shrink-0">
               View
             </span>
             {visibleViewTabs.map((v) => {
@@ -1239,6 +1248,7 @@ export default function InboxListPage() {
                   onClick={() => setView(v)}
                   className={cn(
                     "inline-flex items-center gap-1.5 rounded-sm border px-2 py-1 text-3xs font-semibold uppercase tracking-sops transition-all duration-150",
+                    "max-sm:min-h-[32px] max-sm:shrink-0 max-sm:whitespace-nowrap",
                     active
                       ? "border-accent/60 bg-accent-soft text-accent ring-1 ring-accent/30"
                       : "border-border/70 bg-bg-raised text-fg-muted hover:border-border-strong hover:bg-bg-subtle hover:text-fg",
@@ -1264,14 +1274,14 @@ export default function InboxListPage() {
               <button
                 type="button"
                 onClick={() => setPrefs({ showZeroCounts: !prefs.showZeroCounts })}
-                className="inline-flex items-center gap-1 rounded-sm border border-dashed border-border/60 bg-transparent px-2 py-1 text-3xs font-medium text-fg-subtle hover:border-border-strong hover:text-fg"
+                className="inline-flex items-center gap-1 rounded-sm border border-dashed border-border/60 bg-transparent px-2 py-1 text-3xs font-medium text-fg-subtle hover:border-border-strong hover:text-fg max-sm:min-h-[32px] max-sm:shrink-0 max-sm:whitespace-nowrap"
                 title={prefs.showZeroCounts ? "Hide empty views" : "Show empty views"}
               >
                 <Filter className="h-3 w-3" strokeWidth={2} />
                 {prefs.showZeroCounts ? "Hide empty" : "Show all"}
               </button>
             ) : null}
-          </div>
+          </ScrollFade>
 
           <div className="flex flex-1 items-center gap-2 sm:flex-none sm:basis-[260px]">
             <label className="relative flex w-full items-center">
@@ -1796,9 +1806,12 @@ function InboxRowCard({
       />
 
       <div className={cn("flex items-start", densityChipGapClass(density))}>
+        {/* Tranche 051 (FLOW-019): on <md the clickable label grows to a
+            32×32 hit area via negative margins, so the visible checkbox
+            position and the row layout are pixel-identical to md+. */}
         {showSelectCheckbox ? (
           <label
-            className="mt-1.5 flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center"
+            className="mt-1.5 flex h-5 w-5 shrink-0 cursor-pointer items-center justify-center max-md:-mx-1.5 max-md:-mb-1.5 max-md:mt-0 max-md:h-8 max-md:w-8"
             data-testid="inbox-row-select"
             onClick={(e) => e.stopPropagation()}
           >
@@ -1942,7 +1955,7 @@ function InboxRowCard({
               hasInlinePanel ? (
                 <Link
                   href={row.deep_link}
-                  className="btn btn-sm gap-1 text-fg-muted"
+                  className="btn btn-sm gap-1 text-fg-muted max-md:min-h-[32px]"
                   data-testid="inbox-row-review-full"
                 >
                   פרטים מלאים
@@ -1951,7 +1964,7 @@ function InboxRowCard({
               ) : (
                 <Link
                   href={row.deep_link}
-                  className="btn btn-sm btn-primary gap-1.5"
+                  className="btn btn-sm btn-primary gap-1.5 max-md:min-h-[32px]"
                   data-testid="inbox-row-review"
                 >
                   Review
@@ -1962,7 +1975,7 @@ function InboxRowCard({
               <Link
                 href={row.deep_link}
                 className={cn(
-                  "btn btn-sm gap-1.5",
+                  "btn btn-sm gap-1.5 max-md:min-h-[32px]",
                   labels.deepLink && /אשר|פתור|מפה|חדש|עדכן/.test(labels.deepLink)
                     ? "btn-primary"
                     : "",
@@ -1976,7 +1989,7 @@ function InboxRowCard({
             {!isApproval && row.item_id ? (
               <Link
                 href={`/admin/masters/items/${encodeURIComponent(row.item_id)}`}
-                className="btn btn-sm gap-1.5"
+                className="btn btn-sm gap-1.5 max-md:min-h-[32px]"
                 data-testid="inbox-row-item-link"
                 title={`Open item master for ${row.item_id}`}
               >
@@ -1987,7 +2000,7 @@ function InboxRowCard({
             {!isApproval && row.component_id && row.component_id !== row.item_id ? (
               <Link
                 href={`/admin/masters/items/${encodeURIComponent(row.component_id)}`}
-                className="btn btn-sm gap-1.5"
+                className="btn btn-sm gap-1.5 max-md:min-h-[32px]"
                 data-testid="inbox-row-component-link"
                 title={`Open item master for ${row.component_id}`}
               >
@@ -1998,7 +2011,7 @@ function InboxRowCard({
             {canAck ? (
               <button
                 type="button"
-                className="btn btn-sm gap-1.5"
+                className="btn btn-sm gap-1.5 max-md:min-h-[32px]"
                 data-testid="inbox-row-acknowledge"
                 disabled={ackBusy}
                 onClick={() => onAcknowledge(row.id)}
@@ -2012,7 +2025,7 @@ function InboxRowCard({
               <button
                 type="button"
                 className={cn(
-                  "btn btn-sm gap-1.5",
+                  "btn btn-sm gap-1.5 max-md:min-h-[32px]",
                   isResolveDestructive
                     ? "border-danger/40 text-danger hover:bg-danger-softer"
                     : "btn-primary",

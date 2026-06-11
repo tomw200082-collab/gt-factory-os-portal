@@ -3,6 +3,7 @@
 import type { ReactNode } from "react";
 import { TopBar } from "./TopBar";
 import { SideNav } from "./SideNav";
+import { MobileBottomNav } from "./MobileBottomNav";
 
 export function AppShellChrome({ children }: { children: ReactNode }) {
   return (
@@ -20,15 +21,18 @@ export function AppShellChrome({ children }: { children: ReactNode }) {
             <SideNav />
           </div>
         </div>
+        {/* Bottom padding: md+ keeps the previous max(4rem, safe-area) rule
+            unchanged; <md adds room for the fixed MobileBottomNav (56px bar
+            + breathing space + safe-area) so content is never obscured. */}
         <main
           id="main-content"
           tabIndex={-1}
-          className="min-w-0 flex-1 outline-none"
-          style={{ paddingBottom: "max(4rem, env(safe-area-inset-bottom, 0px))" }}
+          className="min-w-0 flex-1 outline-none pb-[calc(5rem+env(safe-area-inset-bottom,0px))] md:pb-[max(4rem,env(safe-area-inset-bottom,0px))]"
         >
           {children}
         </main>
       </div>
+      <MobileBottomNav />
     </div>
   );
 }

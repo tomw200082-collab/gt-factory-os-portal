@@ -18,6 +18,11 @@
 // labels carry dir="auto" so Hebrew group names render correctly inside an
 // LTR page shell.
 //
+// Mobile (Tranche 051, FLOW-015): below sm the row no longer wraps — it
+// scrolls horizontally inside a <ScrollFade> whose right-edge gradient
+// signals off-screen chips and hides at scroll end. From sm up the row
+// wraps exactly as before (no visual change at md+).
+//
 // Selection model is owned by the caller (controlled component): `selected`
 // is an array of group keys (and/or the NO_GROUP sentinel); `onToggle(key)`
 // fires per chip; `onClear()` resets. Single- vs multi-select semantics are
@@ -26,6 +31,7 @@
 
 import { cn } from "@/lib/cn";
 import { BADGE_TONE_CLASSES } from "@/components/ui/Badge";
+import { ScrollFade } from "@/components/ui/ScrollFade";
 import {
   NO_GROUP,
   NO_GROUP_LABEL,
@@ -88,14 +94,17 @@ export function GroupFilterBar({
   const anySelected = selected.length > 0;
 
   return (
-    <div
-      className={cn("flex flex-wrap items-center gap-1.5", className)}
-      role="group"
-      aria-label={ariaLabel ?? label ?? "Group filters"}
-      data-testid={testId}
+    <ScrollFade
+      className={cn("min-w-0", className)}
+      contentClassName="flex flex-wrap items-center gap-1.5 max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:pb-0.5"
+      contentProps={{
+        role: "group",
+        "aria-label": ariaLabel ?? label ?? "Group filters",
+        "data-testid": testId,
+      }}
     >
       {label ? (
-        <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+        <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle max-sm:shrink-0">
           {label}
         </span>
       ) : null}
@@ -112,6 +121,7 @@ export function GroupFilterBar({
             data-testid={`${testId}-chip-${chip.key}`}
             className={cn(
               "inline-flex items-center gap-1 rounded-sm border px-2 py-1 text-[10px] font-medium transition-all duration-150",
+              "max-sm:shrink-0 max-sm:whitespace-nowrap",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
               active
                 ? cn(toneCls.soft, "shadow-sm")
@@ -132,11 +142,11 @@ export function GroupFilterBar({
           type="button"
           onClick={onClear}
           data-testid={`${testId}-clear`}
-          className="text-2xs font-medium text-accent-fg underline hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+          className="text-2xs font-medium text-accent-fg underline hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 max-sm:shrink-0"
         >
           Clear
         </button>
       ) : null}
-    </div>
+    </ScrollFade>
   );
 }

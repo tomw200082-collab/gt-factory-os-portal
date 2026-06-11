@@ -87,6 +87,7 @@ import {
 import { useInventoryFlow } from "@/app/(planning)/planning/inventory-flow/_lib/useInventoryFlow";
 import type { FlowItem } from "@/app/(planning)/planning/inventory-flow/_lib/types";
 import { SectionCard } from "@/components/workflow/SectionCard";
+import { ScrollFade } from "@/components/ui/ScrollFade";
 import { SectionHeading } from "@/components/workflow/SectionHeading";
 import { Badge } from "@/components/badges/StatusBadge";
 import { FreshnessBadge } from "@/components/badges/FreshnessBadge";
@@ -599,7 +600,12 @@ function QuickActionsLauncher() {
       title="Jump to a workflow"
       description="Most-used workflows for your role."
     >
-      <div className="-mx-1 flex gap-2.5 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:px-0 sm:pb-0">
+      {/* Tranche 051 (FLOW-009): right-edge fade signals more actions exist
+          off-screen while the strip scrolls horizontally (<sm). */}
+      <ScrollFade
+        className="-mx-1 sm:mx-0"
+        contentClassName="flex gap-2.5 overflow-x-auto px-1 pb-1 sm:flex-wrap sm:px-0 sm:pb-0"
+      >
         {visible.map((a) => {
           const Icon = a.icon;
           return (
@@ -622,7 +628,7 @@ function QuickActionsLauncher() {
             </Link>
           );
         })}
-      </div>
+      </ScrollFade>
     </SectionCard>
   );
 }
@@ -2211,12 +2217,14 @@ export default function DashboardPage() {
             {totalInventoryValue != null ? (
               <span
                 className="dash-chip"
-                title="Combined value of RM + PKG + FG stock from the latest stock-value snapshot."
+                title={`${fmtILS(totalInventoryValue)} — combined value of RM + PKG + FG stock from the latest stock-value snapshot.`}
               >
                 <Coins className="h-3.5 w-3.5 text-accent" strokeWidth={2} aria-hidden />
                 <span className="text-fg-muted">Total inventory</span>
+                {/* Tranche 051 (FLOW-010): compact form so the hero meta rail
+                    fits a phone width; the title tooltip keeps the framing. */}
                 <span className="tabular-nums text-fg-strong">
-                  {fmtILS(totalInventoryValue)}
+                  {fmtILSCompact(totalInventoryValue)}
                 </span>
               </span>
             ) : null}
