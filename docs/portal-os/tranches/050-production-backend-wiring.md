@@ -1,6 +1,6 @@
 # Tranche 050 — Production reporting: wire portal to Phase-6 backend
 
-status: active
+status: executed 2026-06-11 — pending merge
 phase: improvement-plan-2026-06 Phase 6 close (backend landed gt-factory-os cdc6403)
 approved_by: Tom (2026-06-11 full-run authorization)
 
