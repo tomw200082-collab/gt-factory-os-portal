@@ -3059,6 +3059,17 @@ export default function AdminEconomicsPage(): JSX.Element {
                                   "component-costs",
                                 ],
                               });
+                              // Tranche 042 — cost changes ripple into stock
+                              // valuation and RM economics; refresh those too.
+                              void queryClient.invalidateQueries({
+                                queryKey: ["stock", "value"],
+                              });
+                              void queryClient.invalidateQueries({
+                                queryKey: ["admin", "economics", "raw-materials"],
+                              });
+                              void queryClient.invalidateQueries({
+                                queryKey: ["dashboard", "economics", "rm-costs"],
+                              });
                             }}
                           />
                         </td>
@@ -3421,6 +3432,15 @@ export default function AdminEconomicsPage(): JSX.Element {
           setCostSavedHint(true);
           void queryClient.invalidateQueries({
             queryKey: ["admin", "economics", "component-costs"],
+          });
+          // Tranche 042 — cost changes ripple into stock valuation and RM
+          // economics; refresh those too.
+          void queryClient.invalidateQueries({ queryKey: ["stock", "value"] });
+          void queryClient.invalidateQueries({
+            queryKey: ["admin", "economics", "raw-materials"],
+          });
+          void queryClient.invalidateQueries({
+            queryKey: ["dashboard", "economics", "rm-costs"],
           });
         }}
       />

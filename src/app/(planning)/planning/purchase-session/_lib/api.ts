@@ -55,12 +55,16 @@ export function useCurrentSession() {
 
 function usePurchaseMutation<TArgs, TResult>(
   fn: (args: TArgs) => Promise<TResult>,
+  extraInvalidateKeys?: readonly (readonly string[])[],
 ) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: fn,
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["purchase-session"] });
+      for (const key of extraInvalidateKeys ?? []) {
+        void qc.invalidateQueries({ queryKey: [...key] });
+      }
     },
   });
 }
@@ -125,6 +129,16 @@ export function usePlacePo() {
       });
       return (await jsonOrThrow(res)) as PoEnvelope;
     },
+    // Tranche 042 — a placed PO becomes visible to the PO list
+    // (["planner","purchase-orders",…] in (po)/purchase-orders/page.tsx),
+    // the PO detail surfaces (["purchase-orders",…]), and the goods-receipt
+    // open-PO dropdown (["ops","receipts","open-pos"]). Invalidate all three
+    // so they refresh without a manual reload.
+    [
+      ["planner", "purchase-orders"],
+      ["purchase-orders"],
+      ["ops", "receipts", "open-pos"],
+    ],
   );
 }
 

@@ -870,6 +870,7 @@ export default function InventoryPage() {
       queryKey: ["stock", "FG"],
       queryFn: () => fetchStock("FG"),
       staleTime: 60_000,
+      refetchInterval: 60_000,
     });
 
   const { data: rmRows, isLoading: rmLoading, error: rmError, refetch: refetchRm, isFetching: rmFetching } =
@@ -877,12 +878,14 @@ export default function InventoryPage() {
       queryKey: ["stock", "RM_PKG"],
       queryFn: () => fetchStock("RM_PKG"),
       staleTime: 60_000,
+      refetchInterval: 60_000,
     });
 
   const { data: valueData, isFetching: valueFetching, refetch: refetchValue } = useQuery({
     queryKey: ["stock", "value"],
     queryFn: fetchStockValue,
-    staleTime: 5 * 60_000,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
   });
 
   const valueMap = useMemo<ValueMap | null>(() => {

@@ -1429,14 +1429,16 @@ function InventoryValueCard({
 }) {
   const points = result?.points ?? [];
   const coveragePct = result ? Math.round(result.coverage * 100) : 0;
-  const lowCoverage = !!result && result.movementCount > 0 && result.coverage < 0.5;
+  // Tranche 042 — drawable threshold raised 50% → 75%: below 75% cost
+  // coverage the reconstructed line is too speculative to draw.
+  const lowCoverage = !!result && result.movementCount > 0 && result.coverage < 0.75;
   const first = points[0]?.value ?? null;
   const change = anchorValue !== null && first !== null ? anchorValue - first : null;
   const changePct = change !== null && first ? (change / first) * 100 : null;
   const footerNote =
     result && result.movementCount === 0
-      ? "Indicative · no stock movements in this window"
-      : `Indicative · reconstructed from movements at current cost · ${coveragePct}% cost coverage`;
+      ? "Indicative · no stock movements in this window · valued at current prices"
+      : `Indicative · reconstructed from movements, valued at current prices · ${coveragePct}% cost coverage`;
 
   return (
     <SectionCard
@@ -1564,8 +1566,7 @@ function CriticalTodayBlock({ now }: { now: Date }) {
       footer={
         asOf ? (
           <span>
-            Source: <code className="font-mono">api_read.v_critical_today</code> · updated{" "}
-            {fmtRelative(asOf, now)}
+            Source: live factory signals · updated {fmtRelative(asOf, now)}
           </span>
         ) : undefined
       }
@@ -1658,9 +1659,8 @@ function SlippedPlansBlock({ now }: { now: Date }) {
       footer={
         asOf ? (
           <span>
-            Source:{" "}
-            <code className="font-mono">api_read.v_production_plan_slippage</code>
-            {" · "}window {windowDays} days · updated {fmtRelative(asOf, now)}
+            Source: production plan · window {windowDays} days · updated{" "}
+            {fmtRelative(asOf, now)}
           </span>
         ) : undefined
       }

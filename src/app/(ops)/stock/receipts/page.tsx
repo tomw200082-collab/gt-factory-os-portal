@@ -33,7 +33,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { UOMS, type Uom } from "@/lib/contracts/enums";
@@ -506,6 +506,7 @@ export default function GoodsReceiptPage() {
   // Direct-entry path (no ?po_id=) is preserved verbatim.
   const searchParams = useSearchParams();
   const urlPoId = searchParams?.get("po_id") ?? "";
+  const queryClient = useQueryClient();
 
   const itemsQuery = useQuery<ListEnvelope<ItemRow>>({
     queryKey: ["master", "items", "ACTIVE"],
@@ -876,6 +877,10 @@ export default function GoodsReceiptPage() {
           postedLines: committed.lines.length,
           postedLineDetails,
         });
+        // Tranche 042 — a posted receipt changes PO-line received quantities
+        // and open-PO statuses; invalidate the whole ["ops","receipts"]
+        // prefix so the PO ledger header pills and line tables refresh.
+        void queryClient.invalidateQueries({ queryKey: ["ops", "receipts"] });
         // Reset form for a fresh submission
         setLines([emptyLine()]);
         setNotes("");
