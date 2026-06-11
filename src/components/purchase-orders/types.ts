@@ -60,6 +60,10 @@ export interface LineDraft {
   orderable_key: string;
   quantity: string;
   uom: Uom;
+  // Price Truth (Tranche 043) — optional caller-entered net price per ORDER
+  // UOM, kept as string input state like `quantity`. Never required; when
+  // blank the backend falls back to the catalog (supplier-item) cost.
+  unit_price_net?: string;
 }
 
 export interface ValidationErrors {
@@ -69,7 +73,12 @@ export interface ValidationErrors {
   lines?: string;
   line_items?: Record<
     number,
-    { orderable_key?: string; quantity?: string; uom?: string }
+    {
+      orderable_key?: string;
+      quantity?: string;
+      uom?: string;
+      unit_price_net?: string;
+    }
   >;
   general?: string;
 }
@@ -111,7 +120,12 @@ export function validatePoDraft(
   const errs: ValidationErrors = {};
   const lineErrors: Record<
     number,
-    { orderable_key?: string; quantity?: string; uom?: string }
+    {
+      orderable_key?: string;
+      quantity?: string;
+      uom?: string;
+      unit_price_net?: string;
+    }
   > = {};
 
   if (!draft.supplierId.trim()) errs.supplier_id = "Required.";
@@ -130,8 +144,12 @@ export function validatePoDraft(
   } else {
     for (let i = 0; i < draft.lines.length; i++) {
       const l = draft.lines[i];
-      const le: { orderable_key?: string; quantity?: string; uom?: string } =
-        {};
+      const le: {
+        orderable_key?: string;
+        quantity?: string;
+        uom?: string;
+        unit_price_net?: string;
+      } = {};
       if (!l.orderable_key) le.orderable_key = "Required.";
       if (!l.quantity.trim()) {
         le.quantity = "Required.";
@@ -140,6 +158,13 @@ export function validatePoDraft(
         if (isNaN(n) || n <= 0) le.quantity = "Must be greater than 0.";
       }
       if (!l.uom) le.uom = "Required.";
+      // Price Truth (Tranche 043) — the price is OPTIONAL everywhere. Only
+      // validate when the operator actually typed something: numeric, >= 0.
+      const priceRaw = (l.unit_price_net ?? "").trim();
+      if (priceRaw !== "") {
+        const p = Number(priceRaw);
+        if (isNaN(p) || p < 0) le.unit_price_net = "Must be 0 or more.";
+      }
       if (Object.keys(le).length > 0) lineErrors[i] = le;
     }
   }

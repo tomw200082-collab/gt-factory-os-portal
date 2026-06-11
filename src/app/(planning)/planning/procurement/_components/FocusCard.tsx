@@ -33,6 +33,7 @@ import {
   useSkipPo,
 } from "../../purchase-session/_lib/api";
 import type {
+  PlaceLinePrice,
   PoStatus,
   PoTier,
   PurchaseSessionPo,
@@ -98,6 +99,12 @@ export function FocusCard({
     po.earliest_need_date ?? "",
   );
   const [copied, setCopied] = useState(false);
+  // Price Truth (Tranche 043) — optional per-line price actually paid (per
+  // order UOM), keyed by session_po_line_id; sent only at place time for the
+  // lines the planner edited. The confirm checkbox authorizes catalog
+  // write-back for small deltas and appears only when a price was edited.
+  const [draftPrice, setDraftPrice] = useState<Record<string, string>>({});
+  const [confirmPriceUpdate, setConfirmPriceUpdate] = useState(true);
 
   const primaryRef = useRef<HTMLButtonElement>(null);
 
@@ -119,6 +126,12 @@ export function FocusCard({
   useEffect(() => {
     primaryRef.current?.focus();
   }, [po.session_po_id, po.status]);
+
+  // Reset the edited prices when moving to another order in the walk-through.
+  useEffect(() => {
+    setDraftPrice({});
+    setConfirmPriceUpdate(true);
+  }, [po.session_po_id]);
 
   function beginEdit(): void {
     const q: Record<string, string> = {};
@@ -163,6 +176,18 @@ export function FocusCard({
   }
 
   const activeLines = po.lines.filter((l) => !l.is_dropped && l.final_qty > 0);
+
+  const isResolved = po.status === "placed" || po.status === "skipped";
+
+  // Price Truth (Tranche 043) — the prices the planner actually edited (valid
+  // numbers >= 0 only). Empty array → nothing is sent at place.
+  const editedLinePrices: PlaceLinePrice[] = po.lines.flatMap((l) => {
+    const raw = draftPrice[l.session_po_line_id];
+    if (raw === undefined || raw.trim() === "") return [];
+    const n = Number(raw);
+    if (!Number.isFinite(n) || n < 0) return [];
+    return [{ session_po_line_id: l.session_po_line_id, unit_price_net: n }];
+  });
 
   return (
     <div className="space-y-5" data-testid={`focus-card-${po.session_po_id}`}>
@@ -270,6 +295,11 @@ export function FocusCard({
               <th className="px-3 py-1.5 text-left font-semibold">כמות</th>
               <th className="px-3 py-1.5 text-left font-semibold">יחידה</th>
               <th className="px-3 py-1.5 text-left font-semibold">עלות</th>
+              {!isResolved && (
+                <th className="px-3 py-1.5 text-left font-semibold">
+                  מחיר ליחידה (₪)
+                </th>
+              )}
               {editing && (
                 <th className="px-3 py-1.5 text-left font-semibold">הסר</th>
               )}
@@ -321,6 +351,27 @@ export function FocusCard({
                   <td className="px-3 py-1.5 text-left font-mono tabular-nums text-fg">
                     {formatIls(l.line_cost)}
                   </td>
+                  {!isResolved && (
+                    <td className="px-3 py-1.5 text-left">
+                      <input
+                        type="number"
+                        min={0}
+                        step="any"
+                        value={draftPrice[l.session_po_line_id] ?? ""}
+                        onChange={(e) =>
+                          setDraftPrice((p) => ({
+                            ...p,
+                            [l.session_po_line_id]: e.target.value,
+                          }))
+                        }
+                        placeholder={fmtQty(l.unit_cost)}
+                        className="w-20 rounded border border-border/60 bg-bg px-1 py-0.5 text-xs font-mono tabular-nums"
+                        aria-label={`מחיר ליחידה עבור ${l.line_label}`}
+                        data-testid={`focus-line-price-${l.session_po_line_id}`}
+                        disabled={busy || dropped}
+                      />
+                    </td>
+                  )}
                   {editing && (
                     <td className="px-3 py-1.5 text-left">
                       <input
@@ -443,6 +494,20 @@ export function FocusCard({
             </label>
           )}
 
+          {/* Price write-back confirm — only when a price was edited */}
+          {po.status === "approved" && editedLinePrices.length > 0 && (
+            <label className="flex items-center gap-2 text-xs text-fg-muted">
+              <input
+                type="checkbox"
+                checked={confirmPriceUpdate}
+                onChange={(e) => setConfirmPriceUpdate(e.target.checked)}
+                disabled={busy}
+                data-testid="focus-confirm-price-update"
+              />
+              עדכן מחיר קטלוג לפי ההזמנה
+            </label>
+          )}
+
           <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
             <button
               type="button"
@@ -482,6 +547,14 @@ export function FocusCard({
                     {
                       poId: po.session_po_id,
                       expected_receive_date: placeDate || undefined,
+                      line_prices:
+                        editedLinePrices.length > 0
+                          ? editedLinePrices
+                          : undefined,
+                      confirm_price_update:
+                        editedLinePrices.length > 0
+                          ? confirmPriceUpdate
+                          : undefined,
                     },
                     {
                       onSuccess: (data) =>

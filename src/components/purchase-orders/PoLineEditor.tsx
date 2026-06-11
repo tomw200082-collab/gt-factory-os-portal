@@ -347,6 +347,42 @@ export function PoLineEditor(props: PoLineEditorProps): JSX.Element {
                   </div>
                 </div>
 
+                {/* Unit price — optional (Tranche 043, Price Truth) */}
+                <div className="space-y-1">
+                  <label
+                    htmlFor={`po-new-line-price-${idx}`}
+                    className="block text-sm font-semibold text-fg"
+                  >
+                    Unit price (₪, per order unit)
+                    <span className="ml-1 text-3xs font-normal text-fg-faint">
+                      (optional)
+                    </span>
+                  </label>
+                  <input
+                    id={`po-new-line-price-${idx}`}
+                    data-testid={`po-new-line-price-${idx}`}
+                    type="number"
+                    inputMode="decimal"
+                    min="0"
+                    step="any"
+                    value={line.unit_price_net ?? ""}
+                    onChange={(e) =>
+                      onUpdateLine(idx, { unit_price_net: e.target.value })
+                    }
+                    placeholder="Leave blank to use the catalog cost"
+                    className={cn(
+                      "input w-full tabular-nums",
+                      lineErr?.unit_price_net && "border-danger/60",
+                    )}
+                    disabled={disabled}
+                  />
+                  {lineErr?.unit_price_net && (
+                    <div className="text-xs text-danger-fg">
+                      {lineErr.unit_price_net}
+                    </div>
+                  )}
+                </div>
+
                 {/* Selected item meta strip — quiet helper text */}
                 {selectedOrderable && (
                   <div className="text-3xs text-fg-faint font-mono">

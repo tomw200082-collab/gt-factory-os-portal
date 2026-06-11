@@ -79,6 +79,16 @@ export interface PoEnvelope {
   po: PurchaseSessionPo;
 }
 
+// Price Truth (Tranche 043) — one optional caller-entered price for a session
+// line, forwarded verbatim by the place action. unit_price_net is per ORDER
+// UOM. Mirror of PlacePoLinePriceSchema in
+// gt-factory-os/api/src/purchase-session/schemas.ts.
+export interface PlaceLinePrice {
+  session_po_line_id: string;
+  unit_price_net: number;
+  supplier_item_id?: string;
+}
+
 // One PATCH/POST line edit.
 export interface LineEdit {
   session_po_line_id: string;

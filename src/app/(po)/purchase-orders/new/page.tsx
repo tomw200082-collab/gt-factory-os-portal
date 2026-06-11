@@ -79,6 +79,10 @@ function ManualPoFormInner(): JSX.Element {
   const [manualReason, setManualReason] = useState("");
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<LineDraft[]>([emptyLine()]);
+  // Price Truth (Tranche 043) — when at least one line carries an entered
+  // price, the operator confirms (default checked) that small deltas may
+  // write back to the supplier-item catalog cost. Sent only in that case.
+  const [confirmPriceUpdate, setConfirmPriceUpdate] = useState(true);
 
   // --- Submission state -----------------------------------------------------
   type Phase = "idle" | "submitting" | "success" | "idempotent";
@@ -117,6 +121,13 @@ function ManualPoFormInner(): JSX.Element {
     [orderableByKey],
   );
 
+  // Price Truth (Tranche 043) — per-line unit_price_net rides along only
+  // when the operator actually typed one; confirm_price_update (and its
+  // checkbox) only exist when at least one line carries a price.
+  const anyPriceEntered = lines.some(
+    (l) => (l.unit_price_net ?? "").trim() !== "",
+  );
+
   // --- Submit ---------------------------------------------------------------
   async function handleSubmit(
     e: React.FormEvent<HTMLFormElement>,
@@ -143,6 +154,7 @@ function ManualPoFormInner(): JSX.Element {
       notes: notes.trim() || null,
       source_type: "manual" as const,
       lines: lines.map((l) => {
+        const priceRaw = (l.unit_price_net ?? "").trim();
         const row = orderableByKey.get(l.orderable_key);
         if (!row) throw new Error("Orderable not found");
         return {
@@ -151,8 +163,12 @@ function ManualPoFormInner(): JSX.Element {
             : { item_id: row.id, component_id: null }),
           qty_ordered: Number(l.quantity),
           uom_id: l.uom,
+          ...(priceRaw !== "" ? { unit_price_net: Number(priceRaw) } : {}),
         };
       }),
+      ...(anyPriceEntered
+        ? { confirm_price_update: confirmPriceUpdate }
+        : {}),
     };
 
     let res: Response;
@@ -185,7 +201,65 @@ function ManualPoFormInner(): JSX.Element {
     }
 
     if (res.status === 409) {
-      const data = (await res.json().catch(() => ({}))) as { po_id?: string };
+      const data = (await res.json().catch(() => ({}))) as {
+        po_id?: string;
+        error?: string;
+        detail?: string;
+      };
+      // Price Truth (Tranche 043) — the DB-layer price validation surfaces
+      // as a 409 token (not a Zod 422 with issues[]). The message does not
+      // identify the offending line, so highlight the price field on every
+      // line that carries an entered price, mirroring the 422 per-field
+      // mapping pattern (inline error + banner + focus first field).
+      if (
+        data.error === "INVALID_PRICE" ||
+        data.error === "INVALID_SUPPLIER_ITEM"
+      ) {
+        const lineFieldErrors: Record<
+          number,
+          {
+            orderable_key?: string;
+            quantity?: string;
+            uom?: string;
+            unit_price_net?: string;
+          }
+        > = {};
+        let firstFocusId: string | null = null;
+        lines.forEach((l, idx) => {
+          if ((l.unit_price_net ?? "").trim() === "") return;
+          lineFieldErrors[idx] = {
+            unit_price_net:
+              data.error === "INVALID_PRICE"
+                ? "The server rejected this price. Enter a number of 0 or more, or leave it blank."
+                : "The server could not match a supplier item for this priced line.",
+          };
+          if (!firstFocusId) firstFocusId = `po-new-line-price-${idx}`;
+        });
+        setErrors(
+          Object.keys(lineFieldErrors).length > 0
+            ? { line_items: lineFieldErrors }
+            : {},
+        );
+        setServerError(
+          "The entered price was rejected — see the highlighted line price fields below.",
+        );
+        if (firstFocusId && typeof window !== "undefined") {
+          window.requestAnimationFrame(() => {
+            const el = document.getElementById(firstFocusId!);
+            if (el) {
+              el.scrollIntoView({ behavior: "smooth", block: "center" });
+              if (
+                "focus" in el &&
+                typeof (el as HTMLElement).focus === "function"
+              ) {
+                (el as HTMLElement).focus({ preventScroll: true });
+              }
+            }
+          });
+        }
+        setPhase("idle");
+        return;
+      }
       setPhase("idempotent");
       setSuccessPoId(data.po_id ?? null);
       return;
@@ -463,6 +537,31 @@ function ManualPoFormInner(): JSX.Element {
           itemsLoading={itemsLoading}
           componentsLoading={componentsLoading}
         />
+
+        {/* Price write-back confirmation — only when a price was entered */}
+        {anyPriceEntered && (
+          <div className="flex items-start gap-2">
+            <input
+              id="po-new-confirm-price-update"
+              data-testid="po-new-confirm-price-update"
+              type="checkbox"
+              checked={confirmPriceUpdate}
+              onChange={(e) => setConfirmPriceUpdate(e.target.checked)}
+              disabled={phase === "submitting"}
+              className="mt-0.5"
+            />
+            <label
+              htmlFor="po-new-confirm-price-update"
+              className="text-sm text-fg"
+            >
+              Update catalog prices from this order
+              <span className="block text-3xs font-normal text-fg-faint">
+                Small changes apply right away; bigger changes wait for admin
+                approval under Price updates.
+              </span>
+            </label>
+          </div>
+        )}
 
         {/* Footer — submit + cancel */}
         <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3 pt-2">

@@ -13,6 +13,7 @@ import type {
   PoEnvelope,
   LineEdit,
   LineAdd,
+  PlaceLinePrice,
   SessionType,
 } from "./types";
 
@@ -118,6 +119,11 @@ export function usePlacePo() {
       poId: string;
       expected_receive_date?: string;
       notes?: string;
+      // Price Truth (Tranche 043) — additive, optional. Existing callers that
+      // omit these are unchanged: JSON.stringify drops undefined keys, so the
+      // strict backend schema never sees them.
+      line_prices?: PlaceLinePrice[];
+      confirm_price_update?: boolean;
     }): Promise<PoEnvelope> => {
       const res = await fetch(`/api/purchase-session/po/${args.poId}/place`, {
         method: "POST",
@@ -125,6 +131,8 @@ export function usePlacePo() {
         body: JSON.stringify({
           expected_receive_date: args.expected_receive_date,
           notes: args.notes,
+          line_prices: args.line_prices,
+          confirm_price_update: args.confirm_price_update,
         }),
       });
       return (await jsonOrThrow(res)) as PoEnvelope;

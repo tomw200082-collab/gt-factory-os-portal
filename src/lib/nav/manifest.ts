@@ -24,6 +24,7 @@ import {
   ArrowLeftRight,
   Building2,
   CalendarDays,
+  CircleDollarSign,
   ClipboardCheck,
   Clock,
   Cog,
@@ -322,6 +323,16 @@ export const NAV_MANIFEST: NavGroup[] = [
         href: "/admin/supplier-items",
         label: "Supplier Items",
         icon: Link2,
+        min_role: "admin",
+        required_capability: "admin:execute",
+      },
+      {
+        // Tranche 043 (Price Truth) — pending supplier_cost_drafts review
+        // queue: PO-entered prices whose delta vs the effective cost needs
+        // admin approval before becoming the catalog cost.
+        href: "/admin/cost-drafts",
+        label: "Price updates",
+        icon: CircleDollarSign,
         min_role: "admin",
         required_capability: "admin:execute",
       },
