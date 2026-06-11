@@ -41,6 +41,10 @@ Index of every operating artifact. Entries use repo-root-relative paths so the P
 ## Background packages
 - `docs/portal-os/backend-package-admin-superuser-depth.md` — 5-deliverable backend package to move admin_superuser_depth to 10/10
 
+## Audit reports & plans
+- `docs/portal-os/audit-reports/2026-06-11-full-system.md` — 10-investigation full-system audit (routes, admin, flows, design, interactions, taxonomy, prices, planning paths, production reporting, PO creation)
+- `docs/portal-os/improvement-plan-2026-06.md` — proposed 7-phase master improvement plan derived from the 2026-06-11 audit; pending Tom decisions T1–T6
+
 ## Tranches (history + state)
 - `docs/portal-os/tranches/000-template.md` — tranche template (do not set status=proposed on this file)
 - `docs/portal-os/tranches/_active.txt` — contains the currently active tranche number, or empty

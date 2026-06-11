@@ -330,14 +330,143 @@ planning runs — it is a parallel engine with different demand, netting, and gr
 
 ---
 
+## 9. Production reporting flow (production-plan → production-actual) — deep review
+
+Verdict: the production-actual form is one of the best-engineered surfaces in the portal
+(pinned-BOM staleness gates, idempotent replay, atomic plan-link, 4 conflict-recovery paths).
+The weak points are *around* it: truth conflicts, broken loop-closers, and a missing safety net.
+
+### NOW — trust & correctness defects
+- **B1 — scrap/consumption truth conflict (top trust defect):** backend consumes RM for
+  **output + scrap** (`production-actuals/handler.ts:561-564,588,776`) but operator copy says
+  three times that consumption is "based on output" only (`production-actual/page.tsx:2260-2262,
+  1580-1586`; `production-plan/_lib/helpers.ts:108-112`). One side is wrong vs the locked decision
+  (GAP-011) — Tom must arbitrate; then show it numerically ("Consumed for 120 processed = 100
+  good + 20 scrap").
+- **B2 — "View report →" on done cards is a dead deep-link:** card links
+  `?submission_id=` (`ProductionJobCard.tsx:302-307`) but the form never reads it
+  (`page.tsx:637-642`) → blank Step-1 form. Build a read-only submission-detail view +
+  `GET /queries/production-actuals/:submission_id` (replay path already has the data).
+- **B3 — planner clicking "Report" hits a hard 403:** board renders the CTA for planners
+  (`production-plan/page.tsx:930`) but the OPEN endpoint requires operator/admin
+  (`handler.ts:83-87,341-343`). Allow read-only open or hide the CTA with a reason.
+- **B4 — engine `draft` rows indistinguishable from firmed plans:** DB enum has
+  `draft|planned|in_production|completed|cancelled` (0133) and tea/matcha engines write drafts
+  (0216:265), but the read handler collapses everything to "planned"
+  (`handler.reads.ts:31,66-70`) — an operator can report production against an unfirmed draft;
+  base-batch rows would render empty-title cards. Surface real status, mute drafts, no Report CTA,
+  add a board-level "Firm this week" affordance, base-batch card variant.
+- **B5 — no reversal path for a wrong production report:** reversal movement types exist for
+  GR/waste/count/shipment (0007:104-105) but no production reversal handler exists anywhere.
+  Fat-fingered 1000-instead-of-100 is permanent. Build admin-gated
+  `POST /mutations/production-actuals/:id/reverse` (mirrored ledger rows, plan returns to
+  planned, reason + linked submissions) — the single highest-leverage trust feature.
+
+### NEXT — reconciliation ergonomics (world-class MES patterns)
+- **C6 — one-tap "Produced exactly as planned"** confirm button (and optional board-card quick
+  action) when arriving from a plan with unchanged qty — SAP "final confirmation w/o deviation".
+- **C7 — partial completion + remainder:** plan↔actual is hard 1:1
+  (`completed_submission_id UNIQUE`); reporting 300 of 500 closes the plan and the 200 vanish.
+  Tier 1 (portal-only): on under-production beyond the 2% band offer "Close" vs "Close and
+  re-plan remainder" (creates a linked plan row for the rest). Tier 2 (schema): N actuals per
+  plan + progress bar.
+- **C8 — variance reason codes:** variance is computed everywhere but never *explained*; add a
+  reason taxonomy (material_shortage / equipment / quality_loss / recipe_yield / extra_demand /
+  counting_error / other) required outside the ±2% band (one column).
+- **C10 — component availability inside the pre-submit preview:** shortages today surface only
+  as a 409 error with raw component ids; show Required | Available | After columns with red
+  shortfall rows pre-submit; map ids→names in the error from the snapshot already in state.
+- **C11 — success-panel fixes (portal-only):** `setSnapshot(null)` runs before render so the
+  consumption table degrades to raw ids (`page.tsx:977` vs `:1508-1523`) — keep a
+  `committedSnapshot`; link movement-log filtered by submission (`?source_event_id=`); show
+  resulting FG on-hand ("you now have 980 bottles").
+- **C12 — history → reconciliation log:** surface reporter (`reported_by_snapshot` stored but
+  never shown), variance vs plan, click-through to submission detail, date filter.
+- **D13 — day-close ritual:** "Close today" review on the board (produced X of Y, unreported
+  plans → report now / move to tomorrow / cancel with reason) + tomorrow preview. Tier 1 is
+  portal-only orchestration of the existing date-move PATCH.
+
+### LATER — production intelligence
+- **C9 — liquid loss vs packaging loss split** for two-head products (tank base L vs broken
+  bottles) — the flagship physics-aware polish for this factory; enables true base-liquid yield.
+- **D14 — start/finish times + surface `in_production`** (status exists in DB, rendered nowhere)
+  → run duration → capacity calibration for the tea scheduler.
+- **D15 — yield trend read model:** per item last-N runs (output/planned %, scrap rate, reason
+  distribution) as sparkline on submission detail + `/planning/production-history` for the weekly
+  meeting — converts reconciliation from data entry into process control.
+- **D16 — actual vs standard run cost:** price actual consumption rows with the existing
+  cogs-rollup engine ("run consumed ₪412 of materials; standard ₪398, +3.5%").
+- **D17 — keypad chips** (planned qty / ½ batch / 1 batch), long-press acceleration, sheet
+  picker on mobile; lot capture stays out of v1 by locked decision.
+
+---
+
+## 10. PO creation flow — "PO as the living update channel for supplier truth"
+
+### Facts
+- **No price field exists anywhere a PO is created.** Manual form captures supplier, date
+  (hardcoded today+7, not lead-time-aware), reason, notes, lines (orderable/qty/uom only)
+  (`purchase-orders/new/page.tsx:77-156`). `unit_price_net` is snapshotted server-side from the
+  primary supplier_item, **fallback 0** (`0095:227-236`) — missing cost silently becomes a ₪0 line.
+- Focus mode lets you edit qty/drop/add-line/date; **not** supplier, price, terms
+  (`FocusCard.tsx:96-151,300-336,424-481`). Convert-rec path has no editable fields at all.
+- The line editor never fetches supplier_items (`useOrderables.ts:48-118`) — supplier and item
+  pickers are uncorrelated; a wrong pairing 409s only at submit (`SUPPLIER_ITEM_MAPPING_MISSING`).
+- **Multi-supplier is fully supported structurally** (`supplier_items`: per-relationship price,
+  lead_time_days, moq, payment_terms, is_primary with partial-unique guard 0067) but the planner
+  never chooses between suppliers anywhere — every path takes `is_primary desc limit 1`.
+- Suppliers carry payment_terms + one contact (name/phone, **no email column**); never surfaced
+  in the PO flow. supplier-item create schema **can't carry cost** (needs a second PATCH); all
+  supplier mutations are admin-only — a planner cannot fix supplier data.
+- **No PO mutation, session action, or goods receipt writes back to supplier_items /
+  price_history** (repo-wide grep). `price_history` has zero API writers; `supplier_cost_drafts`
+  (0188) approval handler doesn't exist. "Last ordered" is derivable from po_lines but unused.
+  Lead-time truth (`actual_first_receipt_at` vs `order_date`, 0050:112-113) is captured and
+  never read.
+- Latent inconsistency: `fn_create_manual_po` doesn't filter supplier_items by approval_status;
+  the session generator does (`handler.actions.ts:241-245`).
+
+### Proposal (ranked)
+- **D3 (NOW, backend+portal, no schema):** accept optional `unit_price_net` + `supplier_item_id`
+  per line in the create schema + `fn_create_manual_po`; entered price becomes the PO snapshot.
+  When it differs from current cost → insert a `supplier_cost_drafts` row (not a silent
+  overwrite); **build the missing 0188 approval handler** (approve atomically writes
+  `supplier_items.std_cost_per_inv_uom` + `price_history` + change_log). One-tap confirm at
+  place: "Update catalog price for [supplier] to ₪X" — checked by default on small deltas
+  (threshold = Tom policy decision), unchecked+warning on large; unchecked stays pending in an
+  admin inbox. Same editable-price column in focus mode. This is the missing price-update loop
+  (audit §7 cause #1) — one pipeline for all price changes (PO entry, receipt, future GI ingest).
+- **D1 (NOW, portal + 1 small read endpoint):** supplier-aware line editor — per-line comparison
+  strip for multi-supplier components (supplier · ₪/order-uom · lead days · MOQ · last ordered),
+  primary pre-selected; price field pre-filled with delta chip ("+12% vs current cost"); gray
+  out suppliers with no mapping (kill the submit-time 409); MOQ/multiple hint under qty.
+- **D2 (NOW, portal-only):** expected date defaults to `today + lead_time_days` of the chosen
+  supplier (helper text "based on X-day lead time"), editable.
+- **D5 (NEXT, backend + 1 column):** optional `actual_unit_price_net` per GR line ("from the
+  delivery note — optional") → same cost-draft funnel; lead-time observation job
+  ("observed 9d vs configured 5d — update?") as suggestion, never auto-write.
+- **D4 (NEXT, needs Tom role decision):** inline "New supplier" sheet in the picker (name,
+  contact, phone, payment terms, lead time) creating supplier + pending supplier_items without
+  leaving the form; widen create gate to planner+admin (contradicts AMMC admin-only — explicit
+  approval needed); add cost to supplier-item create schema; optional email column.
+- **LATER:** multiple contacts per supplier, currency per supplier_item, auto-primary-flip
+  suggestions, GI→draft auto-feed.
+- **Keep-simple guardrails:** nothing new mandatory; defaults everywhere; comparison only
+  renders for multi-supplier components; zero new pages — a strip, a sheet, a checkbox.
+
+---
+
 ## Top 10 production-critical gaps (prioritized)
 
 1. **Price truth is frozen at April 2026 + economics edits shadowed by primary supplier cost** —
-   critical — backend tranche (cost-update loop + effective-cost editor fix).
+   critical — backend tranche (cost-update loop + effective-cost editor fix). Concrete fix path
+   now defined in §10 (D3 price-on-PO + cost-draft approval handler; D5 receipt cost capture).
 2. **Planning-run multi-week math double-counts shortages and re-counts supply** — critical —
    demote runs from ordering now; decide fix-or-retire within a quarter.
-3. **Loss-direction waste posts to the append-only ledger with no confirmation** (INTER-001) —
-   critical — single-page tranche.
+3. **Irreversibility safety net missing on the two daily ledger writers:** loss-direction waste
+   posts with no confirmation (INTER-001) AND there is no reversal path for a wrong production
+   report (§9 B5); plus the scrap/consumption copy-vs-backend truth conflict (§9 B1, Tom
+   arbitration) — critical.
 4. **Two 404s on primary journeys** (`/ops/stock/production-actual` from rec actions;
    `/stock/ledger` from StockTruthDrawer) + receipts locked-supplier dead-end — high — one-line
    href/state fixes, highest journey impact.
