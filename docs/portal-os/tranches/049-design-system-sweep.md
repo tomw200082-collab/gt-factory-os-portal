@@ -1,6 +1,6 @@
 # Tranche 049 — Design-system consumption sweep (Phase 7)
 
-status: active
+status: executed 2026-06-11 — pending merge
 phase: improvement-plan-2026-06 Phase 7 items 2-3 (Tom authorized shared-primitive decisions)
 approved_by: Tom (2026-06-11 full-run authorization; "decide everything")
 
@@ -25,4 +25,4 @@ tsc clean; vitest green (478 baseline + new); no inline <svg> in waste-adjustmen
 single CTA shape rule (no rounded-full primary buttons); existing testids preserved
 
 ## Checklist
-- [x] Implemented  - [x] Typecheck (tsc --noEmit clean)  - [x] Vitest (488/488; 478 baseline + 10 new)  - [ ] Pushed
+- [x] Implemented  - [x] Typecheck (tsc --noEmit clean)  - [x] Vitest (488/488; 478 baseline + 10 new)  - [x] Pushed
