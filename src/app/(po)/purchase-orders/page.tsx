@@ -598,6 +598,24 @@ export default function PurchaseOrdersListPage() {
         }
       />
 
+      {/* KPI skeleton — Tranche 047 (INTER-006): fixed-width placeholder
+          blocks while the counts query is pending, so the tile row does not
+          pop in and shift the layout. */}
+      {allPosQuery.isLoading && (
+        <div
+          className="flex flex-wrap gap-3 mb-2"
+          data-testid="po-stats-skeleton"
+          aria-busy="true"
+          aria-live="polite"
+        >
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div
+              key={i}
+              className="h-[78px] w-[140px] animate-pulse rounded-md border border-border/60 bg-bg-subtle"
+            />
+          ))}
+        </div>
+      )}
       {/* KPI tile row — 4 tiles: Open / Partial / Late / Received */}
       {allPosQuery.isError && (
         <div
@@ -777,6 +795,19 @@ export default function PurchaseOrdersListPage() {
             />
           </div>
         </div>
+
+        {/* Tranche 047 (INTER-008 fallback) — the list query is capped at
+            500 rows; when the response hits the cap, say so instead of
+            silently truncating. */}
+        {rows.length === 500 && (
+          <div
+            className="border-b border-border/60 bg-bg-subtle/50 px-5 py-2 text-xs text-fg-muted"
+            data-testid="po-list-truncation-banner"
+            role="status"
+          >
+            Showing the most recent 500 orders — use filters to narrow.
+          </div>
+        )}
 
         {posQuery.isLoading ? (
           <div className="p-5">

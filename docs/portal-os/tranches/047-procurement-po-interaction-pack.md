@@ -20,4 +20,16 @@ approved_by: Tom (2026-06-11 full-run authorization)
 tsc clean; vitest green (451 baseline + new); no href to /planning/purchase-(session|calendar) outside redirect stubs
 
 ## Checklist
-- [ ] Implemented  - [ ] Typecheck  - [ ] Vitest  - [ ] Pushed
+- [x] Implemented  - [x] Typecheck  - [x] Vitest  - [ ] Pushed
+
+## Evidence (2026-06-11)
+- tsc --noEmit: clean
+- vitest: 478/478 green (451 baseline + 13 tranche-047 tests: 3 supplier-item
+  helper, 7 PoLineEditor comparison-strip/hint, 3 PublishConfirmModal
+  isSubmitting; remaining new tests belong to the concurrent
+  production-plan/actual tranche sharing this worktree)
+- href gate: `grep -rn "planning/purchase-(session|calendar)"` (excluding
+  redirect stubs + kept `_lib`/`_components` dirs) → no matches
+- Deviation: gate required touching `procurement/_components/ActionList.tsx`
+  + its test (fallback open-link constant pointed at the superseded
+  session URL) — two files outside the manifest, minimal repoint only.

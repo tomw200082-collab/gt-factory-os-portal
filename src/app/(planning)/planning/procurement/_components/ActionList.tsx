@@ -38,7 +38,10 @@ import {
   type DecisionBucket,
 } from "../_lib/decision";
 
-const CLASSIC_SESSION_HREF = "/planning/purchase-session";
+// Tranche 047 — fallback link when no onOpen handler is supplied. The
+// classic per-PO session URL is a redirect stub back to
+// /planning/procurement since Tranche 045, so link there directly.
+const FALLBACK_OPEN_HREF = "/planning/procurement";
 
 const TIER_LABEL: Record<PoTier, string> = {
   urgent: "דחוף",
@@ -184,7 +187,7 @@ function ProcurementRow({
             </button>
           ) : (
             <Link
-              href={CLASSIC_SESSION_HREF}
+              href={FALLBACK_OPEN_HREF}
               className="btn btn-sm btn-accent shrink-0"
               data-testid={`procurement-open-${po.session_po_id}`}
             >

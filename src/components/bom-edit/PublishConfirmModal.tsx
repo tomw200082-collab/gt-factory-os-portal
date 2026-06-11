@@ -27,7 +27,23 @@ interface PublishConfirmModalProps {
   onCancel: () => void;
   /** Variant A → false; Variant B → true. Variant C never invokes. */
   onConfirm: (confirmOverride: boolean) => void;
+  /** Tranche 047 (INTER-013) — true while the publish mutation is in
+   *  flight: disables Cancel + the confirm button and swaps the confirm
+   *  label for a spinner, so a slow publish cannot be double-fired or
+   *  abandoned mid-flight. */
+  isSubmitting?: boolean;
 }
+
+/** Inline spinner for the confirm button while publishing. */
+const SpinnerLabel = ({ label }: { label: string }): JSX.Element => (
+  <span className="inline-flex items-center gap-1.5">
+    <span
+      aria-hidden
+      className="inline-block h-3.5 w-3.5 animate-spin rounded-full border-2 border-current border-t-transparent"
+    />
+    {label}
+  </span>
+);
 
 const BLOCKER_COPY: Record<string, string> = {
   EMPTY_VERSION: "Version has no components",
@@ -60,6 +76,7 @@ export function PublishConfirmModal({
   nextVersionLabel,
   onCancel,
   onConfirm,
+  isSubmitting = false,
 }: PublishConfirmModalProps): JSX.Element {
   const [agreed, setAgreed] = useState(false);
   const blockingIssues = preview.blocking_issues ?? [];
@@ -122,16 +139,18 @@ export function PublishConfirmModal({
           <button
             type="button"
             onClick={onCancel}
-            className="rounded-sm border border-border bg-bg-raised px-3 py-1.5 text-sm text-fg hover:bg-bg-subtle"
+            disabled={isSubmitting}
+            className="rounded-sm border border-border bg-bg-raised px-3 py-1.5 text-sm text-fg hover:bg-bg-subtle disabled:cursor-not-allowed disabled:opacity-40"
           >
             Cancel
           </button>
           <button
             type="button"
+            disabled={isSubmitting}
             onClick={() => onConfirm(false)}
-            className="rounded-sm border border-accent-border bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:bg-accent-hover"
+            className="rounded-sm border border-accent-border bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Publish
+            {isSubmitting ? <SpinnerLabel label="Publishing…" /> : "Publish"}
           </button>
         </div>
       </Shell>
@@ -188,17 +207,22 @@ export function PublishConfirmModal({
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-sm border border-border bg-bg-raised px-3 py-1.5 text-sm text-fg hover:bg-bg-subtle"
+          disabled={isSubmitting}
+          className="rounded-sm border border-border bg-bg-raised px-3 py-1.5 text-sm text-fg hover:bg-bg-subtle disabled:cursor-not-allowed disabled:opacity-40"
         >
           Cancel
         </button>
         <button
           type="button"
-          disabled={!agreed}
+          disabled={!agreed || isSubmitting}
           onClick={() => onConfirm(true)}
           className="rounded-sm border border-accent-border bg-accent px-3 py-1.5 text-sm font-medium text-accent-fg hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-40"
         >
-          Publish anyway
+          {isSubmitting ? (
+            <SpinnerLabel label="Publishing…" />
+          ) : (
+            "Publish anyway"
+          )}
         </button>
       </div>
     </Shell>

@@ -160,12 +160,12 @@ function SessionView({
         <div>
           המנוע רץ בהצלחה — אין כרגע הזמנות רכש שדורשות פעולה בתוך האופק.
         </div>
-        <Link
-          href="/planning/purchase-calendar"
-          className="btn btn-sm btn-outline"
-        >
-          ללוח הרכש ←
-        </Link>
+        {/* Tranche 047 — the old purchase-calendar link redirected straight
+            back to this page (a loop after Tranche 045). Replaced with a
+            non-link hint. */}
+        <div className="text-xs text-fg-faint">
+          הזמנות מתוכננות יופיעו כאן אוטומטית כשיגיע מועד הפעולה שלהן.
+        </div>
       </div>
     );
   }

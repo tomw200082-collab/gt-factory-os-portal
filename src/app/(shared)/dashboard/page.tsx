@@ -57,7 +57,8 @@
 //     planner + admin only (gated at the call site so the query never mounts
 //     for other roles). Surfaces this week's purchase-session supplier orders
 //     that are overdue, due today, or flagged urgent-tier, each deep-linking
-//     into /planning/purchase-session. Calm green when nothing is due.
+//     into /planning/procurement (Tranche 047 — repointed from the
+//     superseded purchase-session URL). Calm green when nothing is due.
 // ---------------------------------------------------------------------------
 
 import type { ReactNode } from "react";
@@ -1832,10 +1833,10 @@ function UrgentProcurementBlock({ now }: { now: Date }) {
       description="Supplier orders from this week's procurement session that need ordering now — overdue, due today, or flagged urgent."
       actions={
         <Link
-          href="/planning/purchase-session"
+          href="/planning/procurement"
           className="inline-flex items-center gap-1 rounded text-xs font-semibold text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
         >
-          Open session
+          Open procurement
           <ArrowRight className="h-3 w-3" strokeWidth={2} />
         </Link>
       }
@@ -1850,10 +1851,10 @@ function UrgentProcurementBlock({ now }: { now: Date }) {
               ·
             </span>
             <Link
-              href="/planning/purchase-calendar"
+              href="/planning/procurement"
               className="font-semibold text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
             >
-              View purchase calendar
+              View procurement calendar
             </Link>
           </span>
         ) : undefined
@@ -1875,7 +1876,7 @@ function UrgentProcurementBlock({ now }: { now: Date }) {
       ) : rows.length === 0 ? (
         <AllClearRibbon
           title="All procurement is on track."
-          description="No supplier orders are overdue, due today, or flagged urgent. Upcoming orders appear on the purchase calendar."
+          description="No supplier orders are overdue, due today, or flagged urgent. Upcoming orders appear in the procurement calendar view."
         />
       ) : (
         <ul className="flex flex-col gap-2" aria-live="polite">
@@ -1927,7 +1928,7 @@ function UrgentProcurementBlock({ now }: { now: Date }) {
                   </div>
                 </div>
                 <Link
-                  href="/planning/purchase-session"
+                  href="/planning/procurement"
                   className={cn(
                     "inline-flex shrink-0 items-center gap-1 self-start rounded text-xs font-semibold hover:underline focus-visible:outline-none focus-visible:ring-2 sm:self-center",
                     isDanger

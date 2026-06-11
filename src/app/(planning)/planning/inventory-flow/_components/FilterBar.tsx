@@ -73,6 +73,24 @@ export function FilterBar({
     [router, searchParams],
   );
 
+  // Tranche 047 (INTER-007) — one-click reset of every non-default filter.
+  // Defaults: at_risk_only ON (param absent), no family, no product group,
+  // empty search.
+  const anyNonDefaultFilter =
+    searchParams.get("at_risk_only") === "false" ||
+    family !== "" ||
+    productGroup !== "" ||
+    q !== "";
+
+  const clearAllFilters = useCallback(() => {
+    const sp = new URLSearchParams(searchParams.toString());
+    for (const k of ["at_risk_only", "family", "product_group", "q"]) {
+      sp.delete(k);
+    }
+    const qs = sp.toString();
+    router.replace(qs ? `?${qs}` : "?", { scroll: false });
+  }, [router, searchParams]);
+
   // ⌘K / Ctrl+K global focus shortcut for the search input.
   const searchRef = useRef<HTMLInputElement | null>(null);
   useEffect(() => {
@@ -247,6 +265,20 @@ export function FilterBar({
               );
             })}
           </div>
+        ) : null}
+
+        {/* Tranche 047 (INTER-007) — visible only when any non-default
+            filter is active; resets all four filter params in one click. */}
+        {anyNonDefaultFilter ? (
+          <button
+            type="button"
+            onClick={clearAllFilters}
+            data-testid="flow-filter-clear-all"
+            className="inline-flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-1 text-xs font-medium text-fg-muted underline-offset-2 hover:text-fg hover:underline"
+          >
+            <X className="h-3 w-3" strokeWidth={2} aria-hidden />
+            Clear all
+          </button>
         ) : null}
 
         {/* Groups v1 — curated product-group chips (single-select, URL-backed

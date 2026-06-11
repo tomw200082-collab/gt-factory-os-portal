@@ -14,7 +14,8 @@
 // Tranche 029 — not used yet by the /new page.
 // ---------------------------------------------------------------------------
 
-import { FilePlus2, Trash2 } from "lucide-react";
+import { useMemo } from "react";
+import { AlertTriangle, FilePlus2, Trash2 } from "lucide-react";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { UOMS, type Uom } from "@/lib/contracts/enums";
 import {
@@ -22,12 +23,37 @@ import {
   type SearchableSelectOption,
 } from "@/components/fields/SearchableSelect";
 import { cn } from "@/lib/cn";
-import type {
-  LineDraft,
-  OrderableRow,
-  PoEditorMode,
-  ValidationErrors,
+import {
+  approvedSupplierItems,
+  costPerOrderUom,
+  dedupeBySupplier,
+  type LineDraft,
+  type OrderableRow,
+  type PoEditorMode,
+  type SupplierItemRow,
+  type ValidationErrors,
 } from "./types";
+
+// Tranche 047 (D1) — small format helpers for the supplier comparison strip.
+function fmtIls(n: number): string {
+  return `₪${n.toLocaleString("en-US", { maximumFractionDigits: 2 })}`;
+}
+
+function fmtQty(raw: string): string {
+  const n = Number(raw);
+  if (!isFinite(n)) return raw;
+  return n.toLocaleString("en-US", { maximumFractionDigits: 4 });
+}
+
+/** Chip caption: "₪12.50 · 7d lead · MOQ 24" — unknown segments omitted. */
+function chipDetails(si: SupplierItemRow): string {
+  const parts: string[] = [];
+  const cost = costPerOrderUom(si);
+  if (cost != null) parts.push(fmtIls(cost));
+  if (si.lead_time_days != null) parts.push(`${si.lead_time_days}d lead`);
+  if (si.moq != null) parts.push(`MOQ ${fmtQty(si.moq)}`);
+  return parts.join(" · ");
+}
 
 const REQUIRED_LABEL = (
   <span className="ml-0.5 text-danger-fg" aria-hidden>
@@ -64,6 +90,14 @@ export interface PoLineEditorProps {
   suppliersLoading: boolean;
   itemsLoading: boolean;
   componentsLoading: boolean;
+
+  // Tranche 047 (D1) — supplier_items rows per orderable_key (from
+  // useSupplierItemsByOrderable). Optional: callers that do not pass it get
+  // the pre-047 editor unchanged (no comparison strip / warnings / hints).
+  supplierItemsByOrderable?: Map<string, SupplierItemRow[]>;
+  // Tranche 047 (D2) — helper text under the expected-date field, e.g.
+  // "based on 7-day lead time". Owned by the parent page.
+  expectedDateHint?: string | null;
 }
 
 export function PoLineEditor(props: PoLineEditorProps): JSX.Element {
@@ -89,9 +123,18 @@ export function PoLineEditor(props: PoLineEditorProps): JSX.Element {
     suppliersLoading,
     itemsLoading,
     componentsLoading,
+    supplierItemsByOrderable,
+    expectedDateHint,
   } = props;
 
   const isManual = mode === "manual";
+
+  // Tranche 047 (D1) — supplier display names for chips + warnings.
+  const supplierNameById = useMemo(() => {
+    const m = new Map<string, string>();
+    for (const o of supplierOptions) m.set(o.value, o.label);
+    return m;
+  }, [supplierOptions]);
 
   return (
     <div className="space-y-5">
@@ -161,6 +204,14 @@ export function PoLineEditor(props: PoLineEditorProps): JSX.Element {
                   {errors.expected_receive_date}
                 </div>
               )}
+              {!errors.expected_receive_date && expectedDateHint && (
+                <p
+                  className="text-3xs text-fg-faint"
+                  data-testid="po-new-expected-date-hint"
+                >
+                  {expectedDateHint}
+                </p>
+              )}
             </div>
           </div>
 
@@ -222,6 +273,40 @@ export function PoLineEditor(props: PoLineEditorProps): JSX.Element {
           {lines.map((line, idx) => {
             const lineErr = errors.line_items?.[idx];
             const selectedOrderable = orderableByKey.get(line.orderable_key);
+
+            // Tranche 047 (D1) — supplier comparison data for this line.
+            // siResolved distinguishes "fetched, no rows" from "loading /
+            // failed / feature not wired" so warnings never fire early.
+            const siRows = supplierItemsByOrderable?.get(line.orderable_key);
+            const siResolved = siRows !== undefined;
+            const approved = siRows ? approvedSupplierItems(siRows) : [];
+            const supplierChoices = dedupeBySupplier(approved);
+            const showStrip = supplierChoices.length > 1;
+            const pinnedSi = line.supplier_item_id
+              ? (approved.find(
+                  (r) => r.supplier_item_id === line.supplier_item_id,
+                ) ?? null)
+              : null;
+            const headerSi = supplierId
+              ? (supplierChoices.find((r) => r.supplier_id === supplierId) ??
+                null)
+              : null;
+            const defaultChip =
+              supplierChoices.find((r) => r.is_primary) ??
+              supplierChoices[0] ??
+              null;
+            const selectedChip = pinnedSi ?? defaultChip;
+            // Drives the price placeholder + MOQ hint: explicit pin wins,
+            // then the header supplier's mapping, then the primary supplier.
+            const effectiveSi = pinnedSi ?? headerSi ?? defaultChip;
+            const effectiveCost = effectiveSi
+              ? costPerOrderUom(effectiveSi)
+              : null;
+            const headerHasNoMapping =
+              siResolved &&
+              !!supplierId &&
+              !approved.some((r) => r.supplier_id === supplierId);
+
             return (
               <div
                 key={idx}
@@ -310,6 +395,20 @@ export function PoLineEditor(props: PoLineEditorProps): JSX.Element {
                         {lineErr.quantity}
                       </div>
                     )}
+                    {/* Tranche 047 (D1c) — MOQ hint when known. The supplier-
+                        items API carries no order-multiple field, so the hint
+                        is MOQ-only. */}
+                    {!lineErr?.quantity && effectiveSi?.moq != null && (
+                      <p
+                        className="text-3xs text-fg-faint tabular-nums"
+                        data-testid={`po-new-line-moq-${idx}`}
+                      >
+                        MOQ {fmtQty(effectiveSi.moq)}
+                        {effectiveSi.order_uom
+                          ? ` ${effectiveSi.order_uom}`
+                          : ""}
+                      </p>
+                    )}
                   </div>
 
                   <div className="space-y-1">
@@ -369,7 +468,11 @@ export function PoLineEditor(props: PoLineEditorProps): JSX.Element {
                     onChange={(e) =>
                       onUpdateLine(idx, { unit_price_net: e.target.value })
                     }
-                    placeholder="Leave blank to use the catalog cost"
+                    placeholder={
+                      effectiveCost != null
+                        ? `Catalog: ${fmtIls(effectiveCost)} per ${effectiveSi?.order_uom ?? "order unit"}`
+                        : "Leave blank to use the catalog cost"
+                    }
                     className={cn(
                       "input w-full tabular-nums",
                       lineErr?.unit_price_net && "border-danger/60",
@@ -382,6 +485,93 @@ export function PoLineEditor(props: PoLineEditorProps): JSX.Element {
                     </div>
                   )}
                 </div>
+
+                {/* Tranche 047 (D1b) — header supplier has no approved
+                    mapping for this line: warn before the 409 at submit. */}
+                {headerHasNoMapping && (
+                  <div
+                    role="alert"
+                    className="flex items-start gap-1.5 rounded-sm border border-warning/50 bg-warning/5 px-2.5 py-1.5 text-xs text-warning-fg"
+                    data-testid={`po-new-line-no-mapping-${idx}`}
+                  >
+                    <AlertTriangle
+                      className="h-3.5 w-3.5 shrink-0 mt-0.5"
+                      aria-hidden
+                    />
+                    <span>
+                      {supplierNameById.get(supplierId) ??
+                        "The selected supplier"}{" "}
+                      has no mapping for this item — submitting will fail.
+                    </span>
+                  </div>
+                )}
+
+                {/* Tranche 047 (D1a) — compact supplier comparison strip.
+                    Renders only when >1 approved supplier supplies the line.
+                    Selecting a chip pins the line's supplier_item_id. */}
+                {showStrip && (
+                  <div
+                    className="space-y-1"
+                    data-testid={`po-new-line-suppliers-${idx}`}
+                  >
+                    <div className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                      {supplierChoices.length} approved suppliers
+                    </div>
+                    <div
+                      className="flex flex-wrap gap-1.5"
+                      role="radiogroup"
+                      aria-label={`Line ${idx + 1} supplier comparison`}
+                    >
+                      {supplierChoices.map((si) => {
+                        const selected =
+                          selectedChip?.supplier_item_id ===
+                          si.supplier_item_id;
+                        const details = chipDetails(si);
+                        return (
+                          <button
+                            key={si.supplier_item_id}
+                            type="button"
+                            role="radio"
+                            aria-checked={selected}
+                            disabled={disabled}
+                            onClick={() =>
+                              onUpdateLine(idx, {
+                                supplier_item_id: si.supplier_item_id,
+                              })
+                            }
+                            data-testid={`po-new-line-supplier-chip-${idx}-${si.supplier_item_id}`}
+                            className={cn(
+                              "inline-flex items-center gap-1.5 rounded-sm border px-2 py-1 text-3xs transition-colors",
+                              selected
+                                ? "border-accent/50 bg-accent-soft font-semibold text-accent"
+                                : "border-border/70 bg-bg-raised text-fg-muted hover:border-border-strong hover:text-fg",
+                            )}
+                          >
+                            <span>
+                              {supplierNameById.get(si.supplier_id) ??
+                                si.supplier_id}
+                            </span>
+                            {details && (
+                              <span
+                                className={cn(
+                                  "font-normal tabular-nums",
+                                  selected ? "text-accent/80" : "text-fg-faint",
+                                )}
+                              >
+                                {details}
+                              </span>
+                            )}
+                            {si.is_primary && (
+                              <span className="text-[9px] font-semibold uppercase tracking-sops opacity-70">
+                                primary
+                              </span>
+                            )}
+                          </button>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {/* Selected item meta strip — quiet helper text */}
                 {selectedOrderable && (
