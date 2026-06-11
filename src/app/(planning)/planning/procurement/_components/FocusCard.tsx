@@ -14,6 +14,7 @@
 // ---------------------------------------------------------------------------
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import {
   AlertTriangle,
   Check,
@@ -411,7 +412,16 @@ export function FocusCard({
           <span>
             ההזמנה נוצרה.
             {po.po_id && (
-              <span className="font-mono text-xs"> · PO {po.po_id.slice(0, 8)}…</span>
+              <span className="font-mono text-xs">
+                {" "}·{" "}
+                <Link
+                  href={`/purchase-orders/${po.po_id}`}
+                  className="underline-offset-2 hover:underline"
+                  data-testid="focus-placed-po-link"
+                >
+                  PO {po.po_id.slice(0, 8)}…
+                </Link>
+              </span>
             )}
           </span>
         </div>

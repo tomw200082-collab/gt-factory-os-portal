@@ -77,6 +77,7 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
@@ -174,6 +175,14 @@ async function fetchStockValue(): Promise<StockValueResponse> {
   const res = await fetch("/api/stock/value");
   if (!res.ok) throw new Error(`VALUE_FETCH_${res.status}`);
   return res.json() as Promise<StockValueResponse>;
+}
+
+// Tranche 041 — row drill-down target. RM/PKG rows are component masters
+// (the old items link 404'd for them); FG rows keep the item-master link.
+function rowDetailHref(row: StockRow): string {
+  return row.item_type === "RM" || row.item_type === "PKG"
+    ? `/admin/masters/components/${encodeURIComponent(row.item_id)}`
+    : `/admin/masters/items/${encodeURIComponent(row.item_id)}`;
 }
 
 function fmtIls(val: string | null | undefined, opts?: { compact?: boolean }): string {
@@ -615,7 +624,7 @@ function InventoryCardMobile({
     >
       <div className="flex items-start justify-between gap-4">
         <Link
-          href={`/admin/masters/items/${encodeURIComponent(row.item_id)}`}
+          href={rowDetailHref(row)}
           className="min-w-0 flex-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
           title={row.display_name ?? row.item_id}
         >
@@ -825,6 +834,14 @@ export default function InventoryPage() {
   const [alertDismissed, setAlertDismissed] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const chipRowRef = useRef<HTMLDivElement>(null);
+
+  // Tranche 041 — dashboard stockout drill-down deep-links ?item_id=; seed
+  // the search box on mount so the list lands filtered to that item.
+  const searchParams = useSearchParams();
+  const urlItemId = searchParams?.get("item_id") ?? "";
+  useEffect(() => {
+    if (urlItemId) setSearch(urlItemId);
+  }, [urlItemId]);
 
   function handleReconcileClick(row: StockRow) {
     setDrawerRow(row);
@@ -1829,7 +1846,7 @@ export default function InventoryPage() {
                                     >
                                       <td className="py-2 pr-4">
                                         <Link
-                                          href={`/admin/masters/items/${encodeURIComponent(row.item_id)}`}
+                                          href={rowDetailHref(row)}
                                           className="inline-flex items-center gap-1.5 text-fg hover:text-accent-fg hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
                                           title={row.display_name ?? row.item_id}
                                         >

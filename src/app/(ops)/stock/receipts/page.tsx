@@ -880,10 +880,17 @@ export default function GoodsReceiptPage() {
         setLines([emptyLine()]);
         setNotes("");
       } else {
+        // Tranche 041 — never show stringified JSON to the operator; prefer
+        // the server's message string, else a plain-English fallback.
+        const bodyMessage =
+          body &&
+          typeof body === "object" &&
+          typeof (body as { message?: unknown }).message === "string"
+            ? (body as { message: string }).message
+            : null;
         const detail =
-          body && typeof body === "object"
-            ? JSON.stringify(body)
-            : `HTTP ${res.status}`;
+          bodyMessage ??
+          "Unexpected server response — try again or contact support.";
         setDone({
           kind: "error",
           message: "Could not submit. Check your connection and try again.",
@@ -1304,13 +1311,23 @@ export default function GoodsReceiptPage() {
                     onClick={() => {
                       setLines([emptyLine()]);
                       setNotes("");
-                      setPoId("");
+                      // Tranche 041 — in the URL-locked flow the supplier
+                      // combobox stays disabled and the prefill effect
+                      // early-returns on an empty poId, so clearing both
+                      // left an un-submittable form. Re-seed the URL's PO
+                      // and let prefill re-run instead.
+                      if (urlPoLocked) {
+                        setPoId(urlPoId);
+                        setPrefillApplied(false);
+                      } else {
+                        setPoId("");
+                        setSupplierId("");
+                      }
                       // Tranche 020 — also reset the track so the operator
                       // lands back on the Smart Picker (unless URL-locked,
                       // in which case track stays "po" via the urlPoLocked
                       // branch in the track derivation).
                       setManualConfirmed(false);
-                      setSupplierId("");
                       setDone(null);
                       setPhase("idle");
                     }}

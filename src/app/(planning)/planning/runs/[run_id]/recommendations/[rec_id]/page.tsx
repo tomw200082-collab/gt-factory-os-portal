@@ -243,7 +243,7 @@ export default function RecommendationDrillDownPage() {
         const recommendedQty = result?.data?.recommended_qty ?? "";
         if (isProd) {
           router.push(
-            `/ops/stock/production-actual` +
+            `/stock/production-actual` +
               `?item_id=${encodeURIComponent(itemId)}` +
               `&suggested_qty=${encodeURIComponent(recommendedQty)}` +
               `&from_rec=${encodeURIComponent(recId)}` +
@@ -381,11 +381,11 @@ export default function RecommendationDrillDownPage() {
         ? "This recommendation was superseded by a newer run — no action needed."
         : "No action available for this recommendation.";
 
-  // For production recs, deep-link to /ops/stock/production-actual with
+  // For production recs, deep-link to /stock/production-actual with
   // item_id + suggested_qty + breadcrumb params. For purchase recs, route
   // to the existing convert-to-PO flow.
   const productionFormHref =
-    `/ops/stock/production-actual` +
+    `/stock/production-actual` +
     `?item_id=${encodeURIComponent(rec.item_id)}` +
     `&suggested_qty=${encodeURIComponent(rec.recommended_qty)}` +
     `&from_rec=${encodeURIComponent(recId)}` +
@@ -474,7 +474,7 @@ export default function RecommendationDrillDownPage() {
         {/* Action buttons — adapts to rec_status × rec_type:
             - draft: "Approve" / "Dismiss" — inline approve/dismiss (loop 10)
             - approved purchase: "Create purchase order" → /convert flow
-            - approved production: "Open production report" → /ops/stock/production-actual
+            - approved production: "Open production report" → /stock/production-actual
               with prefilled item_id + suggested_qty + back-chain breadcrumb */}
         <div className="mt-4 flex flex-wrap items-center gap-3">
           {canExecute && isDraft ? (

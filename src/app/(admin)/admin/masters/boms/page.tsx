@@ -298,7 +298,7 @@ export default function AdminMastersBomsListPage(): JSX.Element {
                 repack item and use the BOM tab to create the first recipe.
               </div>
               <Link
-                href="/admin/masters/items"
+                href="/admin/items"
                 className="btn btn-sm btn-primary mt-3"
               >
                 Open items editor →

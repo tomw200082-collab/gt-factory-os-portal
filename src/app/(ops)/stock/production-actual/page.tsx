@@ -1,12 +1,12 @@
 "use client";
 
 // Deep-link integration with planning recommendations and Daily Production Plan:
-// /ops/stock/production-actual?item_id=<id>&suggested_qty=<n>&from_rec=<rec_id>&from_run=<run_id>
+// /stock/production-actual?item_id=<id>&suggested_qty=<n>&from_rec=<rec_id>&from_run=<run_id>
 //   — item_id pre-selects the producible item dropdown
 //   — suggested_qty pre-fills the output_qty field (operator can override)
 //   — from_rec / from_run surface a "this run is authorized by..." breadcrumb
 //
-// /ops/stock/production-actual?from_plan_id=<plan_id>
+// /stock/production-actual?from_plan_id=<plan_id>
 //   — pre-selects item from production_plan.item_id
 //   — pre-fills output_qty from production_plan.planned_qty
 //   — submits with body.from_plan_id; on success, the plan flips to status=done
@@ -414,6 +414,10 @@ interface DoneState {
   // Persisted committed response (for the success panel only).
   committed?: ProductionActualCommitted;
   committedItemName?: string;
+  // Tranche 041 — snapshot captured at commit time, so the success panel's
+  // consumption table can resolve component names after setSnapshot(null)
+  // clears the live form state.
+  committedSnapshot?: ProductionActualOpenResponse;
 }
 
 // Decimal-string arithmetic helpers (keep server-side precision intact for
@@ -938,6 +942,9 @@ export default function ProductionActualPage() {
               : "Inventory has been updated.",
             committed,
             committedItemName: snapshot.item_name,
+            // Tranche 041 — capture the snapshot before setSnapshot(null)
+            // below, so the consumption table keeps resolving names.
+            committedSnapshot: snapshot,
           });
           // Refresh the recent-runs history so the new submission appears.
           void queryClient.invalidateQueries({
@@ -1003,16 +1010,31 @@ export default function ProductionActualPage() {
               available_qty: string | number;
             }>;
           };
-          const shortfallLines = (insuffBody.shortfalls ?? [])
-            .map(
-              (s) =>
-                `${s.component_id}: need ${fmtNumStr(s.required_qty)}, have ${fmtNumStr(s.available_qty)}`,
-            )
-            .join("; ");
+          // Tranche 041 — never surface raw component_id UUIDs to the
+          // operator. Resolve names from the in-state BOM snapshot; if any
+          // shortfall can't be resolved, fall back to the API's message
+          // string, then to a generic plain-English line.
+          const nameByComponentId = new Map<string, string>();
+          for (const bl of snapshot.bom_lines) {
+            nameByComponentId.set(bl.component_id, bl.component_name);
+          }
+          const shortfalls = insuffBody.shortfalls ?? [];
+          const resolvedLines = shortfalls.map((s) => {
+            const name = nameByComponentId.get(s.component_id);
+            return name
+              ? `${name}: need ${fmtNumStr(s.required_qty)}, have ${fmtNumStr(s.available_qty)}`
+              : null;
+          });
+          const allResolved =
+            resolvedLines.length > 0 &&
+            resolvedLines.every((l): l is string => l !== null);
+          const insuffMessage = allResolved
+            ? `Insufficient stock: ${resolvedLines.join("; ")}`
+            : insuffBody.message ||
+              "One or more components are short — check component stock before posting.";
           setDone({
             kind: "error",
-            message: `Insufficient stock: ${shortfallLines || (insuffBody.message ?? "check component stock levels.")}`,
-            detail: insuffBody.message,
+            message: insuffMessage,
           });
           setPhase("entering");
           return;
@@ -1503,15 +1525,17 @@ export default function ProductionActualPage() {
 
               {/* Consumption breakdown table — resolves component_id back
                   to component_name + source (pack/base) using the snapshot's
-                  bom_lines that drove the explosion. Falls back to the raw
-                  id if the snapshot has been reset before render. */}
+                  bom_lines that drove the explosion. Tranche 041 — reads
+                  done.committedSnapshot (captured at commit time) because
+                  the live snapshot is cleared before this panel renders. */}
               {done.committed.consumption.length > 0 ? (() => {
                 const bomLookup = new Map<
                   string,
                   { name: string; source: "pack" | "base" }
                 >();
-                if (snapshot) {
-                  for (const bl of snapshot.bom_lines) {
+                const lookupSnapshot = done.committedSnapshot ?? snapshot;
+                if (lookupSnapshot) {
+                  for (const bl of lookupSnapshot.bom_lines) {
                     // Pack and base may share a component_id in principle;
                     // last write wins for the name (they'd be the same), and
                     // the source is taken from the consumed row itself below.
@@ -1574,15 +1598,22 @@ export default function ProductionActualPage() {
                       </tbody>
                     </table>
                     {/* Scrap-vs-RM clarification (GAP-011 operator-training
-                        note). Per locked decision: scrap reduces FG output
-                        only; RM consumption is computed from output_qty, not
-                        from output_qty + scrap_qty. */}
+                        note). Tranche 041 copy-truth fix (decision T1): the
+                        backend explodes the BOM over output + scrap, so RM
+                        consumption covers scrapped units too. */}
                     {Number(done.committed.scrap_qty) > 0 ? (
                       <div className="border-t border-success/20 px-3 py-2 text-3xs opacity-75">
                         Scrap reduced finished-goods output only.
-                        Raw-material consumption is computed from output, not
-                        from output + scrap (the system does not consume extra
-                        RM to cover scrapped units in v1).
+                        Raw-material consumption is computed from output +
+                        scrap ({fmtNumStr(done.committed.output_qty)} good +{" "}
+                        {fmtNumStr(done.committed.scrap_qty)} scrap ={" "}
+                        {fmtNumStr(
+                          (
+                            Number(done.committed.output_qty) +
+                            Number(done.committed.scrap_qty)
+                          ).toFixed(4),
+                        )}{" "}
+                        processed).
                       </div>
                     ) : null}
                   </div>
@@ -2258,7 +2289,7 @@ export default function ProductionActualPage() {
                     </button>
                   </div>
                   <div className="mt-2 text-xs text-fg-muted leading-snug">
-                    Scrap reduces finished-goods output only — raw-material consumption stays based on output.
+                    Scrap reduces finished-goods output only — raw-material consumption is computed from output + scrap (the full processed quantity).
                   </div>
                 </div>
 

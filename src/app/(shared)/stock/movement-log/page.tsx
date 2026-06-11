@@ -775,6 +775,7 @@ export default function MovementLogPage() {
   const router = useRouter();
 
   const urlPoId = searchParams?.get("po_id") ?? "";
+  const urlItemId = searchParams?.get("item_id") ?? "";
 
   const [filters, setFilters] = useState<Filters>(EMPTY_FILTERS);
   const [appliedFilters, setAppliedFilters] = useState<Filters>(EMPTY_FILTERS);
@@ -789,6 +790,15 @@ export default function MovementLogPage() {
   useEffect(() => {
     setOffset(0);
   }, [urlPoId]);
+
+  // Tranche 041 — StockTruthDrawer deep-links ?item_id=; seed the item filter
+  // on mount (same pattern as ?po_id=) so the list lands pre-filtered.
+  useEffect(() => {
+    if (!urlItemId) return;
+    setFilters((prev) => ({ ...prev, item_id: urlItemId }));
+    setAppliedFilters((prev) => ({ ...prev, item_id: urlItemId }));
+    setOffset(0);
+  }, [urlItemId]);
 
   const poHeaderQuery = useQuery<PurchaseOrderDetailResponse>({
     queryKey: ["stock-ledger", "po-header", urlPoId],
@@ -894,6 +904,19 @@ export default function MovementLogPage() {
     setOffset(0);
   }
 
+  // Tranche 041 — clear the deep-linked item filter (mirrors clearPoFilter,
+  // preserving any PO filter still in the URL).
+  function clearItemFilter() {
+    setFilters((prev) => ({ ...prev, item_id: "" }));
+    setAppliedFilters((prev) => ({ ...prev, item_id: "" }));
+    router.replace(
+      urlPoId
+        ? `/stock/movement-log?po_id=${encodeURIComponent(urlPoId)}`
+        : "/stock/movement-log",
+    );
+    setOffset(0);
+  }
+
   function handleFieldChange(field: keyof Filters, value: string) {
     setFilters((prev) => ({ ...prev, [field]: value }));
   }
@@ -966,6 +989,35 @@ export default function MovementLogPage() {
               onClick={clearPoFilter}
               className="btn btn-ghost btn-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
               data-testid="movement-log-po-filter-clear"
+            >
+              Clear filter
+            </button>
+          </div>
+        </div>
+      ) : null}
+
+      {/* Tranche 041 — deep-linked ?item_id= filter chip (same affordance
+          as the PO chip above). */}
+      {urlItemId && appliedFilters.item_id === urlItemId ? (
+        <div
+          className="flex flex-wrap items-center gap-3 rounded-md border border-info/30 bg-info-softer/30 px-4 py-3 text-sm"
+          role="note"
+          aria-live="polite"
+          data-testid="movement-log-item-filter-chip"
+        >
+          <span className="text-fg-muted">Filtered by item</span>
+          <span
+            className="font-mono text-fg"
+            data-testid="movement-log-item-filter-value"
+          >
+            {urlItemId}
+          </span>
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              onClick={clearItemFilter}
+              className="btn btn-ghost btn-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+              data-testid="movement-log-item-filter-clear"
             >
               Clear filter
             </button>

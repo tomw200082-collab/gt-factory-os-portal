@@ -431,6 +431,9 @@ export default function WasteAdjustmentPage() {
 
   // New state — does NOT replace any existing state
   const [confirmPending, setConfirmPending] = useState(false);
+  // Tranche 041 — keeps the confirm panel visible (with a loading Confirm
+  // button) until doSubmit resolves, instead of dismissing before the await.
+  const [confirmSubmitting, setConfirmSubmitting] = useState(false);
   const [notesAttempted, setNotesAttempted] = useState(false);
   const [relativeTime, setRelativeTime] = useState(() => getRelativeTime(nowLocalDateTime()));
 
@@ -571,13 +574,9 @@ export default function WasteAdjustmentPage() {
       return;
     }
 
-    // Positive direction: show inline confirm panel instead of window.confirm
-    if (direction === "positive") {
-      setConfirmPending(true);
-      return;
-    }
-
-    await doSubmit(row, qtyNumLocal);
+    // Tranche 041 — BOTH directions go through the inline confirm panel.
+    // Loss previously posted a permanent ledger event with no confirmation.
+    setConfirmPending(true);
   }
 
   function handleReset() {
@@ -1030,28 +1029,54 @@ export default function WasteAdjustmentPage() {
           </SectionCard>
 
           {/* ---------------------------------------------------------------- */}
-          {/* Inline confirm panel (replaces window.confirm for positive dir)  */}
+          {/* Inline confirm panel (replaces window.confirm). Tranche 041 —    */}
+          {/* gates BOTH directions; loss previously posted with no confirm.   */}
+          {/* Panel stays visible (Confirm shows a spinner, Cancel disabled)   */}
+          {/* until doSubmit resolves.                                         */}
           {/* ---------------------------------------------------------------- */}
           {confirmPending && (
             <div
               className="rounded-md border border-warning/50 bg-warning-softer px-4 py-4 text-sm text-warning-fg"
               role="alertdialog"
               aria-modal="false"
-              aria-label="Confirm positive adjustment"
+              aria-label={
+                direction === "loss"
+                  ? "Confirm loss adjustment"
+                  : "Confirm positive adjustment"
+              }
               data-testid="waste-confirm-panel"
             >
               <div className="flex items-start gap-2 mb-3">
                 <svg className="h-4 w-4 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
                 <p className="font-medium">
-                  You are about to add{" "}
-                  <span className="font-bold">
-                    {qtyNum} {unit}
-                  </span>{" "}
-                  of{" "}
-                  <span className="font-bold">
-                    {selectedRow?.label ?? "the selected item"}
-                  </span>{" "}
-                  to stock. This will be held for planner approval.
+                  {direction === "loss" ? (
+                    <>
+                      You are about to remove{" "}
+                      <span className="font-bold">
+                        {qtyNum} {unit}
+                      </span>{" "}
+                      of{" "}
+                      <span className="font-bold">
+                        {selectedRow?.label ?? "the selected item"}
+                      </span>{" "}
+                      from stock. The ledger event is permanent — small losses
+                      post immediately; larger losses are held for planner
+                      approval.
+                    </>
+                  ) : (
+                    <>
+                      You are about to add{" "}
+                      <span className="font-bold">
+                        {qtyNum} {unit}
+                      </span>{" "}
+                      of{" "}
+                      <span className="font-bold">
+                        {selectedRow?.label ?? "the selected item"}
+                      </span>{" "}
+                      to stock. This will be held for planner approval. Once
+                      approved, the ledger event is permanent.
+                    </>
+                  )}
                 </p>
               </div>
               <div className="flex gap-2">
@@ -1059,18 +1084,36 @@ export default function WasteAdjustmentPage() {
                   type="button"
                   className="btn btn-primary btn-sm transition-colors duration-150"
                   data-testid="waste-confirm-proceed"
+                  disabled={confirmSubmitting}
                   onClick={async () => {
-                    setConfirmPending(false);
                     const row = byKey.get(selKey);
-                    if (row) await doSubmit(row, Number(quantity));
+                    if (!row) {
+                      setConfirmPending(false);
+                      return;
+                    }
+                    setConfirmSubmitting(true);
+                    try {
+                      await doSubmit(row, Number(quantity));
+                    } finally {
+                      setConfirmSubmitting(false);
+                      setConfirmPending(false);
+                    }
                   }}
                 >
-                  Confirm
+                  {confirmSubmitting ? (
+                    <span className="flex items-center gap-2">
+                      <IconSpinner />
+                      Submitting…
+                    </span>
+                  ) : (
+                    "Confirm"
+                  )}
                 </button>
                 <button
                   type="button"
                   className="btn btn-sm transition-colors duration-150"
                   data-testid="waste-confirm-cancel"
+                  disabled={confirmSubmitting}
                   onClick={() => setConfirmPending(false)}
                 >
                   Cancel
@@ -1140,10 +1183,9 @@ export default function WasteAdjustmentPage() {
                   <IconSpinner />
                   Submitting…
                 </span>
-              ) : direction === "positive" ? (
-                "Review & submit"
               ) : (
-                "Submit adjustment"
+                // Tranche 041 — both directions now open the review panel.
+                "Review & submit"
               )}
             </button>
           </div>

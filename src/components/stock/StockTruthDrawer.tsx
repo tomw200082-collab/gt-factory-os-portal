@@ -169,7 +169,7 @@ export function StockTruthDrawer({
             <p className="mt-2 text-2xs text-fg-muted">
               Showing 10 of {data.total_matching} events ·{' '}
               <Link
-                href={`/stock/ledger?item_id=${encodeURIComponent(itemId)}`}
+                href={`/stock/movement-log?item_id=${encodeURIComponent(itemId)}`}
                 className="underline hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
               >
                 View full ledger for this item →

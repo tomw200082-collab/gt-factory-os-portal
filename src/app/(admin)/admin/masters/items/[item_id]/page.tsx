@@ -1157,7 +1157,7 @@ export default function AdminItemDetailPage({
               Global planning defaults apply. When per-item overrides land, this tab will show an editable form pinned to this product.
             </div>
             <Link
-              href="/admin/planning/policy"
+              href="/admin/planning-policy"
               className="inline-flex items-center gap-1 rounded border border-border/60 bg-bg-subtle/40 px-2.5 py-1.5 text-xs font-medium text-fg transition-colors hover:border-accent/60 hover:text-accent"
             >
               View global planning defaults →

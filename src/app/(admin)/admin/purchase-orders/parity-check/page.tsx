@@ -215,7 +215,7 @@ function DriftTable({ rows }: { rows: ParityDriftRow[] }) {
               {/* PO column — linked */}
               <td className="px-3 py-2">
                 <Link
-                  href={`/admin/purchase-orders/${r.po_id}`}
+                  href={`/purchase-orders/${r.po_id}`}
                   className="font-mono text-xs font-medium text-accent-fg underline-offset-2 hover:underline"
                 >
                   {r.po_number}
@@ -285,7 +285,7 @@ function NoLinesTable({ rows }: { rows: ParityDriftRow[] }) {
             >
               <td className="px-3 py-2">
                 <Link
-                  href={`/admin/purchase-orders/${r.po_id}`}
+                  href={`/purchase-orders/${r.po_id}`}
                   className="font-mono text-xs font-medium text-accent-fg underline-offset-2 hover:underline"
                 >
                   {r.po_number}
