@@ -1,6 +1,6 @@
 # Tranche 045 — Planning consolidation: one declared workflow (Phase 4 portal)
 
-status: active
+status: executed 2026-06-11 — pending merge
 phase: improvement-plan-2026-06 Phase 4 (portal side; T2 resolved: demote runs → retire later)
 approved_by: Tom (2026-06-11; full-run authorization "run the plan to the end")
 
@@ -28,4 +28,4 @@ the canonical cadence is declared in-product.
 - [x] Implemented (2026-06-11)
 - [x] Typecheck clean (`npx tsc --noEmit` — no output)
 - [x] Vitest green (451/451, 59 files — matches baseline; no test changes needed)
-- [ ] Pushed
+- [x] Pushed
