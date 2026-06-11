@@ -1,6 +1,6 @@
 # Tranche 043 — PO price entry UI + cost-drafts inbox (Phase 2 portal close)
 
-status: active
+status: executed 2026-06-11 — pending merge
 phase: improvement-plan-2026-06 Phase 2 (D3 portal side) — backend landed in gt-factory-os 8a1aa40
 approved_by: Tom (2026-06-11 plan approval; T3 threshold 25%)
 
@@ -47,4 +47,4 @@ appears when a price was entered and differs from current cost; no new required 
 - [x] Implemented (2026-06-11)
 - [x] Typecheck clean (`npx tsc --noEmit`)
 - [x] Vitest green (435/435 — 430 baseline + 5 new unit-price validation tests)
-- [ ] One bounded commit set pushed
+- [x] One bounded commit set pushed
