@@ -33,7 +33,7 @@ telemetry they don't have.
   middleware gates superset-consistent with layout minimums
 
 ## Checklist
-- [ ] Implemented
-- [ ] Typecheck clean
-- [ ] Vitest green
+- [x] Implemented (2026-06-11; "Discard changes" button located in `src/app/(admin)/admin/boms/[head_id]/versions/[version_id]/page.tsx`, not the masters edit route — the masters BOM draft editor has no such button)
+- [x] Typecheck clean (tsc --noEmit, 0 errors)
+- [x] Vitest green (451/451)
 - [ ] Pushed

@@ -46,7 +46,10 @@ function fmtTs(iso: string | null): string {
   }
 }
 
-// Iter 5: guess expected interval for stale detection
+// Iter 5: guess expected interval for stale detection.
+// Tranche 046 honesty note: this is a heuristic over the job NAME — the jobs
+// registry does not yet expose the real cron schedule. All staleness copy
+// must carry the "(estimated from job name)" qualifier until it does.
 function guessIntervalMs(jobName: string): number {
   const n = jobName.toLowerCase();
   if (n.includes("nightly") || n.includes("daily")) return 24 * 60 * 60 * 1000;
@@ -67,7 +70,7 @@ function isStale(row: JobRow): boolean {
 function staleTooltip(row: JobRow): string {
   const ago = timeAgo(row.last_ended_at ?? row.last_started_at);
   const hours = Math.round(guessIntervalMs(row.job_name) / (60 * 60 * 1000));
-  return `Expected every ${hours}h — last ran ${ago}`;
+  return `Expected every ~${hours}h (estimated from job name) — last ran ${ago}. The jobs registry does not yet expose a real cron schedule; until it does, the expected interval is inferred from the job's name.`;
 }
 
 type StatusTone = "success" | "danger" | "info" | "warning" | "neutral";
@@ -206,8 +209,14 @@ function JobCard({ row }: { row: JobRow }) {
               {label}
             </Badge>
             {stale && !isFailed && (
-              <span title={staleTooltip(row)} className="cursor-help">
+              <span
+                title={staleTooltip(row)}
+                className="cursor-help inline-flex items-center gap-1"
+              >
                 <Badge tone="warning">Stale</Badge>
+                <span className="text-3xs text-fg-muted">
+                  (estimated from job name)
+                </span>
               </span>
             )}
           </div>

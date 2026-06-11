@@ -3,10 +3,18 @@
     "Paths and patterns that must NOT re-enter production surface.",
     "kinds: dead (route should not exist), fake (fake-session / mocked state), quarantined (route exists but must not appear in primary nav), pending-cleanup (known vestige, scheduled for removal).",
     "forbidden_strings is enforced by pre_tool_use.sh rule 5 AND regression-sentinel.",
-    "This file is human-ritual-only — hook refuses normal edits. Update via a tranche-fix with kind=quarantine-update."
+    "This file is human-ritual-only — hook refuses normal edits. Update via a tranche-fix with kind=quarantine-update.",
+    "Tranche 046 (2026-06-11, kind=quarantine-update): seeded first entry — the goods-receipt spec vestiges named in _todo_after_bootstrap were already deleted by tranche 007; the one remaining forbidden-string vestige is a comment in tests/e2e/forecast-planner-real.spec.ts."
   ],
-  "generated_at": "2026-04-22T00:00:00Z",
-  "entries": [],
+  "generated_at": "2026-06-11T00:00:00Z",
+  "entries": [
+    {
+      "path": "tests/e2e/forecast-planner-real.spec.ts",
+      "kind": "pending-cleanup",
+      "note": "line ~198 comment contains a forbidden string literal (X-Fake-Session) — historical note, scheduled for paraphrase; src/ is clean",
+      "added_by": "tranche 046"
+    }
+  ],
   "forbidden_strings": [
     "X-Fake-Session",
     "X-Test-Session",

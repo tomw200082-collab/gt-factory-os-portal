@@ -188,6 +188,11 @@ function IntegrationHealthCard({
   categories,
   relevant,
 }: IntegrationCardProps) {
+  // Tranche 046 honesty: only Shopify has a real sync-status feed (the
+  // dedicated ShopifySyncStatusCard above). The other cards derive their
+  // status purely from open-exception activity — the copy must say so
+  // instead of implying sync telemetry.
+  const exceptionDerivedOnly = intgKey !== "shopify";
   const criticalCount = relevant.filter((e) => e.severity === "critical").length;
   const warningCount = relevant.filter((e) => e.severity === "warning").length;
   const hasStale = relevant.some((e) => e.category.endsWith("_stale"));
@@ -256,16 +261,27 @@ function IntegrationHealthCard({
         )}
         {newestAgo && (
           <span className="text-xs text-fg-muted" title={`Newest open exception ${newestAgo}`}>
-            · last event {newestAgo}
+            {exceptionDerivedOnly
+              ? `· latest exception activity ${newestAgo}`
+              : `· last event ${newestAgo}`}
           </span>
         )}
       </div>
+      {exceptionDerivedOnly && (
+        <div className="mt-1 text-xs text-fg-faint">
+          Status derived from exception activity — not sync telemetry.
+        </div>
+      )}
 
       {/* Iter 8: stale notice inline */}
       {hasStale && (
         <div className="mt-2 flex items-center gap-2 rounded border border-warning/40 bg-warning-softer/60 px-3 py-2 text-xs text-warning-fg">
           <RefreshCw className="h-3.5 w-3.5 shrink-0" strokeWidth={2} />
-          <span>Stale — last synced {newestAgo ?? "unknown"}</span>
+          <span>
+            {exceptionDerivedOnly
+              ? `Stale — latest exception activity ${newestAgo ?? "unknown"}`
+              : `Stale — last synced ${newestAgo ?? "unknown"}`}
+          </span>
         </div>
       )}
 

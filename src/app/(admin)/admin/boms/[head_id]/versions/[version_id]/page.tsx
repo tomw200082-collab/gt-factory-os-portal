@@ -782,12 +782,14 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
             type="button"
             className="btn btn-ghost btn-sm shrink-0 text-warning-fg hover:bg-warning/20"
             onClick={() => {
-              if (window.confirm("Discard all changes to this draft? This cannot be undone.")) {
+              // Tranche 046 truthfulness: line edits persist to the draft as
+              // you make them — closing the editor discards nothing. Say so.
+              if (window.confirm("Line edits are already saved to the draft. Close the editor?")) {
                 router.push(`/admin/boms/${encodeURIComponent(head_id)}`);
               }
             }}
           >
-            Discard changes
+            Close editor
           </button>
         </div>
       ) : null}
