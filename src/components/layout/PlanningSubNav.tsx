@@ -10,8 +10,14 @@
 // Blockers tab shows a live critical-blocker badge when fail_hard count > 0.
 // Uses a minimal dedicated query (["blockers-badge"]) with 2-min staleTime so
 // every planning page doesn't thrash the server — one fetch every two minutes.
+//
+// Tranche 053 (FLOW-005): the active tab is scrolled into view on mount
+// (inline: "nearest") so deep tabs aren't invisible at phone widths, and the
+// scroll row is wrapped in the shared <ScrollFade> right-edge affordance
+// (Tranche 051 component) so hidden tabs are discoverable.
 // ---------------------------------------------------------------------------
 
+import { useEffect, useRef } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -27,6 +33,7 @@ import {
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { ScrollFade } from "@/components/ui/ScrollFade";
 
 interface PlanningTab {
   href: string;
@@ -132,23 +139,37 @@ export function PlanningSubNav() {
   const pathname = usePathname();
   const criticalBlockerCount = useBlockersBadge();
 
+  // FLOW-005: bring the active tab into view on mount / route change so it is
+  // never hidden off-screen at phone widths.
+  const activeTabRef = useRef<HTMLAnchorElement | null>(null);
+  useEffect(() => {
+    const el = activeTabRef.current;
+    if (el && typeof el.scrollIntoView === "function") {
+      el.scrollIntoView({ inline: "nearest", block: "nearest" });
+    }
+  }, [pathname]);
+
   return (
     <nav aria-label="Planning sections" className="relative">
       {/* Subtle wash to distinguish sub-nav from page content */}
       <div className="absolute inset-0 bg-bg-raised/50" aria-hidden />
 
-      <div className="relative overflow-x-auto [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <div className="flex min-w-max items-end gap-0 border-b border-border/60">
-          {PLANNING_TABS.map((tab) => {
-            const active = isTabActive(tab.href, pathname, tab.exact);
-            const Icon = tab.icon;
-            const badgeCount =
-              tab.badgeKey === "blockers" ? criticalBlockerCount : 0;
+      <ScrollFade
+        className="relative"
+        fadeFromClassName="from-bg"
+        contentClassName="flex items-end gap-0 overflow-x-auto border-b border-border/60 [scrollbar-width:none] [&::-webkit-scrollbar]:hidden"
+      >
+        {PLANNING_TABS.map((tab) => {
+          const active = isTabActive(tab.href, pathname, tab.exact);
+          const Icon = tab.icon;
+          const badgeCount =
+            tab.badgeKey === "blockers" ? criticalBlockerCount : 0;
 
-            return (
+          return (
               <Link
                 key={tab.href}
                 href={tab.href}
+                ref={active ? activeTabRef : undefined}
                 aria-current={active ? "page" : undefined}
                 className={cn(
                   // Base layout
@@ -204,10 +225,9 @@ export function PlanningSubNav() {
                   aria-hidden
                 />
               </Link>
-            );
-          })}
-        </div>
-      </div>
+          );
+        })}
+      </ScrollFade>
     </nav>
   );
 }

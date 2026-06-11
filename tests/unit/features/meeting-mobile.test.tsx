@@ -141,6 +141,61 @@ describe("weekly-meeting cockpit — commitment disclosure", () => {
   });
 });
 
+describe("weekly-meeting cockpit — cadence rail one-row mobile (FLOW-008, T053)", () => {
+  it("stacks icon above label below sm (flex-col base, sm:flex-row)", () => {
+    render(<PlanningMeetingPage />);
+    const nav = screen.getByRole("navigation", { name: /weekly cadence steps/i });
+    const buttons = Array.from(nav.querySelectorAll("button"));
+    expect(buttons.length).toBe(3);
+    buttons.forEach((b) => {
+      expect(b.className.includes("flex-col")).toBe(true);
+      expect(b.className.includes("sm:flex-row")).toBe(true);
+    });
+  });
+
+  it("collapses the Today badge to a corner dot below sm", () => {
+    render(<PlanningMeetingPage />);
+    const nav = screen.getByRole("navigation", { name: /weekly cadence steps/i });
+    // Exactly one step is "today" → exactly one corner dot, hidden at sm+.
+    const dots = nav.querySelectorAll('[data-testid="cadence-today-dot"]');
+    expect(dots.length).toBe(1);
+    expect((dots[0]!.getAttribute("class") ?? "").includes("sm:hidden")).toBe(true);
+    // The full Today badge still exists but only from sm up (wrapper hidden sm:inline-flex).
+    const todayBadge = Array.from(nav.querySelectorAll("span")).find(
+      (s) => s.textContent === "Today",
+    );
+    expect(todayBadge).toBeTruthy();
+    const wrapper = todayBadge!.closest(".hidden");
+    expect(wrapper).toBeTruthy();
+    expect((wrapper!.getAttribute("class") ?? "").includes("sm:inline-flex")).toBe(true);
+  });
+});
+
+describe("weekly-meeting cockpit — firm week selector fits 390px (FLOW-007, T053)", () => {
+  it("drops the 14rem floor: min-w-0 wrapper + truncating week label", () => {
+    render(<PlanningMeetingPage />);
+    openFirmPanel();
+    const eyebrow = screen.getByText(/Target week to firm/i);
+    const labelWrap = eyebrow.parentElement!;
+    const cls = labelWrap.getAttribute("class") ?? "";
+    expect(cls.includes("min-w-0")).toBe(true);
+    expect(cls.includes("min-w-[14rem]")).toBe(false);
+    const weekLabel = labelWrap.firstElementChild!;
+    expect((weekLabel.getAttribute("class") ?? "").includes("truncate")).toBe(true);
+  });
+
+  it("moves Generate / refresh drafts to its own right-aligned row below the week nav", () => {
+    render(<PlanningMeetingPage />);
+    openFirmPanel();
+    const gen = screen.getByRole("button", { name: /Generate \/ refresh drafts/i });
+    const row = gen.parentElement!;
+    const cls = row.getAttribute("class") ?? "";
+    expect(cls.includes("mt-3")).toBe(true);
+    expect(cls.includes("flex")).toBe(true);
+    expect(cls.includes("justify-end")).toBe(true);
+  });
+});
+
 describe("weekly-meeting cockpit — batch chip tap-to-expand", () => {
   it("renders a pack-bearing chip as a disclosure button and reveals the breakdown on tap", () => {
     draftState.current = { data: draftResponse([teaRow()]), isLoading: false, isError: false };

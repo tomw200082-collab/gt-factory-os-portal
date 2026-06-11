@@ -1746,6 +1746,10 @@
     align-items: center;
     gap: 0.625rem;
     padding: 0.5rem 0.75rem;
+    /* FLOW-021 (Tranche 053): keep the bar's actions above the iOS home
+       indicator — additive safe-area inset on top of the base 0.5rem.
+       z-index 35 stays below the TopBar (z-40). */
+    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
     border-radius: 8px;
     border: 1px solid hsl(var(--border));
     background-color: hsl(var(--bg-raised));

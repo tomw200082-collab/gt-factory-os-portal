@@ -99,21 +99,38 @@ function CadenceRail({
               aria-current={isToday ? "step" : undefined}
               aria-label={`${s.label} — ${s.sub}${isToday ? " (today)" : ""}`}
               className={cn(
-                "group flex flex-1 items-center gap-2 rounded-lg px-2.5 py-3 text-left transition-colors sm:gap-3 sm:px-3.5",
+                // FLOW-008 (Tranche 053): <sm stacks icon above label so all
+                // three steps fit one row at 390px; sm+ is the original row.
+                "group relative flex flex-1 flex-col items-center gap-1 rounded-lg px-2 py-2.5 text-center transition-colors",
+                "sm:flex-row sm:items-center sm:gap-3 sm:px-3.5 sm:py-3 sm:text-left",
                 focusRing,
                 isActive
                   ? "bg-accent text-accent-fg shadow-raised"
                   : "text-fg-muted hover:bg-bg-muted hover:text-fg",
               )}
             >
+              {/* FLOW-008: on <sm the Today badge collapses to a corner dot
+                  (the aria-label already announces "(today)"). */}
+              {isToday ? (
+                <span
+                  className={cn(
+                    "absolute right-1.5 top-1.5 h-1.5 w-1.5 rounded-full sm:hidden",
+                    isActive ? "bg-accent-fg" : "bg-accent",
+                  )}
+                  data-testid="cadence-today-dot"
+                  aria-hidden="true"
+                />
+              ) : null}
               <Icon className={cn("h-5 w-5 shrink-0", isActive ? "opacity-100" : "opacity-70")} />
               <span className="min-w-0">
-                <span className="flex items-center gap-2">
-                  <span className="text-sm font-semibold tracking-tightish">{s.label}</span>
+                <span className="flex items-center justify-center gap-2 sm:justify-start">
+                  <span className="text-xs font-semibold tracking-tightish sm:text-sm">{s.label}</span>
                   {isToday ? (
-                    <Badge tone={isActive ? "neutral" : "accent"} variant="soft" size="xs">
-                      Today
-                    </Badge>
+                    <span className="hidden sm:inline-flex">
+                      <Badge tone={isActive ? "neutral" : "accent"} variant="soft" size="xs">
+                        Today
+                      </Badge>
+                    </span>
                   ) : null}
                 </span>
                 <span
@@ -404,45 +421,49 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
 
   return (
     <div className="space-y-5">
-      {/* Week selector */}
-      <div className="flex items-center justify-between gap-3">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={() => shiftWeek(-1)}
-            className={cn(
-              "rounded-md border border-border bg-bg-raised p-2 text-fg-muted shadow-hairline transition-colors hover:bg-bg-muted hover:text-fg",
-              focusRing,
-            )}
-            aria-label="Previous week"
-          >
-            <ChevronLeft className="h-4 w-4" />
-          </button>
-          <div className="min-w-[14rem] text-center">
-            <div className="text-lg font-semibold tracking-tight">{fmtWeekRange(weekStart)}</div>
-            <div className="text-2xs uppercase tracking-ops text-fg-subtle">Target week to firm</div>
+      {/* Week selector — FLOW-007 (Tranche 053): the label no longer forces a
+          14rem minimum (min-w-0 + truncate so it fits 390px), and the
+          Generate/refresh action lives on its own row below the week nav. */}
+      <div>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex min-w-0 items-center gap-2">
+            <button
+              type="button"
+              onClick={() => shiftWeek(-1)}
+              className={cn(
+                "rounded-md border border-border bg-bg-raised p-2 text-fg-muted shadow-hairline transition-colors hover:bg-bg-muted hover:text-fg",
+                focusRing,
+              )}
+              aria-label="Previous week"
+            >
+              <ChevronLeft className="h-4 w-4" />
+            </button>
+            <div className="min-w-0 text-center">
+              <div className="truncate text-lg font-semibold tracking-tight">{fmtWeekRange(weekStart)}</div>
+              <div className="text-2xs uppercase tracking-ops text-fg-subtle">Target week to firm</div>
+            </div>
+            <button
+              type="button"
+              onClick={() => shiftWeek(1)}
+              className={cn(
+                "rounded-md border border-border bg-bg-raised p-2 text-fg-muted shadow-hairline transition-colors hover:bg-bg-muted hover:text-fg",
+                focusRing,
+              )}
+              aria-label="Next week"
+            >
+              <ChevronRight className="h-4 w-4" />
+            </button>
           </div>
           <button
             type="button"
-            onClick={() => shiftWeek(1)}
-            className={cn(
-              "rounded-md border border-border bg-bg-raised p-2 text-fg-muted shadow-hairline transition-colors hover:bg-bg-muted hover:text-fg",
-              focusRing,
-            )}
-            aria-label="Next week"
-          >
-            <ChevronRight className="h-4 w-4" />
-          </button>
-        </div>
-        <div className="flex items-center gap-3">
-          <button
-            type="button"
             onClick={() => setWeekStart(defaultFirmWeekStart())}
-            className={cn("rounded text-xs text-accent hover:underline", focusRing)}
+            className={cn("shrink-0 rounded text-xs text-accent hover:underline", focusRing)}
           >
             Jump to this week's target
           </button>
-          {canAct ? (
+        </div>
+        {canAct ? (
+          <div className="mt-3 flex justify-end">
             <button
               type="button"
               disabled={gen.isPending}
@@ -457,8 +478,8 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
               <RefreshCw className={cn("h-4 w-4", gen.isPending && "animate-spin motion-reduce:animate-none")} aria-hidden="true" />
               {gen.isPending ? "Generating…" : "Generate / refresh drafts"}
             </button>
-          ) : null}
-        </div>
+          </div>
+        ) : null}
       </div>
 
       {/* Generate result / error */}
