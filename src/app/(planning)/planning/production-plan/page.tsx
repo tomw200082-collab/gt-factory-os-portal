@@ -8,7 +8,7 @@
 // when actual production is reported.
 
 import Link from "next/link";
-import { useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Plus,
@@ -56,6 +56,11 @@ import {
   groupFieldErrors,
   type GroupedFieldErrors,
 } from "./_lib/board-summary";
+import {
+  boardOverflows,
+  centeredScrollLeft,
+  isLaneOutOfView,
+} from "./_lib/board-scroll";
 import { WeekTimelineRail } from "./_components/WeekTimelineRail";
 import { ProductionDayLane } from "./_components/ProductionDayLane";
 import { RecipeOverridePanel } from "./_components/RecipeOverridePanel";
@@ -472,7 +477,9 @@ function AddFromRecommendationsModal({
       data-testid="add-from-recs-modal"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
     >
-      <div className="w-full max-w-2xl rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-2xl max-h-[90vh] flex flex-col">
+      {/* FLOW-017 (Tranche 054) — cap the sheet height so the footer
+          buttons stay reachable on short phones. */}
+      <div className="w-full max-w-2xl rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-2xl max-h-[min(90vh,600px)] flex flex-col">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <h2 className="text-base font-semibold text-fg-strong">
@@ -1204,6 +1211,78 @@ export default function ProductionPlanPage() {
     [weekStart, dayTotals, todayIso],
   );
 
+  // FLOW-001 (Tranche 054) — auto-center the TODAY lane in the horizontal
+  // board once per week-view load. Pure geometry lives in _lib/board-scroll.
+  const boardRef = useRef<HTMLDivElement | null>(null);
+  const todayLaneRef = useRef<HTMLDivElement | null>(null);
+  // Week key the auto-center already ran for; navigating to another week and
+  // back re-arms it.
+  const autoCenteredWeekRef = useRef<string | null>(null);
+  // Drives the md+ visibility of the "Today" jump button (below md it is
+  // always shown while today is on the board).
+  const [todayOutOfView, setTodayOutOfView] = useState(false);
+
+  const updateTodayVisibility = useCallback(() => {
+    const board = boardRef.current;
+    const lane = todayLaneRef.current;
+    if (!board || !lane) {
+      setTodayOutOfView(false);
+      return;
+    }
+    const boardRect = board.getBoundingClientRect();
+    const laneRect = lane.getBoundingClientRect();
+    const laneLeft = laneRect.left - boardRect.left + board.scrollLeft;
+    setTodayOutOfView(
+      boardOverflows(board.clientWidth, board.scrollWidth) &&
+        isLaneOutOfView(board.scrollLeft, {
+          containerWidth: board.clientWidth,
+          laneLeft,
+          laneWidth: laneRect.width,
+        }),
+    );
+  }, []);
+
+  const centerTodayLane = useCallback(
+    (smooth: boolean) => {
+      const board = boardRef.current;
+      const lane = todayLaneRef.current;
+      if (!board || !lane) return;
+      // Never jolt layouts that already show the whole week (desktop).
+      if (!boardOverflows(board.clientWidth, board.scrollWidth)) return;
+      const boardRect = board.getBoundingClientRect();
+      const laneRect = lane.getBoundingClientRect();
+      const left = centeredScrollLeft({
+        containerWidth: board.clientWidth,
+        scrollWidth: board.scrollWidth,
+        laneLeft: laneRect.left - boardRect.left + board.scrollLeft,
+        laneWidth: laneRect.width,
+      });
+      if (typeof board.scrollTo === "function") {
+        board.scrollTo({ left, behavior: smooth ? "smooth" : "auto" });
+      } else {
+        board.scrollLeft = left;
+      }
+      updateTodayVisibility();
+    },
+    [updateTodayVisibility],
+  );
+
+  // Run once per week-view load, after plans data lands, and only when today
+  // is inside the visible week. Refetches (60s interval) never re-trigger it.
+  useEffect(() => {
+    const weekKey = toIsoDate(weekStart);
+    if (autoCenteredWeekRef.current === weekKey) return;
+    if (!hasData) return;
+    autoCenteredWeekRef.current = weekKey;
+    if (todayInWeek) centerTodayLane(false);
+    updateTodayVisibility();
+  }, [hasData, todayInWeek, weekStart, centerTodayLane, updateTodayVisibility]);
+
+  useEffect(() => {
+    window.addEventListener("resize", updateTodayVisibility);
+    return () => window.removeEventListener("resize", updateTodayVisibility);
+  }, [updateTodayVisibility]);
+
   // Handlers
   function handleManualAdd(
     req: {
@@ -1458,65 +1537,107 @@ export default function ProductionPlanPage() {
         </div>
       )}
 
-      {/* Week navigation */}
-      <div className="mb-4 flex flex-wrap items-center justify-between gap-2">
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="btn btn-sm gap-1"
-            onClick={() => setWeekStart(addDays(weekStart, -7))}
-            aria-label="Previous week"
-          >
-            <ChevronLeft className="h-3 w-3" strokeWidth={2} />
-            Previous
-          </button>
-          <button
-            type="button"
-            className="btn btn-sm gap-1"
-            onClick={() => setWeekStart(addDays(weekStart, 7))}
-            aria-label="Next week"
-          >
-            Next
-            <ChevronRight className="h-3 w-3" strokeWidth={2} />
-          </button>
-        </div>
-        <div className="text-sm font-semibold text-fg-strong tabular-nums">
+      {/* Week navigation — FLOW-006 (Tranche 054): below md the week-range
+          label gets its own line above, Previous/Next/Refresh collapse to
+          icon-only (aria-labels carry the names), and the Updated-HH:MM
+          stamp drops below as a caption. md+ keeps the pre-054 layout. */}
+      <div className="mb-4">
+        {/* Mobile-only week-range line (md+ shows it inline in the row) */}
+        <div
+          className="mb-2 text-center text-sm font-semibold text-fg-strong tabular-nums md:hidden"
+          data-testid="week-range-mobile"
+        >
           {fmtWeekRange(weekStart, weekEnd)}
         </div>
-        <div className="flex items-center gap-2">
-          <button
-            type="button"
-            className="btn btn-sm"
-            onClick={() => setWeekStart(startOfWeek(new Date()))}
-          >
-            This week
-          </button>
-          {/* INTER-011 (Tranche 048) — the board also auto-refreshes every
-              60s (usePlans refetchInterval); this is the manual path plus a
-              freshness stamp. */}
-          {plansQuery.dataUpdatedAt > 0 ? (
-            <span
-              className="text-3xs text-fg-muted tabular-nums"
-              data-testid="plans-updated-at"
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="btn btn-sm gap-1"
+              onClick={() => setWeekStart(addDays(weekStart, -7))}
+              aria-label="Previous week"
             >
-              Updated {fmtUpdatedTime(plansQuery.dataUpdatedAt)}
-            </span>
-          ) : null}
-          <button
-            type="button"
-            className="btn btn-sm gap-1"
-            onClick={() => void plansQuery.refetch()}
-            disabled={plansQuery.isFetching}
-            title="Refresh the plan board now"
-            data-testid="plans-refresh"
-          >
-            <RefreshCw
-              className={cn("h-3 w-3", plansQuery.isFetching && "animate-spin")}
-              strokeWidth={2}
-            />
-            Refresh
-          </button>
+              <ChevronLeft className="h-3 w-3" strokeWidth={2} />
+              <span className="hidden md:inline">Previous</span>
+            </button>
+            <button
+              type="button"
+              className="btn btn-sm gap-1"
+              onClick={() => setWeekStart(addDays(weekStart, 7))}
+              aria-label="Next week"
+            >
+              <span className="hidden md:inline">Next</span>
+              <ChevronRight className="h-3 w-3" strokeWidth={2} />
+            </button>
+            {/* FLOW-001 — jump the board back to today's lane. Always
+                available below md while today is on the board; at md+ it
+                appears only when today's lane is scrolled out of view, so
+                wide desktop layouts are unchanged. */}
+            {hasData && todayInWeek && allPlans.length > 0 ? (
+              <button
+                type="button"
+                className={cn(
+                  "btn btn-sm gap-1",
+                  !todayOutOfView && "md:hidden",
+                )}
+                onClick={() => centerTodayLane(true)}
+                aria-label="Scroll the board to today's lane"
+                title="Scroll the board to today's lane"
+                data-testid="board-jump-today"
+              >
+                <Calendar className="h-3 w-3" strokeWidth={2} />
+                Today
+              </button>
+            ) : null}
+          </div>
+          <div className="hidden md:block text-sm font-semibold text-fg-strong tabular-nums">
+            {fmtWeekRange(weekStart, weekEnd)}
+          </div>
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              className="btn btn-sm"
+              onClick={() => setWeekStart(startOfWeek(new Date()))}
+            >
+              This week
+            </button>
+            {/* INTER-011 (Tranche 048) — the board also auto-refreshes every
+                60s (usePlans refetchInterval); this is the manual path plus a
+                freshness stamp. */}
+            {plansQuery.dataUpdatedAt > 0 ? (
+              <span
+                className="hidden md:inline text-3xs text-fg-muted tabular-nums"
+                data-testid="plans-updated-at"
+              >
+                Updated {fmtUpdatedTime(plansQuery.dataUpdatedAt)}
+              </span>
+            ) : null}
+            <button
+              type="button"
+              className="btn btn-sm gap-1"
+              onClick={() => void plansQuery.refetch()}
+              disabled={plansQuery.isFetching}
+              aria-label="Refresh the plan board now"
+              title="Refresh the plan board now"
+              data-testid="plans-refresh"
+            >
+              <RefreshCw
+                className={cn("h-3 w-3", plansQuery.isFetching && "animate-spin")}
+                strokeWidth={2}
+              />
+              <span className="hidden md:inline">Refresh</span>
+            </button>
+          </div>
         </div>
+        {/* Mobile-only freshness caption */}
+        {plansQuery.dataUpdatedAt > 0 ? (
+          <div
+            className="mt-1 text-3xs text-fg-muted tabular-nums md:hidden"
+            data-testid="plans-updated-at-mobile"
+          >
+            Updated {fmtUpdatedTime(plansQuery.dataUpdatedAt)}
+          </div>
+        ) : null}
       </div>
 
       {/* ── Layer 2: Week Timeline Rail ── */}
@@ -1721,8 +1842,12 @@ export default function ProductionPlanPage() {
         />
       ) : (
         <>
-          {/* Board container — bg-bg-subtle covers the dot-grid behind lanes */}
+          {/* Board container — bg-bg-subtle covers the dot-grid behind lanes.
+              Tranche 054: ref + onScroll feed the today-lane auto-center and
+              the "Today" jump-button visibility (FLOW-001). */}
           <div
+            ref={boardRef}
+            onScroll={updateTodayVisibility}
             className="rounded-xl bg-bg-subtle p-3 overflow-x-auto"
             data-testid="production-plan-week"
           >
@@ -1742,7 +1867,13 @@ export default function ProductionPlanPage() {
                 const info = dayTotals.get(iso) ?? { total: 0, allDone: false, hasPlanned: false };
 
                 return (
-                  <div key={iso} style={{ minWidth: 196, flex: 1 }}>
+                  // FLOW-002 (Tranche 054) — lane floor 140px below md so a
+                  // phone shows ~2.5 lanes; md+ keeps the original 196px.
+                  <div
+                    key={iso}
+                    ref={isToday ? todayLaneRef : undefined}
+                    className="min-w-[140px] md:min-w-[196px] flex-1"
+                  >
                     <ProductionDayLane
                       date={date}
                       isoDate={iso}
@@ -1810,7 +1941,10 @@ export default function ProductionPlanPage() {
                 </>
               )}
             </div>
-            <div className="hidden lg:flex items-center gap-2 ml-auto">
+            {/* FLOW-020 (Tranche 054) — visible at all widths (was hidden
+                lg:flex); the flex-wrap parent gives it its own row on
+                narrow screens. */}
+            <div className="flex items-center gap-2 ml-auto">
               <Link
                 href="/planning/inventory-flow"
                 className="text-xs text-accent hover:underline flex items-center gap-1"

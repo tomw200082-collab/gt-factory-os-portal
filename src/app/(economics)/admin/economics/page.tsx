@@ -1650,7 +1650,7 @@ function CostGapsDrawer({
                   to publish — the value lands in components.std_cost_per_inv_uom
                   and feeds COGS on the next recalc.
                 </p>
-                <div className="overflow-hidden rounded border border-border/60">
+                <div className="overflow-hidden overflow-x-auto rounded border border-border/60">
                   <table className="w-full border-collapse text-sm">
                     <thead>
                       <tr className="border-b border-border/60 bg-bg-subtle/60">
