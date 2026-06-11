@@ -35,7 +35,6 @@ import {
   LayoutDashboard,
   LineChart,
   Link2,
-  ListChecks,
   MinusCircle,
   Network,
   Package,
@@ -190,13 +189,9 @@ export const NAV_MANIFEST: NavGroup[] = [
         min_role: "viewer",
         required_capability: "planning:read",
       },
-      {
-        href: "/planning/runs",
-        label: "Run History",
-        icon: ListChecks,
-        min_role: "viewer",
-        required_capability: "planning:read",
-      },
+      // Tranche 045 — "Run History" removed from primary nav. The page stays
+      // live at /planning/runs (blockers + critical-today depend on runs) but
+      // is diagnostic-only; ordering goes through /planning/procurement.
       {
         href: "/planning/production-plan",
         label: "Daily Production Plan",

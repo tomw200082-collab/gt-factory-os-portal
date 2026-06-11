@@ -9,8 +9,8 @@
 //   • FIRM (Thursday): review the engine's draft week (~2 weeks out) and lock
 //     it. Locking promotes draft → planned; the Sunday session then buys
 //     against the committed week. Reversible via the production-plan workflow.
-//   • PROCURE (Sunday): buy for the firmed week — handled by the existing
-//     purchase-session surface; the cockpit routes you there.
+//   • PROCURE (Sunday): buy for the firmed week — handled by the merged
+//     Procurement surface (Tranche 045); the cockpit routes you there.
 //   • EXECUTE (daily): make today's batch and report the actual.
 
 import Link from "next/link";
@@ -729,33 +729,35 @@ function ProcurePanel() {
         pending={demand.isLoading}
       />
 
+      {/* Tranche 045 — purchase-session + purchase-calendar are superseded by
+          the merged Procurement page (which carries its own calendar view). */}
       <SectionCard
         title="Place the orders"
-        description="The purchase session consolidates supplier orders by urgency (urgent / must / recommended)."
+        description="Procurement consolidates supplier orders by decision: what must go out today, what can wait, and what's handled."
       >
         <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
           <Link
-            href="/planning/purchase-session"
+            href="/planning/procurement"
             className={cn("group flex items-center justify-between rounded-lg border border-accent-border bg-accent-softer p-4 transition-colors hover:bg-accent-soft", focusRing)}
           >
             <span className="flex items-center gap-3">
               <ShoppingCart className="h-5 w-5 text-accent" />
               <span>
-                <span className="block text-sm font-semibold">Open purchase session</span>
+                <span className="block text-sm font-semibold">Open Procurement</span>
                 <span className="block text-xs text-fg-muted">Review &amp; place supplier orders</span>
               </span>
             </span>
             <ArrowRight className="h-4 w-4 text-accent transition-transform group-hover:translate-x-0.5" />
           </Link>
           <Link
-            href="/planning/purchase-calendar"
+            href="/planning/procurement"
             className={cn("group flex items-center justify-between rounded-lg border border-border bg-bg-raised p-4 shadow-hairline transition-colors hover:bg-bg-muted", focusRing)}
           >
             <span className="flex items-center gap-3">
               <CalendarCheck className="h-5 w-5 text-fg-subtle" />
               <span>
-                <span className="block text-sm font-semibold">Purchase calendar</span>
-                <span className="block text-xs text-fg-muted">10-week order-by view</span>
+                <span className="block text-sm font-semibold">Order calendar</span>
+                <span className="block text-xs text-fg-muted">Calendar view inside Procurement</span>
               </span>
             </span>
             <ArrowRight className="h-4 w-4 text-fg-faint transition-transform group-hover:translate-x-0.5" />

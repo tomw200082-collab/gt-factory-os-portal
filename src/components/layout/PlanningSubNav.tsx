@@ -18,12 +18,10 @@ import { useQuery } from "@tanstack/react-query";
 import {
   AlertOctagon,
   CalendarCheck,
-  CalendarRange,
   Factory,
   FlaskConical,
   Layers,
   LineChart,
-  ListChecks,
   ShoppingCart,
   TrendingUp,
 } from "lucide-react";
@@ -59,12 +57,8 @@ const PLANNING_TABS: PlanningTab[] = [
     shortLabel: "Forecast",
     icon: TrendingUp,
   },
-  {
-    href: "/planning/runs",
-    label: "Run History",
-    shortLabel: "Runs",
-    icon: ListChecks,
-  },
+  // Tranche 045 — "Run History" tab removed (page stays live; diagnostic-only,
+  // ordering goes through Procurement).
   {
     href: "/planning/production-plan",
     label: "Production Plan",
@@ -84,12 +78,8 @@ const PLANNING_TABS: PlanningTab[] = [
     shortLabel: "Simulation",
     icon: FlaskConical,
   },
-  {
-    href: "/planning/weekly-outlook",
-    label: "Weekly Outlook",
-    shortLabel: "Outlook",
-    icon: CalendarRange,
-  },
+  // Tranche 045 — "Weekly Outlook" tab removed; the page now redirects to
+  // /planning/inventory-flow (the daily-granular replacement below).
   {
     href: "/planning/inventory-flow",
     label: "Inventory Flow",

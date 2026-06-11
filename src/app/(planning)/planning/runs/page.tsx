@@ -253,6 +253,28 @@ export default function PlanningRunsListPage() {
         }
       />
 
+      {/* Tranche 045 — runs are demoted from ordering. This banner declares
+          the surface diagnostic-only and routes ordering to Procurement. */}
+      <div
+        role="note"
+        className="rounded border border-accent-border bg-accent-softer px-4 py-3 text-sm"
+        data-testid="planning-runs-diagnostic-banner"
+      >
+        <div className="font-semibold text-fg-strong">
+          Planning runs are diagnostic only — quantities here are not for
+          ordering.
+        </div>
+        <div className="mt-1 text-xs leading-relaxed text-fg-muted">
+          Use this page to understand what the engine saw and why.{" "}
+          <Link
+            href="/planning/procurement"
+            className="font-semibold text-accent hover:underline"
+          >
+            Order through Procurement →
+          </Link>
+        </div>
+      </div>
+
       {breakGlass ? (
         <div
           role="alert"
