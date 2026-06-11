@@ -1418,6 +1418,7 @@ export default function ProductionActualPage() {
   return (
     <div dir="ltr">
       <WorkflowHeader
+        size="section"
         eyebrow="Operator form"
         title="Production Report"
         description="Report output and any scrap. Component consumption is computed from the active BOM."

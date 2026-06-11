@@ -25,4 +25,4 @@ tsc clean; vitest green (478 baseline + new); no inline <svg> in waste-adjustmen
 single CTA shape rule (no rounded-full primary buttons); existing testids preserved
 
 ## Checklist
-- [ ] Implemented  - [ ] Typecheck  - [ ] Vitest  - [ ] Pushed
+- [x] Implemented  - [x] Typecheck (tsc --noEmit clean)  - [x] Vitest (488/488; 478 baseline + 10 new)  - [ ] Pushed

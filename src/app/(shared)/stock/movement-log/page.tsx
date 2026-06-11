@@ -943,6 +943,7 @@ export default function MovementLogPage() {
   return (
     <div className="space-y-5 sm:space-y-6">
       <WorkflowHeader
+        size="section"
         eyebrow="Stock"
         title="Movement Log"
         description="Ledger history for all stock movements. Search, filter by type or date, click a row for full details."

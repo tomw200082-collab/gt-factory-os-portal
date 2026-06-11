@@ -190,6 +190,7 @@ export default function AdminMastersArchivePage(): JSX.Element {
   return (
     <>
       <WorkflowHeader
+        size="section"
         eyebrow="Admin · Masters"
         title="Archive"
         description="Archived master records — review and restore as needed. Records here are hidden from operational workflows."

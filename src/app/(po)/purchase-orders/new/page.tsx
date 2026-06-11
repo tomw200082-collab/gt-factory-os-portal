@@ -429,7 +429,7 @@ function ManualPoFormInner(): JSX.Element {
   if (phase === "success" || phase === "idempotent") {
     return (
       <>
-        <WorkflowHeader eyebrow="Purchase Orders" title="New manual order" />
+        <WorkflowHeader size="section" eyebrow="Purchase Orders" title="New manual order" />
         <SectionCard>
           <div
             className="px-6 py-10 text-center space-y-3"
@@ -515,6 +515,7 @@ function ManualPoFormInner(): JSX.Element {
   return (
     <>
       <WorkflowHeader
+        size="section"
         eyebrow="Purchase Orders"
         title="New manual order"
         description="Manual purchase order — created without a planning recommendation. A reason is required for traceability."

@@ -72,8 +72,9 @@ export default function ProcurementPage(): JSX.Element {
     // right-to-left. Scoped to this page root only — the app shell (TopBar,
     // sidebar, group nav) stays LTR. Matches the existing dir="rtl" convention
     // already used by FocusMode / FocusCard / the purchase-session screen.
-    <div dir="rtl" className="space-y-5">
+    <div dir="rtl" className="flex flex-col gap-5">
       <WorkflowHeader
+        size="section"
         eyebrow="מרחב התכנון"
         title="רכש"
         description="כל הזמנות הרכש במקום אחד, מסודרות לפי החלטה: מה חייב לצאת היום, מה יכול לחכות, ומה כבר טופל."
@@ -82,10 +83,7 @@ export default function ProcurementPage(): JSX.Element {
             type="button"
             onClick={handleStart}
             disabled={startMut.isPending}
-            className={cn(
-              "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold transition-colors",
-              "bg-accent text-accent-fg hover:bg-accent/90 disabled:opacity-60",
-            )}
+            className="btn btn-primary btn-sm"
             data-testid="procurement-start"
           >
             {startMut.isPending

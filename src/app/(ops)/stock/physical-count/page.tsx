@@ -639,6 +639,7 @@ export default function PhysicalCountPage() {
   return (
     <>
       <WorkflowHeader
+        size="section"
         eyebrow="Operator form"
         title="Physical Count"
         description="Pick an item, count what you see, submit."

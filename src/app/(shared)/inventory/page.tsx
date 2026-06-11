@@ -1184,6 +1184,7 @@ export default function InventoryPage() {
     <Tooltip.Provider>
     <div className="space-y-5 sm:space-y-6">
       <WorkflowHeader
+        size="section"
         eyebrow="Stock"
         title="Inventory"
         description="Calculated stock balances derived from the ledger. Posted events only — pending events do not affect these numbers. Negative balances flagged for investigation."

@@ -191,6 +191,7 @@ export default function AdminMastersBomsListPage(): JSX.Element {
   return (
     <>
       <WorkflowHeader
+        size="section"
         eyebrow="Admin · Masters"
         title="Bills of materials"
         description="Browse manufactured and repack BOMs. Click a row to review versions, component lines, and simulate production quantities."
@@ -325,9 +326,9 @@ export default function AdminMastersBomsListPage(): JSX.Element {
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-sm">
+            <table className="table-base table-dense">
               <thead>
-                <tr className="border-b border-border/70 bg-bg-subtle/60">
+                <tr>
                   <Th>Item / BOM</Th>
                   <Th align="right">Output</Th>
                   <Th>Type</Th>
@@ -431,14 +432,14 @@ function BomHeadListRow({
 
   return (
     <tr
-      className="cursor-pointer border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40 focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
+      className="cursor-pointer focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
       tabIndex={0}
       onClick={() => router.push(bomHref)}
       onKeyDown={(e) => {
         if (e.key === "Enter" || e.key === " ") router.push(bomHref);
       }}
     >
-      <td className="px-3 py-2">
+      <td>
         <div className="flex items-center gap-1.5">
           <span className="font-medium text-fg">{displayName}</span>
           {item && (
@@ -459,7 +460,7 @@ function BomHeadListRow({
           <div className="text-3xs text-fg-faint">{head.display_family}</div>
         ) : null}
       </td>
-      <td className="px-3 py-2 text-right font-mono text-xs tabular-nums text-fg-muted">
+      <td className="text-right font-mono text-xs tabular-nums text-fg-muted">
         {fmtNumStr(head.final_bom_output_qty)}
         {head.final_bom_output_uom ? (
           <span className="ml-1 font-sans text-3xs text-fg-subtle">
@@ -467,7 +468,7 @@ function BomHeadListRow({
           </span>
         ) : null}
       </td>
-      <td className="px-3 py-2">
+      <td>
         {item ? (
           <Badge
             tone={
@@ -487,7 +488,7 @@ function BomHeadListRow({
           </Badge>
         )}
       </td>
-      <td className="px-3 py-2">
+      <td>
         {head.active_version_id ? (
           versionsQuery.isLoading ? (
             <span className="text-3xs text-fg-subtle">…</span>
@@ -510,7 +511,7 @@ function BomHeadListRow({
           </Badge>
         )}
       </td>
-      <td className="px-3 py-2 text-right">
+      <td className="text-right">
         {head.active_version_id ? (
           linesQuery.isLoading ? (
             <span className="text-3xs text-fg-subtle">…</span>
@@ -523,14 +524,14 @@ function BomHeadListRow({
           <span className="text-xs text-fg-faint">—</span>
         )}
       </td>
-      <td className="px-3 py-2">
+      <td>
         {versionsQuery.isLoading || linesQuery.isLoading ? (
           <span className="text-3xs text-fg-subtle">…</span>
         ) : (
           <BomReadinessChip state={readinessState} />
         )}
       </td>
-      <td className="px-3 py-2">
+      <td>
         {versionsQuery.isLoading ? (
           <span className="text-3xs text-fg-subtle">…</span>
         ) : latestUpdatedAt ? (
@@ -555,13 +556,7 @@ function Th({
   children: React.ReactNode;
   align?: "left" | "right";
 }): JSX.Element {
-  return (
-    <th
-      className={`px-3 py-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle ${
-        align === "right" ? "text-right" : "text-left"
-      }`}
-    >
-      {children}
-    </th>
-  );
+  // Typography, padding and background come from `table-base` (Tranche 049
+  // / VISUAL-004); this helper only carries alignment.
+  return <th className={align === "right" ? "text-right" : undefined}>{children}</th>;
 }

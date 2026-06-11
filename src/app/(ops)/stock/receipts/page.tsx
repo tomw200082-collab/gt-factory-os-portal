@@ -1071,6 +1071,7 @@ export default function GoodsReceiptPage() {
   return (
     <>
       <WorkflowHeader
+        size="section"
         eyebrow={urlPoLocked && urlPoHeader ? `Receiving against PO ${urlPoHeader.po_number}` : "Operator form"}
         title="Goods Receipt"
         description={

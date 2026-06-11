@@ -32,7 +32,6 @@ import {
   DetailTabEmpty,
   DetailTabError,
   DetailTabLoading,
-  PendingTabPlaceholder,
   type LinkageGroup,
   type TabDescriptor,
   type FieldRow,
@@ -188,22 +187,20 @@ function SeverityBadge({ severity }: { severity: string }): JSX.Element {
 }
 
 // Iter 9 — Lead time visual chip: green ≤7d, amber ≤14d, red >14d.
+// Tranche 049 (VISUAL-011): renders via the canonical <Badge> primitive.
 function LeadTimeChip({ days }: { days: number | null }): JSX.Element {
   if (days === null)
     return <span className="font-mono text-xs text-fg-faint">—</span>;
-  const cls =
-    days <= 7
-      ? "bg-success-softer text-success-fg border-success/30"
-      : days <= 14
-        ? "bg-warning-softer text-warning-fg border-warning/30"
-        : "bg-danger-softer text-danger-fg border-danger/30";
+  const tone = days <= 7 ? "success" : days <= 14 ? "warning" : "danger";
   return (
-    <span
-      className={`inline-flex items-center rounded border px-1.5 py-0.5 font-mono text-xs font-semibold ${cls}`}
-      title={`Lead time: ${days} days`}
+    <Badge
+      tone={tone}
+      size="xs"
+      className="font-mono"
+      tooltip={`Lead time: ${days} days`}
     >
       {days}d
-    </span>
+    </Badge>
   );
 }
 
