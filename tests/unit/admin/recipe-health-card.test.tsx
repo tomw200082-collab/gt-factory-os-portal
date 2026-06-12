@@ -104,9 +104,9 @@ describe("RecipeTrackSummary", () => {
 
 function wrapQuery() {
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
-  return ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={qc}>{children}</QueryClientProvider>
-  );
+  return function TestQueryWrapper({ children }: { children: ReactNode }) {
+    return <QueryClientProvider client={qc}>{children}</QueryClientProvider>;
+  };
 }
 
 const fetchMock = vi.fn();

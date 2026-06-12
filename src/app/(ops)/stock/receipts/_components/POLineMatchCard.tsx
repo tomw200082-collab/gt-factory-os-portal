@@ -128,8 +128,41 @@ export function POLineMatchCard({
   }
 
   // -----------------------------------------------------------------------
-  // PO track surface.
+  // PO track surface — extracted to a child component so its hooks run
+  // unconditionally at the top of a component (rules-of-hooks), while
+  // preserving the previous mount/unmount behavior per track.
   // -----------------------------------------------------------------------
+  return (
+    <POTrackCard
+      poLines={poLines}
+      selectedPoLineId={selectedPoLineId}
+      receivingQty={receivingQty}
+      onChangeMatch={onChangeMatch}
+      disabled={disabled}
+      testIdPrefix={testIdPrefix}
+    />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// POTrackCard — the PO-track surface. All hooks live here, called
+// unconditionally before any early return.
+// ---------------------------------------------------------------------------
+function POTrackCard({
+  poLines,
+  selectedPoLineId,
+  receivingQty,
+  onChangeMatch,
+  disabled,
+  testIdPrefix,
+}: {
+  poLines: PoLineOption[];
+  selectedPoLineId: string;
+  receivingQty: string;
+  onChangeMatch: (poLineId: string, autoFillQty?: string, autoFillUom?: string) => void;
+  disabled?: boolean;
+  testIdPrefix: string;
+}) {
   // Sort PO lines: OPEN/PARTIAL first (most-receivable on top), then CLOSED,
   // then CANCELLED. Within a group, by line_number.
   const orderedLines = useMemo(() => {
