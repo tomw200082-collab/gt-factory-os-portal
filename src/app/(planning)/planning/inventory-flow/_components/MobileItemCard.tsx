@@ -36,7 +36,17 @@ import {
   formatDaysCover,
 } from "../_lib/format";
 import { familyAccent } from "../_lib/family";
-import { dayCellClassName, RISK_TIER_STYLE } from "../_lib/risk";
+import {
+  dayCellClassNameProduction,
+  NON_WORKING_STRIPE_STYLE,
+  RISK_TIER_STYLE,
+} from "../_lib/risk";
+import {
+  coveredByPlan,
+  demandSum14,
+  incomingSum14,
+  shortfallSum14,
+} from "../_lib/production-lens";
 import type { FlowDay, FlowItem } from "../_lib/types";
 import type { PlannedInflowRow } from "../_lib/plannedInflow";
 import { MobileDaySheet } from "./MobileDaySheet";
@@ -80,6 +90,11 @@ function MobileItemCardInner({
 }: MobileItemCardProps) {
   const style = RISK_TIER_STYLE[item.risk_tier];
   const insight = buildInsight(item);
+  // Tranche 058 — production-lens numbers for the digest row + plan badge.
+  const demand14 = demandSum14(item);
+  const incoming14 = incomingSum14(item);
+  const gap14 = shortfallSum14(item);
+  const planCovers = coveredByPlan(item);
 
   // FLOW-M04 — which day's detail sheet is open (null = closed).
   const [sheetDay, setSheetDay] = useState<FlowDay | null>(null);
@@ -153,6 +168,16 @@ function MobileItemCardInner({
             <Badge tone={style.badgeTone} variant="soft" dotted>
               {style.label}
             </Badge>
+            {/* Tranche 058 — planned (not yet posted) production is what
+                prevents this item's projected stockout. The job is to
+                VERIFY the plan lands, not to start a new decision. */}
+            {planCovers ? (
+              <span data-testid="mobile-covered-by-plan">
+                <Badge tone="info" variant="soft">
+                  Covered by plan
+                </Badge>
+              </span>
+            ) : null}
           </div>
         </div>
       </div>
@@ -216,6 +241,30 @@ function MobileItemCardInner({
 
       {/* Insight sentence */}
       <p className="mt-3 text-sm leading-relaxed text-fg-muted">{insight}</p>
+
+      {/* Digest row (Tranche 058) — the actual quantities behind the colors:
+          current stock, total 14-day demand, and either the unfilled gap
+          (danger, = minimum production batch) or total incoming. */}
+      <dl
+        className="mt-3 grid grid-cols-3 gap-2 border-t border-border/40 pt-2.5"
+        data-testid="mobile-digest-row"
+      >
+        <DigestStat label="On hand" value={formatCompact(item.current_on_hand)} />
+        <DigestStat label="Demand 14d" value={formatCompact(demand14)} />
+        {gap14 > 0 ? (
+          <DigestStat
+            label="Unfilled 14d"
+            value={formatCompact(-gap14)}
+            valueClassName="text-danger-fg"
+          />
+        ) : (
+          <DigestStat
+            label="Incoming 14d"
+            value={formatCompact(incoming14)}
+            valueClassName={incoming14 > 0 ? "text-info-fg" : undefined}
+          />
+        )}
+      </dl>
 
       {/* Planned-inflow summary chip (visible inline so the operator sees
           the planned summary without expanding the day strip). */}
@@ -291,6 +340,16 @@ function MobileItemCardInner({
                 : undefined;
             const hasPlanned =
               plannedRow && plannedRow.planned_remaining_qty > 0;
+            const isNonWorking = d.tier === "non_working";
+            const isShort = d.shortfall_qty_with_production > 0;
+            // Tranche 058 — the number IS the cell: projected end-of-day
+            // on-hand, or the NEGATIVE unfilled gap on shortfall days
+            // (−120 says "how much is missing", which beats a clamped 0).
+            const cellValue = isNonWorking
+              ? null
+              : isShort
+                ? formatCompact(-d.shortfall_qty_with_production)
+                : formatCompact(d.projected_on_hand_eod_with_production);
             return (
               <button
                 key={d.day}
@@ -298,25 +357,25 @@ function MobileItemCardInner({
                 onClick={() => setSheetDay(d)}
                 aria-haspopup="dialog"
                 aria-label={
-                  hasPlanned
-                    ? `${fmtDateLong(d.day)} — planned ${formatCompact(
-                        plannedRow!.planned_remaining_qty,
-                      )}, not posted. Open day detail.`
-                    : `${fmtDateLong(d.day)} — open day detail`
+                  isNonWorking
+                    ? `${fmtDateLong(d.day)} — non-working day. Open day detail.`
+                    : isShort
+                      ? `${fmtDateLong(d.day)} — short ${formatCompact(d.shortfall_qty_with_production)} units. Open day detail.`
+                      : `${fmtDateLong(d.day)} — ${formatCompact(d.projected_on_hand_eod_with_production)} units end of day. Open day detail.`
                 }
-                className="flex min-h-[44px] flex-col items-center gap-0.5 rounded-sm pt-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 active:opacity-80"
+                className="flex min-h-[48px] flex-col items-center gap-0.5 rounded-sm pt-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 active:opacity-80"
               >
                 <span
                   className={cn(
-                    "relative block h-7 w-full overflow-hidden rounded-sm",
-                    "border-l-[3px]",
-                    dayCellClassName(d.tier),
-                    d.tier === "stockout" && "border-l-danger",
-                    d.tier === "critical" && "border-l-warning",
-                    d.tier === "watch" && "border-l-warning/60",
-                    d.tier === "healthy" && "border-l-success/50",
-                    d.tier === "non_working" && "border-l-border",
+                    // Same 5-tier production-aware palette the desktop grid
+                    // cells use, so color reads identically on both surfaces.
+                    "relative flex h-8 w-full items-center justify-center overflow-hidden rounded-sm",
+                    dayCellClassNameProduction(
+                      d.cell_tier_with_production,
+                      d.tier,
+                    ),
                   )}
+                  style={isNonWorking ? NON_WORKING_STRIPE_STYLE : undefined}
                 >
                   {/* Subtle vertical depth gradient — same .cell-depth
                       utility used on desktop cells for visual coherence. */}
@@ -324,6 +383,11 @@ function MobileItemCardInner({
                     aria-hidden
                     className="pointer-events-none absolute inset-0 cell-depth"
                   />
+                  {cellValue != null ? (
+                    <span className="relative text-[10px] font-semibold leading-none tabular-nums tracking-tight">
+                      {cellValue}
+                    </span>
+                  ) : null}
                   {hasPlanned ? (
                     <span
                       aria-hidden
@@ -363,8 +427,16 @@ function MobileItemCardInner({
 export const MobileItemCard = memo(MobileItemCardInner);
 
 function buildInsight(item: FlowItem): string {
-  if (item.risk_tier === "stockout" && item.earliest_stockout_date) {
-    return `Stockout projected ${fmtDateLong(item.earliest_stockout_date)}.`;
+  // Tranche 058 — production-aware truth: when planned production prevents
+  // the blind-projection stockout, say THAT instead of an alarming stockout
+  // line that contradicts the (production-aware) hero number above it.
+  if (coveredByPlan(item)) {
+    return "Planned production covers the projected stockout — verify it lands.";
+  }
+  const stockoutDate =
+    item.stockout_at_day_with_production ?? item.earliest_stockout_date;
+  if (item.risk_tier === "stockout" && stockoutDate) {
+    return `Stockout projected ${fmtDateLong(stockoutDate)}.`;
   }
   if (item.risk_tier === "critical") {
     return `Cover below lead time (${item.effective_lead_time_days}d). Replenish soon.`;
@@ -373,4 +445,30 @@ function buildInsight(item: FlowItem): string {
     return `Within 1.5× lead time (${item.effective_lead_time_days}d). Monitor.`;
   }
   return "Healthy through the visible horizon.";
+}
+
+function DigestStat({
+  label,
+  value,
+  valueClassName,
+}: {
+  label: string;
+  value: string;
+  valueClassName?: string;
+}) {
+  return (
+    <div className="min-w-0">
+      <dt className="truncate text-[9px] font-semibold uppercase tracking-sops text-fg-subtle">
+        {label}
+      </dt>
+      <dd
+        className={cn(
+          "mt-0.5 truncate text-sm font-semibold tabular-nums text-fg-strong",
+          valueClassName,
+        )}
+      >
+        {value}
+      </dd>
+    </div>
+  );
 }

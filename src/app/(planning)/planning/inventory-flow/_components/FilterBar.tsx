@@ -32,6 +32,7 @@ import { ScrollFade } from "@/components/ui/ScrollFade";
 import type { GroupLike } from "@/lib/taxonomy/groups";
 import type { FlowItem } from "../_lib/types";
 import { isAtRisk } from "../_lib/risk";
+import { FLOW_SORT_OPTIONS, parseSortKey } from "../_lib/production-lens";
 
 interface FilterBarProps {
   families: string[];
@@ -62,6 +63,10 @@ export function FilterBar({
   const productGroup = searchParams.get("product_group") ?? "";
   // default ON (at-risk-only) unless explicitly false
   const atRiskOnly = searchParams.get("at_risk_only") !== "false";
+  // Tranche 058 — production-lens ordering (?sort=). Default "urgency"
+  // (param absent). Both the mobile card stream and the desktop grid
+  // honor this key.
+  const sortKey = parseSortKey(searchParams.get("sort"));
 
   const updateParam = useCallback(
     (k: string, v: string | null) => {
@@ -81,11 +86,12 @@ export function FilterBar({
     searchParams.get("at_risk_only") === "false" ||
     family !== "" ||
     productGroup !== "" ||
-    q !== "";
+    q !== "" ||
+    sortKey !== "urgency";
 
   const clearAllFilters = useCallback(() => {
     const sp = new URLSearchParams(searchParams.toString());
-    for (const k of ["at_risk_only", "family", "product_group", "q"]) {
+    for (const k of ["at_risk_only", "family", "product_group", "q", "sort"]) {
       sp.delete(k);
     }
     const qs = sp.toString();
@@ -251,6 +257,43 @@ export function FilterBar({
             </span>
           )}
         </label>
+
+        {/* Order-by chips (Tranche 058) — the top-to-bottom story of the
+            list. Urgency = default (param absent). Single scroll row <sm. */}
+        <ScrollFade
+          className="min-w-0 basis-full"
+          contentClassName="flex flex-wrap items-center gap-1.5 max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:pb-0.5"
+          contentProps={{
+            role: "group",
+            "aria-label": "Order items by",
+            "data-testid": "flow-sort",
+          }}
+        >
+          <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle max-sm:shrink-0">
+            Order
+          </span>
+          {FLOW_SORT_OPTIONS.map((opt) => (
+            <button
+              key={opt.key}
+              type="button"
+              onClick={() =>
+                updateParam("sort", opt.key === "urgency" ? null : opt.key)
+              }
+              aria-pressed={sortKey === opt.key}
+              title={opt.hint}
+              data-testid={`flow-sort-${opt.key}`}
+              className={cn(
+                "inline-flex items-center gap-1 rounded-sm border px-2 py-1 text-[10px] font-medium uppercase tracking-sops transition-all duration-150",
+                "max-sm:shrink-0 max-sm:whitespace-nowrap",
+                sortKey === opt.key
+                  ? "border-accent-border bg-accent-soft text-accent shadow-sm"
+                  : "border-border bg-bg-subtle text-fg-muted hover:-translate-y-px hover:border-accent/40 hover:text-fg hover:shadow-sm",
+              )}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </ScrollFade>
 
         {/* Family chips with at-risk counts. FLOW-M14: below sm the row
             scrolls horizontally in a single line inside <ScrollFade> (the

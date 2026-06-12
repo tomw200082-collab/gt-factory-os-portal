@@ -43,7 +43,7 @@
 
 import { useEffect, useMemo, useRef, type CSSProperties } from "react";
 import { ChevronRight } from "lucide-react";
-import { compareItemsByRisk } from "../_lib/risk";
+import { sortItems, type FlowSortKey } from "../_lib/production-lens";
 import { todayIsoLocal } from "../_lib/format";
 import type { FlowItem } from "../_lib/types";
 import {
@@ -108,6 +108,9 @@ interface FlowGridDesktopProps {
   showMovementSparklines?: boolean;
   /** item_id → array of 4 weekly net movement values. */
   movementByItemId?: Map<string, number[]>;
+  /** Production-lens ordering (Tranche 058). Default "urgency" preserves
+   *  the pre-058 risk sort exactly. */
+  sortKey?: FlowSortKey;
 }
 
 export function FlowGridDesktop({
@@ -121,10 +124,11 @@ export function FlowGridDesktop({
   onSelectItem,
   showMovementSparklines = false,
   movementByItemId,
+  sortKey = "urgency",
 }: FlowGridDesktopProps) {
   const sortedItems = useMemo(
-    () => [...items].sort(compareItemsByRisk),
-    [items],
+    () => sortItems(items, sortKey),
+    [items, sortKey],
   );
 
   // Days / weeks shape derived from first item (all items have same horizon).

@@ -13,7 +13,10 @@
 
 import { useQueryClient } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
-import { compareItemsByRisk } from "../_lib/risk";
+import {
+  sortItems,
+  type FlowSortKey,
+} from "../_lib/production-lens";
 import { fmtDaysFromNow } from "../_lib/format";
 import type { FlowItem, FlowSummary } from "../_lib/types";
 import type { PlannedInflowRow } from "../_lib/plannedInflow";
@@ -44,6 +47,9 @@ interface MobileCardStreamProps {
   showMovementSparklines?: boolean;
   /** item_id → array of 4 weekly net movement values. */
   movementByItemId?: Map<string, number[]>;
+  /** Production-lens ordering (Tranche 058). Default "urgency" preserves
+   *  the pre-058 risk sort exactly. */
+  sortKey?: FlowSortKey;
 }
 
 export function MobileCardStream({
@@ -57,8 +63,9 @@ export function MobileCardStream({
   coverageDaysMap,
   showMovementSparklines = false,
   movementByItemId,
+  sortKey = "urgency",
 }: MobileCardStreamProps) {
-  const sorted = useMemo(() => [...items].sort(compareItemsByRisk), [items]);
+  const sorted = useMemo(() => sortItems(items, sortKey), [items, sortKey]);
   const queryClient = useQueryClient();
   const startY = useRef<number | null>(null);
   const [pullPx, setPullPx] = useState(0);
