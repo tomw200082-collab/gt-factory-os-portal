@@ -29,7 +29,6 @@ vi.mock("next/navigation", () => {
 });
 
 // Import AFTER the mock so Wizard sees the stubbed next/navigation.
-// eslint-disable-next-line import/first
 import { Wizard, type WizardStepDef, type WizardStepProps } from "./Wizard";
 
 type TestState = {

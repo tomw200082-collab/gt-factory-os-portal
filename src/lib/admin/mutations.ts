@@ -85,7 +85,7 @@ export async function postStatus<TResponse = unknown>(params: {
 
 async function parseOrThrow<TResponse>(
   res: Response,
-  kind: string,
+  _kind: string,
 ): Promise<TResponse> {
   const body = await res.json().catch(() => null);
   if (res.ok) return body as TResponse;

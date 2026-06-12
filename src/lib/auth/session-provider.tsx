@@ -63,7 +63,7 @@ async function fetchRealSession(): Promise<DevShimSession> {
     cache: "no-store",
   });
   if (!res.ok) {
-    const body = await res.text().catch(() => "");
+    await res.text().catch(() => "");
     throw new Error("Could not load your session. Check your connection and try refreshing.");
   }
   const data = (await res.json()) as {

@@ -399,8 +399,8 @@ export default function NewForecastDraftPage() {
                 placeholder="Context for this forecast revision (optional)."
               />
               <p className="forecast-field-helper">
-                Visible to anyone reviewing this version. Useful for "why this
-                revision" context.
+                Visible to anyone reviewing this version. Useful for &quot;why this
+                revision&quot; context.
               </p>
             </div>
 

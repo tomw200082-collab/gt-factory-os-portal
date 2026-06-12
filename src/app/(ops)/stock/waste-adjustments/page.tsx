@@ -45,17 +45,15 @@ import { cn } from "@/lib/cn";
 
 type ItemType = "FG" | "RM" | "PKG";
 
-const WASTE_REASON_CODES = [
-  "breakage",
-  "spoilage",
-  "production_waste",
-  "sampling",
-  "theft_loss",
-  "found_stock",
-  "correction",
-  "other",
-] as const;
-type WasteReasonCode = (typeof WASTE_REASON_CODES)[number];
+type WasteReasonCode =
+  | "breakage"
+  | "spoilage"
+  | "production_waste"
+  | "sampling"
+  | "theft_loss"
+  | "found_stock"
+  | "correction"
+  | "other";
 
 const REASON_CODES_BY_DIRECTION: Record<
   "loss" | "positive",

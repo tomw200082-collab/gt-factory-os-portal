@@ -142,6 +142,10 @@ export default function GlobalError({
             >
               Try again
             </button>
+            {/* global-error replaces the root layout when the app has crashed,
+                so the client router (and next/link) may be unusable. A plain
+                <a> forcing a full-page reload is the safe escape hatch here. */}
+            {/* eslint-disable-next-line @next/next/no-html-link-for-pages */}
             <a
               href="/"
               style={{

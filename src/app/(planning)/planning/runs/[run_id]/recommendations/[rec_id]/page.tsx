@@ -146,7 +146,7 @@ const LEAD_TIME_SOURCE_LABELS: Record<LeadTimeSource, string> = {
   unknown: "Source unknown",
 };
 
-function SkeletonLayout({ runId }: { runId: string }) {
+function SkeletonLayout(_props: { runId: string }) {
   return (
     <div className="space-y-5" aria-busy="true" aria-label="Loading recommendation…">
       <div className="mb-2">

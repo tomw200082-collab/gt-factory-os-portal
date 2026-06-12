@@ -196,6 +196,10 @@ export default function AdminSkuMapPage(): JSX.Element {
     );
   }
 
+  return <AdminSkuMapContent />;
+}
+
+function AdminSkuMapContent(): JSX.Element {
   const [channelFilter, setChannelFilter] = useState<string>("");
   const [statusFilter, setStatusFilter] = useState<string>("");
 

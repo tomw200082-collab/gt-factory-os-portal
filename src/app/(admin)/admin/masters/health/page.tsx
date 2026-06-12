@@ -327,13 +327,15 @@ export default function AdminMasterDataHealthPage(): JSX.Element {
           headers={["Code", "Name", "Action"]}
           rows={componentsNoSupplier.map((c) => [
             <Link
+              key={`${c.component_id}-code`}
               href={`/admin/masters/components/${encodeURIComponent(c.component_id)}`}
               className="font-mono text-fg hover:text-accent"
             >
               {c.component_id}
             </Link>,
-            <span className="text-fg-muted">{c.component_name ?? "—"}</span>,
+            <span key={`${c.component_id}-name`} className="text-fg-muted">{c.component_name ?? "—"}</span>,
             <CtaLink
+              key={`${c.component_id}-action`}
               href={`/admin/masters/components/${encodeURIComponent(c.component_id)}?tab=supplier-items`}
               label="Add supplier"
             />,
@@ -352,16 +354,18 @@ export default function AdminMasterDataHealthPage(): JSX.Element {
           headers={["Item ID", "Name", "Supply method", "Action"]}
           rows={itemsNoActiveBom.map((item) => [
             <Link
+              key={`${item.item_id}-code`}
               href={`/admin/masters/items/${encodeURIComponent(item.item_id)}`}
               className="font-mono text-fg hover:text-accent"
             >
               {item.item_id}
             </Link>,
-            <span className="text-fg-muted">{item.item_name ?? "—"}</span>,
-            <Badge tone="info" dotted>
+            <span key={`${item.item_id}-name`} className="text-fg-muted">{item.item_name ?? "—"}</span>,
+            <Badge key={`${item.item_id}-supply-method`} tone="info" dotted>
               {item.supply_method === "MANUFACTURED" ? "Manufactured" : "Repack"}
             </Badge>,
             <CtaLink
+              key={`${item.item_id}-action`}
               href={`/admin/masters/items/${encodeURIComponent(item.item_id)}?tab=bom`}
               label="Open BOM"
             />,
@@ -380,30 +384,34 @@ export default function AdminMasterDataHealthPage(): JSX.Element {
           headers={["Type", "Code", "Name", "Action"]}
           rows={[
             ...pendingComponents.map((c) => [
-              <Badge tone="neutral" dotted>Component</Badge>,
+              <Badge key={`component-${c.component_id}-type`} tone="neutral" dotted>Component</Badge>,
               <Link
+                key={`component-${c.component_id}-code`}
                 href={`/admin/masters/components/${encodeURIComponent(c.component_id)}`}
                 className="font-mono text-fg hover:text-accent"
               >
                 {c.component_id}
               </Link>,
-              <span className="text-fg-muted">{c.component_name ?? "—"}</span>,
+              <span key={`component-${c.component_id}-name`} className="text-fg-muted">{c.component_name ?? "—"}</span>,
               <CtaLink
+                key={`component-${c.component_id}-action`}
                 href={`/admin/masters/components/${encodeURIComponent(c.component_id)}`}
                 label="Review"
                 tone="warning"
               />,
             ]),
             ...pendingItems.map((i) => [
-              <Badge tone="neutral" dotted>Item</Badge>,
+              <Badge key={`item-${i.item_id}-type`} tone="neutral" dotted>Item</Badge>,
               <Link
+                key={`item-${i.item_id}-code`}
                 href={`/admin/masters/items/${encodeURIComponent(i.item_id)}`}
                 className="font-mono text-fg hover:text-accent"
               >
                 {i.item_id}
               </Link>,
-              <span className="text-fg-muted">{i.item_name ?? "—"}</span>,
+              <span key={`item-${i.item_id}-name`} className="text-fg-muted">{i.item_name ?? "—"}</span>,
               <CtaLink
+                key={`item-${i.item_id}-action`}
                 href={`/admin/masters/items/${encodeURIComponent(i.item_id)}`}
                 label="Review"
                 tone="warning"

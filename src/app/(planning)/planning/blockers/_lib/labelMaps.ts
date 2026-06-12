@@ -94,21 +94,18 @@ if (process.env.NODE_ENV !== "production") {
   const labelKeysCovered = new Set(Object.keys(BLOCKER_LABEL));
   for (const k of BLOCKER_LABEL_KEY_VALUES) {
     if (!labelKeysCovered.has(k)) {
-      // eslint-disable-next-line no-console
       console.warn(`[planning/blockers] missing English label for blocker_label key '${k}'`);
     }
   }
   const fixKeysCovered = new Set(Object.keys(FIX_ACTION_LABEL));
   for (const k of FIX_ACTION_LABEL_KEY_VALUES) {
     if (!fixKeysCovered.has(k)) {
-      // eslint-disable-next-line no-console
       console.warn(`[planning/blockers] missing English label for fix_action_label key '${k}'`);
     }
   }
   const categoryKeysCovered = new Set(Object.keys(BLOCKER_CATEGORY_LABEL));
   for (const k of BLOCKER_CATEGORY_VALUES) {
     if (!categoryKeysCovered.has(k)) {
-      // eslint-disable-next-line no-console
       console.warn(`[planning/blockers] missing English label for category '${k}'`);
     }
   }

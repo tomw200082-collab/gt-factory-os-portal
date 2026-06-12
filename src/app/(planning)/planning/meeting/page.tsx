@@ -459,7 +459,7 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
             onClick={() => setWeekStart(defaultFirmWeekStart())}
             className={cn("shrink-0 rounded text-xs text-accent hover:underline", focusRing)}
           >
-            Jump to this week's target
+            Jump to this week&apos;s target
           </button>
         </div>
         {canAct ? (
@@ -842,7 +842,7 @@ function ExecutePanel() {
             <Factory className="h-5 w-5 text-accent" />
             <span>
               <span className="block text-sm font-semibold">Production plan</span>
-              <span className="block text-xs text-fg-muted">Today's batches &amp; report actuals</span>
+              <span className="block text-xs text-fg-muted">Today&apos;s batches &amp; report actuals</span>
             </span>
           </span>
           <ArrowRight className="h-4 w-4 text-accent transition-transform group-hover:translate-x-0.5" />

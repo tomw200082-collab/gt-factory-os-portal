@@ -447,7 +447,7 @@ function Step3BomSetup({
         </p>
         <ul className="list-disc space-y-1 pl-5 text-fg-muted">
           <li>Create a new <code>bom_head</code> row linked to this item</li>
-          <li>Create a fresh <code>bom_version</code> row in status="draft"</li>
+          <li>Create a fresh <code>bom_version</code> row in status=&quot;draft&quot;</li>
           <li>Add any lines you define in Step 4 to that draft version</li>
           <li>
             Leave the version as <strong>draft</strong> — you can publish it
@@ -741,14 +741,6 @@ function Step5Suppliers({
         sublabel: i.sku ?? i.item_id,
       }));
   }, [itemsQuery.data]);
-
-  const componentsById = useMemo(() => {
-    const map = new Map<string, ComponentRow>();
-    for (const c of componentsQuery.data?.rows ?? []) {
-      map.set(c.component_id, c);
-    }
-    return map;
-  }, [componentsQuery.data]);
 
   const openQcFor = (kind: "component" | "item", id: string) => {
     setQcTarget({ kind, id } as typeof qcTarget extends infer T ? T : never);
@@ -1137,7 +1129,7 @@ function Step7Review({
       >
         <p className="text-sm text-fg-muted">
           After a successful publish, you will be redirected to the new
-          product's detail page where you can review readiness and make further
+          product&apos;s detail page where you can review readiness and make further
           edits.
         </p>
       </SectionCard>

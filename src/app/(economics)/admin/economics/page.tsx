@@ -1645,7 +1645,7 @@ function CostGapsDrawer({
                   Missing component costs ({componentGaps.length})
                 </h3>
                 <p className="mb-2 text-xs text-fg-muted">
-                  Each row below is a component used by this product's recipe
+                  Each row below is a component used by this product&apos;s recipe
                   that currently has no effective cost. Type a fallback price
                   to publish — the value lands in components.std_cost_per_inv_uom
                   and feeds COGS on the next recalc.

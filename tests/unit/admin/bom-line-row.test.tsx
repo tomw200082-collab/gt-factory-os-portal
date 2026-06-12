@@ -19,13 +19,15 @@ function wrap() {
       mutations: { retry: false },
     },
   });
-  return ({ children }: { children: ReactNode }) => (
-    <QueryClientProvider client={qc}>
-      <table>
-        <tbody>{children}</tbody>
-      </table>
-    </QueryClientProvider>
-  );
+  return function TestQueryWrapper({ children }: { children: ReactNode }) {
+    return (
+      <QueryClientProvider client={qc}>
+        <table>
+          <tbody>{children}</tbody>
+        </table>
+      </QueryClientProvider>
+    );
+  };
 }
 
 const fetchMock = vi.fn();

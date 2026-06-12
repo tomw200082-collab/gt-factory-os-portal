@@ -302,20 +302,6 @@ interface ProductionActualReverseResponse {
 // Formatting helpers — English / LTR locale forced for date output to
 // prevent the Hebrew-month abbreviation regression cited in §8 of the audit.
 // ---------------------------------------------------------------------------
-function fmtDate(iso: string): string {
-  try {
-    return new Date(iso).toLocaleString("en-US", {
-      year: "numeric",
-      month: "short",
-      day: "2-digit",
-      hour: "2-digit",
-      minute: "2-digit",
-    });
-  } catch {
-    return iso;
-  }
-}
-
 function fmtPlanDate(ymd: string): string {
   // Plan dates are YYYY-MM-DD strings; render as "May 1, 2026" en-US locale.
   try {

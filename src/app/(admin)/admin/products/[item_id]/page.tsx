@@ -44,9 +44,9 @@
 //  Iter 20 — TypeScript clean (0 errors).
 // ---------------------------------------------------------------------------
 
-import { useMemo, useState, use, Suspense, type ReactNode } from "react";
+import { useMemo, use, Suspense, type ReactNode } from "react";
 import Link from "next/link";
-import { useRouter, useSearchParams, notFound } from "next/navigation";
+import { notFound } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import * as Popover from "@radix-ui/react-popover";
 import { AlertTriangle, Plus } from "lucide-react";
@@ -1860,7 +1860,6 @@ function ComponentReadinessCell({
 function SupplierCoverageRow({
   component_id,
   components,
-  suppliers,
   supplierNameOf,
 }: {
   component_id: string;

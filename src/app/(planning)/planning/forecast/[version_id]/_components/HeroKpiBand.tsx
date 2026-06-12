@@ -36,7 +36,6 @@ import {
   CheckCircle2,
   Crown,
   Layers,
-  Minus,
   Package,
   TrendingUp,
   type LucideIcon,
