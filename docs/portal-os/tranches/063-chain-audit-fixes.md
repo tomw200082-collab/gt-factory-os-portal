@@ -1,6 +1,9 @@
 # Tranche 063 — chain-audit fixes: forecast → meeting → procurement → PO → goods receipt
 
-status: in progress (branch `claude/sales-forecast-procurement-audit-7rr3h1`; Tom merges)
+status: implemented (branch `claude/sales-forecast-procurement-audit-7rr3h1`; Tom merges)
+evidence: tsc clean · eslint 0 errors (269 pre-existing warnings, unchanged) ·
+vitest 637/637 (80 files; +15 new tests: po-draft-summary 7, staleness 8).
+Playwright not runnable in this environment — skipped per dispatch.
 source: full-chain audit report (2026-06-12, commit 61d86d2) — 27 audited findings,
 implemented in six groups (A cache trust · B chain bridges · C procurement flow ·
 D forecast list · E PO surfaces · F receipts).
@@ -67,38 +70,38 @@ register of the existing copy there.
 
 ## Checklist
 ### Group A — cache invalidation trust (P1)
-- [ ] FLOW-A1 GR submit success invalidates PO/GR/planner/inventory-flow prefixes
-- [ ] FLOW-A2 manual PO create success invalidates planner/PO/open-PO lists
-- [ ] FLOW-A6 convert-to-PO success invalidates the PO-list keys
-- [ ] FLOW-A7 run-trigger / forecast publish / firm-week invalidate ["planning","overview"]
-- [ ] FLOW-A8 forecast key roots unified on plural "forecasts"
-- [ ] FLOW-A9 firm-week also invalidates ["cadence","firmed-week-demand"]
+- [x] FLOW-A1 GR submit success invalidates PO/GR/planner/inventory-flow prefixes
+- [x] FLOW-A2 manual PO create success invalidates planner/PO/open-PO lists
+- [x] FLOW-A6 convert-to-PO success invalidates the PO-list keys
+- [x] FLOW-A7 run-trigger / forecast publish / firm-week invalidate ["planning","overview"]
+- [x] FLOW-A8 forecast key roots unified on plural "forecasts"
+- [x] FLOW-A9 firm-week also invalidates ["cadence","firmed-week-demand"]
 ### Group B — chain bridges (P1/P2)
-- [ ] FLOW-A4 post-publish bridge CTA → /planning/meeting; quiet runs diagnostics link
-- [ ] FLOW-A5 firm-success banner gains "Open Sunday procurement →" CTA
-- [ ] FLOW-A3 "From recommendation" → /planning/procurement; Procurement quick-action tile; runs tile = diagnostics
-- [ ] FLOW-A12 FocusMode DoneSummary link "צפייה בהזמנות שנוצרו ←" → /purchase-orders?status=OPEN
-- [ ] FLOW-A10 simulation shortage CTAs → procurement (+ manual PO); mode + date-range in URL
-- [ ] FLOW-A14 ?view=calendar on /planning/procurement; purchase-calendar redirect targets it
+- [x] FLOW-A4 post-publish bridge CTA → /planning/meeting; quiet runs diagnostics link
+- [x] FLOW-A5 firm-success banner gains "Open Sunday procurement →" CTA
+- [x] FLOW-A3 "From recommendation" → /planning/procurement; Procurement quick-action tile; runs tile = diagnostics
+- [x] FLOW-A12 FocusMode DoneSummary link "צפייה בהזמנות שנוצרו ←" → /purchase-orders?status=OPEN
+- [x] FLOW-A10 simulation shortage CTAs → procurement (+ manual PO); mode + date-range in URL
+- [x] FLOW-A14 ?view=calendar on /planning/procurement; purchase-calendar redirect targets it
 ### Group C — procurement surface flow quality (P0/P1, Hebrew)
-- [ ] FLOW-PC02 inline supersede confirmation replaces window.confirm; sends supersede:true
-- [ ] FLOW-PC03 dismissible session-start success banner above SessionView
-- [ ] FLOW-PC04 quiet "היסטוריית הזמנות ←" link near the summary strip
+- [x] FLOW-PC02 inline supersede confirmation replaces window.confirm; sends supersede:true
+- [x] FLOW-PC03 dismissible session-start success banner above SessionView
+- [x] FLOW-PC04 quiet "היסטוריית הזמנות ←" link near the summary strip
 ### Group D — forecast list (P1)
-- [ ] FLOW-F01 staleness banner (none / covered / elapsed), gated on loaded data
-- [ ] FLOW-F03 ForecastRow: pencil only for drafts, eye only for published/archived
+- [x] FLOW-F01 staleness banner (none / covered / elapsed), gated on loaded data
+- [x] FLOW-F03 ForecastRow: pencil only for drafts, eye only for published/archived
 ### Group E — PO surfaces (P1/P2)
-- [ ] FLOW-PO01 "Order updated." success feedback after notes/expected-date save
-- [ ] FLOW-PO02 source_run_id / source_recommendation_id → human labels
-- [ ] FLOW-PO03 header drops · supplier_id suffix when supplier_name exists
-- [ ] FLOW-N01 reactive read-only summary card between line editor and submit
-- [ ] FLOW-N02 success state shows po_number when the response carries it
-- [ ] FLOW-N03 manual-PO description copy extended (urgent/exceptional only)
-- [ ] FLOW-A13 PO list mirrors q= and late=1 in the URL, restoring on load
+- [x] FLOW-PO01 "Order updated." success feedback after notes/expected-date save
+- [x] FLOW-PO02 source_run_id / source_recommendation_id → human labels
+- [x] FLOW-PO03 header drops · supplier_id suffix when supplier_name exists
+- [x] FLOW-N01 reactive read-only summary card between line editor and submit
+- [x] FLOW-N02 success state shows po_number when the response carries it
+- [x] FLOW-N03 manual-PO description copy extended (urgent/exceptional only)
+- [x] FLOW-A13 PO list mirrors q= and late=1 in the URL, restoring on load
 ### Group F — receipts (P1)
-- [ ] FLOW-R01 over-receipt two-step submit with amber inline confirmation zone
-- [ ] FLOW-R03 manual receipt success links: movement log + submissions
-- [ ] FLOW-R04 receipts _components verified English-only (no change needed)
+- [x] FLOW-R01 over-receipt two-step submit with amber inline confirmation zone
+- [x] FLOW-R03 manual receipt success links: movement log + submissions
+- [x] FLOW-R04 receipts _components verified English-only (no change needed)
 
 ## Verification gates
 - `npm run typecheck` · `npm run lint` · `npm run test` (vitest) — all green before
