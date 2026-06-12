@@ -15,8 +15,9 @@
 //   - history              LIVE — GET /api/purchase-orders/:po_id/history
 // ---------------------------------------------------------------------------
 
-import { use, useState, useCallback, Fragment } from "react";
+import { use, useState, useCallback, useEffect, Fragment } from "react";
 import Link from "next/link";
+import { CheckCircle2 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { useSession } from "@/lib/auth/session-provider";
@@ -620,11 +621,21 @@ export default function PurchaseOrderDetailPage({
       void queryClient.invalidateQueries({ queryKey: ["purchase-orders", "history", po_id] });
       setEditing(false);
       setEditError(null);
+      // Tranche 063 (FLOW-PO01) — flash the "Order updated." note.
+      setUpdateSaved(true);
     },
     onError: (err: unknown) => {
       setEditError((err as Error).message ?? "Update failed. Try again.");
     },
   });
+
+  // Tranche 063 (FLOW-PO01) — auto-dismiss the saved note after ~4.5s.
+  const [updateSaved, setUpdateSaved] = useState(false);
+  useEffect(() => {
+    if (!updateSaved) return;
+    const t = window.setTimeout(() => setUpdateSaved(false), 4500);
+    return () => window.clearTimeout(t);
+  }, [updateSaved]);
 
   // --- Line edit state -------------------------------------------------------
   const [lineEditingId, setLineEditingId] = useState<string | null>(null);
@@ -1113,7 +1124,20 @@ export default function PurchaseOrderDetailPage({
       return (
         <div className="space-y-3">
           {canEditPo && !editing && (
-            <div className="flex justify-end px-1">
+            <div className="flex items-center justify-end gap-2 px-1">
+              {/* Tranche 063 (FLOW-PO01) — brief, auto-dismissing success
+                  feedback after a save (the edit row collapses on success,
+                  so silence read as "did it work?"). */}
+              {updateSaved && (
+                <span
+                  className="inline-flex items-center gap-1 text-xs font-medium text-success-fg"
+                  role="status"
+                  data-testid="po-update-saved-note"
+                >
+                  <CheckCircle2 className="h-3.5 w-3.5" aria-hidden />
+                  Order updated.
+                </span>
+              )}
               <button
                 type="button"
                 className="btn btn-ghost btn-sm"
@@ -1165,10 +1189,11 @@ export default function PurchaseOrderDetailPage({
         );
       }
       return (
+        // Tranche 063 (FLOW-PO02) — human labels instead of raw field names.
         <DetailFieldGrid
           rows={[
             {
-              label: "source_run_id",
+              label: "Planning run",
               value: (
                 <Link
                   href={`/planning/runs/${encodeURIComponent(po.source_run_id)}`}
@@ -1180,7 +1205,7 @@ export default function PurchaseOrderDetailPage({
               mono: true,
             },
             {
-              label: "source_recommendation_id",
+              label: "Recommendation ID",
               value: po.source_recommendation_id,
               mono: true,
             },
@@ -1356,9 +1381,10 @@ export default function PurchaseOrderDetailPage({
       header={{
         eyebrow: "Purchase orders",
         title: po ? `PO ${po.po_number}` : po_id,
-        description: po
-          ? `${supplierLabel} · ${po.supplier_id}`
-          : "Loading purchase order…",
+        // Tranche 063 (FLOW-PO03) — the raw supplier_id suffix is noise once
+        // a real supplier name resolved; supplierLabel already falls back to
+        // the id when no name exists, so the id never disappears entirely.
+        description: po ? supplierLabel : "Loading purchase order…",
         meta: headerMeta,
         actions: (
           <div className="flex items-center gap-2">

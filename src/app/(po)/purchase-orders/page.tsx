@@ -465,23 +465,38 @@ export default function PurchaseOrdersListPage() {
   const [statusFilter, setStatusFilter] = useState<POStatus[] | null>(
     initialStatuses.length > 0 ? initialStatuses : ["OPEN", "PARTIAL"],
   );
-  const [lateOnly, setLateOnly] = useState(false);
-  const [query, setQuery] = useState("");
+  // Tranche 063 (FLOW-A13) — search text and the Late-only flag mirror into
+  // the URL (?q=, ?late=1) like status already does, restoring on load.
+  const [lateOnly, setLateOnly] = useState(
+    () => searchParams.get("late") === "1",
+  );
+  const [query, setQuery] = useState(() => searchParams.get("q") ?? "");
+
+  const syncUrl = useCallback(
+    (next: { statuses: POStatus[] | null; q: string; late: boolean }) => {
+      const params = new URLSearchParams();
+      for (const [key, val] of searchParams.entries()) {
+        if (key !== "status" && key !== "q" && key !== "late") {
+          params.append(key, val);
+        }
+      }
+      if (next.statuses && next.statuses.length > 0) {
+        next.statuses.forEach((status) => params.append("status", status));
+      }
+      if (next.q.trim() !== "") params.set("q", next.q);
+      if (next.late) params.set("late", "1");
+      router.replace(`?${params.toString()}`, { scroll: false });
+    },
+    [router, searchParams],
+  );
 
   const applyStatusFilter = useCallback(
     (s: POStatus[] | null) => {
       setStatusFilter(s);
       setLateOnly(false);
-      const params = new URLSearchParams();
-      for (const [key, val] of searchParams.entries()) {
-        if (key !== "status") params.append(key, val);
-      }
-      if (s && s.length > 0) {
-        s.forEach((status) => params.append("status", status));
-      }
-      router.replace(`?${params.toString()}`, { scroll: false });
+      syncUrl({ statuses: s, q: query, late: false });
     },
-    [router, searchParams],
+    [syncUrl, query],
   );
 
   const posQuery = useQuery<PurchaseOrdersListResponse>({
@@ -691,16 +706,15 @@ export default function PurchaseOrdersListPage() {
             onClick={() => {
               if (lateOnly) {
                 setLateOnly(false);
+                syncUrl({ statuses: statusFilter, q: query, late: false });
               } else {
                 setStatusFilter(["OPEN", "PARTIAL"]);
                 setLateOnly(true);
-                const params = new URLSearchParams();
-                for (const [key, val] of searchParams.entries()) {
-                  if (key !== "status") params.append(key, val);
-                }
-                params.append("status", "OPEN");
-                params.append("status", "PARTIAL");
-                router.replace(`?${params.toString()}`, { scroll: false });
+                syncUrl({
+                  statuses: ["OPEN", "PARTIAL"],
+                  q: query,
+                  late: true,
+                });
               }
             }}
             testId="po-stat-late"
@@ -775,7 +789,10 @@ export default function PurchaseOrdersListPage() {
           {lateOnly && (
             <button
               type="button"
-              onClick={() => setLateOnly(false)}
+              onClick={() => {
+                setLateOnly(false);
+                syncUrl({ statuses: statusFilter, q: query, late: false });
+              }}
               className="inline-flex items-center gap-1 rounded-sm border border-danger/40 bg-danger/5 px-2 py-1 text-3xs font-semibold uppercase tracking-sops text-danger-fg hover:bg-danger/10 transition-colors"
               aria-label="Clear late filter"
             >
@@ -792,7 +809,16 @@ export default function PurchaseOrdersListPage() {
               className="input input-sm pl-8 w-full sm:w-72"
               placeholder="Search PO number, supplier, notes…"
               value={query}
-              onChange={(e) => setQuery(e.target.value)}
+              onChange={(e) => {
+                setQuery(e.target.value);
+                // Tranche 063 (FLOW-A13) — keep ?q= in sync so the search
+                // survives navigation and refresh.
+                syncUrl({
+                  statuses: statusFilter,
+                  q: e.target.value,
+                  late: lateOnly,
+                });
+              }}
             />
           </div>
         </div>
