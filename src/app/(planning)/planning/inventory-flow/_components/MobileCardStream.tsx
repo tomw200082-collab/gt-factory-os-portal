@@ -3,9 +3,12 @@
 // ---------------------------------------------------------------------------
 // MobileCardStream — vertical list of mobile item cards.
 //
-// Sticky thin synopsis header + sticky filter chips. Pull-to-refresh
-// via a touch handler that triggers when the user pulls down past 60px
-// at scroll-top.
+// Thin synopsis strip at the top of the list (non-sticky since Tranche
+// 057 — the sticky FilterBar already carries the at-risk count and the
+// old sticky version slid under the TopBar). Pull-to-refresh via a touch
+// handler that triggers when the user pulls down past 60px at scroll-top
+// (the page scrolls on `window` — AppShellChrome's <main> is not an
+// overflow container — so the `window.scrollY` check is correct).
 // ---------------------------------------------------------------------------
 
 import { useQueryClient } from "@tanstack/react-query";
@@ -103,9 +106,15 @@ export function MobileCardStream({
         </div>
       ) : null}
 
-      {/* Synopsis */}
+      {/* Synopsis — plain (non-sticky) summary strip (Tranche 057,
+          FLOW-M03/M10). The previous `sticky top-0 -mx-4` version slid
+          underneath the sticky TopBar (z-40) and assumed exactly 16px of
+          parent padding for its full-bleed trick. The at-risk count stays
+          permanently visible anyway in the sticky FilterBar's "At risk
+          only" segment, so the strip only needs to orient at the top of
+          the list, not follow the scroll. */}
       {summary ? (
-        <div className="sticky top-0 z-10 -mx-4 border-b border-border/40 bg-bg/95 px-4 py-2 backdrop-blur">
+        <div className="rounded-sm border border-border/40 bg-bg-subtle/60 px-3 py-2">
           <div className="text-3xs uppercase tracking-sops text-fg-subtle">
             <span className="font-semibold text-danger-fg tabular-nums">
               {summary.at_risk_count}

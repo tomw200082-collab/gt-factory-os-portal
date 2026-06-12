@@ -902,12 +902,13 @@
     background-color: hsl(var(--danger-soft));
   }
 
-  /* Sticky filter bar — pins below the hero with a soft backdrop blur.
-     The parent applies `position: sticky; top: 0` (or a custom offset).
-     This utility only handles the visual treatment when stuck. */
+  /* Sticky filter bar — pins below the sticky TopBar with a soft backdrop
+     blur. Tranche 057 (FLOW-M03): top offset = TopBar height (h-16 = 4rem
+     + safe-area top inset) so the bar never slides UNDERNEATH the TopBar
+     (z-40) while this bar is z-30. Keep in sync with TopBar's h-16. */
   .filter-bar-sticky {
     position: sticky;
-    top: 0;
+    top: calc(4rem + env(safe-area-inset-top, 0px));
     z-index: 30;
     background-color: hsl(var(--bg) / 0.85);
     backdrop-filter: saturate(140%) blur(8px);

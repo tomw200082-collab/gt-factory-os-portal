@@ -6,16 +6,25 @@
 // Visual:
 //   - 4px tier strip on the left
 //   - Item name + family + risk badge top
-//   - Hero days-of-cover (text-5xl)
+//   - Hero days-of-cover (text-4xl)
 //   - One-sentence insight
-//   - Mini 14-day strip (color blocks)
-//   - Tap routes to /planning/inventory-flow/[itemId]
+//   - 14-day strip as a 7-column × 2-row grid of TAPPABLE day cells
+//     (Tranche 057, FLOW-M04/M05): tapping a day opens <MobileDaySheet>
+//     with the same demand / supply / projected-EOD rows the desktop
+//     DayPopover shows. Cells are ≥44px touch targets.
+//   - Tapping the card body routes to /planning/inventory-flow/[itemId]
+//
+// Structure note (Tranche 057): the card wrapper is a <div>; the <Link>
+// wraps only the body (header / hero / insight). The day strip is a
+// sibling of the Link because interactive <button> day cells cannot nest
+// inside an anchor (invalid HTML, broken a11y). Pre-057 the whole card
+// was one <Link> and the strip was hover-title-only — useless on touch.
 //
 // Performance: wrapped in React.memo to skip re-render when FlowItem
 // reference is stable across TanStack Query refetches.
 // ---------------------------------------------------------------------------
 
-import { memo, useMemo, type CSSProperties } from "react";
+import { memo, useMemo, useState, type CSSProperties } from "react";
 import Link from "next/link";
 import { Badge } from "@/components/badges/StatusBadge";
 import { cn } from "@/lib/cn";
@@ -28,8 +37,9 @@ import {
 } from "../_lib/format";
 import { familyAccent } from "../_lib/family";
 import { dayCellClassName, RISK_TIER_STYLE } from "../_lib/risk";
-import type { FlowItem } from "../_lib/types";
+import type { FlowDay, FlowItem } from "../_lib/types";
 import type { PlannedInflowRow } from "../_lib/plannedInflow";
+import { MobileDaySheet } from "./MobileDaySheet";
 import { Sparkline } from "./Sparkline";
 
 interface MobileItemCardProps {
@@ -39,11 +49,13 @@ interface MobileItemCardProps {
   /** Pre-indexed `${item_id}|${plan_date}` → row map. */
   plannedByItemDate?: Map<string, PlannedInflowRow>;
   /**
-   * When true, the card wrapper is a non-clickable `<div>` instead of a
+   * When true, the card body is a non-clickable `<div>` instead of a
    * `<Link>` to the per-SKU drill-down route. Used by the supply view,
    * where `/planning/inventory-flow/[itemId]` does not yet handle
    * component IDs and would render broken/empty data on tap. Default
-   * `false` preserves the FG card behaviour exactly.
+   * `false` preserves the FG card behaviour exactly. The day sheet stays
+   * available in both modes (it reads client-side data only) but hides
+   * its drill-down link when this is true.
    */
   disableRowLink?: boolean;
   /** When true, a coverage-days heat badge is overlaid on the card. */
@@ -68,6 +80,9 @@ function MobileItemCardInner({
 }: MobileItemCardProps) {
   const style = RISK_TIER_STYLE[item.risk_tier];
   const insight = buildInsight(item);
+
+  // FLOW-M04 — which day's detail sheet is open (null = closed).
+  const [sheetDay, setSheetDay] = useState<FlowDay | null>(null);
 
   // Sum planned-remaining across the visible 14-day strip for this item —
   // surfaced as an inline summary chip when the overlay is on. Cheap (≤14
@@ -107,14 +122,6 @@ function MobileItemCardInner({
     ? "text-tier-healthy-bg"
     : daysCoverTierClass(cover);
 
-  // Wrapper props are shared between the clickable and non-clickable
-  // variants. When `disableRowLink` is true we render a plain `<div>` and
-  // drop the hover-border affordance so the card visually reads as
-  // non-interactive — but the inner content stays identical.
-  const wrapperClassName = cn(
-    "relative flex overflow-hidden rounded-md border border-border/40 bg-bg-raised shadow-raised transition-colors",
-    disableRowLink ? "cursor-default" : "hover:border-accent/40",
-  );
   const wrapperStyle: CSSProperties = {
     borderLeft: `3px solid ${familyColor}`,
   };
@@ -129,8 +136,115 @@ function MobileItemCardInner({
           : "bg-success-softer text-success-fg"
       : null;
 
-  const cardBody = (
+  const body = (
     <>
+      {/* Header */}
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="truncate text-base font-medium text-fg-strong">
+            {item.item_name}
+          </div>
+          <div className="mt-1 flex items-center gap-1.5 text-3xs text-fg-muted">
+            {item.family ? (
+              <span className="rounded-sm bg-bg-muted px-1 py-0.5 uppercase tracking-sops">
+                {item.family}
+              </span>
+            ) : null}
+            <Badge tone={style.badgeTone} variant="soft" dotted>
+              {style.label}
+            </Badge>
+          </div>
+        </div>
+      </div>
+
+      {/* Hero days of cover (semantic — STOCKOUT / Nd / Nw / >3w) +
+          inline sparkline so the slope reads alongside the headline.
+          FLOW-M15: the value block carries min-w-0 and the sparkline is
+          shrink-0 at a slightly narrower 80px, and the movement sparkline
+          hides below sm — so "STOCKOUT" never clips at 360–390px. */}
+      <div className="mt-4 flex items-end justify-between gap-3">
+        <div className="flex min-w-0 items-baseline gap-2">
+          <div
+            className={cn(
+              "text-4xl font-semibold leading-none tabular-nums",
+              heroToneClass,
+            )}
+          >
+            {heroValue}
+          </div>
+          {heroSub ? (
+            <div className="text-sm uppercase tracking-sops text-fg-subtle">
+              {heroSub}
+            </div>
+          ) : null}
+        </div>
+        <Sparkline
+          days={item.days.slice(0, 14)}
+          riskTier={item.risk_tier}
+          width={80}
+          height={28}
+          className="shrink-0"
+        />
+        {/* R-NEW-7 — 4-week movement sparkline (sm+ only; on phones the
+            hero value wins the space contest). */}
+        {showMovementSparklines && movementWeeks && movementWeeks.length >= 4 ? (() => {
+          const xs = [5, 15, 25, 35] as const;
+          const maxVal = Math.max(...movementWeeks.map(Math.abs), 1);
+          const pts = movementWeeks
+            .map((val, i) => `${xs[i]},${8 - (val / maxVal) * 6}`)
+            .join(" ");
+          return (
+            <svg
+              viewBox="0 0 40 16"
+              width={40}
+              height={16}
+              className="ml-1 hidden shrink-0 sm:inline-block"
+              aria-hidden
+            >
+              <polyline
+                points={pts}
+                fill="none"
+                className="stroke-info"
+                strokeWidth={1.5}
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          );
+        })() : null}
+      </div>
+
+      {/* Insight sentence */}
+      <p className="mt-3 text-sm leading-relaxed text-fg-muted">{insight}</p>
+
+      {/* Planned-inflow summary chip (visible inline so the operator sees
+          the planned summary without expanding the day strip). */}
+      {overlayEnabled && plannedSum > 0 ? (
+        <div className="mt-3 flex items-center gap-2">
+          <span
+            className="inline-flex items-center gap-1 rounded-sm border border-dashed border-info/60 bg-info-softer px-1.5 py-0.5 text-2xs font-semibold tabular-nums text-info-fg"
+            data-testid="mobile-planned-summary"
+            aria-label={`Planned ${formatCompact(plannedSum)} this 14-day window, not yet posted to stock`}
+          >
+            <span aria-hidden>+</span>
+            <span>
+              {formatCompact(plannedSum)}
+              {plannedUom ? ` ${plannedUom}` : ""}
+            </span>
+            <span className="text-3xs font-normal text-info-fg/80">
+              · planned · not posted
+            </span>
+          </span>
+        </div>
+      ) : null}
+    </>
+  );
+
+  return (
+    <div
+      className="relative flex overflow-hidden rounded-md border border-border/40 bg-bg-raised shadow-raised"
+      style={wrapperStyle}
+    >
       {/* Tier strip (kept as a thin secondary cue inside the family-colored
           left border so risk still reads at a glance). */}
       <div className={cn("w-1 shrink-0", style.stripClass)} aria-hidden />
@@ -146,113 +260,30 @@ function MobileItemCardInner({
           {coverageDays}d
         </span>
       ) : null}
-      <div className="flex-1 px-4 py-4">
-        {/* Header */}
-        <div className="flex items-start justify-between gap-3">
-          <div className="min-w-0">
-            <div className="truncate text-base font-medium text-fg-strong">
-              {item.item_name}
-            </div>
-            <div className="mt-1 flex items-center gap-1.5 text-3xs text-fg-muted">
-              {item.family ? (
-                <span className="rounded-sm bg-bg-muted px-1 py-0.5 uppercase tracking-sops">
-                  {item.family}
-                </span>
-              ) : null}
-              <Badge tone={style.badgeTone} variant="soft" dotted>
-                {style.label}
-              </Badge>
-            </div>
-          </div>
-        </div>
 
-        {/* Hero days of cover (semantic — STOCKOUT / Nd / Nw / >3w) +
-            inline sparkline so the slope reads alongside the headline. */}
-        <div className="mt-4 flex items-end justify-between gap-3">
-          <div className="flex items-baseline gap-2">
-            <div
-              className={cn(
-                "text-4xl font-semibold leading-none tabular-nums",
-                heroToneClass,
-              )}
-            >
-              {heroValue}
-            </div>
-            {heroSub ? (
-              <div className="text-sm uppercase tracking-sops text-fg-subtle">
-                {heroSub}
-              </div>
-            ) : null}
-          </div>
-          <Sparkline
-            days={item.days.slice(0, 14)}
-            riskTier={item.risk_tier}
-            width={96}
-            height={28}
-          />
-          {/* R-NEW-7 — 4-week movement sparkline */}
-          {showMovementSparklines && movementWeeks && movementWeeks.length >= 4 ? (() => {
-            const xs = [5, 15, 25, 35] as const;
-            const maxVal = Math.max(...movementWeeks.map(Math.abs), 1);
-            const pts = movementWeeks
-              .map((val, i) => `${xs[i]},${8 - (val / maxVal) * 6}`)
-              .join(" ");
-            return (
-              <svg
-                viewBox="0 0 40 16"
-                width={40}
-                height={16}
-                className="inline-block ml-1"
-                aria-hidden
-              >
-                <polyline
-                  points={pts}
-                  fill="none"
-                  className="stroke-info"
-                  strokeWidth={1.5}
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-              </svg>
-            );
-          })() : null}
-        </div>
+      <div className="flex-1 px-4 pb-3 pt-4">
+        {/* Card body — navigates to the per-item drill-down (FG only). */}
+        {disableRowLink ? (
+          <div>{body}</div>
+        ) : (
+          <Link
+            href={`/planning/inventory-flow/${encodeURIComponent(item.item_id)}`}
+            className="block rounded-sm transition-colors hover:bg-bg-subtle/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+          >
+            {body}
+          </Link>
+        )}
 
-        {/* Insight sentence */}
-        <p className="mt-3 text-sm leading-relaxed text-fg-muted">{insight}</p>
-
-        {/* Planned-inflow summary chip (visible inline so the operator sees
-            the planned summary without expanding the day strip).
-            Touch target reachable inline; Link wrapper provides ≥44px hit
-            via the parent card.
-            Per dispatch validation gate 5: chip is a static label inside
-            the card; the parent <Link> is the interactive element with a
-            full-card touch target well above 44px. */}
-        {overlayEnabled && plannedSum > 0 ? (
-          <div className="mt-3 flex items-center gap-2">
-            <span
-              className="inline-flex items-center gap-1 rounded-sm border border-dashed border-info/60 bg-info-softer px-1.5 py-0.5 text-2xs font-semibold tabular-nums text-info-fg"
-              data-testid="mobile-planned-summary"
-              aria-label={`Planned ${formatCompact(plannedSum)} this 14-day window, not yet posted to stock`}
-            >
-              <span aria-hidden>+</span>
-              <span>
-                {formatCompact(plannedSum)}
-                {plannedUom ? ` ${plannedUom}` : ""}
-              </span>
-              <span className="text-3xs font-normal text-info-fg/80">
-                · planned · not posted
-              </span>
-            </span>
-          </div>
-        ) : null}
-
-        {/* 14-day mini strip — polish 2026-05-05:
-            Tier color rendered as a 3px LEFT BORDER plus a softened bg
-            tint so the cell carries less visual weight while keeping the
-            risk signal at-a-glance. Reduces "wall of color" effect on
-            mobile where 14 cells render side-by-side. */}
-        <div className="mt-4 flex gap-0.5">
+        {/* 14-day strip — 7 columns × 2 rows of tappable day cells
+            (FLOW-M04/M05). Each cell is a ≥44px button that opens the
+            day-detail sheet; the tier color renders as a 3px LEFT BORDER
+            plus a softened bg tint (same visual language as before). */}
+        <div
+          className="mt-3 grid grid-cols-7 gap-1"
+          data-testid="mobile-day-strip"
+          role="group"
+          aria-label="Next 14 days — tap a day for detail"
+        >
           {item.days.slice(0, 14).map((d) => {
             const plannedRow =
               overlayEnabled && plannedByItemDate
@@ -261,29 +292,25 @@ function MobileItemCardInner({
             const hasPlanned =
               plannedRow && plannedRow.planned_remaining_qty > 0;
             return (
-              <div
+              <button
                 key={d.day}
-                className={cn(
-                  "relative flex flex-1 flex-col items-center gap-0.5",
-                )}
-                title={
+                type="button"
+                onClick={() => setSheetDay(d)}
+                aria-haspopup="dialog"
+                aria-label={
                   hasPlanned
-                    ? `${fmtDateLong(d.day)} · planned ${formatCompact(
+                    ? `${fmtDateLong(d.day)} — planned ${formatCompact(
                         plannedRow!.planned_remaining_qty,
-                      )} · not posted`
-                    : fmtDateLong(d.day)
+                      )}, not posted. Open day detail.`
+                    : `${fmtDateLong(d.day)} — open day detail`
                 }
+                className="flex min-h-[44px] flex-col items-center gap-0.5 rounded-sm pt-0.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 active:opacity-80"
               >
-                <div
+                <span
                   className={cn(
-                    // 3px LEFT BORDER in tier color + softened bg tint:
-                    // visual weight is concentrated on the border edge,
-                    // not the fill — so the row reads like a sequence of
-                    // sparkline ticks rather than a hot/cold heatmap.
-                    "relative h-6 w-full overflow-hidden rounded-sm",
+                    "relative block h-7 w-full overflow-hidden rounded-sm",
                     "border-l-[3px]",
                     dayCellClassName(d.tier),
-                    // Tier-color left border via class composition.
                     d.tier === "stockout" && "border-l-danger",
                     d.tier === "critical" && "border-l-warning",
                     d.tier === "watch" && "border-l-warning/60",
@@ -304,34 +331,32 @@ function MobileItemCardInner({
                       className="absolute bottom-0 right-0 block h-1.5 w-1.5 rounded-tl-sm border-l border-t border-dashed border-info bg-info-softer"
                     />
                   ) : null}
-                </div>
+                </span>
                 <span className="text-[9px] uppercase tracking-sops text-fg-faint">
                   {fmtDayLetter(d.day)}
                 </span>
-              </div>
+              </button>
             );
           })}
         </div>
       </div>
-    </>
-  );
 
-  if (disableRowLink) {
-    return (
-      <div className={wrapperClassName} style={wrapperStyle}>
-        {cardBody}
-      </div>
-    );
-  }
-
-  return (
-    <Link
-      href={`/planning/inventory-flow/${encodeURIComponent(item.item_id)}`}
-      className={wrapperClassName}
-      style={wrapperStyle}
-    >
-      {cardBody}
-    </Link>
+      {/* Day-detail bottom sheet (FLOW-M04) */}
+      {sheetDay ? (
+        <MobileDaySheet
+          item={item}
+          day={sheetDay}
+          onClose={() => setSheetDay(null)}
+          overlayEnabled={overlayEnabled}
+          plannedRow={
+            overlayEnabled && plannedByItemDate
+              ? plannedByItemDate.get(`${item.item_id}|${sheetDay.day}`)
+              : undefined
+          }
+          disableRowLink={disableRowLink}
+        />
+      ) : null}
+    </div>
   );
 }
 
