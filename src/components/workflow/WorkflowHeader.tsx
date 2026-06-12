@@ -15,6 +15,14 @@ interface WorkflowHeaderProps {
    */
   backHref?: string;
   backLabel?: string;
+  /**
+   * Visual scale (Tranche 049 / VISUAL-010).
+   *   "page"    — destination surfaces (dashboard, planning hub): text-3xl/4xl.
+   *   "section" — operational list/form pages: text-xl/2xl with tighter
+   *               eyebrow spacing, so working surfaces read as tools, not
+   *               landing pages.
+   */
+  size?: "page" | "section";
 }
 
 /**
@@ -32,7 +40,9 @@ export function WorkflowHeader({
   children,
   backHref,
   backLabel = "Back",
+  size = "page",
 }: WorkflowHeaderProps) {
+  const isSection = size === "section";
   return (
     <header className="flex flex-col gap-4 pb-6 sm:gap-6 sm:pb-8 reveal">
       <div className="flex flex-wrap items-start justify-between gap-4 sm:gap-6">
@@ -47,14 +57,26 @@ export function WorkflowHeader({
             </Link>
           ) : null}
           {eyebrow ? (
-            <div className="mb-2 flex items-center gap-2">
+            <div
+              className={
+                isSection
+                  ? "mb-1.5 flex items-center gap-2"
+                  : "mb-2 flex items-center gap-2"
+              }
+            >
               <span className="dot bg-accent" aria-hidden />
               <div className="text-2xs font-semibold uppercase tracking-sops text-fg-muted">
                 {eyebrow}
               </div>
             </div>
           ) : null}
-          <h1 className="text-3xl font-bold tracking-tight text-fg-strong sm:text-4xl">
+          <h1
+            className={
+              isSection
+                ? "text-xl font-bold tracking-tight text-fg-strong sm:text-2xl"
+                : "text-3xl font-bold tracking-tight text-fg-strong sm:text-4xl"
+            }
+          >
             {title}
           </h1>
           {description ? (

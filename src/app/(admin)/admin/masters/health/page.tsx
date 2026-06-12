@@ -269,6 +269,7 @@ export default function AdminMasterDataHealthPage(): JSX.Element {
   return (
     <>
       <WorkflowHeader
+        size="section"
         eyebrow="Admin · Masters"
         title="Master data health"
         description="Actionable gaps in master data. Fix these before running planning or generating recommendations."

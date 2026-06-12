@@ -29,7 +29,6 @@ import {
   ArrowRight,
   BarChart2,
   CalendarClock,
-  CalendarRange,
   CheckCircle2,
   ChevronDown,
   ChevronRight,
@@ -40,6 +39,7 @@ import {
   Loader2,
   PackageCheck,
   PlayCircle,
+  ShoppingCart,
   Wifi,
   WifiOff,
   XCircle,
@@ -56,9 +56,11 @@ import { cn } from "@/lib/cn";
 // ---------------------------------------------------------------------------
 const PLANNING_SECTIONS = [
   { label: "Forecast", href: "/planning/forecast", icon: BarChart2, blurb: "Demand by month" },
-  { label: "Run history", href: "/planning/runs", icon: ListChecks, blurb: "Every planning run" },
+  { label: "Run history", href: "/planning/runs", icon: ListChecks, blurb: "Diagnostic — every run" },
   { label: "Production plan", href: "/planning/production-plan", icon: CalendarClock, blurb: "This week's build" },
-  { label: "Weekly outlook", href: "/planning/weekly-outlook", icon: CalendarRange, blurb: "Near-term snapshot" },
+  // Tranche 045 — "Weekly outlook" entry replaced: that page now redirects to
+  // Inventory Flow (already listed below); Procurement takes the slot.
+  { label: "Procurement", href: "/planning/procurement", icon: ShoppingCart, blurb: "Place supplier orders" },
   { label: "Inventory flow", href: "/planning/inventory-flow", icon: Layers, blurb: "Daily projection" },
   { label: "Blockers", href: "/planning/blockers", icon: AlertTriangle, blurb: "Items to fix" },
 ] as const;
@@ -605,6 +607,72 @@ export default function PlanningOverviewPage() {
           </Link>
         }
       />
+
+      {/* ===================================================================
+          How planning works here — canonical cadence (Tranche 045)
+          =================================================================== */}
+      <SectionCard
+        eyebrow="Cadence"
+        title="How planning works here"
+        description="One declared workflow — three touchpoints, every week."
+      >
+        <div
+          className="grid grid-cols-1 gap-3 sm:grid-cols-3"
+          data-testid="planning-cadence-block"
+        >
+          <div className="rounded-lg border border-border/70 bg-bg p-3">
+            <div className="text-2xs font-semibold uppercase tracking-sops text-fg-subtle">
+              Thursday
+            </div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm font-semibold">
+              <Link href="/planning/forecast" className="text-accent hover:underline">
+                Forecast
+              </Link>
+              <span className="text-fg-faint" aria-hidden>→</span>
+              <Link href="/planning/meeting" className="text-accent hover:underline">
+                Meeting
+              </Link>
+              <span className="text-fg-faint" aria-hidden>→</span>
+              <Link href="/planning/meeting" className="text-accent hover:underline">
+                Firm week
+              </Link>
+            </div>
+            <div className="mt-1 text-2xs text-fg-muted">
+              Publish demand, decide the build, lock the week.
+            </div>
+          </div>
+          <div className="rounded-lg border border-border/70 bg-bg p-3">
+            <div className="text-2xs font-semibold uppercase tracking-sops text-fg-subtle">
+              Sunday
+            </div>
+            <div className="mt-1.5 text-sm font-semibold">
+              <Link href="/planning/procurement" className="text-accent hover:underline">
+                Procurement
+              </Link>
+            </div>
+            <div className="mt-1 text-2xs text-fg-muted">
+              Work the order queue in focus mode until it hits zero.
+            </div>
+          </div>
+          <div className="rounded-lg border border-border/70 bg-bg p-3">
+            <div className="text-2xs font-semibold uppercase tracking-sops text-fg-subtle">
+              Daily
+            </div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-1.5 gap-y-1 text-sm font-semibold">
+              <Link href="/planning/production-plan" className="text-accent hover:underline">
+                Production board
+              </Link>
+              <span className="text-fg-faint" aria-hidden>+</span>
+              <Link href="/planning/inventory-flow" className="text-accent hover:underline">
+                Inventory flow
+              </Link>
+            </div>
+            <div className="mt-1 text-2xs text-fg-muted">
+              Report today&apos;s output; watch at-risk days.
+            </div>
+          </div>
+        </div>
+      </SectionCard>
 
       {/* ===================================================================
           The planning pipeline — Demand → Run → Recommendations → Blockers

@@ -6,6 +6,11 @@
 // placed on their order-by date. Derived entirely from session.pos via the
 // pure calendar-grid helpers — no second fetch. A day chip opens focus mode at
 // that order.
+//
+// Tranche 053 (FLOW-004): below md (768px) the 7-col month grid is replaced by
+// a grouped-by-week list (supplier · tier chip/dot · date · ₪ amount; tap
+// opens focus mode exactly like the desktop cell button). Desktop md+ renders
+// the original grid unchanged. CSS-breakpoint switch — no JS media query.
 // ---------------------------------------------------------------------------
 
 import { useMemo } from "react";
@@ -18,6 +23,8 @@ import {
   calTotals,
   groupByDay,
   posToCalEntries,
+  type CalEntry,
+  type GridDay,
 } from "../_lib/calendar-grid";
 import { todayISO } from "../_lib/decision";
 
@@ -48,6 +55,17 @@ export interface CalendarViewProps {
   today?: string;
 }
 
+/** "8 ביוני" — Hebrew day-of-month + month label for the mobile list. */
+function hebDate(g: GridDay): string {
+  return `${g.dayOfMonth} ב${MONTH_HE[g.monthIdx]}`;
+}
+
+interface WeekGroup {
+  start: GridDay;
+  end: GridDay;
+  rows: { entry: CalEntry; day: GridDay; dow: string }[];
+}
+
 export function CalendarView({
   pos,
   onOpen,
@@ -58,6 +76,26 @@ export function CalendarView({
   const grid = useMemo(() => buildGrid(day, 10), [day]);
   const byDay = useMemo(() => groupByDay(entries), [entries]);
   const totals = useMemo(() => calTotals(entries), [entries]);
+
+  // FLOW-004: chunk the Sunday-aligned grid into weeks; keep only weeks that
+  // actually carry orders. Same single source of truth (byDay) as the grid.
+  const weeks = useMemo<WeekGroup[]>(() => {
+    const out: WeekGroup[] = [];
+    for (let w = 0; w + 7 <= grid.length; w += 7) {
+      const chunk = grid.slice(w, w + 7);
+      const rows = chunk.flatMap((g, i) =>
+        (byDay.get(g.iso) ?? []).map((entry) => ({
+          entry,
+          day: g,
+          dow: DOW_HE[i]!,
+        })),
+      );
+      if (rows.length > 0) {
+        out.push({ start: chunk[0]!, end: chunk[6]!, rows });
+      }
+    }
+    return out;
+  }, [grid, byDay]);
 
   return (
     <div className="space-y-4" data-testid="procurement-calendar">
@@ -86,8 +124,73 @@ export function CalendarView({
         </div>
       </div>
 
-      {/* Grid */}
-      <div className="card overflow-hidden p-0">
+      {/* Mobile (<md): grouped-by-week list — FLOW-004 */}
+      <div className="space-y-3 md:hidden" data-testid="procurement-calendar-list">
+        {weeks.length === 0 ? (
+          <div className="card p-6 text-center text-sm text-fg-muted">
+            אין הזמנות מתוכננות בתקופה הקרובה.
+          </div>
+        ) : (
+          weeks.map((w) => (
+            <div
+              key={w.start.iso}
+              className="card overflow-hidden p-0"
+              data-testid="calendar-week-group"
+              data-week-start={w.start.iso}
+            >
+              <div className="border-b border-border/60 bg-bg-subtle/50 px-3 py-1.5 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                {`שבוע ${hebDate(w.start)} – ${hebDate(w.end)}`}
+              </div>
+              <div className="divide-y divide-border/40">
+                {w.rows.map(({ entry: e, day: d, dow }) => (
+                  <button
+                    key={e.session_po_id}
+                    type="button"
+                    onClick={() => onOpen?.(e.session_po_id)}
+                    className={cn(
+                      "flex min-h-[44px] w-full items-center gap-2.5 px-3 py-2 text-right transition-colors hover:bg-bg-muted",
+                      e.status === "placed" || e.status === "skipped"
+                        ? "opacity-50"
+                        : "",
+                    )}
+                    title={`${e.supplier_snapshot} · ${e.line_count} פריטים · ${formatIls(e.total_cost)}`}
+                    data-testid={`calendar-list-entry-${e.session_po_id}`}
+                  >
+                    <span
+                      className={cn(
+                        "h-2 w-2 shrink-0 rounded-full",
+                        tierDot(e.tier),
+                      )}
+                    />
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-semibold">
+                        {e.supplier_snapshot}
+                      </span>
+                      <span className="mt-0.5 flex flex-wrap items-center gap-1.5 text-3xs text-fg-subtle">
+                        <span
+                          className={cn(
+                            "inline-flex items-center rounded-full border px-1.5 py-px font-semibold",
+                            tierChip(e.tier),
+                          )}
+                        >
+                          {TIER_LABEL[e.tier]}
+                        </span>
+                        <span>{`יום ${dow}׳ · ${hebDate(d)}`}</span>
+                      </span>
+                    </span>
+                    <span className="shrink-0 font-mono text-sm font-semibold tabular-nums">
+                      {formatIls(e.total_cost)}
+                    </span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          ))
+        )}
+      </div>
+
+      {/* Grid — desktop md+ only (FLOW-004 keeps it byte-identical at md+) */}
+      <div className="card hidden overflow-hidden p-0 md:block">
         <div className="grid grid-cols-7 border-b border-border/60 bg-bg-subtle/50">
           {DOW_HE.map((d) => (
             <div

@@ -40,8 +40,10 @@ describe("CalendarView", () => {
   it("V1 renders an order chip + the tier summary", () => {
     render(<CalendarView pos={[po("a")]} today={TODAY} />);
     expect(screen.getByTestId("calendar-entry-a")).toBeTruthy();
-    // tier summary strip shows the labels
-    expect(screen.getByText(/חובה השבוע/)).toBeTruthy();
+    // Tier summary strip shows the labels. Tranche 053 (FLOW-004) added the
+    // mobile grouped list, which repeats the tier chip per row — so the label
+    // legitimately appears more than once now (getAllByText, was getByText).
+    expect(screen.getAllByText(/חובה השבוע/).length).toBeGreaterThanOrEqual(1);
   });
 
   it("V2 clicking a day chip opens that order", async () => {

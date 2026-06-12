@@ -27,6 +27,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { GroupFilterBar } from "@/components/filters/GroupFilterBar";
+import type { GroupLike } from "@/lib/taxonomy/groups";
 import type { FlowItem } from "../_lib/types";
 import { isAtRisk } from "../_lib/risk";
 
@@ -35,17 +37,28 @@ interface FilterBarProps {
   /** All FG items in the current projection (unfiltered) — used to compute
    *  per-family at-risk counts shown inline on each family chip. */
   items?: FlowItem[];
+  /** Groups v1 (Tranche 044) — curated product groups rendered as a
+   *  single-select chip row backed by the ?product_group= URL param.
+   *  Plain chips (no counts): FlowItem rows do not carry product_group_key,
+   *  so per-group at-risk counts are not cheap to compute client-side. */
+  productGroups?: readonly GroupLike[];
   /** Optional sticky-mode toggle. When true, the bar pins below the hero
    *  with a backdrop-blur. Default: true. Set false in narrow contexts. */
   sticky?: boolean;
 }
 
-export function FilterBar({ families, items, sticky = true }: FilterBarProps) {
+export function FilterBar({
+  families,
+  items,
+  productGroups,
+  sticky = true,
+}: FilterBarProps) {
   const router = useRouter();
   const searchParams = useSearchParams();
 
   const q = searchParams.get("q") ?? "";
   const family = searchParams.get("family") ?? "";
+  const productGroup = searchParams.get("product_group") ?? "";
   // default ON (at-risk-only) unless explicitly false
   const atRiskOnly = searchParams.get("at_risk_only") !== "false";
 
@@ -59,6 +72,24 @@ export function FilterBar({ families, items, sticky = true }: FilterBarProps) {
     },
     [router, searchParams],
   );
+
+  // Tranche 047 (INTER-007) — one-click reset of every non-default filter.
+  // Defaults: at_risk_only ON (param absent), no family, no product group,
+  // empty search.
+  const anyNonDefaultFilter =
+    searchParams.get("at_risk_only") === "false" ||
+    family !== "" ||
+    productGroup !== "" ||
+    q !== "";
+
+  const clearAllFilters = useCallback(() => {
+    const sp = new URLSearchParams(searchParams.toString());
+    for (const k of ["at_risk_only", "family", "product_group", "q"]) {
+      sp.delete(k);
+    }
+    const qs = sp.toString();
+    router.replace(qs ? `?${qs}` : "?", { scroll: false });
+  }, [router, searchParams]);
 
   // ⌘K / Ctrl+K global focus shortcut for the search input.
   const searchRef = useRef<HTMLInputElement | null>(null);
@@ -234,6 +265,37 @@ export function FilterBar({ families, items, sticky = true }: FilterBarProps) {
               );
             })}
           </div>
+        ) : null}
+
+        {/* Tranche 047 (INTER-007) — visible only when any non-default
+            filter is active; resets all four filter params in one click. */}
+        {anyNonDefaultFilter ? (
+          <button
+            type="button"
+            onClick={clearAllFilters}
+            data-testid="flow-filter-clear-all"
+            className="inline-flex shrink-0 items-center gap-1 rounded-sm px-1.5 py-1 text-xs font-medium text-fg-muted underline-offset-2 hover:text-fg hover:underline"
+          >
+            <X className="h-3 w-3" strokeWidth={2} aria-hidden />
+            Clear all
+          </button>
+        ) : null}
+
+        {/* Groups v1 — curated product-group chips (single-select, URL-backed
+            via ?product_group=, refetches the projection server-side). */}
+        {productGroups && productGroups.length > 0 ? (
+          <GroupFilterBar
+            groups={productGroups}
+            selected={productGroup ? [productGroup] : []}
+            onToggle={(key) =>
+              updateParam("product_group", productGroup === key ? null : key)
+            }
+            onClear={() => updateParam("product_group", null)}
+            label="קו מוצר"
+            ariaLabel="Product group filter"
+            testId="flow-product-group-filter"
+            className="basis-full"
+          />
         ) : null}
       </div>
     </>

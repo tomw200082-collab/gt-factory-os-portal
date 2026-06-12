@@ -48,9 +48,11 @@
 //  32. Multi-criteria sort fallback (sort by + then on-hand desc)
 //  33. UOM filter dropdown + explicit Sort-by control (works on mobile,
 //      which has no clickable column headers)
-//  34. Category filter — operator-facing product groups (Tea Extracts,
-//      Alcoholic Beverages, Matcha, …) derived deterministically from the
-//      SKU and verified against the full catalogue, shown as count chips
+//  34. Category filter — curated operator-facing groups (Groups v1,
+//      Tranche 044): FG rows key on items.product_group_key, RM/PKG rows
+//      on components.material_group_key, labels from the shared group
+//      vocabulary (name_he), shown as count chips; null keys bucket
+//      honestly under "ללא קבוצה"
 //  35. Active-filters chip-bar summary + Clear all
 //  36. Result counter "showing N of M"
 //
@@ -77,12 +79,22 @@
 
 import { Fragment, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { ReconcileBadge } from "@/components/stock/ReconcileBadge";
 import { StockTruthDrawer } from "@/components/stock/StockTruthDrawer";
+import { GroupFilterBar } from "@/components/filters/GroupFilterBar";
+import {
+  NO_GROUP,
+  groupKeyLabel,
+  groupsByKey,
+  stockRowGroupKey,
+  useGroups,
+  type GroupLike,
+} from "@/lib/taxonomy/groups";
 import { cn } from "@/lib/cn";
 
 // === Types ================================================================
@@ -105,6 +117,19 @@ interface StockRow {
   // Distinguishes "we counted 0" from "we haven't counted yet". Optional for
   // back-compat with old API deploys (treated as false).
   never_counted?: boolean;
+  // Groups v1 (migrations 0231-0233) — additive grouping fields. Optional for
+  // back-compat with old API deploys (treated as null → NO_GROUP bucket).
+  /** FG rows: curated product-group key. Null for RM/PKG + unassigned FG. */
+  product_group_key?: string | null;
+  /** FG rows: items.family verbatim. Null for RM/PKG rows. */
+  family?: string | null;
+  /** RM/PKG rows: curated material-group key. Null for FG + unassigned. */
+  material_group_key?: string | null;
+  /** RM/PKG rows: components.component_class verbatim. Null for FG rows. */
+  component_class?: string | null;
+  /** RM/PKG rows: product-group keys whose ACTIVE-BOM explosion consumes this
+   *  component. Empty array when none. Null for FG rows. */
+  used_by_product_groups?: string[] | null;
 }
 
 function resolveDisplay(row: StockRow): {
@@ -173,6 +198,14 @@ async function fetchStockValue(): Promise<StockValueResponse> {
   const res = await fetch("/api/stock/value");
   if (!res.ok) throw new Error(`VALUE_FETCH_${res.status}`);
   return res.json() as Promise<StockValueResponse>;
+}
+
+// Tranche 041 — row drill-down target. RM/PKG rows are component masters
+// (the old items link 404'd for them); FG rows keep the item-master link.
+function rowDetailHref(row: StockRow): string {
+  return row.item_type === "RM" || row.item_type === "PKG"
+    ? `/admin/masters/components/${encodeURIComponent(row.item_id)}`
+    : `/admin/masters/items/${encodeURIComponent(row.item_id)}`;
 }
 
 function fmtIls(val: string | null | undefined, opts?: { compact?: boolean }): string {
@@ -254,99 +287,14 @@ function deriveCostStatus(itemType: string, value: ValueMeta | null): CostStatus
 }
 
 // === Category classification ==============================================
-// GT master data has no populated group column (items.product_group and
-// components.component_group are blank across the live dataset), so category
-// is derived deterministically from the SKU. This mapping was verified
-// against the full live catalogue — 68 finished goods + 145 components — and
-// signed off by the operations owner: every item resolves to a real
-// category, nothing falls through to "Other".
-
-// --- Finished Goods -------------------------------------------------------
-// Keyed off the SKU product-line segment (FG-<LINE>-…). ADD-* SKUs are
-// complementary items (mixers, syrups, tapioca, garnishes).
-const FG_TEA_LINES = new Set([
-  "AME", "CAL", "CON", "DES", "DET", "ENE", "FRE", "NAM", "REV",
-]);
-const FG_ALCOHOL_LINES = new Set(["SAN", "MAR", "MUZ", "NM", "ARK", "COS"]);
-
-function deriveFgCategory(itemId: string): string {
-  const seg = itemId.toUpperCase().split("-");
-  if (seg[0] === "ADD") return "Complementary Products";
-  const line = seg[1] ?? "";
-  if (line === "MAT") return "Matcha";
-  if (FG_ALCOHOL_LINES.has(line)) return "Alcoholic Beverages";
-  if (FG_TEA_LINES.has(line)) return "Tea Extracts";
-  return "Other";
-}
-
-// --- Components (raw materials + packaging) -------------------------------
-// Packaging is keyed off the SKU prefix. Raw materials use an ordered
-// keyword ruleset (first match wins) because the RAW-* namespace is not
-// systematic enough to key on alone.
-interface CategoryRule {
-  label: string;
-  test: RegExp;
-}
-
-const PKG_PREFIX_CATEGORY: CategoryRule[] = [
-  { label: "Bottles & Containers", test: /^PKG-(BOTTLE|JERRICAN)/i },
-  { label: "Caps & Closures", test: /^PKG-(CAP|LID)/i },
-  { label: "Labels & Stickers", test: /^PKG-LABEL/i },
-  { label: "Cartons & Boxes", test: /^PKG-CARTON/i },
-  { label: "Bags & Tins", test: /^PKG-(BAG|TIN|PACK)/i },
-  { label: "Production Supplies", test: /^PKG-FILTER/i },
-];
-
-// Order matters: Alcohol before Purées (so "Ouzo Pure" is alcohol, not a
-// purée) and Sweeteners before Base Liquids (so "Sugar water" is a
-// sweetener, not water).
-const RAW_CATEGORY_RULES: CategoryRule[] = [
-  {
-    label: "Alcohol & Spirits",
-    test: /\b(rum|vodka|gin|whisk\w*|tequila|arak|amaretto|campari|ouzo|wine|martini|brandy|liqueur)\b/i,
-  },
-  { label: "Syrups", test: /syrup|orgeat/i },
-  { label: "Purées", test: /pur[eé]+e|\bpure\b|ristretto/i },
-  { label: "Juices & Concentrates", test: /juice|concentrate/i },
-  { label: "Sweeteners", test: /sugar/i },
-  { label: "Dried Fruit & Garnish", test: /dried|\bdry\b/i },
-  {
-    label: "Additives",
-    test: /preservative|stabili|conservant|\bacid\b/i,
-  },
-  {
-    label: "Tea & Botanicals",
-    test: /\btea\b|hibiscus|jasmin|puer|sencha|matcha|chamomile/i,
-  },
-  {
-    label: "Herbs & Spices",
-    test: /anise|pepper|cinnamon|cardamom|masala|balm|melissa|verbena|lemongrass|oregano|mint|menta|nana|savory|zuta|marva|clove|herb|spice/i,
-  },
-  { label: "Base Liquids", test: /water/i },
-];
-
-function deriveComponentCategory(itemId: string, name: string): string {
-  if (/^PKG/i.test(itemId)) {
-    for (const rule of PKG_PREFIX_CATEGORY) {
-      if (rule.test.test(itemId)) return rule.label;
-    }
-    return "Other";
-  }
-  const hay = `${name} ${itemId}`;
-  for (const rule of RAW_CATEGORY_RULES) {
-    if (rule.test.test(hay)) return rule.label;
-  }
-  return "Other";
-}
-
-function deriveCategory(row: {
-  item_type: string;
-  item_id: string;
-  display_name: string | null;
-}): string {
-  if (row.item_type === "FG") return deriveFgCategory(row.item_id);
-  return deriveComponentCategory(row.item_id, row.display_name ?? "");
-}
+// Groups v1 (Tranche 044): category is no longer derived from SKU regexes.
+// The /api/stock rows now carry real curated group keys —
+// items.product_group_key on FG rows and components.material_group_key on
+// RM/PKG rows (migrations 0231-0233) — resolved against the shared group
+// vocabulary from useGroups() (label = name_he). Rows with a null key land
+// honestly in the "ללא קבוצה" (NO_GROUP) bucket, never silently in "Other".
+// Classifier lives in @/lib/taxonomy/groups (stockRowGroupKey) so it is
+// unit-testable.
 
 // === KPI Card =============================================================
 function KpiCard({
@@ -582,10 +530,13 @@ function SkeletonTable({ rows = 8, cols = 7 }: { rows?: number; cols?: number })
 function InventoryCardMobile({
   row,
   value,
+  categoryLabel,
   onReconcileClick,
 }: {
   row: StockRow;
   value: ValueMeta | null;
+  /** Resolved group label (name_he, or "ללא קבוצה" for the null bucket). */
+  categoryLabel: string;
   onReconcileClick: (row: StockRow) => void;
 }) {
   const tier = deriveTier(resolveDisplay(row).raw, row.never_counted);
@@ -605,7 +556,7 @@ function InventoryCardMobile({
     >
       <div className="flex items-start justify-between gap-4">
         <Link
-          href={`/admin/masters/items/${encodeURIComponent(row.item_id)}`}
+          href={rowDetailHref(row)}
           className="min-w-0 flex-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
           title={row.display_name ?? row.item_id}
         >
@@ -624,8 +575,11 @@ function InventoryCardMobile({
       </div>
       <div className="flex flex-wrap items-center gap-1.5">
         <TierBadge tier={tier} />
-        <span className="rounded-full bg-bg-subtle px-1.5 py-0.5 text-2xs text-fg-subtle ring-1 ring-border">
-          {deriveCategory(row)}
+        <span
+          className="rounded-full bg-bg-subtle px-1.5 py-0.5 text-2xs text-fg-subtle ring-1 ring-border"
+          dir="auto"
+        >
+          {categoryLabel}
         </span>
         {cost === "has_cost" ? (
           <span className="text-2xs font-medium tabular-nums text-fg-muted">
@@ -680,12 +634,14 @@ function ActiveFilterChips({
   tier,
   uom,
   category,
+  usedBy,
   missingCost,
   stale,
   onClearSearch,
   onClearTier,
   onClearUom,
   onClearCategory,
+  onClearUsedBy,
   onClearMissingCost,
   onClearStale,
   onClearAll,
@@ -693,13 +649,17 @@ function ActiveFilterChips({
   search: string;
   tier: string;
   uom: string;
+  /** Resolved category label (already human-readable), or "". */
   category: string;
+  /** Resolved "לפי קו מוצר" product-group label, or "". */
+  usedBy: string;
   missingCost: boolean;
   stale: boolean;
   onClearSearch: () => void;
   onClearTier: () => void;
   onClearUom: () => void;
   onClearCategory: () => void;
+  onClearUsedBy: () => void;
   onClearMissingCost: () => void;
   onClearStale: () => void;
   onClearAll: () => void;
@@ -709,6 +669,7 @@ function ActiveFilterChips({
     Boolean(tier) ||
     Boolean(uom) ||
     Boolean(category) ||
+    Boolean(usedBy) ||
     missingCost ||
     stale;
   if (!active) return null;
@@ -717,6 +678,9 @@ function ActiveFilterChips({
       <span className="text-2xs font-medium text-fg-subtle">Active filters:</span>
       {category ? (
         <ClearableChip field="Category" value={category} onClear={onClearCategory} />
+      ) : null}
+      {usedBy ? (
+        <ClearableChip field="קו מוצר" value={usedBy} onClear={onClearUsedBy} />
       ) : null}
       {search ? (
         <ClearableChip field="Search" value={search} onClear={onClearSearch} />
@@ -803,7 +767,11 @@ export default function InventoryPage() {
   const [search, setSearch] = useState("");
   const [tierFilter, setTierFilter] = useState<string>(""); // Tier or ""
   const [uomFilter, setUomFilter] = useState<string>("");
+  // Group key (or the NO_GROUP sentinel), not a display label.
   const [categoryFilter, setCategoryFilter] = useState<string>("");
+  // RM/PKG tab only — product-group key filtering components by the product
+  // line that consumes them ("לפי קו מוצר", via used_by_product_groups).
+  const [usedByFilter, setUsedByFilter] = useState<string>("");
   const [missingCostOnly, setMissingCostOnly] = useState(false);
   const [staleOnly, setStaleOnly] = useState(false);
   const [sortKey, setSortKey] = useState<SortKey>("name");
@@ -815,6 +783,14 @@ export default function InventoryPage() {
   const [alertDismissed, setAlertDismissed] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
   const chipRowRef = useRef<HTMLDivElement>(null);
+
+  // Tranche 041 — dashboard stockout drill-down deep-links ?item_id=; seed
+  // the search box on mount so the list lands filtered to that item.
+  const searchParams = useSearchParams();
+  const urlItemId = searchParams?.get("item_id") ?? "";
+  useEffect(() => {
+    if (urlItemId) setSearch(urlItemId);
+  }, [urlItemId]);
 
   function handleReconcileClick(row: StockRow) {
     setDrawerRow(row);
@@ -843,6 +819,7 @@ export default function InventoryPage() {
       queryKey: ["stock", "FG"],
       queryFn: () => fetchStock("FG"),
       staleTime: 60_000,
+      refetchInterval: 60_000,
     });
 
   const { data: rmRows, isLoading: rmLoading, error: rmError, refetch: refetchRm, isFetching: rmFetching } =
@@ -850,12 +827,14 @@ export default function InventoryPage() {
       queryKey: ["stock", "RM_PKG"],
       queryFn: () => fetchStock("RM_PKG"),
       staleTime: 60_000,
+      refetchInterval: 60_000,
     });
 
   const { data: valueData, isFetching: valueFetching, refetch: refetchValue } = useQuery({
     queryKey: ["stock", "value"],
     queryFn: fetchStockValue,
-    staleTime: 5 * 60_000,
+    staleTime: 60_000,
+    refetchInterval: 60_000,
   });
 
   const valueMap = useMemo<ValueMap | null>(() => {
@@ -879,18 +858,70 @@ export default function InventoryPage() {
   // covers both tabs, so we must wait for both before showing a real number.
   const allStockLoading = fgLoading || rmLoading;
 
-  // Category list extracted from current rows, ranked by item count so the
-  // busiest groups surface first as filter chips.
-  const categoryOptions = useMemo(() => {
-    const counts = new Map<string, number>();
+  // Groups v1 — shared curated vocabulary (product + material groups).
+  const { data: groupsData } = useGroups();
+  const productGroupsByKey = useMemo(
+    () => groupsByKey(groupsData?.product_groups),
+    [groupsData],
+  );
+  const materialGroupsByKey = useMemo(
+    () => groupsByKey(groupsData?.material_groups),
+    [groupsData],
+  );
+  // The current tab's vocabulary map (FG rows → product groups,
+  // RM/PKG rows → material groups).
+  const tabGroupsByKey: ReadonlyMap<string, GroupLike> =
+    tab === "FG" ? productGroupsByKey : materialGroupsByKey;
+
+  // Resolve a row to its operator-facing category label (name_he; the
+  // NO_GROUP bucket renders as "ללא קבוצה"; an unknown key renders verbatim).
+  const labelForRow = (r: StockRow): string =>
+    groupKeyLabel(
+      stockRowGroupKey(r),
+      r.item_type === "FG" ? productGroupsByKey : materialGroupsByKey,
+    );
+
+  // Per-group row counts for the current tab. Chips render only groups that
+  // actually have rows, in vocabulary display_order; the NO_GROUP bucket
+  // chip appears whenever unassigned rows exist.
+  const categoryCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
     for (const r of allRows) {
-      const c = deriveCategory(r);
-      counts.set(c, (counts.get(c) ?? 0) + 1);
+      const k = stockRowGroupKey(r);
+      counts[k] = (counts[k] ?? 0) + 1;
     }
-    return Array.from(counts.entries())
-      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-      .map(([label, count]) => ({ label, count }));
+    return counts;
   }, [allRows]);
+
+  const categoryGroups = useMemo(() => {
+    const vocab =
+      tab === "FG"
+        ? (groupsData?.product_groups ?? [])
+        : (groupsData?.material_groups ?? []);
+    return vocab.filter((g) => (categoryCounts[g.key] ?? 0) > 0);
+  }, [tab, groupsData, categoryCounts]);
+
+  const noGroupCount = categoryCounts[NO_GROUP] ?? 0;
+
+  // RM/PKG secondary filter — product-group keys consumed via active BOMs,
+  // counted over the current rows.
+  const usedByCounts = useMemo(() => {
+    if (tab !== "RM_PKG") return {} as Record<string, number>;
+    const counts: Record<string, number> = {};
+    for (const r of allRows) {
+      for (const k of r.used_by_product_groups ?? []) {
+        counts[k] = (counts[k] ?? 0) + 1;
+      }
+    }
+    return counts;
+  }, [tab, allRows]);
+
+  const usedByGroups = useMemo(() => {
+    if (tab !== "RM_PKG") return [];
+    return (groupsData?.product_groups ?? []).filter(
+      (g) => (usedByCounts[g.key] ?? 0) > 0,
+    );
+  }, [tab, groupsData, usedByCounts]);
 
   // UOM list extracted from current rows.
   const uomOptions = useMemo(() => {
@@ -908,7 +939,9 @@ export default function InventoryPage() {
         if (!hay.includes(q)) return false;
       }
       if (uomFilter && r.base_uom !== uomFilter) return false;
-      if (categoryFilter && deriveCategory(r) !== categoryFilter) return false;
+      if (categoryFilter && stockRowGroupKey(r) !== categoryFilter) return false;
+      if (usedByFilter && !(r.used_by_product_groups ?? []).includes(usedByFilter))
+        return false;
       if (tierFilter) {
         if (tierFilter === "has_stock") {
           const n = Number(r.calculated_on_hand);
@@ -952,7 +985,7 @@ export default function InventoryPage() {
           primary = a.item_id.localeCompare(b.item_id);
           break;
         case "category":
-          primary = deriveCategory(a).localeCompare(deriveCategory(b));
+          primary = labelForRow(a).localeCompare(labelForRow(b));
           break;
         case "on_hand":
           primary = Number(a.calculated_on_hand) - Number(b.calculated_on_hand);
@@ -981,12 +1014,16 @@ export default function InventoryPage() {
     search,
     uomFilter,
     categoryFilter,
+    usedByFilter,
     tierFilter,
     missingCostOnly,
     staleOnly,
     valueMap,
     sortKey,
     sortDir,
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    productGroupsByKey,
+    materialGroupsByKey,
   ]);
 
   // Group the filtered rows into sections for the "Group by" view. Each
@@ -994,7 +1031,9 @@ export default function InventoryPage() {
   // without scanning. groupBy === "none" yields a single unlabelled section.
   const grouped = useMemo(() => {
     const sectionOf = (r: StockRow): string => {
-      if (groupBy === "category") return deriveCategory(r);
+      // "category" sections key on the curated group key (or NO_GROUP);
+      // the display label is resolved at render time via groupSectionLabel.
+      if (groupBy === "category") return stockRowGroupKey(r);
       if (groupBy === "uom") return r.base_uom ?? "No UOM";
       if (groupBy === "tier") return deriveTier(resolveDisplay(r).raw, r.never_counted);
       return "";
@@ -1014,6 +1053,19 @@ export default function InventoryPage() {
           TIER_ORDER.indexOf(a[0] as Tier) - TIER_ORDER.indexOf(b[0] as Tier)
         );
       }
+      if (groupBy === "category") {
+        // Vocabulary display_order first; the NO_GROUP bucket always last.
+        const orderOf = (k: string): number => {
+          if (k === NO_GROUP) return Number.MAX_SAFE_INTEGER;
+          const g = tabGroupsByKey.get(k) as { display_order?: number } | undefined;
+          return g?.display_order ?? Number.MAX_SAFE_INTEGER - 1;
+        };
+        const d = orderOf(a[0]) - orderOf(b[0]);
+        if (d !== 0) return d;
+        return groupKeyLabel(a[0], tabGroupsByKey).localeCompare(
+          groupKeyLabel(b[0], tabGroupsByKey),
+        );
+      }
       return a[0].localeCompare(b[0]);
     });
     return entries.map(([key, sectionRows]) => {
@@ -1024,7 +1076,7 @@ export default function InventoryPage() {
       }
       return { key, rows: sectionRows, count: sectionRows.length, value };
     });
-  }, [rows, groupBy, valueMap]);
+  }, [rows, groupBy, valueMap, tabGroupsByKey]);
 
   // Tab counts
   const fgCount = fgRows?.length ?? 0;
@@ -1075,6 +1127,7 @@ export default function InventoryPage() {
     setTierFilter("");
     setUomFilter("");
     setCategoryFilter("");
+    setUsedByFilter("");
     setMissingCostOnly(false);
     setStaleOnly(false);
   }
@@ -1111,6 +1164,9 @@ export default function InventoryPage() {
         }[key] ?? key
       );
     }
+    if (groupBy === "category") {
+      return groupKeyLabel(key, tabGroupsByKey);
+    }
     return key;
   };
 
@@ -1118,6 +1174,7 @@ export default function InventoryPage() {
     <Tooltip.Provider>
     <div className="space-y-5 sm:space-y-6">
       <WorkflowHeader
+        size="section"
         eyebrow="Stock"
         title="Inventory"
         description="Calculated stock balances derived from the ledger. Posted events only — pending events do not affect these numbers. Negative balances flagged for investigation."
@@ -1304,9 +1361,11 @@ export default function InventoryPage() {
                   aria-selected={isActive}
                   onClick={() => {
                     setTab(t);
-                    // FG and RM/PKG use different category vocabularies — a
-                    // category picked on one tab cannot match the other.
+                    // FG and RM/PKG use different group vocabularies — a
+                    // group picked on one tab cannot match the other. The
+                    // "לפי קו מוצר" filter only exists on the RM/PKG tab.
                     setCategoryFilter("");
+                    setUsedByFilter("");
                   }}
                   className={cn(
                     "inline-flex items-center gap-2 rounded px-3 py-1.5 text-sm font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
@@ -1375,62 +1434,45 @@ export default function InventoryPage() {
 
           {/* Filter panel — grouped controls for scanability */}
           <div className="space-y-3 rounded-lg border border-border/60 bg-bg-subtle/25 p-3 sm:p-4">
-            {/* Category filter — the operator-facing product groups */}
+            {/* Category filter — the curated operator-facing groups (name_he) */}
             <div className="space-y-1.5">
               <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                 Category
               </span>
-              <div
-                className="flex flex-wrap items-center gap-1.5"
-                role="group"
-                aria-label="Category filters"
-              >
-                <button
-                  type="button"
-                  onClick={() => setCategoryFilter("")}
-                  aria-pressed={categoryFilter === ""}
-                  className={cn(
-                    "rounded-full px-3 py-1 text-2xs font-medium ring-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
-                    categoryFilter === ""
-                      ? "bg-fg text-bg ring-fg"
-                      : "bg-bg text-fg-muted ring-border hover:text-fg",
-                  )}
-                >
-                  All categories
-                </button>
-                {categoryOptions.map((c) => {
-                  const active = categoryFilter === c.label;
-                  return (
-                    <button
-                      key={c.label}
-                      type="button"
-                      onClick={() =>
-                        setCategoryFilter((prev) => (prev === c.label ? "" : c.label))
-                      }
-                      aria-pressed={active}
-                      className={cn(
-                        "inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-2xs font-medium ring-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
-                        active
-                          ? "bg-accent text-accent-fg ring-accent"
-                          : "bg-bg text-fg-muted ring-border hover:text-fg",
-                      )}
-                    >
-                      {c.label}
-                      <span
-                        className={cn(
-                          "rounded-full px-1 text-3xs tabular-nums ring-1",
-                          active
-                            ? "bg-accent-fg/15 text-accent-fg ring-accent-fg/25"
-                            : "bg-bg-subtle text-fg-subtle ring-border",
-                        )}
-                      >
-                        {c.count}
-                      </span>
-                    </button>
-                  );
-                })}
-              </div>
+              <GroupFilterBar
+                groups={categoryGroups}
+                counts={categoryCounts}
+                selected={categoryFilter ? [categoryFilter] : []}
+                onToggle={(key) =>
+                  setCategoryFilter((prev) => (prev === key ? "" : key))
+                }
+                onClear={() => setCategoryFilter("")}
+                allowNoGroup={noGroupCount > 0}
+                ariaLabel="Category filters"
+                testId="inventory-category-filter"
+              />
             </div>
+
+            {/* RM/PKG only — secondary filter: components by the product line
+                ("לפי קו מוצר") that consumes them via the active BOMs. */}
+            {tab === "RM_PKG" && usedByGroups.length > 0 ? (
+              <div className="space-y-1.5">
+                <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  לפי קו מוצר
+                </span>
+                <GroupFilterBar
+                  groups={usedByGroups}
+                  counts={usedByCounts}
+                  selected={usedByFilter ? [usedByFilter] : []}
+                  onToggle={(key) =>
+                    setUsedByFilter((prev) => (prev === key ? "" : key))
+                  }
+                  onClear={() => setUsedByFilter("")}
+                  ariaLabel="לפי קו מוצר"
+                  testId="inventory-used-by-filter"
+                />
+              </div>
+            ) : null}
 
             {/* Status filter chips */}
             <div className="space-y-1.5">
@@ -1608,13 +1650,19 @@ export default function InventoryPage() {
             search={search}
             tier={tierFilter}
             uom={uomFilter}
-            category={categoryFilter}
+            category={
+              categoryFilter ? groupKeyLabel(categoryFilter, tabGroupsByKey) : ""
+            }
+            usedBy={
+              usedByFilter ? groupKeyLabel(usedByFilter, productGroupsByKey) : ""
+            }
             missingCost={missingCostOnly}
             stale={staleOnly}
             onClearSearch={() => setSearch("")}
             onClearTier={() => setTierFilter("")}
             onClearUom={() => setUomFilter("")}
             onClearCategory={() => setCategoryFilter("")}
+            onClearUsedBy={() => setUsedByFilter("")}
             onClearMissingCost={() => setMissingCostOnly(false)}
             onClearStale={() => setStaleOnly(false)}
             onClearAll={clearAllFilters}
@@ -1819,7 +1867,7 @@ export default function InventoryPage() {
                                     >
                                       <td className="py-2 pr-4">
                                         <Link
-                                          href={`/admin/masters/items/${encodeURIComponent(row.item_id)}`}
+                                          href={rowDetailHref(row)}
                                           className="inline-flex items-center gap-1.5 text-fg hover:text-accent-fg hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
                                           title={row.display_name ?? row.item_id}
                                         >
@@ -1843,16 +1891,16 @@ export default function InventoryPage() {
                                         <button
                                           type="button"
                                           onClick={() =>
-                                            setCategoryFilter((prev) =>
-                                              prev === deriveCategory(row)
-                                                ? ""
-                                                : deriveCategory(row),
-                                            )
+                                            setCategoryFilter((prev) => {
+                                              const k = stockRowGroupKey(row);
+                                              return prev === k ? "" : k;
+                                            })
                                           }
                                           className="rounded-full bg-bg-subtle px-2 py-0.5 text-2xs text-fg-muted ring-1 ring-border transition hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
-                                          title={`Filter to ${deriveCategory(row)}`}
+                                          title={`Filter to ${labelForRow(row)}`}
+                                          dir="auto"
                                         >
-                                          {deriveCategory(row)}
+                                          {labelForRow(row)}
                                         </button>
                                       </td>
                                       <td className="py-2 pr-4 text-right">
@@ -1954,6 +2002,7 @@ export default function InventoryPage() {
                                   `${row.item_type}:${row.item_id}`,
                                 ) ?? null
                               }
+                              categoryLabel={labelForRow(row)}
                               onReconcileClick={handleReconcileClick}
                             />
                           ))}

@@ -17,7 +17,8 @@
 // component_id, joined to ledger item_id. That cross-namespace join is not
 // guaranteed, so this module reports a COVERAGE ratio (share of in-window RM/PKG
 // movements that resolved to a cost). The card degrades to an honest empty
-// state when coverage is too low, rather than drawing a wrong line.
+// state when coverage is too low (below 75%, tranche 042), rather than
+// drawing a wrong line.
 // ---------------------------------------------------------------------------
 
 import { lastNDays, localDayKey } from "./trends";

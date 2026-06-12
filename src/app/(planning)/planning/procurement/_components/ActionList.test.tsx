@@ -103,6 +103,8 @@ describe("ActionList", () => {
     render(<ActionList pos={POS} today={TODAY} />);
     const open = screen.getByTestId("procurement-open-future");
     expect(open.tagName).toBe("A");
-    expect(open.getAttribute("href")).toBe("/planning/purchase-session");
+    // Tranche 047 — repointed from the superseded purchase-session redirect
+    // stub to its target.
+    expect(open.getAttribute("href")).toBe("/planning/procurement");
   });
 });

@@ -28,11 +28,16 @@ import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
 import { QuickCreateItem } from "@/components/admin/quick-create/QuickCreateItem";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
+import {
+  InlineEditSelectCell,
+  type InlineEditSelectOption,
+} from "@/components/tables/InlineEditSelectCell";
 import { formatQty } from "@/lib/utils/format-quantity";
 import {
   AdminMutationError,
   postStatus,
 } from "@/lib/admin/mutations";
+import { groupLabel, useGroups } from "@/lib/taxonomy/groups";
 import { useSession } from "@/lib/auth/session-provider";
 
 // ---------------------------------------------------------------------------
@@ -59,6 +64,9 @@ interface ItemRow {
   base_bom_head_id: string | null;
   case_pack: number | null;
   product_group: string | null;
+  /** Groups v1 (0231): curated product-group key (FK → product_groups.key).
+   *  Null when unassigned. The legacy free-text `product_group` is unchanged. */
+  product_group_key: string | null;
   site_id: string;
   created_at: string;
   updated_at: string;
@@ -68,6 +76,9 @@ interface ItemRow {
 }
 
 type ListEnvelope<T> = { rows: T[]; count: number };
+
+/** Sentinel option value for "rows with no product group" in the filter. */
+const GROUP_FILTER_NONE = "__none__";
 
 // ---------------------------------------------------------------------------
 // Data fetcher
@@ -79,6 +90,41 @@ async function fetchJson<T>(url: string): Promise<T> {
     throw new Error(`Could not load data (HTTP ${res.status}). Check your connection and try refreshing.`);
   }
   return (await res.json()) as T;
+}
+
+// ---------------------------------------------------------------------------
+// Groups v1 (Tranche 044) — per-row group assignment via the bulk-assign
+// endpoint with a single item id. Throws AdminMutationError on non-2xx.
+// ---------------------------------------------------------------------------
+
+async function postGroupAssign(args: {
+  key: string;
+  item_id: string;
+}): Promise<void> {
+  const res = await fetch("/api/groups/assign", {
+    method: "POST",
+    headers: { "Content-Type": "application/json", Accept: "application/json" },
+    body: JSON.stringify({
+      idempotency_key:
+        typeof crypto !== "undefined" && "randomUUID" in crypto
+          ? crypto.randomUUID()
+          : `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}`,
+      kind: "product",
+      key: args.key,
+      item_ids: [args.item_id],
+    }),
+  });
+  if (!res.ok) {
+    const body = (await res.json().catch(() => null)) as
+      | { reason_code?: string; detail?: string; error?: string }
+      | null;
+    throw new AdminMutationError(
+      res.status,
+      body?.detail ?? body?.error ?? "Could not assign group. Try again.",
+      body?.reason_code,
+      body,
+    );
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -253,6 +299,9 @@ function ItemsPageInner(): JSX.Element {
   const [query, setQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<string>("ACTIVE");
   const [supplyFilter, setSupplyFilter] = useState<string>("");
+  // Groups v1: "" = all, GROUP_FILTER_NONE = unassigned, else a group key.
+  // Client-side filter on row.product_group_key.
+  const [groupFilter, setGroupFilter] = useState<string>("");
   const [showCreate, setShowCreate] = useState(false);
   const [highlightedId, setHighlightedId] = useState<string | null>(preselectId);
   const rowRefs = useRef<Map<string, HTMLTableRowElement>>(new Map());
@@ -270,6 +319,45 @@ function ItemsPageInner(): JSX.Element {
       q.set("include_readiness", "true");
       q.set("limit", "1000");
       return fetchJson(`/api/items?${q.toString()}`);
+    },
+  });
+
+  // Groups v1 — shared product-group vocabulary for the filter dropdown and
+  // the per-row inline select.
+  const groupsQuery = useGroups();
+  const productGroups = groupsQuery.data?.product_groups ?? [];
+  const groupOptions: InlineEditSelectOption[] = productGroups
+    .filter((g) => g.active)
+    .map((g) => ({
+      value: g.key,
+      label: groupLabel(g),
+      meta: g.name_en !== g.name_he ? `${g.name_en} · ${g.key}` : g.key,
+    }));
+  const groupLabelByKey = new Map(
+    productGroups.map((g) => [g.key, groupLabel(g)]),
+  );
+
+  const assignGroupMutation = useMutation({
+    mutationFn: async (args: { item_id: string; key: string }) =>
+      postGroupAssign({ key: args.key, item_id: args.item_id }),
+    onSuccess: (_data, vars) => {
+      setBanner({
+        kind: "success",
+        message: `Product group updated for ${vars.item_id} → ${
+          groupLabelByKey.get(vars.key) ?? vars.key
+        }.`,
+      });
+      void queryClient.invalidateQueries({ queryKey: ["admin", "items"] });
+    },
+    onError: (err: Error, vars) => {
+      const msg =
+        err instanceof AdminMutationError
+          ? `${err.status}${err.code ? ` ${err.code}` : ""}: ${err.message}`
+          : err.message;
+      setBanner({
+        kind: "error",
+        message: `Group assignment failed on ${vars.item_id}: ${msg}`,
+      });
     },
   });
 
@@ -317,23 +405,34 @@ function ItemsPageInner(): JSX.Element {
   }, [preselectId, rows]);
 
   const filtered = useMemo(() => {
-    if (!query) return rows;
+    let out = rows;
+    if (groupFilter) {
+      out = out.filter((r) =>
+        groupFilter === GROUP_FILTER_NONE
+          ? r.product_group_key == null
+          : r.product_group_key === groupFilter,
+      );
+    }
+    if (!query) return out;
     const qLower = query.toLowerCase();
-    return rows.filter(
+    return out.filter(
       (r) =>
         r.item_id.toLowerCase().includes(qLower) ||
         r.item_name.toLowerCase().includes(qLower) ||
         (r.sku ?? "").toLowerCase().includes(qLower) ||
         (r.family ?? "").toLowerCase().includes(qLower),
     );
-  }, [rows, query]);
+  }, [rows, query, groupFilter]);
 
-  const hasActiveFilters = Boolean(query || statusFilter !== "ACTIVE" || supplyFilter);
+  const hasActiveFilters = Boolean(
+    query || statusFilter !== "ACTIVE" || supplyFilter || groupFilter,
+  );
 
   const handleResetFilters = () => {
     setQuery("");
     setStatusFilter("ACTIVE");
     setSupplyFilter("");
+    setGroupFilter("");
   };
 
   const handleToggleStatus = (row: ItemRow) => {
@@ -436,7 +535,7 @@ function ItemsPageInner(): JSX.Element {
       ) : null}
 
       <SectionCard title="Filters" density="compact">
-        <div className="grid grid-cols-1 gap-3 sm:grid-cols-4">
+        <div className="grid grid-cols-1 gap-3 sm:grid-cols-5">
           <div className="block sm:col-span-2">
             <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
               Search
@@ -488,6 +587,25 @@ function ItemsPageInner(): JSX.Element {
               <option value="MANUFACTURED">Manufactured</option>
               <option value="BOUGHT_FINISHED">Purchased finished</option>
               <option value="REPACK">Repack</option>
+            </select>
+          </label>
+          <label className="block">
+            <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+              Product group
+            </span>
+            <select
+              className="input"
+              value={groupFilter}
+              onChange={(e) => setGroupFilter(e.target.value)}
+              data-testid="items-group-filter"
+            >
+              <option value="">(all)</option>
+              <option value={GROUP_FILTER_NONE}>No group</option>
+              {productGroups.map((g) => (
+                <option key={g.key} value={g.key}>
+                  {groupLabel(g)}
+                </option>
+              ))}
             </select>
           </label>
         </div>
@@ -550,6 +668,10 @@ function ItemsPageInner(): JSX.Element {
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Family
                   </th>
+                  {/* Groups v1 — curated product group, inline-assignable */}
+                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    Product group
+                  </th>
                   {/* Iter 3 — Supply method badge */}
                   <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Supply method
@@ -610,6 +732,36 @@ function ItemsPageInner(): JSX.Element {
 
                     <td className="px-3 py-2 text-xs text-fg-muted">
                       {r.family ?? "—"}
+                    </td>
+
+                    {/* Groups v1 — inline product-group assignment via
+                        POST /api/groups/assign (single item id). */}
+                    <td className="px-3 py-2 text-xs">
+                      {isAdmin ? (
+                        <InlineEditSelectCell
+                          value={r.product_group_key}
+                          options={groupOptions}
+                          fieldLabel="Product group"
+                          placeholder="— No group —"
+                          allowClear={false}
+                          ariaLabel={`Edit product group for ${r.item_id}`}
+                          testId={`items-group-select-${r.item_id}`}
+                          onSave={async (newValue) => {
+                            if (!newValue) return;
+                            await assignGroupMutation.mutateAsync({
+                              item_id: r.item_id,
+                              key: newValue,
+                            });
+                          }}
+                        />
+                      ) : (
+                        <span dir="auto" className="text-fg-muted">
+                          {r.product_group_key
+                            ? groupLabelByKey.get(r.product_group_key) ??
+                              r.product_group_key
+                            : "—"}
+                        </span>
+                      )}
                     </td>
 
                     {/* Iter 3 — Supply method badge */}

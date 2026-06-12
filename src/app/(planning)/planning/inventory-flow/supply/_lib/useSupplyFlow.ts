@@ -79,6 +79,11 @@ function buildQuerystring(params: FlowQueryParams): string {
   // Note: supply_method is intentionally NOT forwarded — the supply
   // endpoint has no such filter.
   if (params.at_risk_only) sp.set("at_risk_only", "true");
+  // Groups v1 (Tranche 044): supply-side group filters.
+  if (params.material_group) sp.set("material_group", params.material_group);
+  if (params.used_by_product_group) {
+    sp.set("used_by_product_group", params.used_by_product_group);
+  }
   return sp.toString();
 }
 

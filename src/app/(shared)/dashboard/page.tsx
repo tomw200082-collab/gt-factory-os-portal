@@ -57,7 +57,8 @@
 //     planner + admin only (gated at the call site so the query never mounts
 //     for other roles). Surfaces this week's purchase-session supplier orders
 //     that are overdue, due today, or flagged urgent-tier, each deep-linking
-//     into /planning/purchase-session. Calm green when nothing is due.
+//     into /planning/procurement (Tranche 047 — repointed from the
+//     superseded purchase-session URL). Calm green when nothing is due.
 // ---------------------------------------------------------------------------
 
 import { useMemo, useState } from "react";
@@ -77,7 +78,6 @@ import {
   Minus,
   PackageCheck,
   PackageSearch,
-  RefreshCw,
   ShoppingCart,
   TrendingDown,
   TrendingUp,
@@ -86,9 +86,17 @@ import {
 import { useInventoryFlow } from "@/app/(planning)/planning/inventory-flow/_lib/useInventoryFlow";
 import type { FlowItem } from "@/app/(planning)/planning/inventory-flow/_lib/types";
 import { SectionCard } from "@/components/workflow/SectionCard";
+import { ScrollFade } from "@/components/ui/ScrollFade";
+import { SectionHeading } from "@/components/workflow/SectionHeading";
 import { Badge } from "@/components/badges/StatusBadge";
 import { FreshnessBadge } from "@/components/badges/FreshnessBadge";
-import { EmptyState } from "@/components/feedback/states";
+import {
+  AllClearRibbon,
+  EmptyState,
+  ErrorAlert,
+  Skel,
+  SkeletonRow,
+} from "@/components/feedback/states";
 import { useSession } from "@/lib/auth/session-provider";
 import { authorizeCapability } from "@/lib/auth/authorize";
 import { cn } from "@/lib/cn";
@@ -565,108 +573,11 @@ function fmtToday(now: Date): string {
 }
 
 // ---------------------------------------------------------------------------
-// Shared shells.
+// Shared shells — Tranche 049 (VISUAL-014): Skel, SkeletonRow, AllClearRibbon
+// and ErrorAlert moved to @/components/feedback/states (named exports,
+// visuals unchanged). TitleCount replaced by the <Badge> primitive at call
+// sites. This page defines zero local feedback components.
 // ---------------------------------------------------------------------------
-// Iteration 6 — shimmer skeletons. A light sweep reads as "loading live data"
-// far better than a flat opacity pulse. Driven by the gt-shimmer keyframe
-// already defined in globals.css.
-function Skel({ h, w, className }: { h?: number; w?: string | number; className?: string }) {
-  return (
-    <div
-      className={cn("relative overflow-hidden rounded bg-bg-muted", className)}
-      style={{ height: h ?? 16, width: w ?? "100%" }}
-    >
-      <div
-        className="absolute inset-y-0 w-3/5 bg-gradient-to-r from-transparent via-bg-raised/80 to-transparent motion-reduce:hidden"
-        style={{ animation: "gt-shimmer 1.5s ease-in-out infinite" }}
-        aria-hidden
-      />
-    </div>
-  );
-}
-
-function SkeletonRow() {
-  return (
-    <div className="flex items-center gap-3 rounded border border-border/60 bg-bg-subtle px-3 py-3">
-      <Skel h={12} w={80} />
-      <Skel h={12} className="flex-1" />
-      <Skel h={12} w={64} />
-    </div>
-  );
-}
-
-// Iteration 4 — count chip rendered inside a SectionCard title so the operator
-// can size up a section before reading a single row.
-function TitleCount({ n, tone = "neutral" }: { n: number; tone?: "neutral" | "danger" | "warning" }) {
-  if (n <= 0) return null;
-  const TONE: Record<"neutral" | "danger" | "warning", string> = {
-    neutral: "bg-bg-muted text-fg-muted",
-    danger: "bg-danger/15 text-danger",
-    warning: "bg-warning/15 text-warning-fg",
-  };
-  return (
-    <span
-      className={cn(
-        "ml-2 inline-flex min-w-[1.375rem] items-center justify-center rounded-full px-1.5 py-0.5 align-middle text-2xs font-semibold tabular-nums",
-        TONE[tone],
-      )}
-    >
-      {n}
-    </span>
-  );
-}
-
-// All-clear ribbon — premium healthy/empty state used inside Critical
-// Today / Urgent Procurement / Slipped Plans when there is nothing to act
-// on. Replaces the default dashed EmptyState in those specific contexts
-// with a calm, intentional success ribbon (left accent rail, soft halo,
-// success icon chip). Calm — not alarming, not blank.
-function AllClearRibbon({
-  title,
-  description,
-}: {
-  title: string;
-  description: string;
-}) {
-  return (
-    <div className="dash-allclear">
-      <div className="dash-allclear-icon">
-        <CheckCircle2 className="h-5 w-5" strokeWidth={2.25} aria-hidden />
-      </div>
-      <div className="relative min-w-0 flex-1">
-        <div className="text-sm font-semibold tracking-tightish text-success-fg">
-          {title}
-        </div>
-        <div className="mt-1 text-xs leading-relaxed text-fg-muted">
-          {description}
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ErrorAlert({ label, onRetry }: { label: string; onRetry: () => void }) {
-  return (
-    <div
-      className="flex items-start gap-3 rounded border border-danger/40 bg-danger-softer px-3 py-3 text-xs text-danger-fg"
-      role="alert"
-    >
-      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2} />
-      <div className="min-w-0 flex-1">
-        <div className="font-semibold">{label}</div>
-        <div className="mt-0.5 leading-relaxed text-fg-muted">Try again.</div>
-      </div>
-      <button
-        type="button"
-        onClick={onRetry}
-        className="inline-flex shrink-0 items-center gap-1 rounded border border-danger/40 bg-bg-raised px-2 py-1 text-3xs font-semibold uppercase tracking-sops text-danger-fg hover:bg-danger-softer"
-      >
-        <RefreshCw className="h-3 w-3" strokeWidth={2} />
-        Retry
-      </button>
-    </div>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Quick Actions launcher (FLOW-DG-001) — canonical source: quick-actions.ts.
@@ -688,7 +599,12 @@ function QuickActionsLauncher() {
       title="Jump to a workflow"
       description="Most-used workflows for your role."
     >
-      <div className="-mx-1 flex gap-2.5 overflow-x-auto px-1 pb-1 sm:mx-0 sm:flex-wrap sm:px-0 sm:pb-0">
+      {/* Tranche 051 (FLOW-009): right-edge fade signals more actions exist
+          off-screen while the strip scrolls horizontally (<sm). */}
+      <ScrollFade
+        className="-mx-1 sm:mx-0"
+        contentClassName="flex gap-2.5 overflow-x-auto px-1 pb-1 sm:flex-wrap sm:px-0 sm:pb-0"
+      >
         {visible.map((a) => {
           const Icon = a.icon;
           return (
@@ -711,7 +627,7 @@ function QuickActionsLauncher() {
             </Link>
           );
         })}
-      </div>
+      </ScrollFade>
     </SectionCard>
   );
 }
@@ -809,7 +725,11 @@ function ShortageRisk({ items, loading }: { items: FlowItem[]; loading?: boolean
       title={
         <span>
           Items at risk in horizon
-          <TitleCount n={shortageItems.length} tone="warning" />
+          {shortageItems.length > 0 ? (
+            <Badge tone="warning" size="sm" className="ml-2 align-middle tabular-nums">
+              {shortageItems.length}
+            </Badge>
+          ) : null}
         </span>
       }
       description="Days to projected stockout · top 6 items"
@@ -970,7 +890,11 @@ function ProductionWeek({ rows, loading }: { rows: ProdWeekItem[]; loading?: boo
       title={
         <span>
           Planned vs completed
-          <TitleCount n={rows.length} />
+          {rows.length > 0 ? (
+            <Badge tone="neutral" size="sm" className="ml-2 align-middle tabular-nums">
+              {rows.length}
+            </Badge>
+          ) : null}
         </span>
       }
       description="Top 5 items by planned quantity in the current week."
@@ -1049,7 +973,11 @@ function RecentProduction({
       title={
         <span>
           Last 5 actuals
-          <TitleCount n={rows.length} />
+          {rows.length > 0 ? (
+            <Badge tone="neutral" size="sm" className="ml-2 align-middle tabular-nums">
+              {rows.length}
+            </Badge>
+          ) : null}
         </span>
       }
       description="Most recent production output postings."
@@ -1271,15 +1199,6 @@ function TrendChip({ delta, days }: { delta: TrendDelta; days: number }) {
   );
 }
 
-function ChartSkeleton() {
-  return (
-    <div className="flex flex-col gap-3">
-      <Skel h={20} w="40%" />
-      <Skel h={96} />
-    </div>
-  );
-}
-
 function ProductionActivityCard({
   buckets,
   days,
@@ -1309,7 +1228,10 @@ function ProductionActivityCard({
       footer={<span>Source: production actuals · counts per day over {days} days</span>}
     >
       {loading ? (
-        <ChartSkeleton />
+        <div className="flex flex-col gap-3">
+          <Skel h={20} w="40%" />
+          <Skel h={96} />
+        </div>
       ) : error ? (
         <ErrorAlert label="Production activity unavailable." onRetry={onRetry} />
       ) : total === 0 ? (
@@ -1370,7 +1292,10 @@ function MovementFlowCard({
       footer={<span>Source: stock ledger · counts per day over {days} days</span>}
     >
       {loading ? (
-        <ChartSkeleton />
+        <div className="flex flex-col gap-3">
+          <Skel h={20} w="40%" />
+          <Skel h={96} />
+        </div>
       ) : error ? (
         <ErrorAlert label="Stock movement flow unavailable." onRetry={onRetry} />
       ) : total === 0 ? (
@@ -1428,14 +1353,16 @@ function InventoryValueCard({
 }) {
   const points = result?.points ?? [];
   const coveragePct = result ? Math.round(result.coverage * 100) : 0;
-  const lowCoverage = !!result && result.movementCount > 0 && result.coverage < 0.5;
+  // Tranche 042 — drawable threshold raised 50% → 75%: below 75% cost
+  // coverage the reconstructed line is too speculative to draw.
+  const lowCoverage = !!result && result.movementCount > 0 && result.coverage < 0.75;
   const first = points[0]?.value ?? null;
   const change = anchorValue !== null && first !== null ? anchorValue - first : null;
   const changePct = change !== null && first ? (change / first) * 100 : null;
   const footerNote =
     result && result.movementCount === 0
-      ? "Indicative · no stock movements in this window"
-      : `Indicative · reconstructed from movements at current cost · ${coveragePct}% cost coverage`;
+      ? "Indicative · no stock movements in this window · valued at current prices"
+      : `Indicative · reconstructed from movements, valued at current prices · ${coveragePct}% cost coverage`;
 
   return (
     <SectionCard
@@ -1454,7 +1381,10 @@ function InventoryValueCard({
       footer={<span>{footerNote}</span>}
     >
       {loading ? (
-        <ChartSkeleton />
+        <div className="flex flex-col gap-3">
+          <Skel h={20} w="40%" />
+          <Skel h={96} />
+        </div>
       ) : error ? (
         <ErrorAlert label="Inventory value trend unavailable." onRetry={onRetry} />
       ) : anchorValue === null || result === null ? (
@@ -1556,15 +1486,18 @@ function CriticalTodayBlock({ now }: { now: Date }) {
             <CheckCircle2 className="h-4 w-4 text-success" strokeWidth={2.25} />
           )}
           Critical today
-          <TitleCount n={rows.length} tone="danger" />
+          {rows.length > 0 ? (
+            <Badge tone="danger" size="sm" className="ml-2 align-middle tabular-nums">
+              {rows.length}
+            </Badge>
+          ) : null}
         </span>
       }
       description="What stops production today if nothing is done."
       footer={
         asOf ? (
           <span>
-            Source: <code className="font-mono">api_read.v_critical_today</code> · updated{" "}
-            {fmtRelative(asOf, now)}
+            Source: live factory signals · updated {fmtRelative(asOf, now)}
           </span>
         ) : undefined
       }
@@ -1650,16 +1583,19 @@ function SlippedPlansBlock({ now }: { now: Date }) {
         <span className="inline-flex items-center gap-2">
           <TrendingDown className="h-4 w-4 text-warning" strokeWidth={2.25} />
           Slipped plans
-          <TitleCount n={rows.length} tone="warning" />
+          {rows.length > 0 ? (
+            <Badge tone="warning" size="sm" className="ml-2 align-middle tabular-nums">
+              {rows.length}
+            </Badge>
+          ) : null}
         </span>
       }
       description={`Planned production from the last ${windowDays} days that was not posted as an actual.`}
       footer={
         asOf ? (
           <span>
-            Source:{" "}
-            <code className="font-mono">api_read.v_production_plan_slippage</code>
-            {" · "}window {windowDays} days · updated {fmtRelative(asOf, now)}
+            Source: production plan · window {windowDays} days · updated{" "}
+            {fmtRelative(asOf, now)}
           </span>
         ) : undefined
       }
@@ -1825,16 +1761,24 @@ function UrgentProcurementBlock({ now }: { now: Date }) {
             <CheckCircle2 className="h-4 w-4 text-success" strokeWidth={2.25} />
           )}
           Urgent procurement
-          <TitleCount n={rows.length} tone={hot ? "danger" : "warning"} />
+          {rows.length > 0 ? (
+            <Badge
+              tone={hot ? "danger" : "warning"}
+              size="sm"
+              className="ml-2 align-middle tabular-nums"
+            >
+              {rows.length}
+            </Badge>
+          ) : null}
         </span>
       }
       description="Supplier orders from this week's procurement session that need ordering now — overdue, due today, or flagged urgent."
       actions={
         <Link
-          href="/planning/purchase-session"
+          href="/planning/procurement"
           className="inline-flex items-center gap-1 rounded text-xs font-semibold text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
         >
-          Open session
+          Open procurement
           <ArrowRight className="h-3 w-3" strokeWidth={2} />
         </Link>
       }
@@ -1849,10 +1793,10 @@ function UrgentProcurementBlock({ now }: { now: Date }) {
               ·
             </span>
             <Link
-              href="/planning/purchase-calendar"
+              href="/planning/procurement"
               className="font-semibold text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
             >
-              View purchase calendar
+              View procurement calendar
             </Link>
           </span>
         ) : undefined
@@ -1874,7 +1818,7 @@ function UrgentProcurementBlock({ now }: { now: Date }) {
       ) : rows.length === 0 ? (
         <AllClearRibbon
           title="All procurement is on track."
-          description="No supplier orders are overdue, due today, or flagged urgent. Upcoming orders appear on the purchase calendar."
+          description="No supplier orders are overdue, due today, or flagged urgent. Upcoming orders appear in the procurement calendar view."
         />
       ) : (
         <ul className="flex flex-col gap-2" aria-live="polite">
@@ -1926,7 +1870,7 @@ function UrgentProcurementBlock({ now }: { now: Date }) {
                   </div>
                 </div>
                 <Link
-                  href="/planning/purchase-session"
+                  href="/planning/procurement"
                   className={cn(
                     "inline-flex shrink-0 items-center gap-1 self-start rounded text-xs font-semibold hover:underline focus-visible:outline-none focus-visible:ring-2 sm:self-center",
                     isDanger
@@ -2272,12 +2216,14 @@ export default function DashboardPage() {
             {totalInventoryValue != null ? (
               <span
                 className="dash-chip"
-                title="Combined value of RM + PKG + FG stock from the latest stock-value snapshot."
+                title={`${fmtILS(totalInventoryValue)} — combined value of RM + PKG + FG stock from the latest stock-value snapshot.`}
               >
                 <Coins className="h-3.5 w-3.5 text-accent" strokeWidth={2} aria-hidden />
                 <span className="text-fg-muted">Total inventory</span>
+                {/* Tranche 051 (FLOW-010): compact form so the hero meta rail
+                    fits a phone width; the title tooltip keeps the framing. */}
                 <span className="tabular-nums text-fg-strong">
-                  {fmtILS(totalInventoryValue)}
+                  {fmtILSCompact(totalInventoryValue)}
                 </span>
               </span>
             ) : null}
@@ -2398,14 +2344,10 @@ export default function DashboardPage() {
           selector drives all charts. */}
       <section className="reveal reveal-delay-6 flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
-          <div>
-            <div className="text-2xs font-semibold uppercase tracking-sops text-accent">
-              Operational trends
-            </div>
-            <h2 className="text-lg font-bold tracking-tight text-fg-strong">
-              The last {rangeDays} days at a glance
-            </h2>
-          </div>
+          <SectionHeading
+            eyebrow="Operational trends"
+            title={`The last ${rangeDays} days at a glance`}
+          />
           <RangeSelector value={rangeDays} onChange={setRangeDays} options={[...TREND_RANGES]} />
         </div>
         <div

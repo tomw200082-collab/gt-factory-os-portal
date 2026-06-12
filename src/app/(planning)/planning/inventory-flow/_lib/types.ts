@@ -177,4 +177,12 @@ export interface FlowQueryParams {
   family?: string;
   supply_method?: SupplyMethod;
   at_risk_only?: boolean;
+  // Groups v1 (Tranche 044) — server-side group filters.
+  /** FG flow: curated product-group key (?product_group=). */
+  product_group?: string;
+  /** Supply flow only: curated material-group key (?material_group=). */
+  material_group?: string;
+  /** Supply flow only: product-group key whose ACTIVE-BOM explosion consumes
+   *  the component (?used_by_product_group=). */
+  used_by_product_group?: string;
 }

@@ -3,6 +3,16 @@
 
 export type RenderedState = "planned" | "done" | "cancelled";
 
+// B4 (Phase-6 production reporting): the REAL DB status, passed through
+// additively by the API so the portal can distinguish draft and
+// in-production rows. rendered_state remains the derived compat field.
+export type ProductionPlanStatus =
+  | "draft"
+  | "planned"
+  | "in_production"
+  | "completed"
+  | "cancelled";
+
 export interface ProductionPlanRow {
   plan_id: string;
   plan_type: "production" | "note";
@@ -12,8 +22,15 @@ export interface ProductionPlanRow {
   item_supply_method: string | null;
   planned_qty: string | null;
   uom: string | null;
-  status: "planned" | "cancelled";
+  status: ProductionPlanStatus; // raw DB status (B4 passthrough)
   rendered_state: RenderedState;
+
+  // B4 (Phase-6): base-batch display hints. A base-batch row plans a BASE
+  // liquid batch (base_bom_head_id set, item_id null, pack_manifest > 0)
+  // rather than a single FG item.
+  base_bom_head_id: string | null;
+  is_base_batch: boolean;
+  pack_manifest_count: number; // jsonb_array_length(pack_manifest)
 
   source_recommendation_id: string | null;
   source_run_id: string | null;

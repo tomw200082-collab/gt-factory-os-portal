@@ -100,9 +100,12 @@ export const QUICK_ACTIONS: readonly QuickAction[] = [
     category: "planning",
   },
   {
+    // Tranche 045 — runs are diagnostic-only; ordering goes through
+    // /planning/procurement. Blurb adjusted so the tile no longer frames
+    // runs as the place to act on purchase recommendations.
     href: "/planning/runs",
     label: "Planning Runs",
-    blurb: "Review runs + purchase/production recommendations.",
+    blurb: "Diagnostic run history — order through Procurement.",
     icon: ListChecks,
     required: "planning:read",
     category: "planning",

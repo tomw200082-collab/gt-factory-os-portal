@@ -1,5 +1,6 @@
 import {
   AlertOctagon,
+  AlertTriangle,
   CheckCircle2,
   Inbox,
   Loader2,
@@ -183,6 +184,115 @@ export function SuccessState({
         </div>
       </div>
       {action ? <div className="flex flex-wrap gap-2 pl-14">{action}</div> : null}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Tranche 049 (VISUAL-014) — shared feedback components moved here from the
+// dashboard page, visuals unchanged, so other surfaces can consume them.
+// ---------------------------------------------------------------------------
+
+/**
+ * Shimmer skeleton block. A light sweep reads as "loading live data" far
+ * better than a flat opacity pulse. Driven by the gt-shimmer keyframe in
+ * globals.css. Moved from the dashboard (Iteration 6) unchanged.
+ */
+export function Skel({
+  h,
+  w,
+  className,
+}: {
+  h?: number;
+  w?: string | number;
+  className?: string;
+}) {
+  return (
+    <div
+      className={cn("relative overflow-hidden rounded bg-bg-muted", className)}
+      style={{ height: h ?? 16, width: w ?? "100%" }}
+    >
+      <div
+        className="absolute inset-y-0 w-3/5 bg-gradient-to-r from-transparent via-bg-raised/80 to-transparent motion-reduce:hidden"
+        style={{ animation: "gt-shimmer 1.5s ease-in-out infinite" }}
+        aria-hidden
+      />
+    </div>
+  );
+}
+
+/** Three-cell shimmer row — the standard list-loading placeholder. */
+export function SkeletonRow() {
+  return (
+    <div className="flex items-center gap-3 rounded border border-border/60 bg-bg-subtle px-3 py-3">
+      <Skel h={12} w={80} />
+      <Skel h={12} className="flex-1" />
+      <Skel h={12} w={64} />
+    </div>
+  );
+}
+
+/**
+ * All-clear ribbon — premium healthy/empty state used when a live block has
+ * nothing to act on. Replaces the default dashed EmptyState in those
+ * contexts with a calm, intentional success ribbon (left accent rail, soft
+ * halo, success icon chip). Calm — not alarming, not blank.
+ */
+export function AllClearRibbon({
+  title,
+  description,
+}: {
+  title: string;
+  description: string;
+}) {
+  return (
+    <div className="dash-allclear">
+      <div className="dash-allclear-icon">
+        <CheckCircle2 className="h-5 w-5" strokeWidth={2.25} aria-hidden />
+      </div>
+      <div className="relative min-w-0 flex-1">
+        <div className="text-sm font-semibold tracking-tightish text-success-fg">
+          {title}
+        </div>
+        <div className="mt-1 text-xs leading-relaxed text-fg-muted">
+          {description}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Compact inline error row with a Retry affordance — for errors inside a
+ * card where the full-height <ErrorState> block would be too heavy. Moved
+ * from the dashboard unchanged (ErrorState has no inline variant, so this
+ * stays a distinct component rather than forcing a regression).
+ */
+export function ErrorAlert({
+  label,
+  onRetry,
+}: {
+  label: string;
+  onRetry: () => void;
+}) {
+  return (
+    <div
+      className="flex items-start gap-3 rounded border border-danger/40 bg-danger-softer px-3 py-3 text-xs text-danger-fg"
+      role="alert"
+    >
+      <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2} />
+      <div className="min-w-0 flex-1">
+        <div className="font-semibold">{label}</div>
+        <div className="mt-0.5 leading-relaxed text-fg-muted">Try again.</div>
+      </div>
+      <button
+        type="button"
+        onClick={onRetry}
+        className="inline-flex shrink-0 items-center gap-1 rounded border border-danger/40 bg-bg-raised px-2 py-1 text-3xs font-semibold uppercase tracking-sops text-danger-fg hover:bg-danger-softer"
+      >
+        <RefreshCw className="h-3 w-3" strokeWidth={2} />
+        Retry
+      </button>
     </div>
   );
 }

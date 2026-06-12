@@ -24,6 +24,7 @@ import {
   ArrowLeftRight,
   Building2,
   CalendarDays,
+  CircleDollarSign,
   ClipboardCheck,
   Clock,
   Cog,
@@ -34,7 +35,6 @@ import {
   LayoutDashboard,
   LineChart,
   Link2,
-  ListChecks,
   MinusCircle,
   Network,
   Package,
@@ -42,6 +42,7 @@ import {
   Plug,
   ScrollText,
   Settings2,
+  Shapes,
   ShieldCheck,
   ShoppingCart,
   Tags,
@@ -188,13 +189,9 @@ export const NAV_MANIFEST: NavGroup[] = [
         min_role: "viewer",
         required_capability: "planning:read",
       },
-      {
-        href: "/planning/runs",
-        label: "Run History",
-        icon: ListChecks,
-        min_role: "viewer",
-        required_capability: "planning:read",
-      },
+      // Tranche 045 — "Run History" removed from primary nav. The page stays
+      // live at /planning/runs (blockers + critical-today depend on runs) but
+      // is diagnostic-only; ordering goes through /planning/procurement.
       {
         href: "/planning/production-plan",
         label: "Daily Production Plan",
@@ -305,6 +302,16 @@ export const NAV_MANIFEST: NavGroup[] = [
         required_capability: "admin:execute",
       },
       {
+        // Tranche 044 (Groups v1) — curated product/material group
+        // vocabularies that drive the Inventory category chips and the
+        // flow-page group filters.
+        href: "/admin/groups",
+        label: "Groups",
+        icon: Shapes,
+        min_role: "admin",
+        required_capability: "admin:execute",
+      },
+      {
         href: "/admin/masters/boms",
         label: "BOMs",
         icon: GitBranch,
@@ -322,6 +329,16 @@ export const NAV_MANIFEST: NavGroup[] = [
         href: "/admin/supplier-items",
         label: "Supplier Items",
         icon: Link2,
+        min_role: "admin",
+        required_capability: "admin:execute",
+      },
+      {
+        // Tranche 043 (Price Truth) — pending supplier_cost_drafts review
+        // queue: PO-entered prices whose delta vs the effective cost needs
+        // admin approval before becoming the catalog cost.
+        href: "/admin/cost-drafts",
+        label: "Price updates",
+        icon: CircleDollarSign,
         min_role: "admin",
         required_capability: "admin:execute",
       },

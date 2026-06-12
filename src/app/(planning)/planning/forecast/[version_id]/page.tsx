@@ -302,6 +302,18 @@ export default function ForecastVersionDetailPage() {
   // Per-session dismissable draft banner.
   const [draftBannerDismissed, setDraftBannerDismissed] = useState(false);
 
+  // FLOW-014 (Tranche 053): replace window.confirm with inline two-step
+  // confirms (meeting FirmPanel pattern). Item removal = bottom sheet naming
+  // the item; discard local edits = inline Confirm/Cancel in the bottom bar.
+  const [removeTarget, setRemoveTarget] = useState<ItemForGrid | null>(null);
+  const removeConfirmRef = useRef<HTMLButtonElement | null>(null);
+  useEffect(() => {
+    // Move focus to the destructive confirm when the sheet opens, so keyboard
+    // users land on it instead of hunting (mirrors FirmPanel confirm-focus).
+    if (removeTarget) removeConfirmRef.current?.focus();
+  }, [removeTarget]);
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
+
   // ----- Buckets + items derived -----
   const buckets = useMemo(() => {
     if (!version) return [];
@@ -534,6 +546,13 @@ export default function ForecastVersionDetailPage() {
     },
   });
 
+  // Reset the discard two-step once nothing is pending anymore (bar hides).
+  useEffect(() => {
+    if (autoSave.pendingCount === 0 && autoSave.state !== "saving") {
+      setConfirmingDiscard(false);
+    }
+  }, [autoSave.pendingCount, autoSave.state]);
+
   // Delete-item handler — clears all cells for the item via auto-save with
   // empty string (the backend treats "" as zero-quantity = effectively a
   // no-op delete in v1; full delete-line endpoint not yet exposed).
@@ -541,7 +560,7 @@ export default function ForecastVersionDetailPage() {
   // item from freshlyAddedItemIds. The backend lines remain (zero out via
   // setting forecast_quantity = "0" for each cell). This is the Wave-2-safe
   // path; a true line-delete handler is W1 follow-on work if needed.
-  const onItemRemove = useCallback(
+  const performItemRemove = useCallback(
     (itemId: string) => {
       // Zero out every cell for this item via auto-save (every month is
       // editable post-amendment 2026-05-02).
@@ -560,6 +579,18 @@ export default function ForecastVersionDetailPage() {
       });
     },
     [autoSave, buckets],
+  );
+
+  // FLOW-014: the grid's remove button now *requests* removal — this opens
+  // the confirm sheet naming the item; performItemRemove runs on confirm.
+  const requestItemRemove = useCallback(
+    (itemId: string) => {
+      const meta = itemsForGrid.find((i) => i.item_id === itemId);
+      setRemoveTarget(
+        meta ?? { item_id: itemId, item_name: itemId, supply_method: "" },
+      );
+    },
+    [itemsForGrid],
   );
 
   // ----- Render: loading / error -----
@@ -949,7 +980,7 @@ export default function ForecastVersionDetailPage() {
                 forecast_quantity: value,
               });
             }}
-            onItemRemove={onItemRemove}
+            onItemRemove={requestItemRemove}
           />
         )}
       </SectionCard>
@@ -975,8 +1006,65 @@ export default function ForecastVersionDetailPage() {
         }}
       />
 
+      {/* FLOW-014: item-removal confirm — small bottom sheet naming the item
+          (replaces window.confirm; the grid only *requests* removal). */}
+      {removeTarget ? (
+        <div
+          className="fixed inset-0 z-50"
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="forecast-remove-sheet-title"
+          data-testid="forecast-remove-sheet"
+        >
+          <button
+            type="button"
+            className="absolute inset-0 bg-black/30"
+            aria-label="Cancel removal"
+            onClick={() => setRemoveTarget(null)}
+            data-testid="forecast-remove-sheet-backdrop"
+          />
+          <div className="absolute inset-x-0 bottom-0 rounded-t-xl border border-border bg-bg-raised p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))] sm:bottom-6 sm:left-1/2 sm:right-auto sm:w-[26rem] sm:-translate-x-1/2 sm:rounded-xl sm:pb-4">
+            <div
+              id="forecast-remove-sheet-title"
+              className="text-sm font-semibold text-fg-strong"
+            >
+              Remove “{removeTarget.item_name}” from this forecast?
+            </div>
+            <p className="mt-1 text-xs text-fg-muted">
+              This clears its {buckets.length} month cell
+              {buckets.length === 1 ? "" : "s"}. Cleared cells save
+              automatically.
+            </p>
+            <div className="mt-3 flex justify-end gap-2">
+              <button
+                type="button"
+                className="btn btn-sm min-h-[44px] sm:min-h-0"
+                onClick={() => setRemoveTarget(null)}
+                data-testid="forecast-remove-sheet-cancel"
+              >
+                Cancel
+              </button>
+              <button
+                ref={removeConfirmRef}
+                type="button"
+                className="btn btn-danger btn-sm min-h-[44px] sm:min-h-0"
+                onClick={() => {
+                  performItemRemove(removeTarget.item_id);
+                  setRemoveTarget(null);
+                }}
+                data-testid="forecast-remove-sheet-confirm"
+              >
+                Remove item
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {/* Sticky bottom action bar — appears when there are pending edits
-          mid-flight or queued. Slides out once everything is saved. */}
+          mid-flight or queued. Slides out once everything is saved.
+          FLOW-014: "Discard" is now a two-step inline confirm (FirmPanel
+          pattern) instead of window.confirm. */}
       {isEditable ? (
         <div
           className="fc-bottom-bar"
@@ -988,52 +1076,70 @@ export default function ForecastVersionDetailPage() {
           data-testid="forecast-bottom-action-bar"
           aria-live="polite"
         >
-          <span className="fc-bottom-bar-label">
-            <span className="fc-bottom-bar-count">
-              {autoSave.pendingCount}
-            </span>{" "}
-            pending change
-            {autoSave.pendingCount === 1 ? "" : "s"}
-          </span>
-          <button
-            type="button"
-            className="btn btn-sm gap-1.5"
-            onClick={() => {
-              // "Discard" = drop local cell overlays for any unsaved edits;
-              // already-saved cells stay on disk untouched. We can only
-              // reliably clear local overlays since the autosave queue is
-              // private; clearing local cells is the right UX here.
-              if (
-                !window.confirm(
-                  "Discard all local edits? Unsaved changes, including any in progress, will be lost.",
-                )
-              ) {
-                return;
-              }
-              setLocalCells((prev) => {
-                const next = { ...prev };
-                // Remove only entries that are in the pending count window:
-                // anything still queued. Since we don't expose the queue
-                // directly, the safest mass-undo is to clear all overlays;
-                // the next refetch will re-render server values.
-                for (const k of Object.keys(next)) delete next[k];
-                return next;
-              });
-            }}
-            data-testid="forecast-bottom-bar-discard"
-          >
-            Discard local edits
-          </button>
-          <button
-            type="button"
-            className="btn btn-primary btn-sm gap-1.5"
-            onClick={() => void autoSave.flush()}
-            disabled={autoSave.state === "saving"}
-            data-testid="forecast-bottom-bar-save"
-          >
-            <CheckCircle2 className="h-3 w-3" strokeWidth={2.5} />
-            {autoSave.state === "saving" ? "Saving…" : "Save now"}
-          </button>
+          {confirmingDiscard ? (
+            <>
+              <span className="fc-bottom-bar-label">
+                Discard{" "}
+                <span className="fc-bottom-bar-count">
+                  {autoSave.pendingCount}
+                </span>{" "}
+                unsaved change
+                {autoSave.pendingCount === 1 ? "" : "s"}?
+              </span>
+              <button
+                type="button"
+                className="btn btn-sm gap-1.5"
+                onClick={() => setConfirmingDiscard(false)}
+                data-testid="forecast-bottom-bar-discard-cancel"
+              >
+                Keep editing
+              </button>
+              <button
+                type="button"
+                className="btn btn-danger btn-sm gap-1.5"
+                onClick={() => {
+                  // "Discard" = drop local cell overlays for any unsaved
+                  // edits; already-saved cells stay on disk untouched. The
+                  // autosave queue is private, so the safest mass-undo is to
+                  // clear all overlays; the next refetch re-renders server
+                  // values.
+                  setLocalCells({});
+                  setConfirmingDiscard(false);
+                }}
+                data-testid="forecast-bottom-bar-discard-confirm"
+              >
+                Discard edits
+              </button>
+            </>
+          ) : (
+            <>
+              <span className="fc-bottom-bar-label">
+                <span className="fc-bottom-bar-count">
+                  {autoSave.pendingCount}
+                </span>{" "}
+                pending change
+                {autoSave.pendingCount === 1 ? "" : "s"}
+              </span>
+              <button
+                type="button"
+                className="btn btn-sm gap-1.5"
+                onClick={() => setConfirmingDiscard(true)}
+                data-testid="forecast-bottom-bar-discard"
+              >
+                Discard local edits
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary btn-sm gap-1.5"
+                onClick={() => void autoSave.flush()}
+                disabled={autoSave.state === "saving"}
+                data-testid="forecast-bottom-bar-save"
+              >
+                <CheckCircle2 className="h-3 w-3" strokeWidth={2.5} />
+                {autoSave.state === "saving" ? "Saving…" : "Save now"}
+              </button>
+            </>
+          )}
         </div>
       ) : null}
     </>

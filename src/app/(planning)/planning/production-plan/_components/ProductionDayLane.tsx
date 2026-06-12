@@ -57,6 +57,7 @@ export function ProductionDayLane({
   onAddNote,
   onEdit,
   onCancel,
+  onAdjustRecipe,
 }: {
   date: Date;
   isoDate: string;
@@ -73,6 +74,7 @@ export function ProductionDayLane({
   onAddNote: (date: Date) => void;
   onEdit: (p: ProductionPlanRow) => void;
   onCancel: (p: ProductionPlanRow) => void;
+  onAdjustRecipe: (p: ProductionPlanRow) => void;
 }) {
   const liveCount = plans.filter((p) => p.rendered_state === "planned").length;
   const doneCount = plans.filter((p) => p.rendered_state === "done").length;
@@ -207,6 +209,7 @@ export function ProductionDayLane({
                 isToday={isToday}
                 onEdit={onEdit}
                 onCancel={onCancel}
+                onAdjustRecipe={onAdjustRecipe}
               />
             )
           )

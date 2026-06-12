@@ -14,10 +14,21 @@
 // ---------------------------------------------------------------------------
 
 import Link from "next/link";
-import { useEffect, useId, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
+import {
+  AlertTriangle,
+  ArrowDown,
+  ArrowUp,
+  Check,
+  Clock,
+  Info,
+  Loader2,
+  XCircle,
+} from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
+import { SearchableSelect } from "@/components/fields/SearchableSelect";
 import { UOMS, type Uom } from "@/lib/contracts/enums";
 import { componentItemType } from "@/lib/contracts/components";
 import { cn } from "@/lib/cn";
@@ -179,179 +190,6 @@ const REASON_LABELS: Record<WasteReasonCode, string> = {
 };
 
 // ---------------------------------------------------------------------------
-// SVG icons (inline, no extra dep)
-// ---------------------------------------------------------------------------
-function IconArrowDown() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-      <path d="M10 4v12M4 10l6 6 6-6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function IconArrowUp() {
-  return (
-    <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
-      <path d="M10 16V4M4 10l6-6 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function IconSpinner() {
-  return (
-    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" className="animate-spin" aria-hidden="true">
-      <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="2" strokeOpacity="0.25" />
-      <path d="M14 8a6 6 0 0 1-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-    </svg>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Searchable combobox
-// ---------------------------------------------------------------------------
-interface ComboboxProps {
-  options: AdjustableRow[];
-  value: string;
-  onChange: (key: string, row: AdjustableRow | undefined) => void;
-}
-
-function ItemCombobox({ options, value, onChange }: ComboboxProps) {
-  const listboxId = useId();
-  const [query, setQuery] = useState("");
-  const [open, setOpen] = useState(false);
-  const [activeIdx, setActiveIdx] = useState(0);
-  const inputRef = useRef<HTMLInputElement>(null);
-  const listRef = useRef<HTMLUListElement>(null);
-  const containerRef = useRef<HTMLDivElement>(null);
-
-  const selectedRow = options.find((o) => `${o.kind}:${o.id}` === value);
-  const displayValue = selectedRow?.label ?? "";
-
-  const filtered = useMemo(() => {
-    const q = query.toLowerCase().trim();
-    if (!q) return options;
-    return options.filter((o) => o.label.toLowerCase().includes(q));
-  }, [options, query]);
-
-  // close on outside click
-  useEffect(() => {
-    function handler(e: MouseEvent) {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setOpen(false);
-      }
-    }
-    document.addEventListener("mousedown", handler);
-    return () => document.removeEventListener("mousedown", handler);
-  }, []);
-
-  function handleInputChange(e: React.ChangeEvent<HTMLInputElement>) {
-    setQuery(e.target.value);
-    setOpen(true);
-    setActiveIdx(0);
-    if (!e.target.value) {
-      onChange("", undefined);
-    }
-  }
-
-  function handleSelect(row: AdjustableRow) {
-    const key = `${row.kind}:${row.id}`;
-    onChange(key, row);
-    setQuery("");
-    setOpen(false);
-    inputRef.current?.blur();
-  }
-
-  function handleKeyDown(e: React.KeyboardEvent<HTMLInputElement>) {
-    if (!open && (e.key === "ArrowDown" || e.key === "ArrowUp")) {
-      setOpen(true);
-      return;
-    }
-    if (e.key === "ArrowDown") {
-      e.preventDefault();
-      setActiveIdx((i) => Math.min(i + 1, filtered.length - 1));
-    } else if (e.key === "ArrowUp") {
-      e.preventDefault();
-      setActiveIdx((i) => Math.max(i - 1, 0));
-    } else if (e.key === "Enter") {
-      e.preventDefault();
-      if (filtered[activeIdx]) handleSelect(filtered[activeIdx]);
-    } else if (e.key === "Escape") {
-      setOpen(false);
-    }
-  }
-
-  // scroll active item into view
-  useEffect(() => {
-    if (listRef.current) {
-      const li = listRef.current.children[activeIdx] as HTMLElement | undefined;
-      li?.scrollIntoView({ block: "nearest" });
-    }
-  }, [activeIdx]);
-
-  return (
-    <div ref={containerRef} className="relative" data-testid="waste-item-select">
-      <input
-        ref={inputRef}
-        type="text"
-        className="input w-full transition-colors duration-150"
-        placeholder={displayValue || "Search items and components…"}
-        value={open ? query : displayValue}
-        onChange={handleInputChange}
-        onFocus={() => { setOpen(true); setQuery(""); }}
-        onKeyDown={handleKeyDown}
-        autoComplete="off"
-        role="combobox"
-        aria-autocomplete="list"
-        aria-expanded={open}
-        aria-controls={listboxId}
-      />
-      {open && (
-        <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-bg shadow-lg">
-          {query && (
-            <div className="border-b border-border px-3 py-1.5 text-xs text-fg-muted">
-              {filtered.length} match{filtered.length !== 1 ? "es" : ""}
-            </div>
-          )}
-          <ul
-            id={listboxId}
-            ref={listRef}
-            role="listbox"
-            className="max-h-60 overflow-y-auto py-1"
-          >
-            {filtered.length === 0 ? (
-              <li className="px-3 py-2 text-sm text-fg-muted">No results</li>
-            ) : (
-              filtered.map((row, i) => {
-                const key = `${row.kind}:${row.id}`;
-                return (
-                  <li
-                    key={key}
-                    role="option"
-                    aria-selected={value === key}
-                    className={cn(
-                      "cursor-pointer px-3 py-2 text-sm transition-colors duration-150",
-                      i === activeIdx ? "bg-accent/10 text-fg" : "text-fg hover:bg-bg-subtle",
-                      value === key && "font-medium"
-                    )}
-                    onMouseEnter={() => setActiveIdx(i)}
-                    onMouseDown={(e) => { e.preventDefault(); handleSelect(row); }}
-                  >
-                    <span className="text-xs text-fg-muted mr-2">
-                      {row.item_type ?? "—"}
-                    </span>
-                    {row.label}
-                  </li>
-                );
-              })
-            )}
-          </ul>
-        </div>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
 // Page component
 // ---------------------------------------------------------------------------
 export default function WasteAdjustmentPage() {
@@ -406,6 +244,9 @@ export default function WasteAdjustmentPage() {
 
   // New state — does NOT replace any existing state
   const [confirmPending, setConfirmPending] = useState(false);
+  // Tranche 041 — keeps the confirm panel visible (with a loading Confirm
+  // button) until doSubmit resolves, instead of dismissing before the await.
+  const [confirmSubmitting, setConfirmSubmitting] = useState(false);
   const [notesAttempted, setNotesAttempted] = useState(false);
   const [relativeTime, setRelativeTime] = useState(() => getRelativeTime(nowLocalDateTime()));
 
@@ -546,13 +387,9 @@ export default function WasteAdjustmentPage() {
       return;
     }
 
-    // Positive direction: show inline confirm panel instead of window.confirm
-    if (direction === "positive") {
-      setConfirmPending(true);
-      return;
-    }
-
-    await doSubmit(row, qtyNumLocal);
+    // Tranche 041 — BOTH directions go through the inline confirm panel.
+    // Loss previously posted a permanent ledger event with no confirmation.
+    setConfirmPending(true);
   }
 
   function handleReset() {
@@ -571,6 +408,7 @@ export default function WasteAdjustmentPage() {
   return (
     <>
       <WorkflowHeader
+        size="section"
         eyebrow="Operator form"
         title="Waste / Adjustment"
         description="Report a loss or positive correction."
@@ -601,21 +439,13 @@ export default function WasteAdjustmentPage() {
               )}
             >
               {done.kind === "success" && (
-                <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <path d="M5 13l4 4L19 7" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
+                <Check className="h-7 w-7" strokeWidth={2} aria-hidden />
               )}
               {done.kind === "pending" && (
-                <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
-                  <path d="M12 7v5l3 3" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                </svg>
+                <Clock className="h-7 w-7" strokeWidth={2} aria-hidden />
               )}
               {done.kind === "error" && (
-                <svg className="h-7 w-7" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
-                  <path d="M9 9l6 6M15 9l-6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
-                </svg>
+                <XCircle className="h-7 w-7" strokeWidth={2} aria-hidden />
               )}
             </span>
             <div className="flex-1 min-w-0">
@@ -745,7 +575,7 @@ export default function WasteAdjustmentPage() {
                       : "bg-bg-subtle text-danger-fg",
                   )}
                 >
-                  <IconArrowDown />
+                  <ArrowDown className="h-5 w-5" strokeWidth={2} aria-hidden />
                 </span>
                 <span className="flex-1">
                   <span className="block text-lg font-bold leading-tight">Loss</span>
@@ -784,7 +614,7 @@ export default function WasteAdjustmentPage() {
                       : "bg-bg-subtle text-warning-fg",
                   )}
                 >
-                  <IconArrowUp />
+                  <ArrowUp className="h-5 w-5" strokeWidth={2} aria-hidden />
                 </span>
                 <span className="flex-1">
                   <span className="block text-lg font-bold leading-tight">Positive correction</span>
@@ -801,7 +631,7 @@ export default function WasteAdjustmentPage() {
           {/* ---------------------------------------------------------------- */}
           {direction === "positive" && (
             <div className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning-softer px-4 py-3 text-sm text-warning-fg transition-all duration-200">
-              <svg className="h-4 w-4 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+              <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" strokeWidth={2} aria-hidden />
               <span>
                 <span className="font-semibold">Approval required.</span>{" "}
                 Positive adjustments are held for planner approval before affecting stock.
@@ -839,14 +669,25 @@ export default function WasteAdjustmentPage() {
                 <span className="mb-2 block text-sm font-semibold text-fg">
                   Item / component *
                 </span>
-                <ItemCombobox
-                  options={adjustable}
-                  value={selKey}
-                  onChange={(key, row) => {
-                    setSelKey(key);
-                    if (row) setUnit(row.default_uom);
-                  }}
-                />
+                <div data-testid="waste-item-select">
+                  <SearchableSelect
+                    value={selKey}
+                    onChange={(key) => {
+                      setSelKey(key);
+                      const row = byKey.get(key);
+                      if (row) setUnit(row.default_uom);
+                    }}
+                    options={adjustable.map((row) => ({
+                      value: `${row.kind}:${row.id}`,
+                      label: row.label,
+                      meta: row.item_type ?? "—",
+                    }))}
+                    placeholder="Search items and components…"
+                    searchPlaceholder="Search items and components…"
+                    emptyMessage="No results"
+                    ariaLabel="Item or component"
+                  />
+                </div>
                 {/* Selected item chip */}
                 {selectedRow && (
                   <div className="mt-1.5 inline-flex items-center gap-1 rounded-full border border-border/60 bg-bg-subtle px-2.5 py-0.5 text-xs text-fg-muted">
@@ -965,7 +806,7 @@ export default function WasteAdjustmentPage() {
                 </div>
                 {reasonCode && REASON_CODES_REQUIRING_NOTES.includes(reasonCode) && (
                   <div className="mt-2 flex items-center gap-1.5 text-sm font-medium text-info-fg">
-                    <svg className="h-4 w-4 shrink-0" viewBox="0 0 24 24" fill="none" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2"/><path d="M12 8h.01M11 12h1v5h1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                    <Info className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
                     Notes required for this reason
                   </div>
                 )}
@@ -1005,28 +846,54 @@ export default function WasteAdjustmentPage() {
           </SectionCard>
 
           {/* ---------------------------------------------------------------- */}
-          {/* Inline confirm panel (replaces window.confirm for positive dir)  */}
+          {/* Inline confirm panel (replaces window.confirm). Tranche 041 —    */}
+          {/* gates BOTH directions; loss previously posted with no confirm.   */}
+          {/* Panel stays visible (Confirm shows a spinner, Cancel disabled)   */}
+          {/* until doSubmit resolves.                                         */}
           {/* ---------------------------------------------------------------- */}
           {confirmPending && (
             <div
               className="rounded-md border border-warning/50 bg-warning-softer px-4 py-4 text-sm text-warning-fg"
               role="alertdialog"
               aria-modal="false"
-              aria-label="Confirm positive adjustment"
+              aria-label={
+                direction === "loss"
+                  ? "Confirm loss adjustment"
+                  : "Confirm positive adjustment"
+              }
               data-testid="waste-confirm-panel"
             >
               <div className="flex items-start gap-2 mb-3">
-                <svg className="h-4 w-4 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 9v4M12 17h.01M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0Z" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"/></svg>
+                <AlertTriangle className="h-4 w-4 shrink-0 mt-0.5" strokeWidth={2} aria-hidden />
                 <p className="font-medium">
-                  You are about to add{" "}
-                  <span className="font-bold">
-                    {qtyNum} {unit}
-                  </span>{" "}
-                  of{" "}
-                  <span className="font-bold">
-                    {selectedRow?.label ?? "the selected item"}
-                  </span>{" "}
-                  to stock. This will be held for planner approval.
+                  {direction === "loss" ? (
+                    <>
+                      You are about to remove{" "}
+                      <span className="font-bold">
+                        {qtyNum} {unit}
+                      </span>{" "}
+                      of{" "}
+                      <span className="font-bold">
+                        {selectedRow?.label ?? "the selected item"}
+                      </span>{" "}
+                      from stock. The ledger event is permanent — small losses
+                      post immediately; larger losses are held for planner
+                      approval.
+                    </>
+                  ) : (
+                    <>
+                      You are about to add{" "}
+                      <span className="font-bold">
+                        {qtyNum} {unit}
+                      </span>{" "}
+                      of{" "}
+                      <span className="font-bold">
+                        {selectedRow?.label ?? "the selected item"}
+                      </span>{" "}
+                      to stock. This will be held for planner approval. Once
+                      approved, the ledger event is permanent.
+                    </>
+                  )}
                 </p>
               </div>
               <div className="flex gap-2">
@@ -1034,18 +901,36 @@ export default function WasteAdjustmentPage() {
                   type="button"
                   className="btn btn-primary btn-sm transition-colors duration-150"
                   data-testid="waste-confirm-proceed"
+                  disabled={confirmSubmitting}
                   onClick={async () => {
-                    setConfirmPending(false);
                     const row = byKey.get(selKey);
-                    if (row) await doSubmit(row, Number(quantity));
+                    if (!row) {
+                      setConfirmPending(false);
+                      return;
+                    }
+                    setConfirmSubmitting(true);
+                    try {
+                      await doSubmit(row, Number(quantity));
+                    } finally {
+                      setConfirmSubmitting(false);
+                      setConfirmPending(false);
+                    }
                   }}
                 >
-                  Confirm
+                  {confirmSubmitting ? (
+                    <span className="flex items-center gap-2">
+                      <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden />
+                      Submitting…
+                    </span>
+                  ) : (
+                    "Confirm"
+                  )}
                 </button>
                 <button
                   type="button"
                   className="btn btn-sm transition-colors duration-150"
                   data-testid="waste-confirm-cancel"
+                  disabled={confirmSubmitting}
                   onClick={() => setConfirmPending(false)}
                 >
                   Cancel
@@ -1072,10 +957,7 @@ export default function WasteAdjustmentPage() {
               data-testid="waste-pre-submit-effect"
             >
               <div className="flex items-start gap-2">
-                <svg className="h-4 w-4 shrink-0 mt-0.5" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                  <circle cx="12" cy="12" r="9" stroke="currentColor" strokeWidth="2" />
-                  <path d="M12 8h.01M11 12h1v5h1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-                </svg>
+                <Info className="h-4 w-4 shrink-0 mt-0.5" strokeWidth={2} aria-hidden />
                 <div className="flex-1 space-y-1">
                   <div>
                     On submit, <strong>{selectedRow.label}</strong> stock will{" "}
@@ -1112,13 +994,12 @@ export default function WasteAdjustmentPage() {
             >
               {phase === "submitting" ? (
                 <span className="flex items-center gap-2">
-                  <IconSpinner />
+                  <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden />
                   Submitting…
                 </span>
-              ) : direction === "positive" ? (
-                "Review & submit"
               ) : (
-                "Submit adjustment"
+                // Tranche 041 — both directions now open the review panel.
+                "Review & submit"
               )}
             </button>
           </div>

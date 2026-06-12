@@ -823,24 +823,39 @@
     letter-spacing: 0.04em;
   }
 
-  /* KPI micro-card — used by the sub-stat row. 2px tier-coloured left
-     accent, hairline border, subtle bg-raised inset. The accent is set
-     via `--kpi-accent` inline (e.g. `var(--danger)` or `var(--warning)`). */
-  .kpi-microcard {
+  /* Canonical stat card — Tranche 049 (VISUAL-006). One visual recipe for
+     the small KPI / stat cards: 2px tier-coloured left accent rail set via
+     `--kpi-accent` inline (e.g. `var(--danger)`), hairline border, 4px
+     radius, mid-size padding, subtle bg-raised inset. `.kpi-microcard`,
+     `.fc-kpi-card` and `.fc-list-stat` are thin aliases of this block
+     (layout-only deltas live on each class); use `.stat-card` directly for
+     new surfaces. Deliberately does NOT touch `.kpi-tile`. */
+  .stat-card,
+  .kpi-microcard,
+  .fc-kpi-card,
+  .fc-list-stat {
     position: relative;
-    display: inline-flex;
-    align-items: center;
-    gap: 0.5rem;
-    padding: 0.375rem 0.625rem 0.375rem 0.75rem;
+    padding: 0.5rem 0.625rem 0.5rem 0.75rem;
     background-color: hsl(var(--bg-raised));
-    border: 1px solid hsl(var(--border) / 0.5);
+    border: 1px solid hsl(var(--border) / 0.55);
     border-left: 2px solid hsl(var(--kpi-accent, var(--border-strong)));
     border-radius: 4px;
     box-shadow: 0 1px 0 0 hsl(var(--shadow-color) / 0.04);
     transition: border-color 150ms ease-out, background-color 150ms ease-out;
   }
-  .kpi-microcard:hover {
+  .stat-card:hover,
+  .kpi-microcard:hover,
+  .fc-kpi-card:hover,
+  .fc-list-stat:hover {
     border-color: hsl(var(--border-strong));
+  }
+
+  /* KPI micro-card — row-layout alias of .stat-card, used by the sub-stat
+     row. */
+  .kpi-microcard {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
   }
 
   /* Segmented control — 2-segment switch (All / At-risk only).
@@ -1316,13 +1331,12 @@
   }
 
   /* Inline disclosure button — "What is a forecast?" expand/collapse.
-     Italic + muted to read as supporting copy. */
+     Muted to read as supporting copy. */
   .forecast-disclosure-toggle {
     display: inline-flex;
     align-items: center;
     gap: 0.3125rem;
     font-size: 11px;
-    font-style: italic;
     color: hsl(var(--fg-muted));
     transition: color 150ms ease-out;
     cursor: pointer;
@@ -1484,26 +1498,15 @@
     animation-delay: 100ms;
   }
 
-  /* Forecast KPI micro-card — 5-up band on the edit page. Mirrors the
-     inventory-flow .kpi-microcard but vertically stacked (large value on
-     top, tiny uppercase label below) since this is the page-level KPI band
-     not a sub-row. */
+  /* Forecast KPI micro-card — column-layout alias of .stat-card (Tranche
+     049 / VISUAL-006): vertically stacked (large value on top, tiny
+     uppercase label below) since this is the page-level KPI band not a
+     sub-row. Visuals come from the canonical .stat-card block. */
   .fc-kpi-card {
-    position: relative;
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
-    padding: 0.625rem 0.75rem 0.6875rem 0.875rem;
-    background-color: hsl(var(--bg-raised));
-    border: 1px solid hsl(var(--border) / 0.55);
-    border-left: 2px solid hsl(var(--kpi-accent, var(--border-strong)));
-    border-radius: 5px;
-    box-shadow: 0 1px 0 0 hsl(var(--shadow-color) / 0.04);
-    transition: border-color 160ms ease-out, transform 160ms ease-out;
     min-height: 58px;
-  }
-  .fc-kpi-card:hover {
-    border-color: hsl(var(--border-strong));
   }
   .fc-kpi-card-label {
     font-size: 9px;
@@ -1743,6 +1746,10 @@
     align-items: center;
     gap: 0.625rem;
     padding: 0.5rem 0.75rem;
+    /* FLOW-021 (Tranche 053): keep the bar's actions above the iOS home
+       indicator — additive safe-area inset on top of the base 0.5rem.
+       z-index 35 stays below the TopBar (z-40). */
+    padding-bottom: calc(0.5rem + env(safe-area-inset-bottom, 0px));
     border-radius: 8px;
     border: 1px solid hsl(var(--border));
     background-color: hsl(var(--bg-raised));
@@ -1950,24 +1957,13 @@
   @media (min-width: 640px) {
     .fc-list-stats { grid-template-columns: repeat(4, minmax(0, 1fr)); }
   }
+  /* Column-layout alias of .stat-card (Tranche 049 / VISUAL-006) — visuals
+     come from the canonical .stat-card block. */
   .fc-list-stat {
-    position: relative;
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
-    padding: 0.5rem 0.625rem 0.5rem 0.75rem;
-    background-color: hsl(var(--bg-raised));
-    border: 1px solid hsl(var(--border) / 0.55);
-    border-left: 2px solid hsl(var(--kpi-accent, var(--border-strong)));
-    border-radius: 4px;
-    box-shadow: 0 1px 0 0 hsl(var(--shadow-color) / 0.04);
-    transition: border-color 150ms ease-out, transform 150ms ease-out,
-      background-color 150ms ease-out;
     min-width: 0;
-  }
-  .fc-list-stat:hover {
-    border-color: hsl(var(--border-strong));
-    background-color: hsl(var(--bg-raised));
   }
   .fc-list-stat-label {
     font-size: 8.5px;
@@ -2811,7 +2807,7 @@
     overflow: hidden;
     color: hsl(var(--fg-muted));
     max-width: 22rem;
-    font-style: italic;
+    
   }
 
   /* — Right rail: actions (hover-revealed) + primary CTA. */
@@ -3100,67 +3096,6 @@
       hsl(var(--border) / 0.7) 80%,
       transparent 100%
     );
-  }
-
-  /* Premium KPI tile — composes on top of .card. Top accent rail varies
-     by tone via the --kpi-tone CSS var. Lift + ring on hover for the
-     linked variant. */
-  .kpi-tile {
-    @apply card relative flex flex-col gap-3 overflow-hidden p-5
-           transition-all duration-200 ease-out-quart;
-    background:
-      linear-gradient(180deg, hsl(var(--bg-raised) / 1) 0%, hsl(var(--bg-raised) / 0.96) 100%);
-  }
-  .kpi-tile::before {
-    content: "";
-    position: absolute;
-    inset: 0 0 auto 0;
-    height: 2px;
-    z-index: 0;
-    pointer-events: none;
-    background: linear-gradient(
-      to right,
-      hsl(var(--kpi-tone, var(--accent)) / 0.85) 0%,
-      hsl(var(--kpi-tone, var(--accent)) / 0.4) 55%,
-      transparent 100%
-    );
-    transition: opacity 200ms ease, height 200ms ease;
-  }
-  .kpi-tile::after {
-    content: "";
-    position: absolute;
-    inset: auto 0 0 0;
-    height: 80px;
-    z-index: 0;
-    pointer-events: none;
-    background: radial-gradient(
-      60% 100% at 100% 100%,
-      hsl(var(--kpi-tone, var(--accent)) / 0.06) 0%,
-      transparent 70%
-    );
-  }
-  .kpi-tile[data-tone="accent"]  { --kpi-tone: var(--accent); }
-  .kpi-tile[data-tone="success"] { --kpi-tone: var(--success); }
-  .kpi-tile[data-tone="info"]    { --kpi-tone: var(--info); }
-  .kpi-tile[data-tone="warning"] { --kpi-tone: var(--warning); }
-  .kpi-tile[data-tone="danger"]  { --kpi-tone: var(--danger); }
-  .kpi-tile > * { position: relative; z-index: 1; }
-
-  .kpi-tile.is-link:hover,
-  .kpi-tile.is-link:focus-visible {
-    transform: translateY(-2px);
-    box-shadow:
-      0 2px 6px -1px hsl(var(--shadow-color-deep) / 0.08),
-      0 12px 28px -6px hsl(var(--shadow-color-deep) / 0.12),
-      0 0 0 1px hsl(var(--kpi-tone, var(--accent)) / 0.35);
-    border-color: hsl(var(--kpi-tone, var(--accent)) / 0.5);
-  }
-  .kpi-tile.is-link:hover::before,
-  .kpi-tile.is-link:focus-visible::before { height: 3px; }
-  @media (prefers-reduced-motion: reduce) {
-    .kpi-tile { transition: none; }
-    .kpi-tile.is-link:hover,
-    .kpi-tile.is-link:focus-visible { transform: none; }
   }
 
   /* Premium section card on the dashboard — gentle hover lift on linked

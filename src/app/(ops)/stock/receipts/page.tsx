@@ -33,7 +33,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { UOMS, type Uom } from "@/lib/contracts/enums";
@@ -506,6 +506,7 @@ export default function GoodsReceiptPage() {
   // Direct-entry path (no ?po_id=) is preserved verbatim.
   const searchParams = useSearchParams();
   const urlPoId = searchParams?.get("po_id") ?? "";
+  const queryClient = useQueryClient();
 
   const itemsQuery = useQuery<ListEnvelope<ItemRow>>({
     queryKey: ["master", "items", "ACTIVE"],
@@ -876,14 +877,25 @@ export default function GoodsReceiptPage() {
           postedLines: committed.lines.length,
           postedLineDetails,
         });
+        // Tranche 042 — a posted receipt changes PO-line received quantities
+        // and open-PO statuses; invalidate the whole ["ops","receipts"]
+        // prefix so the PO ledger header pills and line tables refresh.
+        void queryClient.invalidateQueries({ queryKey: ["ops", "receipts"] });
         // Reset form for a fresh submission
         setLines([emptyLine()]);
         setNotes("");
       } else {
+        // Tranche 041 — never show stringified JSON to the operator; prefer
+        // the server's message string, else a plain-English fallback.
+        const bodyMessage =
+          body &&
+          typeof body === "object" &&
+          typeof (body as { message?: unknown }).message === "string"
+            ? (body as { message: string }).message
+            : null;
         const detail =
-          body && typeof body === "object"
-            ? JSON.stringify(body)
-            : `HTTP ${res.status}`;
+          bodyMessage ??
+          "Unexpected server response — try again or contact support.";
         setDone({
           kind: "error",
           message: "Could not submit. Check your connection and try again.",
@@ -1042,6 +1054,7 @@ export default function GoodsReceiptPage() {
   return (
     <>
       <WorkflowHeader
+        size="section"
         eyebrow={urlPoLocked && urlPoHeader ? `Receiving against PO ${urlPoHeader.po_number}` : "Operator form"}
         title="Goods Receipt"
         description={
@@ -1287,13 +1300,23 @@ export default function GoodsReceiptPage() {
                     onClick={() => {
                       setLines([emptyLine()]);
                       setNotes("");
-                      setPoId("");
+                      // Tranche 041 — in the URL-locked flow the supplier
+                      // combobox stays disabled and the prefill effect
+                      // early-returns on an empty poId, so clearing both
+                      // left an un-submittable form. Re-seed the URL's PO
+                      // and let prefill re-run instead.
+                      if (urlPoLocked) {
+                        setPoId(urlPoId);
+                        setPrefillApplied(false);
+                      } else {
+                        setPoId("");
+                        setSupplierId("");
+                      }
                       // Tranche 020 — also reset the track so the operator
                       // lands back on the Smart Picker (unless URL-locked,
                       // in which case track stays "po" via the urlPoLocked
                       // branch in the track derivation).
                       setManualConfirmed(false);
-                      setSupplierId("");
                       setDone(null);
                       setPhase("idle");
                     }}

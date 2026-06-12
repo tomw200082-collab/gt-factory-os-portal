@@ -33,14 +33,29 @@ import { updateSupabaseSession } from "@/lib/supabase/middleware";
 // Prefix → allowed-roles table. First-match wins (check more-specific
 // prefixes first). Keep aligned with docs/portal-os/route-manifest.json
 // and the per-group layout.tsx RoleGate allow-lists.
+//
+// Tranche 046 (2026-06-11): reconciled with the layout capability gates +
+// the role×capability lattice (src/lib/auth/authorize.ts):
+//   - (ops) layout gates stock:execute → operator+planner+admin (lattice
+//     grants planner stock:execute; the old table wrongly excluded planner).
+//   - /stock/movement-log lives in the (shared) group (viewer:read) — carved
+//     out BEFORE the /stock prefix so all roles pass.
+//   - (planning) + (planner) layouts gate planning:read → all four roles
+//     (writes remain gated server-side on planning:execute).
+//   - /admin/economics lives in the (economics) group (planning:execute →
+//     planner+admin) — carved out BEFORE the /admin prefix.
+//   - (po) layout gates viewer:read → all four roles.
 const ROLE_GATES: Array<{ prefix: string; allow: string[] }> = [
-  // More-specific first: /inbox/approvals/* must match before /inbox.
+  // More-specific first: /inbox/approvals/* must match before /inbox;
+  // /admin/economics before /admin; /stock/movement-log before /stock.
   { prefix: "/inbox/approvals", allow: ["planner", "admin"] },
+  { prefix: "/admin/economics", allow: ["planner", "admin"] },
   { prefix: "/admin", allow: ["admin"] },
-  { prefix: "/planning", allow: ["planner", "admin"] },
-  { prefix: "/stock", allow: ["operator", "admin"] },
-  { prefix: "/purchase-orders", allow: ["planner", "admin", "viewer"] },
-  { prefix: "/exceptions", allow: ["planner", "admin", "viewer"] },
+  { prefix: "/stock/movement-log", allow: ["operator", "planner", "admin", "viewer"] },
+  { prefix: "/stock", allow: ["operator", "planner", "admin"] },
+  { prefix: "/planning", allow: ["operator", "planner", "admin", "viewer"] },
+  { prefix: "/purchase-orders", allow: ["operator", "planner", "admin", "viewer"] },
+  { prefix: "/exceptions", allow: ["operator", "planner", "admin", "viewer"] },
   // /inbox, /dashboard, /profile — any authenticated role. Explicitly
   // listed here for documentation; they match nothing above.
 ];

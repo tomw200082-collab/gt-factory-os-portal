@@ -24,7 +24,7 @@
 //   503/5xx → connection error banner
 // ---------------------------------------------------------------------------
 
-import { useState, useCallback } from "react";
+import { useState, useCallback, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { AlertTriangle } from "lucide-react";
@@ -34,7 +34,9 @@ import { RoleGate } from "@/lib/auth/role-gate";
 import { cn } from "@/lib/cn";
 import { PoLineEditor } from "@/components/purchase-orders/PoLineEditor";
 import { useOrderables } from "@/components/purchase-orders/useOrderables";
+import { useSupplierItemsByOrderable } from "@/components/purchase-orders/useSupplierItems";
 import {
+  approvedSupplierItems,
   emptyLine,
   todayPlusDays,
   validatePoDraft,
@@ -63,6 +65,7 @@ function ManualPoFormInner(): JSX.Element {
   // --- Master data (shared hook) --------------------------------------------
   const {
     supplierOptions,
+    suppliersById,
     orderableOptions,
     orderableByKey,
     suppliersLoading,
@@ -76,9 +79,54 @@ function ManualPoFormInner(): JSX.Element {
   // --- Form state -----------------------------------------------------------
   const [supplierId, setSupplierId] = useState("");
   const [expectedDate, setExpectedDate] = useState(todayPlusDays(7));
+  // Tranche 047 (D2) — once the operator edits the date by hand we never
+  // override it with a lead-time default again.
+  const [dateTouched, setDateTouched] = useState(false);
   const [manualReason, setManualReason] = useState("");
   const [notes, setNotes] = useState("");
   const [lines, setLines] = useState<LineDraft[]>([emptyLine()]);
+
+  // Tranche 047 (D1) — supplier_items per selected line (cached per
+  // orderable; powers the comparison strip, MOQ hints, no-mapping warnings,
+  // and the D2 lead-time date default).
+  const { byOrderable: supplierItemsByOrderable } = useSupplierItemsByOrderable(
+    lines.map((l) => l.orderable_key),
+  );
+
+  // Tranche 047 (D2) — default expected date from the chosen supplier's lead
+  // time: max supplier_items.lead_time_days across the chosen lines, else the
+  // supplier's default_lead_time_days, else 7. Computed inline (cheap) — the
+  // supplier-items map is rebuilt per render.
+  let defaultLeadDays: number | null = null;
+  if (supplierId) {
+    let maxLead: number | null = null;
+    for (const l of lines) {
+      const rows = supplierItemsByOrderable.get(l.orderable_key);
+      if (!rows) continue;
+      for (const r of approvedSupplierItems(rows)) {
+        if (r.supplier_id !== supplierId || r.lead_time_days == null) continue;
+        if (maxLead == null || r.lead_time_days > maxLead) {
+          maxLead = r.lead_time_days;
+        }
+      }
+    }
+    defaultLeadDays =
+      maxLead ?? suppliersById.get(supplierId)?.default_lead_time_days ?? 7;
+  }
+
+  useEffect(() => {
+    if (dateTouched || !supplierId || defaultLeadDays == null) return;
+    setExpectedDate(todayPlusDays(defaultLeadDays));
+  }, [dateTouched, supplierId, defaultLeadDays]);
+
+  const expectedDateHint =
+    !dateTouched && supplierId && defaultLeadDays != null
+      ? `based on ${defaultLeadDays}-day lead time`
+      : null;
+  // Price Truth (Tranche 043) — when at least one line carries an entered
+  // price, the operator confirms (default checked) that small deltas may
+  // write back to the supplier-item catalog cost. Sent only in that case.
+  const [confirmPriceUpdate, setConfirmPriceUpdate] = useState(true);
 
   // --- Submission state -----------------------------------------------------
   type Phase = "idle" | "submitting" | "success" | "idempotent";
@@ -117,6 +165,13 @@ function ManualPoFormInner(): JSX.Element {
     [orderableByKey],
   );
 
+  // Price Truth (Tranche 043) — per-line unit_price_net rides along only
+  // when the operator actually typed one; confirm_price_update (and its
+  // checkbox) only exist when at least one line carries a price.
+  const anyPriceEntered = lines.some(
+    (l) => (l.unit_price_net ?? "").trim() !== "",
+  );
+
   // --- Submit ---------------------------------------------------------------
   async function handleSubmit(
     e: React.FormEvent<HTMLFormElement>,
@@ -143,16 +198,32 @@ function ManualPoFormInner(): JSX.Element {
       notes: notes.trim() || null,
       source_type: "manual" as const,
       lines: lines.map((l) => {
+        const priceRaw = (l.unit_price_net ?? "").trim();
         const row = orderableByKey.get(l.orderable_key);
         if (!row) throw new Error("Orderable not found");
+        // Tranche 047 (D1) — include the comparison-strip pin only when it
+        // belongs to the chosen header supplier: the backend resolves the
+        // pin against the PO supplier and would 409 on a mismatch.
+        const pinRows = supplierItemsByOrderable.get(l.orderable_key) ?? [];
+        const pin = l.supplier_item_id
+          ? pinRows.find((r) => r.supplier_item_id === l.supplier_item_id)
+          : undefined;
+        const pinMatchesSupplier = pin && pin.supplier_id === supplierId;
         return {
           ...(row.kind === "component"
             ? { component_id: row.id, item_id: null }
             : { item_id: row.id, component_id: null }),
           qty_ordered: Number(l.quantity),
           uom_id: l.uom,
+          ...(priceRaw !== "" ? { unit_price_net: Number(priceRaw) } : {}),
+          ...(pinMatchesSupplier
+            ? { supplier_item_id: pin.supplier_item_id }
+            : {}),
         };
       }),
+      ...(anyPriceEntered
+        ? { confirm_price_update: confirmPriceUpdate }
+        : {}),
     };
 
     let res: Response;
@@ -185,7 +256,65 @@ function ManualPoFormInner(): JSX.Element {
     }
 
     if (res.status === 409) {
-      const data = (await res.json().catch(() => ({}))) as { po_id?: string };
+      const data = (await res.json().catch(() => ({}))) as {
+        po_id?: string;
+        error?: string;
+        detail?: string;
+      };
+      // Price Truth (Tranche 043) — the DB-layer price validation surfaces
+      // as a 409 token (not a Zod 422 with issues[]). The message does not
+      // identify the offending line, so highlight the price field on every
+      // line that carries an entered price, mirroring the 422 per-field
+      // mapping pattern (inline error + banner + focus first field).
+      if (
+        data.error === "INVALID_PRICE" ||
+        data.error === "INVALID_SUPPLIER_ITEM"
+      ) {
+        const lineFieldErrors: Record<
+          number,
+          {
+            orderable_key?: string;
+            quantity?: string;
+            uom?: string;
+            unit_price_net?: string;
+          }
+        > = {};
+        let firstFocusId: string | null = null;
+        lines.forEach((l, idx) => {
+          if ((l.unit_price_net ?? "").trim() === "") return;
+          lineFieldErrors[idx] = {
+            unit_price_net:
+              data.error === "INVALID_PRICE"
+                ? "The server rejected this price. Enter a number of 0 or more, or leave it blank."
+                : "The server could not match a supplier item for this priced line.",
+          };
+          if (!firstFocusId) firstFocusId = `po-new-line-price-${idx}`;
+        });
+        setErrors(
+          Object.keys(lineFieldErrors).length > 0
+            ? { line_items: lineFieldErrors }
+            : {},
+        );
+        setServerError(
+          "The entered price was rejected — see the highlighted line price fields below.",
+        );
+        if (firstFocusId && typeof window !== "undefined") {
+          window.requestAnimationFrame(() => {
+            const el = document.getElementById(firstFocusId!);
+            if (el) {
+              el.scrollIntoView({ behavior: "smooth", block: "center" });
+              if (
+                "focus" in el &&
+                typeof (el as HTMLElement).focus === "function"
+              ) {
+                (el as HTMLElement).focus({ preventScroll: true });
+              }
+            }
+          });
+        }
+        setPhase("idle");
+        return;
+      }
       setPhase("idempotent");
       setSuccessPoId(data.po_id ?? null);
       return;
@@ -300,7 +429,7 @@ function ManualPoFormInner(): JSX.Element {
   if (phase === "success" || phase === "idempotent") {
     return (
       <>
-        <WorkflowHeader eyebrow="Purchase Orders" title="New manual order" />
+        <WorkflowHeader size="section" eyebrow="Purchase Orders" title="New manual order" />
         <SectionCard>
           <div
             className="px-6 py-10 text-center space-y-3"
@@ -386,6 +515,7 @@ function ManualPoFormInner(): JSX.Element {
   return (
     <>
       <WorkflowHeader
+        size="section"
         eyebrow="Purchase Orders"
         title="New manual order"
         description="Manual purchase order — created without a planning recommendation. A reason is required for traceability."
@@ -448,7 +578,10 @@ function ManualPoFormInner(): JSX.Element {
           notes={notes}
           lines={lines}
           onSupplierChange={setSupplierId}
-          onExpectedDateChange={setExpectedDate}
+          onExpectedDateChange={(v) => {
+            setDateTouched(true);
+            setExpectedDate(v);
+          }}
           onManualReasonChange={setManualReason}
           onNotesChange={setNotes}
           onAddLine={addLine}
@@ -462,7 +595,34 @@ function ManualPoFormInner(): JSX.Element {
           suppliersLoading={suppliersLoading}
           itemsLoading={itemsLoading}
           componentsLoading={componentsLoading}
+          supplierItemsByOrderable={supplierItemsByOrderable}
+          expectedDateHint={expectedDateHint}
         />
+
+        {/* Price write-back confirmation — only when a price was entered */}
+        {anyPriceEntered && (
+          <div className="flex items-start gap-2">
+            <input
+              id="po-new-confirm-price-update"
+              data-testid="po-new-confirm-price-update"
+              type="checkbox"
+              checked={confirmPriceUpdate}
+              onChange={(e) => setConfirmPriceUpdate(e.target.checked)}
+              disabled={phase === "submitting"}
+              className="mt-0.5"
+            />
+            <label
+              htmlFor="po-new-confirm-price-update"
+              className="text-sm text-fg"
+            >
+              Update catalog prices from this order
+              <span className="block text-3xs font-normal text-fg-faint">
+                Small changes apply right away; bigger changes wait for admin
+                approval under Price updates.
+              </span>
+            </label>
+          </div>
+        )}
 
         {/* Footer — submit + cancel */}
         <div className="flex flex-col-reverse sm:flex-row sm:items-center sm:justify-end gap-3 pt-2">

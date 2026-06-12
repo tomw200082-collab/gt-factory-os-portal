@@ -302,10 +302,7 @@ function NewPoDropdown(): JSX.Element | null {
         type="button"
         data-testid="po-list-new-po-trigger"
         onClick={() => setOpen((v) => !v)}
-        className={cn(
-          "inline-flex items-center gap-1.5 rounded-md border border-accent/40 bg-accent-soft px-3 py-1.5 text-xs font-semibold text-accent transition-colors",
-          "hover:bg-accent-soft/80 hover:border-accent/60",
-        )}
+        className="btn btn-outline btn-sm"
         aria-haspopup="menu"
         aria-expanded={open}
       >
@@ -582,6 +579,7 @@ export default function PurchaseOrdersListPage() {
   return (
     <>
       <WorkflowHeader
+        size="section"
         eyebrow="Purchase Orders"
         title="Purchase Orders"
         description="Live read of approved purchase orders. Created from approved planning recommendations or manually by planners and admins."
@@ -598,6 +596,24 @@ export default function PurchaseOrdersListPage() {
         }
       />
 
+      {/* KPI skeleton — Tranche 047 (INTER-006): fixed-width placeholder
+          blocks while the counts query is pending, so the tile row does not
+          pop in and shift the layout. */}
+      {allPosQuery.isLoading && (
+        <div
+          className="flex flex-wrap gap-3 mb-2"
+          data-testid="po-stats-skeleton"
+          aria-busy="true"
+          aria-live="polite"
+        >
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div
+              key={i}
+              className="h-[78px] w-[140px] animate-pulse rounded-md border border-border/60 bg-bg-subtle"
+            />
+          ))}
+        </div>
+      )}
       {/* KPI tile row — 4 tiles: Open / Partial / Late / Received */}
       {allPosQuery.isError && (
         <div
@@ -778,6 +794,19 @@ export default function PurchaseOrdersListPage() {
           </div>
         </div>
 
+        {/* Tranche 047 (INTER-008 fallback) — the list query is capped at
+            500 rows; when the response hits the cap, say so instead of
+            silently truncating. */}
+        {rows.length === 500 && (
+          <div
+            className="border-b border-border/60 bg-bg-subtle/50 px-5 py-2 text-xs text-fg-muted"
+            data-testid="po-list-truncation-banner"
+            role="status"
+          >
+            Showing the most recent 500 orders — use filters to narrow.
+          </div>
+        )}
+
         {posQuery.isLoading ? (
           <div className="p-5">
             <div className="space-y-2" aria-busy="true" aria-live="polite">
@@ -855,40 +884,107 @@ export default function PurchaseOrdersListPage() {
             )}
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table
-              className="w-full border-collapse text-sm"
-              data-testid="po-list-table"
-            >
+          <>
+            {/* Mobile card list (<md) — Tranche 051 (FLOW-018). Same rows,
+                same sort, same filters; the table remains the md+ surface. */}
+            <div className="space-y-2 p-3 md:hidden" data-testid="po-list-cards">
+              {filtered.map((r) => {
+                const today = new Date().toISOString().slice(0, 10);
+                const isLate =
+                  (r.status === "OPEN" || r.status === "PARTIAL") &&
+                  !!r.expected_receive_date &&
+                  r.expected_receive_date < today;
+                const daysLate = isLate
+                  ? Math.floor(
+                      (Date.now() -
+                        new Date(r.expected_receive_date!).getTime()) /
+                        86400000,
+                    )
+                  : 0;
+                return (
+                  <Link
+                    key={r.po_id}
+                    href={`/purchase-orders/${encodeURIComponent(r.po_id)}`}
+                    className={cn(
+                      "flex flex-col gap-2 rounded-lg border bg-bg px-3 py-3 transition hover:bg-bg-subtle/40",
+                      "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
+                      isLate
+                        ? "border-l-4 border-l-danger/50 border-y-border/70 border-r-border/70"
+                        : "border-border/70",
+                    )}
+                    data-testid="po-list-card"
+                    data-po-id={r.po_id}
+                    data-status={r.status}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="min-w-0 flex-1">
+                        <div className="font-mono text-sm font-semibold text-fg">
+                          {r.po_number}
+                        </div>
+                        <div className="mt-0.5 truncate text-xs text-fg-muted">
+                          {r.supplier_name ?? (
+                            <span className="italic" title={`supplier_id ${r.supplier_id}`}>
+                              Unknown supplier
+                              <span className="ml-1 font-mono text-3xs opacity-70">
+                                ({r.supplier_id.slice(0, 8)}…)
+                              </span>
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <POStatusBadge status={r.status} />
+                    </div>
+                    <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs">
+                      <span className="inline-flex items-baseline gap-1">
+                        <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                          Expected
+                        </span>
+                        {r.expected_receive_date ? (
+                          <span
+                            className={cn(
+                              "tabular-nums",
+                              isLate
+                                ? "font-semibold text-danger-fg"
+                                : "text-fg-muted",
+                            )}
+                          >
+                            {fmtDate(r.expected_receive_date)}
+                            {isLate
+                              ? ` · ${daysLate} day${daysLate === 1 ? "" : "s"} late`
+                              : ""}
+                          </span>
+                        ) : (
+                          <span className="text-fg-faint">—</span>
+                        )}
+                      </span>
+                      <span className="ml-auto inline-flex items-baseline gap-1">
+                        <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                          Total
+                        </span>
+                        <span className="font-mono tabular-nums text-fg">
+                          {fmtMoney(r.total_net, r.currency)}
+                        </span>
+                      </span>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+
+            {/* Desktop table (md+) — unchanged. */}
+            <div className="hidden overflow-x-auto md:block">
+            <table className="table-base" data-testid="po-list-table">
               <thead>
-                <tr className="border-b border-border/70 bg-bg-subtle/60">
-                  <th className="px-4 py-2.5 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    PO number
-                  </th>
-                  <th className="px-3 py-2.5 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    Supplier
-                  </th>
-                  <th className="px-3 py-2.5 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    Status
-                  </th>
-                  <th className="px-3 py-2.5 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    Order date
-                  </th>
-                  <th className="px-3 py-2.5 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    Expected
-                  </th>
-                  <th className="px-3 py-2.5 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    Receipts
-                  </th>
-                  <th className="px-3 py-2.5 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    Total net
-                  </th>
-                  <th className="px-3 py-2.5 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    Source
-                  </th>
-                  <th className="px-3 py-2.5 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                    Created
-                  </th>
+                <tr>
+                  <th>PO number</th>
+                  <th>Supplier</th>
+                  <th>Status</th>
+                  <th>Order date</th>
+                  <th>Expected</th>
+                  <th>Receipts</th>
+                  <th className="text-right">Total net</th>
+                  <th>Source</th>
+                  <th>Created</th>
                 </tr>
               </thead>
               <tbody>
@@ -909,8 +1005,7 @@ export default function PurchaseOrdersListPage() {
                     <tr
                       key={r.po_id}
                       className={cn(
-                        "cursor-pointer border-b border-border/40 last:border-b-0 transition-colors",
-                        "hover:bg-bg-subtle/40",
+                        "cursor-pointer",
                         isLate && "bg-danger/[0.02]",
                       )}
                       data-testid="po-list-row"
@@ -922,7 +1017,7 @@ export default function PurchaseOrdersListPage() {
                         )
                       }
                     >
-                      <td className="px-4 py-2.5 font-mono text-xs">
+                      <td className="font-mono text-xs">
                         <Link
                           href={`/purchase-orders/${encodeURIComponent(r.po_id)}`}
                           className="font-semibold text-fg hover:text-accent transition-colors"
@@ -931,7 +1026,7 @@ export default function PurchaseOrdersListPage() {
                           {r.po_number}
                         </Link>
                       </td>
-                      <td className="px-3 py-2.5 text-xs text-fg">
+                      <td className="text-xs">
                         {r.supplier_name ?? (
                           <span
                             className="text-fg-muted italic"
@@ -944,13 +1039,13 @@ export default function PurchaseOrdersListPage() {
                           </span>
                         )}
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td>
                         <POStatusBadge status={r.status} />
                       </td>
-                      <td className="px-3 py-2.5 text-xs text-fg-muted tabular-nums">
+                      <td className="text-xs text-fg-muted tabular-nums">
                         {fmtDate(r.order_date)}
                       </td>
-                      <td className="px-3 py-2.5 text-xs">
+                      <td className="text-xs">
                         {r.expected_receive_date ? (
                           <div className="flex flex-col">
                             <span
@@ -973,16 +1068,16 @@ export default function PurchaseOrdersListPage() {
                           <span className="text-fg-faint">—</span>
                         )}
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td>
                         <LinesSummaryCell summary={r.lines_summary} />
                       </td>
-                      <td className="px-3 py-2.5 text-right font-mono text-xs text-fg tabular-nums">
+                      <td className="text-right font-mono text-xs tabular-nums">
                         {fmtMoney(r.total_net, r.currency)}
                       </td>
-                      <td className="px-3 py-2.5">
+                      <td>
                         <SourceBadge row={r} />
                       </td>
-                      <td className="px-3 py-2.5 text-xs text-fg-muted tabular-nums">
+                      <td className="text-xs text-fg-muted tabular-nums">
                         {fmtDateTime(r.created_at)}
                       </td>
                     </tr>
@@ -990,7 +1085,8 @@ export default function PurchaseOrdersListPage() {
                 })}
               </tbody>
             </table>
-          </div>
+            </div>
+          </>
         )}
       </SectionCard>
     </>

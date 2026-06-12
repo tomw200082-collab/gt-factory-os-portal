@@ -230,6 +230,7 @@ export default function PlanningRunsListPage() {
   return (
     <div className="space-y-6">
       <WorkflowHeader
+        size="section"
         eyebrow="Planning workspace"
         title="Planning runs"
         description="Each run turns the active forecast into purchase and production recommendations."
@@ -252,6 +253,28 @@ export default function PlanningRunsListPage() {
           ) : null
         }
       />
+
+      {/* Tranche 045 — runs are demoted from ordering. This banner declares
+          the surface diagnostic-only and routes ordering to Procurement. */}
+      <div
+        role="note"
+        className="rounded border border-accent-border bg-accent-softer px-4 py-3 text-sm"
+        data-testid="planning-runs-diagnostic-banner"
+      >
+        <div className="font-semibold text-fg-strong">
+          Planning runs are diagnostic only — quantities here are not for
+          ordering.
+        </div>
+        <div className="mt-1 text-xs leading-relaxed text-fg-muted">
+          Use this page to understand what the engine saw and why.{" "}
+          <Link
+            href="/planning/procurement"
+            className="font-semibold text-accent hover:underline"
+          >
+            Order through Procurement →
+          </Link>
+        </div>
+      </div>
 
       {breakGlass ? (
         <div
@@ -395,27 +418,14 @@ export default function PlanningRunsListPage() {
           <>
             {/* Desktop table */}
             <div className="hidden sm:block overflow-x-auto">
-              <table
-                className="w-full border-collapse text-sm"
-                data-testid="planning-runs-table"
-              >
+              <table className="table-base" data-testid="planning-runs-table">
                 <thead>
-                  <tr className="border-b border-border/70 bg-bg-subtle/60 text-left">
-                    <th className="px-3 py-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      Run date
-                    </th>
-                    <th className="px-3 py-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      Status
-                    </th>
-                    <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      Recommendations
-                    </th>
-                    <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      Exceptions
-                    </th>
-                    <th className="px-3 py-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                      Triggered by
-                    </th>
+                  <tr>
+                    <th>Run date</th>
+                    <th>Status</th>
+                    <th className="text-right">Recommendations</th>
+                    <th className="text-right">Exceptions</th>
+                    <th>Triggered by</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -426,7 +436,7 @@ export default function PlanningRunsListPage() {
                     return (
                       <tr
                         key={r.run_id}
-                        className="border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/50 cursor-pointer transition-colors"
+                        className="cursor-pointer"
                         data-testid="planning-runs-row"
                         data-run-id={r.run_id}
                         data-status={r.status}
@@ -436,7 +446,7 @@ export default function PlanningRunsListPage() {
                           )
                         }
                       >
-                        <td className="px-3 py-3">
+                        <td>
                           <Link
                             href={`/planning/runs/${encodeURIComponent(r.run_id)}`}
                             className="text-sm font-medium text-fg-strong hover:underline"
@@ -445,13 +455,13 @@ export default function PlanningRunsListPage() {
                             {fmtRunDate(r.executed_at)}
                           </Link>
                         </td>
-                        <td className="px-3 py-3">
+                        <td>
                           <RunStatusBadge status={r.status} />
                         </td>
-                        <td className="px-3 py-3 text-right font-mono tabular-nums text-fg">
+                        <td className="text-right font-mono tabular-nums">
                           {recs}
                         </td>
-                        <td className="px-3 py-3 text-right font-mono tabular-nums">
+                        <td className="text-right font-mono tabular-nums">
                           {r.summary.exceptions_count > 0 ? (
                             <span className="text-warning-fg font-semibold">
                               {r.summary.exceptions_count}
@@ -460,7 +470,7 @@ export default function PlanningRunsListPage() {
                             <span className="text-fg-muted">0</span>
                           )}
                         </td>
-                        <td className="px-3 py-3 text-xs text-fg-muted">
+                        <td className="text-xs text-fg-muted">
                           {actorLabel(r)}
                         </td>
                       </tr>

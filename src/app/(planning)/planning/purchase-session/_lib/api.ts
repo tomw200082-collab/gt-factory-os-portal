@@ -13,6 +13,7 @@ import type {
   PoEnvelope,
   LineEdit,
   LineAdd,
+  PlaceLinePrice,
   SessionType,
 } from "./types";
 
@@ -55,12 +56,16 @@ export function useCurrentSession() {
 
 function usePurchaseMutation<TArgs, TResult>(
   fn: (args: TArgs) => Promise<TResult>,
+  extraInvalidateKeys?: readonly (readonly string[])[],
 ) {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: fn,
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["purchase-session"] });
+      for (const key of extraInvalidateKeys ?? []) {
+        void qc.invalidateQueries({ queryKey: [...key] });
+      }
     },
   });
 }
@@ -114,6 +119,11 @@ export function usePlacePo() {
       poId: string;
       expected_receive_date?: string;
       notes?: string;
+      // Price Truth (Tranche 043) — additive, optional. Existing callers that
+      // omit these are unchanged: JSON.stringify drops undefined keys, so the
+      // strict backend schema never sees them.
+      line_prices?: PlaceLinePrice[];
+      confirm_price_update?: boolean;
     }): Promise<PoEnvelope> => {
       const res = await fetch(`/api/purchase-session/po/${args.poId}/place`, {
         method: "POST",
@@ -121,10 +131,22 @@ export function usePlacePo() {
         body: JSON.stringify({
           expected_receive_date: args.expected_receive_date,
           notes: args.notes,
+          line_prices: args.line_prices,
+          confirm_price_update: args.confirm_price_update,
         }),
       });
       return (await jsonOrThrow(res)) as PoEnvelope;
     },
+    // Tranche 042 — a placed PO becomes visible to the PO list
+    // (["planner","purchase-orders",…] in (po)/purchase-orders/page.tsx),
+    // the PO detail surfaces (["purchase-orders",…]), and the goods-receipt
+    // open-PO dropdown (["ops","receipts","open-pos"]). Invalidate all three
+    // so they refresh without a manual reload.
+    [
+      ["planner", "purchase-orders"],
+      ["purchase-orders"],
+      ["ops", "receipts", "open-pos"],
+    ],
   );
 }
 

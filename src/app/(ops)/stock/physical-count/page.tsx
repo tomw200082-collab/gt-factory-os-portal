@@ -16,6 +16,7 @@
 // ---------------------------------------------------------------------------
 
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
@@ -314,6 +315,19 @@ export default function PhysicalCountPage() {
   // ---------------------------------------------------------------------------
   const [searchQuery, setSearchQuery] = useState<string>("");
   const searchInputRef = useRef<HTMLInputElement>(null);
+
+  // Tranche 041 — StockTruthDrawer deep-links ?item_id=; pre-fill the
+  // pick-step search once on mount so the operator lands on the right item
+  // (mirrors the production-actual item_id prefill; one-shot, never stomps
+  // a manually typed query afterwards).
+  const searchParams = useSearchParams();
+  const initialItemId = searchParams?.get("item_id") ?? "";
+  const itemPrefillAppliedRef = useRef(false);
+  useEffect(() => {
+    if (itemPrefillAppliedRef.current) return;
+    itemPrefillAppliedRef.current = true;
+    if (initialItemId) setSearchQuery(initialItemId);
+  }, [initialItemId]);
   const countedQtyInputRef = useRef<HTMLInputElement>(null);
   // Anchor for the portaled dropdown — wraps the input row so we can measure
   // its viewport rect and position the panel directly below it. The wrapper
@@ -625,6 +639,7 @@ export default function PhysicalCountPage() {
   return (
     <>
       <WorkflowHeader
+        size="section"
         eyebrow="Operator form"
         title="Physical Count"
         description="Pick an item, count what you see, submit."

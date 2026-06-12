@@ -14,7 +14,7 @@ import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { ArrowLeft } from "lucide-react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "@/lib/auth/session-provider";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
@@ -153,6 +153,7 @@ function formatDelta(delta: string | null | undefined, unit: string): string {
 
 export default function PhysicalCountReviewPage() {
   const { session } = useSession();
+  const queryClient = useQueryClient();
   const params = useParams<{ submission_id: string }>();
   const submissionId = params.submission_id;
   const [approvalNotes, setApprovalNotes] = useState("");
@@ -175,9 +176,19 @@ export default function PhysicalCountReviewPage() {
 
   const d = detailQuery.data;
 
+  // Tranche 042 — the inbox list reads this source query (see
+  // (inbox)/inbox/page.tsx QK_PC); invalidate it on a successful decision
+  // so "Back to inbox" never shows the stale row.
+  const invalidateInboxSources = () => {
+    void queryClient.invalidateQueries({
+      queryKey: ["inbox", "source", "approvals", "physical_count"],
+    });
+  };
+
   const handleApprove = async () => {
     setBusy(true);
     const r = await callApprove(submissionId, session, approvalNotes || null);
+    if (r.kind === "approved") invalidateInboxSources();
     setOutcome(r);
     setBusy(false);
   };
@@ -185,6 +196,7 @@ export default function PhysicalCountReviewPage() {
     if (!rejectionReason.trim()) return;
     setBusy(true);
     const r = await callReject(submissionId, session, rejectionReason);
+    if (r.kind === "rejected") invalidateInboxSources();
     setOutcome(r);
     setBusy(false);
   };

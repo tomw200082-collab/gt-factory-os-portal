@@ -23,10 +23,14 @@ import userEvent from "@testing-library/user-event";
 import type { SearchableSelectOption } from "@/components/fields/SearchableSelect";
 import { PoLineEditor, type PoLineEditorProps } from "./PoLineEditor";
 import {
+  approvedSupplierItems,
+  costPerOrderUom,
+  dedupeBySupplier,
   emptyLine,
   validatePoDraft,
   type OrderableRow,
   type PoDraft,
+  type SupplierItemRow,
 } from "./types";
 
 afterEach(() => {
@@ -133,6 +137,38 @@ const ORDERABLE_OPTIONS: SearchableSelectOption[] = ORDERABLES.map((r) => ({
 
 const SUPPLIER_OPTIONS: SearchableSelectOption[] = [
   { value: "sup_1", label: "Acme Supplies", meta: "sup_1" },
+  { value: "sup_2", label: "Bolt Trading", meta: "sup_2" },
+];
+
+// --- Tranche 047 (D1) — supplier-item fixtures ------------------------------
+
+function makeSi(over: Partial<SupplierItemRow> = {}): SupplierItemRow {
+  return {
+    supplier_item_id: "si_1",
+    supplier_id: "sup_1",
+    component_id: "c_1",
+    item_id: null,
+    is_primary: false,
+    order_uom: "CARTON",
+    inventory_uom: "UNIT",
+    pack_conversion: "12",
+    lead_time_days: 7,
+    moq: "24",
+    approval_status: "approved",
+    std_cost_per_inv_uom: "2.5",
+    ...over,
+  };
+}
+
+const TWO_SUPPLIERS: SupplierItemRow[] = [
+  makeSi({ supplier_item_id: "si_1", supplier_id: "sup_1", is_primary: true }),
+  makeSi({
+    supplier_item_id: "si_2",
+    supplier_id: "sup_2",
+    lead_time_days: 3,
+    std_cost_per_inv_uom: "3",
+    moq: "10",
+  }),
 ];
 
 function renderEditor(
@@ -189,5 +225,126 @@ describe("PoLineEditor", () => {
     const props = renderEditor();
     await user.type(screen.getByTestId("po-new-line-qty-0"), "7");
     expect(props.onUpdateLine).toHaveBeenCalledWith(0, { quantity: "7" });
+  });
+});
+
+// --- Tranche 047 (D1/D2) — supplier comparison ------------------------------
+
+describe("supplier-item helpers (T047)", () => {
+  it("H1 costPerOrderUom = std_cost_per_inv_uom × pack_conversion", () => {
+    expect(costPerOrderUom(makeSi())).toBe(30); // 2.5 × 12
+    expect(costPerOrderUom(makeSi({ std_cost_per_inv_uom: null }))).toBeNull();
+    expect(
+      costPerOrderUom(makeSi({ pack_conversion: "not-a-number" })),
+    ).toBeNull();
+  });
+
+  it("H2 approvedSupplierItems keeps only approval_status='approved'", () => {
+    const rows = [makeSi(), makeSi({ approval_status: "pending" })];
+    expect(approvedSupplierItems(rows)).toHaveLength(1);
+  });
+
+  it("H3 dedupeBySupplier keeps one row per supplier, primary first", () => {
+    const rows = [
+      makeSi({ supplier_item_id: "a", supplier_id: "sup_1" }),
+      makeSi({ supplier_item_id: "b", supplier_id: "sup_1", is_primary: true }),
+      makeSi({ supplier_item_id: "c", supplier_id: "sup_2" }),
+    ];
+    const out = dedupeBySupplier(rows);
+    expect(out).toHaveLength(2);
+    expect(out[0].supplier_item_id).toBe("b");
+  });
+});
+
+describe("PoLineEditor supplier comparison strip (T047)", () => {
+  const LINE = { orderable_key: "component:c_1", quantity: "10", uom: "UNIT" as const };
+
+  it("S1 renders the strip for a multi-supplier line, primary pre-selected", () => {
+    renderEditor({
+      supplierId: "sup_1",
+      lines: [LINE],
+      supplierItemsByOrderable: new Map([["component:c_1", TWO_SUPPLIERS]]),
+    });
+    expect(screen.getByTestId("po-new-line-suppliers-0")).toBeTruthy();
+    const primaryChip = screen.getByTestId("po-new-line-supplier-chip-0-si_1");
+    const otherChip = screen.getByTestId("po-new-line-supplier-chip-0-si_2");
+    expect(primaryChip.getAttribute("aria-checked")).toBe("true");
+    expect(otherChip.getAttribute("aria-checked")).toBe("false");
+    // Chip caption: name · ₪cost-per-order-uom · Xd lead · MOQ Y
+    expect(otherChip.textContent).toContain("Bolt Trading");
+    expect(otherChip.textContent).toContain("₪36"); // 3 × 12
+    expect(otherChip.textContent).toContain("3d lead");
+    expect(otherChip.textContent).toContain("MOQ 10");
+  });
+
+  it("S2 selecting a chip pins the line's supplier_item_id", async () => {
+    const user = userEvent.setup();
+    const props = renderEditor({
+      supplierId: "sup_1",
+      lines: [LINE],
+      supplierItemsByOrderable: new Map([["component:c_1", TWO_SUPPLIERS]]),
+    });
+    await user.click(screen.getByTestId("po-new-line-supplier-chip-0-si_2"));
+    expect(props.onUpdateLine).toHaveBeenCalledWith(0, {
+      supplier_item_id: "si_2",
+    });
+  });
+
+  it("S3 no strip for a single-supplier line", () => {
+    renderEditor({
+      supplierId: "sup_1",
+      lines: [LINE],
+      supplierItemsByOrderable: new Map([
+        ["component:c_1", [TWO_SUPPLIERS[0]]],
+      ]),
+    });
+    expect(screen.queryByTestId("po-new-line-suppliers-0")).toBeNull();
+  });
+
+  it("S4 warns when the header supplier has no approved mapping", () => {
+    renderEditor({
+      supplierId: "sup_2",
+      lines: [LINE],
+      supplierItemsByOrderable: new Map([
+        ["component:c_1", [TWO_SUPPLIERS[0]]], // only sup_1 approved
+      ]),
+    });
+    const warning = screen.getByTestId("po-new-line-no-mapping-0");
+    expect(warning.textContent).toContain("Bolt Trading");
+    expect(warning.textContent).toContain("has no mapping for this item");
+  });
+
+  it("S5 no warning while supplier items are not yet resolved", () => {
+    renderEditor({
+      supplierId: "sup_2",
+      lines: [LINE],
+      supplierItemsByOrderable: new Map(), // not fetched yet
+    });
+    expect(screen.queryByTestId("po-new-line-no-mapping-0")).toBeNull();
+  });
+
+  it("S6 MOQ hint under qty + catalog price placeholder", () => {
+    renderEditor({
+      supplierId: "sup_1",
+      lines: [LINE],
+      supplierItemsByOrderable: new Map([
+        ["component:c_1", [TWO_SUPPLIERS[0]]],
+      ]),
+    });
+    expect(screen.getByTestId("po-new-line-moq-0").textContent).toContain(
+      "MOQ 24 CARTON",
+    );
+    const price = screen.getByTestId(
+      "po-new-line-price-0",
+    ) as HTMLInputElement;
+    expect(price.placeholder).toContain("₪30");
+    expect(price.placeholder).toContain("CARTON");
+  });
+
+  it("S7 renders the expected-date lead-time hint when provided", () => {
+    renderEditor({ expectedDateHint: "based on 7-day lead time" });
+    expect(
+      screen.getByTestId("po-new-expected-date-hint").textContent,
+    ).toContain("based on 7-day lead time");
   });
 });

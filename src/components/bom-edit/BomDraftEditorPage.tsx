@@ -536,6 +536,7 @@ export function BomDraftEditorPage({
           onConfirm={(confirmOverride) =>
             publishMutation.mutate({ confirmOverride })
           }
+          isSubmitting={publishMutation.isPending}
         />
       )}
     </>

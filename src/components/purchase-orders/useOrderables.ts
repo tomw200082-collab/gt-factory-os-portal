@@ -34,6 +34,9 @@ async function fetchJson<T>(url: string): Promise<T> {
 
 export interface UseOrderablesResult {
   supplierOptions: SearchableSelectOption[];
+  /** Tranche 047 (D2) — full supplier rows keyed by id, so the PO editor can
+   *  read default_lead_time_days without a second suppliers fetch. */
+  suppliersById: Map<string, SupplierRow>;
   orderableOptions: SearchableSelectOption[];
   orderableByKey: Map<string, OrderableRow>;
   suppliersLoading: boolean;
@@ -76,6 +79,12 @@ export function useOrderables(): UseOrderablesResult {
         label: s.supplier_name_official,
         meta: s.supplier_id,
       }));
+  }, [suppliersQuery.data]);
+
+  const suppliersById = useMemo(() => {
+    const m = new Map<string, SupplierRow>();
+    for (const s of suppliersQuery.data?.rows ?? []) m.set(s.supplier_id, s);
+    return m;
   }, [suppliersQuery.data]);
 
   // Unified orderable list: BOUGHT_FINISHED items + all active components,
@@ -131,6 +140,7 @@ export function useOrderables(): UseOrderablesResult {
 
   return {
     supplierOptions,
+    suppliersById,
     orderableOptions,
     orderableByKey,
     suppliersLoading: suppliersQuery.isLoading,

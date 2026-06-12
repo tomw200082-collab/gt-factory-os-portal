@@ -21,6 +21,7 @@ import {
 import { UnmappedSkusBanner } from "./_components/UnmappedSkusBanner";
 import { useInventoryFlow } from "./_lib/useInventoryFlow";
 import { usePlannedInflow, indexByItemDate } from "./_lib/plannedInflow";
+import { useGroups } from "@/lib/taxonomy/groups";
 import type { FlowItem, FlowQueryParams } from "./_lib/types";
 import { isAtRisk } from "./_lib/risk";
 import { cn } from "@/lib/cn";
@@ -37,11 +38,26 @@ export function InventoryFlowClient() {
 
   const params: FlowQueryParams = useMemo(() => {
     const family = searchParams.get("family") ?? undefined;
+    // Groups v1 (Tranche 044) — curated product-group filter, mirrored into
+    // the query params exactly like family so the fetch URL AND the TanStack
+    // cache key (["inventory-flow", params]) both carry it.
+    const productGroup = searchParams.get("product_group") ?? undefined;
     const atRiskOnly = searchParams.get("at_risk_only") !== "false";
-    return { family: family || undefined, at_risk_only: atRiskOnly };
+    return {
+      family: family || undefined,
+      product_group: productGroup || undefined,
+      at_risk_only: atRiskOnly,
+    };
   }, [searchParams]);
 
   const flowQuery = useInventoryFlow(params);
+
+  // Groups v1 — shared vocabulary for the product-group chip row.
+  const groupsQuery = useGroups();
+  const productGroups = useMemo(
+    () => (groupsQuery.data?.product_groups ?? []).filter((g) => g.active),
+    [groupsQuery.data],
+  );
   const data = flowQuery.data ?? null;
   const summary = data?.summary ?? null;
 
@@ -255,7 +271,11 @@ export function InventoryFlowClient() {
           <UnmappedSkusBanner fraction={fraction} />
         ) : (
           <>
-            <FilterBar families={families} items={data.items} />
+            <FilterBar
+              families={families}
+              items={data.items}
+              productGroups={productGroups}
+            />
 
             {filteredItems.length === 0 ? (
               <EmptyState

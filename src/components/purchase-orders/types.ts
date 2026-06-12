@@ -23,6 +23,26 @@ export interface SupplierRow {
   supplier_id: string;
   supplier_name_official: string;
   status: string;
+  // Tranche 047 (D2) — supplier-level fallback lead time, exposed by the
+  // suppliers LIST endpoint. Optional on the wire for forward/backward compat.
+  default_lead_time_days?: number | null;
+}
+
+// Tranche 047 (D1) — mirror of api/src/supplier-items/schemas.ts SupplierItemRow
+// (fields the PO editor consumes; numeric columns arrive as ::text strings).
+export interface SupplierItemRow {
+  supplier_item_id: string;
+  supplier_id: string;
+  component_id: string | null;
+  item_id: string | null;
+  is_primary: boolean;
+  order_uom: string | null;
+  inventory_uom: string | null;
+  pack_conversion: string;
+  lead_time_days: number | null;
+  moq: string | null;
+  approval_status: string | null;
+  std_cost_per_inv_uom: string | null;
 }
 
 export interface ComponentRow {
@@ -60,6 +80,14 @@ export interface LineDraft {
   orderable_key: string;
   quantity: string;
   uom: Uom;
+  // Price Truth (Tranche 043) — optional caller-entered net price per ORDER
+  // UOM, kept as string input state like `quantity`. Never required; when
+  // blank the backend falls back to the catalog (supplier-item) cost.
+  unit_price_net?: string;
+  // Tranche 047 (D1) — optional pin to a specific supplier_items row, set by
+  // the supplier comparison strip. The create API accepts it (Price Truth
+  // 0229 pin); the pin must belong to the PO header supplier to resolve.
+  supplier_item_id?: string;
 }
 
 export interface ValidationErrors {
@@ -69,7 +97,12 @@ export interface ValidationErrors {
   lines?: string;
   line_items?: Record<
     number,
-    { orderable_key?: string; quantity?: string; uom?: string }
+    {
+      orderable_key?: string;
+      quantity?: string;
+      uom?: string;
+      unit_price_net?: string;
+    }
   >;
   general?: string;
 }
@@ -100,6 +133,43 @@ export function emptyLine(): LineDraft {
   return { orderable_key: "", quantity: "", uom: "UNIT" };
 }
 
+// --- Tranche 047 (D1/D2) — supplier-item helpers ----------------------------
+// approval_status='approved' is the locked contract convention (migration
+// 0067/0069); the manual-PO function only resolves approved rows (0229).
+
+export function approvedSupplierItems(
+  rows: SupplierItemRow[],
+): SupplierItemRow[] {
+  return rows.filter((r) => r.approval_status === "approved");
+}
+
+/** Catalog cost per ORDER UOM: std_cost_per_inv_uom × pack_conversion.
+ *  Returns null when either factor is missing or non-numeric. */
+export function costPerOrderUom(si: SupplierItemRow): number | null {
+  if (si.std_cost_per_inv_uom == null) return null;
+  const cost = Number(si.std_cost_per_inv_uom);
+  const pack = Number(si.pack_conversion);
+  if (!isFinite(cost) || !isFinite(pack)) return null;
+  return cost * pack;
+}
+
+/** One approved row per supplier, primary first (mirrors the backend's
+ *  `order by is_primary desc` default pick). */
+export function dedupeBySupplier(rows: SupplierItemRow[]): SupplierItemRow[] {
+  const sorted = [...rows].sort((a, b) => {
+    if (a.is_primary !== b.is_primary) return a.is_primary ? -1 : 1;
+    return a.supplier_item_id.localeCompare(b.supplier_item_id);
+  });
+  const seen = new Set<string>();
+  const out: SupplierItemRow[] = [];
+  for (const r of sorted) {
+    if (seen.has(r.supplier_id)) continue;
+    seen.add(r.supplier_id);
+    out.push(r);
+  }
+  return out;
+}
+
 // --- Shared client-side validation -----------------------------------------
 // Mirrors the original /new validate() exactly; the only mode-dependent rule
 // is manual_reason, which is skipped entirely in "recommendation" mode.
@@ -111,7 +181,12 @@ export function validatePoDraft(
   const errs: ValidationErrors = {};
   const lineErrors: Record<
     number,
-    { orderable_key?: string; quantity?: string; uom?: string }
+    {
+      orderable_key?: string;
+      quantity?: string;
+      uom?: string;
+      unit_price_net?: string;
+    }
   > = {};
 
   if (!draft.supplierId.trim()) errs.supplier_id = "Required.";
@@ -130,8 +205,12 @@ export function validatePoDraft(
   } else {
     for (let i = 0; i < draft.lines.length; i++) {
       const l = draft.lines[i];
-      const le: { orderable_key?: string; quantity?: string; uom?: string } =
-        {};
+      const le: {
+        orderable_key?: string;
+        quantity?: string;
+        uom?: string;
+        unit_price_net?: string;
+      } = {};
       if (!l.orderable_key) le.orderable_key = "Required.";
       if (!l.quantity.trim()) {
         le.quantity = "Required.";
@@ -140,6 +219,13 @@ export function validatePoDraft(
         if (isNaN(n) || n <= 0) le.quantity = "Must be greater than 0.";
       }
       if (!l.uom) le.uom = "Required.";
+      // Price Truth (Tranche 043) — the price is OPTIONAL everywhere. Only
+      // validate when the operator actually typed something: numeric, >= 0.
+      const priceRaw = (l.unit_price_net ?? "").trim();
+      if (priceRaw !== "") {
+        const p = Number(priceRaw);
+        if (isNaN(p) || p < 0) le.unit_price_net = "Must be 0 or more.";
+      }
       if (Object.keys(le).length > 0) lineErrors[i] = le;
     }
   }

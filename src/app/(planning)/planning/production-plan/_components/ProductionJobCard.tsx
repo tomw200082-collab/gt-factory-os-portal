@@ -15,6 +15,7 @@ import {
   CheckCircle2,
   Ban,
   Factory,
+  FlaskConical,
   Pencil,
   Boxes,
   ChevronDown,
@@ -23,6 +24,7 @@ import {
 } from "lucide-react";
 import { Badge } from "@/components/badges/StatusBadge";
 import { cn } from "@/lib/cn";
+import { usePlanRecipeFlag } from "../_lib/useRecipe";
 import {
   fmtQty,
   computeVarianceSign,
@@ -45,19 +47,26 @@ interface BomImpactSnapshot {
   }>;
 }
 
-function useBomImpact(itemId: string | null) {
+function useBomImpact(itemId: string | null, planId: string | null) {
   return useQuery<BomImpactSnapshot | null>({
-    queryKey: ["bom-impact", itemId],
+    // Tranche 052 — plan id is part of the key: with from_plan_id the open
+    // response's base-source lines reflect that plan's improvised recipe,
+    // so snapshots must not be shared across plans of the same item.
+    queryKey: ["bom-impact", itemId, planId],
     queryFn: async () => {
       if (!itemId) return null;
-      const res = await fetch(
-        `/api/production-actuals/open?item_id=${encodeURIComponent(itemId)}`,
-        { headers: { Accept: "application/json" } },
-      );
+      const q = new URLSearchParams({ item_id: itemId });
+      if (planId) q.set("from_plan_id", planId);
+      const res = await fetch(`/api/production-actuals/open?${q.toString()}`, {
+        headers: { Accept: "application/json" },
+      });
       if (!res.ok) return null;
       return ((await res.json()) as BomImpactSnapshot | null) ?? null;
     },
-    enabled: false,
+    // Lazy via `enabled` (Tranche 052): both args are null while the panel
+    // is closed; opening it flips the key + enables the fetch. The previous
+    // `enabled:false` + manual refetch() raced the key change.
+    enabled: itemId !== null,
     staleTime: 5 * 60 * 1000,
   });
 }
@@ -68,24 +77,61 @@ export function ProductionJobCard({
   isToday,
   onEdit,
   onCancel,
+  onAdjustRecipe,
 }: {
   plan: ProductionPlanRow;
   canAct: boolean;
   isToday: boolean;
   onEdit: (p: ProductionPlanRow) => void;
   onCancel: (p: ProductionPlanRow) => void;
+  onAdjustRecipe: (p: ProductionPlanRow) => void;
 }) {
   const isLive = plan.rendered_state === "planned";
   const isDone = plan.rendered_state === "done";
   const isCancelled = plan.rendered_state === "cancelled";
   const isRec = !!plan.source_recommendation_id;
 
+  // B4 (Tranche 050) — raw DB status passthrough. Drafts are muted,
+  // not-yet-firmed rows with NO Report CTA; in-production rows get their own
+  // chip. rendered_state keeps driving the existing live/done/cancelled
+  // surfaces untouched.
+  const isDraft = plan.status === "draft";
+  const isInProduction = plan.status === "in_production";
+
+  // B4 (Tranche 050) — base-batch rows plan a BASE liquid batch across N
+  // pack SKUs; item_id/item_name are null, so render the batch label
+  // instead of an empty title.
+  const cardTitle = plan.is_base_batch
+    ? `Base batch · ${plan.pack_manifest_count} SKU${plan.pack_manifest_count === 1 ? "" : "s"}`
+    : (plan.item_name ?? plan.item_id);
+
   const [impactOpen, setImpactOpen] = useState(false);
-  const bomQuery = useBomImpact(impactOpen ? plan.item_id : null);
+  const bomQuery = useBomImpact(
+    impactOpen ? plan.item_id : null,
+    impactOpen ? plan.plan_id : null,
+  );
+
+  // Tranche 052 — recipe-override eligibility: MANUFACTURED single-item
+  // plans only (base-batch rows and REPACK items have no per-plan liquid
+  // override surface).
+  const recipeEligible =
+    !plan.is_base_batch &&
+    plan.item_id !== null &&
+    plan.item_supply_method === "MANUFACTURED";
+
+  // Override-flag path (Tranche 052): the plan-list DTO does NOT carry an
+  // override flag and a per-card recipe GET would be too heavy. The flag
+  // query is therefore (a) written into the cache by the save mutation and
+  // (b) lazily fetched only while the BOM-impact panel is open. Until either
+  // happens it stays undefined and no badge renders.
+  const hasCustomRecipe = usePlanRecipeFlag(plan.plan_id, {
+    enabled: impactOpen && recipeEligible,
+  });
 
   function toggleImpact() {
+    // Opening flips the useBomImpact key to (item_id, plan_id) and enables
+    // the query — no manual refetch needed (Tranche 052).
     setImpactOpen((v) => !v);
-    if (!impactOpen) void bomQuery.refetch();
   }
 
   const rmLines = useMemo(() => {
@@ -117,13 +163,16 @@ export function ProductionJobCard({
         "group relative rounded-lg border-l-[3px] border border-border/40",
         "transition-all duration-150 cursor-default",
         "hover:ring-1 hover:ring-accent/20 hover:shadow-sm",
-        isLive && !isCancelled && "border-l-warning bg-bg-raised border-warning/20",
+        isLive && !isCancelled && !isDraft && "border-l-warning bg-bg-raised border-warning/20",
         isDone && "border-l-success bg-bg-raised border-success/20",
         isCancelled && "border-l-border/40 bg-bg-subtle/60 opacity-70",
+        // B4 — drafts are muted: not firmed, no urgency color.
+        isDraft && !isCancelled && !isDone && "border-l-border/60 bg-bg-subtle/50 opacity-80",
       )}
       data-testid="production-job-card"
       data-plan-id={plan.plan_id}
       data-rendered-state={plan.rendered_state}
+      data-plan-status={plan.status}
     >
       <div className="px-3 pt-3 pb-2.5">
         {/* Quantity (dominant signal) */}
@@ -131,7 +180,8 @@ export function ProductionJobCard({
           <div
             className={cn(
               "text-[26px] font-bold tabular-nums leading-none tracking-tightish",
-              isLive && "text-warning-fg",
+              isLive && !isDraft && "text-warning-fg",
+              isDraft && !isDone && !isCancelled && "text-fg-muted",
               isDone && "text-success-fg",
               isCancelled && "text-fg-muted line-through",
             )}
@@ -140,7 +190,8 @@ export function ProductionJobCard({
             <span
               className={cn(
                 "ml-1.5 text-sm font-semibold align-baseline",
-                isLive && "text-warning-fg/80",
+                isLive && !isDraft && "text-warning-fg/80",
+                isDraft && !isDone && !isCancelled && "text-fg-muted",
                 isDone && "text-success-fg/80",
                 isCancelled && "text-fg-muted",
               )}
@@ -151,7 +202,7 @@ export function ProductionJobCard({
 
           {/* Status icon (top-right corner) */}
           <div className="pt-1 shrink-0">
-            {isLive && (
+            {isLive && !isDraft && (
               <Clock className="h-3.5 w-3.5 text-warning/70" strokeWidth={2} />
             )}
             {isDone && (
@@ -170,11 +221,11 @@ export function ProductionJobCard({
         <div
           className={cn(
             "text-sm font-semibold leading-tight truncate mb-2",
-            isCancelled ? "text-fg-muted" : "text-fg-strong",
+            isCancelled || isDraft ? "text-fg-muted" : "text-fg-strong",
           )}
-          title={plan.item_name ?? plan.item_id ?? undefined}
+          title={cardTitle ?? undefined}
         >
-          {plan.item_name ?? plan.item_id}
+          {cardTitle}
         </div>
 
         {/* Metadata foot row */}
@@ -187,8 +238,42 @@ export function ProductionJobCard({
             </span>
           )}
 
-          {/* Overdue clock — only on live overdue plans */}
-          {isLive && !isToday && (
+          {/* B4 — draft chip: not yet firmed, never reportable. */}
+          {isDraft && !isDone && !isCancelled && (
+            <span
+              className="chip gap-1 text-[10px] text-fg-muted"
+              data-testid="plan-card-draft-chip"
+            >
+              Draft — not firmed
+            </span>
+          )}
+
+          {/* Tranche 052 — custom-recipe badge. Known lazily: after a save
+              in this session or once the impact panel fetched the recipe. */}
+          {hasCustomRecipe === true && !isCancelled && (
+            <span
+              className="chip chip-accent gap-1 text-[10px]"
+              title="This run uses an adjusted liquid recipe"
+              data-testid="plan-card-custom-recipe-chip"
+            >
+              <FlaskConical className="h-2.5 w-2.5" strokeWidth={2.5} />
+              Custom recipe
+            </span>
+          )}
+
+          {/* B4 — in-production chip: firmed and currently running. */}
+          {isInProduction && !isDone && !isCancelled && (
+            <span
+              className="chip chip-info gap-1 text-[10px]"
+              data-testid="plan-card-in-production-chip"
+            >
+              <Factory className="h-2.5 w-2.5" strokeWidth={2.5} />
+              In production
+            </span>
+          )}
+
+          {/* Overdue clock — only on live (firmed) overdue plans */}
+          {isLive && !isDraft && !isToday && (
             <span className="chip chip-warning gap-1 text-[10px]">
               <Clock className="h-2.5 w-2.5" strokeWidth={2.5} />
               Overdue
@@ -241,28 +326,52 @@ export function ProductionJobCard({
         </div>
       </div>
 
-      {/* Action strip — always-on for live plans */}
+      {/* Action strip — always-on for live plans. B4: drafts keep edit /
+          cancel but get NO Report CTA — a draft is not firmed and must not
+          be reported against. */}
       {canAct && isLive && (
         <div className="flex items-center justify-between gap-1.5 px-3 pb-2.5 border-t border-border/20 pt-2">
-          {/* Report button — primary for today */}
-          <Link
-            href={`/stock/production-actual?from_plan_id=${encodeURIComponent(plan.plan_id)}${plan.item_id ? `&item_id=${encodeURIComponent(plan.item_id)}` : ""}&suggested_qty=${encodeURIComponent(plan.planned_qty ?? "")}`}
-            className={cn(
-              "btn btn-xs gap-1",
-              isToday ? "btn-primary" : "btn-ghost text-accent",
-            )}
-            title="Report actual production"
-            data-testid="plan-row-report"
-          >
-            <Factory className="h-2.5 w-2.5" strokeWidth={2.5} />
-            Report
-          </Link>
+          {/* Report button — primary for today; hidden on drafts */}
+          {!isDraft ? (
+            <Link
+              href={`/stock/production-actual?from_plan_id=${encodeURIComponent(plan.plan_id)}${plan.item_id ? `&item_id=${encodeURIComponent(plan.item_id)}` : ""}&suggested_qty=${encodeURIComponent(plan.planned_qty ?? "")}`}
+              className={cn(
+                "btn btn-xs gap-1",
+                isToday ? "btn-primary" : "btn-ghost text-accent",
+              )}
+              title="Report actual production"
+              data-testid="plan-row-report"
+            >
+              <Factory className="h-2.5 w-2.5" strokeWidth={2.5} />
+              Report
+            </Link>
+          ) : (
+            <span className="text-[10px] text-fg-faint" title="Firm this plan before reporting production">
+              Not reportable yet
+            </span>
+          )}
 
-          {/* Edit + cancel */}
+          {/* Edit + cancel. INTER-010 (Tranche 048): min 32×32px touch
+              targets via padding only — the icon size is unchanged. */}
           <div className="flex items-center gap-1">
+            {/* Tranche 052 — adjust the liquid recipe for this run. Only on
+                live (unreported) MANUFACTURED plans; the strip itself already
+                hides once the plan is done or cancelled. */}
+            {recipeEligible && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-xs min-h-[32px] min-w-[32px] text-accent"
+                onClick={() => onAdjustRecipe(plan)}
+                title="Adjust recipe for this run"
+                aria-label="Adjust recipe for this run"
+                data-testid="plan-row-adjust-recipe"
+              >
+                <FlaskConical className="h-2.5 w-2.5" strokeWidth={2.5} />
+              </button>
+            )}
             <button
               type="button"
-              className="btn btn-ghost btn-xs"
+              className="btn btn-ghost btn-xs min-h-[32px] min-w-[32px]"
               onClick={() => onEdit(plan)}
               title="Edit plan"
               aria-label="Edit plan"
@@ -272,7 +381,7 @@ export function ProductionJobCard({
             </button>
             <button
               type="button"
-              className="btn btn-ghost btn-xs text-danger"
+              className="btn btn-ghost btn-xs min-h-[32px] min-w-[32px] text-danger"
               onClick={() => onCancel(plan)}
               title="Cancel plan"
               aria-label="Cancel plan"
@@ -321,8 +430,8 @@ export function ProductionJobCard({
                 +{fmtQty(plan.planned_qty ?? "0", plan.uom ?? "")}
               </span>
               {" of "}
-              <span className="font-medium">{plan.item_name ?? plan.item_id}</span>
-              {" to finished goods"}
+              <span className="font-medium">{cardTitle}</span>
+              {plan.is_base_batch ? " to base liquid" : " to finished goods"}
             </span>
           </div>
 

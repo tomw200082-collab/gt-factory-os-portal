@@ -56,17 +56,27 @@
 //       Enter (= Down) move between cells. Mirrors Notion / Airtable.
 //
 // English LTR per Tom-locked global standard 2026-05-01.
+//
+// Tranche 053 (FLOW-003): below 768px the fixed-track grid (380px sticky item
+// col + 130px month cols) is unusable, so a vertical per-item collapsible list
+// replaces it — same edit/save state machine (effectiveValue + onCellEdit →
+// parent's debounced auto-save), ≥44px numeric inputs. Desktop md+ unchanged.
+// FLOW-014: the remove button no longer window.confirm()s — it *requests*
+// removal; the parent page owns the confirmation (bottom sheet naming the item).
 // ---------------------------------------------------------------------------
 
 import {
   useCallback,
+  useEffect,
   useMemo,
   useRef,
+  useState,
   type CSSProperties,
   type KeyboardEvent,
 } from "react";
 import { ChevronDown, Trash2 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import {
   formatExactInt,
   formatMonthHeader2,
@@ -108,6 +118,20 @@ function gridStyle(
   };
 }
 
+/**
+ * Normalize a raw numeric-input value to the string the edit state machine
+ * expects: "" passes through (cleared cell), negative / non-finite input is
+ * rejected (null = ignore the keystroke), anything else floors to an integer
+ * string. Shared by the desktop grid cells and the mobile list inputs so both
+ * feed the SAME onCellEdit → debounced auto-save pipeline.
+ */
+function normalizeCellInput(raw: string): string | null {
+  if (raw === "") return "";
+  const n = Number(raw);
+  if (!Number.isFinite(n) || n < 0) return null;
+  return String(Math.floor(n));
+}
+
 // ---- Public types ---------------------------------------------------------
 
 export interface ForecastLineLite {
@@ -138,7 +162,11 @@ interface MonthlyGridProps {
   isEditable: boolean;
   /** Cell edit. value is the raw string (parent normalizes via auto-save). */
   onCellEdit: (itemId: string, bucketKey: string, value: string) => void;
-  /** Remove an item (deletes all lines for that item; parent handles confirm + delete). */
+  /**
+   * Request removal of an item. The parent owns confirmation (Tranche 053
+   * FLOW-014: inline bottom-sheet confirm naming the item — no window.confirm
+   * here) and performs the actual delete/zero-out.
+   */
   onItemRemove: (itemId: string) => void;
   /**
    * Optional: pre-aggregated planned-production quantity by
@@ -165,6 +193,13 @@ export function MonthlyGrid(props: MonthlyGridProps) {
     onItemRemove,
     plannedProductionByCell,
   } = props;
+
+  // FLOW-003 (Tranche 053): mobile fallback. Pair the media query with an
+  // isMounted flag (idiom copied from InventoryFlowClient.tsx) so SSR/first
+  // paint always renders the desktop grid — no hydration mismatch.
+  const [isMounted, setIsMounted] = useState(false);
+  useEffect(() => setIsMounted(true), []);
+  const isMobile = useMediaQuery("(max-width: 767px)");
 
   const monthCount = buckets.length;
   const sharedGridStyle = useMemo(() => gridStyle(monthCount), [monthCount]);
@@ -326,6 +361,24 @@ export function MonthlyGrid(props: MonthlyGridProps) {
     },
     [buckets.length, items.length, focusCell],
   );
+
+  // ── Mobile (<768px): vertical collapsible list, same edit pipeline ──────
+  if (isMounted && isMobile) {
+    return (
+      <MobileForecastList
+        items={items}
+        buckets={buckets}
+        todayIdx={todayIdx}
+        isEditable={isEditable}
+        freshlyAddedItemIds={freshlyAddedItemIds}
+        rowTotals={rowTotals}
+        grandTotal={grandTotal}
+        effectiveValue={effectiveValue}
+        onCellEdit={onCellEdit}
+        onItemRemove={onItemRemove}
+      />
+    );
+  }
 
   return (
     <div
@@ -584,13 +637,7 @@ function BodyRow({
         {isEditable ? (
           <button
             type="button"
-            onClick={() => {
-              const ok = window.confirm(
-                `Remove "${item.item_name}" from this forecast? This deletes its ${buckets.length} cell${buckets.length === 1 ? "" : "s"}.`,
-              );
-              if (!ok) return;
-              onItemRemove(item.item_id);
-            }}
+            onClick={() => onItemRemove(item.item_id)}
             className="row-quick-action inline-flex h-6 w-6 shrink-0 items-center justify-center rounded text-fg-faint transition-colors duration-150 hover:bg-danger-softer hover:text-danger-fg focus-visible:opacity-100"
             title={`Remove ${item.item_name} from forecast`}
             data-testid="forecast-grid-row-remove"
@@ -666,15 +713,9 @@ function BodyRow({
                 inputMode="numeric"
                 value={displayValue}
                 onChange={(e) => {
-                  const raw = e.target.value;
-                  if (raw === "") {
-                    onCellEdit(item.item_id, b.key, "");
-                    return;
-                  }
-                  const n = Number(raw);
-                  if (!Number.isFinite(n) || n < 0) return;
-                  const intStr = String(Math.floor(n));
-                  onCellEdit(item.item_id, b.key, intStr);
+                  const normalized = normalizeCellInput(e.target.value);
+                  if (normalized === null) return;
+                  onCellEdit(item.item_id, b.key, normalized);
                 }}
                 onKeyDown={(e) => onCellKeyDown(e, rowIdx, colIdx)}
                 placeholder="—"
@@ -794,6 +835,195 @@ function FooterTotalsRow({
         }}
         data-testid="forecast-grid-grand-total"
       >
+        <span
+          className={cn(
+            "font-mono text-base font-bold tabular-nums",
+            grandTotal > 0 ? "text-accent" : "text-fg-faint",
+          )}
+        >
+          {grandTotal > 0 ? formatExactInt(grandTotal) : "—"}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Mobile (<768px) fallback — Tranche 053 FLOW-003.
+//
+// One collapsible row per item (name + supply chip + live row total); expands
+// to stacked month cells with ≥44px-tall numeric inputs wired to the SAME
+// effectiveValue / onCellEdit state machine as the grid, so the parent's
+// debounced auto-save keeps working unchanged. New testids (forecast-mobile-*)
+// — the desktop forecast-grid-* testids are untouched.
+// ---------------------------------------------------------------------------
+
+interface MobileForecastListProps {
+  items: ItemForGrid[];
+  buckets: MonthBucket[];
+  todayIdx: number;
+  isEditable: boolean;
+  freshlyAddedItemIds: Set<string>;
+  rowTotals: Map<string, number>;
+  grandTotal: number;
+  effectiveValue: (itemId: string, bucketKey: string) => string;
+  onCellEdit: (itemId: string, bucketKey: string, value: string) => void;
+  onItemRemove: (itemId: string) => void;
+}
+
+function MobileForecastList({
+  items,
+  buckets,
+  todayIdx,
+  isEditable,
+  freshlyAddedItemIds,
+  rowTotals,
+  grandTotal,
+  effectiveValue,
+  onCellEdit,
+  onItemRemove,
+}: MobileForecastListProps) {
+  const [expandedIds, setExpandedIds] = useState<Set<string>>(new Set());
+  const toggle = useCallback((itemId: string) => {
+    setExpandedIds((prev) => {
+      const next = new Set(prev);
+      if (next.has(itemId)) next.delete(itemId);
+      else next.add(itemId);
+      return next;
+    });
+  }, []);
+
+  return (
+    <div data-testid="forecast-mobile-list">
+      <div className="divide-y divide-border/40">
+        {items.map((item) => {
+          const open = expandedIds.has(item.item_id);
+          const isFresh = freshlyAddedItemIds.has(item.item_id);
+          const rowTotal = rowTotals.get(item.item_id) ?? 0;
+          return (
+            <div
+              key={item.item_id}
+              data-testid="forecast-mobile-item"
+              data-item-id={item.item_id}
+              className={cn(isFresh && "bg-accent-soft/15")}
+            >
+              {/* Collapsible row header — ≥44px touch target. */}
+              <button
+                type="button"
+                onClick={() => toggle(item.item_id)}
+                aria-expanded={open}
+                aria-label={`${item.item_name} — ${open ? "collapse" : "expand"} month cells`}
+                data-testid="forecast-mobile-item-toggle"
+                className="flex min-h-[44px] w-full items-center gap-2.5 px-4 py-2.5 text-left transition-colors hover:bg-bg-subtle/60"
+              >
+                <ChevronDown
+                  className={cn(
+                    "h-4 w-4 shrink-0 text-fg-faint transition-transform duration-150",
+                    open && "rotate-180",
+                  )}
+                  strokeWidth={2}
+                  aria-hidden
+                />
+                <span className="min-w-0 flex-1">
+                  <span className="block truncate text-[13px] font-medium text-fg-strong">
+                    {item.item_name}
+                  </span>
+                  <span className="mt-0.5 flex items-center gap-1.5">
+                    <SupplyMethodChip supplyMethod={item.supply_method} />
+                  </span>
+                </span>
+                <span
+                  className={cn(
+                    "shrink-0 font-mono text-sm font-semibold tabular-nums",
+                    rowTotal > 0 ? "text-fg-strong" : "text-fg-faint",
+                  )}
+                  data-testid="forecast-mobile-row-total"
+                >
+                  {rowTotal > 0 ? formatExactInt(rowTotal) : "—"}
+                </span>
+              </button>
+
+              {/* Expanded: stacked month cells. */}
+              {open ? (
+                <div className="space-y-2 px-4 pb-3">
+                  {buckets.map((b, idx) => {
+                    const displayValue = effectiveValue(item.item_id, b.key);
+                    const isToday = idx === todayIdx;
+                    return (
+                      <label
+                        key={b.key}
+                        className="flex items-center gap-3"
+                        data-testid="forecast-mobile-cell"
+                        data-bucket={b.key}
+                      >
+                        <span className="flex w-24 shrink-0 flex-col">
+                          <span className="text-xs font-medium text-fg-muted">
+                            {b.label}
+                          </span>
+                          {isToday ? (
+                            <span className="text-[9px] font-bold uppercase tracking-sops text-accent">
+                              Today
+                            </span>
+                          ) : null}
+                        </span>
+                        {isEditable ? (
+                          <input
+                            type="number"
+                            min={0}
+                            step={1}
+                            inputMode="numeric"
+                            value={displayValue}
+                            onChange={(e) => {
+                              const normalized = normalizeCellInput(
+                                e.target.value,
+                              );
+                              if (normalized === null) return;
+                              onCellEdit(item.item_id, b.key, normalized);
+                            }}
+                            placeholder="—"
+                            aria-label={`${item.item_name} — ${b.label}`}
+                            data-testid="forecast-mobile-cell-input"
+                            className={cn(
+                              "min-h-[44px] w-full rounded border border-border bg-bg px-3 text-right font-mono text-sm tabular-nums outline-none transition-colors duration-150",
+                              "placeholder:text-fg-faint/70",
+                              "focus:border-accent focus:bg-accent-soft/25 focus:text-fg-strong",
+                            )}
+                          />
+                        ) : (
+                          <span className="flex min-h-[44px] w-full items-center justify-end rounded border border-border/40 bg-bg-subtle/40 px-3 font-mono text-sm tabular-nums text-fg">
+                            {formatQty(displayValue)}
+                          </span>
+                        )}
+                      </label>
+                    );
+                  })}
+                  {isEditable ? (
+                    <button
+                      type="button"
+                      onClick={() => onItemRemove(item.item_id)}
+                      className="inline-flex min-h-[44px] items-center gap-1.5 rounded px-1 text-xs font-medium text-danger-fg transition-colors hover:bg-danger-softer"
+                      data-testid="forecast-mobile-item-remove"
+                      aria-label={`Remove ${item.item_name} from forecast`}
+                    >
+                      <Trash2 className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+                      Remove from forecast
+                    </button>
+                  ) : null}
+                </div>
+              ) : null}
+            </div>
+          );
+        })}
+      </div>
+
+      {/* Grand total — parity with the desktop footer totals row. */}
+      <div
+        className="flex items-center justify-between border-t-2 border-accent/60 bg-bg-raised px-4 py-3"
+        data-testid="forecast-mobile-grand-total"
+      >
+        <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+          Total
+        </span>
         <span
           className={cn(
             "font-mono text-base font-bold tabular-nums",

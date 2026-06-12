@@ -82,6 +82,9 @@ function buildQuerystring(params: FlowQueryParams): string {
   if (params.family) sp.set("family", params.family);
   if (params.supply_method) sp.set("supply_method", params.supply_method);
   if (params.at_risk_only) sp.set("at_risk_only", "true");
+  // Groups v1 (Tranche 044): curated product-group filter. Forwarded only on
+  // the FG flow; the supply variant has its own group params in useSupplyFlow.
+  if (params.product_group) sp.set("product_group", params.product_group);
   return sp.toString();
 }
 
