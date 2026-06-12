@@ -21,7 +21,7 @@ const REASON_COPY: Record<string, string> = {
   COUNT_ALREADY_OPEN:
     "A count for this item is already open. Try saving again — the open count will be reused.",
   COUNT_FREEZE_ACTIVE:
-    "A previous count for this item is still awaiting planner approval. It must be approved or rejected before a new count can start.",
+    "A previous count for this item is still awaiting planner approval — it must be approved or rejected in the approvals inbox before a new count can start. If you are not a planner, ask one to review it.",
   SNAPSHOT_NOT_FOUND:
     "The count snapshot was not found. Save again to open a fresh one.",
   SNAPSHOT_EXPIRED:

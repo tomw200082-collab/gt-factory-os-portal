@@ -375,17 +375,24 @@ export default function PhysicalCountReviewPage() {
           <DetailRow
             label="Current status"
             value={
-              <span
-                className={
-                  d.status === "pending"
-                    ? "text-warning-fg font-medium"
-                    : d.status === "posted"
-                      ? "text-success-fg font-medium"
-                      : "text-fg-muted"
-                }
-              >
-                {d.status}
-              </span>
+              // FLOW-206 — plain-English status chip, never the raw enum.
+              d.status === "pending" ? (
+                <span className="inline-flex items-center rounded-full border border-warning/40 bg-warning-softer px-2 py-0.5 text-xs font-medium text-warning-fg">
+                  Awaiting approval
+                </span>
+              ) : d.status === "posted" ? (
+                <span className="inline-flex items-center rounded-full border border-success/30 bg-success-softer px-2 py-0.5 text-xs font-medium text-success-fg">
+                  Approved — anchor applied
+                </span>
+              ) : d.status === "rejected" ? (
+                <span className="inline-flex items-center rounded-full border border-border bg-bg-subtle px-2 py-0.5 text-xs font-medium text-fg-muted">
+                  Rejected — anchor unchanged
+                </span>
+              ) : (
+                <span className="inline-flex items-center rounded-full border border-border bg-bg-subtle px-2 py-0.5 text-xs font-medium text-fg-muted">
+                  {d.status.replace(/_/g, " ")}
+                </span>
+              )
             }
           />
         </div>

@@ -172,7 +172,23 @@ function CountRow({
   // Zero-count guard: a count of 0 is legitimate but high-impact (it can
   // zero an item's stock), so it takes one extra deliberate confirmation.
   const [confirmZero, setConfirmZero] = useState(false);
+  // FLOW-202 — synchronous in-flight guard. The parent's `saving` phase only
+  // lands on the NEXT render, so a rapid double-Enter / double-tap could
+  // otherwise dispatch two submissions with two different idempotency keys.
+  const inFlightRef = useRef(false);
   const saving = phase === "saving";
+  useEffect(() => {
+    if (phase !== "saving") inFlightRef.current = false;
+  }, [phase]);
+  // FLOW-203 — clear the stale qty when the row returns to the count queue
+  // (Recount pressed, or the planner rejected the previous count). The old
+  // number must never silently pre-fill a correction.
+  useEffect(() => {
+    if (!counted || counted.status === "rejected") {
+      setQty("");
+      setConfirmZero(false);
+    }
+  }, [counted]);
   const qtyNum = Number(qty);
   const qtyValid = qty.trim() !== "" && Number.isFinite(qtyNum) && qtyNum >= 0;
   const isZero = qtyValid && qtyNum === 0;
@@ -181,12 +197,13 @@ function CountRow({
   const showEntry = !counted || rejected;
 
   function trySubmit() {
-    if (!qtyValid || saving) return;
+    if (inFlightRef.current || !qtyValid || saving) return;
     if (isZero && !confirmZero) {
       setConfirmZero(true);
       return;
     }
     setConfirmZero(false);
+    inFlightRef.current = true;
     onSubmit(row, qty);
   }
 
@@ -226,13 +243,13 @@ function CountRow({
 
       {/* Count entry / result */}
       {!showEntry && counted ? (
-        <div className="flex shrink-0 items-center gap-2">
+        <div className="flex shrink-0 items-center gap-2 max-sm:w-full">
           <span
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold tabular-nums ring-1",
+              "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-semibold tabular-nums",
               counted.status === "posted"
-                ? "bg-success-softer text-success-fg ring-success/30"
-                : "bg-warning-softer text-warning-fg ring-warning/40",
+                ? "border-success/30 bg-success-softer text-success-fg"
+                : "border-warning/40 bg-warning-softer text-warning-fg",
             )}
           >
             {counted.status === "posted" ? (
@@ -268,7 +285,7 @@ function CountRow({
           ) : null}
           <button
             type="button"
-            className="btn btn-ghost btn-sm text-fg-muted"
+            className="btn btn-ghost btn-sm ml-auto text-fg-muted sm:ml-0"
             onClick={() => onRecount(row.key)}
             disabled={saving}
             data-testid="bulk-count-recount"
@@ -277,7 +294,7 @@ function CountRow({
           </button>
         </div>
       ) : (
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="flex shrink-0 items-center gap-2 max-sm:w-full">
           <input
             ref={(el) => registerInput(row.key, el)}
             type="number"
@@ -297,7 +314,7 @@ function CountRow({
               }
             }}
             disabled={saving}
-            className="input h-10 w-24 text-right text-base font-semibold tabular-nums"
+            className="input h-11 w-24 text-right text-base font-semibold tabular-nums max-sm:flex-1 sm:h-10"
             aria-label={`Counted quantity for ${row.name}`}
             data-testid="bulk-count-qty"
           />
@@ -313,7 +330,7 @@ function CountRow({
             <>
               <button
                 type="button"
-                className="btn btn-danger btn-sm h-10"
+                className="btn btn-danger btn-sm h-11 sm:h-10"
                 onClick={trySubmit}
                 disabled={saving}
                 aria-label={`Confirm zero count for ${row.name}`}
@@ -323,7 +340,7 @@ function CountRow({
               </button>
               <button
                 type="button"
-                className="btn btn-ghost btn-sm h-10"
+                className="btn btn-ghost btn-sm h-11 sm:h-10"
                 onClick={() => setConfirmZero(false)}
                 disabled={saving}
               >
@@ -333,7 +350,7 @@ function CountRow({
           ) : (
             <button
               type="button"
-              className="btn btn-primary btn-sm h-10"
+              className="btn btn-primary btn-sm h-11 sm:h-10"
               onClick={trySubmit}
               disabled={!qtyValid || saving}
               aria-label={`Save count for ${row.name}`}
@@ -450,7 +467,21 @@ export default function BulkCountPage() {
   const [filters, setFilters] = useState<BulkFilters>(EMPTY_FILTERS);
   const [sort, setSort] = useState<BulkSortKey>("name");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  // Mobile-first: the full filter panel is collapsed by default so the count
+  // rows own the screen; the sticky header keeps only progress + search.
+  const [filtersOpen, setFiltersOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
+
+  // Number of active filter dimensions (search excluded — it is always
+  // visible in the sticky header). Drives the badge on the Filters button.
+  const activeFilterCount =
+    (filters.type ? 1 : 0) +
+    (filters.productGroups.length > 0 ? 1 : 0) +
+    (filters.materialGroups.length > 0 ? 1 : 0) +
+    (filters.usedBy ? 1 : 0) +
+    (filters.view ? 1 : 0) +
+    (filters.neverCountedOnly ? 1 : 0) +
+    (filters.staleOnly ? 1 : 0);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -567,7 +598,16 @@ export default function BulkCountPage() {
   // --- progress ----------------------------------------------------------------------
   const overall = useMemo(() => progressOf(rows, counted), [rows, counted]);
   const visible = useMemo(() => progressOf(visibleRows, counted), [visibleRows, counted]);
-  const pct = overall.total > 0 ? Math.round((overall.done / overall.total) * 100) : 0;
+  // FLOW-205 — when filters narrow the view, the number that matters for the
+  // walk is the filtered scope; the whole-catalog total demotes to a note.
+  const scoped = visible.total !== overall.total;
+  const prim = scoped ? visible : overall;
+  const pct = prim.total > 0 ? Math.round((prim.done / prim.total) * 100) : 0;
+  const walkComplete = overall.total > 0 && overall.done === overall.total;
+  const postedCount = useMemo(
+    () => Object.values(counted).filter((e) => e.status === "posted").length,
+    [counted],
+  );
 
   // --- per-row submission --------------------------------------------------------------
   const [rowPhase, setRowPhase] = useState<Record<string, RowPhase>>({});
@@ -577,24 +617,59 @@ export default function BulkCountPage() {
     inputRefs.current.set(rowKey, el);
   }, []);
 
+  // FLOW-204 — feedback when Enter-to-next has nowhere visible to go but
+  // uncounted items remain behind filters / collapsed sections.
+  const [walkNotice, setWalkNotice] = useState<string | null>(null);
+  useEffect(() => {
+    if (!walkNotice) return;
+    const t = setTimeout(() => setWalkNotice(null), 8000);
+    return () => clearTimeout(t);
+  }, [walkNotice]);
+  useEffect(() => {
+    setWalkNotice(null);
+  }, [filters]);
+
   const focusNextUncounted = useCallback(
     (afterKey: string, nextCounted: CountedMap) => {
       const flat: BulkCountRow[] = [];
       for (const s of sections) if (!collapsed.has(s.key)) flat.push(...s.rows);
       const idx = flat.findIndex((r) => r.key === afterKey);
+      // FLOW-210 — a freshly mounted input may not be in the ref map yet;
+      // retry once on the next frame before skipping past it.
+      const focusRow = (key: string, attempt: number): boolean => {
+        const el = inputRefs.current.get(key);
+        if (el) {
+          el.focus();
+          el.scrollIntoView({ block: "center", behavior: "smooth" });
+          return true;
+        }
+        if (attempt === 0) {
+          requestAnimationFrame(() => focusRow(key, 1));
+          return true;
+        }
+        return false;
+      };
       for (let i = idx + 1; i < flat.length; i += 1) {
         const entry = nextCounted[flat[i].key];
         // Rejected counts need a recount — they stay in the focus queue.
         if (entry && entry.status !== "rejected") continue;
-        const el = inputRefs.current.get(flat[i].key);
-        if (el) {
-          el.focus();
-          el.scrollIntoView({ block: "center", behavior: "smooth" });
-          return;
-        }
+        if (focusRow(flat[i].key, 0)) return;
+      }
+      // Nothing visible left to count — say so if more remain out of view.
+      const visibleKeys = new Set(flat.map((r) => r.key));
+      let remainingElsewhere = 0;
+      for (const r of rows) {
+        const entry = nextCounted[r.key];
+        if (entry && entry.status !== "rejected") continue;
+        if (!visibleKeys.has(r.key)) remainingElsewhere += 1;
+      }
+      if (remainingElsewhere > 0) {
+        setWalkNotice(
+          `All visible items are counted — ${remainingElsewhere} more remain in collapsed sections or outside the current filters.`,
+        );
       }
     },
-    [sections, collapsed],
+    [sections, collapsed, rows],
   );
 
   const submitRow = useCallback(
@@ -793,22 +868,30 @@ export default function BulkCountPage() {
         </div>
       </WorkflowHeader>
 
-      {/* ===== Sticky progress bar ===== */}
+      {/* ===== Sticky header — mobile-first. Only what the walk needs in
+            view at all times: progress + search + the filter-tray toggle.
+            Sticky offset top-16 matches the TopBar height (UI-301). ===== */}
       <div
-        className="sticky top-0 z-20 -mx-1 rounded-lg border border-border/60 bg-bg/95 px-3 py-2.5 shadow-sm backdrop-blur-md sm:px-4"
+        className="sticky top-16 z-20 rounded-lg border border-border/60 bg-bg/95 px-3 py-2 shadow-sm backdrop-blur-md sm:px-4"
         data-testid="bulk-count-progress"
       >
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1.5">
-          <span className="text-sm font-semibold tabular-nums text-fg">
-            {overall.done} / {overall.total} counted today
+        <div className="flex items-center gap-3">
+          <span className="shrink-0 text-sm font-semibold tabular-nums text-fg">
+            {prim.done}
+            <span className="font-normal text-fg-subtle"> / {prim.total}</span>
+            {scoped ? (
+              <span className="ml-1.5 hidden text-2xs font-normal text-fg-subtle sm:inline">
+                in view · {overall.done}/{overall.total} overall
+              </span>
+            ) : null}
           </span>
           <div
-            className="h-2 min-w-32 flex-1 overflow-hidden rounded-full bg-bg-subtle"
+            className="h-2 min-w-16 flex-1 overflow-hidden rounded-full bg-bg-subtle"
             role="progressbar"
-            aria-valuenow={overall.done}
+            aria-valuenow={prim.done}
             aria-valuemin={0}
-            aria-valuemax={overall.total}
-            aria-label="Count progress"
+            aria-valuemax={prim.total}
+            aria-label={scoped ? "Count progress (current view)" : "Count progress"}
           >
             <div
               className={cn(
@@ -818,31 +901,89 @@ export default function BulkCountPage() {
               style={{ width: `${pct}%` }}
             />
           </div>
-          <span className="text-2xs tabular-nums text-fg-muted">{pct}%</span>
+          <span className="shrink-0 text-2xs tabular-nums text-fg-muted">{pct}%</span>
           {pendingCount > 0 ? (
-            <span className="rounded-full bg-warning-softer px-2 py-0.5 text-2xs font-medium text-warning-fg ring-1 ring-warning/30">
+            <span className="hidden shrink-0 rounded-full border border-warning/30 bg-warning-softer px-2 py-0.5 text-2xs font-medium text-warning-fg sm:inline">
               {pendingCount} awaiting approval
             </span>
           ) : null}
-          {visible.total !== overall.total ? (
-            <span className="text-2xs text-fg-subtle">
-              In view: {visible.done}/{visible.total}
-            </span>
-          ) : null}
         </div>
-        <p className="mt-1 text-3xs leading-snug text-fg-subtle">
-          Progress ticks are saved on this device only — switching devices
-          mid-walk resets the ticks, but every submitted count is already safe
-          in the system.
-        </p>
+        {walkComplete ? (
+          <div
+            className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs"
+            data-testid="bulk-count-walk-complete"
+          >
+            <span className="font-semibold text-success-fg">Walk complete 🎉</span>
+            <span className="text-fg-muted">
+              {postedCount} posted
+              {pendingCount > 0 ? ` · ${pendingCount} awaiting approval` : ""}
+            </span>
+            <Link
+              href="/stock/movement-log"
+              className="text-accent underline hover:text-accent-hover hover:no-underline"
+            >
+              View movement log
+            </Link>
+          </div>
+        ) : null}
+        <div className="mt-2 flex items-center gap-2">
+          <div className="relative min-w-0 flex-1">
+            <input
+              ref={searchRef}
+              type="search"
+              value={filters.search}
+              onChange={(e) => patch({ search: e.target.value })}
+              placeholder="Search name or code… ( / )"
+              className="input h-11 w-full pl-8 text-base sm:h-10 sm:text-sm"
+              aria-label="Search items"
+              data-testid="bulk-count-search"
+            />
+            <span
+              className="pointer-events-none absolute inset-y-0 left-2.5 flex items-center text-fg-subtle"
+              aria-hidden
+            >
+              ⌕
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => setFiltersOpen((v) => !v)}
+            aria-expanded={filtersOpen}
+            aria-controls="bulk-count-filter-tray"
+            className={cn(
+              "btn h-11 shrink-0 sm:h-10",
+              (filtersOpen || activeFilterCount > 0) && "border-accent/50",
+            )}
+            data-testid="bulk-count-filters-toggle"
+          >
+            <span className="inline-flex items-center gap-1.5">
+              <svg className="h-4 w-4" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <path d="M2 4h12M4.5 8h7M7 12h2" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+              </svg>
+              Filters
+              {activeFilterCount > 0 ? (
+                <span className="rounded-full bg-accent-softer px-1.5 py-0 text-2xs font-semibold tabular-nums text-accent">
+                  {activeFilterCount}
+                </span>
+              ) : null}
+            </span>
+          </button>
+        </div>
       </div>
 
-      {/* ===== Filters ===== */}
-      <div className="space-y-3 rounded-lg border border-border/60 bg-bg-subtle/25 p-3 sm:p-4">
-        {/* Type tabs + search + sort */}
-        <div className="flex flex-wrap items-center gap-2">
+      {/* ===== Filter tray — collapsible, mobile-first. A toolbar tray
+            (bottom hairline, no card box) so the count rows below stay the
+            visually dominant element (UI-307). ===== */}
+      {filtersOpen ? (
+      <div
+        id="bulk-count-filter-tray"
+        className="space-y-3 border-b border-border/40 bg-bg-subtle/25 pb-3 sm:pb-4"
+        data-testid="bulk-count-filter-panel"
+      >
+        {/* Type tabs (horizontal scroll on phones) + sort */}
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <div
-            className="flex items-center gap-1 rounded-md bg-bg-subtle/60 p-0.5"
+            className="flex max-w-full items-center gap-1 overflow-x-auto rounded-md bg-bg-subtle/60 p-0.5"
             role="tablist"
             aria-label="Item type"
           >
@@ -861,7 +1002,7 @@ export default function BulkCountPage() {
                 aria-selected={filters.type === value}
                 onClick={() => patch({ type: value as BulkFilters["type"], usedBy: value === "FG" ? "" : filters.usedBy })}
                 className={cn(
-                  "rounded px-2.5 py-1.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
+                  "shrink-0 whitespace-nowrap rounded px-2.5 py-1.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
                   filters.type === value
                     ? "bg-bg text-fg shadow-sm"
                     : "text-fg-muted hover:text-fg",
@@ -871,22 +1012,6 @@ export default function BulkCountPage() {
                 {label}
               </button>
             ))}
-          </div>
-
-          <div className="relative min-w-44 flex-1 sm:max-w-xs">
-            <input
-              ref={searchRef}
-              type="search"
-              value={filters.search}
-              onChange={(e) => patch({ search: e.target.value })}
-              placeholder="Search name or code… ( / )"
-              className="input h-9 w-full pl-8 text-sm"
-              aria-label="Search items"
-              data-testid="bulk-count-search"
-            />
-            <span className="pointer-events-none absolute inset-y-0 left-2.5 flex items-center text-fg-subtle" aria-hidden>
-              ⌕
-            </span>
           </div>
 
           <label className="flex items-center gap-1.5 text-2xs text-fg-muted">
@@ -956,7 +1081,8 @@ export default function BulkCountPage() {
           />
         ) : null}
 
-        {/* Quick view toggles */}
+        {/* Quick view toggles — same .chip language as the area chips above
+            (UI-302: one chip system across the tray). */}
         <div className="flex flex-wrap items-center gap-1.5">
           {(
             [
@@ -971,10 +1097,8 @@ export default function BulkCountPage() {
               aria-pressed={filters.view === value}
               onClick={() => patch({ view: value as BulkFilters["view"] })}
               className={cn(
-                "rounded-full px-2.5 py-1 text-2xs font-medium ring-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
-                filters.view === value
-                  ? "bg-accent-softer text-accent-fg ring-accent/30"
-                  : "bg-bg-subtle text-fg-muted ring-border hover:text-fg",
+                "chip transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
+                filters.view === value && "chip-accent",
               )}
               data-testid={`bulk-count-view-${value || "everything"}`}
             >
@@ -987,10 +1111,8 @@ export default function BulkCountPage() {
             aria-pressed={filters.neverCountedOnly}
             onClick={() => patch({ neverCountedOnly: !filters.neverCountedOnly })}
             className={cn(
-              "rounded-full px-2.5 py-1 text-2xs font-medium ring-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
-              filters.neverCountedOnly
-                ? "bg-warning-softer text-warning-fg ring-warning/40"
-                : "bg-bg-subtle text-fg-muted ring-border hover:text-fg",
+              "chip transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
+              filters.neverCountedOnly && "chip-warning",
             )}
             data-testid="bulk-count-nevercounted"
           >
@@ -1001,40 +1123,65 @@ export default function BulkCountPage() {
             aria-pressed={filters.staleOnly}
             onClick={() => patch({ staleOnly: !filters.staleOnly })}
             className={cn(
-              "rounded-full px-2.5 py-1 text-2xs font-medium ring-1 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
-              filters.staleOnly
-                ? "bg-warning-softer text-warning-fg ring-warning/40"
-                : "bg-bg-subtle text-fg-muted ring-border hover:text-fg",
+              "chip transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
+              filters.staleOnly && "chip-warning",
             )}
             title={`Last movement ${STALE_DAYS}+ days ago`}
             data-testid="bulk-count-stale"
           >
             ⏱ Stale ({STALE_DAYS}d+)
           </button>
-          {anyFilterActive(filters) ? (
-            <button
-              type="button"
-              onClick={() => setFilters(EMPTY_FILTERS)}
-              className="ml-1 text-2xs font-medium text-accent-fg underline hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
-              data-testid="bulk-count-clear-filters"
-            >
-              Clear all filters
-            </button>
-          ) : null}
-          <span className="ml-auto text-2xs tabular-nums text-fg-subtle" aria-live="polite">
-            Showing {visibleRows.length.toLocaleString()} of {rows.length.toLocaleString()}
-          </span>
         </div>
       </div>
+      ) : null}
+
+      {/* Result summary — always visible, regardless of tray state */}
+      <div className="flex items-center justify-between gap-2 px-1 text-2xs text-fg-subtle">
+        <span aria-live="polite">
+          Showing {visibleRows.length.toLocaleString()} of {rows.length.toLocaleString()} items
+        </span>
+        {anyFilterActive(filters) ? (
+          <button
+            type="button"
+            onClick={() => setFilters(EMPTY_FILTERS)}
+            className="shrink-0 font-medium text-accent underline hover:text-accent-hover hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+            data-testid="bulk-count-clear-filters"
+          >
+            Clear all filters
+          </button>
+        ) : null}
+      </div>
+
+      {walkNotice ? (
+        <div
+          className="rounded-md border border-info/30 bg-info-softer/50 px-3 py-2 text-2xs text-info-fg"
+          role="status"
+          data-testid="bulk-count-walk-notice"
+        >
+          {walkNotice}
+        </div>
+      ) : null}
 
       {/* ===== Body ===== */}
       {loading ? (
         <div className="space-y-2" aria-busy="true" aria-live="polite">
           {Array.from({ length: 8 }).map((_, i) => (
-            <div key={i} className="flex animate-pulse items-center gap-3 rounded-lg border border-border/40 px-4 py-3">
-              <div className="h-4 w-10 rounded-full bg-bg-subtle" />
-              <div className="h-4 flex-1 rounded bg-bg-subtle" />
-              <div className="h-8 w-24 rounded bg-bg-subtle" />
+            <div
+              key={i}
+              className="flex animate-pulse flex-wrap items-center gap-x-3 gap-y-2 rounded-lg border border-border/40 px-3 py-2.5 sm:px-4"
+            >
+              <div className="flex min-w-0 flex-1 basis-56 items-center gap-2.5">
+                <div className="h-5 w-10 shrink-0 rounded-full bg-bg-subtle" />
+                <div className="min-w-0 space-y-1.5">
+                  <div className="h-4 w-48 max-w-full rounded bg-bg-subtle" />
+                  <div className="h-3 w-32 rounded bg-bg-subtle/70" />
+                </div>
+              </div>
+              <div className="flex shrink-0 items-center gap-2">
+                <div className="h-10 w-24 rounded bg-bg-subtle" />
+                <div className="h-4 w-12 rounded bg-bg-subtle/70" />
+                <div className="h-10 w-14 rounded bg-bg-subtle" />
+              </div>
             </div>
           ))}
         </div>
@@ -1067,7 +1214,7 @@ export default function BulkCountPage() {
             <button
               type="button"
               onClick={() => setFilters(EMPTY_FILTERS)}
-              className="mt-3 text-xs font-medium text-accent-fg underline hover:no-underline"
+              className="mt-3 text-xs font-medium text-accent underline hover:text-accent-hover hover:no-underline"
             >
               Reset filters
             </button>
@@ -1090,11 +1237,12 @@ export default function BulkCountPage() {
                   onClick={() => toggleSection(section.key)}
                   aria-expanded={!isCollapsed}
                   className={cn(
-                    // Sticky only from sm up — on phones the wrapping progress
-                    // bar has a variable height, so pinned section headers
-                    // could overlap it (FLOW-116).
-                    "flex w-full items-center gap-2.5 border-b border-border/50 px-3 py-2.5 text-left backdrop-blur-md transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 sm:sticky sm:top-12 sm:z-10 sm:px-4",
-                    done ? "bg-success-softer/80" : "bg-bg-raised/95 hover:bg-bg-subtle/80",
+                    // Not sticky: the page-level sticky header (progress +
+                    // search) owns the pinned zone; pinned section headers
+                    // would stack against its variable height (FLOW-116 /
+                    // UI-301). Done state at full opacity (UI-304).
+                    "flex min-h-[44px] w-full items-center gap-2.5 border-b border-border/50 px-3 py-2.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 sm:px-4",
+                    done ? "bg-success-softer" : "bg-bg-raised/95 hover:bg-bg-subtle/80",
                   )}
                 >
                   <svg
@@ -1106,11 +1254,23 @@ export default function BulkCountPage() {
                     <path d="M4 2l4 4-4 4" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" strokeLinejoin="round" />
                   </svg>
                   <span className="min-w-0 flex-1 truncate text-sm font-bold text-fg" dir="auto">
-                    {sectionLabel(section)}
+                    {/* FLOW-201 — never flash raw group keys while the groups
+                        vocabulary is still loading. */}
+                    {groupsData || section.group_key === NO_GROUP ? (
+                      sectionLabel(section)
+                    ) : (
+                      <span
+                        className="inline-block h-4 w-24 animate-pulse rounded bg-bg-subtle align-middle"
+                        aria-label="Loading area name"
+                      />
+                    )}
                   </span>
-                  <span className="rounded-full bg-bg-subtle px-2 py-0.5 text-2xs text-fg-muted ring-1 ring-border">
-                    {section.vocab === "pg" ? "FG" : "RM/PKG"}
-                  </span>
+                  {/* Vocab chip only disambiguates on the All tab (UI-308). */}
+                  {filters.type === "" ? (
+                    <span className="rounded-full border border-border bg-bg-subtle px-2 py-0.5 text-2xs text-fg-muted">
+                      {section.vocab === "pg" ? "FG" : "RM/PKG"}
+                    </span>
+                  ) : null}
                   {done ? (
                     <span className="inline-flex items-center gap-1 text-2xs font-semibold text-success-fg">
                       <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" aria-hidden="true">
@@ -1157,7 +1317,9 @@ export default function BulkCountPage() {
             </Link>
             . &quot;Recount&quot; only clears the local tick so you can submit a
             corrected count; previous submissions stay on the audit trail.
-            Tick marks reset automatically each day.
+            Tick marks reset automatically each day and are saved on this
+            device only — switching devices mid-walk resets the ticks, but
+            every submitted count is already safe in the system.
           </p>
         </div>
       )}
