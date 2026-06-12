@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Tranche 063 (FLOW-N01) — unit tests for summarizePoDraft, the pure rollup
+// Tranche 065 (FLOW-N01) — unit tests for summarizePoDraft, the pure rollup
 // behind the manual-PO form's read-only summary card. Lines count once an
 // orderable is chosen; money totals only over lines with a positive quantity
 // AND a non-negative entered price; totalValue is null when nothing is priced.
@@ -12,7 +12,7 @@ function line(overrides?: Partial<LineDraft>): LineDraft {
   return { orderable_key: "component:c1", quantity: "5", uom: "UNIT", ...overrides };
 }
 
-describe("summarizePoDraft (Tranche 063 FLOW-N01)", () => {
+describe("summarizePoDraft (Tranche 065 FLOW-N01)", () => {
   it("S1 empty draft → zero lines, null total", () => {
     expect(summarizePoDraft([])).toEqual({
       lineCount: 0,

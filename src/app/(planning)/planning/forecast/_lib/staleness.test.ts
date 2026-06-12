@@ -1,5 +1,5 @@
 // ---------------------------------------------------------------------------
-// Tranche 063 (FLOW-F01) — unit tests for the forecast-list staleness
+// Tranche 065 (FLOW-F01) — unit tests for the forecast-list staleness
 // classifier behind the banner: none / covered / stale.
 // ---------------------------------------------------------------------------
 
@@ -24,7 +24,7 @@ function version(
   };
 }
 
-describe("forecastStaleness (Tranche 063 FLOW-F01)", () => {
+describe("forecastStaleness (Tranche 065 FLOW-F01)", () => {
   it("F1 no versions → none", () => {
     expect(forecastStaleness([], NOW)).toEqual({ kind: "none" });
   });

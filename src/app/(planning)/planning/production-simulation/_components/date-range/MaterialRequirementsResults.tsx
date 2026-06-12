@@ -241,7 +241,7 @@ export function MaterialRequirementsResults({ from, to }: Props) {
             </span>
           ) : null}
         </div>
-        {/* Tranche 063 (FLOW-A10) — when the window needs buying, bridge
+        {/* Tranche 065 (FLOW-A10) — when the window needs buying, bridge
             into the ordering corridor instead of dead-ending. */}
         {toOrderCount > 0 ? (
           <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-border/60 pt-4">

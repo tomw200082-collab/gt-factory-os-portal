@@ -38,7 +38,7 @@ const MODES: { id: Mode; label: string; hint: string; icon: typeof FlaskConical 
   ];
 
 export function SimulationModeShell() {
-  // Tranche 063 (FLOW-A10) — the chosen mode rides in ?mode= so navigating
+  // Tranche 065 (FLOW-A10) — the chosen mode rides in ?mode= so navigating
   // away (e.g. into procurement) and back never destroys the setup. The
   // page wraps this shell in <Suspense>, satisfying useSearchParams.
   const router = useRouter();

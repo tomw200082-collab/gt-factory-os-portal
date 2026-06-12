@@ -538,7 +538,7 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
             <div className="mt-0.5 text-xs text-fg-muted">
               {result.week_firmed_total} batch{result.week_firmed_total === 1 ? "" : "es"} now committed for {fmtWeekRange(result.week_start)}. The Sunday session will buy against this week. Reversible via the production plan.
             </div>
-            {/* Tranche 063 (FLOW-A5) — bridge straight into the next chain
+            {/* Tranche 065 (FLOW-A5) — bridge straight into the next chain
                 step instead of leaving the planner to find procurement. */}
             <Link
               href="/planning/procurement"

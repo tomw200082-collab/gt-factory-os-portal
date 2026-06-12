@@ -322,7 +322,7 @@ function NewPoDropdown(): JSX.Element | null {
           role="menu"
           className="absolute right-0 top-full z-20 mt-1 min-w-[280px] rounded-md border border-border bg-bg-raised shadow-pop animate-fade-in-up overflow-hidden"
         >
-          {/* Tranche 063 (FLOW-A3, Tom-decided corridor consolidation) —
+          {/* Tranche 065 (FLOW-A3, Tom-decided corridor consolidation) —
               planning-backed ordering goes through the procurement session,
               not the diagnostic runs surface. */}
           <Link
@@ -465,7 +465,7 @@ export default function PurchaseOrdersListPage() {
   const [statusFilter, setStatusFilter] = useState<POStatus[] | null>(
     initialStatuses.length > 0 ? initialStatuses : ["OPEN", "PARTIAL"],
   );
-  // Tranche 063 (FLOW-A13) — search text and the Late-only flag mirror into
+  // Tranche 065 (FLOW-A13) — search text and the Late-only flag mirror into
   // the URL (?q=, ?late=1) like status already does, restoring on load.
   const [lateOnly, setLateOnly] = useState(
     () => searchParams.get("late") === "1",
@@ -811,7 +811,7 @@ export default function PurchaseOrdersListPage() {
               value={query}
               onChange={(e) => {
                 setQuery(e.target.value);
-                // Tranche 063 (FLOW-A13) — keep ?q= in sync so the search
+                // Tranche 065 (FLOW-A13) — keep ?q= in sync so the search
                 // survives navigation and refresh.
                 syncUrl({
                   statuses: statusFilter,

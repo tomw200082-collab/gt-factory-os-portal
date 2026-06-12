@@ -1,4 +1,4 @@
-# Tranche 063 — chain-audit fixes: forecast → meeting → procurement → PO → goods receipt
+# Tranche 065 — chain-audit fixes: forecast → meeting → procurement → PO → goods receipt
 
 status: implemented (branch `claude/sales-forecast-procurement-audit-7rr3h1`; Tom merges)
 evidence: tsc clean · eslint 0 errors (269 pre-existing warnings, unchanged) ·
@@ -13,7 +13,7 @@ surfaces are English-first. New Hebrew strings on the procurement surface match 
 register of the existing copy there.
 
 ## File manifest
-- `docs/portal-os/tranches/063-chain-audit-fixes.md` — this plan.
+- `docs/portal-os/tranches/065-chain-audit-fixes.md` — this plan.
 - `docs/portal-os/tranches/_active.txt` — set to 063 while active; cleared at close.
 - `src/app/(ops)/stock/receipts/page.tsx` — A1 invalidation set; R01 over-receipt
   two-step submit; R03 manual-success forward links.

@@ -501,7 +501,7 @@ export function ForecastRow({
 
       {/* — Right rail: hover-revealed actions + primary "Open" CTA zone. — */}
       <div className="fc-list-row-hero-rail">
-        {/* Tranche 063 (FLOW-F03) — one honest action per row: drafts are
+        {/* Tranche 065 (FLOW-F03) — one honest action per row: drafts are
             edited (pencil); published/archived versions are opened
             read-only (eye). Both routes lead to the detail page, which
             enforces editability itself. */}

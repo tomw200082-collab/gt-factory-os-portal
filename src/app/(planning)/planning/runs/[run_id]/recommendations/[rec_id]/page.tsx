@@ -210,7 +210,7 @@ export default function RecommendationDrillDownPage() {
       void queryClient.invalidateQueries({
         queryKey: ["planning", "run", runId, "recs"],
       });
-      // Tranche 063 (FLOW-A6) — the new PO must appear in the PO list,
+      // Tranche 065 (FLOW-A6) — the new PO must appear in the PO list,
       // PO detail surfaces, and the goods-receipt open-PO dropdown without
       // a manual reload (same set as usePlacePo / manual creation).
       void queryClient.invalidateQueries({

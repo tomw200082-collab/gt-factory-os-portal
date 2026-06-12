@@ -828,7 +828,7 @@ export default function GoodsReceiptPage() {
       lines: envelopeLines,
     };
 
-    // Tranche 063 (FLOW-R01) — over-receipts post to stock and create an
+    // Tranche 065 (FLOW-R01) — over-receipts post to stock and create an
     // exception, so the first submit tap swaps the button for an inline
     // confirmation zone instead of posting straight away. The second tap
     // ("Confirm and submit") passes this gate. No extra step when no line
@@ -892,7 +892,7 @@ export default function GoodsReceiptPage() {
         // and open-PO statuses; invalidate the whole ["ops","receipts"]
         // prefix so the PO ledger header pills and line tables refresh.
         void queryClient.invalidateQueries({ queryKey: ["ops", "receipts"] });
-        // Tranche 063 (FLOW-A1) — a posted receipt also flips PO statuses,
+        // Tranche 065 (FLOW-A1) — a posted receipt also flips PO statuses,
         // received quantities, GR lists, and projected stock. Mirror the
         // invalidation set of usePlacePo (purchase-session/_lib/api.ts) so
         // the PO list, PO detail, planner views, and inventory-flow refresh
@@ -1012,7 +1012,7 @@ export default function GoodsReceiptPage() {
     return n;
   }, [lines, poLines, poId]);
 
-  // Tranche 063 (FLOW-R01) — two-step submit when over-receipts exist:
+  // Tranche 065 (FLOW-R01) — two-step submit when over-receipts exist:
   // while true, the submit button is replaced by the amber inline
   // confirmation zone in the sticky bar.
   const [confirmingOverReceipt, setConfirmingOverReceipt] = useState(false);
@@ -1344,7 +1344,7 @@ export default function GoodsReceiptPage() {
                   </Link>
                 </div>
               ) : null}
-              {/* Tranche 063 (FLOW-R03) — manual (non-PO) receipts also get
+              {/* Tranche 065 (FLOW-R03) — manual (non-PO) receipts also get
                   forward links, so success is never a dead-end: the posted
                   movement is verifiable in the ledger, and the submission
                   itself in the submissions list. */}
@@ -2093,7 +2093,7 @@ export default function GoodsReceiptPage() {
                 </button>
                 {/* #23: Keyboard shortcut hint */}
                 <span className="hidden text-3xs text-fg-subtle sm:block">{shortcutHint}</span>
-                {/* Tranche 063 (FLOW-R01) — two-step submit for over-receipts:
+                {/* Tranche 065 (FLOW-R01) — two-step submit for over-receipts:
                     the first tap swaps the button for this amber zone naming
                     the over-receipt line count and what posting does. */}
                 {confirmingOverReceipt && overReceiptCount > 0 ? (

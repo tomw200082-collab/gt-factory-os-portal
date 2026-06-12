@@ -394,7 +394,7 @@ function DoneSummary({
           חזרה לרשימה
         </button>
       </div>
-      {/* Tranche 063 (FLOW-A12) — close the loop: the orders this session
+      {/* Tranche 065 (FLOW-A12) — close the loop: the orders this session
           created are visible on the PO list. */}
       {placed > 0 && (
         <Link

@@ -72,7 +72,7 @@ function usePurchaseMutation<TArgs, TResult>(
 
 export function useStartSession() {
   return usePurchaseMutation(
-    // Tranche 063 (FLOW-PC02) — `supersede: true` rides along when the
+    // Tranche 065 (FLOW-PC02) — `supersede: true` rides along when the
     // planner explicitly confirmed replacing an open session. The current
     // backend ignores the extra field; the upcoming backend will require it
     // in that case (forward-compatible).

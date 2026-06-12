@@ -66,7 +66,7 @@ function ManualPoFormInner(): JSX.Element {
   const router = useRouter();
   const queryClient = useQueryClient();
 
-  // Tranche 063 (FLOW-A2) — a freshly created PO must show up in the PO
+  // Tranche 065 (FLOW-A2) — a freshly created PO must show up in the PO
   // list (["planner","purchase-orders",…]), PO detail surfaces
   // (["purchase-orders",…]), and the goods-receipt open-PO dropdown
   // (["ops","receipts","open-pos"]) without a manual reload. Mirrors the
@@ -151,7 +151,7 @@ function ManualPoFormInner(): JSX.Element {
   type Phase = "idle" | "submitting" | "success" | "idempotent";
   const [phase, setPhase] = useState<Phase>("idle");
   const [successPoId, setSuccessPoId] = useState<string | null>(null);
-  // Tranche 063 (FLOW-N02) — display the human po_number when the POST
+  // Tranche 065 (FLOW-N02) — display the human po_number when the POST
   // response carries it; UUID fragment stays as the fallback (the backend
   // is adding the field in parallel, so code defensively).
   const [successPoNumber, setSuccessPoNumber] = useState<string | null>(null);
@@ -638,7 +638,7 @@ function ManualPoFormInner(): JSX.Element {
           expectedDateHint={expectedDateHint}
         />
 
-        {/* Tranche 063 (FLOW-N01) — reactive read-only summary of what
+        {/* Tranche 065 (FLOW-N01) — reactive read-only summary of what
             submit will create, so the operator confirms the shape of the
             order before committing. Money shows only when at least one
             line carries an entered price. */}

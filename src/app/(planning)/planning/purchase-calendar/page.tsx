@@ -4,7 +4,7 @@
 //
 // Tranche 045 (planning consolidation): the procurement page carries its own
 // calendar view (Tranche 033 CalendarView, via the in-page list/calendar
-// toggle). Tranche 063 (FLOW-A14): that toggle now honours ?view=calendar,
+// toggle). Tranche 065 (FLOW-A14): that toggle now honours ?view=calendar,
 // so this redirect lands the planner directly on the calendar view instead
 // of requiring an extra tap.
 //

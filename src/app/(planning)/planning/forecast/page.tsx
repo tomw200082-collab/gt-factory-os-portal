@@ -205,7 +205,7 @@ export default function ForecastListPage() {
   // Per-row production-liters fetches. Small payload, cached 5 minutes.
   const summariesQueries = useQueries({
     queries: baseFiltered.map((v) => ({
-      // Tranche 063 (FLOW-A8) — key root unified on plural "forecasts".
+      // Tranche 065 (FLOW-A8) — key root unified on plural "forecasts".
       queryKey: [
         "forecasts",
         "production-liters",
@@ -303,7 +303,7 @@ export default function ForecastListPage() {
         }
       />
 
-      {/* ----- Staleness banner (Tranche 063, FLOW-F01) -----
+      {/* ----- Staleness banner (Tranche 065, FLOW-F01) -----
           Computed from the already-fetched version metadata; rendered only
           once data is loaded (absent during loading/error). */}
       {query.data && !query.isLoading && !query.isError

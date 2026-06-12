@@ -621,7 +621,7 @@ export default function PurchaseOrderDetailPage({
       void queryClient.invalidateQueries({ queryKey: ["purchase-orders", "history", po_id] });
       setEditing(false);
       setEditError(null);
-      // Tranche 063 (FLOW-PO01) — flash the "Order updated." note.
+      // Tranche 065 (FLOW-PO01) — flash the "Order updated." note.
       setUpdateSaved(true);
     },
     onError: (err: unknown) => {
@@ -629,7 +629,7 @@ export default function PurchaseOrderDetailPage({
     },
   });
 
-  // Tranche 063 (FLOW-PO01) — auto-dismiss the saved note after ~4.5s.
+  // Tranche 065 (FLOW-PO01) — auto-dismiss the saved note after ~4.5s.
   const [updateSaved, setUpdateSaved] = useState(false);
   useEffect(() => {
     if (!updateSaved) return;
@@ -1125,7 +1125,7 @@ export default function PurchaseOrderDetailPage({
         <div className="space-y-3">
           {canEditPo && !editing && (
             <div className="flex items-center justify-end gap-2 px-1">
-              {/* Tranche 063 (FLOW-PO01) — brief, auto-dismissing success
+              {/* Tranche 065 (FLOW-PO01) — brief, auto-dismissing success
                   feedback after a save (the edit row collapses on success,
                   so silence read as "did it work?"). */}
               {updateSaved && (
@@ -1189,7 +1189,7 @@ export default function PurchaseOrderDetailPage({
         );
       }
       return (
-        // Tranche 063 (FLOW-PO02) — human labels instead of raw field names.
+        // Tranche 065 (FLOW-PO02) — human labels instead of raw field names.
         <DetailFieldGrid
           rows={[
             {
@@ -1381,7 +1381,7 @@ export default function PurchaseOrderDetailPage({
       header={{
         eyebrow: "Purchase orders",
         title: po ? `PO ${po.po_number}` : po_id,
-        // Tranche 063 (FLOW-PO03) — the raw supplier_id suffix is noise once
+        // Tranche 065 (FLOW-PO03) — the raw supplier_id suffix is noise once
         // a real supplier name resolved; supplierLabel already falls back to
         // the id when no name exists, so the id never disappears entirely.
         description: po ? supplierLabel : "Loading purchase order…",

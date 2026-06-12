@@ -128,7 +128,7 @@ export function useAutoSave(
       setErrorMessage(null);
       // Refetch to pick up server-side normalization (e.g., trailing zeros
       // stripped to qty_8dp shape).
-      // Tranche 063 (FLOW-A8) — key root unified on plural "forecasts" so
+      // Tranche 065 (FLOW-A8) — key root unified on plural "forecasts" so
       // publish/list invalidations and this detail query share one family.
       qc.invalidateQueries({ queryKey: ["forecasts", "version", versionId] });
       return true;

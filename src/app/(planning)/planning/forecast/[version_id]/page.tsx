@@ -506,7 +506,7 @@ export default function ForecastVersionDetailPage() {
         queryClient.invalidateQueries({
           queryKey: ["forecasts", "versions"],
         });
-        // Tranche 063 (FLOW-A7) — the planning hub overview reads
+        // Tranche 065 (FLOW-A7) — the planning hub overview reads
         // ["planning","overview",…] (active forecast card, coverage);
         // a newly published forecast must refresh it.
         queryClient.invalidateQueries({
@@ -861,7 +861,7 @@ export default function ForecastVersionDetailPage() {
       ) : null}
 
       {/* Active-published bridge: tell the planner the next step.
-          Tranche 063 (FLOW-A4) — the operational next step after publishing
+          Tranche 065 (FLOW-A4) — the operational next step after publishing
           is the weekly meeting (firm the week), not the diagnostic runs
           surface. Runs stays reachable via a quiet secondary link. */}
       {isPublished ? (

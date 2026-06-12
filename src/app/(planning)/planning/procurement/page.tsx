@@ -49,7 +49,7 @@ export default function ProcurementPage(): JSX.Element {
   const startMut = useStartSession();
   const session = data?.session ?? null;
 
-  // Tranche 063 (FLOW-A14) — ?view=calendar deep-links straight into the
+  // Tranche 065 (FLOW-A14) — ?view=calendar deep-links straight into the
   // calendar view (the purchase-calendar redirect targets it).
   const searchParams = useSearchParams();
   const initialView: "list" | "calendar" =
@@ -59,11 +59,11 @@ export default function ProcurementPage(): JSX.Element {
   const [focusOpen, setFocusOpen] = useState(false);
   const [focusStartId, setFocusStartId] = useState<string | null>(null);
 
-  // Tranche 063 (FLOW-PC02) — inline supersede confirmation replaces the
+  // Tranche 065 (FLOW-PC02) — inline supersede confirmation replaces the
   // old window.confirm. While true, the start button area swaps for a
   // warning zone (matches the PO-detail inline cancel-confirm pattern).
   const [confirmingStart, setConfirmingStart] = useState(false);
-  // Tranche 063 (FLOW-PC03) — dismissible success banner after a start.
+  // Tranche 065 (FLOW-PC03) — dismissible success banner after a start.
   const [startBannerDismissed, setStartBannerDismissed] = useState(false);
 
   function openFocus(startId: string | null): void {
@@ -105,7 +105,7 @@ export default function ProcurementPage(): JSX.Element {
         description="כל הזמנות הרכש במקום אחד, מסודרות לפי החלטה: מה חייב לצאת היום, מה יכול לחכות, ומה כבר טופל."
         meta={
           confirmingStart ? (
-            // Tranche 063 (FLOW-PC02) — inline warning zone instead of a
+            // Tranche 065 (FLOW-PC02) — inline warning zone instead of a
             // browser confirm: states what is lost, offers an explicit way
             // to stay in the current session.
             <div
@@ -168,7 +168,7 @@ export default function ProcurementPage(): JSX.Element {
         />
       )}
 
-      {/* Tranche 063 (FLOW-PC03) — explicit, dismissible confirmation that
+      {/* Tranche 065 (FLOW-PC03) — explicit, dismissible confirmation that
           a session opened, with the date and the review workload. */}
       {startBannerVisible && startedSession && (
         <div
@@ -285,7 +285,7 @@ function SessionView({
           </div>
         </div>
         <div className="flex items-center gap-3">
-          {/* Tranche 063 (FLOW-PC04) — quiet exit to the full PO history. */}
+          {/* Tranche 065 (FLOW-PC04) — quiet exit to the full PO history. */}
           <Link
             href="/purchase-orders"
             className="text-xs font-medium text-fg-muted underline-offset-2 hover:text-fg hover:underline"

@@ -170,7 +170,7 @@ export function dedupeBySupplier(rows: SupplierItemRow[]): SupplierItemRow[] {
   return out;
 }
 
-// --- Tranche 063 (FLOW-N01) — draft summary ---------------------------------
+// --- Tranche 065 (FLOW-N01) — draft summary ---------------------------------
 // Pure rollup for the read-only summary card on the manual-PO form. A line
 // counts once an orderable is chosen; it contributes to the total only when
 // it carries both a positive quantity and a non-negative entered price.
