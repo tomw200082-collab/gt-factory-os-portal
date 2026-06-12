@@ -3952,4 +3952,12 @@
   :root.dark .dash-week-row {
     background-color: hsl(var(--bg) / 0.25);
   }
+  /* FLOW-E10: linked detail rows get a real hover affordance. */
+  .dash-week-row.is-link {
+    @apply transition-colors;
+  }
+  .dash-week-row.is-link:hover {
+    border-color: hsl(var(--accent) / 0.5);
+    background-color: hsl(var(--accent) / 0.06);
+  }
 }

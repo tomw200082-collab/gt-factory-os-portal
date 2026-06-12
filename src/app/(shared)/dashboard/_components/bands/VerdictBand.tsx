@@ -37,8 +37,10 @@ export interface VerdictBandProps {
   focus: FocusResult;
   /** Critical-today count; null while loading. */
   critical: number | null;
-  /** Slipped-plan count; null while loading. */
-  slipped: number | null;
+  /** Total Today's-Work queue depth (rows + overflow); null while loading.
+   *  FLOW-E01: the pill is a WORKLOAD METER — a heavy procurement day must
+   *  not read as "Floor is clear". */
+  queueTotal: number | null;
   /** Freshness chip(s) — composed by the page. */
   metaRail: ReactNode;
   /** "Since you last looked" delta chips (empty on first-ever visit). */
@@ -51,21 +53,28 @@ interface FactoryState {
   Icon: typeof CheckCircle2;
 }
 
-function resolveFactoryState(critical: number | null, slipped: number | null): FactoryState {
-  if (critical === null || slipped === null) {
+// FLOW-E01: the pill encodes total workload, not just two sub-counts.
+// danger when anything stops production; warning while ANY queue items
+// exist; success only when the queue is truly empty.
+function resolveFactoryState(critical: number | null, queueTotal: number | null): FactoryState {
+  if (critical === null || queueTotal === null) {
     return { tone: "neutral", label: "Reading floor state", Icon: Loader2 };
   }
-  const parts: string[] = [];
-  if (critical > 0) parts.push(`${critical} critical`);
-  if (slipped > 0) parts.push(`${slipped} slipped`);
-  if (parts.length === 0) {
-    return { tone: "success", label: "Floor is clear", Icon: CheckCircle2 };
+  if (critical > 0) {
+    return {
+      tone: "danger",
+      label: `${queueTotal} action${queueTotal !== 1 ? "s" : ""} today · ${critical} critical`,
+      Icon: AlertTriangle,
+    };
   }
-  return {
-    tone: critical > 0 ? "danger" : "warning",
-    label: parts.join(" · "),
-    Icon: AlertTriangle,
-  };
+  if (queueTotal > 0) {
+    return {
+      tone: "warning",
+      label: `${queueTotal} action${queueTotal !== 1 ? "s" : ""} today`,
+      Icon: AlertTriangle,
+    };
+  }
+  return { tone: "success", label: "Floor is clear", Icon: CheckCircle2 };
 }
 
 export function VerdictBand({
@@ -73,11 +82,11 @@ export function VerdictBand({
   dateLong,
   focus,
   critical,
-  slipped,
+  queueTotal,
   metaRail,
   sinceChips,
 }: VerdictBandProps) {
-  const state = resolveFactoryState(critical, slipped);
+  const state = resolveFactoryState(critical, queueTotal);
   const { Icon } = state;
 
   // Sticky collapse — observe the full band; show the slim mirror when it
@@ -170,14 +179,17 @@ export function VerdictBand({
           <span className="dash-verdict-date"> · {dateLong}</span>
         </h1>
 
-        {/* Row 3 — the Focus Engine sentence. FLOW-D04: the eyebrow chip
-            marks it as THE daily directive (it read as decorative copy). */}
-        <div className="mt-4 flex items-center gap-2">
-          <span className="dash-focus-eyebrow" data-tone={focus.tone} data-testid="dash-focus-eyebrow">
+        {/* Row 3 — the Focus Engine sentence. FLOW-D04 chip marks it as THE
+            daily directive; FLOW-E06 merged the chip INLINE with the sentence
+            so Band 0 carries a single eyebrow-level label. */}
+        <p className="dash-focus mt-4 flex flex-wrap items-center gap-2" data-tone={focus.tone} data-testid="dash-focus">
+          <span
+            className="dash-focus-eyebrow shrink-0"
+            data-tone={focus.tone}
+            data-testid="dash-focus-eyebrow"
+          >
             Today&apos;s focus
           </span>
-        </div>
-        <p className="dash-focus mt-1.5" data-tone={focus.tone} data-testid="dash-focus">
           {focus.href ? (
             focus.href.startsWith("#") ? (
               <a

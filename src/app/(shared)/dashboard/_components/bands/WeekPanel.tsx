@@ -106,11 +106,12 @@ export function WeekPanel({ procurement, production, fmtMoney, fmtMoneyFull }: W
       className={cn("grid grid-cols-1 gap-4", twoUp && "lg:grid-cols-2")}
     >
       {procurement ? (
-        <Link
-          href="/planning/procurement"
+        // FLOW-E10: a div (not a Link) so the detail rows inside can carry
+        // their own deep links; the CTA row below is the tile's link.
+        <div
           data-tone="accent"
           data-testid="week-procurement"
-          className="kpi-tile is-link group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+          className="kpi-tile group"
         >
           <div className="flex items-start justify-between gap-3">
             <div className="kpi-tile-label">Procurement this week</div>
@@ -171,6 +172,7 @@ export function WeekPanel({ procurement, production, fmtMoney, fmtMoneyFull }: W
               {/* Receiving previously ordered goods is independent of this
                   week's session — always shown. */}
               <DetailRow
+                href="/purchase-orders"
                 emphasis={procurement.awaitingReceipt.late > 0 ? "danger" : undefined}
                 label={`Awaiting receipt — ${procurement.awaitingReceipt.count} PO${
                   procurement.awaitingReceipt.count !== 1 ? "s" : ""
@@ -183,11 +185,14 @@ export function WeekPanel({ procurement, production, fmtMoney, fmtMoneyFull }: W
               />
             </div>
           ) : null}
-          <div className="kpi-tile-cta">
+          <Link
+            href="/planning/procurement"
+            className="kpi-tile-cta rounded transition-colors hover:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+          >
             <span>{procurement.sessionExists ? "Open procurement" : "Start session"}</span>
             <ArrowRight className="kpi-tile-cta-arrow" strokeWidth={2} aria-hidden />
-          </div>
-        </Link>
+          </Link>
+        </div>
       ) : null}
 
       <Link
