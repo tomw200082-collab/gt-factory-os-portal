@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { Play, CalendarRange, AlertTriangle } from "lucide-react";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { cn } from "@/lib/cn";
@@ -128,10 +129,23 @@ function DateField({
   );
 }
 
+const ISO_DATE = /^\d{4}-\d{2}-\d{2}$/;
+
 export function DateRangePlanShell() {
+  // Tranche 063 (FLOW-A10) — the date range rides in ?from=/?to= so
+  // navigating away (e.g. into procurement) and back never destroys the
+  // setup. The page wraps the shells in <Suspense> (useSearchParams).
+  const router = useRouter();
+  const searchParams = useSearchParams();
   const initial = useMemo(defaultRange, []);
-  const [draftFrom, setDraftFrom] = useState(initial.from);
-  const [draftTo, setDraftTo] = useState(initial.to);
+  const [draftFrom, setDraftFrom] = useState(() => {
+    const v = searchParams.get("from");
+    return v && ISO_DATE.test(v) ? v : initial.from;
+  });
+  const [draftTo, setDraftTo] = useState(() => {
+    const v = searchParams.get("to");
+    return v && ISO_DATE.test(v) ? v : initial.to;
+  });
   const [committed, setCommitted] = useState<{ from: string; to: string } | null>(
     null,
   );
@@ -139,10 +153,28 @@ export function DateRangePlanShell() {
   const error = rangeError(draftFrom, draftTo);
   const canSimulate = error === null;
 
+  function syncUrl(from: string, to: string): void {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("from", from);
+    params.set("to", to);
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }
+
+  function changeFrom(next: string): void {
+    setDraftFrom(next);
+    syncUrl(next, draftTo);
+  }
+
+  function changeTo(next: string): void {
+    setDraftTo(next);
+    syncUrl(draftFrom, next);
+  }
+
   function applyPreset(p: Preset) {
     const r = p.range();
     setDraftFrom(r.from);
     setDraftTo(r.to);
+    syncUrl(r.from, r.to);
   }
 
   function handleSimulate() {
@@ -188,7 +220,7 @@ export function DateRangePlanShell() {
             <DateField
               label="From"
               value={draftFrom}
-              onChange={setDraftFrom}
+              onChange={changeFrom}
               testId="production-simulation-range-from"
             />
             <span
@@ -200,7 +232,7 @@ export function DateRangePlanShell() {
             <DateField
               label="To"
               value={draftTo}
-              onChange={setDraftTo}
+              onChange={changeTo}
               testId="production-simulation-range-to"
             />
             <button

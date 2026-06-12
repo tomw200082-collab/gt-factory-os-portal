@@ -29,6 +29,7 @@ import {
   MinusCircle,
   Package,
   PackageOpen,
+  ShoppingBasket,
   ShoppingCart,
   TrendingUp,
 } from "lucide-react";
@@ -100,12 +101,21 @@ export const QUICK_ACTIONS: readonly QuickAction[] = [
     category: "planning",
   },
   {
+    // Tranche 063 (FLOW-A3) — the weekly buying flow gets its own launcher;
+    // it is the canonical ordering corridor (Tom-decided consolidation).
+    href: "/planning/procurement",
+    label: "Procurement",
+    blurb: "The weekly buying flow — review and place planned orders.",
+    icon: ShoppingBasket,
+    required: "planning:read",
+    category: "planning",
+  },
+  {
     // Tranche 045 — runs are diagnostic-only; ordering goes through
-    // /planning/procurement. Blurb adjusted so the tile no longer frames
-    // runs as the place to act on purchase recommendations.
+    // /planning/procurement. Tranche 063 (FLOW-A3) sharpens the blurb.
     href: "/planning/runs",
     label: "Planning Runs",
-    blurb: "Diagnostic run history — order through Procurement.",
+    blurb: "Diagnostic planning runs — not for ordering.",
     icon: ListChecks,
     required: "planning:read",
     category: "planning",

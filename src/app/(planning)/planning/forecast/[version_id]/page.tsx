@@ -860,7 +860,10 @@ export default function ForecastVersionDetailPage() {
         </div>
       ) : null}
 
-      {/* Active-published bridge: tell the planner the next step */}
+      {/* Active-published bridge: tell the planner the next step.
+          Tranche 063 (FLOW-A4) — the operational next step after publishing
+          is the weekly meeting (firm the week), not the diagnostic runs
+          surface. Runs stays reachable via a quiet secondary link. */}
       {isPublished ? (
         <div
           className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded border border-info/30 bg-info-softer px-4 py-3 text-xs text-info-fg"
@@ -871,27 +874,36 @@ export default function ForecastVersionDetailPage() {
               Active forecast — demand source for planning
             </div>
             <div className="mt-0.5 text-fg-muted">
-              Trigger a planning run to turn this forecast into purchase and
-              production recommendations.
+              Next step: review the draft production week and firm it in the
+              weekly meeting.
             </div>
           </div>
-          <Link
-            href="/planning/runs"
-            className="btn btn-sm btn-primary gap-1.5 shrink-0"
-            data-testid="forecast-published-go-runs"
-          >
-            {canAuthor ? (
-              <>
-                <Play className="h-3 w-3" strokeWidth={2.5} />
-                Run planning
-              </>
-            ) : (
-              <>
-                <ChevronRight className="h-3 w-3" strokeWidth={2.5} />
-                Planning runs
-              </>
-            )}
-          </Link>
+          <div className="flex shrink-0 items-center gap-3">
+            <Link
+              href="/planning/runs"
+              className="text-fg-muted underline-offset-2 hover:text-fg hover:underline"
+              data-testid="forecast-published-go-runs"
+            >
+              Diagnostic runs
+            </Link>
+            <Link
+              href="/planning/meeting"
+              className="btn btn-sm btn-primary gap-1.5"
+              data-testid="forecast-published-go-meeting"
+            >
+              {canAuthor ? (
+                <>
+                  <Play className="h-3 w-3" strokeWidth={2.5} />
+                  Firm the week
+                </>
+              ) : (
+                <>
+                  <ChevronRight className="h-3 w-3" strokeWidth={2.5} />
+                  Weekly meeting
+                </>
+              )}
+            </Link>
+          </div>
         </div>
       ) : null}
 

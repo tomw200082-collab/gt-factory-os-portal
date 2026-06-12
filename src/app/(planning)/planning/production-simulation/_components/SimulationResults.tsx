@@ -1,7 +1,8 @@
 "use client";
 
+import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, FileWarning } from "lucide-react";
+import { AlertTriangle, FileWarning, ShoppingCart } from "lucide-react";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { cn } from "@/lib/cn";
 import type {
@@ -502,6 +503,27 @@ export function SimulationResults({
             </span>
           ) : null}
         </div>
+        {/* Tranche 063 (FLOW-A10) — when the run needs buying, bridge into
+            the ordering corridor instead of dead-ending on the answer. */}
+        {short + partial > 0 ? (
+          <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-border/60 pt-4">
+            <Link
+              href="/planning/procurement"
+              className="btn btn-sm btn-primary gap-1.5"
+              data-testid="production-simulation-go-procurement"
+            >
+              <ShoppingCart className="h-3.5 w-3.5" strokeWidth={2.25} aria-hidden />
+              Take this to procurement
+            </Link>
+            <Link
+              href="/purchase-orders/new"
+              className="text-xs font-medium text-fg-muted underline-offset-2 hover:text-fg hover:underline"
+              data-testid="production-simulation-go-manual-po"
+            >
+              Create a manual purchase order →
+            </Link>
+          </div>
+        ) : null}
       </div>
 
       {data.warnings.length > 0 ? (

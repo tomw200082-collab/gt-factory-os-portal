@@ -21,12 +21,15 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   AlertTriangle,
   CalendarDays,
+  CheckCircle2,
   ListChecks,
   RefreshCw,
   Target,
+  X,
 } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { cn } from "@/lib/cn";
@@ -46,9 +49,22 @@ export default function ProcurementPage(): JSX.Element {
   const startMut = useStartSession();
   const session = data?.session ?? null;
 
+  // Tranche 063 (FLOW-A14) — ?view=calendar deep-links straight into the
+  // calendar view (the purchase-calendar redirect targets it).
+  const searchParams = useSearchParams();
+  const initialView: "list" | "calendar" =
+    searchParams.get("view") === "calendar" ? "calendar" : "list";
+
   // Focus mode: open flag + the order to start on (null = first queued).
   const [focusOpen, setFocusOpen] = useState(false);
   const [focusStartId, setFocusStartId] = useState<string | null>(null);
+
+  // Tranche 063 (FLOW-PC02) — inline supersede confirmation replaces the
+  // old window.confirm. While true, the start button area swaps for a
+  // warning zone (matches the PO-detail inline cancel-confirm pattern).
+  const [confirmingStart, setConfirmingStart] = useState(false);
+  // Tranche 063 (FLOW-PC03) — dismissible success banner after a start.
+  const [startBannerDismissed, setStartBannerDismissed] = useState(false);
 
   function openFocus(startId: string | null): void {
     setFocusStartId(startId);
@@ -56,16 +72,25 @@ export default function ProcurementPage(): JSX.Element {
   }
 
   function handleStart(): void {
-    if (
-      session?.status === "open" &&
-      !window.confirm(
-        "קיים מושב רכש פתוח. הרצת מושב חדש תחליף אותו וכל פעולה שלא נשמרה תאבד. להמשיך?",
-      )
-    ) {
+    if (session?.status === "open" && !confirmingStart) {
+      setConfirmingStart(true);
       return;
     }
-    startMut.mutate({ session_type: "weekly" });
+    const superseding = confirmingStart;
+    setConfirmingStart(false);
+    setStartBannerDismissed(false);
+    startMut.mutate({
+      session_type: "weekly",
+      // FLOW-PC02 — the backend will soon require supersede:true when an
+      // open session exists; send it from the confirmed path already now
+      // (the current backend ignores the extra field).
+      ...(superseding ? { supersede: true } : {}),
+    });
   }
+
+  const startedSession = startMut.data?.session ?? null;
+  const startBannerVisible =
+    startMut.isSuccess && startedSession !== null && !startBannerDismissed;
 
   return (
     // Procurement is a fully-Hebrew operator surface, so the whole page reads
@@ -79,19 +104,60 @@ export default function ProcurementPage(): JSX.Element {
         title="רכש"
         description="כל הזמנות הרכש במקום אחד, מסודרות לפי החלטה: מה חייב לצאת היום, מה יכול לחכות, ומה כבר טופל."
         meta={
-          <button
-            type="button"
-            onClick={handleStart}
-            disabled={startMut.isPending}
-            className="btn btn-primary btn-sm"
-            data-testid="procurement-start"
-          >
-            {startMut.isPending
-              ? "מריץ…"
-              : session
-                ? "הרצת מושב חדש"
-                : "התחל מושב רכש"}
-          </button>
+          confirmingStart ? (
+            // Tranche 063 (FLOW-PC02) — inline warning zone instead of a
+            // browser confirm: states what is lost, offers an explicit way
+            // to stay in the current session.
+            <div
+              className="flex flex-wrap items-center gap-2 rounded-md border border-warning/40 bg-warning-softer px-3 py-2"
+              role="alertdialog"
+              aria-label="אישור החלפת מושב"
+              data-testid="procurement-start-confirm-zone"
+            >
+              <AlertTriangle
+                className="h-4 w-4 shrink-0 text-warning-fg"
+                aria-hidden
+              />
+              <span className="text-xs text-warning-fg">
+                קיים מושב רכש פתוח. מושב חדש יחליף אותו, ואישורים שלא נשמרו
+                יאבדו.
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  onClick={handleStart}
+                  disabled={startMut.isPending}
+                  className="btn btn-sm bg-warning text-fg-inverted hover:bg-warning/90"
+                  data-testid="procurement-start-confirm"
+                >
+                  התחל מושב חדש
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setConfirmingStart(false)}
+                  disabled={startMut.isPending}
+                  className="btn btn-ghost btn-sm"
+                  data-testid="procurement-start-dismiss"
+                >
+                  השאר במושב הנוכחי
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              onClick={handleStart}
+              disabled={startMut.isPending}
+              className="btn btn-primary btn-sm"
+              data-testid="procurement-start"
+            >
+              {startMut.isPending
+                ? "מריץ…"
+                : session
+                  ? "הרצת מושב חדש"
+                  : "התחל מושב רכש"}
+            </button>
+          )
         }
       />
 
@@ -100,6 +166,36 @@ export default function ProcurementPage(): JSX.Element {
           message={(startMut.error as Error).message}
           onRetry={handleStart}
         />
+      )}
+
+      {/* Tranche 063 (FLOW-PC03) — explicit, dismissible confirmation that
+          a session opened, with the date and the review workload. */}
+      {startBannerVisible && startedSession && (
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex items-start gap-2 rounded-md border border-success/40 bg-success-softer px-4 py-3 text-sm text-success-fg"
+          data-testid="procurement-start-success"
+        >
+          <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+          <span className="min-w-0 flex-1">
+            מושב רכש נפתח לתאריך{" "}
+            <span className="font-semibold">
+              {startedSession.session_date}
+            </span>{" "}
+            — {buildFocusQueue(startedSession.pos).length} הזמנות ממתינות
+            לסקירה.
+          </span>
+          <button
+            type="button"
+            onClick={() => setStartBannerDismissed(true)}
+            className="shrink-0 rounded p-0.5 text-success-fg hover:bg-success/10"
+            aria-label="סגירת ההודעה"
+            data-testid="procurement-start-success-dismiss"
+          >
+            <X className="h-4 w-4" aria-hidden />
+          </button>
+        </div>
       )}
 
       {isLoading ? (
@@ -116,6 +212,7 @@ export default function ProcurementPage(): JSX.Element {
           pos={session.pos}
           sessionDate={session.session_date}
           totalCost={session.totals.total_cost}
+          initialView={initialView}
           onStartFocus={() => openFocus(null)}
           onOpenById={openFocus}
         />
@@ -140,16 +237,18 @@ function SessionView({
   pos,
   sessionDate,
   totalCost,
+  initialView,
   onStartFocus,
   onOpenById,
 }: {
   pos: PurchaseSessionPo[];
   sessionDate: string;
   totalCost: number;
+  initialView: "list" | "calendar";
   onStartFocus: () => void;
   onOpenById: (id: string) => void;
 }): JSX.Element {
-  const [view, setView] = useState<"list" | "calendar">("list");
+  const [view, setView] = useState<"list" | "calendar">(initialView);
   const actionableCount = buildFocusQueue(pos).length;
 
   if (pos.length === 0) {
@@ -186,6 +285,14 @@ function SessionView({
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {/* Tranche 063 (FLOW-PC04) — quiet exit to the full PO history. */}
+          <Link
+            href="/purchase-orders"
+            className="text-xs font-medium text-fg-muted underline-offset-2 hover:text-fg hover:underline"
+            data-testid="procurement-order-history"
+          >
+            היסטוריית הזמנות ←
+          </Link>
           <Link
             href="/purchase-orders/new"
             className="text-xs font-medium text-fg-muted underline-offset-2 hover:text-fg hover:underline"

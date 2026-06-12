@@ -322,8 +322,11 @@ function NewPoDropdown(): JSX.Element | null {
           role="menu"
           className="absolute right-0 top-full z-20 mt-1 min-w-[280px] rounded-md border border-border bg-bg-raised shadow-pop animate-fade-in-up overflow-hidden"
         >
+          {/* Tranche 063 (FLOW-A3, Tom-decided corridor consolidation) —
+              planning-backed ordering goes through the procurement session,
+              not the diagnostic runs surface. */}
           <Link
-            href="/planning/runs"
+            href="/planning/procurement"
             role="menuitem"
             data-testid="po-list-new-from-recommendation"
             onClick={() => setOpen(false)}
@@ -334,9 +337,9 @@ function NewPoDropdown(): JSX.Element | null {
               aria-hidden
             />
             <div className="flex flex-col gap-0.5 min-w-0">
-              <span className="font-semibold">From recommendation</span>
+              <span className="font-semibold">From procurement session</span>
               <span className="text-3xs text-fg-faint">
-                Convert an approved planning recommendation into a PO.
+                The weekly buying flow — planning-backed orders start here.
               </span>
             </div>
           </Link>
