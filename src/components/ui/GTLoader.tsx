@@ -147,7 +147,11 @@ export function GTLoader({
           }}
         />
 
-        {/* GT Monogram */}
+        {/* Brand logo — the real GT Everyday mark (Tom 2026-06-12: replaces
+            the "GT" text monogram; everything else — rings, glow, shimmer,
+            timing — is unchanged). The loader surface is always dark and
+            /brand/logo.png is white-on-transparent, so unlike TopBar's
+            BrandMark no theme invert is needed here. */}
         <div
           style={{
             position: "relative",
@@ -158,24 +162,23 @@ export function GTLoader({
         >
           {/* Shimmer wrapper */}
           <div style={{ position: "relative", overflow: "hidden" }}>
-            <div
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/brand/logo.png"
+              alt=""
+              aria-hidden
+              width={92}
+              height={92}
+              draggable={false}
               style={{
-                fontSize: 76,
-                fontWeight: 800,
-                letterSpacing: "-0.05em",
-                lineHeight: 1,
-                background: `linear-gradient(135deg, ${T.ring1b} 0%, ${T.ring1a} 42%, ${T.ring2a} 100%)`,
-                WebkitBackgroundClip: "text",
-                WebkitTextFillColor: "transparent",
-                backgroundClip: "text",
-                fontFamily:
-                  "var(--font-public-sans, ui-sans-serif, system-ui, sans-serif)",
+                display: "block",
+                width: 92,
+                height: 92,
+                objectFit: "contain",
                 filter: `drop-shadow(0 0 18px hsl(186 50% 50% / 0.42))`,
                 userSelect: "none",
               }}
-            >
-              GT
-            </div>
+            />
             {/* Shimmer sweep */}
             <div
               aria-hidden
