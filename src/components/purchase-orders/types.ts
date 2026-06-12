@@ -170,6 +170,47 @@ export function dedupeBySupplier(rows: SupplierItemRow[]): SupplierItemRow[] {
   return out;
 }
 
+// --- Tranche 065 (FLOW-N01) — draft summary ---------------------------------
+// Pure rollup for the read-only summary card on the manual-PO form. A line
+// counts once an orderable is chosen; it contributes to the total only when
+// it carries both a positive quantity and a non-negative entered price.
+// totalValue is null when no line carries a usable price (the card then
+// omits the money figure instead of showing a misleading ₪0.00).
+
+export interface PoDraftSummary {
+  lineCount: number;
+  pricedLineCount: number;
+  totalValue: number | null;
+}
+
+export function summarizePoDraft(lines: LineDraft[]): PoDraftSummary {
+  let lineCount = 0;
+  let pricedLineCount = 0;
+  let totalValue = 0;
+  for (const l of lines) {
+    if (!l.orderable_key) continue;
+    lineCount++;
+    const qty = Number(l.quantity);
+    const priceRaw = (l.unit_price_net ?? "").trim();
+    if (priceRaw === "") continue;
+    const price = Number(priceRaw);
+    if (
+      Number.isFinite(qty) &&
+      qty > 0 &&
+      Number.isFinite(price) &&
+      price >= 0
+    ) {
+      pricedLineCount++;
+      totalValue += qty * price;
+    }
+  }
+  return {
+    lineCount,
+    pricedLineCount,
+    totalValue: pricedLineCount > 0 ? totalValue : null,
+  };
+}
+
 // --- Shared client-side validation -----------------------------------------
 // Mirrors the original /new validate() exactly; the only mode-dependent rule
 // is manual_reason, which is skipped entirely in "recommendation" mode.

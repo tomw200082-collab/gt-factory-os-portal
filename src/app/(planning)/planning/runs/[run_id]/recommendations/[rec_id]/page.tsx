@@ -210,6 +210,16 @@ export default function RecommendationDrillDownPage() {
       void queryClient.invalidateQueries({
         queryKey: ["planning", "run", runId, "recs"],
       });
+      // Tranche 065 (FLOW-A6) — the new PO must appear in the PO list,
+      // PO detail surfaces, and the goods-receipt open-PO dropdown without
+      // a manual reload (same set as usePlacePo / manual creation).
+      void queryClient.invalidateQueries({
+        queryKey: ["planner", "purchase-orders"],
+      });
+      void queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
+      void queryClient.invalidateQueries({
+        queryKey: ["ops", "receipts", "open-pos"],
+      });
       router.push(`/purchase-orders/${encodeURIComponent(data.po_id)}`);
     },
     onError: (err: Error) => {

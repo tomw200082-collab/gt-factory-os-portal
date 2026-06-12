@@ -334,6 +334,14 @@ export function useFirmWeek() {
       // The firmed rows leave 'draft' → refetch the now-emptier draft week.
       void qc.invalidateQueries({ queryKey: ["cadence", "draft-week"] });
       void qc.invalidateQueries({ queryKey: ["production-plan"] });
+      // Tranche 065 (FLOW-A9) — the Procure step's firmed-week demand list
+      // reads ["cadence","firmed-week-demand"]; a firm changes it.
+      void qc.invalidateQueries({
+        queryKey: ["cadence", "firmed-week-demand"],
+      });
+      // Tranche 065 (FLOW-A7) — the planning hub overview cards read
+      // ["planning","overview",…]; a firmed week changes coverage/jobs.
+      void qc.invalidateQueries({ queryKey: ["planning", "overview"] });
     },
   });
 }

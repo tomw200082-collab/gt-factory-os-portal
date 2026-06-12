@@ -72,11 +72,21 @@ function usePurchaseMutation<TArgs, TResult>(
 
 export function useStartSession() {
   return usePurchaseMutation(
-    async (args: { session_type: SessionType }): Promise<SessionEnvelope> => {
+    // Tranche 065 (FLOW-PC02) — `supersede: true` rides along when the
+    // planner explicitly confirmed replacing an open session. The current
+    // backend ignores the extra field; the upcoming backend will require it
+    // in that case (forward-compatible).
+    async (args: {
+      session_type: SessionType;
+      supersede?: boolean;
+    }): Promise<SessionEnvelope> => {
       const res = await fetch("/api/purchase-session/start", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ session_type: args.session_type }),
+        body: JSON.stringify({
+          session_type: args.session_type,
+          ...(args.supersede ? { supersede: true } : {}),
+        }),
       });
       return (await jsonOrThrow(res)) as SessionEnvelope;
     },

@@ -44,6 +44,7 @@ import { MiniStats } from "./_components/MiniStats";
 import { SectionHeader } from "./_components/SectionHeader";
 import { ForecastRow } from "./_components/ForecastRow";
 import type { ProductionLitersResponseApi } from "./_lib/production-liters";
+import { forecastStaleness } from "./_lib/staleness";
 
 // ---------------------------------------------------------------------------
 // Types — mirror the W1 DTO contract for /api/forecasts/versions
@@ -204,8 +205,9 @@ export default function ForecastListPage() {
   // Per-row production-liters fetches. Small payload, cached 5 minutes.
   const summariesQueries = useQueries({
     queries: baseFiltered.map((v) => ({
+      // Tranche 065 (FLOW-A8) — key root unified on plural "forecasts".
       queryKey: [
-        "forecast",
+        "forecasts",
         "production-liters",
         v.version_id,
         session.role,
@@ -300,6 +302,74 @@ export default function ForecastListPage() {
           ) : null
         }
       />
+
+      {/* ----- Staleness banner (Tranche 065, FLOW-F01) -----
+          Computed from the already-fetched version metadata; rendered only
+          once data is loaded (absent during loading/error). */}
+      {query.data && !query.isLoading && !query.isError
+        ? (() => {
+            const staleness = forecastStaleness(allVersions);
+            if (staleness.kind === "none") {
+              return (
+                <div
+                  className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-md border border-border bg-bg-raised px-4 py-3 text-sm text-fg"
+                  role="note"
+                  data-testid="forecast-staleness-banner"
+                  data-state="none"
+                >
+                  <span>
+                    <span className="font-semibold">No active forecast</span>{" "}
+                    — planning has nothing to work from.
+                  </span>
+                  {canAuthor ? (
+                    <Link
+                      href="/planning/forecast/new"
+                      className="btn btn-sm btn-primary shrink-0"
+                      data-testid="forecast-staleness-create"
+                    >
+                      Create a forecast
+                    </Link>
+                  ) : null}
+                </div>
+              );
+            }
+            if (staleness.kind === "stale") {
+              return (
+                <div
+                  className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-md border border-warning/40 bg-warning-softer px-4 py-3 text-sm text-warning-fg"
+                  role="alert"
+                  data-testid="forecast-staleness-banner"
+                  data-state="stale"
+                >
+                  <span>
+                    <span className="font-semibold">
+                      The active forecast does not cover the current period
+                    </span>{" "}
+                    — planning recommendations may be stale.
+                  </span>
+                  <Link
+                    href={`/planning/forecast/${encodeURIComponent(staleness.versionId)}`}
+                    className="btn btn-sm shrink-0"
+                    data-testid="forecast-staleness-open"
+                  >
+                    Open the active forecast
+                  </Link>
+                </div>
+              );
+            }
+            return (
+              <div
+                className="mb-6 text-xs text-fg-muted"
+                role="note"
+                data-testid="forecast-staleness-banner"
+                data-state="covered"
+              >
+                Active forecast covers the current period (through{" "}
+                {staleness.horizonEnd.toISOString().slice(0, 10)}).
+              </div>
+            );
+          })()
+        : null}
 
       {/* ----- Filter bar ----- */}
       <div

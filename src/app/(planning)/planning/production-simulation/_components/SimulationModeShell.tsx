@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { FlaskConical, CalendarRange } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { ProductionSimulatorShell } from "./ProductionSimulatorShell";
@@ -37,7 +38,21 @@ const MODES: { id: Mode; label: string; hint: string; icon: typeof FlaskConical 
   ];
 
 export function SimulationModeShell() {
-  const [mode, setMode] = useState<Mode>("single");
+  // Tranche 065 (FLOW-A10) — the chosen mode rides in ?mode= so navigating
+  // away (e.g. into procurement) and back never destroys the setup. The
+  // page wraps this shell in <Suspense>, satisfying useSearchParams.
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const [mode, setMode] = useState<Mode>(() =>
+    searchParams.get("mode") === "range" ? "range" : "single",
+  );
+
+  function selectMode(next: Mode): void {
+    setMode(next);
+    const params = new URLSearchParams(searchParams.toString());
+    params.set("mode", next);
+    router.replace(`?${params.toString()}`, { scroll: false });
+  }
 
   return (
     <div className="mt-5 flex flex-col gap-5">
@@ -54,7 +69,7 @@ export function SimulationModeShell() {
               key={m.id}
               type="button"
               aria-pressed={active}
-              onClick={() => setMode(m.id)}
+              onClick={() => selectMode(m.id)}
               data-testid={`production-simulation-mode-${m.id}`}
               className={cn(
                 "flex items-center gap-3 rounded-lg border px-4 py-3 text-left transition-colors",

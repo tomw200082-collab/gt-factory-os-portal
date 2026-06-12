@@ -241,7 +241,7 @@ export default function ForecastVersionDetailPage() {
 
   // ----- Data -----
   const versionQuery = useQuery<GetVersionResponse>({
-    queryKey: ["forecast", "version", versionId, session.role],
+    queryKey: ["forecasts", "version", versionId, session.role],
     queryFn: () => fetchVersion(session, versionId),
     enabled: Boolean(versionId),
     staleTime: 60_000,
@@ -255,7 +255,7 @@ export default function ForecastVersionDetailPage() {
 
   // Most recent published version, if any — used for the "vs prev month" KPI.
   const priorPublishedQuery = useQuery({
-    queryKey: ["forecast", "versions", "published-list", session.role],
+    queryKey: ["forecasts", "versions", "published-list", session.role],
     queryFn: () => fetchVersionsList(session),
     staleTime: 5 * 60 * 1000,
   });
@@ -466,7 +466,7 @@ export default function ForecastVersionDetailPage() {
   }, [priorPublishedQuery.data, versionId]);
 
   const priorPublishedQueryLines = useQuery<GetVersionResponse | null>({
-    queryKey: ["forecast", "version", priorPublishedVersionId, "prev-month"],
+    queryKey: ["forecasts", "version", priorPublishedVersionId, "prev-month"],
     queryFn: () =>
       priorPublishedVersionId
         ? fetchVersionLines(session, priorPublishedVersionId)
@@ -501,10 +501,16 @@ export default function ForecastVersionDetailPage() {
         setPublishMissing(null);
         setPublishOpen(false);
         queryClient.invalidateQueries({
-          queryKey: ["forecast", "version", versionId],
+          queryKey: ["forecasts", "version", versionId],
         });
         queryClient.invalidateQueries({
           queryKey: ["forecasts", "versions"],
+        });
+        // Tranche 065 (FLOW-A7) — the planning hub overview reads
+        // ["planning","overview",…] (active forecast card, coverage);
+        // a newly published forecast must refresh it.
+        queryClient.invalidateQueries({
+          queryKey: ["planning", "overview"],
         });
         return;
       }
@@ -854,7 +860,10 @@ export default function ForecastVersionDetailPage() {
         </div>
       ) : null}
 
-      {/* Active-published bridge: tell the planner the next step */}
+      {/* Active-published bridge: tell the planner the next step.
+          Tranche 065 (FLOW-A4) — the operational next step after publishing
+          is the weekly meeting (firm the week), not the diagnostic runs
+          surface. Runs stays reachable via a quiet secondary link. */}
       {isPublished ? (
         <div
           className="mb-3 flex flex-wrap items-center justify-between gap-3 rounded border border-info/30 bg-info-softer px-4 py-3 text-xs text-info-fg"
@@ -865,27 +874,36 @@ export default function ForecastVersionDetailPage() {
               Active forecast — demand source for planning
             </div>
             <div className="mt-0.5 text-fg-muted">
-              Trigger a planning run to turn this forecast into purchase and
-              production recommendations.
+              Next step: review the draft production week and firm it in the
+              weekly meeting.
             </div>
           </div>
-          <Link
-            href="/planning/runs"
-            className="btn btn-sm btn-primary gap-1.5 shrink-0"
-            data-testid="forecast-published-go-runs"
-          >
-            {canAuthor ? (
-              <>
-                <Play className="h-3 w-3" strokeWidth={2.5} />
-                Run planning
-              </>
-            ) : (
-              <>
-                <ChevronRight className="h-3 w-3" strokeWidth={2.5} />
-                Planning runs
-              </>
-            )}
-          </Link>
+          <div className="flex shrink-0 items-center gap-3">
+            <Link
+              href="/planning/runs"
+              className="text-fg-muted underline-offset-2 hover:text-fg hover:underline"
+              data-testid="forecast-published-go-runs"
+            >
+              Diagnostic runs
+            </Link>
+            <Link
+              href="/planning/meeting"
+              className="btn btn-sm btn-primary gap-1.5"
+              data-testid="forecast-published-go-meeting"
+            >
+              {canAuthor ? (
+                <>
+                  <Play className="h-3 w-3" strokeWidth={2.5} />
+                  Firm the week
+                </>
+              ) : (
+                <>
+                  <ChevronRight className="h-3 w-3" strokeWidth={2.5} />
+                  Weekly meeting
+                </>
+              )}
+            </Link>
+          </div>
         </div>
       ) : null}
 

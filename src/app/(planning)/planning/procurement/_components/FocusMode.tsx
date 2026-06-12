@@ -18,6 +18,7 @@
 // ---------------------------------------------------------------------------
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { CheckCircle2, ListChecks, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { classifyPo, todayISO } from "../_lib/decision";
@@ -393,6 +394,17 @@ function DoneSummary({
           חזרה לרשימה
         </button>
       </div>
+      {/* Tranche 065 (FLOW-A12) — close the loop: the orders this session
+          created are visible on the PO list. */}
+      {placed > 0 && (
+        <Link
+          href="/purchase-orders?status=OPEN"
+          className="text-xs font-medium text-fg-muted underline-offset-2 hover:text-fg hover:underline"
+          data-testid="focus-done-view-orders"
+        >
+          צפייה בהזמנות שנוצרו ←
+        </Link>
+      )}
     </div>
   );
 }

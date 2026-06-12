@@ -501,29 +501,36 @@ export function ForecastRow({
 
       {/* — Right rail: hover-revealed actions + primary "Open" CTA zone. — */}
       <div className="fc-list-row-hero-rail">
+        {/* Tranche 065 (FLOW-F03) — one honest action per row: drafts are
+            edited (pencil); published/archived versions are opened
+            read-only (eye). Both routes lead to the detail page, which
+            enforces editability itself. */}
         <div
           className="fc-list-row-actions"
           data-testid="forecast-row-actions"
           onClick={(e) => e.stopPropagation()}
         >
-          <Link
-            href={detailHref}
-            className="fc-list-row-action-btn"
-            title="Open forecast"
-            aria-label="Open forecast"
-            data-testid="forecast-row-action-open"
-          >
-            <Eye className="h-3.5 w-3.5" strokeWidth={2} />
-          </Link>
-          <Link
-            href={detailHref}
-            className="fc-list-row-action-btn"
-            title="Edit forecast"
-            aria-label="Edit forecast"
-            data-testid="forecast-row-action-edit"
-          >
-            <Pencil className="h-3.5 w-3.5" strokeWidth={2} />
-          </Link>
+          {v.status === "draft" ? (
+            <Link
+              href={detailHref}
+              className="fc-list-row-action-btn"
+              title="Edit forecast"
+              aria-label="Edit forecast"
+              data-testid="forecast-row-action-edit"
+            >
+              <Pencil className="h-3.5 w-3.5" strokeWidth={2} />
+            </Link>
+          ) : (
+            <Link
+              href={detailHref}
+              className="fc-list-row-action-btn"
+              title="Open forecast"
+              aria-label="Open forecast"
+              data-testid="forecast-row-action-open"
+            >
+              <Eye className="h-3.5 w-3.5" strokeWidth={2} />
+            </Link>
+          )}
         </div>
 
         <Link

@@ -27,6 +27,7 @@
 import { useState, useCallback, useEffect } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { AlertTriangle } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
@@ -38,11 +39,13 @@ import { useSupplierItemsByOrderable } from "@/components/purchase-orders/useSup
 import {
   approvedSupplierItems,
   emptyLine,
+  summarizePoDraft,
   todayPlusDays,
   validatePoDraft,
   type LineDraft,
   type ValidationErrors,
 } from "@/components/purchase-orders/types";
+import { formatIls } from "@/lib/utils/format-money";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -61,6 +64,22 @@ function newIdempotencyKey(): string {
 
 function ManualPoFormInner(): JSX.Element {
   const router = useRouter();
+  const queryClient = useQueryClient();
+
+  // Tranche 065 (FLOW-A2) — a freshly created PO must show up in the PO
+  // list (["planner","purchase-orders",…]), PO detail surfaces
+  // (["purchase-orders",…]), and the goods-receipt open-PO dropdown
+  // (["ops","receipts","open-pos"]) without a manual reload. Mirrors the
+  // usePlacePo invalidation set in purchase-session/_lib/api.ts.
+  const invalidatePoLists = useCallback(() => {
+    void queryClient.invalidateQueries({
+      queryKey: ["planner", "purchase-orders"],
+    });
+    void queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
+    void queryClient.invalidateQueries({
+      queryKey: ["ops", "receipts", "open-pos"],
+    });
+  }, [queryClient]);
 
   // --- Master data (shared hook) --------------------------------------------
   const {
@@ -132,6 +151,10 @@ function ManualPoFormInner(): JSX.Element {
   type Phase = "idle" | "submitting" | "success" | "idempotent";
   const [phase, setPhase] = useState<Phase>("idle");
   const [successPoId, setSuccessPoId] = useState<string | null>(null);
+  // Tranche 065 (FLOW-N02) — display the human po_number when the POST
+  // response carries it; UUID fragment stays as the fallback (the backend
+  // is adding the field in parallel, so code defensively).
+  const [successPoNumber, setSuccessPoNumber] = useState<string | null>(null);
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [serverError, setServerError] = useState<string | null>(null);
 
@@ -242,6 +265,7 @@ function ManualPoFormInner(): JSX.Element {
     if (res.status === 201 || res.status === 200) {
       const data = (await res.json().catch(() => ({}))) as {
         po_id?: string;
+        po_number?: string;
         idempotent_replay?: boolean;
       };
       const poId = data.po_id;
@@ -252,12 +276,19 @@ function ManualPoFormInner(): JSX.Element {
       // be toast-only".
       setPhase(data.idempotent_replay ? "idempotent" : "success");
       setSuccessPoId(poId ?? null);
+      setSuccessPoNumber(
+        typeof data.po_number === "string" && data.po_number
+          ? data.po_number
+          : null,
+      );
+      invalidatePoLists();
       return;
     }
 
     if (res.status === 409) {
       const data = (await res.json().catch(() => ({}))) as {
         po_id?: string;
+        po_number?: string;
         error?: string;
         detail?: string;
       };
@@ -317,6 +348,12 @@ function ManualPoFormInner(): JSX.Element {
       }
       setPhase("idempotent");
       setSuccessPoId(data.po_id ?? null);
+      setSuccessPoNumber(
+        typeof data.po_number === "string" && data.po_number
+          ? data.po_number
+          : null,
+      );
+      invalidatePoLists();
       return;
     }
 
@@ -475,9 +512,11 @@ function ManualPoFormInner(): JSX.Element {
                 ? "We re-fetched the original PO; submitting again did not create another one."
                 : "Status: OPEN. Add receipts when goods arrive."}
             </div>
-            {successPoId && (
+            {(successPoNumber || successPoId) && (
               <div className="text-3xs text-fg-faint font-mono">
-                ref {successPoId.slice(0, 8)}…
+                {successPoNumber
+                  ? `PO ${successPoNumber}`
+                  : `ref ${successPoId!.slice(0, 8)}…`}
               </div>
             )}
             <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
@@ -518,7 +557,7 @@ function ManualPoFormInner(): JSX.Element {
         size="section"
         eyebrow="Purchase Orders"
         title="New manual order"
-        description="Manual purchase order — created without a planning recommendation. A reason is required for traceability."
+        description="Manual purchase orders are not reviewed by the planning engine. Use this only for urgent or exceptional needs not covered by a planning recommendation. A reason is required for traceability."
         meta={
           <span className="inline-flex items-center gap-1.5 rounded-full border border-warning/40 bg-warning/5 px-2.5 py-0.5 text-3xs font-semibold uppercase tracking-sops text-warning-fg">
             <AlertTriangle className="h-3 w-3" aria-hidden />
@@ -598,6 +637,49 @@ function ManualPoFormInner(): JSX.Element {
           supplierItemsByOrderable={supplierItemsByOrderable}
           expectedDateHint={expectedDateHint}
         />
+
+        {/* Tranche 065 (FLOW-N01) — reactive read-only summary of what
+            submit will create, so the operator confirms the shape of the
+            order before committing. Money shows only when at least one
+            line carries an entered price. */}
+        {(() => {
+          const summary = summarizePoDraft(lines);
+          if (!supplierId && summary.lineCount === 0) return null;
+          const supplierName = supplierId
+            ? suppliersById.get(supplierId)?.supplier_name_official ?? supplierId
+            : null;
+          return (
+            <div
+              className="rounded-md border border-border/60 bg-bg-subtle/40 px-4 py-3 text-sm text-fg"
+              role="status"
+              aria-live="polite"
+              data-testid="po-new-draft-summary"
+            >
+              <span className="font-semibold">Creating a purchase order</span>{" "}
+              with {summary.lineCount} line
+              {summary.lineCount !== 1 ? "s" : ""}
+              {supplierName ? (
+                <>
+                  {" "}
+                  for <bdi className="font-semibold">{supplierName}</bdi>
+                </>
+              ) : null}
+              {expectedDate ? <>, expected {expectedDate}</> : null}
+              {summary.totalValue !== null ? (
+                <>
+                  {" "}
+                  ·{" "}
+                  <span className="font-mono tabular-nums font-semibold">
+                    {formatIls(summary.totalValue)}
+                  </span>{" "}
+                  across {summary.pricedLineCount} priced line
+                  {summary.pricedLineCount !== 1 ? "s" : ""}
+                </>
+              ) : null}
+              .
+            </div>
+          );
+        })()}
 
         {/* Price write-back confirmation — only when a price was entered */}
         {anyPriceEntered && (

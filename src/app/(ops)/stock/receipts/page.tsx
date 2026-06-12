@@ -828,6 +828,17 @@ export default function GoodsReceiptPage() {
       lines: envelopeLines,
     };
 
+    // Tranche 065 (FLOW-R01) — over-receipts post to stock and create an
+    // exception, so the first submit tap swaps the button for an inline
+    // confirmation zone instead of posting straight away. The second tap
+    // ("Confirm and submit") passes this gate. No extra step when no line
+    // is an over-receipt.
+    if (overReceiptCount > 0 && !confirmingOverReceipt) {
+      setConfirmingOverReceipt(true);
+      return;
+    }
+    setConfirmingOverReceipt(false);
+
     setPhase("submitting");
     try {
       const res = await fetch("/api/goods-receipts", {
@@ -881,6 +892,23 @@ export default function GoodsReceiptPage() {
         // and open-PO statuses; invalidate the whole ["ops","receipts"]
         // prefix so the PO ledger header pills and line tables refresh.
         void queryClient.invalidateQueries({ queryKey: ["ops", "receipts"] });
+        // Tranche 065 (FLOW-A1) — a posted receipt also flips PO statuses,
+        // received quantities, GR lists, and projected stock. Mirror the
+        // invalidation set of usePlacePo (purchase-session/_lib/api.ts) so
+        // the PO list, PO detail, planner views, and inventory-flow refresh
+        // without a manual reload.
+        void queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
+        void queryClient.invalidateQueries({
+          queryKey: ["purchase-order-lines"],
+        });
+        void queryClient.invalidateQueries({ queryKey: ["goods-receipts"] });
+        void queryClient.invalidateQueries({
+          queryKey: ["planner", "purchase-orders"],
+        });
+        void queryClient.invalidateQueries({ queryKey: ["inventory-flow"] });
+        void queryClient.invalidateQueries({
+          queryKey: ["ops", "receipts", "open-pos"],
+        });
         // Reset form for a fresh submission
         setLines([emptyLine()]);
         setNotes("");
@@ -983,6 +1011,32 @@ export default function GoodsReceiptPage() {
     }
     return n;
   }, [lines, poLines, poId]);
+
+  // Tranche 065 (FLOW-R01) — two-step submit when over-receipts exist:
+  // while true, the submit button is replaced by the amber inline
+  // confirmation zone in the sticky bar.
+  const [confirmingOverReceipt, setConfirmingOverReceipt] = useState(false);
+
+  // "Review quantities" — leave the confirmation zone and put focus on the
+  // first over-receipt line's quantity input.
+  function reviewOverReceiptQuantities(): void {
+    setConfirmingOverReceipt(false);
+    const firstIdx = lines.findIndex((l) => {
+      if (!l.po_line_id) return false;
+      const pl = poLines.find((p) => p.po_line_id === l.po_line_id);
+      if (!pl) return false;
+      return (Number(l.quantity) || 0) > (Number(pl.open_qty) || 0);
+    });
+    if (firstIdx >= 0 && typeof window !== "undefined") {
+      window.requestAnimationFrame(() => {
+        const el = document.getElementById(`receipt-line-qty-${firstIdx}`);
+        if (el) {
+          el.scrollIntoView({ behavior: "smooth", block: "center" });
+          (el as HTMLElement).focus({ preventScroll: true });
+        }
+      });
+    }
+  }
 
   // #12: Duplicate line detection
   const duplicateKeys = useMemo(() => {
@@ -1287,6 +1341,28 @@ export default function GoodsReceiptPage() {
                     title="View ledger movements scoped to this PO."
                   >
                     View movement log →
+                  </Link>
+                </div>
+              ) : null}
+              {/* Tranche 065 (FLOW-R03) — manual (non-PO) receipts also get
+                  forward links, so success is never a dead-end: the posted
+                  movement is verifiable in the ledger, and the submission
+                  itself in the submissions list. */}
+              {done.kind === "success" && !done.poId ? (
+                <div className="mt-3 flex flex-wrap items-center gap-2">
+                  <Link
+                    href="/stock/movement-log"
+                    className="btn btn-ghost btn-sm transition-colors duration-150"
+                    data-testid="receipt-success-view-movements"
+                  >
+                    View stock movements →
+                  </Link>
+                  <Link
+                    href="/stock/submissions"
+                    className="btn btn-ghost btn-sm transition-colors duration-150"
+                    data-testid="receipt-success-view-submissions"
+                  >
+                    View submissions →
                   </Link>
                 </div>
               ) : null}
@@ -1780,6 +1856,7 @@ export default function GoodsReceiptPage() {
                             −
                           </button>
                           <input
+                            id={`receipt-line-qty-${idx}`}
                             type="number"
                             inputMode="decimal"
                             step="any"
@@ -2016,22 +2093,58 @@ export default function GoodsReceiptPage() {
                 </button>
                 {/* #23: Keyboard shortcut hint */}
                 <span className="hidden text-3xs text-fg-subtle sm:block">{shortcutHint}</span>
-                <button
-                  type="submit"
-                  className="btn btn-lg btn-primary flex items-center gap-2 transition-colors duration-150"
-                  disabled={phase === "submitting"}
-                  data-testid="receipt-submit"
-                >
-                  {/* #30: Spinner when submitting */}
-                  {phase === "submitting" ? (
-                    <>
-                      <Spinner className="h-4 w-4" />
-                      Submitting…
-                    </>
-                  ) : (
-                    "Submit receipt"
-                  )}
-                </button>
+                {/* Tranche 065 (FLOW-R01) — two-step submit for over-receipts:
+                    the first tap swaps the button for this amber zone naming
+                    the over-receipt line count and what posting does. */}
+                {confirmingOverReceipt && overReceiptCount > 0 ? (
+                  <div
+                    className="flex flex-wrap items-center gap-2 rounded-md border border-warning/40 bg-warning-softer px-3 py-2"
+                    role="alertdialog"
+                    aria-label="Confirm over-receipt"
+                    data-testid="receipt-over-receipt-confirm-zone"
+                  >
+                    <span className="text-xs font-medium text-warning-fg">
+                      {overReceiptCount} line
+                      {overReceiptCount !== 1 ? "s exceed" : " exceeds"} the
+                      open PO quantity. Submitting posts to stock and creates
+                      an over-receipt exception.
+                    </span>
+                    <button
+                      type="submit"
+                      className="btn btn-sm bg-warning text-fg-inverted hover:bg-warning/90"
+                      disabled={phase === "submitting"}
+                      data-testid="receipt-over-receipt-confirm"
+                    >
+                      {phase === "submitting" ? "Submitting…" : "Confirm and submit"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={reviewOverReceiptQuantities}
+                      disabled={phase === "submitting"}
+                      data-testid="receipt-over-receipt-review"
+                    >
+                      Review quantities
+                    </button>
+                  </div>
+                ) : (
+                  <button
+                    type="submit"
+                    className="btn btn-lg btn-primary flex items-center gap-2 transition-colors duration-150"
+                    disabled={phase === "submitting"}
+                    data-testid="receipt-submit"
+                  >
+                    {/* #30: Spinner when submitting */}
+                    {phase === "submitting" ? (
+                      <>
+                        <Spinner className="h-4 w-4" />
+                        Submitting…
+                      </>
+                    ) : (
+                      "Submit receipt"
+                    )}
+                  </button>
+                )}
               </div>
             </div>
           </form>

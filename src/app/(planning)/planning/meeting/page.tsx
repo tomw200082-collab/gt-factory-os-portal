@@ -538,6 +538,19 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
             <div className="mt-0.5 text-xs text-fg-muted">
               {result.week_firmed_total} batch{result.week_firmed_total === 1 ? "" : "es"} now committed for {fmtWeekRange(result.week_start)}. The Sunday session will buy against this week. Reversible via the production plan.
             </div>
+            {/* Tranche 065 (FLOW-A5) — bridge straight into the next chain
+                step instead of leaving the planner to find procurement. */}
+            <Link
+              href="/planning/procurement"
+              className={cn(
+                "mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-success-fg underline underline-offset-2 hover:no-underline",
+                focusRing,
+              )}
+              data-testid="meeting-firm-success-go-procurement"
+            >
+              <ShoppingCart className="h-3.5 w-3.5" aria-hidden="true" />
+              Open Sunday procurement →
+            </Link>
           </div>
         </div>
       ) : null}
