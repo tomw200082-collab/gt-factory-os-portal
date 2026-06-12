@@ -23,7 +23,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { ChevronDown, Lock, LogOut, Moon, Search, Sun, X } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
-import { useState, useCallback, useEffect } from "react";
+import { useState, useCallback, useEffect, useRef } from "react";
 import { useSession } from "@/lib/auth/session-provider";
 import { authorizeCapability } from "@/lib/auth/authorize";
 import { useTheme } from "@/lib/theme";
@@ -102,10 +102,35 @@ export function SideNavSkeleton() {
   );
 }
 
-export function SideNav({ onNavigate }: { onNavigate?: () => void } = {}) {
+export interface SideNavProps {
+  onNavigate?: () => void;
+  /**
+   * "compact" (default) — desktop sidebar density, unchanged from before.
+   * "comfortable" — mobile drawer density (Tranche 056): ≥44px touch
+   * targets, larger label type and icons. With the bottom tab bar removed
+   * the drawer is the ONLY mobile navigation, so its rows must be
+   * first-class touch targets rather than shrunken desktop rows.
+   */
+  density?: "compact" | "comfortable";
+}
+
+export function SideNav({ onNavigate, density = "compact" }: SideNavProps = {}) {
   const { session, isLoading, loadError } = useSession();
   const pathname = usePathname();
   const queryClient = useQueryClient();
+  const comfortable = density === "comfortable";
+
+  // Tranche 056: bring the active item into view on mount / route change so
+  // a deep entry (long Stock/Planning lists, expanded Admin) is never
+  // hidden off-screen in the scrollable nav container. block:"nearest"
+  // no-ops when the item is already visible.
+  const activeLinkRef = useRef<HTMLAnchorElement | null>(null);
+  useEffect(() => {
+    const el = activeLinkRef.current;
+    if (el && typeof el.scrollIntoView === "function") {
+      el.scrollIntoView({ block: "nearest", inline: "nearest" });
+    }
+  }, [pathname]);
 
   // Track which collapsible groups are expanded. Starts from defaultCollapsed
   // only — SSR-safe (no window access). Auto-expand for active path happens
@@ -193,7 +218,10 @@ export function SideNav({ onNavigate }: { onNavigate?: () => void } = {}) {
             }
           }}
           placeholder="Filter pages…"
-          className="w-full rounded border border-border/60 bg-bg-subtle/70 py-1.5 pl-7 pr-7 text-3xs text-fg placeholder:text-fg-faint focus:border-accent/50 focus:bg-bg-raised focus:outline-none focus:ring-2 focus:ring-accent/20"
+          className={cn(
+            "w-full rounded border border-border/60 bg-bg-subtle/70 pl-7 pr-7 text-3xs text-fg placeholder:text-fg-faint focus:border-accent/50 focus:bg-bg-raised focus:outline-none focus:ring-2 focus:ring-accent/20",
+            comfortable ? "py-2.5" : "py-1.5",
+          )}
           aria-label="Filter navigation"
           data-testid="sidenav-search"
         />
@@ -234,7 +262,10 @@ export function SideNav({ onNavigate }: { onNavigate?: () => void } = {}) {
               <button
                 type="button"
                 onClick={() => toggleGroup(group.title)}
-                className="mb-2 flex w-full items-center gap-2 px-2 text-left"
+                className={cn(
+                  "mb-2 flex w-full items-center gap-2 px-2 text-left",
+                  comfortable && "min-h-[44px]",
+                )}
                 aria-expanded={isExpanded}
                 aria-label={`${group.title} navigation section`}
               >
@@ -290,7 +321,9 @@ export function SideNav({ onNavigate }: { onNavigate?: () => void } = {}) {
                     ) : null}
                     <Icon
                       className={cn(
-                        "h-[15px] w-[15px] shrink-0",
+                        comfortable
+                          ? "h-[18px] w-[18px] shrink-0"
+                          : "h-[15px] w-[15px] shrink-0",
                         active
                           ? "text-accent"
                           : subdued
@@ -301,7 +334,8 @@ export function SideNav({ onNavigate }: { onNavigate?: () => void } = {}) {
                     />
                     <span
                       className={cn(
-                        "flex-1 truncate text-[0.8125rem]",
+                        "flex-1 truncate",
+                        comfortable ? "text-[0.9375rem]" : "text-[0.8125rem]",
                         active && "font-semibold tracking-tightish",
                         subdued && "text-fg-faint",
                       )}
@@ -338,7 +372,10 @@ export function SideNav({ onNavigate }: { onNavigate?: () => void } = {}) {
                     {subdued ? (
                       <span
                         className={cn(
-                          "group relative flex items-center gap-2.5 rounded-sm px-2.5 py-1.5 text-sm text-fg-faint",
+                          "group relative flex items-center rounded-sm text-sm text-fg-faint",
+                          comfortable
+                            ? "min-h-[44px] gap-3 px-3 py-2"
+                            : "gap-2.5 px-2.5 py-1.5",
                           "cursor-not-allowed opacity-70",
                         )}
                         title={tooltip}
@@ -350,9 +387,13 @@ export function SideNav({ onNavigate }: { onNavigate?: () => void } = {}) {
                       <Link
                         href={item.href}
                         onClick={onNavigate}
+                        ref={active ? activeLinkRef : undefined}
                         aria-current={active ? "page" : undefined}
                         className={cn(
-                          "group relative flex items-center gap-2.5 rounded-sm px-2.5 py-1.5 text-sm text-fg transition-colors duration-150 ease-out-quart",
+                          "group relative flex items-center rounded-sm text-sm text-fg transition-colors duration-150 ease-out-quart",
+                          comfortable
+                            ? "min-h-[44px] gap-3 px-3 py-2"
+                            : "gap-2.5 px-2.5 py-1.5",
                           active
                             ? "bg-accent-soft text-accent"
                             : "text-fg-muted hover:bg-bg-subtle hover:text-fg",

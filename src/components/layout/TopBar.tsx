@@ -2,7 +2,9 @@
 
 import { ChevronDown, Eye, LogOut, Moon, Sun } from "lucide-react";
 import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useSession } from "@/lib/auth/session-provider";
+import { activeNavLabel } from "@/lib/nav/active";
 import { useReviewMode } from "@/lib/review-mode/store";
 import { useTheme } from "@/lib/theme";
 import type { Role } from "@/lib/contracts/enums";
@@ -45,6 +47,11 @@ const NON_PROD_LABEL =
 export function TopBar() {
   const { session, setRole } = useSession();
   const { setOpen, forcedScreenState } = useReviewMode();
+  const pathname = usePathname();
+  // Tranche 056: with the bottom tab bar removed, phone widths show the
+  // current page's manifest label here so orientation never requires
+  // opening the drawer. Null (route outside the manifest) renders nothing.
+  const mobileLabel = activeNavLabel(pathname);
 
   return (
     <header
@@ -67,6 +74,19 @@ export function TopBar() {
             </div>
           </div>
         </div>
+
+        {/* Current page label — phone widths only. The brand text block is
+            hidden <sm, so this takes its place next to the logo. */}
+        {mobileLabel ? (
+          <div
+            className="min-w-0 flex-1 sm:hidden"
+            data-testid="topbar-mobile-page-label"
+          >
+            <div className="truncate text-[0.8125rem] font-semibold text-fg-strong">
+              {mobileLabel}
+            </div>
+          </div>
+        ) : null}
 
         {/* Non-prod env chip — small visual safety so the operator never
             confuses staging for prod. Hidden in production and in dev-shim. */}
