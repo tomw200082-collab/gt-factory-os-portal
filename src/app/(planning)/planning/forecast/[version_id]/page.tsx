@@ -241,7 +241,7 @@ export default function ForecastVersionDetailPage() {
 
   // ----- Data -----
   const versionQuery = useQuery<GetVersionResponse>({
-    queryKey: ["forecast", "version", versionId, session.role],
+    queryKey: ["forecasts", "version", versionId, session.role],
     queryFn: () => fetchVersion(session, versionId),
     enabled: Boolean(versionId),
     staleTime: 60_000,
@@ -255,7 +255,7 @@ export default function ForecastVersionDetailPage() {
 
   // Most recent published version, if any — used for the "vs prev month" KPI.
   const priorPublishedQuery = useQuery({
-    queryKey: ["forecast", "versions", "published-list", session.role],
+    queryKey: ["forecasts", "versions", "published-list", session.role],
     queryFn: () => fetchVersionsList(session),
     staleTime: 5 * 60 * 1000,
   });
@@ -466,7 +466,7 @@ export default function ForecastVersionDetailPage() {
   }, [priorPublishedQuery.data, versionId]);
 
   const priorPublishedQueryLines = useQuery<GetVersionResponse | null>({
-    queryKey: ["forecast", "version", priorPublishedVersionId, "prev-month"],
+    queryKey: ["forecasts", "version", priorPublishedVersionId, "prev-month"],
     queryFn: () =>
       priorPublishedVersionId
         ? fetchVersionLines(session, priorPublishedVersionId)
@@ -501,10 +501,16 @@ export default function ForecastVersionDetailPage() {
         setPublishMissing(null);
         setPublishOpen(false);
         queryClient.invalidateQueries({
-          queryKey: ["forecast", "version", versionId],
+          queryKey: ["forecasts", "version", versionId],
         });
         queryClient.invalidateQueries({
           queryKey: ["forecasts", "versions"],
+        });
+        // Tranche 063 (FLOW-A7) — the planning hub overview reads
+        // ["planning","overview",…] (active forecast card, coverage);
+        // a newly published forecast must refresh it.
+        queryClient.invalidateQueries({
+          queryKey: ["planning", "overview"],
         });
         return;
       }

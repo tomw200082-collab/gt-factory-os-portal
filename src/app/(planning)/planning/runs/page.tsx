@@ -207,6 +207,12 @@ export default function PlanningRunsListPage() {
       setBreakGlass(false);
       setTriggerError(null);
       void queryClient.invalidateQueries({ queryKey: ["planning", "runs"] });
+      // Tranche 063 (FLOW-A7) — the planning hub overview cards read
+      // ["planning","overview",…]; a new run changes the latest-run card
+      // and coverage, so refresh the hub too.
+      void queryClient.invalidateQueries({
+        queryKey: ["planning", "overview"],
+      });
       router.push(`/planning/runs/${encodeURIComponent(data.run_id)}`);
     },
     onError: (err: Error & { status?: number }) => {

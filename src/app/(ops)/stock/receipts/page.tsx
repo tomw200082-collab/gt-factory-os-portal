@@ -881,6 +881,23 @@ export default function GoodsReceiptPage() {
         // and open-PO statuses; invalidate the whole ["ops","receipts"]
         // prefix so the PO ledger header pills and line tables refresh.
         void queryClient.invalidateQueries({ queryKey: ["ops", "receipts"] });
+        // Tranche 063 (FLOW-A1) — a posted receipt also flips PO statuses,
+        // received quantities, GR lists, and projected stock. Mirror the
+        // invalidation set of usePlacePo (purchase-session/_lib/api.ts) so
+        // the PO list, PO detail, planner views, and inventory-flow refresh
+        // without a manual reload.
+        void queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
+        void queryClient.invalidateQueries({
+          queryKey: ["purchase-order-lines"],
+        });
+        void queryClient.invalidateQueries({ queryKey: ["goods-receipts"] });
+        void queryClient.invalidateQueries({
+          queryKey: ["planner", "purchase-orders"],
+        });
+        void queryClient.invalidateQueries({ queryKey: ["inventory-flow"] });
+        void queryClient.invalidateQueries({
+          queryKey: ["ops", "receipts", "open-pos"],
+        });
         // Reset form for a fresh submission
         setLines([emptyLine()]);
         setNotes("");

@@ -204,8 +204,9 @@ export default function ForecastListPage() {
   // Per-row production-liters fetches. Small payload, cached 5 minutes.
   const summariesQueries = useQueries({
     queries: baseFiltered.map((v) => ({
+      // Tranche 063 (FLOW-A8) — key root unified on plural "forecasts".
       queryKey: [
-        "forecast",
+        "forecasts",
         "production-liters",
         v.version_id,
         session.role,
