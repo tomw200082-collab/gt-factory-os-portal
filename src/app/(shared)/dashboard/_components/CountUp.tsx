@@ -1,7 +1,9 @@
 // ---------------------------------------------------------------------------
 // CountUp — animated counter for KPI tile values. Rolls from 0 to the
-// target on first paint (or when the value changes), giving the dashboard
-// a real "instrument cluster waking up" feel without changing any data.
+// target on FIRST paint only ("instrument cluster waking up"). Subsequent
+// value changes tween from the previously displayed number to the new one
+// (Tranche 059, DASH-T2) — with 60s auto-refresh, restarting from 0 made
+// every change look like the data crashed and recovered.
 //
 // Why a wrapper around a string? KPI values come pre-formatted from the
 // page (e.g. "₪ 145,250") because formatting is locale-aware and currency-
@@ -22,13 +24,15 @@ import { useEffect, useRef, useState } from "react";
 export interface CountUpProps {
   /** The fully formatted target value (e.g. "₪ 145,250", "12", "—"). */
   value: string | null;
-  /** Animation duration in milliseconds. Default 800ms — within the
-   *  150–600ms "smooth not cheap" band recommended by the ui-ux-pro-max
-   *  skill for premium dashboards. */
+  /** First-paint animation duration in milliseconds (0 → value). */
   durationMs?: number;
   /** Optional className passed through to the wrapper span. */
   className?: string;
 }
+
+// Subsequent changes (previous → new) use a shorter tween: the number is
+// already on screen, so the motion only needs to signal "this updated".
+const CHANGE_DURATION_MS = 300;
 
 function parseFormatted(value: string): {
   prefix: string;
@@ -112,6 +116,11 @@ export function CountUp({ value, durationMs = 800, className }: CountUpProps) {
   // unrelated re-render — only when the value itself changes.
   const lastTargetRef = useRef<string | null>(null);
 
+  // The number currently visible on screen (updated every animation frame).
+  // null until the first numeric value has been shown — that distinction is
+  // what separates the first-paint 0→value roll from the prev→new tween.
+  const shownNumberRef = useRef<number | null>(null);
+
   useEffect(() => {
     // Detect reduced motion once on mount.
     if (typeof window !== "undefined" && window.matchMedia) {
@@ -122,10 +131,18 @@ export function CountUp({ value, durationMs = 800, className }: CountUpProps) {
   }, []);
 
   useEffect(() => {
+    // Re-parse inside the effect so the dependency list stays primitive.
+    // (Depending on the render-scope `parsed` object — a fresh identity every
+    // render — made this effect re-run on every render, and its cleanup
+    // cancelled the in-flight animation frame chain.)
+    const p = passthrough ? null : parseFormatted(target);
+    const endValue = p?.hasNumber ? p.number : null;
+
     // No-op when there's no numeric value or when target hasn't changed.
-    if (passthrough || finalNumber === null || !parsed) {
+    if (passthrough || endValue === null || !p) {
       setDisplayed(target);
       lastTargetRef.current = target;
+      shownNumberRef.current = null;
       return;
     }
     if (lastTargetRef.current === target) return;
@@ -133,31 +150,39 @@ export function CountUp({ value, durationMs = 800, className }: CountUpProps) {
 
     if (reducedMotion.current) {
       setDisplayed(target);
+      shownNumberRef.current = endValue;
       return;
     }
 
+    // DASH-T2: first paint rolls 0 → value; later changes tween from the
+    // number currently on screen so an updated KPI never "crashes to 0".
+    const isFirstPaint = shownNumberRef.current === null;
+    const startValue = isFirstPaint ? 0 : shownNumberRef.current!;
+    const tweenMs = isFirstPaint ? durationMs : CHANGE_DURATION_MS;
+    const end: number = endValue;
+
     let raf = 0;
     const startTs = performance.now();
-    const startValue = 0;
-    const endValue = finalNumber;
 
     function tick(ts: number) {
       const elapsed = ts - startTs;
-      const t = Math.min(1, elapsed / durationMs);
+      const t = Math.min(1, elapsed / tweenMs);
       const eased = easeOutCubic(t);
-      const current = startValue + (endValue - startValue) * eased;
-      setDisplayed(formatPart(parsed!, current));
+      const current = startValue + (end - startValue) * eased;
+      shownNumberRef.current = current;
+      setDisplayed(formatPart(p!, current));
       if (t < 1) {
         raf = requestAnimationFrame(tick);
       } else {
         // Snap exactly to the final formatted string for pixel-perfect
         // visual continuity with subsequent renders.
+        shownNumberRef.current = end;
         setDisplayed(target);
       }
     }
     raf = requestAnimationFrame(tick);
     return () => cancelAnimationFrame(raf);
-  }, [target, passthrough, finalNumber, parsed, durationMs]);
+  }, [target, passthrough, durationMs]);
 
   return <span className={className}>{displayed}</span>;
 }

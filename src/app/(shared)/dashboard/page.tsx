@@ -125,6 +125,7 @@ import {
   type ValueMovement,
   type ValueTrendResult,
 } from "./_lib/value-trend";
+import { useNow } from "./_lib/useNow";
 
 // ---------------------------------------------------------------------------
 // Cadence — keep low for the morning view; refresh on tab focus is the default.
@@ -412,15 +413,16 @@ function fmtPlanDate(s: string): string {
   }
 }
 
-function weekRange(): { from: string; to: string } {
-  const now = new Date();
-  const day = now.getDay();
-  const sun = new Date(now);
-  sun.setDate(now.getDate() - day);
+// Tranche 059 (DASH-T5): local-time day boundaries. The previous
+// toISOString() version computed the Sun–Sat window in UTC, so in Israel the
+// week flipped at 02:00/03:00 local instead of midnight.
+function weekRange(today: Date): { from: string; to: string } {
+  const day = today.getDay();
+  const sun = new Date(today);
+  sun.setDate(today.getDate() - day);
   const sat = new Date(sun);
   sat.setDate(sun.getDate() + 6);
-  const fmt = (d: Date) => d.toISOString().slice(0, 10);
-  return { from: fmt(sun), to: fmt(sat) };
+  return { from: isoDateLocal(sun), to: isoDateLocal(sat) };
 }
 
 // ---------------------------------------------------------------------------
@@ -1894,8 +1896,11 @@ function UrgentProcurementBlock({ now }: { now: Date }) {
 // Page.
 // ---------------------------------------------------------------------------
 export default function DashboardPage() {
-  const now = useMemo(() => new Date(), []);
-  const week = useMemo(() => weekRange(), []);
+  // Tranche 059 (DASH-T1): live shared ticker replaces the frozen
+  // mount-time Date, so relative labels stay truthful across a shift.
+  const now = useNow();
+  const todayLocalISO = isoDateLocal(now);
+  const week = weekRange(now);
   const { session } = useSession();
 
   // The Urgent Procurement block reads the planner-scoped purchase session.
@@ -2162,14 +2167,23 @@ export default function DashboardPage() {
   // has already passed.
   const poStats = useMemo(() => {
     const rows = purchaseOrdersQ.data?.rows ?? purchaseOrdersQ.data?.data ?? [];
-    const today = new Date().toISOString().slice(0, 10);
     const open = rows.filter((r) => r.status === "OPEN" || r.status === "PARTIAL");
+    // DASH-T5: "late" compares against the local calendar day, not UTC.
     const late = open.filter(
-      (r) => !!r.expected_receive_date && r.expected_receive_date < today,
+      (r) => !!r.expected_receive_date && r.expected_receive_date < todayLocalISO,
     );
-    const openValue = open.reduce((sum, r) => sum + toNum(r.total_net), 0);
-    return { openCount: open.length, lateCount: late.length, openValue };
-  }, [purchaseOrdersQ.data]);
+    // DASH-T4: sum ILS POs only — a foreign-currency PO must not silently
+    // inflate a ₪-labelled figure. Foreign open POs are counted and surfaced
+    // in the tile's sub line instead.
+    const ilsOpen = open.filter((r) => !r.currency || r.currency === "ILS");
+    const openValue = ilsOpen.reduce((sum, r) => sum + toNum(r.total_net), 0);
+    return {
+      openCount: open.length,
+      lateCount: late.length,
+      openValue,
+      foreignCount: open.length - ilsOpen.length,
+    };
+  }, [purchaseOrdersQ.data, todayLocalISO]);
 
   // Combined inventory value for the header chip.
   const totalInventoryValue =
@@ -2292,6 +2306,11 @@ export default function DashboardPage() {
           sub={
             <span>
               {fmtILSCompact(poStats.openValue)} open value
+              {poStats.foreignCount > 0 ? (
+                <span className="text-fg-faint">
+                  {" · "}+{poStats.foreignCount} foreign-currency
+                </span>
+              ) : null}
               {poStats.lateCount > 0 ? (
                 <>
                   {" · "}
@@ -2308,9 +2327,12 @@ export default function DashboardPage() {
           ctaLabel="Open POs"
           loading={purchaseOrdersQ.isLoading}
         />
+        {/* Tranche 059 (DASH-T3): the headline number is the CRITICAL count —
+            info/warning rows no longer inflate the scariest-looking tile.
+            The legend keeps the full breakdown. */}
         <KpiTileBreakdown
-          label="Exceptions"
-          value={String(criticalN + warningN + infoN)}
+          label="Critical Exceptions"
+          value={String(criticalN)}
           tone={criticalN > 0 ? "danger" : "info"}
           icon={<Inbox className="h-5 w-5" strokeWidth={2} />}
           href="/inbox"
