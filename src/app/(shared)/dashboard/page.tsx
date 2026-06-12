@@ -61,7 +61,7 @@
 //     superseded purchase-session URL). Calm green when nothing is due.
 // ---------------------------------------------------------------------------
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
 import {
@@ -72,13 +72,11 @@ import {
   CheckCircle2,
   ClipboardList,
   Coins,
-  Flame,
   Inbox,
   LineChart,
   Minus,
   PackageCheck,
   PackageSearch,
-  ShoppingCart,
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
@@ -91,7 +89,6 @@ import { SectionHeading } from "@/components/workflow/SectionHeading";
 import { Badge } from "@/components/badges/StatusBadge";
 import { FreshnessBadge } from "@/components/badges/FreshnessBadge";
 import {
-  AllClearRibbon,
   EmptyState,
   ErrorAlert,
   Skel,
@@ -102,12 +99,11 @@ import { authorizeCapability } from "@/lib/auth/authorize";
 import { cn } from "@/lib/cn";
 import { fmtNumStr } from "@/lib/utils/format-quantity";
 import { QUICK_ACTIONS } from "@/features/dashboard/quick-actions";
-import { useCurrentSession } from "@/app/(planning)/planning/purchase-session/_lib/api";
-import type {
-  PoTier,
-  PurchaseSessionPo,
-} from "@/app/(planning)/planning/purchase-session/_lib/types";
-import { DashboardHero } from "./_components/DashboardHero";
+import type { PurchaseSessionPo } from "@/app/(planning)/planning/purchase-session/_lib/types";
+import { VerdictBand, type SinceChip } from "./_components/bands/VerdictBand";
+import { FlowRibbon, type FlowEdgeActivity } from "./_components/bands/FlowRibbon";
+import type { FlowNodeData } from "./_components/bands/FlowNode";
+import { TodaysWork, type TomorrowItem } from "./_components/bands/TodaysWork";
 import { KpiTile, KpiTileBreakdown } from "./_components/KpiTile";
 import { StockHealthCard } from "./_components/StockHealthCard";
 import { MovementBars, RangeSelector, TrendAreaChart } from "./_components/TrendChart";
@@ -126,6 +122,8 @@ import {
   type ValueTrendResult,
 } from "./_lib/value-trend";
 import { useNow } from "./_lib/useNow";
+import { resolveFocus } from "./_lib/focus-engine";
+import { mrpOnHandLine, rankQueue, type QueueRowSpec } from "./_lib/queue";
 
 // ---------------------------------------------------------------------------
 // Cadence — keep low for the morning view; refresh on tab focus is the default.
@@ -505,20 +503,6 @@ function detailHintFor(row: CriticalTodayRow): DetailHint {
   }
 }
 
-function triggerKindLabel(kind: string): string {
-  switch (kind) {
-    case "stockout":
-      return "Stockout";
-    case "planning_fail_hard":
-      return "Planning fail-hard";
-    case "integration_critical_stale":
-      return "Integration stale";
-    case "break_glass":
-      return "Break-glass";
-    default:
-      return kind;
-  }
-}
 
 // ---------------------------------------------------------------------------
 // Movement-log registry — compact mirror of the movement-log page registry.
@@ -983,15 +967,8 @@ function RecentProduction({
         </span>
       }
       description="Most recent production output postings."
-      footer={
-        <Link
-          href="/stock/movement-log"
-          className="inline-flex items-center gap-1 rounded text-xs font-semibold text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-        >
-          View movement log
-          <ArrowRight className="h-3 w-3" strokeWidth={2} />
-        </Link>
-      }
+      // Tranche 060: the duplicate "View movement log" footer is gone — the
+      // adjacent Recent Movements panel (same column) carries the single link.
     >
       {loading ? (
         <div className="flex flex-col gap-2">
@@ -1454,216 +1431,12 @@ function InventoryValueCard({
   );
 }
 
-// ---------------------------------------------------------------------------
-// Critical Today block — graduated v2 implementation. Full state hygiene.
-// ---------------------------------------------------------------------------
-function CriticalTodayBlock({ now }: { now: Date }) {
-  const query = useQuery({
-    queryKey: QK_CRITICAL_TODAY,
-    queryFn: ({ signal }) =>
-      fetchJson<CriticalTodayResponse>("/api/dashboard/critical-today", signal),
-    staleTime: STALE_TIME_MS,
-  });
-
-  const rows = query.data?.rows ?? [];
-  const asOf = query.data?.as_of;
-  // Iteration 5 — escalation: the block is loud (danger border, pulsing
-  // flame, count chip) only while something is actually critical. When the
-  // floor is clear it drops to the calm default tone with a green check.
-  const hot = rows.length > 0;
-
-  return (
-    <SectionCard
-      tone={hot ? "danger" : "default"}
-      className={cn("dash-panel dash-live-block", hot && "is-hot shadow-pop")}
-      eyebrow="Live"
-      title={
-        <span className="inline-flex items-center gap-2">
-          {hot ? (
-            <Flame
-              className="h-4 w-4 text-danger animate-pulse-soft motion-reduce:animate-none"
-              strokeWidth={2.25}
-            />
-          ) : (
-            <CheckCircle2 className="h-4 w-4 text-success" strokeWidth={2.25} />
-          )}
-          Critical today
-          {rows.length > 0 ? (
-            <Badge tone="danger" size="sm" className="ml-2 align-middle tabular-nums">
-              {rows.length}
-            </Badge>
-          ) : null}
-        </span>
-      }
-      description="What stops production today if nothing is done."
-      footer={
-        asOf ? (
-          <span>
-            Source: live factory signals · updated {fmtRelative(asOf, now)}
-          </span>
-        ) : undefined
-      }
-    >
-      {query.isLoading ? (
-        <div className="flex flex-col gap-2">
-          <SkeletonRow />
-          <SkeletonRow />
-        </div>
-      ) : query.isError ? (
-        <ErrorAlert label="Critical issues unavailable." onRetry={() => query.refetch()} />
-      ) : rows.length === 0 ? (
-        <AllClearRibbon
-          title="All clear · no critical issues today."
-          description="No stockouts, no fail-hard planning exceptions, no critical-stale integrations, no active break-glass."
-        />
-      ) : (
-        <ul className="flex flex-col gap-2" aria-live="polite">
-          {rows.map((row, idx) => {
-            const hint = detailHintFor(row);
-            return (
-              <li
-                key={`${row.trigger_kind}-${row.triggered_at}-${idx}`}
-                className="flex flex-col gap-1.5 rounded border border-danger/40 bg-bg-raised px-3 py-3 sm:flex-row sm:items-start sm:gap-3"
-              >
-                <div className="flex items-center gap-2 sm:w-44 sm:shrink-0">
-                  <Badge tone="danger" variant="solid" dotted>
-                    {triggerKindLabel(row.trigger_kind)}
-                  </Badge>
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold text-fg-strong">{row.display_name}</div>
-                  {hint.body ? (
-                    <div className="mt-0.5 text-xs leading-relaxed text-fg-muted">{hint.body}</div>
-                  ) : null}
-                  <div
-                    className="mt-1 text-2xs text-fg-faint"
-                    title={fmtAbsolute(row.triggered_at)}
-                  >
-                    Triggered {fmtRelative(row.triggered_at, now)}
-                  </div>
-                </div>
-                {hint.link ? (
-                  <Link
-                    href={hint.link.href}
-                    className="inline-flex shrink-0 items-center gap-1 self-start rounded text-xs font-semibold text-danger-fg hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-danger/40 sm:self-center"
-                  >
-                    {hint.link.label}
-                    <ArrowRight className="h-3 w-3" strokeWidth={2} />
-                  </Link>
-                ) : null}
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </SectionCard>
-  );
-}
 
 // ---------------------------------------------------------------------------
-// Slipped Plans block — graduated v2 implementation.
-// ---------------------------------------------------------------------------
-function SlippedPlansBlock({ now }: { now: Date }) {
-  const query = useQuery({
-    queryKey: QK_SLIPPED_PLANS,
-    queryFn: ({ signal }) =>
-      fetchJson<SlippedPlansResponse>("/api/dashboard/slipped-plans", signal),
-    staleTime: STALE_TIME_MS,
-  });
-
-  const rows = query.data?.rows ?? [];
-  const asOf = query.data?.as_of;
-  const windowDays = query.data?.window_days ?? 7;
-  const hasRows = rows.length > 0;
-
-  return (
-    <SectionCard
-      tone={hasRows ? "warning" : "default"}
-      className={cn("dash-panel dash-live-block", hasRows && "is-warm")}
-      eyebrow="Live"
-      title={
-        <span className="inline-flex items-center gap-2">
-          <TrendingDown className="h-4 w-4 text-warning" strokeWidth={2.25} />
-          Slipped plans
-          {rows.length > 0 ? (
-            <Badge tone="warning" size="sm" className="ml-2 align-middle tabular-nums">
-              {rows.length}
-            </Badge>
-          ) : null}
-        </span>
-      }
-      description={`Planned production from the last ${windowDays} days that was not posted as an actual.`}
-      footer={
-        asOf ? (
-          <span>
-            Source: production plan · window {windowDays} days · updated{" "}
-            {fmtRelative(asOf, now)}
-          </span>
-        ) : undefined
-      }
-    >
-      {query.isLoading ? (
-        <div className="flex flex-col gap-2">
-          <SkeletonRow />
-          <SkeletonRow />
-        </div>
-      ) : query.isError ? (
-        <ErrorAlert label="Slipped plans unavailable." onRetry={() => query.refetch()} />
-      ) : rows.length === 0 ? (
-        <AllClearRibbon
-          title={`No slipped plans in the past ${windowDays} days.`}
-          description="Every past plan in this window has a posted actual or was cancelled by the planner."
-        />
-      ) : (
-        <ul className="flex flex-col gap-2" aria-live="polite">
-          {rows.map((row) => {
-            const planLink = `/planning/production-plan?from=${encodeURIComponent(
-              row.plan_date,
-            )}&to=${encodeURIComponent(row.plan_date)}`;
-            const overdueLabel =
-              row.days_overdue === 1 ? "1 day overdue" : `${row.days_overdue} days overdue`;
-            return (
-              <li
-                key={row.plan_id}
-                className="flex flex-col gap-1.5 rounded border border-border/70 bg-bg-raised px-3 py-3 sm:flex-row sm:items-start sm:gap-3"
-              >
-                <div className="flex flex-wrap items-center gap-2 sm:w-44 sm:shrink-0">
-                  <Badge tone="warning" variant="soft">
-                    {fmtPlanDate(row.plan_date)}
-                  </Badge>
-                  <Badge tone="danger" variant="outline">
-                    {overdueLabel}
-                  </Badge>
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="text-sm font-semibold text-fg-strong">
-                    {row.item_name ?? row.item_id}
-                  </div>
-                  <div className="mt-0.5 text-xs leading-relaxed text-fg-muted">
-                    Planned: <span className="font-mono">{fmtNumStr(row.planned_qty)}</span> {row.uom}
-                  </div>
-                </div>
-                <Link
-                  href={planLink}
-                  className="inline-flex shrink-0 items-center gap-1 self-start rounded text-xs font-semibold text-fg-strong hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 sm:self-center"
-                >
-                  Open plan
-                  <ArrowRight className="h-3 w-3" strokeWidth={2} />
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </SectionCard>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Urgent Procurement block (Stage 4) — surfaces purchase-session supplier
-// orders that need ordering now: overdue, due today, or urgent-tier. The
-// block is rendered for planner/admin only, gated at the call site so the
-// /api/purchase-session/current query never mounts for other roles.
+// Procurement urgency helpers (Tranche 060) — the supplier orders that need
+// ordering now (overdue / due today / urgent-tier) feed the Today's Work
+// queue and the Focus Engine. The purchase-session query is gated to
+// planner/admin via `enabled`, sharing useCurrentSession's cache key.
 // ---------------------------------------------------------------------------
 type ProcUrgency = "overdue" | "today" | "soon";
 
@@ -1674,16 +1447,17 @@ interface ProcRow {
   days: number | null;
 }
 
-const PROC_TIER_LABEL: Record<PoTier, string> = {
-  urgent: "Urgent",
-  must: "Must",
-  recommended: "Recommended",
-};
-const PROC_TIER_TONE: Record<PoTier, "danger" | "warning" | "info"> = {
-  urgent: "danger",
-  must: "warning",
-  recommended: "info",
-};
+// Minimal mirror of the purchase-session current response — only the fields
+// the dashboard reads. Cache key matches useCurrentSession so React Query
+// dedupes with the procurement page.
+interface CurrentSessionLite {
+  session: {
+    session_type: string;
+    created_at: string;
+    pos: PurchaseSessionPo[];
+  } | null;
+}
+const QK_PURCHASE_SESSION = ["purchase-session", "current"] as const;
 
 function isoDateLocal(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
@@ -1706,191 +1480,6 @@ function fmtCost(n: number, currency: string): string {
   return currency && currency !== "ILS" ? `${num} ${currency}` : `₪ ${num}`;
 }
 
-function UrgentProcurementBlock({ now }: { now: Date }) {
-  const query = useCurrentSession();
-  const todayISO = useMemo(() => isoDateLocal(now), [now]);
-  const session = query.data?.session ?? null;
-
-  const rows = useMemo<ProcRow[]>(() => {
-    if (!session) return [];
-    const out: ProcRow[] = [];
-    for (const po of session.pos) {
-      // Only orders the planner still has to act on — placed and skipped
-      // POs are done with.
-      if (po.status !== "proposed" && po.status !== "approved") continue;
-      const days = daysFromToday(po.order_by_date, todayISO);
-      const dueOrPast = days !== null && days <= 0;
-      // Urgent-tier orders surface even when their order-by date is upcoming;
-      // everything else only surfaces once it is due today or overdue.
-      if (!dueOrPast && po.tier !== "urgent") continue;
-      const urgency: ProcUrgency =
-        days !== null && days < 0 ? "overdue" : days === 0 ? "today" : "soon";
-      out.push({ po, urgency, days });
-    }
-    // Overdue first (most overdue leads), then due-today, then urgent upcoming.
-    out.sort((a, b) => (a.days ?? 9_999) - (b.days ?? 9_999));
-    return out;
-  }, [session, todayISO]);
-
-  const dangerCount = rows.filter((r) => r.urgency !== "soon").length;
-  const hot = dangerCount > 0;
-  const tone: "danger" | "warning" | "default" = hot
-    ? "danger"
-    : rows.length > 0
-      ? "warning"
-      : "default";
-
-  const hasWarm = !hot && rows.length > 0;
-  return (
-    <SectionCard
-      tone={tone}
-      className={cn(
-        "dash-panel dash-live-block",
-        hot && "is-hot shadow-pop",
-        hasWarm && "is-warm",
-      )}
-      eyebrow="Live"
-      title={
-        <span className="inline-flex items-center gap-2">
-          {hot ? (
-            <ShoppingCart
-              className="h-4 w-4 text-danger animate-pulse-soft motion-reduce:animate-none"
-              strokeWidth={2.25}
-            />
-          ) : rows.length > 0 ? (
-            <ShoppingCart className="h-4 w-4 text-warning" strokeWidth={2.25} />
-          ) : (
-            <CheckCircle2 className="h-4 w-4 text-success" strokeWidth={2.25} />
-          )}
-          Urgent procurement
-          {rows.length > 0 ? (
-            <Badge
-              tone={hot ? "danger" : "warning"}
-              size="sm"
-              className="ml-2 align-middle tabular-nums"
-            >
-              {rows.length}
-            </Badge>
-          ) : null}
-        </span>
-      }
-      description="Supplier orders from this week's procurement session that need ordering now — overdue, due today, or flagged urgent."
-      actions={
-        <Link
-          href="/planning/procurement"
-          className="inline-flex items-center gap-1 rounded text-xs font-semibold text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-        >
-          Open procurement
-          <ArrowRight className="h-3 w-3" strokeWidth={2} />
-        </Link>
-      }
-      footer={
-        session ? (
-          <span className="flex flex-wrap items-center gap-x-2 gap-y-1">
-            <span>
-              {session.session_type === "weekly" ? "Weekly" : "Off-cycle"} session · started{" "}
-              {fmtRelative(session.created_at, now)}
-            </span>
-            <span aria-hidden className="text-fg-faint">
-              ·
-            </span>
-            <Link
-              href="/planning/procurement"
-              className="font-semibold text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-            >
-              View procurement calendar
-            </Link>
-          </span>
-        ) : undefined
-      }
-    >
-      {query.isLoading ? (
-        <div className="flex flex-col gap-2">
-          <SkeletonRow />
-          <SkeletonRow />
-        </div>
-      ) : query.isError ? (
-        <ErrorAlert label="Purchase session unavailable." onRetry={() => query.refetch()} />
-      ) : !session ? (
-        <EmptyState
-          icon={<ShoppingCart className="h-5 w-5 text-fg-subtle" strokeWidth={2} />}
-          title="No purchase session this week."
-          description="Start the weekly procurement session to generate consolidated supplier order drafts."
-        />
-      ) : rows.length === 0 ? (
-        <AllClearRibbon
-          title="All procurement is on track."
-          description="No supplier orders are overdue, due today, or flagged urgent. Upcoming orders appear in the procurement calendar view."
-        />
-      ) : (
-        <ul className="flex flex-col gap-2" aria-live="polite">
-          {rows.map(({ po, urgency, days }) => {
-            const liveLines = po.lines.filter((l) => !l.is_dropped).length;
-            const urgencyLabel =
-              urgency === "overdue"
-                ? `${Math.abs(days ?? 0)}d overdue`
-                : urgency === "today"
-                  ? "Due today"
-                  : days !== null
-                    ? `In ${days}d`
-                    : "Urgent";
-            const isDanger = urgency !== "soon";
-            return (
-              <li
-                key={po.session_po_id}
-                className={cn(
-                  "flex flex-col gap-1.5 rounded border bg-bg-raised px-3 py-3 sm:flex-row sm:items-start sm:gap-3",
-                  isDanger ? "border-danger/40" : "border-warning/40",
-                )}
-              >
-                <div className="flex flex-wrap items-center gap-2 sm:w-44 sm:shrink-0">
-                  <Badge
-                    tone={isDanger ? "danger" : "warning"}
-                    variant={isDanger ? "solid" : "soft"}
-                    dotted={isDanger}
-                  >
-                    {urgencyLabel}
-                  </Badge>
-                  <Badge tone={PROC_TIER_TONE[po.tier]} variant="outline">
-                    {PROC_TIER_LABEL[po.tier]}
-                  </Badge>
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-semibold text-fg-strong">
-                    {po.supplier_snapshot}
-                  </div>
-                  <div className="mt-0.5 text-xs leading-relaxed text-fg-muted">
-                    {liveLines} line{liveLines !== 1 ? "s" : ""}
-                    {" · "}
-                    <span className="font-mono tabular-nums">
-                      {fmtCost(po.total_cost, po.currency)}
-                    </span>
-                  </div>
-                  <div className="mt-1 text-2xs text-fg-faint" title={po.order_by_date}>
-                    Order by {fmtPlanDate(po.order_by_date)}
-                    {po.status === "approved" ? " · approved, not yet placed" : ""}
-                  </div>
-                </div>
-                <Link
-                  href="/planning/procurement"
-                  className={cn(
-                    "inline-flex shrink-0 items-center gap-1 self-start rounded text-xs font-semibold hover:underline focus-visible:outline-none focus-visible:ring-2 sm:self-center",
-                    isDanger
-                      ? "text-danger-fg focus-visible:ring-danger/40"
-                      : "text-fg-strong focus-visible:ring-accent/40",
-                  )}
-                >
-                  Open
-                  <ArrowRight className="h-3 w-3" strokeWidth={2} />
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </SectionCard>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Page.
@@ -1903,14 +1492,20 @@ export default function DashboardPage() {
   const week = weekRange(now);
   const { session } = useSession();
 
-  // The Urgent Procurement block reads the planner-scoped purchase session.
-  // Gate it here so the query never mounts for viewers/operators.
+  // Role content rules (Tranche 060, design-doc §4): band ORDER is identical
+  // for every role; roles differ only in which bands render.
+  //   operator — no Numbers band (Band 3); everything operational stays.
+  //   viewer   — read-only digest: Verdict + Flow Ribbon + Trends only.
   const role = session?.role ?? "viewer";
   const canSeePurchasing = role === "planner" || role === "admin";
   // The indicative inventory-value trend reads per-item unit costs from the
   // economics surface, so it is gated to the same cost-aware roles as
   // purchasing — viewers/operators never see (or fetch) cost data.
   const canSeeValueTrend = role === "planner" || role === "admin";
+  const isViewer = role === "viewer";
+  const showWork = !isViewer;
+  const showNumbers = role === "planner" || role === "admin";
+  const showDetail = !isViewer;
 
   // Shared range for the operational-trends band (7 / 14 / 30 days). The trend
   // queries already fetch a 30-day-deep window, so switching range only
@@ -1933,6 +1528,8 @@ export default function DashboardPage() {
       fetchJson<ExceptionsResponse>("/api/exceptions?status=OPEN&page_size=200", signal),
     staleTime: STALE_TIME_MS,
     refetchInterval: STALE_TIME_MS,
+    // Feeds the Numbers band only — never mounts for roles that don't see it.
+    enabled: showNumbers,
   });
 
   const planningQ = useQuery({
@@ -1940,6 +1537,20 @@ export default function DashboardPage() {
     queryFn: ({ signal }) =>
       fetchJson<PlanningRunsResponse>("/api/planning/runs?status=completed&limit=1", signal),
     staleTime: 120_000,
+    // Feeds the detail PlanningCard only.
+    enabled: showDetail,
+  });
+
+  // Purchase session — feeds the Today's Work queue + Focus Engine for
+  // planner/admin. Shares useCurrentSession's cache key so the procurement
+  // page and this query dedupe; `enabled` keeps it off for other roles.
+  const purchaseSessionQ = useQuery({
+    queryKey: QK_PURCHASE_SESSION,
+    queryFn: ({ signal }) =>
+      fetchJson<CurrentSessionLite>("/api/purchase-session/current", signal),
+    staleTime: 30_000,
+    retry: false,
+    enabled: canSeePurchasing,
   });
 
   const productionQ = useQuery({
@@ -1958,6 +1569,8 @@ export default function DashboardPage() {
       fetchJson<ProductionActualsResponse>("/api/production-actuals/history?limit=5", signal),
     staleTime: STALE_TIME_MS,
     refetchInterval: STALE_TIME_MS,
+    // Feeds the detail activity band only.
+    enabled: showDetail,
   });
 
   const purchaseOrdersQ = useQuery({
@@ -1974,6 +1587,8 @@ export default function DashboardPage() {
       fetchJson<LedgerResponse>("/api/stock/ledger?limit=3", signal),
     staleTime: STALE_TIME_MS,
     refetchInterval: STALE_TIME_MS,
+    // Feeds the detail activity band only.
+    enabled: showDetail,
   });
 
   // Trend queries (tranche 039) — larger windows, aggregated client-side into
@@ -2023,7 +1638,10 @@ export default function DashboardPage() {
   });
 
   // Derived: stock health from inventory-flow.
-  const flowItems = flowQ.data?.items ?? [];
+  // Stable reference so downstream memos (queue, ribbon nodes) don't
+  // recompute on unrelated renders.
+  const flowItemsData = flowQ.data?.items;
+  const flowItems = useMemo(() => flowItemsData ?? [], [flowItemsData]);
   const healthy = flowItems.filter((i) => i.risk_tier === "healthy").length;
   const watch = flowItems.filter((i) => i.risk_tier === "watch").length;
   const critical = flowItems.filter(
@@ -2189,7 +1807,7 @@ export default function DashboardPage() {
   const totalInventoryValue =
     rmValue != null || fgValue != null ? (rmValue ?? 0) + (fgValue ?? 0) : null;
 
-  // At-a-glance factory-state counts for the hero chip. null while still
+  // At-a-glance factory-state counts for the verdict band. null while still
   // loading so we never paint unknown as healthy.
   const criticalCount = criticalTodayQ.isLoading
     ? null
@@ -2198,27 +1816,480 @@ export default function DashboardPage() {
     ? null
     : slippedPlansQ.data?.rows?.length ?? 0;
 
-  // Compact + long date strings for the hero. Compact is shown right of the
-  // greeting; long is in the sub-line below. Locale-aware.
+  // The date is rendered ONCE, inside the greeting line (design-doc Band 0).
+  // The old compact date plate and "Here is the state…" restatement are gone.
   const dateLong = useMemo(() => fmtToday(now), [now]);
-  const dateCompact = useMemo(
-    () =>
-      now.toLocaleDateString(undefined, {
-        weekday: "short",
-        month: "short",
-        day: "numeric",
-      }),
-    [now],
-  );
+
+  // -------------------------------------------------------------------------
+  // Tranche 060 derivations — Bands 0–2.
+  // -------------------------------------------------------------------------
+
+  // Today's production plan summary (runs planned today vs posted complete).
+  const todayPlanSummary = useMemo(() => {
+    const rawRows = productionQ.data?.rows ?? productionQ.data?.data ?? [];
+    const todays = rawRows.filter(
+      (r) => r.plan_date === todayLocalISO && r.status !== "CANCELLED",
+    );
+    if (todays.length === 0) return null;
+    const isDone = (r: ProductionPlanRow) =>
+      toNum(r.planned_qty) > 0 && toNum(r.completed_qty) >= toNum(r.planned_qty);
+    const done = todays.filter(isDone).length;
+    const next = todays.find((r) => !isDone(r));
+    return {
+      planned: todays.length,
+      done,
+      nextItem: next ? (next.item_name ?? next.item_id) : null,
+      rows: todays,
+    };
+  }, [productionQ.data, todayLocalISO]);
+
+  // Supplier orders needing action now (lifted from the retired
+  // UrgentProcurementBlock — identical filter + sort semantics).
+  const purchaseSession = purchaseSessionQ.data?.session ?? null;
+  const procRows = useMemo<ProcRow[]>(() => {
+    if (!purchaseSession) return [];
+    const out: ProcRow[] = [];
+    for (const po of purchaseSession.pos) {
+      if (po.status !== "proposed" && po.status !== "approved") continue;
+      const days = daysFromToday(po.order_by_date, todayLocalISO);
+      const dueOrPast = days !== null && days <= 0;
+      if (!dueOrPast && po.tier !== "urgent") continue;
+      const urgency: ProcUrgency =
+        days !== null && days < 0 ? "overdue" : days === 0 ? "today" : "soon";
+      out.push({ po, urgency, days });
+    }
+    out.sort((a, b) => (a.days ?? 9_999) - (b.days ?? 9_999));
+    return out;
+  }, [purchaseSession, todayLocalISO]);
+
+  // Forward pointers: the next commitment (all-clear focus) + Tomorrow strip.
+  const forward = useMemo(() => {
+    const tomorrowItems: TomorrowItem[] = [];
+    let nextCommitment: string | null = null;
+    if (canSeePurchasing && purchaseSession) {
+      const future = purchaseSession.pos
+        .filter((p) => p.status === "proposed" || p.status === "approved")
+        .map((p) => ({ d: daysFromToday(p.order_by_date, todayLocalISO), p }))
+        .filter((x): x is { d: number; p: PurchaseSessionPo } => x.d !== null && x.d > 0)
+        .sort((a, b) => a.d - b.d);
+      if (future[0]) {
+        const f = future[0].p;
+        nextCommitment = `order-by ${fmtPlanDate(f.order_by_date)} (${f.supplier_snapshot})`;
+        tomorrowItems.push({
+          key: `po-${f.session_po_id}`,
+          label: `Order ${f.supplier_snapshot} by ${fmtPlanDate(f.order_by_date)}`,
+          href: "/planning/procurement",
+        });
+      }
+    }
+    const rawRows = productionQ.data?.rows ?? productionQ.data?.data ?? [];
+    const tomorrowISO = isoDateLocal(new Date(now.getTime() + 86_400_000));
+    const t = rawRows.find(
+      (r) => r.plan_date === tomorrowISO && r.status !== "CANCELLED",
+    );
+    if (t) {
+      const label = `Run ${t.item_name ?? t.item_id} tomorrow`;
+      if (!nextCommitment) nextCommitment = `tomorrow's run: ${t.item_name ?? t.item_id}`;
+      tomorrowItems.push({
+        key: `plan-${t.item_id}-${t.plan_date}`,
+        label,
+        href: "/planning/production-plan",
+      });
+    }
+    return { nextCommitment, tomorrowItems };
+  }, [canSeePurchasing, purchaseSession, productionQ.data, todayLocalISO, now]);
+
+  // Focus Engine (Band 0) — the one sentence that answers "what is today
+  // about?". Deterministic cascade; see _lib/focus-engine.ts.
+  const focus = resolveFocus({
+    now,
+    critical: criticalTodayQ.isLoading
+      ? null
+      : (criticalTodayQ.data?.rows ?? []).map((r) => ({ label: r.display_name })),
+    procurement:
+      canSeePurchasing && !purchaseSessionQ.isLoading
+        ? {
+            sessionExists: purchaseSession !== null,
+            overdue: procRows.filter((r) => r.urgency === "overdue").length,
+            dueToday: procRows.filter((r) => r.urgency === "today").length,
+            nextSupplier: procRows[0]?.po.supplier_snapshot ?? null,
+          }
+        : null,
+    slipped: slippedCount,
+    todayPlan: todayPlanSummary,
+    latePos: purchaseOrdersQ.isLoading ? null : poStats.lateCount,
+    nextCommitment: forward.nextCommitment,
+  });
+
+  // Today's Work queue (Band 2) — critical-today + procurement + slipped +
+  // late POs merged into one ranked list. Sources and links are exactly the
+  // ones the three retired blocks used.
+  const queue = useMemo(() => {
+    const rows: QueueRowSpec[] = [];
+    for (const [i, row] of (criticalTodayQ.data?.rows ?? []).entries()) {
+      const hint = detailHintFor(row);
+      const itemId = pickString(row.detail_jsonb, "item_id");
+      const flowItem = itemId ? flowItems.find((f) => f.item_id === itemId) : undefined;
+      rows.push({
+        id: `crit-${row.trigger_kind}-${row.triggered_at}-${i}`,
+        severity: "critical",
+        category: "stops_production",
+        title: `Resolve: ${row.display_name}`,
+        whyNow:
+          hint.body ??
+          (flowItem
+            ? mrpOnHandLine({
+                onHand: flowItem.current_on_hand,
+                daysOfCover: flowItem.days_of_cover,
+              })
+            : null),
+        at: row.triggered_at,
+        ageLabel: `Triggered ${fmtRelative(row.triggered_at, now)}`,
+        href: hint.link?.href ?? "/inbox",
+        cta: hint.link?.label ?? "Open",
+      });
+    }
+    for (const { po, urgency, days } of procRows) {
+      const liveLines = po.lines.filter((l) => !l.is_dropped).length;
+      rows.push({
+        id: `proc-${po.session_po_id}`,
+        severity: urgency === "overdue" ? "critical" : "warning",
+        category: "procurement",
+        title: `Order from ${po.supplier_snapshot}`,
+        whyNow: `${liveLines} line${liveLines !== 1 ? "s" : ""} · ${fmtCost(
+          po.total_cost,
+          po.currency,
+        )} · order by ${fmtPlanDate(po.order_by_date)}${
+          po.status === "approved" ? " · approved, not placed" : ""
+        }${po.tier === "urgent" ? " · flagged urgent" : ""}`,
+        at: null,
+        ageLabel:
+          urgency === "overdue"
+            ? `${Math.abs(days ?? 0)}d overdue`
+            : urgency === "today"
+              ? "Due today"
+              : days !== null
+                ? `In ${days}d`
+                : "Urgent",
+        href: "/planning/procurement",
+        cta: "Order now",
+      });
+    }
+    for (const row of slippedPlansQ.data?.rows ?? []) {
+      rows.push({
+        id: `slip-${row.plan_id}`,
+        severity: "warning",
+        category: "slipped",
+        title: `Post actual: ${row.item_name ?? row.item_id}`,
+        whyNow: `Planned ${fmtNumStr(row.planned_qty)} ${row.uom} on ${fmtPlanDate(row.plan_date)}`,
+        at: row.slipped_at,
+        ageLabel: row.days_overdue === 1 ? "1 day overdue" : `${row.days_overdue} days overdue`,
+        href: `/planning/production-plan?from=${encodeURIComponent(row.plan_date)}&to=${encodeURIComponent(row.plan_date)}`,
+        cta: "Open plan",
+      });
+    }
+    const poRows = purchaseOrdersQ.data?.rows ?? purchaseOrdersQ.data?.data ?? [];
+    for (const po of poRows) {
+      const open = po.status === "OPEN" || po.status === "PARTIAL";
+      const late =
+        open && !!po.expected_receive_date && po.expected_receive_date < todayLocalISO;
+      if (!late) continue;
+      rows.push({
+        id: `po-${po.po_id}`,
+        severity: "warning",
+        category: "late_po",
+        title: `Chase receipt: PO ${po.po_number}${
+          po.supplier_name ? ` (${po.supplier_name})` : ""
+        }`,
+        whyNow: `Expected ${fmtPlanDate(po.expected_receive_date as string)}`,
+        at: `${po.expected_receive_date}T00:00:00`,
+        ageLabel: null,
+        href: `/purchase-orders/${encodeURIComponent(po.po_id)}`,
+        cta: "Open PO",
+      });
+    }
+    return rankQueue(rows);
+  }, [
+    criticalTodayQ.data,
+    procRows,
+    slippedPlansQ.data,
+    purchaseOrdersQ.data,
+    flowItems,
+    todayLocalISO,
+    now,
+  ]);
+
+  // Flow Ribbon (Band 1) — node + edge data. Edges animate only when a real
+  // movement crossed them today (LAW 2: motion encodes a real event).
+  const edgeActivity = useMemo<FlowEdgeActivity[]>(() => {
+    const rows = movementsTrendQ.data?.rows ?? movementsTrendQ.data?.data ?? [];
+    let gr = false;
+    let cons = false;
+    let out = false;
+    let ship = false;
+    for (const r of rows) {
+      const when = r.posted_at ?? r.event_at;
+      if (!when) continue;
+      if (isoDateLocal(new Date(when)) !== todayLocalISO) continue;
+      const t = r.movement_type;
+      if (t === "GR_POSTED") gr = true;
+      else if (t === "production_consumption") cons = true;
+      else if (t === "production_output") out = true;
+      else if (t === "LIONWHEEL_PICK" || t === "FG_OUT_PICK") ship = true;
+    }
+    return [
+      { activeToday: gr, label: gr ? "Goods received today" : "No goods received today" },
+      {
+        activeToday: cons,
+        label: cons ? "Materials consumed in production today" : "No consumption today",
+      },
+      {
+        activeToday: out,
+        label: out ? "Production output posted today" : "No production output today",
+      },
+      { activeToday: ship, label: ship ? "Shipments picked today" : "No shipments today" },
+    ];
+  }, [movementsTrendQ.data, todayLocalISO]);
+
+  const flowNodes = useMemo<FlowNodeData[]>(() => {
+    // Materials urgency is expressed in TIME (days of cover) — the MRP
+    // urgency currency. Money stays in the Numbers band.
+    const minCover =
+      flowItems.length > 0
+        ? Math.max(0, Math.min(...flowItems.map((i) => i.days_of_cover)))
+        : null;
+    const shortTop = [...flowItems]
+      .filter((i) => i.risk_tier !== "healthy")
+      .sort((a, b) => a.days_of_cover - b.days_of_cover)
+      .slice(0, 3);
+    const poRows = purchaseOrdersQ.data?.rows ?? purchaseOrdersQ.data?.data ?? [];
+    const openPos = poRows.filter((r) => r.status === "OPEN" || r.status === "PARTIAL");
+    const dueTodayPos = openPos.filter(
+      (r) => r.expected_receive_date === todayLocalISO,
+    ).length;
+    const poTop = [...openPos]
+      .filter((r) => !!r.expected_receive_date)
+      .sort((a, b) =>
+        (a.expected_receive_date as string) < (b.expected_receive_date as string) ? -1 : 1,
+      )
+      .slice(0, 3);
+    const planTop = (todayPlanSummary?.rows ?? []).slice(0, 3);
+
+    return [
+      {
+        key: "inbound",
+        label: "Inbound",
+        state: poStats.lateCount > 0 ? "danger" : dueTodayPos > 0 ? "warn" : "ok",
+        display: purchaseOrdersQ.isLoading ? null : String(poStats.openCount),
+        sub: purchaseOrdersQ.isLoading ? (
+          "…"
+        ) : (
+          <span>
+            {poStats.lateCount > 0 ? (
+              <span className="font-semibold text-danger">{poStats.lateCount} late · </span>
+            ) : null}
+            {fmtILSCompact(poStats.openValue)} open
+          </span>
+        ),
+        href: "/purchase-orders",
+        drill: poTop.map((p) => ({
+          key: p.po_id,
+          label: `${p.po_number}${p.supplier_name ? ` · ${p.supplier_name}` : ""}`,
+          value: p.expected_receive_date ? fmtPlanDate(p.expected_receive_date) : "—",
+        })),
+        srSummary: `Stage 1 of 5, Inbound: ${poStats.openCount} open purchase orders, ${poStats.lateCount} late.`,
+      },
+      {
+        key: "materials",
+        label: "Materials",
+        state: critical > 0 ? "danger" : watch > 0 ? "warn" : "ok",
+        display:
+          flowQ.isLoading || minCover === null
+            ? flowQ.isLoading
+              ? null
+              : "—"
+            : `${Math.round(minCover * 10) / 10}d`,
+        displayFull: "Minimum days of cover across raw materials and packaging",
+        sub: (
+          <span>
+            {critical > 0 ? (
+              <span className="font-semibold text-danger">{critical} critical · </span>
+            ) : null}
+            {total} SKUs
+          </span>
+        ),
+        href: "/planning/inventory-flow",
+        drill: shortTop.map((i) => ({
+          key: i.item_id,
+          label: i.item_name,
+          value: `${Math.round(i.days_of_cover * 10) / 10}d`,
+        })),
+        srSummary: `Stage 2 of 5, Materials: minimum cover ${
+          minCover === null ? "unknown" : `${Math.round(minCover * 10) / 10} days`
+        }, ${critical} critical of ${total} SKUs.`,
+      },
+      {
+        key: "production",
+        label: "Production",
+        state: (slippedCount ?? 0) > 0 ? "warn" : "ok",
+        display: productionQ.isLoading
+          ? null
+          : todayPlanSummary
+            ? `${todayPlanSummary.done}/${todayPlanSummary.planned}`
+            : "—",
+        displayFull: "Runs posted complete vs planned for today",
+        sub: todayPlanSummary ? (
+          <span>
+            {(slippedCount ?? 0) > 0 ? (
+              <span className="font-semibold text-warning-fg">{slippedCount} slipped · </span>
+            ) : null}
+            {todayPlanSummary.nextItem ? `next: ${todayPlanSummary.nextItem}` : "today's runs"}
+          </span>
+        ) : (
+          <span>
+            {(slippedCount ?? 0) > 0 ? (
+              <span className="font-semibold text-warning-fg">{slippedCount} slipped · </span>
+            ) : null}
+            No runs planned today
+          </span>
+        ),
+        href: "/planning/production-plan",
+        drill: planTop.map((r) => ({
+          key: `${r.item_id}-${r.plan_date}`,
+          label: r.item_name ?? r.item_id,
+          value: `${toNum(r.completed_qty)}/${toNum(r.planned_qty)}`,
+        })),
+        srSummary: `Stage 3 of 5, Production: ${
+          todayPlanSummary
+            ? `${todayPlanSummary.done} of ${todayPlanSummary.planned} runs done today`
+            : "no runs planned today"
+        }${(slippedCount ?? 0) > 0 ? `, ${slippedCount} slipped` : ""}.`,
+      },
+      {
+        key: "fg",
+        label: "Finished goods",
+        state: "ok",
+        display: valueQ.isLoading ? null : fgValue != null ? fmtILSCompact(fgValue) : "—",
+        displayFull: fgValue != null ? fmtILS(fgValue) : null,
+        sub: `${fgSkus} SKUs`,
+        href: "/inventory",
+        drill: [],
+        srSummary: `Stage 4 of 5, Finished goods: ${
+          fgValue != null ? fmtILS(fgValue) : "value unavailable"
+        } across ${fgSkus} SKUs.`,
+      },
+      {
+        key: "outbound",
+        label: "Outbound",
+        state: "quiet",
+        display: "—",
+        sub: "Activates with shipments mirror",
+        href: null,
+        drill: [],
+        srSummary:
+          "Stage 5 of 5, Outbound: not yet live — activates with the shipments mirror.",
+      },
+    ];
+  }, [
+    flowItems,
+    flowQ.isLoading,
+    critical,
+    watch,
+    total,
+    purchaseOrdersQ.data,
+    purchaseOrdersQ.isLoading,
+    poStats,
+    todayPlanSummary,
+    productionQ.isLoading,
+    slippedCount,
+    valueQ.isLoading,
+    fgValue,
+    fgSkus,
+    todayLocalISO,
+  ]);
+
+  // "Since you last looked" delta chips (Band 0) — computed once per mount
+  // from the ledger trend window, and only when the operator was away ≥30
+  // minutes (so ordinary tab switches stay quiet).
+  const [sinceChips, setSinceChips] = useState<SinceChip[]>([]);
+  const sinceComputedRef = useRef(false);
+  useEffect(() => {
+    if (sinceComputedRef.current) return;
+    const rows = movementsTrendQ.data?.rows ?? movementsTrendQ.data?.data ?? [];
+    if (!movementsTrendQ.data) return;
+    sinceComputedRef.current = true;
+    const KEY = "gt-dash-last-visit";
+    let last: string | null = null;
+    try {
+      last = window.localStorage.getItem(KEY);
+      window.localStorage.setItem(KEY, new Date().toISOString());
+    } catch {
+      return;
+    }
+    if (!last) return;
+    const lastMs = Date.parse(last);
+    if (!Number.isFinite(lastMs) || Date.now() - lastMs < 30 * 60_000) return;
+    let receipts = 0;
+    let produced = 0;
+    let other = 0;
+    for (const r of rows) {
+      const when = r.posted_at ?? r.event_at;
+      if (!when || Date.parse(when) <= lastMs) continue;
+      if (r.movement_type === "GR_POSTED") receipts += 1;
+      else if (r.movement_type === "production_output") produced += 1;
+      else other += 1;
+    }
+    const chips: SinceChip[] = [];
+    if (receipts > 0)
+      chips.push({
+        key: "receipts",
+        label: `+${receipts} receipt${receipts !== 1 ? "s" : ""}`,
+        href: "/stock/movement-log",
+      });
+    if (produced > 0)
+      chips.push({
+        key: "produced",
+        label: `+${produced} production posting${produced !== 1 ? "s" : ""}`,
+        href: "/stock/movement-log",
+      });
+    if (other > 0)
+      chips.push({
+        key: "other",
+        label: `+${other} other movement${other !== 1 ? "s" : ""}`,
+        href: "/stock/movement-log",
+      });
+    setSinceChips(chips.slice(0, 3));
+  }, [movementsTrendQ.data]);
+
+  // Band provenance labels.
+  const ribbonAsOf = useMemo(() => {
+    const stamps = [
+      purchaseOrdersQ.dataUpdatedAt,
+      flowQ.dataUpdatedAt,
+      productionQ.dataUpdatedAt,
+      valueQ.dataUpdatedAt,
+    ].filter((t) => t > 0);
+    if (stamps.length === 0) return null;
+    return `Live · updated ${fmtRelative(new Date(Math.min(...stamps)).toISOString(), now)}`;
+  }, [purchaseOrdersQ.dataUpdatedAt, flowQ.dataUpdatedAt, productionQ.dataUpdatedAt, valueQ.dataUpdatedAt, now]);
+
+  const workAsOf = criticalTodayQ.data?.as_of
+    ? `Live signals · updated ${fmtRelative(criticalTodayQ.data.as_of, now)}`
+    : null;
 
   return (
     <div className="dashboard-canvas flex flex-col gap-6 sm:gap-7">
-      <DashboardHero
+      {/* Band 0 — Verdict & Focus (design-doc §4). The date renders once,
+          the Focus Engine sentence answers "what is today about?", and the
+          freshness chip carries provenance (the "Auto-refreshing" developer
+          chip is retired — the live dot inside freshness says the same). */}
+      <VerdictBand
         greeting={greeting(now, session?.display_name)}
         dateLong={dateLong}
-        dateCompact={dateCompact}
+        focus={focus}
         critical={criticalCount}
         slipped={slippedCount}
+        sinceChips={sinceChips}
         metaRail={
           <>
             <FreshnessBadge
@@ -2227,43 +2298,59 @@ export default function DashboardPage() {
               warnAfterMinutes={15}
               failAfterMinutes={120}
             />
-            {totalInventoryValue != null ? (
+            {totalInventoryValue != null && showNumbers ? (
               <span
                 className="dash-chip"
                 title={`${fmtILS(totalInventoryValue)} — combined value of RM + PKG + FG stock from the latest stock-value snapshot.`}
               >
                 <Coins className="h-3.5 w-3.5 text-accent" strokeWidth={2} aria-hidden />
                 <span className="text-fg-muted">Total inventory</span>
-                {/* Tranche 051 (FLOW-010): compact form so the hero meta rail
-                    fits a phone width; the title tooltip keeps the framing. */}
                 <span className="tabular-nums text-fg-strong">
                   {fmtILSCompact(totalInventoryValue)}
                 </span>
               </span>
             ) : null}
-            <span
-              className="dash-chip"
-              data-tone="accent"
-              title="Key panels re-fetch automatically every 60 seconds."
-            >
-              <span className="dash-live-dot" aria-hidden />
-              Auto-refreshing
-            </span>
           </>
         }
       />
 
       <BreakGlassBanner />
 
+      {/* Band 1 — Factory Flow Ribbon: the pipeline itself, left to right. */}
       <div className="reveal reveal-delay-1">
-        <QuickActionsLauncher />
+        <FlowRibbon nodes={flowNodes} edges={edgeActivity} asOfLabel={ribbonAsOf} />
       </div>
 
-      {/* Hero KPI strip — promoted above the live blocks so the headline
-          numbers a COO opens the dashboard to see appear in the first
-          scanning zone. The live blocks (critical / urgent / slipped)
-          follow immediately below and escalate visually when active. */}
-      <div className="reveal reveal-delay-2 grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-4">
+      {/* Band 2 — Today's Work: ONE ranked queue replacing the three
+          separate live blocks. */}
+      {showWork ? (
+        <div className="reveal reveal-delay-2">
+          <TodaysWork
+            rows={queue.rows}
+            overflow={queue.overflow}
+            loading={criticalTodayQ.isLoading || slippedPlansQ.isLoading}
+            error={criticalTodayQ.isError || slippedPlansQ.isError}
+            onRetry={() => {
+              void criticalTodayQ.refetch();
+              void slippedPlansQ.refetch();
+            }}
+            tomorrow={forward.tomorrowItems}
+            asOfLabel={workAsOf}
+          />
+        </div>
+      ) : null}
+
+      {showWork ? (
+        <div className="reveal reveal-delay-3">
+          <QuickActionsLauncher />
+        </div>
+      ) : null}
+
+      {/* Band 3 — The Numbers (planner/admin). lg gets 2×2 so the display
+          numbers never collapse to their smallest size on common laptops
+          (DASH-V3); 4-up returns at xl. */}
+      {showNumbers ? (
+      <div className="reveal reveal-delay-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
         <KpiTile
           label="RM Inventory Value"
           value={rmValue != null ? fmtILSCompact(rmValue) : null}
@@ -2347,24 +2434,12 @@ export default function DashboardPage() {
           }
         />
       </div>
-
-      <div className="reveal reveal-delay-3">
-        <CriticalTodayBlock now={now} />
-      </div>
-      {canSeePurchasing ? (
-        <div className="reveal reveal-delay-4">
-          <UrgentProcurementBlock now={now} />
-        </div>
       ) : null}
-      <div className="reveal reveal-delay-5">
-        <SlippedPlansBlock now={now} />
-      </div>
 
-      {/* Operational trends — the dashboard's time-series band. Activity charts
-          count postings per day (honest, UOM-agnostic); the inventory-value
-          card is an explicitly-indicative reconstruction. A shared range
-          selector drives all charts. */}
-      <section className="reveal reveal-delay-6 flex flex-col gap-4">
+      {/* Band 4 — Operational trends. Activity charts count postings per day
+          (honest, UOM-agnostic); the inventory-value card is an explicitly-
+          indicative reconstruction. A shared range selector drives all charts. */}
+      <section className="reveal reveal-delay-5 flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <SectionHeading
             eyebrow="Operational trends"
@@ -2405,35 +2480,39 @@ export default function DashboardPage() {
         </div>
       </section>
 
-      {/* Shortage risk + stock health + planning. */}
-      <div className="reveal reveal-delay-6 grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
-        <ShortageRisk items={flowItems} loading={flowQ.isLoading} />
-        <div className="flex flex-col gap-4">
-          <StockHealthCard
-            healthy={healthy}
-            watch={watch}
-            critical={critical}
-            total={total}
-            loading={flowQ.isLoading}
-          />
-          <PlanningCard run={latestRun} loading={planningQ.isLoading} />
+      {/* Band 5 — detail: shortage risk + stock health + planning. */}
+      {showDetail ? (
+        <div className="reveal reveal-delay-6 grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
+          <ShortageRisk items={flowItems} loading={flowQ.isLoading} />
+          <div className="flex flex-col gap-4">
+            <StockHealthCard
+              healthy={healthy}
+              watch={watch}
+              critical={critical}
+              total={total}
+              loading={flowQ.isLoading}
+            />
+            <PlanningCard run={latestRun} loading={planningQ.isLoading} />
+          </div>
         </div>
-      </div>
+      ) : null}
 
-      {/* Production this week + recent activity. */}
-      <div className="reveal reveal-delay-6 grid grid-cols-1 gap-4 lg:grid-cols-2">
-        <ProductionWeek rows={prodWeekItems} loading={productionQ.isLoading} />
-        <div className="flex flex-col gap-4">
-          <RecentProduction rows={recentActuals} now={now} loading={actualsQ.isLoading} />
-          <RecentMovements
-            rows={recentMovements}
-            now={now}
-            loading={movementsQ.isLoading}
-            error={movementsQ.isError}
-            onRetry={() => movementsQ.refetch()}
-          />
+      {/* Band 5 — detail: production this week + recent activity. */}
+      {showDetail ? (
+        <div className="reveal reveal-delay-7 grid grid-cols-1 gap-4 lg:grid-cols-2">
+          <ProductionWeek rows={prodWeekItems} loading={productionQ.isLoading} />
+          <div className="flex flex-col gap-4">
+            <RecentProduction rows={recentActuals} now={now} loading={actualsQ.isLoading} />
+            <RecentMovements
+              rows={recentMovements}
+              now={now}
+              loading={movementsQ.isLoading}
+              error={movementsQ.isError}
+              onRetry={() => movementsQ.refetch()}
+            />
+          </div>
         </div>
-      </div>
+      ) : null}
     </div>
   );
 }

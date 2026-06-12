@@ -181,7 +181,14 @@ export function CountUp({ value, durationMs = 800, className }: CountUpProps) {
       }
     }
     raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+    return () => {
+      cancelAnimationFrame(raf);
+      // StrictMode-safe: dev double-invokes effects (mount → cleanup →
+      // mount). If this cleanup interrupted an unfinished tween, clear the
+      // target guard so the re-run restarts the animation instead of
+      // early-returning and freezing the value at its first frame.
+      if (shownNumberRef.current !== end) lastTargetRef.current = null;
+    };
   }, [target, passthrough, durationMs]);
 
   return <span className={className}>{displayed}</span>;

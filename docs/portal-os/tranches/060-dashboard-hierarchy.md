@@ -1,6 +1,12 @@
 # Tranche 060 — dashboard-hierarchy: Verdict, Flow Ribbon, Today's Work (Phase 2 of 4)
 
-status: proposed (executes only after Tranche 059 lands; Tom screenshot round mid-tranche)
+status: implemented (branch `claude/dashboard-ui-audit-pc60ck`; Tom merges after screenshot review)
+evidence: tsc clean · vitest 616/616 (77 files) · eslint clean · Playwright @mocked 4/4
+  (3 new dashboard band tests + procurement focus loop) · 4 evidence screenshots
+  delivered to Tom (critical-day light/desktop, clear-day light/desktop,
+  critical-day dark/desktop*, clear-day mobile). *dark capture pending a real
+  env — the e2e dev-shim /api/me mock resets the theme; all new CSS is
+  token-driven so dark derives automatically.
 phase: dashboard convergence, Phase 2 (see ../dashboard-target-design.md §4, §7)
 source: dashboard-target-design.md v2 (decisions resolved 2026-06-12 under Tom's delegation)
 
