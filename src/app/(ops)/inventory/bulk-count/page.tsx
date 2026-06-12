@@ -37,6 +37,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
+import { useSession } from "@/lib/auth/session-provider";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { GroupFilterBar } from "@/components/filters/GroupFilterBar";
 import {
@@ -46,7 +47,7 @@ import {
   useGroups,
   type GroupLike,
 } from "@/lib/taxonomy/groups";
-import { UOMS, type Uom } from "@/lib/contracts/enums";
+import { friendlyCountError } from "@/lib/copy/physical-count-errors";
 import { cn } from "@/lib/cn";
 import {
   EMPTY_FILTERS,
@@ -152,6 +153,7 @@ function CountRow({
   counted,
   phase,
   error,
+  canReview,
   onSubmit,
   onRecount,
   registerInput,
@@ -160,20 +162,39 @@ function CountRow({
   counted: CountedEntry | undefined;
   phase: RowPhase;
   error: string | undefined;
-  onSubmit: (row: BulkCountRow, qty: string, unit: Uom) => void;
+  /** True when the session role may open the planner approval surface. */
+  canReview: boolean;
+  onSubmit: (row: BulkCountRow, qty: string) => void;
   onRecount: (rowKey: string) => void;
   registerInput: (rowKey: string, el: HTMLInputElement | null) => void;
 }) {
   const [qty, setQty] = useState("");
-  const [unit, setUnit] = useState<Uom>(row.default_uom);
+  // Zero-count guard: a count of 0 is legitimate but high-impact (it can
+  // zero an item's stock), so it takes one extra deliberate confirmation.
+  const [confirmZero, setConfirmZero] = useState(false);
   const saving = phase === "saving";
-  const qtyValid = qty.trim() !== "" && Number.isFinite(Number(qty)) && Number(qty) >= 0;
+  const qtyNum = Number(qty);
+  const qtyValid = qty.trim() !== "" && Number.isFinite(qtyNum) && qtyNum >= 0;
+  const isZero = qtyValid && qtyNum === 0;
+  // A rejected count means "recount this item" — the entry controls return.
+  const rejected = counted?.status === "rejected";
+  const showEntry = !counted || rejected;
+
+  function trySubmit() {
+    if (!qtyValid || saving) return;
+    if (isZero && !confirmZero) {
+      setConfirmZero(true);
+      return;
+    }
+    setConfirmZero(false);
+    onSubmit(row, qty);
+  }
 
   return (
     <li
       className={cn(
         "flex flex-wrap items-center gap-x-3 gap-y-2 border-b border-border/40 px-3 py-2.5 transition-colors sm:px-4",
-        counted ? "bg-success-softer/30" : "hover:bg-bg-subtle/40",
+        counted && !rejected ? "bg-success-softer/30" : "hover:bg-bg-subtle/40",
       )}
       data-testid={`bulk-count-row-${row.item_type}-${row.item_id}`}
     >
@@ -204,7 +225,7 @@ function CountRow({
       </div>
 
       {/* Count entry / result */}
-      {counted ? (
+      {!showEntry && counted ? (
         <div className="flex shrink-0 items-center gap-2">
           <span
             className={cn(
@@ -227,14 +248,23 @@ function CountRow({
             {counted.qty} {counted.unit}
             <span className="font-normal opacity-75">· {timeLabel(counted.at)}</span>
           </span>
-          {counted.status === "pending" && counted.submission_id ? (
-            <Link
-              href={`/inbox/approvals/physical-count/${encodeURIComponent(counted.submission_id)}`}
-              className="text-2xs font-medium text-warning-fg underline hover:no-underline"
-              title="Variance exceeded the threshold — stock will not change until a planner approves."
-            >
-              Awaiting approval
-            </Link>
+          {counted.status === "pending" ? (
+            canReview && counted.submission_id ? (
+              <Link
+                href={`/inbox/approvals/physical-count/${encodeURIComponent(counted.submission_id)}`}
+                className="text-2xs font-medium text-warning-fg underline hover:no-underline"
+                title="Variance exceeded the threshold — stock will not change until a planner approves."
+              >
+                Review approval
+              </Link>
+            ) : (
+              <span
+                className="text-2xs text-fg-muted"
+                title="Variance exceeded the threshold — stock will not change until a planner approves. The badge updates here once it is decided."
+              >
+                Awaiting planner approval
+              </span>
+            )
           ) : null}
           <button
             type="button"
@@ -256,11 +286,14 @@ function CountRow({
             min="0"
             placeholder="0"
             value={qty}
-            onChange={(e) => setQty(e.target.value)}
+            onChange={(e) => {
+              setQty(e.target.value);
+              setConfirmZero(false);
+            }}
             onKeyDown={(e) => {
-              if (e.key === "Enter" && qtyValid && !saving) {
+              if (e.key === "Enter") {
                 e.preventDefault();
-                onSubmit(row, qty, unit);
+                trySubmit();
               }
             }}
             disabled={saving}
@@ -268,38 +301,76 @@ function CountRow({
             aria-label={`Counted quantity for ${row.name}`}
             data-testid="bulk-count-qty"
           />
-          <select
-            value={unit}
-            onChange={(e) => setUnit(e.target.value as Uom)}
-            disabled={saving}
-            className="input h-10 w-[5.5rem] px-2 text-xs"
-            aria-label={`Unit for ${row.name}`}
+          {/* Unit is locked to the item master's counting unit — submitting in
+              any other unit is refused server-side (UNIT_INCOMPATIBLE). */}
+          <span
+            className="w-12 shrink-0 text-center text-xs font-semibold uppercase text-fg-muted"
+            title="Counting unit — set on the item master"
           >
-            {UOMS.map((u) => (
-              <option key={u} value={u}>
-                {u}
-              </option>
-            ))}
-          </select>
-          <button
-            type="button"
-            className="btn btn-primary btn-sm h-10"
-            onClick={() => onSubmit(row, qty, unit)}
-            disabled={!qtyValid || saving}
-            aria-label={`Save count for ${row.name}`}
-            data-testid="bulk-count-save"
-          >
-            {saving ? (
-              <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-                <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
-                <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
-              </svg>
-            ) : (
-              "Save"
-            )}
-          </button>
+            {row.default_uom}
+          </span>
+          {confirmZero ? (
+            <>
+              <button
+                type="button"
+                className="btn btn-danger btn-sm h-10"
+                onClick={trySubmit}
+                disabled={saving}
+                aria-label={`Confirm zero count for ${row.name}`}
+                data-testid="bulk-count-confirm-zero"
+              >
+                Confirm 0
+              </button>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm h-10"
+                onClick={() => setConfirmZero(false)}
+                disabled={saving}
+              >
+                Change
+              </button>
+            </>
+          ) : (
+            <button
+              type="button"
+              className="btn btn-primary btn-sm h-10"
+              onClick={trySubmit}
+              disabled={!qtyValid || saving}
+              aria-label={`Save count for ${row.name}`}
+              data-testid="bulk-count-save"
+            >
+              {saving ? (
+                <svg className="h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                </svg>
+              ) : (
+                "Save"
+              )}
+            </button>
+          )}
         </div>
       )}
+
+      {confirmZero ? (
+        <div
+          className="basis-full text-2xs text-danger-fg"
+          role="alert"
+          data-testid="bulk-count-zero-warning"
+        >
+          Zero means no stock on hand for this item. Confirm to save the zero count.
+        </div>
+      ) : null}
+
+      {rejected && counted ? (
+        <div
+          className="basis-full text-2xs text-danger-fg"
+          data-testid="bulk-count-rejected-note"
+        >
+          Previous count ({counted.qty} {counted.unit} at {timeLabel(counted.at)}) was
+          rejected by the planner — stock was not changed. Count this item again.
+        </div>
+      ) : null}
 
       {error ? (
         <div
@@ -319,6 +390,11 @@ function CountRow({
 // ---------------------------------------------------------------------------
 
 export default function BulkCountPage() {
+  const { session } = useSession();
+  // Planner approval surface is planner/admin-gated (middleware + layout);
+  // operators get a non-linked status label instead of a dead-end link.
+  const canReview = session.role === "planner" || session.role === "admin";
+
   // --- data -----------------------------------------------------------------
   const fgQuery = useQuery({
     queryKey: ["stock", "FG"],
@@ -507,7 +583,9 @@ export default function BulkCountPage() {
       for (const s of sections) if (!collapsed.has(s.key)) flat.push(...s.rows);
       const idx = flat.findIndex((r) => r.key === afterKey);
       for (let i = idx + 1; i < flat.length; i += 1) {
-        if (nextCounted[flat[i].key]) continue;
+        const entry = nextCounted[flat[i].key];
+        // Rejected counts need a recount — they stay in the focus queue.
+        if (entry && entry.status !== "rejected") continue;
         const el = inputRefs.current.get(flat[i].key);
         if (el) {
           el.focus();
@@ -520,7 +598,7 @@ export default function BulkCountPage() {
   );
 
   const submitRow = useCallback(
-    async (row: BulkCountRow, qtyStr: string, unit: Uom) => {
+    async (row: BulkCountRow, qtyStr: string) => {
       const qty = Number(qtyStr);
       if (!Number.isFinite(qty) || qty < 0) {
         setRowError((e) => ({ ...e, [row.key]: "Quantity must be a non-negative number." }));
@@ -528,6 +606,10 @@ export default function BulkCountPage() {
       }
       setRowError((e) => ({ ...e, [row.key]: undefined }));
       setRowPhase((p) => ({ ...p, [row.key]: "saving" }));
+      // Tracks a snapshot that was opened but not consumed by a successful
+      // submit. Released in finally so a failed submit never leaves the item
+      // frozen on the server until the reaper job catches it.
+      let unconsumedSnapshotId: string | null = null;
       try {
         // 1. Open (or idempotently resume) the blind-count snapshot.
         const q = new URLSearchParams({ item_type: row.item_type, item_id: row.item_id });
@@ -540,11 +622,15 @@ export default function BulkCountPage() {
         if (!openRes.ok || !openBody?.snapshot_id) {
           setRowError((e) => ({
             ...e,
-            [row.key]: `Could not open a count snapshot (HTTP ${openRes.status}). Try again.`,
+            [row.key]: `Could not start the count. ${friendlyCountError(openBody, openRes.status)}`,
           }));
           return;
         }
-        // 2. Submit the counted quantity.
+        unconsumedSnapshotId = openBody.snapshot_id;
+        // 2. Submit the counted quantity — always in the snapshot's unit
+        //    (the item master's counting unit), never a client-side choice,
+        //    so UNIT_INCOMPATIBLE conflicts cannot happen.
+        const unit = openBody.unit_default;
         const res = await fetch("/api/physical-count", {
           method: "POST",
           headers: { "Content-Type": "application/json", Accept: "application/json" },
@@ -565,6 +651,7 @@ export default function BulkCountPage() {
             }
           | null;
         if (body?.status === "posted" || body?.status === "pending") {
+          unconsumedSnapshotId = null; // consumed — nothing to release
           const entry: CountedEntry = {
             qty,
             unit,
@@ -579,20 +666,79 @@ export default function BulkCountPage() {
         } else {
           setRowError((e) => ({
             ...e,
-            [row.key]: `Could not submit (HTTP ${res.status}). Check your connection and try again.`,
+            [row.key]: `${friendlyCountError(body, res.status)} The count was not saved.`,
           }));
         }
       } catch (err) {
         setRowError((e) => ({
           ...e,
-          [row.key]: err instanceof Error ? `Network error: ${err.message}` : "Network error.",
+          [row.key]:
+            err instanceof Error
+              ? `Network error — the count was not saved. (${err.message})`
+              : "Network error — the count was not saved.",
         }));
       } finally {
+        if (unconsumedSnapshotId) {
+          // Fire-and-forget release; if it fails, a retry reuses the still-open
+          // snapshot idempotently and the server reaper expires it eventually.
+          void fetch(
+            `/api/physical-count/${encodeURIComponent(unconsumedSnapshotId)}/cancel`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json", Accept: "application/json" },
+              body: JSON.stringify({ idempotency_key: newIdempotencyKey() }),
+            },
+          ).catch(() => {});
+        }
         setRowPhase((p) => ({ ...p, [row.key]: undefined }));
       }
     },
     [counted, persistCounted, focusNextUncounted],
   );
+
+  // FLOW-104 — close the feedback loop on held counts: on load and on tab
+  // focus, silently re-check every pending submission and flip its local tick
+  // to posted / rejected once the planner has decided.
+  const refreshPendingRef = useRef<() => void>(() => {});
+  refreshPendingRef.current = () => {
+    const pend = Object.entries(counted).filter(
+      ([, e]) => e.status === "pending" && e.submission_id,
+    );
+    if (pend.length === 0) return;
+    void Promise.all(
+      pend.map(async ([key, e]) => {
+        try {
+          const res = await fetch(
+            `/api/physical-count/${encodeURIComponent(e.submission_id ?? "")}`,
+            { headers: { Accept: "application/json" } },
+          );
+          if (!res.ok) return null;
+          const d = (await res.json().catch(() => null)) as { status?: string } | null;
+          if (d?.status === "posted" || d?.status === "rejected") {
+            const updated: CountedEntry = { ...e, status: d.status };
+            return [key, updated] as [string, CountedEntry];
+          }
+          return null;
+        } catch {
+          return null;
+        }
+      }),
+    ).then((results) => {
+      const updates = results.filter((r): r is [string, CountedEntry] => r !== null);
+      if (updates.length === 0) return;
+      persistCounted({ ...counted, ...Object.fromEntries(updates) });
+    });
+  };
+  useEffect(() => {
+    // Small delay so the localStorage restore effect has populated `counted`.
+    const t = setTimeout(() => refreshPendingRef.current(), 800);
+    const onFocus = () => refreshPendingRef.current();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      clearTimeout(t);
+      window.removeEventListener("focus", onFocus);
+    };
+  }, []);
 
   // Re-open a row for recounting: clears the LOCAL tick only. The previous
   // count stays in the ledger / approval queue; a new submission posts a new
@@ -684,6 +830,11 @@ export default function BulkCountPage() {
             </span>
           ) : null}
         </div>
+        <p className="mt-1 text-3xs leading-snug text-fg-subtle">
+          Progress ticks are saved on this device only — switching devices
+          mid-walk resets the ticks, but every submitted count is already safe
+          in the system.
+        </p>
       </div>
 
       {/* ===== Filters ===== */}
@@ -794,7 +945,7 @@ export default function BulkCountPage() {
         ) : null}
         {filters.type !== "FG" && usedByChips.length > 0 ? (
           <GroupFilterBar
-            label="לפי קו מוצר"
+            label="By product line"
             groups={usedByChips}
             counts={usedByCounts}
             selected={filters.usedBy ? [filters.usedBy] : []}
@@ -939,7 +1090,10 @@ export default function BulkCountPage() {
                   onClick={() => toggleSection(section.key)}
                   aria-expanded={!isCollapsed}
                   className={cn(
-                    "sticky top-12 z-10 flex w-full items-center gap-2.5 border-b border-border/50 px-3 py-2.5 text-left backdrop-blur-md transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 sm:px-4",
+                    // Sticky only from sm up — on phones the wrapping progress
+                    // bar has a variable height, so pinned section headers
+                    // could overlap it (FLOW-116).
+                    "flex w-full items-center gap-2.5 border-b border-border/50 px-3 py-2.5 text-left backdrop-blur-md transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 sm:sticky sm:top-12 sm:z-10 sm:px-4",
                     done ? "bg-success-softer/80" : "bg-bg-raised/95 hover:bg-bg-subtle/80",
                   )}
                 >
@@ -979,7 +1133,8 @@ export default function BulkCountPage() {
                         counted={counted[row.key]}
                         phase={rowPhase[row.key]}
                         error={rowError[row.key]}
-                        onSubmit={(r, q, u) => void submitRow(r, q, u)}
+                        canReview={canReview}
+                        onSubmit={(r, q) => void submitRow(r, q)}
                         onRecount={recountRow}
                         registerInput={registerInput}
                       />
@@ -991,13 +1146,17 @@ export default function BulkCountPage() {
           })}
 
           <p className="px-1 text-2xs leading-relaxed text-fg-subtle">
-            Every saved row posts a physical-count event to the stock ledger (or
+            Every saved row replaces the stock balance anchor for that item (or
             holds for planner approval on large variance) — identical to{" "}
             <Link href="/stock/physical-count" className="underline hover:no-underline">
               the single-item count form
             </Link>
+            . Current balances update on{" "}
+            <Link href="/inventory" className="underline hover:no-underline">
+              Inventory
+            </Link>
             . &quot;Recount&quot; only clears the local tick so you can submit a
-            corrected count; previous submissions stay in the ledger audit trail.
+            corrected count; previous submissions stay on the audit trail.
             Tick marks reset automatically each day.
           </p>
         </div>

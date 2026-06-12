@@ -95,9 +95,11 @@ export function toBulkRow(row: BulkStockRow): BulkCountRow | null {
 export interface CountedEntry {
   qty: number;
   unit: string;
-  /** "posted" — auto-posted to the ledger. "pending" — held for planner
-   *  approval (stock unchanged until approved). */
-  status: "posted" | "pending";
+  /** "posted" — anchor replaced (auto or via approval). "pending" — held for
+   *  planner approval (stock unchanged until approved). "rejected" — planner
+   *  refused the count; the previous anchor stands and the item should be
+   *  recounted. */
+  status: "posted" | "pending" | "rejected";
   submission_id?: string;
   /** Server-computed delta string (e.g. "+5.00") when returned. */
   delta?: string;
@@ -192,8 +194,12 @@ export function rowMatches(
     if (!row.used_by.includes(f.usedBy)) return false;
   }
 
-  if (f.view === "remaining" && counted[row.key]) return false;
-  if (f.view === "counted" && !counted[row.key]) return false;
+  // A rejected count means the item still needs a recount — it stays in
+  // "remaining" and out of "counted".
+  const entry = counted[row.key];
+  const isDone = entry !== undefined && entry.status !== "rejected";
+  if (f.view === "remaining" && isDone) return false;
+  if (f.view === "counted" && !isDone) return false;
 
   if (f.neverCountedOnly && !row.never_counted) return false;
   if (f.staleOnly && !isStale(row.last_event_at, nowMs)) return false;
@@ -280,7 +286,11 @@ export function progressOf(
   counted: CountedMap,
 ): { done: number; total: number } {
   let done = 0;
-  for (const r of rows) if (counted[r.key]) done += 1;
+  for (const r of rows) {
+    const e = counted[r.key];
+    // Rejected counts still need a recount — not done.
+    if (e && e.status !== "rejected") done += 1;
+  }
   return { done, total: rows.length };
 }
 
@@ -312,7 +322,7 @@ export function parseStored(raw: string | null): CountedMap {
       if (
         typeof e.qty !== "number" ||
         typeof e.unit !== "string" ||
-        (e.status !== "posted" && e.status !== "pending") ||
+        (e.status !== "posted" && e.status !== "pending" && e.status !== "rejected") ||
         typeof e.at !== "string"
       ) {
         continue;

@@ -23,6 +23,7 @@ import { useQuery } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { UOMS, type Uom } from "@/lib/contracts/enums";
+import { friendlyCountError } from "@/lib/copy/physical-count-errors";
 import { cn } from "@/lib/cn";
 
 // ---------------------------------------------------------------------------
@@ -461,11 +462,10 @@ export default function PhysicalCountPage() {
         setUnit(toUom(snap.unit_default));
         setPhase("counting");
       } else {
-        const detail = body ? JSON.stringify(body) : `HTTP ${res.status}`;
         setDone({
           kind: "error",
-          message: `Failed to open count snapshot (HTTP ${res.status}).`,
-          detail,
+          message: "Could not start the count.",
+          detail: friendlyCountError(body, res.status),
         });
         setPhase("pick");
       }
@@ -552,11 +552,10 @@ export default function PhysicalCountPage() {
         });
         resetFlow();
       } else {
-        const detail = body ? JSON.stringify(body) : `HTTP ${res.status}`;
         setDone({
           kind: "error",
-          message: "Could not submit. Check your connection and try again.",
-          detail,
+          message: "Could not submit the count.",
+          detail: friendlyCountError(body, res.status),
         });
         setPhase("counting");
       }
