@@ -141,6 +141,16 @@ describe("rowMatches", () => {
     ).toBe(false);
   });
 
+  it("a rejected count stays in 'remaining', out of 'counted', and not done", () => {
+    const rejectedMap: CountedMap = {
+      "RM:RM-rej": { qty: 9, unit: "KG", status: "rejected", at: "2026-06-12T09:00:00Z" },
+    };
+    const row = bulkRow({ item_id: "RM-rej" });
+    expect(rowMatches(row, { ...EMPTY_FILTERS, view: "remaining" }, rejectedMap, NOW)).toBe(true);
+    expect(rowMatches(row, { ...EMPTY_FILTERS, view: "counted" }, rejectedMap, NOW)).toBe(false);
+    expect(progressOf([row], rejectedMap)).toEqual({ done: 0, total: 1 });
+  });
+
   it("view=remaining hides counted rows; view=counted shows only them", () => {
     const row = bulkRow({ item_id: "RM-counted" });
     expect(rowMatches(row, { ...EMPTY_FILTERS, view: "remaining" }, counted, NOW)).toBe(false);
@@ -230,11 +240,12 @@ describe("progress + persistence", () => {
     const good = {
       "RM:A": { qty: 2, unit: "KG", status: "posted", at: "t", delta: "+1.00" },
       "RM:B": { qty: 1, unit: "L", status: "pending", at: "t", submission_id: "s1" },
+      "RM:C": { qty: 4, unit: "L", status: "rejected", at: "t", submission_id: "s2" },
       "RM:bad-status": { qty: 1, unit: "L", status: "nope", at: "t" },
       "RM:bad-qty": { qty: "3", unit: "L", status: "posted", at: "t" },
     };
     const parsed = parseStored(JSON.stringify(good));
-    expect(Object.keys(parsed).sort()).toEqual(["RM:A", "RM:B"]);
+    expect(Object.keys(parsed).sort()).toEqual(["RM:A", "RM:B", "RM:C"]);
     expect(parsed["RM:A"].delta).toBe("+1.00");
     expect(parsed["RM:B"].submission_id).toBe("s1");
   });
