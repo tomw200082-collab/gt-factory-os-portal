@@ -51,6 +51,10 @@ const ROLE_GATES: Array<{ prefix: string; allow: string[] }> = [
   { prefix: "/inbox/approvals", allow: ["planner", "admin"] },
   { prefix: "/admin/economics", allow: ["planner", "admin"] },
   { prefix: "/admin", allow: ["admin"] },
+  // /inventory/bulk-count writes stock events — it lives in the (ops) group
+  // (stock:execute) and must match BEFORE any broader /inventory handling
+  // (/inventory itself is viewer:read shared and intentionally unlisted).
+  { prefix: "/inventory/bulk-count", allow: ["operator", "planner", "admin"] },
   { prefix: "/stock/movement-log", allow: ["operator", "planner", "admin", "viewer"] },
   { prefix: "/stock", allow: ["operator", "planner", "admin"] },
   { prefix: "/planning", allow: ["operator", "planner", "admin", "viewer"] },

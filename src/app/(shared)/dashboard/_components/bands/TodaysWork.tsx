@@ -11,8 +11,9 @@
 // "nothing to do").
 // ---------------------------------------------------------------------------
 
+import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, CalendarClock, CheckCircle2, Flame } from "lucide-react";
+import { ArrowRight, CalendarClock, CheckCircle2, Flame, X } from "lucide-react";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
 import { AllClearRibbon, ErrorAlert, SkeletonRow } from "@/components/feedback/states";
@@ -29,7 +30,11 @@ export interface TodaysWorkProps {
   rows: QueueRowSpec[];
   overflow: number;
   loading?: boolean;
-  error?: boolean;
+  /** FLOW-D08: per-source errors — the queue renders whatever it has and
+   *  shows an inline error row per failed source. The full-panel error
+   *  appears only when BOTH sources fail. */
+  criticalError?: boolean;
+  slippedError?: boolean;
   onRetry: () => void;
   /** Forward pointers shown when the queue is empty. */
   tomorrow: TomorrowItem[];
@@ -37,22 +42,49 @@ export interface TodaysWorkProps {
   asOfLabel: string | null;
 }
 
+// FLOW-D01: plain language a factory owner reads without MRP training —
+// "Slipped plan" and "Late PO" were system jargon.
 const CATEGORY_LABEL: Record<QueueRowSpec["category"], string> = {
   stops_production: "Stops production",
   procurement: "Procurement",
-  slipped: "Slipped plan",
-  late_po: "Late PO",
+  slipped: "Production overdue",
+  late_po: "Late delivery",
 };
+
+const HINT_DISMISS_KEY = "gt-dash-queue-hint-dismissed";
 
 export function TodaysWork({
   rows,
   overflow,
   loading,
-  error,
+  criticalError,
+  slippedError,
   onRetry,
   tomorrow,
   asOfLabel,
 }: TodaysWorkProps) {
+  const allSourcesFailed = !!criticalError && !!slippedError;
+  const someSourceFailed = !!criticalError || !!slippedError;
+
+  // FLOW-E02: the working instruction is a first-time aid, not a permanent
+  // fixture — once dismissed it never returns (Law 3: no passenger pixels
+  // after an element's job is done). Mount-gated so SSR never mismatches.
+  const [showHint, setShowHint] = useState(false);
+  useEffect(() => {
+    try {
+      if (!window.localStorage.getItem(HINT_DISMISS_KEY)) setShowHint(true);
+    } catch {
+      /* hint stays hidden when storage is unavailable */
+    }
+  }, []);
+  const dismissHint = () => {
+    setShowHint(false);
+    try {
+      window.localStorage.setItem(HINT_DISMISS_KEY, "1");
+    } catch {
+      /* non-fatal */
+    }
+  };
   const criticalCount = rows.filter((r) => r.severity === "critical").length;
   const hot = criticalCount > 0;
   const tone: "danger" | "warning" | "default" =
@@ -116,9 +148,9 @@ export function TodaysWork({
             <SkeletonRow />
             <SkeletonRow />
           </div>
-        ) : error ? (
+        ) : allSourcesFailed ? (
           <ErrorAlert label="Today's work unavailable." onRetry={onRetry} />
-        ) : rows.length === 0 ? (
+        ) : rows.length === 0 && !someSourceFailed ? (
           <div className="flex flex-col gap-3">
             <AllClearRibbon
               title="All clear — nothing needs a decision right now."
@@ -146,6 +178,46 @@ export function TodaysWork({
             ) : null}
           </div>
         ) : (
+          <>
+          {/* FLOW-D01: the working instruction, readable at scan speed.
+              FLOW-E02: dismissible — a first-time aid, not daily noise.
+              FLOW-E04: copy no longer teaches passivity ("next refresh"). */}
+          {rows.length > 0 && showHint ? (
+            <div
+              className="mb-2 flex items-start gap-2 rounded border border-border/60 bg-bg-subtle/50 px-2.5 py-2"
+              data-testid="todays-work-hint"
+            >
+              <p className="min-w-0 flex-1 text-xs font-medium text-fg-muted">
+                These items need your action today.{" "}
+                <span className="font-semibold text-fg-strong">
+                  Start at the top — the list is ranked by urgency.
+                </span>{" "}
+                Each button opens the screen where the action happens; worked
+                items clear within seconds.
+              </p>
+              <button
+                type="button"
+                onClick={dismissHint}
+                aria-label="Dismiss this explanation permanently"
+                data-testid="todays-work-hint-dismiss"
+                className="flex h-6 w-6 shrink-0 items-center justify-center rounded text-fg-subtle transition-colors hover:bg-bg-muted hover:text-fg-strong focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+              >
+                <X className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+              </button>
+            </div>
+          ) : null}
+          {/* FLOW-D08: inline per-source error rows — the rows we DO have
+              stay visible. */}
+          {criticalError ? (
+            <div className="mb-2">
+              <ErrorAlert label="Critical alerts unavailable — other items still shown." onRetry={onRetry} />
+            </div>
+          ) : null}
+          {slippedError ? (
+            <div className="mb-2">
+              <ErrorAlert label="Overdue-production items unavailable — other items still shown." onRetry={onRetry} />
+            </div>
+          ) : null}
           <ol className="flex flex-col gap-2" data-testid="todays-work-list">
             {rows.map((row) => {
               const danger = row.severity === "critical";
@@ -165,7 +237,7 @@ export function TodaysWork({
                       variant={danger ? "solid" : "soft"}
                       dotted={danger}
                     >
-                      {CATEGORY_LABEL[row.category]}
+                      {row.badge ?? CATEGORY_LABEL[row.category]}
                     </Badge>
                     {row.ageLabel ? (
                       <span className="text-2xs tabular-nums text-fg-faint">{row.ageLabel}</span>
@@ -197,6 +269,7 @@ export function TodaysWork({
               );
             })}
           </ol>
+          </>
         )}
       </SectionCard>
     </div>

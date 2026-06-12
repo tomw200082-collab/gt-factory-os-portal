@@ -23,6 +23,7 @@ import { useQuery } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { UOMS, type Uom } from "@/lib/contracts/enums";
+import { friendlyCountError } from "@/lib/copy/physical-count-errors";
 import { cn } from "@/lib/cn";
 
 // ---------------------------------------------------------------------------
@@ -176,7 +177,7 @@ function StepIndicator({ step }: { step: 1 | 2 }) {
           className={cn(
             "flex h-10 w-10 items-center justify-center rounded-full border-2 text-base font-bold transition-all duration-150",
             step >= 1
-              ? "border-accent bg-accent text-white shadow-sm"
+              ? "border-accent bg-accent text-accent-fg shadow-sm"
               : "border-border bg-bg text-fg-muted",
           )}
         >
@@ -212,7 +213,7 @@ function StepIndicator({ step }: { step: 1 | 2 }) {
           className={cn(
             "flex h-10 w-10 items-center justify-center rounded-full border-2 text-base font-bold transition-all duration-150",
             step >= 2
-              ? "border-accent bg-accent text-white shadow-sm"
+              ? "border-accent bg-accent text-accent-fg shadow-sm"
               : "border-border bg-bg text-fg-muted",
           )}
         >
@@ -461,11 +462,10 @@ export default function PhysicalCountPage() {
         setUnit(toUom(snap.unit_default));
         setPhase("counting");
       } else {
-        const detail = body ? JSON.stringify(body) : `HTTP ${res.status}`;
         setDone({
           kind: "error",
-          message: `Failed to open count snapshot (HTTP ${res.status}).`,
-          detail,
+          message: "Could not start the count.",
+          detail: friendlyCountError(body, res.status),
         });
         setPhase("pick");
       }
@@ -552,11 +552,10 @@ export default function PhysicalCountPage() {
         });
         resetFlow();
       } else {
-        const detail = body ? JSON.stringify(body) : `HTTP ${res.status}`;
         setDone({
           kind: "error",
-          message: "Could not submit. Check your connection and try again.",
-          detail,
+          message: "Could not submit the count.",
+          detail: friendlyCountError(body, res.status),
         });
         setPhase("counting");
       }
@@ -849,7 +848,7 @@ export default function PhysicalCountPage() {
                   className="flex items-center gap-3 rounded-xl border-2 border-accent/40 bg-accent/5 px-4 py-3 transition-all duration-150"
                   data-testid="physical-count-selected"
                 >
-                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-white">
+                  <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-accent text-accent-fg">
                     <svg className="h-5 w-5" viewBox="0 0 16 16" fill="none" aria-hidden="true">
                       <path d="M3 8l3.5 3.5L13 4.5" stroke="currentColor" strokeWidth="2.25" strokeLinecap="round" strokeLinejoin="round" />
                     </svg>
@@ -951,7 +950,7 @@ export default function PhysicalCountPage() {
                   {comboOpen && comboRect && typeof document !== "undefined"
                     ? createPortal(
                         <div
-                          className="z-50 max-h-80 overflow-auto rounded-xl border border-border bg-bg shadow-xl ring-1 ring-black/5"
+                          className="z-50 max-h-80 overflow-auto rounded-xl border border-border bg-bg shadow-xl ring-1 ring-border/40"
                           style={{
                             position: "fixed",
                             top: comboRect.top + 6,
@@ -1249,25 +1248,45 @@ export default function PhysicalCountPage() {
               </button>
             </div>
 
-            {/* Unit chips — centered under the hero, equal visual rhythm. */}
+            {/* Unit chips — centered under the hero. Once a snapshot is open
+                the unit is locked to the item master's counting unit: the
+                server refuses any other unit (UNIT_INCOMPATIBLE), so offering
+                it would only manufacture an avoidable error (FLOW-209). */}
             <div className="mt-6 flex flex-wrap items-center justify-center gap-2" data-testid="physical-count-unit">
-              {UOMS.map((u) => (
-                <button
-                  key={u}
-                  type="button"
-                  className={cn(
-                    "cursor-pointer rounded-full border-2 px-4 py-2 text-sm font-semibold transition-all duration-150",
-                    unit === u
-                      ? "border-accent bg-accent text-white shadow-sm"
-                      : "border-border bg-bg text-fg hover:border-fg-muted",
-                  )}
-                  onClick={() => setUnit(u as Uom)}
-                  disabled={phase === "submitting"}
-                >
-                  {u}
-                </button>
-              ))}
+              {UOMS.map((u) => {
+                const lockedUnit = snapshot ? toUom(snapshot.unit_default) : null;
+                const lockedOut = lockedUnit !== null && u !== lockedUnit;
+                return (
+                  <button
+                    key={u}
+                    type="button"
+                    className={cn(
+                      "rounded-full border-2 px-4 py-2 text-sm font-semibold transition-all duration-150",
+                      unit === u
+                        ? "border-accent bg-accent text-accent-fg shadow-sm"
+                        : "border-border bg-bg text-fg",
+                      lockedOut
+                        ? "cursor-not-allowed opacity-35"
+                        : "cursor-pointer hover:border-fg-muted",
+                    )}
+                    onClick={() => setUnit(u as Uom)}
+                    disabled={phase === "submitting" || lockedOut}
+                    title={
+                      lockedOut
+                        ? `This item is counted in ${lockedUnit} (set on the item master).`
+                        : undefined
+                    }
+                  >
+                    {u}
+                  </button>
+                );
+              })}
             </div>
+            {snapshot ? (
+              <p className="mt-2 text-center text-2xs text-fg-subtle">
+                Unit is set by the item master.
+              </p>
+            ) : null}
           </div>
 
           {/* Secondary details — collapsed by default. Event time and

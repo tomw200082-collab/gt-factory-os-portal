@@ -135,6 +135,12 @@ function friendlyPhysicalCountConflict(reasonCode: string, fallbackDetail: strin
   }
 }
 
+/** Varied widths so the loading skeleton approximates real value lengths. */
+function cnLoadingBar(i: number): string {
+  const widths = ["w-48", "w-24", "w-32", "w-20", "w-40", "w-56", "w-28"];
+  return `h-4 rounded bg-bg-subtle ${widths[i % widths.length]}`;
+}
+
 function DetailRow({ label, value }: { label: string; value: ReactNode }) {
   return (
     <div className="flex gap-3 text-sm">
@@ -214,9 +220,20 @@ export default function PhysicalCountReviewPage() {
             : `${itemLabel}: counted ${counted}. Snapshot replaced and is now the authoritative balance for this item.`
         }
         action={
-          <Link href="/inbox" className="btn btn-sm btn-primary">
-            Back to inbox
-          </Link>
+          <>
+            <Link href="/inbox" className="btn btn-sm btn-primary">
+              Back to inbox
+            </Link>
+            {d?.item_id ? (
+              <Link
+                href={`/inventory?item_id=${encodeURIComponent(d.item_id)}`}
+                className="btn btn-sm"
+                data-testid="pc-review-approved-view-inventory"
+              >
+                View in inventory
+              </Link>
+            ) : null}
+          </>
         }
       />
     );
@@ -295,8 +312,18 @@ export default function PhysicalCountReviewPage() {
       />
 
       {detailQuery.isLoading ? (
-        <div className="mb-4 rounded-md border border-border/60 bg-bg-subtle/40 p-4 text-xs text-fg-muted">
-          Loading submission details…
+        <div
+          className="mb-6 space-y-3 rounded-xl border border-border/60 bg-bg-subtle/40 p-5"
+          aria-busy="true"
+          aria-live="polite"
+        >
+          <div className="h-5 w-32 animate-pulse rounded bg-bg-subtle" />
+          {Array.from({ length: 7 }).map((_, i) => (
+            <div key={i} className="flex animate-pulse gap-3">
+              <div className="h-4 w-36 shrink-0 rounded bg-bg-subtle" />
+              <div className={cnLoadingBar(i)} />
+            </div>
+          ))}
         </div>
       ) : detailQuery.isError ? (
         <div className="mb-4 rounded-md border border-danger/40 bg-danger-softer p-4 text-xs text-danger-fg">
@@ -348,17 +375,24 @@ export default function PhysicalCountReviewPage() {
           <DetailRow
             label="Current status"
             value={
-              <span
-                className={
-                  d.status === "pending"
-                    ? "text-warning-fg font-medium"
-                    : d.status === "posted"
-                      ? "text-success-fg font-medium"
-                      : "text-fg-muted"
-                }
-              >
-                {d.status}
-              </span>
+              // FLOW-206 — plain-English status chip, never the raw enum.
+              d.status === "pending" ? (
+                <span className="inline-flex items-center rounded-full border border-warning/40 bg-warning-softer px-2 py-0.5 text-xs font-medium text-warning-fg">
+                  Awaiting approval
+                </span>
+              ) : d.status === "posted" ? (
+                <span className="inline-flex items-center rounded-full border border-success/30 bg-success-softer px-2 py-0.5 text-xs font-medium text-success-fg">
+                  Approved — anchor applied
+                </span>
+              ) : d.status === "rejected" ? (
+                <span className="inline-flex items-center rounded-full border border-border bg-bg-subtle px-2 py-0.5 text-xs font-medium text-fg-muted">
+                  Rejected — anchor unchanged
+                </span>
+              ) : (
+                <span className="inline-flex items-center rounded-full border border-border bg-bg-subtle px-2 py-0.5 text-xs font-medium text-fg-muted">
+                  {d.status.replace(/_/g, " ")}
+                </span>
+              )
             }
           />
         </div>

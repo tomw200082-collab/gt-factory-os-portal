@@ -79,6 +79,7 @@ import {
 } from "lucide-react";
 
 import { useInventoryFlow } from "@/app/(planning)/planning/inventory-flow/_lib/useInventoryFlow";
+import { useSupplyFlow } from "@/app/(planning)/planning/inventory-flow/supply/_lib/useSupplyFlow";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { ScrollFade } from "@/components/ui/ScrollFade";
 import { SectionHeading } from "@/components/workflow/SectionHeading";
@@ -983,6 +984,14 @@ interface CurrentSessionLite {
   } | null;
 }
 const QK_PURCHASE_SESSION = ["purchase-session", "current"] as const;
+const QK_OUTBOUND = ["dashboard", "orders", "outbound-summary"] as const;
+
+// Mirror of api/src/orders/schemas.ts OutboundSummaryResponse.
+interface OutboundSummaryResponse {
+  open_orders: number;
+  due_today: number;
+  as_of: string;
+}
 
 function isoDateLocal(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
@@ -1037,8 +1046,13 @@ export default function DashboardPage() {
   // re-aggregates client-side — no refetch.
   const [rangeDays, setRangeDays] = useState<number>(TREND_DAYS);
 
-  // Inventory flow drives Stock Health + Shortage Risk + on-hand context.
-  const flowQ = useInventoryFlow({});
+  // Tranche 064 truth fix: /api/inventory/flow returns the FINISHED-GOODS
+  // projection ("Daily FG stock projection — at-risk products"); the
+  // raw-materials/packaging universe lives on /api/inventory/supply-flow
+  // (COMPONENT rows). The MATERIALS ribbon node was previously fed FG data
+  // under a materials label — now each node reads its own universe.
+  const flowQ = useInventoryFlow({}); // FG items — feeds the FG node + stockout context
+  const supplyQ = useSupplyFlow({}); // RM/PKG components — feeds the MATERIALS node
 
   const valueQ = useQuery({
     queryKey: QK_VALUE,
@@ -1071,6 +1085,12 @@ export default function DashboardPage() {
         signal,
       ),
     staleTime: STALE_TIME_MS,
+    // FLOW-D03: the operator posts an actual elsewhere and tabs back —
+    // refresh on focus so the dashboard reflects it (global default is off).
+    refetchOnWindowFocus: true,
+    // FLOW-E04: refetch on every dashboard mount (in-app navigation back)
+    // so a completed transaction is reflected within seconds.
+    refetchOnMount: "always",
   });
 
   const purchaseOrdersQ = useQuery({
@@ -1079,6 +1099,10 @@ export default function DashboardPage() {
       fetchJson<PurchaseOrdersResponse>("/api/purchase-orders?limit=500", signal),
     staleTime: STALE_TIME_MS,
     refetchInterval: STALE_TIME_MS,
+    // FLOW-D03: refresh on focus after placing/receiving a PO elsewhere.
+    refetchOnWindowFocus: true,
+    // FLOW-E04: refetch on every dashboard mount.
+    refetchOnMount: "always",
   });
 
   // Tranche 061: 6 rows — the single merged "Recent activity" feed (the
@@ -1124,32 +1148,61 @@ export default function DashboardPage() {
     enabled: canSeeValueTrend,
   });
 
-  // Mirror queries for the at-a-glance factory-state chip. These share
-  // queryKeys with the inline block components (CriticalTodayBlock and
-  // SlippedPlansBlock), so React Query dedupes — no extra network traffic.
+  // The two act-now signals. FLOW-D03: these are what the operator acts on,
+  // so they refresh twice as fast as the value/trend data AND on tab focus
+  // (the global provider default disables focus refetch).
   const criticalTodayQ = useQuery({
     queryKey: QK_CRITICAL_TODAY,
     queryFn: ({ signal }) =>
       fetchJson<CriticalTodayResponse>("/api/dashboard/critical-today", signal),
-    staleTime: STALE_TIME_MS,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+    // FLOW-E04: refetch on every dashboard mount.
+    refetchOnMount: "always",
   });
   const slippedPlansQ = useQuery({
     queryKey: QK_SLIPPED_PLANS,
     queryFn: ({ signal }) =>
       fetchJson<SlippedPlansResponse>("/api/dashboard/slipped-plans", signal),
-    staleTime: STALE_TIME_MS,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+    // FLOW-E04: refetch on every dashboard mount.
+    refetchOnMount: "always",
   });
 
-  // Derived: stock health from inventory-flow.
-  // Stable reference so downstream memos (queue, ribbon nodes) don't
-  // recompute on unrelated renders.
+  // OUTBOUND node feed (Tranche 063 — LionWheel mirror activation). The
+  // node degrades to its quiet state on any failure (e.g. until the backend
+  // deploy that ships this endpoint reaches Railway), so retry stays off.
+  const outboundQ = useQuery({
+    queryKey: QK_OUTBOUND,
+    queryFn: ({ signal }) =>
+      fetchJson<OutboundSummaryResponse>("/api/orders/outbound-summary", signal),
+    staleTime: STALE_TIME_MS,
+    refetchInterval: STALE_TIME_MS,
+    retry: false,
+  });
+
+  // Derived: risk counts per universe. Stable references so downstream
+  // memos (queue, ribbon nodes) don't recompute on unrelated renders.
   const flowItemsData = flowQ.data?.items;
-  const flowItems = useMemo(() => flowItemsData ?? [], [flowItemsData]);
-  const watch = flowItems.filter((i) => i.risk_tier === "watch").length;
-  const critical = flowItems.filter(
+  const flowItems = useMemo(() => flowItemsData ?? [], [flowItemsData]); // FG
+  const supplyItemsData = supplyQ.data?.items;
+  const supplyItems = useMemo(() => supplyItemsData ?? [], [supplyItemsData]); // RM/PKG
+
+  // MATERIALS node counts (components universe).
+  const watch = supplyItems.filter((i) => i.risk_tier === "watch").length;
+  const critical = supplyItems.filter(
     (i) => i.risk_tier === "critical" || i.risk_tier === "stockout",
   ).length;
-  const total = flowItems.length;
+  const total = supplyItems.length;
+
+  // FG node counts (FLOW-E05 — the FG stage must stop being permanently green).
+  const fgAtRisk = flowItems.filter((i) => i.risk_tier !== "healthy").length;
+  const fgCritical = flowItems.filter(
+    (i) => i.risk_tier === "critical" || i.risk_tier === "stockout",
+  ).length;
 
   // Derived: inventory values. The /api/stock/value response carries an
   // uncapped per-item_type rollup in `by_type`. The dashboard composes two
@@ -1424,6 +1477,14 @@ export default function DashboardPage() {
         id: `proc-${po.session_po_id}`,
         severity: urgency === "overdue" ? "critical" : "warning",
         category: "procurement",
+        // FLOW-E07: the badge (primary scan element) encodes the urgency
+        // degree, not just the category.
+        badge:
+          urgency === "overdue"
+            ? "Order overdue"
+            : urgency === "today"
+              ? "Order due today"
+              : "Order ahead (urgent)",
         title: `Order from ${po.supplier_snapshot}`,
         whyNow: `${liveLines} line${liveLines !== 1 ? "s" : ""} · ${fmtCost(
           po.total_cost,
@@ -1520,14 +1581,34 @@ export default function DashboardPage() {
     ];
   }, [movementsTrendQ.data, todayLocalISO]);
 
+  // Picks posted today, from the ledger (stock truth) — feeds the OUTBOUND
+  // node sub-line. Deliberately NOT taken from the mirror summary: the
+  // ledger is the source of truth for stock-affecting picks.
+  const pickedToday = useMemo(() => {
+    const rows = movementsTrendQ.data?.rows ?? movementsTrendQ.data?.data ?? [];
+    let n = 0;
+    for (const r of rows) {
+      if (r.movement_type !== "LIONWHEEL_PICK" && r.movement_type !== "FG_OUT_PICK") continue;
+      const when = r.posted_at ?? r.event_at;
+      if (when && isoDateLocal(new Date(when)) === todayLocalISO) n += 1;
+    }
+    return n;
+  }, [movementsTrendQ.data, todayLocalISO]);
+
   const flowNodes = useMemo<FlowNodeData[]>(() => {
     // Materials urgency is expressed in TIME (days of cover) — the MRP
     // urgency currency. Money stays in the Numbers band.
+    // Tranche 064: minCover/shortTop now read the COMPONENT universe
+    // (supply-flow) — the FG projection was mislabeled as materials before.
     const minCover =
-      flowItems.length > 0
-        ? Math.max(0, Math.min(...flowItems.map((i) => i.days_of_cover)))
+      supplyItems.length > 0
+        ? Math.max(0, Math.min(...supplyItems.map((i) => i.days_of_cover)))
         : null;
-    const shortTop = [...flowItems]
+    const shortTop = [...supplyItems]
+      .filter((i) => i.risk_tier !== "healthy")
+      .sort((a, b) => a.days_of_cover - b.days_of_cover)
+      .slice(0, 3);
+    const fgTop = [...flowItems]
       .filter((i) => i.risk_tier !== "healthy")
       .sort((a, b) => a.days_of_cover - b.days_of_cover)
       .slice(0, 3);
@@ -1573,21 +1654,26 @@ export default function DashboardPage() {
         label: "Materials",
         state: critical > 0 ? "danger" : watch > 0 ? "warn" : "ok",
         display:
-          flowQ.isLoading || minCover === null
-            ? flowQ.isLoading
+          supplyQ.isLoading || minCover === null
+            ? supplyQ.isLoading
               ? null
               : "—"
             : `${Math.round(minCover * 10) / 10}d`,
         displayFull: "Minimum days of cover across raw materials and packaging",
-        sub: (
-          <span>
-            {critical > 0 ? (
-              <span className="font-semibold text-danger">{critical} critical · </span>
-            ) : null}
-            {total} SKUs
-          </span>
-        ),
-        href: "/planning/inventory-flow",
+        // FLOW-D09: in a strained state, NAME the worst item inline — the
+        // drill card is hover-only and invisible on touch.
+        sub:
+          shortTop[0] && (critical > 0 || watch > 0) ? (
+            <span>
+              <span className={critical > 0 ? "font-semibold text-danger" : "font-semibold text-warning-fg"}>
+                {shortTop[0].item_name}: {Math.round(shortTop[0].days_of_cover * 10) / 10}d
+              </span>
+              {critical > 0 ? ` · ${critical} critical` : ""} · {total} SKUs
+            </span>
+          ) : (
+            <span>{total} SKUs</span>
+          ),
+        href: "/planning/inventory-flow/supply",
         drill: shortTop.map((i) => ({
           key: i.item_id,
           label: i.item_name,
@@ -1595,7 +1681,7 @@ export default function DashboardPage() {
         })),
         srSummary: `Stage 2 of 5, Materials: minimum cover ${
           minCover === null ? "unknown" : `${Math.round(minCover * 10) / 10} days`
-        }, ${critical} critical of ${total} SKUs.`,
+        }, ${critical} critical of ${total} components.`,
       },
       {
         key: "production",
@@ -1606,18 +1692,36 @@ export default function DashboardPage() {
           : todayPlanSummary
             ? `${todayPlanSummary.done}/${todayPlanSummary.planned}`
             : "—",
-        displayFull: "Runs posted complete vs planned for today",
+        // FLOW-E08: today's number and the warn state read different time
+        // windows (today vs 7-day overdue lookback). When today is fully
+        // done, the sub-line says so and attributes the amber to PRIOR runs.
+        // FLOW-E03: "slipped" → "overdue" (one vocabulary across the page).
+        displayFull:
+          todayPlanSummary &&
+          todayPlanSummary.done >= todayPlanSummary.planned &&
+          (slippedCount ?? 0) > 0
+            ? `Today complete — ${slippedCount} run${(slippedCount ?? 0) !== 1 ? "s" : ""} from previous days still need reporting`
+            : "Runs posted complete vs planned for today",
         sub: todayPlanSummary ? (
-          <span>
-            {(slippedCount ?? 0) > 0 ? (
-              <span className="font-semibold text-warning-fg">{slippedCount} slipped · </span>
-            ) : null}
-            {todayPlanSummary.nextItem ? `next: ${todayPlanSummary.nextItem}` : "today's runs"}
-          </span>
+          todayPlanSummary.done >= todayPlanSummary.planned && (slippedCount ?? 0) > 0 ? (
+            <span>
+              today done ·{" "}
+              <span className="font-semibold text-warning-fg">
+                {slippedCount} prior run{(slippedCount ?? 0) !== 1 ? "s" : ""} overdue
+              </span>
+            </span>
+          ) : (
+            <span>
+              {(slippedCount ?? 0) > 0 ? (
+                <span className="font-semibold text-warning-fg">{slippedCount} overdue · </span>
+              ) : null}
+              {todayPlanSummary.nextItem ? `next: ${todayPlanSummary.nextItem}` : "today's runs"}
+            </span>
+          )
         ) : (
           <span>
             {(slippedCount ?? 0) > 0 ? (
-              <span className="font-semibold text-warning-fg">{slippedCount} slipped · </span>
+              <span className="font-semibold text-warning-fg">{slippedCount} overdue · </span>
             ) : null}
             No runs planned today
           </span>
@@ -1632,36 +1736,82 @@ export default function DashboardPage() {
           todayPlanSummary
             ? `${todayPlanSummary.done} of ${todayPlanSummary.planned} runs done today`
             : "no runs planned today"
-        }${(slippedCount ?? 0) > 0 ? `, ${slippedCount} slipped` : ""}.`,
+        }${(slippedCount ?? 0) > 0 ? `, ${slippedCount} prior runs overdue` : ""}.`,
       },
       {
         key: "fg",
         label: "Finished goods",
-        state: "ok",
+        // FLOW-E05: the FG stage reflects the FG projection's risk — it was
+        // hardcoded green before. Danger when products are at/past stockout,
+        // warn when any product is off-healthy.
+        state: fgCritical > 0 ? "danger" : fgAtRisk > 0 ? "warn" : "ok",
         display: valueQ.isLoading ? null : fgValue != null ? fmtILSCompact(fgValue) : "—",
         displayFull: fgValue != null ? fmtILS(fgValue) : null,
-        sub: `${fgSkus} SKUs`,
-        href: "/inventory",
-        drill: [],
+        sub:
+          fgAtRisk > 0 ? (
+            <span>
+              <span
+                className={
+                  fgCritical > 0 ? "font-semibold text-danger" : "font-semibold text-warning-fg"
+                }
+              >
+                {fgAtRisk} at risk
+              </span>
+              {" · "}
+              {fgSkus} SKUs
+            </span>
+          ) : (
+            `${fgSkus} SKUs`
+          ),
+        href: "/planning/inventory-flow",
+        drill: fgTop.map((i) => ({
+          key: i.item_id,
+          label: i.item_name,
+          value: `${Math.round(i.days_of_cover * 10) / 10}d`,
+        })),
         srSummary: `Stage 4 of 5, Finished goods: ${
           fgValue != null ? fmtILS(fgValue) : "value unavailable"
-        } across ${fgSkus} SKUs.`,
+        } across ${fgSkus} SKUs${fgAtRisk > 0 ? `, ${fgAtRisk} at risk` : ""}.`,
       },
-      {
-        key: "outbound",
-        label: "Outbound",
-        state: "quiet",
-        display: "—",
-        sub: "Activates with shipments mirror",
-        href: null,
-        drill: [],
-        srSummary:
-          "Stage 5 of 5, Outbound: not yet live — activates with the shipments mirror.",
-      },
+      // OUTBOUND — live from the LionWheel mirror (Tranche 063). Degrades
+      // to the quiet placeholder whenever the summary endpoint is
+      // unavailable or malformed (e.g. before the backend deploy lands),
+      // never fakes.
+      outboundQ.data && typeof outboundQ.data.open_orders === "number"
+        ? {
+            key: "outbound",
+            label: "Outbound",
+            state: "ok",
+            display: String(outboundQ.data.open_orders),
+            displayFull: "Open customer orders in the LionWheel mirror",
+            sub: (
+              <span>
+                {outboundQ.data.due_today > 0 ? `${outboundQ.data.due_today} due today · ` : ""}
+                {pickedToday > 0 ? `${pickedToday} picked today` : "no picks yet today"}
+              </span>
+            ),
+            href: "/stock/movement-log",
+            drill: [],
+            srSummary: `Stage 5 of 5, Outbound: ${outboundQ.data.open_orders} open orders, ${outboundQ.data.due_today} due today, ${pickedToday} picked today.`,
+          }
+        : {
+            key: "outbound",
+            label: "Outbound",
+            state: "quiet",
+            display: outboundQ.isLoading ? null : "—",
+            sub: "Shipments feed unavailable",
+            href: null,
+            drill: [],
+            srSummary:
+              "Stage 5 of 5, Outbound: shipments feed unavailable right now.",
+          },
     ];
   }, [
     flowItems,
-    flowQ.isLoading,
+    supplyItems,
+    supplyQ.isLoading,
+    fgAtRisk,
+    fgCritical,
     critical,
     watch,
     total,
@@ -1675,6 +1825,9 @@ export default function DashboardPage() {
     fgValue,
     fgSkus,
     todayLocalISO,
+    outboundQ.data,
+    outboundQ.isLoading,
+    pickedToday,
   ]);
 
   // "Since you last looked" delta chips (Band 0) — computed once per mount
@@ -1697,16 +1850,25 @@ export default function DashboardPage() {
     }
     if (!last) return;
     const lastMs = Date.parse(last);
-    if (!Number.isFinite(lastMs) || Date.now() - lastMs < 30 * 60_000) return;
+    // FLOW-D07: 5-minute threshold — long enough to skip ordinary tab
+    // switches, short enough that a "post a receipt and come back" round
+    // trip (typically 3–5 minutes) produces a visible delta chip.
+    if (!Number.isFinite(lastMs) || Date.now() - lastMs < 5 * 60_000) return;
+    // FLOW-E09: name the movement kinds — "other movements" was opaque
+    // morning news. Picks and stock adjustments are each meaningful events.
     let receipts = 0;
     let produced = 0;
-    let other = 0;
+    let picks = 0;
+    let adjustments = 0;
     for (const r of rows) {
       const when = r.posted_at ?? r.event_at;
       if (!when || Date.parse(when) <= lastMs) continue;
       if (r.movement_type === "GR_POSTED") receipts += 1;
       else if (r.movement_type === "production_output") produced += 1;
-      else other += 1;
+      else if (r.movement_type === "LIONWHEEL_PICK" || r.movement_type === "FG_OUT_PICK")
+        picks += 1;
+      else if (r.movement_type === "WASTE_POSTED" || r.movement_type === "COUNT_ADJUST")
+        adjustments += 1;
     }
     const chips: SinceChip[] = [];
     if (receipts > 0)
@@ -1721,10 +1883,16 @@ export default function DashboardPage() {
         label: `+${produced} production posting${produced !== 1 ? "s" : ""}`,
         href: "/stock/movement-log",
       });
-    if (other > 0)
+    if (picks > 0)
       chips.push({
-        key: "other",
-        label: `+${other} other movement${other !== 1 ? "s" : ""}`,
+        key: "picks",
+        label: `+${picks} shipment pick${picks !== 1 ? "s" : ""}`,
+        href: "/stock/movement-log",
+      });
+    if (adjustments > 0)
+      chips.push({
+        key: "adjustments",
+        label: `+${adjustments} stock adjustment${adjustments !== 1 ? "s" : ""}`,
         href: "/stock/movement-log",
       });
     setSinceChips(chips.slice(0, 3));
@@ -1757,7 +1925,13 @@ export default function DashboardPage() {
         dateLong={dateLong}
         focus={focus}
         critical={criticalCount}
-        slipped={slippedCount}
+        // FLOW-E01: the pill is a workload meter — total queue depth, so a
+        // procurement-heavy day can never read as "Floor is clear".
+        queueTotal={
+          criticalTodayQ.isLoading || slippedPlansQ.isLoading
+            ? null
+            : queue.rows.length + queue.overflow
+        }
         sinceChips={sinceChips}
         metaRail={
           <>
@@ -1798,7 +1972,8 @@ export default function DashboardPage() {
             rows={queue.rows}
             overflow={queue.overflow}
             loading={criticalTodayQ.isLoading || slippedPlansQ.isLoading}
-            error={criticalTodayQ.isError || slippedPlansQ.isError}
+            criticalError={criticalTodayQ.isError}
+            slippedError={slippedPlansQ.isError}
             onRetry={() => {
               void criticalTodayQ.refetch();
               void slippedPlansQ.refetch();

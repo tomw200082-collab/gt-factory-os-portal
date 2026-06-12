@@ -25,6 +25,10 @@ export interface QueueRowSpec {
   category: QueueCategory;
   /** Verb + object: "Order lime juice from Tempo". */
   title: string;
+  /** Optional badge override (FLOW-E07) — encodes urgency degree for
+   *  procurement rows ("Order overdue" / "Order due today"). Falls back to
+   *  the category label when absent. */
+  badge?: string;
   /** MRP why-now line: "On hand 40 L · 2.1d cover". Null when unknown. */
   whyNow: string | null;
   /** ISO timestamp used for age ranking (oldest first). Null ranks last. */
