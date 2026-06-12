@@ -29,7 +29,31 @@ async function mockDashboardApis(
       json: { break_glass_active: false, jobs_paused: false, set_at: null },
     }),
   );
+  // FG projection (products universe).
   await page.route("**/api/inventory/flow**", (route) =>
+    route.fulfill({
+      json: {
+        items: [
+          {
+            item_id: "FG1",
+            item_name: "Mojito 330ml",
+            risk_tier: "watch",
+            days_of_cover: 6.5,
+            current_on_hand: 320,
+          },
+          {
+            item_id: "FG2",
+            item_name: "Margarita 330ml",
+            risk_tier: "healthy",
+            days_of_cover: 18,
+            current_on_hand: 900,
+          },
+        ],
+      },
+    }),
+  );
+  // Supply flow (RM/PKG components universe) — feeds the MATERIALS node.
+  await page.route("**/api/inventory/supply-flow**", (route) =>
     route.fulfill({
       json: {
         items: [
@@ -126,6 +150,11 @@ async function mockDashboardApis(
   await page.route("**/api/economics/raw-materials", (route) =>
     route.fulfill({ json: { rows: [] } }),
   );
+  await page.route("**/api/orders/outbound-summary", (route) =>
+    route.fulfill({
+      json: { open_orders: 5, due_today: 2, as_of: new Date().toISOString() },
+    }),
+  );
   await page.route("**/api/dashboard/critical-today", (route) =>
     route.fulfill({
       json: {
@@ -191,9 +220,24 @@ test.describe("@mocked dashboard bands 0–2", () => {
     }
     await expect(page.getByTestId("flow-node-materials")).toHaveAttribute(
       "href",
-      "/planning/inventory-flow",
+      "/planning/inventory-flow/supply",
     );
-    await expect(page.getByTestId("flow-node-outbound")).not.toHaveAttribute("href", /.+/);
+    // Truth fix (Tranche 064): MATERIALS reads the components universe and
+    // names the worst item inline; FG reflects product risk.
+    await expect(page.getByTestId("flow-node-materials")).toContainText("Lime juice: 1.4d");
+    await expect(page.getByTestId("flow-node-fg")).toHaveAttribute("data-state", "warn");
+    // FLOW-E01: the pill is a workload meter.
+    await expect(page.getByTestId("dash-state-pill")).toContainText("actions today");
+    // FLOW-D01 + FLOW-E02: the working instruction shows for a first-time
+    // user, and is dismissible (stays dismissed).
+    await expect(page.getByTestId("todays-work-hint")).toContainText("Start at the top");
+    await page.getByTestId("todays-work-hint-dismiss").click();
+    await expect(page.getByTestId("todays-work-hint")).toHaveCount(0);
+    // Tranche 063: OUTBOUND is live from the LionWheel mirror summary.
+    await expect(page.getByTestId("flow-node-outbound")).toContainText("5");
+    await expect(page.getByTestId("flow-node-outbound")).toContainText("2 due today");
+    // FLOW-D04: the focus sentence is marked as the daily directive.
+    await expect(page.getByTestId("dash-focus-eyebrow")).toContainText("Today's focus");
 
     // Band 2 — queue: critical stockout row outranks the slipped + late-PO
     // rows, and every row carries a transaction CTA.

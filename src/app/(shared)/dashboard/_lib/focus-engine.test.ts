@@ -70,7 +70,7 @@ describe("resolveFocus", () => {
   it("rule 4: slipped plans", () => {
     const r = resolveFocus(base({ slipped: 3 }));
     expect(r.rule).toBe("slipped");
-    expect(r.sentence).toContain("3 planned runs");
+    expect(r.sentence).toContain("3 production runs are overdue");
   });
 
   it("rule 5: today's plan in progress names the next run", () => {
@@ -92,7 +92,7 @@ describe("resolveFocus", () => {
   it("rule 6: late POs", () => {
     const r = resolveFocus(base({ latePos: 1 }));
     expect(r.rule).toBe("late_pos");
-    expect(r.sentence).toContain("1 purchase order is past expected receipt");
+    expect(r.sentence).toContain("1 delivery is late from suppliers");
   });
 
   it("rule 7: all clear points forward at the next commitment", () => {

@@ -131,7 +131,7 @@ export function resolveFocus(inputs: FocusInputs): FocusResult {
   if ((slipped ?? 0) > 0) {
     const n = slipped as number;
     return {
-      sentence: `${n} planned ${plural(n, "run has", "runs have")} no posted actual — post or reschedule.`,
+      sentence: `${n} production ${plural(n, "run is", "runs are")} overdue — post actuals or reschedule.`,
       tone: "warning",
       href: "/planning/production-plan",
       rule: "slipped",
@@ -162,7 +162,7 @@ export function resolveFocus(inputs: FocusInputs): FocusResult {
   if ((latePos ?? 0) > 0) {
     const n = latePos as number;
     return {
-      sentence: `${n} purchase ${plural(n, "order is", "orders are")} past expected receipt — chase suppliers.`,
+      sentence: `${n} ${plural(n, "delivery is", "deliveries are")} late from suppliers — chase them.`,
       tone: "warning",
       href: "/purchase-orders",
       rule: "late_pos",
