@@ -127,7 +127,11 @@ export function InventoryFlowClient() {
     <WorkflowHeader
       eyebrow="Planning"
       title="Inventory Flow"
-      description="Daily projection of finished-goods stock over the next 14 days, then weekly through 8 weeks. Stockouts surface at the top; healthy items recede."
+      // Tranche 057 (FLOW-M07): size="section" + one-line description so the
+      // header stops eating the phone's above-the-fold space — the first item
+      // card must be visible without scrolling on a 667px-tall viewport.
+      size="section"
+      description="14-day daily FG projection, then weekly to 8 weeks. Stockouts first."
       meta={
         <>
           {flowQuery.isLoading ? (
@@ -159,13 +163,19 @@ export function InventoryFlowClient() {
             disabled={flowQuery.isFetching}
             className="btn btn-ghost btn-sm gap-1.5"
             data-testid="inventory-flow-refresh"
+            aria-label={flowQuery.isFetching ? "Refreshing" : "Refresh now"}
             title="Force a fresh projection. The auto-refresh runs every 60s; use this if you just posted a movement and want to see it immediately."
           >
             <RefreshCw
               className={cn("h-3.5 w-3.5", flowQuery.isFetching && "animate-spin")}
               strokeWidth={2}
             />
-            {flowQuery.isFetching ? "Refreshing…" : "Refresh now"}
+            {/* FLOW-M02: icon-only below sm so the toggle + refresh pair
+                never compresses the header title (aria-label keeps the
+                accessible name; the spinning icon carries the busy state). */}
+            <span className="hidden sm:inline">
+              {flowQuery.isFetching ? "Refreshing…" : "Refresh now"}
+            </span>
           </button>
         </div>
       }
@@ -173,9 +183,11 @@ export function InventoryFlowClient() {
   );
 
   // ---------------------------------------------------------------------------
-  // Pre-mount skeleton (SSR-safe)
+  // Pre-mount skeleton (SSR-safe). isMobile === null means the viewport is
+  // not yet known (FLOW-M01) — keep the skeleton so the desktop grid never
+  // mounts-and-unmounts on a phone.
   // ---------------------------------------------------------------------------
-  if (!isMounted) {
+  if (!isMounted || isMobile === null) {
     return (
       <>
         {tabs}

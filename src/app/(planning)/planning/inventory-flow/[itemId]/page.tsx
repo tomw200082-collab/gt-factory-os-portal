@@ -154,8 +154,10 @@ export default function InventoryFlowItemPage({ params }: PageParams) {
         />
       ) : (
         <>
-          {/* KPI strip */}
-          <div className="grid grid-cols-3 gap-3">
+          {/* KPI strip — FLOW-M11: stacks to one column on phones so long
+              values ("STOCKOUT", ">8 weeks", "14,520") never overflow the
+              ~114px cells that grid-cols-3 produces at 390px. */}
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
             <Kpi
               label="Days of cover"
               value={fmtDaysOfCover(detail.days_of_cover)}
@@ -230,7 +232,9 @@ export default function InventoryFlowItemPage({ params }: PageParams) {
                         <div className="text-sm font-medium text-fg-strong">
                           {o.customer_name ?? o.lw_task_id}
                         </div>
-                        <div className="mt-0.5 text-3xs text-fg-muted">
+                        {/* FLOW-M12: truncate so a long lw_task_id can never
+                            push the qty column off-screen at phone widths. */}
+                        <div className="mt-0.5 truncate text-3xs text-fg-muted">
                           {o.pickup_at ? fmtDateLong(o.pickup_at.slice(0, 10)) : "no pickup date"}
                           {" · "}
                           <span className="font-mono">{o.lw_task_id}</span>

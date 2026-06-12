@@ -27,7 +27,8 @@ export function InventoryFlowTabs({ activeTab }: { activeTab: Tab }) {
         aria-selected={activeTab === "fg"}
         href="/planning/inventory-flow"
         className={cn(
-          "px-3 py-1.5 rounded-sm font-medium transition-colors",
+          // FLOW-M17: py-2 lifts the touch target to ≥36px (32px minimum).
+          "inline-flex items-center px-3 py-2 rounded-sm font-medium transition-colors",
           activeTab === "fg"
             ? "bg-bg-raised text-fg-strong shadow-sm"
             : "text-fg-muted hover:text-fg",
@@ -40,7 +41,7 @@ export function InventoryFlowTabs({ activeTab }: { activeTab: Tab }) {
         aria-selected={activeTab === "supply"}
         href="/planning/inventory-flow/supply"
         className={cn(
-          "px-3 py-1.5 rounded-sm font-medium transition-colors",
+          "inline-flex items-center px-3 py-2 rounded-sm font-medium transition-colors",
           activeTab === "supply"
             ? "bg-bg-raised text-fg-strong shadow-sm"
             : "text-fg-muted hover:text-fg",

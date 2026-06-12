@@ -203,9 +203,14 @@ export function InsightsHero({
             tone={summary!.exceptions_count > 0 ? "warning" : "neutral"}
           />
 
-          {/* "as of" chip pushed to the right edge */}
+          {/* "as of" chip pushed to the right edge. FLOW-M09: hidden on
+              phones — it wraps to an unpredictable position there, and the
+              WorkflowHeader's FreshnessBadge already carries freshness. */}
           {asOf ? (
-            <span className="ml-auto" title={`Projection computed at ${asOf}`}>
+            <span
+              className="ml-auto max-sm:hidden"
+              title={`Projection computed at ${asOf}`}
+            >
               <span className="asof-chip">
                 <Clock className="h-2.5 w-2.5" strokeWidth={2} />
                 <span className="uppercase tracking-sops">as of</span>
@@ -333,8 +338,11 @@ function Banner({
       {cta ? (
         <Link
           href={cta.href}
+          // FLOW-M08: on phones the CTA takes its own full-width line right
+          // below the count/chips it refers to (basis-full); sm+ keeps the
+          // original right-aligned inline placement (sm:ml-auto).
           className={cn(
-            "ml-auto inline-flex shrink-0 items-center gap-1.5 rounded px-2.5 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
+            "inline-flex min-h-[32px] shrink-0 basis-full items-center gap-1.5 rounded px-2.5 py-1 text-xs font-semibold transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 sm:ml-auto sm:basis-auto",
             ctaToneClasses,
           )}
         >

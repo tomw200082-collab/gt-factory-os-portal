@@ -28,6 +28,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Search, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { GroupFilterBar } from "@/components/filters/GroupFilterBar";
+import { ScrollFade } from "@/components/ui/ScrollFade";
 import type { GroupLike } from "@/lib/taxonomy/groups";
 import type { FlowItem } from "../_lib/types";
 import { isAtRisk } from "../_lib/risk";
@@ -147,7 +148,12 @@ export function FilterBar({
           target.dataset.stuck = entry.isIntersecting ? "false" : "true";
         }
       },
-      { threshold: [0], rootMargin: "0px" },
+      // -64px top margin mirrors the .filter-bar-sticky top offset (the
+      // 4rem TopBar height) so data-stuck flips exactly when the bar pins
+      // below the TopBar, not a TopBar-height later. The safe-area inset
+      // is not representable in rootMargin; on notched phones the hairline
+      // simply appears a few px early, which is invisible in practice.
+      { threshold: [0], rootMargin: "-64px 0px 0px 0px" },
     );
     obs.observe(sentinel);
     return () => obs.disconnect();
@@ -217,7 +223,9 @@ export function FilterBar({
             onChange={(e) => updateParam("q", e.target.value)}
             placeholder="Search items"
             aria-label="Search items"
-            className="w-full rounded-sm border border-border bg-bg-subtle py-1.5 pl-8 pr-16 text-xs text-fg placeholder:text-fg-faint focus:border-accent-border focus:outline-none focus:ring-2 focus:ring-accent/20"
+            // FLOW-M18: pr-8 below md (clear button only) — the ⌘K hint is
+            // desktop-only, so phones get the reclaimed input width back.
+            className="w-full rounded-sm border border-border bg-bg-subtle py-1.5 pl-8 pr-8 text-xs text-fg placeholder:text-fg-faint focus:border-accent-border focus:outline-none focus:ring-2 focus:ring-accent/20 md:pr-16"
           />
           {q ? (
             <button
@@ -234,7 +242,7 @@ export function FilterBar({
           ) : (
             <span
               aria-hidden
-              className="pointer-events-none absolute right-2 top-1/2 -translate-y-1/2"
+              className="pointer-events-none absolute right-2 top-1/2 hidden -translate-y-1/2 md:block"
               title="Press to focus search"
             >
               <span className="kbd-hint">
@@ -244,9 +252,20 @@ export function FilterBar({
           )}
         </label>
 
-        {/* Family chips with at-risk counts */}
+        {/* Family chips with at-risk counts. FLOW-M14: below sm the row
+            scrolls horizontally in a single line inside <ScrollFade> (the
+            GroupFilterBar / Tranche 051 idiom) instead of wrapping — so the
+            sticky bar stays compact regardless of family count. sm+ wraps
+            exactly as before. */}
         {families.length > 0 ? (
-          <div className="flex flex-wrap items-center gap-1.5">
+          <ScrollFade
+            className="min-w-0"
+            contentClassName="flex flex-wrap items-center gap-1.5 max-sm:flex-nowrap max-sm:overflow-x-auto max-sm:pb-0.5"
+            contentProps={{
+              role: "group",
+              "aria-label": "Family filter",
+            }}
+          >
             <ChipButton
               active={family === ""}
               onClick={() => updateParam("family", null)}
@@ -264,7 +283,7 @@ export function FilterBar({
                 />
               );
             })}
-          </div>
+          </ScrollFade>
         ) : null}
 
         {/* Tranche 047 (INTER-007) — visible only when any non-default
@@ -291,7 +310,10 @@ export function FilterBar({
               updateParam("product_group", productGroup === key ? null : key)
             }
             onClear={() => updateParam("product_group", null)}
-            label="קו מוצר"
+            // FLOW-M06: English-first UI standard — this surface is not in
+            // the sanctioned Hebrew-exception list; group NAMES (data
+            // values) stay Hebrew via dir="auto" inside the chips.
+            label="Product line"
             ariaLabel="Product group filter"
             testId="flow-product-group-filter"
             className="basis-full"
@@ -317,6 +339,7 @@ function ChipButton({ active, onClick, label, count }: ChipButtonProps) {
       aria-pressed={active}
       className={cn(
         "inline-flex items-center gap-1 rounded-sm border px-2 py-1 text-[10px] font-medium uppercase tracking-sops transition-all duration-150",
+        "max-sm:shrink-0 max-sm:whitespace-nowrap",
         active
           ? "border-accent-border bg-accent-soft text-accent shadow-sm"
           : "border-border bg-bg-subtle text-fg-muted hover:-translate-y-px hover:border-accent/40 hover:text-fg hover:shadow-sm",
