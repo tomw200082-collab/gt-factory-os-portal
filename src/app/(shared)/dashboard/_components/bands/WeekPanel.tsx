@@ -125,16 +125,23 @@ export function WeekPanel({ procurement, production, fmtMoney, fmtMoneyFull }: W
               No purchase session yet
             </div>
           ) : (
-            <div
-              className="kpi-tile-value"
-              title={fmtMoneyFull(procurement.week.toOrderIls)}
-            >
-              <CountUp value={fmtMoney(procurement.week.toOrderIls)} />
+            <div>
+              <div
+                className="kpi-tile-value"
+                title={fmtMoneyFull(procurement.week.toOrderIls)}
+              >
+                <CountUp value={fmtMoney(procurement.week.toOrderIls)} />
+              </div>
+              {/* FLOW-D10: the meaning sits ADJACENT to the number — this is
+                  money not yet spent, not a budget or a total. */}
+              <div className="mt-0.5 text-2xs font-semibold uppercase tracking-sops text-fg-subtle">
+                Still to order this week
+              </div>
             </div>
           )}
           <div className="kpi-tile-sub">
             {procurement.sessionExists
-              ? `Still to order — ${procurement.week.toOrderCount} supplier order${
+              ? `${procurement.week.toOrderCount} supplier order${
                   procurement.week.toOrderCount !== 1 ? "s" : ""
                 } from the planning session${
                   procurement.week.foreignCount > 0
@@ -146,10 +153,12 @@ export function WeekPanel({ procurement, production, fmtMoney, fmtMoneyFull }: W
           {!procurement.loading ? (
             <div className="flex flex-col gap-1">
               {/* Session-scoped rows — only meaningful while a session exists. */}
+              {/* FLOW-D02: plain language naming the consequence — "recorded
+                  as PO" was MRP jargon. */}
               {procurement.sessionExists && procurement.week.approvedNotPlacedCount > 0 ? (
                 <DetailRow
                   emphasis="warning"
-                  label={`Approved, not recorded as PO — ${procurement.week.approvedNotPlacedCount}`}
+                  label={`Agreed with supplier, not in the system yet — ${procurement.week.approvedNotPlacedCount}`}
                   value={fmtMoney(procurement.week.approvedNotPlacedIls)}
                 />
               ) : null}
@@ -209,11 +218,15 @@ export function WeekPanel({ procurement, production, fmtMoney, fmtMoneyFull }: W
               }`
             : " · no runs planned today"}
         </div>
+        {/* FLOW-D05: action language, not system status — "no posted actual"
+            was developer vocabulary. */}
         {!production.loading && (production.slipped ?? 0) > 0 ? (
           <div className="flex flex-col gap-1">
             <DetailRow
               emphasis="warning"
-              label="Slipped — planned, no posted actual"
+              label={`Production overdue — ${production.slipped} run${
+                (production.slipped ?? 0) !== 1 ? "s" : ""
+              } need${(production.slipped ?? 0) === 1 ? "s" : ""} reporting`}
               value={production.slipped as number}
             />
           </div>

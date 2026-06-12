@@ -3762,6 +3762,30 @@
   .dash-focus[data-tone="danger"]  { color: hsl(var(--danger)); }
   .dash-focus[data-tone="warning"] { color: hsl(var(--warning-fg)); }
   .dash-focus[data-tone="success"] { color: hsl(var(--success-fg)); }
+  /* FLOW-D04: the eyebrow chip that marks the focus sentence as THE daily
+     directive. Tone-matched so it doubles as a severity signal. */
+  .dash-focus-eyebrow {
+    @apply inline-flex items-center rounded-full border px-2 py-0.5 text-3xs
+           font-semibold uppercase tracking-sops;
+    border-color: hsl(var(--accent) / 0.4);
+    background-color: hsl(var(--accent) / 0.08);
+    color: hsl(var(--accent));
+  }
+  .dash-focus-eyebrow[data-tone="danger"] {
+    border-color: hsl(var(--danger) / 0.45);
+    background-color: hsl(var(--danger) / 0.10);
+    color: hsl(var(--danger));
+  }
+  .dash-focus-eyebrow[data-tone="warning"] {
+    border-color: hsl(var(--warning) / 0.45);
+    background-color: hsl(var(--warning) / 0.10);
+    color: hsl(var(--warning-fg));
+  }
+  .dash-focus-eyebrow[data-tone="success"] {
+    border-color: hsl(var(--success) / 0.45);
+    background-color: hsl(var(--success) / 0.10);
+    color: hsl(var(--success-fg));
+  }
   .dash-focus-link {
     @apply rounded underline-offset-4 hover:underline;
     color: inherit;

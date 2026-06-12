@@ -29,7 +29,11 @@ export interface TodaysWorkProps {
   rows: QueueRowSpec[];
   overflow: number;
   loading?: boolean;
-  error?: boolean;
+  /** FLOW-D08: per-source errors — the queue renders whatever it has and
+   *  shows an inline error row per failed source. The full-panel error
+   *  appears only when BOTH sources fail. */
+  criticalError?: boolean;
+  slippedError?: boolean;
   onRetry: () => void;
   /** Forward pointers shown when the queue is empty. */
   tomorrow: TomorrowItem[];
@@ -37,22 +41,27 @@ export interface TodaysWorkProps {
   asOfLabel: string | null;
 }
 
+// FLOW-D01: plain language a factory owner reads without MRP training —
+// "Slipped plan" and "Late PO" were system jargon.
 const CATEGORY_LABEL: Record<QueueRowSpec["category"], string> = {
   stops_production: "Stops production",
   procurement: "Procurement",
-  slipped: "Slipped plan",
-  late_po: "Late PO",
+  slipped: "Production overdue",
+  late_po: "Late delivery",
 };
 
 export function TodaysWork({
   rows,
   overflow,
   loading,
-  error,
+  criticalError,
+  slippedError,
   onRetry,
   tomorrow,
   asOfLabel,
 }: TodaysWorkProps) {
+  const allSourcesFailed = !!criticalError && !!slippedError;
+  const someSourceFailed = !!criticalError || !!slippedError;
   const criticalCount = rows.filter((r) => r.severity === "critical").length;
   const hot = criticalCount > 0;
   const tone: "danger" | "warning" | "default" =
@@ -116,9 +125,9 @@ export function TodaysWork({
             <SkeletonRow />
             <SkeletonRow />
           </div>
-        ) : error ? (
+        ) : allSourcesFailed ? (
           <ErrorAlert label="Today's work unavailable." onRetry={onRetry} />
-        ) : rows.length === 0 ? (
+        ) : rows.length === 0 && !someSourceFailed ? (
           <div className="flex flex-col gap-3">
             <AllClearRibbon
               title="All clear — nothing needs a decision right now."
@@ -146,6 +155,31 @@ export function TodaysWork({
             ) : null}
           </div>
         ) : (
+          <>
+          {/* FLOW-D01: the working instruction, readable at scan speed —
+              the muted description above was being skipped. */}
+          {rows.length > 0 ? (
+            <p className="mb-2 text-xs font-medium text-fg-muted" data-testid="todays-work-hint">
+              These items need your action today.{" "}
+              <span className="font-semibold text-fg-strong">
+                Start at the top — the list is ranked by urgency.
+              </span>{" "}
+              Each button opens the screen where the action happens; a finished
+              item disappears on the next refresh.
+            </p>
+          ) : null}
+          {/* FLOW-D08: inline per-source error rows — the rows we DO have
+              stay visible. */}
+          {criticalError ? (
+            <div className="mb-2">
+              <ErrorAlert label="Critical alerts unavailable — other items still shown." onRetry={onRetry} />
+            </div>
+          ) : null}
+          {slippedError ? (
+            <div className="mb-2">
+              <ErrorAlert label="Overdue-production items unavailable — other items still shown." onRetry={onRetry} />
+            </div>
+          ) : null}
           <ol className="flex flex-col gap-2" data-testid="todays-work-list">
             {rows.map((row) => {
               const danger = row.severity === "critical";
@@ -197,6 +231,7 @@ export function TodaysWork({
               );
             })}
           </ol>
+          </>
         )}
       </SectionCard>
     </div>

@@ -170,8 +170,14 @@ export function VerdictBand({
           <span className="dash-verdict-date"> · {dateLong}</span>
         </h1>
 
-        {/* Row 3 — the Focus Engine sentence. */}
-        <p className="dash-focus mt-3" data-tone={focus.tone} data-testid="dash-focus">
+        {/* Row 3 — the Focus Engine sentence. FLOW-D04: the eyebrow chip
+            marks it as THE daily directive (it read as decorative copy). */}
+        <div className="mt-4 flex items-center gap-2">
+          <span className="dash-focus-eyebrow" data-tone={focus.tone} data-testid="dash-focus-eyebrow">
+            Today&apos;s focus
+          </span>
+        </div>
+        <p className="dash-focus mt-1.5" data-tone={focus.tone} data-testid="dash-focus">
           {focus.href ? (
             focus.href.startsWith("#") ? (
               <a

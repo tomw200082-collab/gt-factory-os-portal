@@ -126,6 +126,11 @@ async function mockDashboardApis(
   await page.route("**/api/economics/raw-materials", (route) =>
     route.fulfill({ json: { rows: [] } }),
   );
+  await page.route("**/api/orders/outbound-summary", (route) =>
+    route.fulfill({
+      json: { open_orders: 5, due_today: 2, as_of: new Date().toISOString() },
+    }),
+  );
   await page.route("**/api/dashboard/critical-today", (route) =>
     route.fulfill({
       json: {
@@ -193,7 +198,13 @@ test.describe("@mocked dashboard bands 0–2", () => {
       "href",
       "/planning/inventory-flow",
     );
-    await expect(page.getByTestId("flow-node-outbound")).not.toHaveAttribute("href", /.+/);
+    // Tranche 063: OUTBOUND is live from the LionWheel mirror summary.
+    await expect(page.getByTestId("flow-node-outbound")).toContainText("5");
+    await expect(page.getByTestId("flow-node-outbound")).toContainText("2 due today");
+    // FLOW-D01: the queue carries its working instruction.
+    await expect(page.getByTestId("todays-work-hint")).toContainText("Start at the top");
+    // FLOW-D04: the focus sentence is marked as the daily directive.
+    await expect(page.getByTestId("dash-focus-eyebrow")).toContainText("Today's focus");
 
     // Band 2 — queue: critical stockout row outranks the slipped + late-PO
     // rows, and every row carries a transaction CTA.

@@ -71,18 +71,36 @@ export function FlowNode({ node, loading }: { node: FlowNodeData; loading?: bool
       <div className="dash-node-sub">{node.sub}</div>
       <span className="sr-only">{node.srSummary}</span>
 
-      {/* Drill card — CSS-revealed on hover/focus-within (desktop). */}
+      {/* Drill rows. FLOW-D06: hover does not exist on touch — on mobile
+          (<sm) the rows render inline under the node, always visible. The
+          hover card remains the desktop treatment (it is sm+-only in CSS). */}
       {node.drill.length > 0 ? (
-        <div className="dash-node-card" role="group" aria-label={`${node.label} details`}>
-          {node.drill.slice(0, 3).map((d) => (
-            <div key={d.key} className="flex items-baseline justify-between gap-3 text-2xs">
-              <span className="truncate text-fg-muted">{d.label}</span>
-              <span className="shrink-0 font-semibold tabular-nums text-fg-strong">
-                {d.value}
-              </span>
-            </div>
-          ))}
-        </div>
+        <>
+          <div
+            className="mt-1.5 flex flex-col gap-1 border-t border-border/50 pt-1.5 sm:hidden"
+            role="group"
+            aria-label={`${node.label} details`}
+          >
+            {node.drill.slice(0, 3).map((d) => (
+              <div key={d.key} className="flex items-baseline justify-between gap-3 text-2xs">
+                <span className="truncate text-fg-muted">{d.label}</span>
+                <span className="shrink-0 font-semibold tabular-nums text-fg-strong">
+                  {d.value}
+                </span>
+              </div>
+            ))}
+          </div>
+          <div className="dash-node-card" role="group" aria-label={`${node.label} details`}>
+            {node.drill.slice(0, 3).map((d) => (
+              <div key={d.key} className="flex items-baseline justify-between gap-3 text-2xs">
+                <span className="truncate text-fg-muted">{d.label}</span>
+                <span className="shrink-0 font-semibold tabular-nums text-fg-strong">
+                  {d.value}
+                </span>
+              </div>
+            ))}
+          </div>
+        </>
       ) : null}
     </>
   );

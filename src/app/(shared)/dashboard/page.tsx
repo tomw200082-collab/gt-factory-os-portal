@@ -983,6 +983,14 @@ interface CurrentSessionLite {
   } | null;
 }
 const QK_PURCHASE_SESSION = ["purchase-session", "current"] as const;
+const QK_OUTBOUND = ["dashboard", "orders", "outbound-summary"] as const;
+
+// Mirror of api/src/orders/schemas.ts OutboundSummaryResponse.
+interface OutboundSummaryResponse {
+  open_orders: number;
+  due_today: number;
+  as_of: string;
+}
 
 function isoDateLocal(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
@@ -1071,6 +1079,9 @@ export default function DashboardPage() {
         signal,
       ),
     staleTime: STALE_TIME_MS,
+    // FLOW-D03: the operator posts an actual elsewhere and tabs back —
+    // refresh on focus so the dashboard reflects it (global default is off).
+    refetchOnWindowFocus: true,
   });
 
   const purchaseOrdersQ = useQuery({
@@ -1079,6 +1090,8 @@ export default function DashboardPage() {
       fetchJson<PurchaseOrdersResponse>("/api/purchase-orders?limit=500", signal),
     staleTime: STALE_TIME_MS,
     refetchInterval: STALE_TIME_MS,
+    // FLOW-D03: refresh on focus after placing/receiving a PO elsewhere.
+    refetchOnWindowFocus: true,
   });
 
   // Tranche 061: 6 rows — the single merged "Recent activity" feed (the
@@ -1124,20 +1137,36 @@ export default function DashboardPage() {
     enabled: canSeeValueTrend,
   });
 
-  // Mirror queries for the at-a-glance factory-state chip. These share
-  // queryKeys with the inline block components (CriticalTodayBlock and
-  // SlippedPlansBlock), so React Query dedupes — no extra network traffic.
+  // The two act-now signals. FLOW-D03: these are what the operator acts on,
+  // so they refresh twice as fast as the value/trend data AND on tab focus
+  // (the global provider default disables focus refetch).
   const criticalTodayQ = useQuery({
     queryKey: QK_CRITICAL_TODAY,
     queryFn: ({ signal }) =>
       fetchJson<CriticalTodayResponse>("/api/dashboard/critical-today", signal),
-    staleTime: STALE_TIME_MS,
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
   });
   const slippedPlansQ = useQuery({
     queryKey: QK_SLIPPED_PLANS,
     queryFn: ({ signal }) =>
       fetchJson<SlippedPlansResponse>("/api/dashboard/slipped-plans", signal),
+    staleTime: 30_000,
+    refetchInterval: 30_000,
+    refetchOnWindowFocus: true,
+  });
+
+  // OUTBOUND node feed (Tranche 063 — LionWheel mirror activation). The
+  // node degrades to its quiet state on any failure (e.g. until the backend
+  // deploy that ships this endpoint reaches Railway), so retry stays off.
+  const outboundQ = useQuery({
+    queryKey: QK_OUTBOUND,
+    queryFn: ({ signal }) =>
+      fetchJson<OutboundSummaryResponse>("/api/orders/outbound-summary", signal),
     staleTime: STALE_TIME_MS,
+    refetchInterval: STALE_TIME_MS,
+    retry: false,
   });
 
   // Derived: stock health from inventory-flow.
@@ -1520,6 +1549,20 @@ export default function DashboardPage() {
     ];
   }, [movementsTrendQ.data, todayLocalISO]);
 
+  // Picks posted today, from the ledger (stock truth) — feeds the OUTBOUND
+  // node sub-line. Deliberately NOT taken from the mirror summary: the
+  // ledger is the source of truth for stock-affecting picks.
+  const pickedToday = useMemo(() => {
+    const rows = movementsTrendQ.data?.rows ?? movementsTrendQ.data?.data ?? [];
+    let n = 0;
+    for (const r of rows) {
+      if (r.movement_type !== "LIONWHEEL_PICK" && r.movement_type !== "FG_OUT_PICK") continue;
+      const when = r.posted_at ?? r.event_at;
+      if (when && isoDateLocal(new Date(when)) === todayLocalISO) n += 1;
+    }
+    return n;
+  }, [movementsTrendQ.data, todayLocalISO]);
+
   const flowNodes = useMemo<FlowNodeData[]>(() => {
     // Materials urgency is expressed in TIME (days of cover) — the MRP
     // urgency currency. Money stays in the Numbers band.
@@ -1579,14 +1622,19 @@ export default function DashboardPage() {
               : "—"
             : `${Math.round(minCover * 10) / 10}d`,
         displayFull: "Minimum days of cover across raw materials and packaging",
-        sub: (
-          <span>
-            {critical > 0 ? (
-              <span className="font-semibold text-danger">{critical} critical · </span>
-            ) : null}
-            {total} SKUs
-          </span>
-        ),
+        // FLOW-D09: in a strained state, NAME the worst item inline — the
+        // drill card is hover-only and invisible on touch.
+        sub:
+          shortTop[0] && (critical > 0 || watch > 0) ? (
+            <span>
+              <span className={critical > 0 ? "font-semibold text-danger" : "font-semibold text-warning-fg"}>
+                {shortTop[0].item_name}: {Math.round(shortTop[0].days_of_cover * 10) / 10}d
+              </span>
+              {critical > 0 ? ` · ${critical} critical` : ""} · {total} SKUs
+            </span>
+          ) : (
+            <span>{total} SKUs</span>
+          ),
         href: "/planning/inventory-flow",
         drill: shortTop.map((i) => ({
           key: i.item_id,
@@ -1647,17 +1695,38 @@ export default function DashboardPage() {
           fgValue != null ? fmtILS(fgValue) : "value unavailable"
         } across ${fgSkus} SKUs.`,
       },
-      {
-        key: "outbound",
-        label: "Outbound",
-        state: "quiet",
-        display: "—",
-        sub: "Activates with shipments mirror",
-        href: null,
-        drill: [],
-        srSummary:
-          "Stage 5 of 5, Outbound: not yet live — activates with the shipments mirror.",
-      },
+      // OUTBOUND — live from the LionWheel mirror (Tranche 063). Degrades
+      // to the quiet placeholder whenever the summary endpoint is
+      // unavailable or malformed (e.g. before the backend deploy lands),
+      // never fakes.
+      outboundQ.data && typeof outboundQ.data.open_orders === "number"
+        ? {
+            key: "outbound",
+            label: "Outbound",
+            state: "ok",
+            display: String(outboundQ.data.open_orders),
+            displayFull: "Open customer orders in the LionWheel mirror",
+            sub: (
+              <span>
+                {outboundQ.data.due_today > 0 ? `${outboundQ.data.due_today} due today · ` : ""}
+                {pickedToday > 0 ? `${pickedToday} picked today` : "no picks yet today"}
+              </span>
+            ),
+            href: "/stock/movement-log",
+            drill: [],
+            srSummary: `Stage 5 of 5, Outbound: ${outboundQ.data.open_orders} open orders, ${outboundQ.data.due_today} due today, ${pickedToday} picked today.`,
+          }
+        : {
+            key: "outbound",
+            label: "Outbound",
+            state: "quiet",
+            display: outboundQ.isLoading ? null : "—",
+            sub: "Shipments feed unavailable",
+            href: null,
+            drill: [],
+            srSummary:
+              "Stage 5 of 5, Outbound: shipments feed unavailable right now.",
+          },
     ];
   }, [
     flowItems,
@@ -1675,6 +1744,9 @@ export default function DashboardPage() {
     fgValue,
     fgSkus,
     todayLocalISO,
+    outboundQ.data,
+    outboundQ.isLoading,
+    pickedToday,
   ]);
 
   // "Since you last looked" delta chips (Band 0) — computed once per mount
@@ -1697,7 +1769,10 @@ export default function DashboardPage() {
     }
     if (!last) return;
     const lastMs = Date.parse(last);
-    if (!Number.isFinite(lastMs) || Date.now() - lastMs < 30 * 60_000) return;
+    // FLOW-D07: 5-minute threshold — long enough to skip ordinary tab
+    // switches, short enough that a "post a receipt and come back" round
+    // trip (typically 3–5 minutes) produces a visible delta chip.
+    if (!Number.isFinite(lastMs) || Date.now() - lastMs < 5 * 60_000) return;
     let receipts = 0;
     let produced = 0;
     let other = 0;
@@ -1798,7 +1873,8 @@ export default function DashboardPage() {
             rows={queue.rows}
             overflow={queue.overflow}
             loading={criticalTodayQ.isLoading || slippedPlansQ.isLoading}
-            error={criticalTodayQ.isError || slippedPlansQ.isError}
+            criticalError={criticalTodayQ.isError}
+            slippedError={slippedPlansQ.isError}
             onRetry={() => {
               void criticalTodayQ.refetch();
               void slippedPlansQ.refetch();
