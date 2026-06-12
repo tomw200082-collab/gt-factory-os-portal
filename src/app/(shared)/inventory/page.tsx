@@ -1179,25 +1179,37 @@ export default function InventoryPage() {
         title="Inventory"
         description="Calculated stock balances derived from the ledger. Posted events only — pending events do not affect these numbers. Negative balances flagged for investigation."
         actions={
-          <button
-            type="button"
-            onClick={refreshAll}
-            disabled={refreshing}
-            className="btn btn-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 disabled:opacity-50"
-            aria-label="Refresh inventory"
-          >
-            {refreshing ? (
+          <div className="flex items-center gap-2">
+            <Link
+              href="/inventory/bulk-count"
+              className="btn btn-sm btn-primary focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+              data-testid="inventory-bulk-count-link"
+            >
               <span className="inline-flex items-center gap-1.5">
-                <span aria-hidden className="h-1.5 w-1.5 animate-pulse rounded-full bg-info" />
-                Refreshing
+                <span aria-hidden>✓</span>
+                Bulk count
               </span>
-            ) : (
-              <span className="inline-flex items-center gap-1.5">
-                <span aria-hidden>↻</span>
-                Refresh
-              </span>
-            )}
-          </button>
+            </Link>
+            <button
+              type="button"
+              onClick={refreshAll}
+              disabled={refreshing}
+              className="btn btn-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 disabled:opacity-50"
+              aria-label="Refresh inventory"
+            >
+              {refreshing ? (
+                <span className="inline-flex items-center gap-1.5">
+                  <span aria-hidden className="h-1.5 w-1.5 animate-pulse rounded-full bg-info" />
+                  Refreshing
+                </span>
+              ) : (
+                <span className="inline-flex items-center gap-1.5">
+                  <span aria-hidden>↻</span>
+                  Refresh
+                </span>
+              )}
+            </button>
+          </div>
         }
       >
         {/* Iteration 6 — Trust strip */}
