@@ -21,7 +21,7 @@
 // ---------------------------------------------------------------------------
 
 import * as Popover from "@radix-ui/react-popover";
-import { useState, useMemo, useRef, useEffect } from "react";
+import { useState, useMemo, useRef, useEffect, useId } from "react";
 import { Check, ChevronDown, Search, X } from "lucide-react";
 import { cn } from "@/lib/cn";
 
@@ -66,6 +66,7 @@ export function SearchableSelect({
   testId,
   ariaLabel,
 }: SearchableSelectProps): JSX.Element {
+  const listboxId = useId();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
@@ -163,9 +164,11 @@ export function SearchableSelect({
         <button
           type="button"
           disabled={disabled || loading}
+          role="combobox"
           aria-label={ariaLabel}
           aria-haspopup="listbox"
           aria-expanded={open}
+          aria-controls={listboxId}
           aria-invalid={invalid || undefined}
           data-testid={testId}
           className={cn(
@@ -241,7 +244,7 @@ export function SearchableSelect({
           )}
 
           {/* Options */}
-          <div ref={listRef} role="listbox" className="max-h-72 overflow-y-auto py-1">
+          <div id={listboxId} ref={listRef} role="listbox" className="max-h-72 overflow-y-auto py-1">
             {filtered.length === 0 ? (
               <div className="px-3 py-6 text-center text-xs text-fg-muted">
                 {emptyMessage}

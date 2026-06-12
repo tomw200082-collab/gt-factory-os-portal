@@ -140,7 +140,6 @@ export async function middleware(request: NextRequest) {
     return response;
   } catch (err) {
     // Never 500 from middleware. Log and pass through.
-    // eslint-disable-next-line no-console
     console.error(
       "[middleware] unexpected error; passing through:",
       err instanceof Error ? err.message : String(err),

@@ -14,7 +14,7 @@
 // ---------------------------------------------------------------------------
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
@@ -245,6 +245,7 @@ interface ComboboxProps {
 }
 
 function ItemCombobox({ options, value, onChange }: ComboboxProps) {
+  const listboxId = useId();
   const [query, setQuery] = useState("");
   const [open, setOpen] = useState(false);
   const [activeIdx, setActiveIdx] = useState(0);
@@ -328,8 +329,10 @@ function ItemCombobox({ options, value, onChange }: ComboboxProps) {
         onFocus={() => { setOpen(true); setQuery(""); }}
         onKeyDown={handleKeyDown}
         autoComplete="off"
+        role="combobox"
         aria-autocomplete="list"
         aria-expanded={open}
+        aria-controls={listboxId}
       />
       {open && (
         <div className="absolute z-50 mt-1 w-full rounded-md border border-border bg-bg shadow-lg">
@@ -339,6 +342,7 @@ function ItemCombobox({ options, value, onChange }: ComboboxProps) {
             </div>
           )}
           <ul
+            id={listboxId}
             ref={listRef}
             role="listbox"
             className="max-h-60 overflow-y-auto py-1"

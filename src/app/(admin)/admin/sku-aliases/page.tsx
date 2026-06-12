@@ -283,11 +283,6 @@ interface NotesState {
 
 function AdminSkuAliasesPageInner(): JSX.Element {
   const { session } = useSession();
-  const router = useRouter();
-  const searchParams = useSearchParams();
-
-  const activeChannel = parseChannel(searchParams.get("channel"));
-  const channelCfg = CHANNEL_CONFIGS[activeChannel];
 
   if (session.role !== "admin") {
     return (
@@ -303,6 +298,16 @@ function AdminSkuAliasesPageInner(): JSX.Element {
       </div>
     );
   }
+
+  return <AdminSkuAliasesContent />;
+}
+
+function AdminSkuAliasesContent(): JSX.Element {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+
+  const activeChannel = parseChannel(searchParams.get("channel"));
+  const channelCfg = CHANNEL_CONFIGS[activeChannel];
 
   const [assignments, setAssignments] = useState<AssignmentState>({});
   const [notes, setNotes] = useState<NotesState>({});

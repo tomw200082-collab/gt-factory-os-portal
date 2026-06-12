@@ -1170,7 +1170,7 @@ export default function InventoryPage() {
             </span>
           ) : null}
           <span className="text-fg-muted">
-            Items below the physical floor (red) need investigation · Items without a configured cost show no value · ACTIVE master items that have never been counted appear at 0 with a "Not counted" badge
+            Items below the physical floor (red) need investigation · Items without a configured cost show no value · ACTIVE master items that have never been counted appear at 0 with a &quot;Not counted&quot; badge
           </span>
         </div>
       </WorkflowHeader>

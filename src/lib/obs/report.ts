@@ -80,7 +80,6 @@ export function reportError(
     const report = envelope("error", err, context);
     // Always console.error so the browser devtools + any log-capture layer
     // picks it up.
-    // eslint-disable-next-line no-console
     console.error("[obs:error]", report);
     forwardToPlatform(report);
   } catch {
@@ -94,7 +93,6 @@ export function reportWarning(
 ): void {
   try {
     const report = envelope("warning", msg, context);
-    // eslint-disable-next-line no-console
     console.warn("[obs:warning]", report);
     forwardToPlatform(report);
   } catch {
