@@ -3259,7 +3259,8 @@
       );
     background-size: 28px 28px;
     background-position: 0 0;
-    opacity: 0.45;
+    /* Tranche 061 calm pass: texture, not noise — faded hard. */
+    opacity: 0.18;
     -webkit-mask-image: linear-gradient(
       to bottom,
       transparent 0%,
@@ -3296,26 +3297,19 @@
     background-color: hsl(var(--bg-raised) / 0.65);
   }
   .dash-hero::before {
-    /* Inner top glow — accent halo with a slow breathing motion that
-       reads as "factory pulse". Subtle: a 6-second cycle, not a
-       distracting strobe. */
+    /* Inner top glow — static accent halo. Tranche 061 motion budget:
+       the "breathe" animation is retired (motion is reserved for the live
+       dot, count-up, chart draw-in and the danger pulse). */
     content: "";
     position: absolute;
     inset: -1px -1px auto -1px;
     height: 200px;
     pointer-events: none;
     z-index: 0;
+    opacity: 0.9;
     background:
       radial-gradient(65% 100% at 18% 0%, hsl(var(--accent) / 0.22) 0%, transparent 65%),
       radial-gradient(45% 100% at 88% 0%, hsl(var(--info) / 0.14) 0%, transparent 70%);
-    animation: dash-hero-breathe 6s ease-in-out infinite;
-  }
-  @keyframes dash-hero-breathe {
-    0%, 100% { opacity: 0.85; }
-    50%      { opacity: 1.00; }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .dash-hero::before { animation: none; opacity: 0.9; }
   }
   .dash-hero::after {
     /* Hairline accent at the very top edge */
@@ -3814,21 +3808,53 @@
   }
   .dash-node {
     --node-tone: var(--border-strong);
-    @apply relative flex min-w-[150px] shrink-0 snap-center flex-col gap-1 rounded-lg
-           border border-border/70 bg-bg-raised px-3.5 py-3 shadow-raised
+    @apply relative flex min-w-[160px] shrink-0 snap-center flex-col gap-1 overflow-hidden
+           rounded-xl border border-border/70 px-4 py-3.5 shadow-raised
            sm:min-w-0 sm:shrink;
-    transition: border-color 200ms ease-out, box-shadow 200ms ease-out;
+    /* Premium pass (Tranche 061): the ribbon is the page's instrument
+       cluster — same gradient language as .kpi-tile, tinted by node state. */
+    background: linear-gradient(
+      160deg,
+      hsl(var(--bg-raised)) 0%,
+      hsl(var(--bg-raised) / 0.97) 60%,
+      hsl(var(--node-tone) / 0.06) 100%
+    );
+    transition:
+      border-color 200ms ease-out,
+      box-shadow 200ms ease-out,
+      transform 200ms ease-out;
+  }
+  .dash-node::before {
+    /* Tone rail along the top — fades along its length like .kpi-tile. */
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 2.5px;
+    pointer-events: none;
+    background: linear-gradient(
+      to right,
+      hsl(var(--node-tone) / 0.85) 0%,
+      hsl(var(--node-tone) / 0.35) 55%,
+      transparent 100%
+    );
   }
   .dash-node[data-state="ok"]     { --node-tone: var(--success); }
   .dash-node[data-state="warn"]   { --node-tone: var(--warning); }
   .dash-node[data-state="danger"] { --node-tone: var(--danger); }
   .dash-node[data-state="quiet"]  { opacity: 0.55; }
+  .dash-node[data-state="quiet"]::before { background: none; }
   .dash-node.is-link:hover,
   .dash-node.is-link:focus-visible {
+    transform: translateY(-2px);
     border-color: hsl(var(--node-tone) / 0.6);
     box-shadow:
       0 1px 0 0 hsl(var(--shadow-color) / 0.4),
-      0 10px 28px -10px hsl(var(--shadow-color-deep) / 0.14);
+      0 14px 32px -10px hsl(var(--shadow-color-deep) / 0.16);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dash-node { transition: none; }
+    .dash-node.is-link:hover,
+    .dash-node.is-link:focus-visible { transform: none; }
   }
   .dash-node-label {
     @apply text-3xs font-semibold uppercase tracking-sops text-fg-subtle;
@@ -3845,7 +3871,8 @@
     .dash-node[data-state="danger"] .dash-node-dot { animation: none; }
   }
   .dash-node-value {
-    @apply mt-1 text-2xl font-semibold leading-none tabular-nums tracking-tight text-fg-strong;
+    @apply mt-1 font-semibold leading-none tabular-nums tracking-tight text-fg-strong;
+    font-size: 1.75rem;
   }
   .dash-node-sub {
     @apply mt-0.5 text-2xs leading-relaxed text-fg-muted;
@@ -3891,5 +3918,14 @@
   }
   .dash-tomorrow-label {
     @apply text-3xs font-semibold uppercase tracking-sops text-fg-subtle;
+  }
+
+  /* ── Band 3: Week panel detail rows (Tranche 061). */
+  .dash-week-row {
+    @apply flex items-center gap-2 rounded-md border border-border/50 bg-bg/40
+           px-2.5 py-1.5 text-xs;
+  }
+  :root.dark .dash-week-row {
+    background-color: hsl(var(--bg) / 0.25);
   }
 }

@@ -231,6 +231,12 @@ test.describe("@mocked dashboard bands 0–2", () => {
     // Late PO from the mock still queues work.
     const rows = page.getByTestId("todays-work-list").locator("li");
     await expect(rows.first()).toContainText("Chase receipt: PO PO-100");
+
+    // Band 3 (Tranche 061) — the Week panel answers the money questions.
+    await expect(page.getByTestId("week-procurement")).toBeVisible();
+    await expect(page.getByTestId("week-procurement")).toContainText("Procurement this week");
+    await expect(page.getByTestId("week-procurement")).toContainText("Awaiting receipt");
+    await expect(page.getByTestId("week-production")).toBeVisible();
   });
 
   test("viewer sees the digest only — no Today's Work, no Numbers band", async ({
@@ -243,6 +249,6 @@ test.describe("@mocked dashboard bands 0–2", () => {
     await expect(page.getByTestId("dash-verdict")).toBeVisible();
     await expect(page.getByTestId("flow-ribbon")).toBeVisible();
     await expect(page.getByTestId("todays-work-list")).toHaveCount(0);
-    await expect(page.getByText("Critical Exceptions")).toHaveCount(0);
+    await expect(page.getByTestId("week-panel")).toHaveCount(0);
   });
 });

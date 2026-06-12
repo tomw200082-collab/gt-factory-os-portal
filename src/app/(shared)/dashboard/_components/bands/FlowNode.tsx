@@ -124,16 +124,16 @@ export function FlowEdge({ active, label }: { active: boolean; label: string }) 
       role="img"
       aria-label={label}
     >
-      <svg viewBox="0 0 28 12" width="28" height="12" aria-hidden className="shrink-0">
+      <svg viewBox="0 0 40 12" width="40" height="12" aria-hidden className="shrink-0">
         <line
           x1="1"
           y1="6"
-          x2="21"
+          x2="32"
           y2="6"
           className="dash-edge-line"
           strokeWidth="1.5"
         />
-        <path d="M20 2 L26 6 L20 10" fill="none" className="dash-edge-head" strokeWidth="1.5" />
+        <path d="M31 2 L38 6 L31 10" fill="none" className="dash-edge-head" strokeWidth="1.5" />
       </svg>
     </div>
   );

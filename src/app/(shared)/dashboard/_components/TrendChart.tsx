@@ -123,11 +123,19 @@ function useActiveIndex(n: number) {
   };
 }
 
-function AxisTicks({ buckets }: { buckets: { label: string }[] }) {
+function AxisTicks({
+  buckets,
+  peakLabel,
+}: {
+  buckets: { label: string }[];
+  /** "peak 12" — y-reference for the dashed peak gridline (Tranche 061). */
+  peakLabel?: string | null;
+}) {
   if (buckets.length === 0) return null;
   return (
     <div className="mt-1 flex justify-between text-3xs tabular-nums text-fg-faint">
       <span>{buckets[0]?.label}</span>
+      {peakLabel ? <span>{peakLabel}</span> : null}
       <span>{buckets[buckets.length - 1]?.label}</span>
     </div>
   );
@@ -219,6 +227,20 @@ export function TrendAreaChart({
 
           <line x1={PAD_X} y1={BASE_Y} x2={VB_W - PAD_X} y2={BASE_Y} className="stroke-border" strokeWidth={1} />
 
+          {/* Peak y-reference (Tranche 061) — a dashed gridline at the
+              window's maximum so spikes are sizeable at a glance. */}
+          {vals.some((v) => v > (zeroBased ? 0 : -Infinity)) ? (
+            <line
+              x1={PAD_X}
+              y1={Y(maxV)}
+              x2={VB_W - PAD_X}
+              y2={Y(maxV)}
+              className="stroke-border"
+              strokeWidth={0.75}
+              strokeDasharray="3 3"
+            />
+          ) : null}
+
           {areaPath ? (
             <path
               d={areaPath}
@@ -276,7 +298,10 @@ export function TrendAreaChart({
           </Tooltip>
         ) : null}
       </div>
-      <AxisTicks buckets={buckets} />
+      <AxisTicks
+        buckets={buckets}
+        peakLabel={buckets.length > 0 ? `peak ${fmt(maxV)}` : null}
+      />
       <span className="sr-only" aria-live="polite">
         {ax !== null ? `${buckets[ax].label}: ${fmt(buckets[ax].value)} ${unitLabel}` : ""}
       </span>

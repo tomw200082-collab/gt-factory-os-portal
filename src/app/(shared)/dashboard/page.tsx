@@ -69,24 +69,19 @@ import {
   AlertTriangle,
   ArrowLeftRight,
   ArrowRight,
-  CheckCircle2,
-  ClipboardList,
   Coins,
   Inbox,
   LineChart,
   Minus,
-  PackageCheck,
   PackageSearch,
   TrendingDown,
   TrendingUp,
 } from "lucide-react";
 
 import { useInventoryFlow } from "@/app/(planning)/planning/inventory-flow/_lib/useInventoryFlow";
-import type { FlowItem } from "@/app/(planning)/planning/inventory-flow/_lib/types";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { ScrollFade } from "@/components/ui/ScrollFade";
 import { SectionHeading } from "@/components/workflow/SectionHeading";
-import { Badge } from "@/components/badges/StatusBadge";
 import { FreshnessBadge } from "@/components/badges/FreshnessBadge";
 import {
   EmptyState,
@@ -104,16 +99,13 @@ import { VerdictBand, type SinceChip } from "./_components/bands/VerdictBand";
 import { FlowRibbon, type FlowEdgeActivity } from "./_components/bands/FlowRibbon";
 import type { FlowNodeData } from "./_components/bands/FlowNode";
 import { TodaysWork, type TomorrowItem } from "./_components/bands/TodaysWork";
-import { KpiTile, KpiTileBreakdown } from "./_components/KpiTile";
-import { StockHealthCard } from "./_components/StockHealthCard";
-import { MovementBars, RangeSelector, TrendAreaChart } from "./_components/TrendChart";
+import { WeekPanel } from "./_components/bands/WeekPanel";
+import { RangeSelector, TrendAreaChart } from "./_components/TrendChart";
 import {
   bucketTotal,
   dailyCounts,
-  dailyFlow,
   trendDelta,
   type DayBucket,
-  type FlowDayBucket,
   type TrendDelta,
 } from "./_lib/trends";
 import {
@@ -124,6 +116,7 @@ import {
 import { useNow } from "./_lib/useNow";
 import { resolveFocus } from "./_lib/focus-engine";
 import { mrpOnHandLine, rankQueue, type QueueRowSpec } from "./_lib/queue";
+import { weekProcurement, weekProduction } from "./_lib/week";
 
 // ---------------------------------------------------------------------------
 // Cadence — keep low for the morning view; refresh on tab focus is the default.
@@ -137,10 +130,7 @@ const STALE_TIME_MS = 60_000;
 // the two pages fetch independently and show different numbers when
 // master-data costs were edited between the two requests.
 const QK_VALUE = ["stock", "value"] as const;
-const QK_EXCEPTIONS = ["dashboard", "exceptions", "open"] as const;
-const QK_PLANNING_LATEST = ["dashboard", "planning", "runs", "latest"] as const;
 const QK_PRODUCTION_PLAN = ["dashboard", "production-plan"] as const;
-const QK_PRODUCTION_ACTUALS = ["dashboard", "production-actuals", "recent"] as const;
 const QK_CRITICAL_TODAY = ["dashboard", "critical-today"] as const;
 const QK_SLIPPED_PLANS = ["dashboard", "slipped-plans"] as const;
 const QK_BREAK_GLASS = ["dashboard", "break-glass"] as const;
@@ -193,31 +183,6 @@ interface RawMaterialCostRow {
 interface RawMaterialCostResponse {
   rows?: RawMaterialCostRow[];
   data?: RawMaterialCostRow[];
-}
-
-interface ExceptionRow {
-  exception_id: string;
-  severity: "critical" | "warning" | "info" | string;
-  status: string;
-}
-interface ExceptionsResponse {
-  rows?: ExceptionRow[];
-  data?: ExceptionRow[];
-  total?: number;
-}
-
-interface PlanningRunRow {
-  run_id: string;
-  executed_at: string;
-  summary?: {
-    purchase_recs_count?: number;
-    production_recs_count?: number;
-    exceptions_count?: number;
-  };
-}
-interface PlanningRunsResponse {
-  rows?: PlanningRunRow[];
-  data?: PlanningRunRow[];
 }
 
 interface ProductionPlanRow {
@@ -655,376 +620,6 @@ function BreakGlassBanner() {
 }
 
 
-function Legend({ dotClass, label, n }: { dotClass: string; label: string; n: number }) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className={cn("dot", dotClass)} aria-hidden />
-      <span className="flex-1 text-fg-muted">{label}</span>
-      <span className="font-semibold tabular-nums text-fg-strong">{n}</span>
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Shortage risk.
-// ---------------------------------------------------------------------------
-function ShortageRisk({ items, loading }: { items: FlowItem[]; loading?: boolean }) {
-  const shortageItems = useMemo(
-    () =>
-      items
-        .filter(
-          (i) =>
-            i.risk_tier === "critical" || i.risk_tier === "stockout" || i.risk_tier === "watch",
-        )
-        .sort((a, b) => a.days_of_cover - b.days_of_cover)
-        .slice(0, 6),
-    [items],
-  );
-
-  function urgencyClasses(d: number): { text: string; bg: string; border: string; bar: string } {
-    if (d <= 2)
-      return {
-        text: "text-danger",
-        bg: "bg-danger-softer",
-        border: "border-danger/30",
-        bar: "bg-danger",
-      };
-    if (d <= 5)
-      return {
-        text: "text-warning",
-        bg: "bg-warning-softer",
-        border: "border-warning/30",
-        bar: "bg-warning",
-      };
-    return {
-      text: "text-accent",
-      bg: "bg-accent-soft/30",
-      border: "border-accent/30",
-      bar: "bg-accent",
-    };
-  }
-
-  return (
-    <SectionCard
-      className="dash-panel"
-      eyebrow="Shortage risk"
-      title={
-        <span>
-          Items at risk in horizon
-          {shortageItems.length > 0 ? (
-            <Badge tone="warning" size="sm" className="ml-2 align-middle tabular-nums">
-              {shortageItems.length}
-            </Badge>
-          ) : null}
-        </span>
-      }
-      description="Days to projected stockout · top 6 items"
-    >
-      {loading ? (
-        <div className="flex flex-col gap-2">
-          <SkeletonRow />
-          <SkeletonRow />
-          <SkeletonRow />
-        </div>
-      ) : shortageItems.length === 0 ? (
-        <EmptyState
-          title="No items at shortage risk."
-          description="No items are projected to fall below zero in the current horizon."
-          icon={<CheckCircle2 className="h-5 w-5 text-success" strokeWidth={2} />}
-        />
-      ) : (
-        <ul className="flex flex-col gap-2">
-          {shortageItems.map((item) => {
-            const d = item.days_of_cover;
-            const u = urgencyClasses(d);
-            return (
-              <li key={item.item_id}>
-                <Link
-                  href={`/planning/inventory-flow/${item.item_id}`}
-                  className={cn(
-                    "flex items-center gap-3 rounded border px-3 py-2.5 text-fg-strong transition-colors hover:bg-bg-raised focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40",
-                    u.border,
-                    u.bg,
-                  )}
-                >
-                  <div className={cn("min-w-[60px] text-right", u.text)}>
-                    <span className="text-3xl font-semibold tabular-nums tracking-tighter">
-                      {Math.round(d)}
-                    </span>
-                    <span className="ml-0.5 text-sm font-semibold opacity-70">d</span>
-                  </div>
-                  <div className="h-7 w-px bg-border/60" aria-hidden />
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-sm font-semibold">{item.item_name}</div>
-                    <div className="mt-0.5 text-2xs text-fg-muted">
-                      {item.current_on_hand.toLocaleString()} on hand
-                    </div>
-                  </div>
-                  <div className="w-20 shrink-0">
-                    <div className="h-1 overflow-hidden rounded bg-bg-muted">
-                      <div
-                        className={cn("h-full rounded", u.bar)}
-                        style={{ width: `${Math.max(8, (d / 14) * 100)}%`, opacity: 0.75 }}
-                      />
-                    </div>
-                    <div className="mt-1 text-right text-3xs text-fg-faint">
-                      {Math.round((d / 14) * 100)}% horizon
-                    </div>
-                  </div>
-                </Link>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </SectionCard>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Planning card — FLOW-DG-005: adds Open run deep-link when run_id present.
-// ---------------------------------------------------------------------------
-function PlanningCard({ run, loading }: { run: PlanningRunRow | null; loading?: boolean }) {
-  const totalRecs =
-    (run?.summary?.purchase_recs_count ?? 0) + (run?.summary?.production_recs_count ?? 0);
-  const exceptions = run?.summary?.exceptions_count ?? 0;
-  const lastRun = run?.executed_at ?? null;
-
-  return (
-    <SectionCard
-      className="dash-panel"
-      eyebrow="Planning run"
-      title="Latest completed run"
-      description="Recommendations, exceptions, and timing of the last run."
-      actions={
-        run ? (
-          <Link
-            href={`/planning/runs/${encodeURIComponent(run.run_id)}`}
-            className="inline-flex items-center gap-1 rounded text-xs font-semibold text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-          >
-            Open run
-            <ArrowRight className="h-3 w-3" strokeWidth={2} />
-          </Link>
-        ) : undefined
-      }
-    >
-      {loading ? (
-        <div className="flex flex-col gap-3">
-          <Skel h={50} w="60%" />
-          <Skel h={32} />
-        </div>
-      ) : (
-        <div className="flex flex-col gap-4">
-          <div>
-            <div className="text-4xl font-semibold tabular-nums tracking-tighter text-fg-strong">
-              {run ? totalRecs : "—"}
-            </div>
-            <div className="mt-1 text-xs text-fg-muted">
-              {run ? "recommendations · latest run" : "No completed run found"}
-            </div>
-          </div>
-          {run && (
-            <div className="flex flex-wrap gap-1.5">
-              <Badge tone="warning" variant="soft">
-                {exceptions} exception{exceptions !== 1 ? "s" : ""}
-              </Badge>
-              <Badge tone="success" variant="soft">
-                {run.summary?.purchase_recs_count ?? 0} purchase
-              </Badge>
-              <Badge tone="info" variant="soft">
-                {run.summary?.production_recs_count ?? 0} production
-              </Badge>
-            </div>
-          )}
-          <div className="border-t border-border/60 pt-3">
-            <div className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              Last run
-            </div>
-            <div
-              className="mt-1 text-xs font-semibold text-fg-muted"
-              title={fmtAbsolute(lastRun)}
-            >
-              {lastRun ? fmtAbsolute(lastRun) : "—"}
-            </div>
-          </div>
-        </div>
-      )}
-    </SectionCard>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Production this week.
-// ---------------------------------------------------------------------------
-interface ProdWeekItem {
-  item_id: string;
-  item_name: string;
-  planned: number;
-  completed: number;
-  remaining: number;
-  current_on_hand: number;
-  toneClass: string;
-}
-
-const TONE_BG_CYCLE = ["bg-accent", "bg-success", "bg-info", "bg-warning", "bg-danger"];
-
-function ProductionWeek({ rows, loading }: { rows: ProdWeekItem[]; loading?: boolean }) {
-  return (
-    <SectionCard
-      className="dash-panel"
-      eyebrow="Production this week"
-      title={
-        <span>
-          Planned vs completed
-          {rows.length > 0 ? (
-            <Badge tone="neutral" size="sm" className="ml-2 align-middle tabular-nums">
-              {rows.length}
-            </Badge>
-          ) : null}
-        </span>
-      }
-      description="Top 5 items by planned quantity in the current week."
-    >
-      {loading ? (
-        <div className="flex flex-col gap-4">
-          <Skel h={52} />
-          <Skel h={52} />
-          <Skel h={52} />
-        </div>
-      ) : rows.length === 0 ? (
-        <EmptyState
-          icon={<PackageSearch className="h-5 w-5 text-fg-subtle" strokeWidth={2} />}
-          title="No production planned for this week."
-          description="No daily-plan rows exist for the current Sun–Sat window."
-        />
-      ) : (
-        <div className="flex flex-col gap-5">
-          {rows.map((item) => {
-            const total = item.planned;
-            const done = item.completed;
-            const pctDone = total > 0 ? (done / total) * 100 : 0;
-            return (
-              <div key={item.item_id}>
-                <div className="mb-2 flex items-baseline justify-between gap-2">
-                  <span className="truncate text-sm font-semibold text-fg-strong">
-                    {item.item_name}
-                  </span>
-                  <span className="shrink-0 text-2xs text-fg-muted">
-                    <span className="font-semibold text-fg-strong">
-                      +{item.planned.toLocaleString()}
-                    </span>
-                    {" planned · "}
-                    {item.completed.toLocaleString()} done
-                  </span>
-                </div>
-                <div className="relative h-2 overflow-hidden rounded bg-bg-muted">
-                  <div
-                    className={cn("absolute inset-y-0 rounded opacity-25", item.toneClass)}
-                    style={{ width: "100%" }}
-                  />
-                  <div
-                    className={cn("absolute inset-y-0 rounded", item.toneClass)}
-                    style={{ width: `${pctDone}%` }}
-                  />
-                </div>
-                <div className="mt-1 flex justify-between text-3xs text-fg-faint">
-                  <span>Done: {item.completed.toLocaleString()}</span>
-                  <span>On hand: {item.current_on_hand.toLocaleString()}</span>
-                </div>
-              </div>
-            );
-          })}
-        </div>
-      )}
-    </SectionCard>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Recent production — FLOW-DG-006: adds View movement log footer link.
-// ---------------------------------------------------------------------------
-function RecentProduction({
-  rows,
-  now,
-  loading,
-}: {
-  rows: ProductionActualRow[];
-  now: Date;
-  loading?: boolean;
-}) {
-  return (
-    <SectionCard
-      className="dash-panel"
-      eyebrow="Recent production"
-      title={
-        <span>
-          Last 5 actuals
-          {rows.length > 0 ? (
-            <Badge tone="neutral" size="sm" className="ml-2 align-middle tabular-nums">
-              {rows.length}
-            </Badge>
-          ) : null}
-        </span>
-      }
-      description="Most recent production output postings."
-      // Tranche 060: the duplicate "View movement log" footer is gone — the
-      // adjacent Recent Movements panel (same column) carries the single link.
-    >
-      {loading ? (
-        <div className="flex flex-col gap-2">
-          <Skel h={44} />
-          <Skel h={44} />
-          <Skel h={44} />
-        </div>
-      ) : rows.length === 0 ? (
-        <EmptyState
-          icon={<Inbox className="h-5 w-5 text-fg-subtle" strokeWidth={2} />}
-          title="No recent production actuals."
-          description="No production-actual postings have been recorded yet."
-        />
-      ) : (
-        <ul className="flex flex-col">
-          {rows.map((r, i) => {
-            const name = r.item_name ?? r.item_id;
-            const qty = toNum(r.output_qty);
-            const time = fmtRelative(r.submitted_at ?? r.produced_at, now);
-            return (
-              <li
-                key={r.actual_id ?? `${r.item_id}-${i}`}
-                className={cn(
-                  "flex items-center gap-3 px-2 py-2.5",
-                  i < rows.length - 1 ? "border-b border-border/60" : "",
-                  i === 0 ? "rounded bg-success-softer/40" : "",
-                )}
-              >
-                <div
-                  className={cn(
-                    "flex h-7 w-7 shrink-0 items-center justify-center rounded-full border text-2xs font-semibold",
-                    i === 0
-                      ? "border-success/40 bg-success/10 text-success"
-                      : "border-border/60 bg-bg-muted text-fg-muted",
-                  )}
-                >
-                  {i + 1}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <div className="truncate text-sm font-semibold text-fg-strong">{name}</div>
-                  <div className="mt-0.5 text-3xs text-fg-muted">{time}</div>
-                </div>
-                <div className="shrink-0 text-right">
-                  <div className="text-base font-semibold tabular-nums text-success">
-                    +{qty.toLocaleString()}
-                  </div>
-                  <div className="text-3xs text-fg-faint">units</div>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
-    </SectionCard>
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Recent movements — last 3 rows from the stock ledger (movement log).
@@ -1055,14 +650,14 @@ function RecentMovements({
   return (
     <SectionCard
       className="dash-panel"
-      eyebrow="Stock ledger"
+      eyebrow="Activity"
       title={
         <span className="inline-flex items-center gap-2">
           <ArrowLeftRight className="h-4 w-4 text-accent" strokeWidth={2.25} />
-          Recent movements
+          Recent activity
         </span>
       }
-      description="The 3 most recent postings to the stock ledger."
+      description="Latest stock movements — receipts, production, shipments, counts."
       footer={
         <Link
           href="/stock/movement-log"
@@ -1089,7 +684,7 @@ function RecentMovements({
         />
       ) : (
         <ul className="flex flex-col gap-2" aria-live="polite">
-          {rows.slice(0, 3).map((r) => {
+          {rows.slice(0, 6).map((r) => {
             const meta = moveMeta(r.movement_type);
             const qty = toNum(r.qty_delta);
             const positive = qty > 0;
@@ -1100,16 +695,15 @@ function RecentMovements({
                 key={r.movement_id}
                 className="flex items-center gap-3 rounded border border-border/70 bg-bg-raised px-3 py-2.5"
               >
+                {/* Tranche 061: typographic glyphs dropped — the label is the
+                    information; the pill tone carries direction. */}
                 <span
                   className={cn(
-                    "inline-flex shrink-0 items-center gap-1.5 rounded-full px-2 py-0.5 text-2xs font-medium",
+                    "inline-flex shrink-0 items-center rounded-full px-2 py-0.5 text-2xs font-medium",
                     DIR_PILL[meta.dir],
                   )}
                   title={`${meta.label} (${r.movement_type})`}
                 >
-                  <span aria-hidden className="font-mono">
-                    {meta.glyph}
-                  </span>
                   {meta.label}
                 </span>
                 <div className="min-w-0 flex-1">
@@ -1241,75 +835,6 @@ function ProductionActivityCard({
   );
 }
 
-function MovementFlowCard({
-  buckets,
-  days,
-  loading,
-  error,
-  onRetry,
-}: {
-  buckets: FlowDayBucket[];
-  days: number;
-  loading?: boolean;
-  error?: boolean;
-  onRetry: () => void;
-}) {
-  const inboundTotal = buckets.reduce((s, b) => s + b.inbound, 0);
-  const outboundTotal = buckets.reduce((s, b) => s + b.outbound, 0);
-  const total = inboundTotal + outboundTotal;
-  return (
-    <SectionCard
-      className="dash-panel"
-      eyebrow="Trends"
-      title={
-        <span className="inline-flex items-center gap-2">
-          <ArrowLeftRight className="h-4 w-4 text-accent" strokeWidth={2.25} />
-          Stock movement flow
-        </span>
-      }
-      description={`Inbound vs outbound postings per day · last ${days} days`}
-      footer={<span>Source: stock ledger · counts per day over {days} days</span>}
-    >
-      {loading ? (
-        <div className="flex flex-col gap-3">
-          <Skel h={20} w="40%" />
-          <Skel h={96} />
-        </div>
-      ) : error ? (
-        <ErrorAlert label="Stock movement flow unavailable." onRetry={onRetry} />
-      ) : total === 0 ? (
-        <EmptyState
-          icon={<Inbox className="h-5 w-5 text-fg-subtle" strokeWidth={2} />}
-          title={`No movements in the last ${days} days.`}
-          description="No rows were posted to the stock ledger in this window."
-        />
-      ) : (
-        <div className="flex flex-col gap-3">
-          <div className="flex flex-wrap items-center gap-x-5 gap-y-1.5 text-xs">
-            <span className="inline-flex items-center gap-1.5">
-              <span className="dot bg-success" aria-hidden />
-              <span className="text-fg-muted">Inbound</span>
-              <span className="font-semibold tabular-nums text-fg-strong">
-                {inboundTotal.toLocaleString()}
-              </span>
-            </span>
-            <span className="inline-flex items-center gap-1.5">
-              <span className="dot bg-fg-subtle" aria-hidden />
-              <span className="text-fg-muted">Outbound</span>
-              <span className="font-semibold tabular-nums text-fg-strong">
-                {outboundTotal.toLocaleString()}
-              </span>
-            </span>
-          </div>
-          <MovementBars
-            buckets={buckets}
-            ariaLabel={`Stock movement postings per day over the last ${days} days: ${inboundTotal} inbound, ${outboundTotal} outbound. Use arrow keys to inspect each day.`}
-          />
-        </div>
-      )}
-    </SectionCard>
-  );
-}
 
 // Indicative inventory-value trend (RM+PKG). Honest about its nature: anchored
 // to today's real snapshot value, reconstructed backward from real movements
@@ -1522,26 +1047,11 @@ export default function DashboardPage() {
     refetchInterval: STALE_TIME_MS,
   });
 
-  const exceptionsQ = useQuery({
-    queryKey: QK_EXCEPTIONS,
-    queryFn: ({ signal }) =>
-      fetchJson<ExceptionsResponse>("/api/exceptions?status=OPEN&page_size=200", signal),
-    staleTime: STALE_TIME_MS,
-    refetchInterval: STALE_TIME_MS,
-    // Feeds the Numbers band only — never mounts for roles that don't see it.
-    enabled: showNumbers,
-  });
+  // Tranche 061: the exceptions (200-row) and latest-planning-run queries are
+  // gone with their tiles — exception triage lives in /inbox (the queue keeps
+  // stops-production rows), run meta lives on /planning.
 
-  const planningQ = useQuery({
-    queryKey: QK_PLANNING_LATEST,
-    queryFn: ({ signal }) =>
-      fetchJson<PlanningRunsResponse>("/api/planning/runs?status=completed&limit=1", signal),
-    staleTime: 120_000,
-    // Feeds the detail PlanningCard only.
-    enabled: showDetail,
-  });
-
-  // Purchase session — feeds the Today's Work queue + Focus Engine for
+  // Purchase session — feeds the Week panel, the Today's Work queue and the
   // planner/admin. Shares useCurrentSession's cache key so the procurement
   // page and this query dedupe; `enabled` keeps it off for other roles.
   const purchaseSessionQ = useQuery({
@@ -1563,16 +1073,6 @@ export default function DashboardPage() {
     staleTime: STALE_TIME_MS,
   });
 
-  const actualsQ = useQuery({
-    queryKey: QK_PRODUCTION_ACTUALS,
-    queryFn: ({ signal }) =>
-      fetchJson<ProductionActualsResponse>("/api/production-actuals/history?limit=5", signal),
-    staleTime: STALE_TIME_MS,
-    refetchInterval: STALE_TIME_MS,
-    // Feeds the detail activity band only.
-    enabled: showDetail,
-  });
-
   const purchaseOrdersQ = useQuery({
     queryKey: QK_PURCHASE_ORDERS,
     queryFn: ({ signal }) =>
@@ -1581,13 +1081,16 @@ export default function DashboardPage() {
     refetchInterval: STALE_TIME_MS,
   });
 
+  // Tranche 061: 6 rows — the single merged "Recent activity" feed (the
+  // ledger already contains production output, so the separate Recent
+  // Production panel is gone).
   const movementsQ = useQuery({
     queryKey: QK_RECENT_MOVEMENTS,
     queryFn: ({ signal }) =>
-      fetchJson<LedgerResponse>("/api/stock/ledger?limit=3", signal),
+      fetchJson<LedgerResponse>("/api/stock/ledger?limit=6", signal),
     staleTime: STALE_TIME_MS,
     refetchInterval: STALE_TIME_MS,
-    // Feeds the detail activity band only.
+    // Feeds the activity feed only.
     enabled: showDetail,
   });
 
@@ -1642,7 +1145,6 @@ export default function DashboardPage() {
   // recompute on unrelated renders.
   const flowItemsData = flowQ.data?.items;
   const flowItems = useMemo(() => flowItemsData ?? [], [flowItemsData]);
-  const healthy = flowItems.filter((i) => i.risk_tier === "healthy").length;
   const watch = flowItems.filter((i) => i.risk_tier === "watch").length;
   const critical = flowItems.filter(
     (i) => i.risk_tier === "critical" || i.risk_tier === "stockout",
@@ -1677,55 +1179,10 @@ export default function DashboardPage() {
 
   const rmValue = stockValue.rmValue;
   const fgValue = stockValue.fgValue;
-  const rmSkus = stockValue.rmSkus;
   const fgSkus = stockValue.fgSkus;
   const valueAsOf = valueQ.data?.as_of ?? null;
 
-  // Derived: exceptions.
-  const excRows = exceptionsQ.data?.rows ?? exceptionsQ.data?.data ?? [];
-  const criticalN = excRows.filter((e) => e.severity === "critical").length;
-  const warningN = excRows.filter((e) => e.severity === "warning").length;
-  const infoN = excRows.filter((e) => e.severity === "info").length;
-
-  // Derived: planning run.
-  const planRows = planningQ.data?.rows ?? planningQ.data?.data ?? [];
-  const latestRun = planRows[0] ?? null;
-
-  // Derived: production this week.
-  const prodWeekItems = useMemo<ProdWeekItem[]>(() => {
-    const rawRows = productionQ.data?.rows ?? productionQ.data?.data ?? [];
-    const byItem = new Map<string, ProdWeekItem>();
-    rawRows.forEach((row, idx) => {
-      if (row.status === "CANCELLED") return;
-      const existing = byItem.get(row.item_id);
-      const planned = toNum(row.planned_qty);
-      const completed = toNum(row.completed_qty);
-      const flowItem = flowItems.find((f) => f.item_id === row.item_id);
-      if (existing) {
-        existing.planned += planned;
-        existing.completed += completed;
-        existing.remaining += toNum(row.planned_remaining_qty);
-      } else {
-        byItem.set(row.item_id, {
-          item_id: row.item_id,
-          item_name: row.item_name ?? row.item_id,
-          planned,
-          completed,
-          remaining: toNum(row.planned_remaining_qty),
-          current_on_hand: flowItem?.current_on_hand ?? 0,
-          toneClass: TONE_BG_CYCLE[idx % TONE_BG_CYCLE.length],
-        });
-      }
-    });
-    return Array.from(byItem.values())
-      .sort((a, b) => b.planned - a.planned)
-      .slice(0, 5);
-  }, [productionQ.data, flowItems]);
-
-  // Derived: recent actuals.
-  const recentActuals = actualsQ.data?.rows ?? actualsQ.data?.data ?? [];
-
-  // Derived: recent stock-ledger movements (3 most recent).
+  // Derived: recent stock-ledger movements (merged activity feed).
   const recentMovements = movementsQ.data?.rows ?? movementsQ.data?.data ?? [];
 
   // Derived: production activity trend — count of output postings per day over
@@ -1736,20 +1193,8 @@ export default function DashboardPage() {
     return dailyCounts(timestamps, rangeDays, now);
   }, [prodTrendQ.data, now, rangeDays]);
 
-  // Derived: stock movement flow — inbound vs outbound postings per day.
-  // Direction reuses the page's single-source MOVEMENT_REGISTRY (via moveMeta);
-  // movement kinds without an explicit in/out direction fall back to the sign
-  // of qty_delta so reversals/audits still land on the correct side.
-  const movementFlow = useMemo<FlowDayBucket[]>(() => {
-    const rows = movementsTrendQ.data?.rows ?? movementsTrendQ.data?.data ?? [];
-    const mapped = rows.map((r) => {
-      const dir = moveMeta(r.movement_type).dir;
-      const direction: "in" | "out" =
-        dir === "in" ? "in" : dir === "out" ? "out" : toNum(r.qty_delta) >= 0 ? "in" : "out";
-      return { when: r.posted_at ?? r.event_at ?? null, direction };
-    });
-    return dailyFlow(mapped, rangeDays, now);
-  }, [movementsTrendQ.data, now, rangeDays]);
+  // Tranche 061: the inbound/outbound flow CHART is gone (the ribbon's edge
+  // animations carry today's flow); its trend aggregation went with it.
 
   // Derived: indicative inventory-value trend (RM+PKG). Anchored to today's
   // real snapshot value (stockValue.rmValue) and reconstructed backward from
@@ -1861,6 +1306,30 @@ export default function DashboardPage() {
     out.sort((a, b) => (a.days ?? 9_999) - (b.days ?? 9_999));
     return out;
   }, [purchaseSession, todayLocalISO]);
+
+  // Week panel rollups (Tranche 061) — Tom's three named answers: money to
+  // order this week, decided-but-not-recorded-as-PO, and goods to receive.
+  const weekProc = useMemo(
+    () =>
+      weekProcurement(
+        (purchaseSession?.pos ?? []).map((p) => ({
+          status: p.status,
+          currency: p.currency,
+          total_cost: p.total_cost,
+        })),
+      ),
+    [purchaseSession],
+  );
+  const weekProd = useMemo(() => {
+    const rawRows = productionQ.data?.rows ?? productionQ.data?.data ?? [];
+    return weekProduction(
+      rawRows.map((r) => ({
+        status: r.status,
+        planned_qty: toNum(r.planned_qty),
+        completed_qty: toNum(r.completed_qty),
+      })),
+    );
+  }, [productionQ.data]);
 
   // Forward pointers: the next commitment (all-clear focus) + Tomorrow strip.
   const forward = useMemo(() => {
@@ -2346,99 +1815,50 @@ export default function DashboardPage() {
         </div>
       ) : null}
 
-      {/* Band 3 — The Numbers (planner/admin). lg gets 2×2 so the display
-          numbers never collapse to their smallest size on common laptops
-          (DASH-V3); 4-up returns at xl. */}
-      {showNumbers ? (
-      <div className="reveal reveal-delay-4 grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-        <KpiTile
-          label="RM Inventory Value"
-          value={rmValue != null ? fmtILSCompact(rmValue) : null}
-          valueFull={rmValue != null ? fmtILS(rmValue) : null}
-          sub={
-            <span>
-              {rmSkus} raw material &amp; packaging SKUs
-              {stockValue.rmUnpriced > 0 ? (
-                <span className="text-fg-faint"> · {stockValue.rmUnpriced} unpriced</span>
-              ) : null}
-            </span>
-          }
-          tone="warning"
-          icon={<Coins className="h-5 w-5" strokeWidth={2} />}
-          href="/inventory"
-          ctaLabel="Open inventory"
-          loading={valueQ.isLoading}
-        />
-        <KpiTile
-          label="FG Inventory Value"
-          value={fgValue != null ? fmtILSCompact(fgValue) : null}
-          valueFull={fgValue != null ? fmtILS(fgValue) : null}
-          sub={
-            <span>
-              {fgSkus} finished good SKUs
-              {stockValue.fgUnpriced > 0 ? (
-                <span className="text-fg-faint"> · {stockValue.fgUnpriced} unpriced</span>
-              ) : null}
-            </span>
-          }
-          tone="success"
-          icon={<PackageCheck className="h-5 w-5" strokeWidth={2} />}
-          href="/inventory"
-          ctaLabel="Open inventory"
-          loading={valueQ.isLoading}
-        />
-        <KpiTile
-          label="Open Purchase Orders"
-          value={String(poStats.openCount)}
-          sub={
-            <span>
-              {fmtILSCompact(poStats.openValue)} open value
-              {poStats.foreignCount > 0 ? (
-                <span className="text-fg-faint">
-                  {" · "}+{poStats.foreignCount} foreign-currency
-                </span>
-              ) : null}
-              {poStats.lateCount > 0 ? (
-                <>
-                  {" · "}
-                  <span className="font-semibold text-danger">
-                    {poStats.lateCount} late
-                  </span>
-                </>
-              ) : null}
-            </span>
-          }
-          tone="info"
-          icon={<ClipboardList className="h-5 w-5" strokeWidth={2} />}
-          href="/purchase-orders"
-          ctaLabel="Open POs"
-          loading={purchaseOrdersQ.isLoading}
-        />
-        {/* Tranche 059 (DASH-T3): the headline number is the CRITICAL count —
-            info/warning rows no longer inflate the scariest-looking tile.
-            The legend keeps the full breakdown. */}
-        <KpiTileBreakdown
-          label="Critical Exceptions"
-          value={String(criticalN)}
-          tone={criticalN > 0 ? "danger" : "info"}
-          icon={<Inbox className="h-5 w-5" strokeWidth={2} />}
-          href="/inbox"
-          ctaLabel="Open inbox"
-          loading={exceptionsQ.isLoading}
-          legend={
-            <>
-              <Legend dotClass="bg-danger" label="Critical" n={criticalN} />
-              <Legend dotClass="bg-warning" label="Warning" n={warningN} />
-              <Legend dotClass="bg-info" label="Info" n={infoN} />
-            </>
-          }
-        />
-      </div>
+      {/* Band 3 — The Week (Tranche 061): the three answers Tom named —
+          ₪ to order this week per the planning session, decided-but-not-
+          recorded-as-PO, and goods awaiting receipt — plus week production
+          progress. Replaces the four-tile KPI strip, PlanningCard,
+          ProductionWeek and the donut (duplication map in the tranche doc). */}
+      {showDetail ? (
+        <div className="reveal reveal-delay-4">
+          <WeekPanel
+            procurement={
+              showNumbers
+                ? {
+                    week: weekProc,
+                    sessionExists: purchaseSession !== null,
+                    awaitingReceipt: {
+                      count: poStats.openCount,
+                      valueIls: poStats.openValue,
+                      late: poStats.lateCount,
+                    },
+                    loading: purchaseSessionQ.isLoading || purchaseOrdersQ.isLoading,
+                  }
+                : null
+            }
+            production={{
+              totalRuns: weekProd.totalRuns,
+              doneRuns: weekProd.doneRuns,
+              today: todayPlanSummary
+                ? {
+                    planned: todayPlanSummary.planned,
+                    done: todayPlanSummary.done,
+                    nextItem: todayPlanSummary.nextItem,
+                  }
+                : null,
+              slipped: slippedCount,
+              loading: productionQ.isLoading,
+            }}
+            fmtMoney={(n) => fmtILSCompact(n)}
+            fmtMoneyFull={(n) => fmtILS(n)}
+          />
+        </div>
       ) : null}
 
-      {/* Band 4 — Operational trends. Activity charts count postings per day
-          (honest, UOM-agnostic); the inventory-value card is an explicitly-
-          indicative reconstruction. A shared range selector drives all charts. */}
+      {/* Band 4 — trends + activity in one row. Two honest charts (postings
+          per day; indicative value for cost-aware roles) and the single
+          merged Recent-activity feed. */}
       <section className="reveal reveal-delay-5 flex flex-col gap-4">
         <div className="flex flex-wrap items-center justify-between gap-3">
           <SectionHeading
@@ -2450,7 +1870,11 @@ export default function DashboardPage() {
         <div
           className={cn(
             "grid grid-cols-1 gap-4",
-            canSeeValueTrend ? "lg:grid-cols-2 xl:grid-cols-3" : "lg:grid-cols-2",
+            showDetail
+              ? canSeeValueTrend
+                ? "lg:grid-cols-2 xl:grid-cols-3"
+                : "lg:grid-cols-2"
+              : "lg:grid-cols-2",
           )}
         >
           <ProductionActivityCard
@@ -2459,13 +1883,6 @@ export default function DashboardPage() {
             loading={prodTrendQ.isLoading}
             error={prodTrendQ.isError}
             onRetry={() => prodTrendQ.refetch()}
-          />
-          <MovementFlowCard
-            buckets={movementFlow}
-            days={rangeDays}
-            loading={movementsTrendQ.isLoading}
-            error={movementsTrendQ.isError}
-            onRetry={() => movementsTrendQ.refetch()}
           />
           {canSeeValueTrend ? (
             <InventoryValueCard
@@ -2477,32 +1894,7 @@ export default function DashboardPage() {
               onRetry={() => valueCostsQ.refetch()}
             />
           ) : null}
-        </div>
-      </section>
-
-      {/* Band 5 — detail: shortage risk + stock health + planning. */}
-      {showDetail ? (
-        <div className="reveal reveal-delay-6 grid grid-cols-1 gap-4 lg:grid-cols-[3fr_2fr]">
-          <ShortageRisk items={flowItems} loading={flowQ.isLoading} />
-          <div className="flex flex-col gap-4">
-            <StockHealthCard
-              healthy={healthy}
-              watch={watch}
-              critical={critical}
-              total={total}
-              loading={flowQ.isLoading}
-            />
-            <PlanningCard run={latestRun} loading={planningQ.isLoading} />
-          </div>
-        </div>
-      ) : null}
-
-      {/* Band 5 — detail: production this week + recent activity. */}
-      {showDetail ? (
-        <div className="reveal reveal-delay-7 grid grid-cols-1 gap-4 lg:grid-cols-2">
-          <ProductionWeek rows={prodWeekItems} loading={productionQ.isLoading} />
-          <div className="flex flex-col gap-4">
-            <RecentProduction rows={recentActuals} now={now} loading={actualsQ.isLoading} />
+          {showDetail ? (
             <RecentMovements
               rows={recentMovements}
               now={now}
@@ -2510,9 +1902,9 @@ export default function DashboardPage() {
               error={movementsQ.isError}
               onRetry={() => movementsQ.refetch()}
             />
-          </div>
+          ) : null}
         </div>
-      ) : null}
+      </section>
     </div>
   );
 }
