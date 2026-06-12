@@ -34,6 +34,7 @@ Index of every operating artifact. Entries use repo-root-relative paths so the P
 - `docs/portal-os/route-manifest.json` — canonical list of live routes, roles, status
 - `docs/portal-os/scorecard.json` — 10-category readiness score (machine-readable)
 - `docs/portal-os/scorecard.md` — human-readable mirror of scorecard.json
+- `docs/portal-os/dashboard-target-design.md` — dashboard design constitution v2 ("Factory Flow Instrument"): 3 design laws, Focus Engine spec, Flow Ribbon node table, Today's Work queue, Week panel, color/motion/performance budgets, phase convergence map
 
 ## Migration docs
 - `docs/portal-os/MIGRATION-HISTORY.md` — history of OS merges onto main (what was imported, what was kept, rationale)
@@ -43,6 +44,7 @@ Index of every operating artifact. Entries use repo-root-relative paths so the P
 
 ## Audit reports & plans
 - `docs/portal-os/audit-reports/2026-06-11-full-system.md` — 10-investigation full-system audit (routes, admin, flows, design, interactions, taxonomy, prices, planning paths, production reporting, PO creation)
+- `docs/portal-os/audit-reports/2026-06-12-dashboard-ui-audit.md` — dashboard UI/visual audit: 8 P0 trust findings, 6 IA findings, 7 visual-system findings, 4-phase plan (truth → hierarchy → calm → structure)
 - `docs/portal-os/improvement-plan-2026-06.md` — proposed 7-phase master improvement plan derived from the 2026-06-11 audit; pending Tom decisions T1–T6
 
 ## Tranches (history + state)
@@ -95,6 +97,9 @@ Index of every operating artifact. Entries use repo-root-relative paths so the P
 - `docs/portal-os/tranches/044-groups-v1-portal.md` — Groups v1 portal: shared taxonomy module (`src/lib/taxonomy/groups.ts`) + `GroupFilterBar`, 4 groups proxies, /inventory regex-taxonomy → real `product_group_key`/`material_group_key` with honest "ללא קבוצה" bucket + RM/PKG "לפי קו מוצר" row, FG-flow `?product_group=` chips, supply-flow `?material_group=`/`?used_by_product_group=` chips, /admin/items group filter + inline assign, new `/admin/groups` management page + nav entry; 451/451 green (435 + 16 new)
 - `docs/portal-os/tranches/043-po-price-entry-cost-drafts.md` — Price Truth portal close: optional per-line unit price on `/purchase-orders/new` + focus-mode place (`line_prices` + `confirm_price_update`, default-checked, shown only when a price was entered), 3 cost-drafts proxies, `/admin/cost-drafts` "Price updates" review queue (delta-% badges at the 25% threshold, PO source links, approve/reject with stock-value + economics invalidation), admin nav entry; 435/435 green
 - `docs/portal-os/tranches/050-production-backend-wiring.md` — Phase 6 close: submission detail view, reversal UI, variance reasons, availability columns, draft/base-batch board states
+- `docs/portal-os/tranches/061-dashboard-condense.md` — dashboard Phase 3: 10→7 sections (duplication map), NEW Week panel (₪ to order this week / approved-not-recorded-as-PO / awaiting receipt + Receive CTA, week run progress, pure `_lib/week.ts`), beauty pass (premium flow nodes, longer connectors, dot-grid faded, hero breathe retired, chart peak gridline), exceptions query removed; 622/622 green
+- `docs/portal-os/tranches/060-dashboard-hierarchy.md` — dashboard Phase 2: VerdictBand + deterministic Focus Engine (7-rule cascade) + since-last-look chips + sticky verdict mirror, Factory Flow Ribbon (5 nodes, edges animate only on real same-day movement), Today's Work unified queue (severity→category→age, cap 8), role content rules, new @mocked dashboard e2e; 616/616 green
+- `docs/portal-os/tranches/059-dashboard-truth.md` — dashboard Phase 1 (P0 trust): useNow live clock, CountUp prev→new tween + StrictMode fix, exceptions headline=critical, ILS-only PO sums, local-time day boundaries, /inbox honors ?id=; 596/596 green
 - `docs/portal-os/tranches/058-inventory-flow-production-lens.md` — Production lens: mobile day cells show EOD/−gap numbers in desktop 5-tier palette, card digest row (On hand / Demand 14d / Unfilled-or-Incoming 14d), "Covered by plan" badge + truthful insight, NEW pure `_lib/production-lens.ts` with URL-backed ?sort= ordering (Urgency/Biggest gap/Demand/Product line) honored by mobile stream AND desktop grid; 587/587 green (+11)
 - `docs/portal-os/tranches/057-inventory-flow-mobile-pack.md` — Inventory-flow mobile pack (ux-flow-audit 18 findings): NEW MobileDaySheet day-detail bottom sheet + 7×2 tappable day-strip grid (44px targets, P0 FLOW-M04/M05/M13), useMediaQuery boolean|null skeleton gate, filter-bar-sticky below TopBar, section header, CTA/chips/KPI/tab mobile fixes, "Product line" label; 576/576 green
 - `docs/portal-os/tranches/056-mobile-nav-redesign.md` — Mobile nav redesign (Tom 2026-06-12): bottom tab bar REMOVED (MobileBottomNav + bottom-nav.ts deleted, FLOW-016 remediation intentionally reversed), drawer becomes first-class (SideNav density prop, 44px rows, active-item scrollIntoView), TopBar shows current page label <sm via new pure `src/lib/nav/active.ts`; 576/576 green (−12/+8 tests)
