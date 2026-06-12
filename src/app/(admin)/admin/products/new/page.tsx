@@ -742,14 +742,6 @@ function Step5Suppliers({
       }));
   }, [itemsQuery.data]);
 
-  const componentsById = useMemo(() => {
-    const map = new Map<string, ComponentRow>();
-    for (const c of componentsQuery.data?.rows ?? []) {
-      map.set(c.component_id, c);
-    }
-    return map;
-  }, [componentsQuery.data]);
-
   const openQcFor = (kind: "component" | "item", id: string) => {
     setQcTarget({ kind, id } as typeof qcTarget extends infer T ? T : never);
     setQcOpen(true);

@@ -132,14 +132,6 @@ function VersionStatusBadge({
   return <Badge tone="neutral" dotted>{version.status}</Badge>;
 }
 
-// --- exception helpers ---
-
-function SeverityBadge({ severity }: { severity: string }): JSX.Element {
-  if (severity === "critical") return <Badge tone="danger" dotted>critical</Badge>;
-  if (severity === "warning") return <Badge tone="warning" dotted>warning</Badge>;
-  return <Badge tone="info" dotted>info</Badge>;
-}
-
 // ---------------------------------------------------------------------------
 // iter 13: Draft status warning card
 // ---------------------------------------------------------------------------

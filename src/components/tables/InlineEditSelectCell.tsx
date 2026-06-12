@@ -41,7 +41,7 @@ import {
   type ReactNode,
 } from "react";
 import * as Popover from "@radix-ui/react-popover";
-import { Pencil, Loader2, Check, ChevronDown, Search, X, Plus } from "lucide-react";
+import { Loader2, Check, ChevronDown, Search, X, Plus } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 export interface InlineEditSelectOption {

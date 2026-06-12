@@ -160,7 +160,6 @@ type GroupBy = "none" | "category" | "uom" | "tier";
 const LOW_STOCK_THRESHOLD = 10; // generic v1; future: pull from items.safety_stock
 const CRITICAL_STOCK_THRESHOLD = 3;
 const STALE_DAYS = 14;
-const STALE_MS = STALE_DAYS * 24 * 60 * 60 * 1000;
 
 // === Helpers ==============================================================
 async function fetchStock(itemType: TabType): Promise<StockRow[]> {
@@ -211,15 +210,6 @@ function fmtIlsAccountancy(val: string | null | undefined): {
     isNeg,
     isZero,
   };
-}
-
-function fmtNumber(val: string | number, decimals = 2): string {
-  const n = typeof val === "number" ? val : Number(val);
-  if (isNaN(n)) return String(val);
-  return n.toLocaleString("en-US", {
-    minimumFractionDigits: decimals,
-    maximumFractionDigits: decimals,
-  });
 }
 
 function smartRelativeDate(iso: string | null): { label: string; aria: string; daysAgo: number } {

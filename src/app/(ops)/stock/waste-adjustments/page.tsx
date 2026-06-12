@@ -34,17 +34,15 @@ import { cn } from "@/lib/cn";
 
 type ItemType = "FG" | "RM" | "PKG";
 
-const WASTE_REASON_CODES = [
-  "breakage",
-  "spoilage",
-  "production_waste",
-  "sampling",
-  "theft_loss",
-  "found_stock",
-  "correction",
-  "other",
-] as const;
-type WasteReasonCode = (typeof WASTE_REASON_CODES)[number];
+type WasteReasonCode =
+  | "breakage"
+  | "spoilage"
+  | "production_waste"
+  | "sampling"
+  | "theft_loss"
+  | "found_stock"
+  | "correction"
+  | "other";
 
 const REASON_CODES_BY_DIRECTION: Record<
   "loss" | "positive",
@@ -195,33 +193,6 @@ function IconArrowUp() {
   return (
     <svg width="20" height="20" viewBox="0 0 20 20" fill="none" aria-hidden="true">
       <path d="M10 16V4M4 10l6-6 6 6" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function IconCheck() {
-  return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="12" cy="12" r="11" stroke="currentColor" strokeWidth="2" />
-      <path d="M7 12.5l3.5 3.5 6.5-7" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function IconClock() {
-  return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="12" cy="12" r="11" stroke="currentColor" strokeWidth="2" />
-      <path d="M12 7v5l3.5 3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
-}
-
-function IconX() {
-  return (
-    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" aria-hidden="true">
-      <circle cx="12" cy="12" r="11" stroke="currentColor" strokeWidth="2" />
-      <path d="M8.5 8.5l7 7M15.5 8.5l-7 7" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
     </svg>
   );
 }

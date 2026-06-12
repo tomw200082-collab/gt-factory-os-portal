@@ -1007,23 +1007,6 @@ export default function GoodsReceiptPage() {
     return [...items, ...comps];
   }
 
-  // PO combobox options
-  const poOptions: ComboboxOption[] = useMemo(() => {
-    const rows = openPosQuery.data?.rows ?? [];
-    const opts: ComboboxOption[] = rows.map((p) => ({
-      value: p.po_id,
-      label: `${p.po_number} · ${p.supplier_id} · ${p.status}${p.expected_receive_date ? ` · exp ${p.expected_receive_date}` : ""}`,
-    }));
-    // Cycle 16: synthetic option for URL-locked PO not in list
-    if (urlPoLocked && urlPoHeader && !rows.some((p) => p.po_id === urlPoHeader.po_id)) {
-      opts.unshift({
-        value: urlPoHeader.po_id,
-        label: `${urlPoHeader.po_number} · ${urlPoHeader.supplier_id} · ${urlPoHeader.status}`,
-      });
-    }
-    return opts;
-  }, [openPosQuery.data, urlPoLocked, urlPoHeader]);
-
   // Selected supplier display name (improvement #6)
   const selectedSupplierName = useMemo(() => {
     return suppliersQuery.data?.rows.find((s) => s.supplier_id === supplierId)?.supplier_name_official ?? "";

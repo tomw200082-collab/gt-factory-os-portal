@@ -8,7 +8,7 @@
 //   9. Per-tab empty state with Archive icon + better messaging
 // ---------------------------------------------------------------------------
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Archive, RotateCcw } from "lucide-react";

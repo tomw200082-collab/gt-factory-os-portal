@@ -2,10 +2,12 @@
 #
 # Runs on every PR against main. Required check for merge.
 #
-# Checks: typecheck + vitest + registry presence.
+# Checks: lint + typecheck + vitest + registry presence.
 # vitest was enabled in tranche 035 once the unit suite was driven fully green
 # (366 passing, 5 documented skips) — gating it stops the silent test-rot that
-# had let 35 assertions drift. lint / playwright remain for a future tranche.
+# had let 35 assertions drift. lint was enabled 2026-06-12 once the codebase
+# was driven to 0 errors (eslint flat config; max-warnings guards against
+# error-level regressions only — warn-level ratchet rules don't block).
 
 name: portal-pr-guard
 
@@ -33,6 +35,9 @@ jobs:
 
       - name: Install
         run: npm ci
+
+      - name: Lint
+        run: npx eslint .
 
       - name: Typecheck
         run: npx tsc --noEmit

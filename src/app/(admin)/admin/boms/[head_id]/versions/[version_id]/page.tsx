@@ -338,7 +338,6 @@ export default function AdminBomEditorPage({ params }: PageProps): JSX.Element {
   const statusLower = (version?.status ?? "").toLowerCase();
   const isDraft = statusLower === "draft";
   const editMode = isDraft && isAdmin;
-  const activeVersionId = head?.active_version_id ?? null;
 
   const lines = useMemo(() => {
     return (linesQuery.data?.rows ?? [])

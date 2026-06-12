@@ -24,7 +24,6 @@ import { classifyPo, todayISO } from "../_lib/decision";
 import {
   allResolved,
   buildFocusQueue,
-  isResolved,
   nextUnresolvedId,
   positionOf,
   remainingCount,

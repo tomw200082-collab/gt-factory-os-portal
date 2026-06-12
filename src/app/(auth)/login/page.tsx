@@ -300,7 +300,7 @@ function MagicLinkLogin() {
     "idle",
   );
   const [error, setError] = useState<string | null>(null);
-  const [sentAt, setSentAt] = useState<Date | null>(null);
+  const [, setSentAt] = useState<Date | null>(null);
   const [isResending, setIsResending] = useState(false);
   const [cooldownRemaining, setCooldownRemaining] = useState(0);
 

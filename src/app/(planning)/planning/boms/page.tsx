@@ -129,7 +129,7 @@ type ListEnvelope<T> = { rows: T[]; count: number; total?: number };
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url, { headers: { Accept: "application/json" } });
   if (!res.ok) {
-    const body = await res.text().catch(() => "");
+    await res.text().catch(() => "");
     throw new Error("Could not load data. Check your connection and try refreshing.");
   }
   return (await res.json()) as T;
@@ -2984,7 +2984,7 @@ export default function PlanningBomsPage(): JSX.Element {
                 {/* Left border line */}
                 <div className="absolute left-1.5 top-1 bottom-1 w-px bg-border" />
                 <ul className="space-y-3">
-                  {mockVersionTimeline.map((entry, idx) => (
+                  {mockVersionTimeline.map((entry) => (
                     <li key={entry.version} className="relative flex items-start gap-2.5">
                       {/* Dot indicator */}
                       {entry.status === "Active" ? (
