@@ -24,6 +24,7 @@ import { usePlannedInflow, indexByItemDate } from "./_lib/plannedInflow";
 import { useGroups } from "@/lib/taxonomy/groups";
 import type { FlowItem, FlowQueryParams } from "./_lib/types";
 import { isAtRisk } from "./_lib/risk";
+import { parseSortKey } from "./_lib/production-lens";
 import { cn } from "@/lib/cn";
 
 const UNMAPPED_GATE = 0.1;
@@ -87,6 +88,9 @@ export function InventoryFlowClient() {
   // ---------------------------------------------------------------------------
   const q = (searchParams.get("q") ?? "").trim().toLowerCase();
   const atRiskOnlyClient = searchParams.get("at_risk_only") !== "false";
+  // Tranche 058 — production-lens ordering, URL-backed via ?sort= (chips in
+  // FilterBar). Honored by both the mobile card stream and the desktop grid.
+  const sortKey = parseSortKey(searchParams.get("sort"));
 
   const filteredItems: FlowItem[] = useMemo(() => {
     if (!data) return [];
@@ -304,6 +308,7 @@ export function InventoryFlowClient() {
                 summary={summary}
                 overlayEnabled={overlayEnabled}
                 plannedByItemDate={plannedByItemDate}
+                sortKey={sortKey}
               />
             ) : (
               <FlowGridDesktop
@@ -311,6 +316,7 @@ export function InventoryFlowClient() {
                 overlayEnabled={overlayEnabled}
                 plannedByItemDate={plannedByItemDate}
                 plannedRows={plannedRows}
+                sortKey={sortKey}
                 onSelectItem={(itemId) =>
                   router.push(
                     `/planning/inventory-flow/${encodeURIComponent(itemId)}`,
