@@ -763,6 +763,32 @@ export default function InboxListPage() {
     [allRows],
   );
 
+  // -------------------------------------------------------------------------
+  // Tranche 059 (DASH-T6): honor a deep-linked ?id=<exception_id>.
+  // /exceptions?id= has forwarded the param here since Tranche 041, but the
+  // inbox dropped it — the dashboard's Critical-Today CTA landed the operator
+  // on a generic list. When the rows arrive, focus + scroll the matching row
+  // once per id (re-runs harmlessly until the row is present).
+  // -------------------------------------------------------------------------
+  const deepLinkId = searchParams?.get("id") ?? null;
+  const consumedDeepLinkRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!deepLinkId || consumedDeepLinkRef.current === deepLinkId) return;
+    const idx = mainRows.findIndex((r) => r.id === deepLinkId);
+    if (idx < 0) return; // rows still loading, or id lives in the muted lane
+    consumedDeepLinkRef.current = deepLinkId;
+    setFocusedIdx(idx);
+    requestAnimationFrame(() => {
+      const reduce =
+        typeof window !== "undefined" &&
+        typeof window.matchMedia === "function" &&
+        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      document
+        .querySelector(`[data-row-id="${CSS.escape(deepLinkId)}"]`)
+        ?.scrollIntoView({ block: "center", behavior: reduce ? "auto" : "smooth" });
+    });
+  }, [deepLinkId, mainRows]);
+
   const visibleSelectableIds = useMemo(() => {
     const out: string[] = [];
     for (const r of mainRows) {

@@ -691,6 +691,8 @@
   .reveal-delay-4 { animation-delay: 160ms; }
   .reveal-delay-5 { animation-delay: 200ms; }
   .reveal-delay-6 { animation-delay: 240ms; }
+  /* Tranche 060: unique tail — the last band no longer pops in with band 6. */
+  .reveal-delay-7 { animation-delay: 280ms; }
 
   /* ══════════════════════════════════════════════════════════════════════
      Inventory Flow — grid body polish (2026-05-05)
@@ -3257,7 +3259,8 @@
       );
     background-size: 28px 28px;
     background-position: 0 0;
-    opacity: 0.45;
+    /* Tranche 061 calm pass: texture, not noise — faded hard. */
+    opacity: 0.18;
     -webkit-mask-image: linear-gradient(
       to bottom,
       transparent 0%,
@@ -3294,26 +3297,19 @@
     background-color: hsl(var(--bg-raised) / 0.65);
   }
   .dash-hero::before {
-    /* Inner top glow — accent halo with a slow breathing motion that
-       reads as "factory pulse". Subtle: a 6-second cycle, not a
-       distracting strobe. */
+    /* Inner top glow — static accent halo. Tranche 061 motion budget:
+       the "breathe" animation is retired (motion is reserved for the live
+       dot, count-up, chart draw-in and the danger pulse). */
     content: "";
     position: absolute;
     inset: -1px -1px auto -1px;
     height: 200px;
     pointer-events: none;
     z-index: 0;
+    opacity: 0.9;
     background:
       radial-gradient(65% 100% at 18% 0%, hsl(var(--accent) / 0.22) 0%, transparent 65%),
       radial-gradient(45% 100% at 88% 0%, hsl(var(--info) / 0.14) 0%, transparent 70%);
-    animation: dash-hero-breathe 6s ease-in-out infinite;
-  }
-  @keyframes dash-hero-breathe {
-    0%, 100% { opacity: 0.85; }
-    50%      { opacity: 1.00; }
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .dash-hero::before { animation: none; opacity: 0.9; }
   }
   .dash-hero::after {
     /* Hairline accent at the very top edge */
@@ -3745,5 +3741,191 @@
   }
   @media (prefers-reduced-motion: reduce) {
     .dash-legend-bar-fill { transition: none; }
+  }
+
+  /* ══════════════════════════════════════════════════════════════════════
+     Dashboard Bands 0–2 (Tranche 060) — Verdict & Focus, Factory Flow
+     Ribbon, Today's Work. Additive, token-driven, theme-aware,
+     reduced-motion safe. See docs/portal-os/dashboard-target-design.md.
+     ══════════════════════════════════════════════════════════════════════ */
+
+  /* ── Band 0: verdict band extras (composes on .dash-hero). */
+  .dash-verdict-date {
+    @apply font-normal text-fg-muted;
+    font-size: 0.55em;
+    letter-spacing: 0;
+    -webkit-text-fill-color: hsl(var(--fg-muted));
+  }
+  .dash-focus {
+    @apply max-w-3xl text-base font-semibold leading-relaxed text-fg-strong;
+  }
+  .dash-focus[data-tone="danger"]  { color: hsl(var(--danger)); }
+  .dash-focus[data-tone="warning"] { color: hsl(var(--warning-fg)); }
+  .dash-focus[data-tone="success"] { color: hsl(var(--success-fg)); }
+  .dash-focus-link {
+    @apply rounded underline-offset-4 hover:underline;
+    color: inherit;
+  }
+
+  /* Slim sticky mirror — zero-height wrapper sticks below the h-16 TopBar;
+     the bar inside fades in only once the full band has scrolled out. */
+  .dash-verdict-mini-wrap {
+    position: sticky;
+    top: 4rem; /* TopBar h-16 */
+    z-index: 30;
+    height: 0;
+    overflow: visible;
+  }
+  .dash-verdict-mini {
+    @apply mx-auto flex max-w-3xl items-center gap-2 rounded-b-lg border border-t-0
+           border-border/70 bg-bg-raised/90 px-4 py-2;
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    box-shadow: 0 8px 24px -12px hsl(var(--shadow-color-deep) / 0.18);
+    opacity: 0;
+    transform: translateY(-110%);
+    pointer-events: none;
+    transition: opacity 200ms ease-out, transform 200ms ease-out;
+  }
+  .dash-verdict-mini.is-stuck {
+    opacity: 1;
+    transform: translateY(0);
+    pointer-events: auto;
+  }
+  .dash-verdict-mini[data-tone="danger"]  { border-color: hsl(var(--danger) / 0.4); }
+  .dash-verdict-mini[data-tone="warning"] { border-color: hsl(var(--warning) / 0.4); }
+  .dash-verdict-mini .dash-hero-status-dot[data-tone="success"] { background: hsl(var(--success)); }
+  .dash-verdict-mini .dash-hero-status-dot[data-tone="danger"]  { background: hsl(var(--danger)); }
+  .dash-verdict-mini .dash-hero-status-dot[data-tone="warning"] { background: hsl(var(--warning)); }
+  .dash-verdict-mini .dash-hero-status-dot[data-tone="neutral"] { background: hsl(var(--fg-subtle)); }
+  @media (prefers-reduced-motion: reduce) {
+    .dash-verdict-mini { transition: none; }
+  }
+
+  /* ── Band 1: Factory Flow Ribbon. Mobile: scroll-snap strip; sm+: grid. */
+  .dash-ribbon {
+    scroll-snap-type: x proximity;
+  }
+  .dash-node {
+    --node-tone: var(--border-strong);
+    @apply relative flex min-w-[160px] shrink-0 snap-center flex-col gap-1 overflow-hidden
+           rounded-xl border border-border/70 px-4 py-3.5 shadow-raised
+           sm:min-w-0 sm:shrink;
+    /* Premium pass (Tranche 061): the ribbon is the page's instrument
+       cluster — same gradient language as .kpi-tile, tinted by node state. */
+    background: linear-gradient(
+      160deg,
+      hsl(var(--bg-raised)) 0%,
+      hsl(var(--bg-raised) / 0.97) 60%,
+      hsl(var(--node-tone) / 0.06) 100%
+    );
+    transition:
+      border-color 200ms ease-out,
+      box-shadow 200ms ease-out,
+      transform 200ms ease-out;
+  }
+  .dash-node::before {
+    /* Tone rail along the top — fades along its length like .kpi-tile. */
+    content: "";
+    position: absolute;
+    inset: 0 0 auto 0;
+    height: 2.5px;
+    pointer-events: none;
+    background: linear-gradient(
+      to right,
+      hsl(var(--node-tone) / 0.85) 0%,
+      hsl(var(--node-tone) / 0.35) 55%,
+      transparent 100%
+    );
+  }
+  .dash-node[data-state="ok"]     { --node-tone: var(--success); }
+  .dash-node[data-state="warn"]   { --node-tone: var(--warning); }
+  .dash-node[data-state="danger"] { --node-tone: var(--danger); }
+  .dash-node[data-state="quiet"]  { opacity: 0.55; }
+  .dash-node[data-state="quiet"]::before { background: none; }
+  .dash-node.is-link:hover,
+  .dash-node.is-link:focus-visible {
+    transform: translateY(-2px);
+    border-color: hsl(var(--node-tone) / 0.6);
+    box-shadow:
+      0 1px 0 0 hsl(var(--shadow-color) / 0.4),
+      0 14px 32px -10px hsl(var(--shadow-color-deep) / 0.16);
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dash-node { transition: none; }
+    .dash-node.is-link:hover,
+    .dash-node.is-link:focus-visible { transform: none; }
+  }
+  .dash-node-label {
+    @apply text-3xs font-semibold uppercase tracking-sops text-fg-subtle;
+  }
+  .dash-node-dot {
+    @apply h-2 w-2 shrink-0 rounded-full;
+    background: hsl(var(--node-tone));
+    box-shadow: 0 0 0 3px hsl(var(--node-tone) / 0.18);
+  }
+  .dash-node[data-state="danger"] .dash-node-dot {
+    animation: dash-hero-status-pulse 1.6s ease-in-out infinite;
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dash-node[data-state="danger"] .dash-node-dot { animation: none; }
+  }
+  .dash-node-value {
+    @apply mt-1 font-semibold leading-none tabular-nums tracking-tight text-fg-strong;
+    font-size: 1.75rem;
+  }
+  .dash-node-sub {
+    @apply mt-0.5 text-2xs leading-relaxed text-fg-muted;
+  }
+  /* Drill card — revealed on hover/focus-within; desktop only (mobile taps
+     navigate via the node link). */
+  .dash-node-card {
+    @apply pointer-events-none absolute left-1/2 top-[calc(100%+6px)] z-20 hidden
+           w-56 -translate-x-1/2 flex-col gap-1.5 rounded-md border border-border
+           bg-bg-raised px-3 py-2.5 opacity-0 shadow-pop sm:flex;
+    transition: opacity 150ms ease-out;
+  }
+  .dash-node:hover .dash-node-card,
+  .dash-node:focus-visible .dash-node-card,
+  .dash-node:focus-within .dash-node-card {
+    opacity: 1;
+  }
+
+  /* Edge connector — dash-flow runs ONLY when a movement crossed the edge
+     today (motion encodes a real event; a still edge is information). */
+  .dash-edge {
+    @apply flex shrink-0 items-center px-0.5 text-border-strong sm:px-1;
+  }
+  .dash-edge-line { stroke: currentColor; }
+  .dash-edge-head { stroke: currentColor; }
+  .dash-edge[data-active] {
+    color: hsl(var(--accent));
+  }
+  .dash-edge[data-active] .dash-edge-line {
+    stroke-dasharray: 4 3;
+    animation: dash-edge-flow 1.4s linear infinite;
+  }
+  @keyframes dash-edge-flow {
+    to { stroke-dashoffset: -14; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .dash-edge[data-active] .dash-edge-line { animation: none; }
+  }
+
+  /* ── Band 2: Today's Work extras. */
+  .dash-tomorrow {
+    @apply flex flex-wrap items-center gap-2;
+  }
+  .dash-tomorrow-label {
+    @apply text-3xs font-semibold uppercase tracking-sops text-fg-subtle;
+  }
+
+  /* ── Band 3: Week panel detail rows (Tranche 061). */
+  .dash-week-row {
+    @apply flex items-center gap-2 rounded-md border border-border/50 bg-bg/40
+           px-2.5 py-1.5 text-xs;
+  }
+  :root.dark .dash-week-row {
+    background-color: hsl(var(--bg) / 0.25);
   }
 }
