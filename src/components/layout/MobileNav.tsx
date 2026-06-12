@@ -138,7 +138,7 @@ export function MobileNav() {
         aria-modal="true"
         aria-labelledby="mobile-nav-title"
         className={cn(
-          "fixed inset-y-0 left-0 z-50 flex w-[min(288px,85vw)] flex-col border-r border-border/70 bg-bg shadow-raised transition-transform duration-200 ease-out md:hidden",
+          "fixed inset-y-0 left-0 z-50 flex w-[min(320px,88vw)] flex-col border-r border-border/70 bg-bg shadow-raised transition-transform duration-200 ease-out md:hidden",
           open ? "translate-x-0" : "-translate-x-full",
         )}
         style={{ paddingTop: "env(safe-area-inset-top, 0px)" }}
@@ -195,9 +195,12 @@ export function MobileNav() {
           </button>
         </div>
 
-        {/* Nav content — pb-safe ensures content clears the iPhone home indicator */}
+        {/* Nav content — pb-safe ensures content clears the iPhone home indicator.
+            Comfortable density (Tranche 056): with the bottom tab bar removed
+            this drawer is the only mobile navigation, so rows render at ≥44px
+            touch-target size. */}
         <div className="min-h-0 flex-1 overflow-y-auto p-4 pb-[max(1rem,env(safe-area-inset-bottom))]">
-          <SideNav onNavigate={() => setOpen(false)} />
+          <SideNav density="comfortable" onNavigate={() => setOpen(false)} />
         </div>
       </aside>
     </>
