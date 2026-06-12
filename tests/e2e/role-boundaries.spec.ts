@@ -24,7 +24,6 @@ test.describe.configure({ mode: "serial" });
 // Synthetic IDs used for surfaces that require a path param. The pages
 // must block the role BEFORE attempting any data fetch — so an arbitrary
 // ID is fine for negative-path tests.
-const FAKE_PO_ID = "00000000-0000-0000-0000-000000000000";
 const FAKE_SUB_ID = "00000000-0000-0000-0000-000000000000";
 const FAKE_ITEM_ID = "00000000-0000-0000-0000-000000000000";
 

@@ -32,7 +32,6 @@ import {
   DetailTabEmpty,
   DetailTabError,
   DetailTabLoading,
-  PendingTabPlaceholder,
   type LinkageGroup,
   type TabDescriptor,
   type FieldRow,

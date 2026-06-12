@@ -52,7 +52,6 @@ export function MobileCardStream({
   disableRowLink = false,
   showCoverageHeatmap = false,
   coverageDaysMap,
-  onSelectItem,
   showMovementSparklines = false,
   movementByItemId,
 }: MobileCardStreamProps) {
