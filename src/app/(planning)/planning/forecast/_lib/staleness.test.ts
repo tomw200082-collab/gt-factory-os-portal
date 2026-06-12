@@ -98,4 +98,52 @@ describe("forecastStaleness (Tranche 063 FLOW-F01)", () => {
     );
     expect(r.kind).toBe("stale");
   });
+
+  // -------------------------------------------------------------------------
+  // Monthly cadence — horizon_weeks counts MONTHLY BUCKETS on the live
+  // monthly cadence (HORIZON_WEEKS_V1 = 2 means two calendar months).
+  // -------------------------------------------------------------------------
+
+  it("M1 monthly: horizon_weeks=2 covers the whole second month, not 14 days", () => {
+    const r = forecastStaleness(
+      [
+        version({
+          cadence: "monthly",
+          horizon_start_at: "2026-05-01T00:00:00Z",
+          horizon_weeks: 2,
+        }),
+      ],
+      NOW, // 2026-06-12 — week-math would have expired on 2026-05-15
+    );
+    expect(r.kind).toBe("covered");
+    if (r.kind === "covered") {
+      expect(r.horizonEnd.toISOString()).toBe("2026-07-01T00:00:00.000Z");
+    }
+  });
+
+  it("M2 monthly: horizon elapsed after N months → stale", () => {
+    const r = forecastStaleness(
+      [
+        version({
+          cadence: "monthly",
+          horizon_start_at: "2026-03-01T00:00:00Z",
+          horizon_weeks: 2,
+        }),
+      ],
+      NOW, // ended 2026-05-01
+    );
+    expect(r.kind).toBe("stale");
+  });
+
+  it("M3 weekly cadence keeps week-denominated math", () => {
+    expect(
+      horizonEndOf(
+        version({
+          cadence: "weekly",
+          horizon_start_at: "2026-06-01T00:00:00Z",
+          horizon_weeks: 2,
+        }),
+      )?.toISOString(),
+    ).toBe("2026-06-15T00:00:00.000Z");
+  });
 });

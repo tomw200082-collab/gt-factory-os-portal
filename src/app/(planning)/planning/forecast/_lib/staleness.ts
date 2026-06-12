@@ -9,6 +9,12 @@
 //             current date (elapsed, or — edge case — not started yet), so
 //             planning recommendations may be stale.
 //
+// Cadence-aware horizon math (post-tranche-063 review fix): the backend's
+// `horizon_weeks` column counts BUCKETS, not calendar weeks — on the live
+// monthly cadence `horizon_weeks = 2` means two calendar months. Treating
+// it as 14 days would mark a perfectly valid monthly forecast "stale"
+// mid-month. Weekly/daily cadences keep week-denominated math.
+//
 // When several published versions exist (shouldn't normally happen), the one
 // whose horizon ends latest decides — the most generous honest answer.
 // ---------------------------------------------------------------------------
@@ -16,6 +22,7 @@
 export interface StalenessVersionInput {
   version_id: string;
   status: string;
+  cadence?: "monthly" | "weekly" | "daily" | string;
   horizon_start_at: string;
   horizon_weeks: number;
 }
@@ -28,11 +35,18 @@ export type ForecastStaleness =
 const WEEK_MS = 7 * 24 * 60 * 60 * 1000;
 
 export function horizonEndOf(v: StalenessVersionInput): Date | null {
-  const start = new Date(v.horizon_start_at).getTime();
-  if (!Number.isFinite(start)) return null;
-  const weeks = Number(v.horizon_weeks);
-  if (!Number.isFinite(weeks) || weeks <= 0) return null;
-  return new Date(start + weeks * WEEK_MS);
+  const start = new Date(v.horizon_start_at);
+  if (!Number.isFinite(start.getTime())) return null;
+  const buckets = Number(v.horizon_weeks);
+  if (!Number.isFinite(buckets) || buckets <= 0) return null;
+  if (v.cadence === "monthly") {
+    // N monthly buckets — horizon ends at the same day-of-month N months
+    // later (UTC), matching the backend's bucket interpretation.
+    const end = new Date(start.getTime());
+    end.setUTCMonth(end.getUTCMonth() + buckets);
+    return end;
+  }
+  return new Date(start.getTime() + buckets * WEEK_MS);
 }
 
 export function forecastStaleness(
