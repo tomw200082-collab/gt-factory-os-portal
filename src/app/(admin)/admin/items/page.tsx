@@ -490,7 +490,7 @@ function ItemsPageInner(): JSX.Element {
               noun="items"
             />
             <Badge tone="neutral" dotted>
-              live API
+              Live data
             </Badge>
           </>
         }

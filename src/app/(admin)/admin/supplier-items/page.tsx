@@ -456,7 +456,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
         description="Map suppliers to the components and items they supply. Set lead times, MOQ, and pack sizes. Mark the primary supplier per item."
         meta={
           <Badge tone="neutral" dotted>
-            live API
+            Live data
           </Badge>
         }
         actions={
@@ -467,7 +467,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
               onClick={() => setShowCreate(true)}
             >
               <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
-              New supplier-item
+              New sourcing link
             </button>
           ) : null
         }
@@ -609,7 +609,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
           </SectionCard>
 
           <SectionCard
-            eyebrow="Supplier-items"
+            eyebrow="Sourcing links"
             title={`Showing ${filtered.length} of ${rows.length}`}
             contentClassName="p-0"
           >

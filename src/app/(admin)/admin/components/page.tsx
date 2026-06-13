@@ -586,7 +586,7 @@ function ComponentsPageInner(): JSX.Element {
               noun="components"
             />
             <Badge tone="neutral" dotted>
-              live API
+              Live data
             </Badge>
           </>
         }
@@ -956,7 +956,7 @@ function ComponentsPageInner(): JSX.Element {
               </div>
               <div>
                 <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Code (locked)
+                  Component ID (read-only)
                 </span>
                 <span className="font-mono text-fg">
                   {selectedComponent.component_id}
@@ -1033,7 +1033,7 @@ function ComponentsPageInner(): JSX.Element {
               </div>
               <div>
                 <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Stock unit (locked)
+                  Stock unit (read-only)
                 </span>
                 <span className="text-fg">
                   {selectedComponent.inventory_uom ?? "—"}
@@ -1041,7 +1041,7 @@ function ComponentsPageInner(): JSX.Element {
               </div>
               <div>
                 <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Purchase unit (locked)
+                  Purchase unit (read-only)
                 </span>
                 <span className="text-fg">
                   {selectedComponent.purchase_uom ?? "—"}
@@ -1049,7 +1049,7 @@ function ComponentsPageInner(): JSX.Element {
               </div>
               <div>
                 <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Purchase → stock factor (locked)
+                  Units per purchase pack (read-only)
                 </span>
                 <span className="text-fg">
                   {formatQty(
@@ -1073,7 +1073,7 @@ function ComponentsPageInner(): JSX.Element {
               </div>
               <div>
                 <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  MOQ (purchase UOM)
+                  Min. order quantity (purchase unit)
                 </span>
                 <span className="text-fg">
                   {selectedComponent.moq_purchase_uom != null

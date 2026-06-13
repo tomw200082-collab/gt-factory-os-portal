@@ -425,7 +425,7 @@ export default function AdminPlanningPolicyPage(): JSX.Element {
               {policyQuery.data?.count ?? 0} keys
             </Badge>
             <Badge tone="neutral" dotted>
-              live API
+              Live data
             </Badge>
           </>
         }

@@ -394,7 +394,7 @@ function SuppliersPageInner(): JSX.Element {
               noun="suppliers"
             />
             <Badge tone="neutral" dotted>
-              live API
+              Live data
             </Badge>
           </>
         }

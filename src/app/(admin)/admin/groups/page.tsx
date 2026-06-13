@@ -163,12 +163,12 @@ function NewGroupForm({
           className="input font-mono"
           value={draft.key}
           onChange={(e) => setDraft((d) => ({ ...d, key: e.target.value }))}
-          placeholder="lower_snake"
+          placeholder="e.g. cocktail_mix"
           data-testid="groups-new-key"
         />
         {draft.key && !keyValid ? (
           <span className="mt-1 block text-3xs text-danger-fg">
-            lower_snake only ([a-z0-9_]+)
+            Use lowercase letters, numbers, and underscores only (e.g. cocktail_mix)
           </span>
         ) : null}
       </label>
@@ -587,7 +587,7 @@ export default function AdminGroupsPage(): JSX.Element {
               groups
             </Badge>
             <Badge tone="neutral" dotted>
-              live API
+              Live data
             </Badge>
           </>
         }
@@ -662,7 +662,7 @@ export default function AdminGroupsPage(): JSX.Element {
         <SectionCard
           eyebrow="Create"
           title={`New ${tab} group`}
-          description="Key is permanent (lower_snake). Names and order can be edited later; assignment to items/components happens on the Items / Components pages."
+          description="The key is permanent. Names and display order can be edited later; assignment to products / materials happens on the Items / Components pages."
           density="compact"
         >
           <NewGroupForm
@@ -679,8 +679,8 @@ export default function AdminGroupsPage(): JSX.Element {
         title={tab === "product" ? "Product groups" : "Material groups"}
         description={
           tab === "product"
-            ? "FG categories — member counts come from items.product_group_key."
-            : "RM/PKG categories — member counts come from components.material_group_key."
+            ? "Finished-goods categories. Member counts reflect how many products are assigned to each group."
+            : "Raw-material and packaging categories. Member counts reflect how many materials are assigned to each group."
         }
         contentClassName="p-0"
       >

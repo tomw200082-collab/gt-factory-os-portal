@@ -357,7 +357,7 @@ export default function AdminSkuHealthPage(): JSX.Element {
         meta={
           <>
             <Badge tone="info" dotted>{stats.total} active FG</Badge>
-            <Badge tone="neutral" dotted>live API</Badge>
+            <Badge tone="neutral" dotted>Live data</Badge>
           </>
         }
       />
