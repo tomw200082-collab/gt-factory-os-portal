@@ -1806,22 +1806,22 @@ function SupplierItemsTable({
           <table className="w-full border-collapse text-xs">
             <thead>
               <tr className="border-b border-border/70 bg-bg-subtle/60">
-                <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Supplier
                 </th>
-                <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Relationship
                 </th>
-                <th className="px-3 py-2 text-center text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                <th scope="col" className="px-3 py-2 text-center text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Primary
                 </th>
-                <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Order UoM
                 </th>
-                <th className="px-3 py-2 text-center text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                <th scope="col" className="px-3 py-2 text-center text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Lead time
                 </th>
-                <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                   Approval
                 </th>
               </tr>

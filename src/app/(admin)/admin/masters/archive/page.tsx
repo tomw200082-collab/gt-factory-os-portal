@@ -482,10 +482,10 @@ function ArchiveSection({
         <table className="w-full border-collapse text-sm">
           <thead>
             <tr className="border-b border-border/70 bg-bg-subtle/60">
-              <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Name</th>
-              <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Detail</th>
-              <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Archived</th>
-              <th className="px-3 py-2" />
+              <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Name</th>
+              <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Detail</th>
+              <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Archived</th>
+              <th scope="col" className="px-3 py-2" />
             </tr>
           </thead>
           <tbody>{children}</tbody>

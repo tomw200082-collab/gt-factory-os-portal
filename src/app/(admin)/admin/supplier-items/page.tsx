@@ -1082,6 +1082,7 @@ function Th({
 }): JSX.Element {
   return (
     <th
+      scope="col"
       className={`px-3 py-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle ${
         align === "right" ? "text-right" : "text-left"
       }`}

@@ -558,5 +558,5 @@ function Th({
 }): JSX.Element {
   // Typography, padding and background come from `table-base` (Tranche 049
   // / VISUAL-004); this helper only carries alignment.
-  return <th className={align === "right" ? "text-right" : undefined}>{children}</th>;
+  return <th scope="col" className={align === "right" ? "text-right" : undefined}>{children}</th>;
 }

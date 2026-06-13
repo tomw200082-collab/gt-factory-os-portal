@@ -1080,14 +1080,14 @@ export default function AdminSupplierDetailPage({
               <table className="w-full border-collapse text-xs">
                 <thead>
                   <tr className="border-b border-border/70 bg-bg-subtle/60">
-                    <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Kind</th>
-                    <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Target</th>
-                    <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Relationship</th>
-                    <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Primary</th>
-                    <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Order UoM</th>
-                    <th className="px-3 py-2 text-center text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Lead</th>
-                    <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Approval</th>
-                    <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Std cost (ILS)</th>
+                    <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Kind</th>
+                    <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Target</th>
+                    <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Relationship</th>
+                    <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Primary</th>
+                    <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Order UoM</th>
+                    <th scope="col" className="px-3 py-2 text-center text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Lead</th>
+                    <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Approval</th>
+                    <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Std cost (ILS)</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1218,10 +1218,10 @@ export default function AdminSupplierDetailPage({
                 <table className="w-full border-collapse text-xs">
                   <thead>
                     <tr className="border-b border-border/70 bg-bg-subtle/60">
-                      <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">PO number</th>
-                      <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Order date</th>
-                      <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Expected receive</th>
-                      <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Total net</th>
+                      <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">PO number</th>
+                      <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Order date</th>
+                      <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Expected receive</th>
+                      <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Total net</th>
                     </tr>
                   </thead>
                   <tbody>

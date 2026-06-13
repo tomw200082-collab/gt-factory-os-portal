@@ -412,14 +412,14 @@ export default function AdminCostDraftsPage(): JSX.Element {
             <table className="table-base" data-testid="cost-drafts-table">
               <thead>
                 <tr>
-                  <th>Component / item</th>
-                  <th>Current cost</th>
-                  <th>Proposed cost</th>
-                  <th>Delta</th>
-                  <th>Source</th>
-                  <th>Created</th>
-                  <th>Status</th>
-                  <th>Actions</th>
+                  <th scope="col">Component / item</th>
+                  <th scope="col">Current cost</th>
+                  <th scope="col">Proposed cost</th>
+                  <th scope="col">Delta</th>
+                  <th scope="col">Source</th>
+                  <th scope="col">Created</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Actions</th>
                 </tr>
               </thead>
               <tbody>
