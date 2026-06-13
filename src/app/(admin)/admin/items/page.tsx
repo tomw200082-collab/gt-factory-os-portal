@@ -26,6 +26,8 @@ import { ArrowRight, Plus, Power, X } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
+import { QueryCountChip } from "@/components/feedback/QueryCountChip";
+import { useConfirm } from "@/components/overlays/ConfirmDialog";
 import { QuickCreateItem } from "@/components/admin/quick-create/QuickCreateItem";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import {
@@ -309,6 +311,7 @@ function ItemsPageInner(): JSX.Element {
     | { kind: "success" | "error"; message: string; itemId?: string }
     | null
   >(null);
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   const itemsQuery = useQuery<ListEnvelope<ItemRow>>({
     queryKey: ["admin", "items", statusFilter, supplyFilter],
@@ -435,10 +438,22 @@ function ItemsPageInner(): JSX.Element {
     setGroupFilter("");
   };
 
-  const handleToggleStatus = (row: ItemRow) => {
+  const handleToggleStatus = async (row: ItemRow) => {
     if (!isAdmin) return;
     const next = row.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
-    if (!window.confirm(`Set ${row.item_id} status to ${next}?`)) return;
+    const ok = await confirm({
+      title:
+        next === "INACTIVE"
+          ? `Deactivate "${row.item_name}"?`
+          : `Reactivate "${row.item_name}"?`,
+      description:
+        next === "INACTIVE"
+          ? "It will stop appearing in the default active list. You can reactivate it later."
+          : "It will appear in the active list again.",
+      confirmLabel: next === "INACTIVE" ? "Deactivate" : "Reactivate",
+      tone: next === "INACTIVE" ? "danger" : "default",
+    });
+    if (!ok) return;
     setBanner(null);
     statusMutation.mutate({
       item_id: row.item_id,
@@ -468,9 +483,12 @@ function ItemsPageInner(): JSX.Element {
         description="Finished goods and bought-finished item master. Click a row to open details."
         meta={
           <>
-            <Badge tone="info" dotted>
-              {itemsQuery.data?.count ?? 0} items
-            </Badge>
+            <QueryCountChip
+              isLoading={itemsQuery.isLoading}
+              isError={itemsQuery.isError}
+              count={itemsQuery.data?.count}
+              noun="items"
+            />
             <Badge tone="neutral" dotted>
               live API
             </Badge>
@@ -500,8 +518,13 @@ function ItemsPageInner(): JSX.Element {
         }
       />
 
+      {confirmDialog}
+
       {banner ? (
         <div
+          role={banner.kind === "error" ? "alert" : "status"}
+          aria-live={banner.kind === "error" ? "assertive" : "polite"}
+          aria-atomic="true"
           className={
             banner.kind === "success"
               ? "flex items-start justify-between gap-3 rounded-md border border-success/40 bg-success-softer p-3 text-sm text-success-fg"

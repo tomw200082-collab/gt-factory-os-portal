@@ -23,6 +23,8 @@ import { ArrowRight, Phone, Plus, Power, X } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
+import { QueryCountChip } from "@/components/feedback/QueryCountChip";
+import { useConfirm } from "@/components/overlays/ConfirmDialog";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { QuickCreateSupplier } from "@/components/admin/quick-create/QuickCreateSupplier";
 import { formatQty } from "@/lib/utils/format-quantity";
@@ -245,6 +247,7 @@ function SuppliersPageInner(): JSX.Element {
     | { kind: "success" | "error"; message: string }
     | null
   >(null);
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   const suppliersQuery = useQuery<ListEnvelope<SupplierRow>>({
     queryKey: ["admin", "suppliers", statusFilter],
@@ -351,10 +354,22 @@ function SuppliersPageInner(): JSX.Element {
     setStatusFilter("ACTIVE");
   };
 
-  const handleToggleStatus = (row: SupplierRow) => {
+  const handleToggleStatus = async (row: SupplierRow) => {
     if (!isAdmin) return;
     const next = row.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
-    if (!window.confirm(`Set ${row.supplier_id} status to ${next}?`)) return;
+    const ok = await confirm({
+      title:
+        next === "INACTIVE"
+          ? `Deactivate "${row.supplier_name_official}"?`
+          : `Reactivate "${row.supplier_name_official}"?`,
+      description:
+        next === "INACTIVE"
+          ? "It will stop appearing in the default active list. You can reactivate it later."
+          : "It will appear in the active list again.",
+      confirmLabel: next === "INACTIVE" ? "Deactivate" : "Reactivate",
+      tone: next === "INACTIVE" ? "danger" : "default",
+    });
+    if (!ok) return;
     setBanner(null);
     statusMutation.mutate({
       supplier_id: row.supplier_id,
@@ -372,9 +387,12 @@ function SuppliersPageInner(): JSX.Element {
         description="Supplier master. Click a row to see the per-supplier catalog and item coverage."
         meta={
           <>
-            <Badge tone="info" dotted>
-              {suppliersQuery.data?.count ?? 0} suppliers
-            </Badge>
+            <QueryCountChip
+              isLoading={suppliersQuery.isLoading}
+              isError={suppliersQuery.isError}
+              count={suppliersQuery.data?.count}
+              noun="suppliers"
+            />
             <Badge tone="neutral" dotted>
               live API
             </Badge>
@@ -394,8 +412,13 @@ function SuppliersPageInner(): JSX.Element {
         }
       />
 
+      {confirmDialog}
+
       {banner ? (
         <div
+          role={banner.kind === "error" ? "alert" : "status"}
+          aria-live={banner.kind === "error" ? "assertive" : "polite"}
+          aria-atomic="true"
           className={
             banner.kind === "success"
               ? "rounded-md border border-success/40 bg-success-softer p-3 text-sm text-success-fg"

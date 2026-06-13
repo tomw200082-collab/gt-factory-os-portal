@@ -15,6 +15,8 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
+import { QueryCountChip } from "@/components/feedback/QueryCountChip";
+import { useConfirm } from "@/components/overlays/ConfirmDialog";
 import { useSession } from "@/lib/auth/session-provider";
 import { Users, X } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -146,6 +148,7 @@ export default function AdminUsersPage() {
   } | null>(null);
   // Default to active-only; deactivated rows are rare and admin-curiosity only.
   const [showInactive, setShowInactive] = useState<boolean>(false);
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   const getRowState = (user_id: string): RowState =>
     rowStates[user_id] ?? DEFAULT_ROW_STATE;
@@ -220,15 +223,19 @@ export default function AdminUsersPage() {
 
   return (
     <>
+      {confirmDialog}
       <WorkflowHeader
         eyebrow="Admin · users"
         title="Users"
         description="App users and role assignments. New users appear automatically after their first sign-in via Supabase magic-link."
         meta={
           <>
-            <Badge tone="info" dotted>
-              {visibleRows.length} users
-            </Badge>
+            <QueryCountChip
+              isLoading={isLoading}
+              isError={Boolean(error)}
+              count={isLoading ? undefined : visibleRows.length}
+              noun="users"
+            />
           </>
         }
       />
@@ -431,16 +438,19 @@ export default function AdminUsersPage() {
                                 value={u.role}
                                 disabled={rs.rolePending}
                                 aria-label={`Change role for ${u.display_name}`}
-                                onChange={(e) => {
+                                onChange={async (e) => {
                                   const newRole = e.target.value;
                                   if (newRole === u.role) return;
-                                  const confirmed = window.confirm(
-                                    `Change ${u.display_name}'s role from "${u.role}" to "${newRole}"? This updates their portal access immediately.`,
-                                  );
-                                  if (!confirmed) {
-                                    e.target.value = u.role;
-                                    return;
-                                  }
+                                  const ok = await confirm({
+                                    title: `Change ${u.display_name}'s role to "${newRole}"?`,
+                                    description:
+                                      "This updates their portal access immediately.",
+                                    confirmLabel: "Change role",
+                                    tone: "danger",
+                                  });
+                                  // The select is controlled by value={u.role};
+                                  // on cancel it re-asserts the original role.
+                                  if (!ok) return;
                                   roleMutation.mutate({
                                     user_id: u.user_id,
                                     role: newRole,

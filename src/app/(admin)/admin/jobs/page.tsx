@@ -197,7 +197,7 @@ function JobCard({ row }: { row: JobRow }) {
   const errorIsLong = errorText.length > 120;
   const rowBg = isFailed
     ? "bg-danger-softer/30 border-danger/30"
-    : "bg-bg-card border-border/60";
+    : "bg-bg-raised border-border/60";
 
   return (
     <div className={cn("rounded-lg border p-3 transition-colors hover:bg-bg-subtle/40", rowBg)}>

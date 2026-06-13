@@ -26,6 +26,8 @@ import { ArrowRight, ExternalLink, Plus, Power, X } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
+import { QueryCountChip } from "@/components/feedback/QueryCountChip";
+import { useConfirm } from "@/components/overlays/ConfirmDialog";
 import { ReadinessPill } from "@/components/readiness/ReadinessPill";
 import { QuickCreateComponent } from "@/components/admin/quick-create/QuickCreateComponent";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
@@ -272,6 +274,7 @@ function ComponentsPageInner(): JSX.Element {
     | { kind: "success" | "error"; message: string; componentId?: string }
     | null
   >(null);
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   const componentsQuery = useQuery<ListEnvelope<ComponentRow>>({
     queryKey: ["admin", "components", statusFilter],
@@ -544,10 +547,22 @@ function ComponentsPageInner(): JSX.Element {
     setGroupFilter("");
   };
 
-  const handleToggleStatus = (row: ComponentRow) => {
+  const handleToggleStatus = async (row: ComponentRow) => {
     if (!isAdmin) return;
     const next = row.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
-    if (!window.confirm(`Set ${row.component_id} status to ${next}?`)) return;
+    const ok = await confirm({
+      title:
+        next === "INACTIVE"
+          ? `Deactivate "${row.component_name}"?`
+          : `Reactivate "${row.component_name}"?`,
+      description:
+        next === "INACTIVE"
+          ? "It will stop appearing in the default active list. You can reactivate it later."
+          : "It will appear in the active list again.",
+      confirmLabel: next === "INACTIVE" ? "Deactivate" : "Reactivate",
+      tone: next === "INACTIVE" ? "danger" : "default",
+    });
+    if (!ok) return;
     setBanner(null);
     statusMutation.mutate({
       component_id: row.component_id,
@@ -564,9 +579,12 @@ function ComponentsPageInner(): JSX.Element {
         description="Raw material and packaging component master. Click a row for details including supplier coverage and BOM usage."
         meta={
           <>
-            <Badge tone="info" dotted>
-              {componentsQuery.data?.count ?? 0} components
-            </Badge>
+            <QueryCountChip
+              isLoading={componentsQuery.isLoading}
+              isError={componentsQuery.isError}
+              count={componentsQuery.data?.count}
+              noun="components"
+            />
             <Badge tone="neutral" dotted>
               live API
             </Badge>
@@ -586,8 +604,13 @@ function ComponentsPageInner(): JSX.Element {
         }
       />
 
+      {confirmDialog}
+
       {banner ? (
         <div
+          role={banner.kind === "error" ? "alert" : "status"}
+          aria-live={banner.kind === "error" ? "assertive" : "polite"}
+          aria-atomic="true"
           className={
             banner.kind === "success"
               ? "flex items-start justify-between gap-3 rounded-md border border-success/40 bg-success-softer p-3 text-sm text-success-fg"

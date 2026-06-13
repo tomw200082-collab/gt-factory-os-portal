@@ -24,6 +24,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { CircleDollarSign } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
+import { useConfirm } from "@/components/overlays/ConfirmDialog";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge, type BadgeTone } from "@/components/badges/StatusBadge";
 import { EmptyState, ErrorState } from "@/components/feedback/states";
@@ -180,6 +181,7 @@ export default function AdminCostDraftsPage(): JSX.Element {
   const [banner, setBanner] = useState<
     { kind: "success" | "error"; message: string } | null
   >(null);
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   const draftsQuery = useQuery<CostDraftsListResponse>({
     queryKey: ["admin", "cost-drafts", filter],
@@ -256,15 +258,18 @@ export default function AdminCostDraftsPage(): JSX.Element {
     ? decisionMutation.variables?.draftId
     : undefined;
 
-  const handleDecision = (
+  const handleDecision = async (
     row: CostDraftRow,
     action: "approve" | "reject",
-  ): void => {
+  ): Promise<void> => {
     const targetName = row.target_name ?? row.supplier_item_id;
     if (action === "reject") {
-      const ok = window.confirm(
-        `Reject this price update for ${targetName}? The catalog cost stays unchanged.`,
-      );
+      const ok = await confirm({
+        title: `Reject this price update for ${targetName}?`,
+        description: "The catalog cost stays unchanged.",
+        confirmLabel: "Reject price update",
+        tone: "danger",
+      });
       if (!ok) return;
     }
     setBanner(null);
@@ -280,6 +285,7 @@ export default function AdminCostDraftsPage(): JSX.Element {
 
   return (
     <>
+      {confirmDialog}
       <WorkflowHeader
         eyebrow="Admin · price updates"
         title="Price updates"

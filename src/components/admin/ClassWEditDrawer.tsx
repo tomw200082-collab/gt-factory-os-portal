@@ -35,7 +35,7 @@ export function ClassWEditDrawer({
         onClick={onClose}
         aria-hidden="true"
       />
-      <div className="relative ml-auto flex h-full w-full max-w-md flex-col bg-bg-card shadow-xl">
+      <div className="relative ml-auto flex h-full w-full max-w-md flex-col bg-bg-raised shadow-xl">
         <div className="flex items-center justify-between border-b border-border px-4 py-3">
           <h3 className="text-sm font-semibold text-fg-strong">{title}</h3>
           <button

@@ -30,6 +30,7 @@ import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2, Plus } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
+import { useConfirm } from "@/components/overlays/ConfirmDialog";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
@@ -222,6 +223,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
   const [archivingRow, setArchivingRow] = useState<SupplierItemRow | null>(
     null,
   );
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   const sortedSuppliers = useMemo(
     () =>
@@ -437,6 +439,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
 
   return (
     <>
+      {confirmDialog}
       <Breadcrumbs
         items={[
           { label: "Admin", href: "/admin" },
@@ -969,13 +972,14 @@ export default function AdminSupplierItemsPage(): JSX.Element {
                             <button
                               type="button"
                               className="btn btn-ghost btn-sm text-xs text-fg-muted hover:text-fg"
-                              onClick={() => {
-                                if (
-                                  !window.confirm(
-                                    `Set this as the primary source for ${r.component_id ?? r.item_id}? The existing primary (if any) will be demoted.`,
-                                  )
-                                )
-                                  return;
+                              onClick={async () => {
+                                const ok = await confirm({
+                                  title: `Set as the primary source for ${r.component_id ?? r.item_id}?`,
+                                  description:
+                                    "The existing primary (if any) will be demoted. This affects planning cost and lead time for this item.",
+                                  confirmLabel: "Set as primary",
+                                });
+                                if (!ok) return;
                                 promotePrimaryMutation.mutate({
                                   supplier_item_id: r.supplier_item_id,
                                   updated_at: r.updated_at,

@@ -23,6 +23,7 @@ import {
 } from "@/components/patterns/DetailPage";
 import { Badge } from "@/components/badges/StatusBadge";
 import { SectionCard } from "@/components/workflow/SectionCard";
+import { useConfirm } from "@/components/overlays/ConfirmDialog";
 import { InlineEditCell } from "@/components/tables/InlineEditCell";
 import { InlineEditSelectCell } from "@/components/tables/InlineEditSelectCell";
 import { QuickCreateSupplierItem } from "@/components/admin/quick-create/QuickCreateSupplierItem";
@@ -269,6 +270,7 @@ export default function AdminComponentDetailPage({
   const [editBanner, setEditBanner] = useState<{ kind: "success" | "error"; message: string } | null>(null);
   const [showStatusDrawer, setShowStatusDrawer] = useState(false);
   const [drawerStatusTarget, setDrawerStatusTarget] = useState<string>("");
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   const componentQuery = useQuery<ComponentsListResponse>({
     queryKey: ["admin", "masters", "component", component_id],
@@ -1004,9 +1006,15 @@ export default function AdminComponentDetailPage({
                 setEditBanner(null);
                 await fieldMutation.mutateAsync({ supplier_item_id: id, field, value, updated_at });
               }}
-              onPromotePrimary={(id, updated_at) => {
+              onPromotePrimary={async (id, updated_at) => {
                 setEditBanner(null);
-                if (!window.confirm("Promote this supplier to primary? Existing primary will be demoted.")) return;
+                const ok = await confirm({
+                  title: "Set this supplier as primary?",
+                  description:
+                    "The existing primary (if any) will be demoted. This affects planning cost and lead time for this component.",
+                  confirmLabel: "Set as primary",
+                });
+                if (!ok) return;
                 promotePrimaryMutation.mutate({ supplier_item_id: id, updated_at });
               }}
             />
@@ -1158,6 +1166,7 @@ export default function AdminComponentDetailPage({
 
   return (
     <>
+      {confirmDialog}
       {/* Summary card — iter 4: KPI strip; iter 13: subtitle; iter 18: reveal-on-mount */}
       {row ? (
         <div className="reveal-on-mount">

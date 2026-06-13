@@ -327,8 +327,8 @@ function TabStrip({
       onKeyDown={onKeyDown}
       className={cn(
         "sticky top-0 z-20 -mx-1 flex flex-wrap items-center gap-1 px-1",
-        "border-b border-border/70 bg-bg-card/85 backdrop-blur",
-        "supports-[not(backdrop-filter:blur(8px))]:bg-bg-card",
+        "border-b border-border/70 bg-bg-raised/85 backdrop-blur",
+        "supports-[not(backdrop-filter:blur(8px))]:bg-bg-raised",
       )}
     >
       {tabs.map((t) => {
