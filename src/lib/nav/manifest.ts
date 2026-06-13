@@ -123,6 +123,16 @@ export const NAV_MANIFEST: NavGroup[] = [
           countSelector: "length",
         },
       },
+      {
+        // Bookkeeper shortage-resolution table (Tom 2026-06-12): every
+        // picking shortage (credit_tasks) with credited/deferred/supplied
+        // marks. Backs the missing-picks daily email cumulative CSV.
+        href: "/credit-tracking",
+        label: "Credit Tracking",
+        icon: CircleDollarSign,
+        min_role: "viewer",
+        required_capability: "viewer:read",
+      },
     ],
   },
   {
