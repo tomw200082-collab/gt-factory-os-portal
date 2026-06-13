@@ -164,7 +164,10 @@ export default function AdminUsersPage() {
     queryKey: ["admin-users"],
     queryFn: async () => {
       const res = await fetch("/api/users");
-      if (!res.ok) throw new Error("Failed to load users");
+      if (!res.ok)
+        throw new Error(
+          "We couldn't load users. Check your connection and try again.",
+        );
       return res.json() as Promise<{ rows: AppUser[] }>;
     },
   });

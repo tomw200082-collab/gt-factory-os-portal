@@ -394,7 +394,7 @@ export default function AdminComponentDetailPage({
     onError: (err: Error) => {
       const msg =
         err instanceof AdminMutationError
-          ? `${err.status}${err.code ? ` ${err.code}` : ""}: ${err.message}`
+          ? err.message
           : err.message;
       setEditBanner({ kind: "error", message: `Update failed: ${msg}` });
     },
@@ -414,7 +414,7 @@ export default function AdminComponentDetailPage({
     onError: (err: Error) => {
       const msg =
         err instanceof AdminMutationError
-          ? `${err.status}${err.code ? ` ${err.code}` : ""}: ${err.message}`
+          ? err.message
           : err.message;
       setEditBanner({ kind: "error", message: `Promote failed: ${msg}` });
     },
@@ -437,7 +437,7 @@ export default function AdminComponentDetailPage({
     onError: (err: Error) => {
       const msg =
         err instanceof AdminMutationError
-          ? `${err.status}${err.code ? ` ${err.code}` : ""}: ${err.message}`
+          ? err.message
           : err.message;
       setEditBanner({ kind: "error", message: `Update failed: ${msg}` });
     },
@@ -461,7 +461,7 @@ export default function AdminComponentDetailPage({
     onError: (err: Error) => {
       const msg =
         err instanceof AdminMutationError
-          ? `${err.status}${err.code ? ` ${err.code}` : ""}: ${err.message}`
+          ? err.message
           : err.message;
       setEditBanner({ kind: "error", message: `Status update failed: ${msg}` });
     },

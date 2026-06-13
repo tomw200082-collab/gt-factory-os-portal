@@ -536,7 +536,10 @@ export default function AdminIntegrationsPage() {
     queryKey: ["exceptions-all-open"],
     queryFn: async () => {
       const res = await fetch("/api/exceptions?statuses=open,acknowledged");
-      if (!res.ok) throw new Error("Failed to load exceptions");
+      if (!res.ok)
+        throw new Error(
+          "We couldn't load exceptions. Check your connection and try again.",
+        );
       const d = await res.json();
       return (d.rows ?? []) as ExRow[];
     },

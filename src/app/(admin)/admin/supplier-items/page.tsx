@@ -285,7 +285,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
     onError: (err: Error) => {
       const msg =
         err instanceof AdminMutationError
-          ? `${err.status}${err.code ? ` ${err.code}` : ""}: ${err.message}`
+          ? err.message
           : err.message;
       setBanner({ kind: "error", message: `Update failed: ${msg}` });
     },
@@ -311,7 +311,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
     onError: (err: Error) => {
       const msg =
         err instanceof AdminMutationError
-          ? `${err.status}${err.code ? ` ${err.code}` : ""}: ${err.message}`
+          ? err.message
           : err.message;
       setBanner({ kind: "error", message: `Promote-primary failed: ${msg}` });
     },
@@ -379,7 +379,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
     onError: (err: Error) => {
       const msg =
         err instanceof AdminMutationError
-          ? `${err.status}${err.code ? ` ${err.code}` : ""}: ${err.message}`
+          ? err.message
           : err.message;
       setBanner({ kind: "error", message: `Archive failed: ${msg}` });
     },
@@ -783,9 +783,9 @@ export default function AdminSupplierItemsPage(): JSX.Element {
                               }}
                             >
                               <option value="">— set —</option>
-                              <option value="approved">approved</option>
-                              <option value="pending">pending</option>
-                              <option value="rejected">rejected</option>
+                              <option value="approved">Approved</option>
+                              <option value="pending">Pending</option>
+                              <option value="rejected">Rejected</option>
                             </select>
                           ) : (
                             <ApprovalBadge status={r.approval_status} />

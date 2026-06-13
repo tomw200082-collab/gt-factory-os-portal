@@ -263,9 +263,9 @@ function Step1ItemBasics({
             }
           >
             <option value="">(pick one)</option>
-            <option value="MANUFACTURED">MANUFACTURED</option>
-            <option value="BOUGHT_FINISHED">BOUGHT_FINISHED</option>
-            <option value="REPACK">REPACK</option>
+            <option value="MANUFACTURED">Manufactured</option>
+            <option value="BOUGHT_FINISHED">Bought finished</option>
+            <option value="REPACK">Repack</option>
           </select>
           <span className="mt-1 block text-3xs text-fg-subtle">
             MANUFACTURED / REPACK walk all 7 steps. BOUGHT_FINISHED skips BOM

@@ -495,7 +495,7 @@ export default function AdminGroupsPage(): JSX.Element {
       setPendingKey(null);
       const msg =
         err instanceof AdminMutationError
-          ? `${err.status}${err.code ? ` ${err.code}` : ""}: ${err.message}`
+          ? err.message
           : err.message;
       setFeedback({
         kind: "error",
@@ -545,7 +545,7 @@ export default function AdminGroupsPage(): JSX.Element {
     onError: (err: Error, vars) => {
       const msg =
         err instanceof AdminMutationError
-          ? `${err.status}${err.code ? ` ${err.code}` : ""}: ${err.message}`
+          ? err.message
           : err.message;
       setFeedback({
         kind: "error",

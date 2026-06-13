@@ -70,7 +70,7 @@ function isStale(row: JobRow): boolean {
 function staleTooltip(row: JobRow): string {
   const ago = timeAgo(row.last_ended_at ?? row.last_started_at);
   const hours = Math.round(guessIntervalMs(row.job_name) / (60 * 60 * 1000));
-  return `Expected every ~${hours}h (estimated from job name) — last ran ${ago}. The jobs registry does not yet expose a real cron schedule; until it does, the expected interval is inferred from the job's name.`;
+  return `Expected to run about every ${hours}h (estimated from the job name) — last ran ${ago}. The actual schedule may differ.`;
 }
 
 type StatusTone = "success" | "danger" | "info" | "warning" | "neutral";
@@ -278,7 +278,10 @@ export default function AdminJobsPage() {
       queryKey: ["admin-jobs"],
       queryFn: async () => {
         const res = await fetch("/api/admin/jobs");
-        if (!res.ok) throw new Error("Failed to load jobs");
+        if (!res.ok)
+          throw new Error(
+            "We couldn't load the jobs list. Check your connection and try again.",
+          );
         return res.json() as Promise<{ rows: JobRow[] }>;
       },
       refetchInterval: 60_000,
@@ -360,7 +363,7 @@ export default function AdminJobsPage() {
         {data && rows.length === 0 && (
           <EmptyState
             title="No scheduled jobs yet"
-            description="Jobs are registered by W1 migrations / Edge Functions. Once a job runs at least once, it appears here."
+            description="Background jobs appear here once they have run at least once."
             icon={<CalendarClock className="h-5 w-5 text-fg-faint" strokeWidth={1.5} />}
           />
         )}

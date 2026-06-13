@@ -307,7 +307,7 @@ function ComponentsPageInner(): JSX.Element {
     onError: (err: Error, vars) => {
       const msg =
         err instanceof AdminMutationError
-          ? `${err.status}${err.code ? ` ${err.code}` : ""}: ${err.message}`
+          ? err.message
           : err.message;
       setBanner({
         kind: "error",
@@ -451,7 +451,7 @@ function ComponentsPageInner(): JSX.Element {
     onError: (err: Error) => {
       const msg =
         err instanceof AdminMutationError
-          ? `${err.status}${err.code ? ` ${err.code}` : ""}: ${err.message}`
+          ? err.message
           : err.message;
       setBanner({ kind: "error", message: `Update failed: ${msg}` });
     },

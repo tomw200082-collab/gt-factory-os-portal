@@ -438,8 +438,8 @@ export default function AdminSkuHealthPage(): JSX.Element {
               onChange={(e) => setSupplyFilter(e.target.value)}
             >
               <option value="">(all)</option>
-              <option value="MANUFACTURED">MANUFACTURED</option>
-              <option value="BOUGHT_FINISHED">BOUGHT_FINISHED</option>
+              <option value="MANUFACTURED">Manufactured</option>
+              <option value="BOUGHT_FINISHED">Bought finished</option>
             </select>
           </label>
           <label className="block">
