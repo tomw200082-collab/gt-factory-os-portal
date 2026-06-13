@@ -1182,7 +1182,7 @@ function ComponentsPageInner(): JSX.Element {
                           className="flex items-center justify-between text-sm"
                         >
                           <Link
-                            href={`/admin/boms?head=${encodeURIComponent(row.headId)}`}
+                            href={`/admin/masters/boms/${encodeURIComponent(row.headId)}`}
                             className="text-accent hover:underline"
                           >
                             {row.headName}

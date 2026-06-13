@@ -1356,7 +1356,7 @@ export default function AdminNewProductWizardPage(): JSX.Element {
           void queryClient.invalidateQueries({
             queryKey: ["admin", "integration-sku-map"],
           });
-          router.push(`/admin/products/${encodeURIComponent(item_id)}`);
+          router.push(`/admin/masters/items/${encodeURIComponent(item_id)}`);
         }}
       />
     </>

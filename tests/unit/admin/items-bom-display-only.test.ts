@@ -49,7 +49,10 @@ const ITEMS_PAGE_PATH = join(
 
 const ADMIN_DIR = join(__dirname, "..", "..", "..", "src", "app", "(admin)", "admin");
 const PRODUCTS_NEW_PATH = join(ADMIN_DIR, "products", "new", "page.tsx");
-const PRODUCTS_DETAIL_PATH = join(ADMIN_DIR, "products", "[item_id]", "page.tsx");
+// Tranche 066: the canonical item detail surface is /admin/masters/items/[item_id]
+// (the former /admin/products/[item_id] "Product 360" is now a redirect). The
+// read-only-BOM doctrine is re-anchored to the canonical detail page.
+const ITEM_DETAIL_PATH = join(ADMIN_DIR, "masters", "items", "[item_id]", "page.tsx");
 
 const BOM_FIELDS = [
   "primary_bom_head_id",
@@ -114,17 +117,18 @@ describe("admin/items — BOM display-only doctrine anchor", () => {
 //
 // The create-product wizard (/admin/products/new) POSTs item basics only and
 // builds the BOM through SEPARATE /api/boms endpoints (it never binds BOM refs
-// as editable item fields). The product detail (/admin/products/[item_id])
-// renders the linked BOM as a read-only link to /admin/boms, never an input.
-// These replace the obsolete itemSchema / BOM_DISPLAY_ONLY / null-seed pins.
+// as editable item fields). The canonical item detail
+// (/admin/masters/items/[item_id]) renders the linked BOM as a read-only link to
+// /admin/masters/boms, never an input. These replace the obsolete itemSchema /
+// BOM_DISPLAY_ONLY / null-seed pins.
 // ---------------------------------------------------------------------------
-describe("admin/products — BOM stays out of the product form", () => {
+describe("admin item detail — BOM stays out of the product form", () => {
   const productsNew = readFileSync(PRODUCTS_NEW_PATH, "utf8");
-  const productsDetail = readFileSync(PRODUCTS_DETAIL_PATH, "utf8");
+  const itemDetail = readFileSync(ITEM_DETAIL_PATH, "utf8");
 
-  it("the products wizard + detail sources exist and are non-empty", () => {
+  it("the products wizard + canonical detail sources exist and are non-empty", () => {
     expect(productsNew.length).toBeGreaterThan(100);
-    expect(productsDetail.length).toBeGreaterThan(100);
+    expect(itemDetail.length).toBeGreaterThan(100);
   });
 
   it.each(BOM_FIELDS)(
@@ -146,11 +150,11 @@ describe("admin/products — BOM stays out of the product form", () => {
     },
   );
 
-  it("the product detail renders the linked BOM read-only (a link, not a form binding)", () => {
-    expect(productsDetail).toContain("primary_bom_head_id");
-    // Read-only navigation to the BOM editor, not an editable field.
-    expect(productsDetail).toMatch(/\/admin\/boms\//);
-    expect(productsDetail).not.toMatch(/register\(\s*['"`]primary_bom_head_id/);
-    expect(productsDetail).not.toMatch(/primary_bom_head_id\s*:\s*e\.target\./);
+  it("the item detail renders the linked BOM read-only (a link, not a form binding)", () => {
+    expect(itemDetail).toContain("primary_bom_head_id");
+    // Read-only navigation to the canonical BOM surface, not an editable field.
+    expect(itemDetail).toMatch(/\/admin\/masters\/boms\//);
+    expect(itemDetail).not.toMatch(/register\(\s*['"`]primary_bom_head_id/);
+    expect(itemDetail).not.toMatch(/primary_bom_head_id\s*:\s*e\.target\./);
   });
 });
