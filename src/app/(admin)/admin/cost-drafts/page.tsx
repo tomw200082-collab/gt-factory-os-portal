@@ -271,6 +271,22 @@ export default function AdminCostDraftsPage(): JSX.Element {
         tone: "danger",
       });
       if (!ok) return;
+    } else {
+      const pct = deltaPct(row);
+      const deltaText =
+        pct === null ? "" : `, ${pct > 0 ? "+" : ""}${formatPct(pct)}`;
+      const fromText =
+        row.current_effective_cost != null
+          ? ` (was ${formatIls(row.current_effective_cost)}${deltaText})`
+          : "";
+      const ok = await confirm({
+        title: `Approve price update for ${targetName}?`,
+        description: `This sets the catalog cost to ${formatIls(
+          row.suggested_cost_ils,
+        )}${fromText} and writes it to price history. It affects all BOM costing and stock value.`,
+        confirmLabel: "Approve price update",
+      });
+      if (!ok) return;
     }
     setBanner(null);
     decisionMutation.mutate({

@@ -11,7 +11,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Archive, RotateCcw } from "lucide-react";
+import { Archive, RotateCcw, X } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
@@ -127,6 +127,9 @@ export default function AdminMastersArchivePage(): JSX.Element {
   const isAdmin = session.role === "admin";
   const [activeTab, setActiveTab] = useState<EntityTab>("items");
   const [confirmId, setConfirmId] = useState<string | null>(null);
+  const [banner, setBanner] = useState<
+    { kind: "success" | "error"; message: string } | null
+  >(null);
   const queryClient = useQueryClient();
 
   const itemsQuery = useQuery<ListEnvelope<ItemRow>>({
@@ -153,8 +156,16 @@ export default function AdminMastersArchivePage(): JSX.Element {
       patchStatus(`/api/items/${encodeURIComponent(args.item_id)}`, "ACTIVE", args.updated_at),
     onSuccess: () => {
       setConfirmId(null);
+      setBanner({ kind: "success", message: "Item restored and set to Active." });
       void queryClient.invalidateQueries({ queryKey: ["admin", "archive", "items"] });
       void queryClient.invalidateQueries({ queryKey: ["admin", "health"] });
+    },
+    onError: () => {
+      setConfirmId(null);
+      setBanner({
+        kind: "error",
+        message: "Could not restore this item. Refresh and try again.",
+      });
     },
   });
 
@@ -163,8 +174,16 @@ export default function AdminMastersArchivePage(): JSX.Element {
       patchStatus(`/api/components/${encodeURIComponent(args.component_id)}`, "ACTIVE", args.updated_at),
     onSuccess: () => {
       setConfirmId(null);
+      setBanner({ kind: "success", message: "Component restored and set to Active." });
       void queryClient.invalidateQueries({ queryKey: ["admin", "archive", "components"] });
       void queryClient.invalidateQueries({ queryKey: ["admin", "health"] });
+    },
+    onError: () => {
+      setConfirmId(null);
+      setBanner({
+        kind: "error",
+        message: "Could not restore this component. Refresh and try again.",
+      });
     },
   });
 
@@ -173,7 +192,15 @@ export default function AdminMastersArchivePage(): JSX.Element {
       patchStatus(`/api/suppliers/${encodeURIComponent(args.supplier_id)}`, "ACTIVE", args.updated_at),
     onSuccess: () => {
       setConfirmId(null);
+      setBanner({ kind: "success", message: "Supplier restored and set to Active." });
       void queryClient.invalidateQueries({ queryKey: ["admin", "archive", "suppliers"] });
+    },
+    onError: () => {
+      setConfirmId(null);
+      setBanner({
+        kind: "error",
+        message: "Could not restore this supplier. Refresh and try again.",
+      });
     },
   });
 
@@ -196,6 +223,29 @@ export default function AdminMastersArchivePage(): JSX.Element {
         description="Archived master records — review and restore as needed. Records here are hidden from operational workflows."
         meta={<Badge tone="neutral">read-only</Badge>}
       />
+
+      {banner ? (
+        <div
+          role={banner.kind === "error" ? "alert" : "status"}
+          aria-live={banner.kind === "error" ? "assertive" : "polite"}
+          aria-atomic="true"
+          className={
+            banner.kind === "success"
+              ? "flex items-start justify-between gap-3 rounded-md border border-success/40 bg-success-softer p-3 text-sm text-success-fg"
+              : "flex items-start justify-between gap-3 rounded-md border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg"
+          }
+        >
+          <span>{banner.message}</span>
+          <button
+            type="button"
+            className="btn btn-ghost btn-sm shrink-0"
+            aria-label="Dismiss"
+            onClick={() => setBanner(null)}
+          >
+            <X className="h-3.5 w-3.5" strokeWidth={2.5} />
+          </button>
+        </div>
+      ) : null}
 
       <div className="flex gap-1 border-b border-border/60">
         {tabs.map((t) => (

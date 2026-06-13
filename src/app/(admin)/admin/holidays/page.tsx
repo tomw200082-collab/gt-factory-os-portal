@@ -1815,11 +1815,13 @@ function BulkImportModal({
                   errorCount > 0 && "opacity-70",
                 )}
                 onClick={onCommit}
-                disabled={busy}
+                disabled={busy || validCount === 0}
                 title={
-                  errorCount > 0
-                    ? `${errorCount} rows will be rejected — review before committing`
-                    : undefined
+                  validCount === 0
+                    ? "Nothing valid to import — fix the rows above first"
+                    : errorCount > 0
+                      ? `${errorCount} rows will be rejected — review before committing`
+                      : undefined
                 }
               >
                 {commitMutation.isPending ? (
