@@ -229,9 +229,9 @@ export function InventoryFlowClient() {
         <div className="rounded border border-info/30 bg-info-softer px-4 py-3 text-xs text-info-fg">
           <div className="font-semibold">Calculating projection…</div>
           <div className="mt-0.5 text-fg-muted">
-            Daily inventory flow runs a heavy SQL pass over forecast + open orders + BOM + on-hand
-            for every active FG. First-time loads can take ~20 seconds. Subsequent loads use a
-            cached snapshot and should be instant.
+            This projection covers all active products across forecast, open
+            orders, recipes, and on-hand stock. First-time loads can take up to
+            20 seconds. Subsequent loads are instant.
           </div>
         </div>
         <InsightsHero items={[]} summary={null} isLoading />

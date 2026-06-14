@@ -414,6 +414,10 @@ export default function ForecastListPage() {
           {STATUS_FILTERS.map((opt) => {
             const isActive = statusFilter === opt.id;
             const count = statusCounts[opt.id];
+            // Gate the count on real data — never show "0" while loading
+            // (UX-Standard §3): statusCounts are derived from an empty list
+            // during the loading phase.
+            const showCount = query.data !== undefined && !query.isError;
             return (
               <button
                 key={opt.id}
@@ -430,16 +434,18 @@ export default function ForecastListPage() {
                 ].join(" ")}
               >
                 {opt.label}
-                <span
-                  className={[
-                    "tabular-nums rounded px-1 text-3xs font-semibold",
-                    isActive
-                      ? "bg-accent/15 text-accent"
-                      : "bg-bg-subtle text-fg-faint",
-                  ].join(" ")}
-                >
-                  {count}
-                </span>
+                {showCount ? (
+                  <span
+                    className={[
+                      "tabular-nums rounded px-1 text-3xs font-semibold",
+                      isActive
+                        ? "bg-accent/15 text-accent"
+                        : "bg-bg-subtle text-fg-faint",
+                    ].join(" ")}
+                  >
+                    {count}
+                  </span>
+                ) : null}
               </button>
             );
           })}
