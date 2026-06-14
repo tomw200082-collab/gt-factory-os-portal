@@ -71,6 +71,7 @@ function SortHeader({
   const active = currentKey === sortKey;
   return (
     <th
+      scope="col"
       className={cn(
         "px-3 py-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle cursor-pointer select-none hover:text-fg",
         align === "right" ? "text-right" : "text-left",

@@ -37,6 +37,7 @@ import {
 } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { EmptyState, ErrorState } from "@/components/feedback/states";
+import { useRovingTabList } from "@/components/a11y/useRovingTabList";
 import { useSession } from "@/lib/auth/session-provider";
 import type { Session } from "@/lib/auth/fake-auth";
 import { useMemo, useState } from "react";
@@ -158,6 +159,16 @@ export default function ForecastListPage() {
   const [searchQuery, setSearchQuery] = useState("");
   const [showArchived, setShowArchived] = useState(false);
   const canAuthor = session.role === "planner" || session.role === "admin";
+
+  // Tranche 075 (A11Y-009) — roving tabindex + arrow keys for the status
+  // segmented filter. STATUS_FILTERS is a module-level const so keys are
+  // stable; tabs activate on focus (selected = tabIndex 0).
+  const statusRoving = useRovingTabList<StatusFilter>({
+    keys: STATUS_FILTERS.map((opt) => opt.id),
+    activeKey: statusFilter,
+    onChange: setStatusFilter,
+    orientation: "horizontal",
+  });
 
   const query = useQuery<ListResponse>({
     queryKey: ["forecasts", "versions", "all", session.role],
@@ -408,7 +419,7 @@ export default function ForecastListPage() {
         {/* Status segmented filter */}
         <div
           className="inline-flex items-center gap-1 rounded border border-border bg-bg p-0.5"
-          role="tablist"
+          {...statusRoving.tabListProps}
           aria-label="Filter by status"
         >
           {STATUS_FILTERS.map((opt) => {
@@ -418,12 +429,16 @@ export default function ForecastListPage() {
             // (UX-Standard §3): statusCounts are derived from an empty list
             // during the loading phase.
             const showCount = query.data !== undefined && !query.isError;
+            const tabProps = statusRoving.getTabProps(opt.id);
             return (
               <button
                 key={opt.id}
                 type="button"
-                role="tab"
-                aria-selected={isActive}
+                role={tabProps.role}
+                tabIndex={tabProps.tabIndex}
+                aria-selected={tabProps["aria-selected"]}
+                ref={(el) => tabProps.ref(el)}
+                onKeyDown={tabProps.onKeyDown}
                 onClick={() => setStatusFilter(opt.id)}
                 data-testid={`forecast-status-${opt.id}`}
                 className={[

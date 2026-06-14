@@ -382,22 +382,22 @@ export function RecipeOverridePanel({
                 <table className="w-full border-collapse text-xs">
                   <thead>
                     <tr className="border-b border-border/70 bg-bg-subtle/60">
-                      <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                      <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                         Component
                       </th>
-                      <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                      <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                         Per {recipe.uom}
                       </th>
-                      <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                      <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                         Unit
                       </th>
-                      <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                      <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                         Run total
                       </th>
-                      <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                      <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                         Stock
                       </th>
-                      <th className="px-2 py-2" aria-hidden />
+                      <th scope="col" className="px-2 py-2" aria-hidden />
                     </tr>
                   </thead>
                   <tbody>

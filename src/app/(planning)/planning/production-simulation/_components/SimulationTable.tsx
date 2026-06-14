@@ -122,11 +122,11 @@ export function SimulationTable({ lines }: { lines: SimulationLine[] }) {
         <table className="w-full">
           <thead>
             <tr className="border-b border-border/70 text-2xs font-bold uppercase tracking-sops text-fg-subtle">
-              <th className="px-5 py-3 text-left">Component</th>
-              <th className="px-5 py-3 text-right">Per unit</th>
-              <th className="px-5 py-3 text-right">Required</th>
-              <th className="px-5 py-3 text-right">On hand</th>
-              <th className="px-5 py-3 text-left">Coverage</th>
+              <th scope="col" className="px-5 py-3 text-left">Component</th>
+              <th scope="col" className="px-5 py-3 text-right">Per unit</th>
+              <th scope="col" className="px-5 py-3 text-right">Required</th>
+              <th scope="col" className="px-5 py-3 text-right">On hand</th>
+              <th scope="col" className="px-5 py-3 text-left">Coverage</th>
             </tr>
           </thead>
           <tbody>

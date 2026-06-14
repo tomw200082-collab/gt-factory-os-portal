@@ -202,6 +202,46 @@ function ManualAddModal({
   const [uom, setUom] = useState("");
   const [notes, setNotes] = useState("");
 
+  // Tranche 075 (A11Y-007 / A11Y-016) — proper dialog semantics on this
+  // inline custom dialog (Radix-Dialog drop-in not used because the surface
+  // is a fixed-inset overlay with bespoke layout, and the structural rewrite
+  // would change submit behaviour for tranches 048 / 052). Instead:
+  //   - aria-labelledby points at the heading (id added below).
+  //   - Escape closes via a keydown listener bound to the dialog wrapper.
+  //   - Initial focus is moved into the dialog (first heading, since the
+  //     first field is a date input that the planner may not want to type
+  //     into immediately).
+  //   - Focus is returned to the element that opened the modal on close.
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const titleRef = useRef<HTMLHeadingElement | null>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+
+  useEffect(() => {
+    // Capture the element that had focus when the modal mounted; restore on
+    // unmount. Works for every trigger (header CTA, day-card "+" action,
+    // etc.) without each trigger needing to thread a ref through.
+    previouslyFocusedRef.current =
+      (document.activeElement as HTMLElement | null) ?? null;
+    // Defer focus so the dialog has actually mounted into the DOM.
+    queueMicrotask(() => {
+      if (titleRef.current) {
+        titleRef.current.focus();
+      } else if (dialogRef.current) {
+        dialogRef.current.focus();
+      }
+    });
+    return () => {
+      const el = previouslyFocusedRef.current;
+      if (el && typeof el.focus === "function") {
+        try {
+          el.focus();
+        } catch {
+          /* trigger may have unmounted — ignore */
+        }
+      }
+    };
+  }, []);
+
   // INTER-004 — UoM is a select over the known UoM universe. If the
   // item-derived default (sales_uom) somehow isn't in the option list, keep
   // it selectable rather than silently dropping the value.
@@ -248,15 +288,29 @@ function ManualAddModal({
 
   return (
     <div
+      ref={dialogRef}
       dir="ltr"
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 px-2 sm:px-4"
       role="dialog"
       aria-modal="true"
+      aria-labelledby="manual-add-modal-title"
       data-testid="manual-add-modal"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && !isSubmitting) {
+          e.stopPropagation();
+          onClose();
+        }
+      }}
+      tabIndex={-1}
     >
       <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-2xl">
-        <h2 className="text-base font-semibold text-fg-strong">
+        <h2
+          id="manual-add-modal-title"
+          ref={titleRef}
+          tabIndex={-1}
+          className="text-base font-semibold text-fg-strong outline-none"
+        >
           Add production manually
         </h2>
         <p className="mt-1 text-3xs text-fg-muted">

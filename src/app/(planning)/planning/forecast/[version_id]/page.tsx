@@ -831,11 +831,17 @@ export default function ForecastVersionDetailPage() {
         />
       </header>
 
-      {/* Inline success / error banners */}
+      {/* Inline success / error banners.
+          Tranche 075 (A11Y-019 / A11Y-026): publish outcome is announced —
+          success uses an aria-live="polite" status region (non-urgent
+          confirmation); error uses role="alert" so screen readers interrupt
+          and announce immediately. */}
       {publishSuccess ? (
         <div
           className="mb-3 flex items-center gap-2 rounded border border-success/30 bg-success-softer px-4 py-2 text-xs text-success-fg"
           data-testid="forecast-action-success"
+          role="status"
+          aria-live="polite"
         >
           <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
           {publishSuccess}
@@ -846,6 +852,7 @@ export default function ForecastVersionDetailPage() {
         <div
           className="mb-3 flex items-center gap-2 rounded border border-danger/30 bg-danger-softer px-4 py-2 text-xs text-danger-fg"
           data-testid="forecast-action-error"
+          role="alert"
         >
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
           <span className="min-w-0 flex-1">{publishError}</span>

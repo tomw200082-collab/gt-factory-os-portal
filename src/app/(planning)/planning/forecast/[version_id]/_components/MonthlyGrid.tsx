@@ -393,6 +393,15 @@ export function MonthlyGrid(props: MonthlyGridProps) {
       <div
         className="min-w-fit"
         style={{ width: "max-content" }}
+        // Tranche 075 (A11Y-015) — the inner header/body/footer rows already
+        // carry role="row" + columnheader / rowheader / gridcell; the missing
+        // piece was the outer role="grid" ancestor. Adding it here keeps the
+        // existing visual structure untouched and gives the orphan gridcell
+        // children a valid ARIA ancestry.
+        role="grid"
+        aria-label="Forecast monthly grid"
+        aria-rowcount={items.length + 2}
+        aria-colcount={buckets.length + 2}
       >
         {/* ── Header row ─────────────────────────────────────────────────── */}
         <HeaderRow

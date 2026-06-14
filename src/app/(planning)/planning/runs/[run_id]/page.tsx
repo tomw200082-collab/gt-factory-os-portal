@@ -33,6 +33,7 @@ import { Badge } from "@/components/badges/StatusBadge";
 import { EmptyState, ErrorState } from "@/components/feedback/states";
 import { useSession } from "@/lib/auth/session-provider";
 import type { Session } from "@/lib/auth/fake-auth";
+import { useRovingTabList } from "@/components/a11y/useRovingTabList";
 import { cn } from "@/lib/cn";
 
 type PlanningRunStatus =
@@ -351,6 +352,22 @@ export default function PlanningRunDetailPage() {
     "all" | "purchase" | "production"
   >("all");
 
+  // Tranche 075 (A11Y-009) — roving tabindex + arrow keys for the two
+  // tablists on this page: section tabs (Recommendations | Exceptions) and
+  // the rec-type sub-filter.
+  const sectionRoving = useRovingTabList<"recommendations" | "exceptions">({
+    keys: ["recommendations", "exceptions"] as const,
+    activeKey: activeTab,
+    onChange: setActiveTab,
+    orientation: "horizontal",
+  });
+  const recTypeRoving = useRovingTabList<"all" | "purchase" | "production">({
+    keys: ["all", "purchase", "production"] as const,
+    activeKey: recTypeFilter,
+    onChange: setRecTypeFilter,
+    orientation: "horizontal",
+  });
+
   const detailQuery = useQuery({
     queryKey: ["planning", "run", runId, session.role],
     queryFn: () => fetchDetail(session, runId),
@@ -510,44 +527,69 @@ export default function PlanningRunDetailPage() {
 
       {/* Tab control */}
       <div
-        role="tablist"
+        {...sectionRoving.tabListProps}
         aria-label="Run sections"
         className="inline-flex items-center gap-1 rounded border border-border/70 bg-bg-raised p-0.5"
         data-testid="run-detail-tabs"
       >
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === "recommendations"}
-          onClick={() => setActiveTab("recommendations")}
-          className={cn(
-            "rounded px-3 py-1.5 text-2xs font-semibold uppercase tracking-sops transition-colors",
-            activeTab === "recommendations"
-              ? "bg-accent text-accent-fg"
-              : "text-fg-muted hover:text-fg-strong",
-          )}
-          data-testid="run-detail-tab-recommendations"
-        >
-          Recommendations · {totalRecs}
-        </button>
-        <button
-          type="button"
-          role="tab"
-          aria-selected={activeTab === "exceptions"}
-          onClick={() => setActiveTab("exceptions")}
-          className={cn(
-            "rounded px-3 py-1.5 text-2xs font-semibold uppercase tracking-sops transition-colors",
-            activeTab === "exceptions"
-              ? "bg-accent text-accent-fg"
-              : "text-fg-muted hover:text-fg-strong",
-          )}
-          data-testid="run-detail-tab-exceptions"
-        >
-          Exceptions · {detail.summary.exceptions_count}
-        </button>
+        {(() => {
+          const tp = sectionRoving.getTabProps("recommendations");
+          return (
+            <button
+              type="button"
+              id="run-detail-tab-btn-recommendations"
+              aria-controls="run-detail-panel-recommendations"
+              role={tp.role}
+              tabIndex={tp.tabIndex}
+              aria-selected={tp["aria-selected"]}
+              ref={(el) => tp.ref(el)}
+              onKeyDown={tp.onKeyDown}
+              onClick={() => setActiveTab("recommendations")}
+              className={cn(
+                "rounded px-3 py-1.5 text-2xs font-semibold uppercase tracking-sops transition-colors",
+                activeTab === "recommendations"
+                  ? "bg-accent text-accent-fg"
+                  : "text-fg-muted hover:text-fg-strong",
+              )}
+              data-testid="run-detail-tab-recommendations"
+            >
+              Recommendations · {totalRecs}
+            </button>
+          );
+        })()}
+        {(() => {
+          const tp = sectionRoving.getTabProps("exceptions");
+          return (
+            <button
+              type="button"
+              id="run-detail-tab-btn-exceptions"
+              aria-controls="run-detail-panel-exceptions"
+              role={tp.role}
+              tabIndex={tp.tabIndex}
+              aria-selected={tp["aria-selected"]}
+              ref={(el) => tp.ref(el)}
+              onKeyDown={tp.onKeyDown}
+              onClick={() => setActiveTab("exceptions")}
+              className={cn(
+                "rounded px-3 py-1.5 text-2xs font-semibold uppercase tracking-sops transition-colors",
+                activeTab === "exceptions"
+                  ? "bg-accent text-accent-fg"
+                  : "text-fg-muted hover:text-fg-strong",
+              )}
+              data-testid="run-detail-tab-exceptions"
+            >
+              Exceptions · {detail.summary.exceptions_count}
+            </button>
+          );
+        })()}
       </div>
 
       {activeTab === "recommendations" ? (
+        <div
+          role="tabpanel"
+          id="run-detail-panel-recommendations"
+          aria-labelledby="run-detail-tab-btn-recommendations"
+        >
         <SectionCard
           eyebrow="Recommendations"
           title={
@@ -558,7 +600,7 @@ export default function PlanningRunDetailPage() {
           description="Click any row for the full breakdown."
           actions={
             <div
-              role="tablist"
+              {...recTypeRoving.tabListProps}
               aria-label="Filter recommendations by type"
               className="inline-flex items-center gap-1 rounded border border-border/70 bg-bg-raised p-0.5"
               data-testid="run-detail-rec-type-filter"
@@ -571,12 +613,16 @@ export default function PlanningRunDetailPage() {
                 ] as const
               ).map((opt) => {
                 const active = recTypeFilter === opt.key;
+                const tp = recTypeRoving.getTabProps(opt.key);
                 return (
                   <button
                     key={opt.key}
                     type="button"
-                    role="tab"
-                    aria-selected={active}
+                    role={tp.role}
+                    tabIndex={tp.tabIndex}
+                    aria-selected={tp["aria-selected"]}
+                    ref={(el) => tp.ref(el)}
+                    onKeyDown={tp.onKeyDown}
                     onClick={() => setRecTypeFilter(opt.key)}
                     className={cn(
                       "rounded px-2.5 py-1 text-2xs font-semibold uppercase tracking-sops transition-colors",
@@ -637,22 +683,22 @@ export default function PlanningRunDetailPage() {
                 >
                   <thead>
                     <tr className="border-b border-border/70 bg-bg-subtle/60 text-left">
-                      <th className="px-3 py-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                      <th scope="col" className="px-3 py-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                         Item
                       </th>
-                      <th className="px-3 py-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                      <th scope="col" className="px-3 py-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                         Type
                       </th>
-                      <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                      <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                         Quantity
                       </th>
-                      <th className="px-3 py-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                      <th scope="col" className="px-3 py-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                         Priority
                       </th>
-                      <th className="px-3 py-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                      <th scope="col" className="px-3 py-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                         Status
                       </th>
-                      <th className="px-3 py-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                      <th scope="col" className="px-3 py-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                         Action
                       </th>
                     </tr>
@@ -746,7 +792,13 @@ export default function PlanningRunDetailPage() {
             </>
           )}
         </SectionCard>
+        </div>
       ) : (
+        <div
+          role="tabpanel"
+          id="run-detail-panel-exceptions"
+          aria-labelledby="run-detail-tab-btn-exceptions"
+        >
         <SectionCard
           eyebrow="Exceptions"
           title={
@@ -771,16 +823,16 @@ export default function PlanningRunDetailPage() {
                 >
                   <thead>
                     <tr className="border-b border-border/70 bg-bg-subtle/60 text-left">
-                      <th className="px-3 py-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                      <th scope="col" className="px-3 py-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                         Item / component
                       </th>
-                      <th className="px-3 py-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                      <th scope="col" className="px-3 py-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                         Exception
                       </th>
-                      <th className="px-3 py-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                      <th scope="col" className="px-3 py-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                         Severity
                       </th>
-                      <th className="px-3 py-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                      <th scope="col" className="px-3 py-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                         Action
                       </th>
                     </tr>
@@ -895,6 +947,7 @@ export default function PlanningRunDetailPage() {
             </>
           )}
         </SectionCard>
+        </div>
       )}
     </div>
   );
