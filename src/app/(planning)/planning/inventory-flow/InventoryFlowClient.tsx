@@ -135,7 +135,7 @@ export function InventoryFlowClient() {
       // header stops eating the phone's above-the-fold space — the first item
       // card must be visible without scrolling on a 667px-tall viewport.
       size="section"
-      description="14-day daily FG projection, then weekly to 8 weeks. Stockouts first."
+      description="14-day daily finished-goods projection, then weekly to 8 weeks. Stockouts first."
       meta={
         <>
           {flowQuery.isLoading ? (
