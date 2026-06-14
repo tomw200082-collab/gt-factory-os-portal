@@ -174,6 +174,13 @@ export function useCreatePlan() {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["production-plan"] });
+      // F3 (data integrity): a plan can be created from a recommendation, which
+      // consumes it. Without these, the runs / run-detail / recommendations /
+      // overview surfaces (all under the ["planning"] prefix) and the inbox keep
+      // showing the consumed rec as actionable — risking double-consumption.
+      // Prefix invalidation; a no-op refetch for manually-created plans.
+      void qc.invalidateQueries({ queryKey: ["planning"] });
+      void qc.invalidateQueries({ queryKey: ["inbox"] });
     },
   });
 }

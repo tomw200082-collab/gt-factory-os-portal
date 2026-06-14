@@ -2,7 +2,12 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, FileWarning, ShoppingCart } from "lucide-react";
+import {
+  AlertTriangle,
+  CalendarCheck,
+  FileWarning,
+  ShoppingCart,
+} from "lucide-react";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { cn } from "@/lib/cn";
 import type {
@@ -523,7 +528,21 @@ export function SimulationResults({
               Create a manual purchase order →
             </Link>
           </div>
-        ) : null}
+        ) : (
+          // Fully covered: stock already supports this run, so the onward step
+          // isn't ordering — it's scheduling. Bridge to the production board so
+          // the what-if doesn't dead-end on a green answer.
+          <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-border/60 pt-4">
+            <Link
+              href="/planning/production-plan"
+              className="btn btn-sm btn-primary gap-1.5"
+              data-testid="production-simulation-go-production-plan"
+            >
+              <CalendarCheck className="h-3.5 w-3.5" strokeWidth={2.25} aria-hidden />
+              Stock covers this run — schedule it
+            </Link>
+          </div>
+        )}
       </div>
 
       {data.warnings.length > 0 ? (
@@ -540,7 +559,7 @@ export function SimulationResults({
         contentClassName="p-0"
         footer={
           <span>
-            Ratios from PACK recipe{" "}
+            Ratios from packaging recipe{" "}
             <span className="font-mono text-fg-subtle">
               {data.packHeadId}
             </span>{" "}
@@ -548,7 +567,7 @@ export function SimulationResults({
             {data.baseHeadId && data.baseVersionLabel ? (
               <>
                 {" "}
-                + BASE recipe{" "}
+                + liquid recipe{" "}
                 <span className="font-mono text-fg-subtle">
                   {data.baseHeadId}
                 </span>{" "}
