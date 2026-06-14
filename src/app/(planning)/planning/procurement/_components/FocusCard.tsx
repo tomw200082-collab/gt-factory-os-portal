@@ -19,6 +19,7 @@ import {
   AlertTriangle,
   Check,
   ClipboardCopy,
+  FileText,
   Pencil,
   Plus,
   SkipForward,
@@ -394,6 +395,15 @@ export function FocusCard({
         </table>
         </div>
       </div>
+
+      {/* Printable order sheet — detailed Hebrew order with spec + labels */}
+      <Link
+        href={`/planning/procurement/${po.session_po_id}/sheet`}
+        className="inline-flex items-center gap-1 text-3xs font-semibold uppercase tracking-sops text-fg-muted hover:text-fg transition-colors"
+        data-testid="focus-open-sheet"
+      >
+        <FileText className="h-3 w-3" aria-hidden /> גיליון הזמנה להדפסה
+      </Link>
 
       {/* Ad-hoc add line (Tranche 030) */}
       {addingLine && po.status !== "placed" && po.status !== "skipped" && (
