@@ -6,6 +6,32 @@ export type SessionStatus = "open" | "completed" | "superseded";
 export type PoTier = "must" | "recommended" | "urgent";
 export type PoStatus = "proposed" | "approved" | "placed" | "skipped";
 
+// 0250: physical label size carried on a label line (priced by size).
+export interface LineLabelSize {
+  size_id: string;
+  width_mm: number;
+  height_mm: number;
+  label: string;
+}
+
+// 0250: procurement spec resolved per (component, supplier).
+export interface LineProcurementSpec {
+  supplier_catalog_wording: string | null;
+  material: string | null;
+  finish: string | null;
+  print: string | null;
+  design: string | null;
+  dimensions_mm: string | null;
+  ordering_notes: string | null;
+}
+
+// 0251: a current file attached to the line's component.
+export interface LineAsset {
+  asset_type: "PHOTO" | "PRINT_FILE" | "SPEC_SHEET";
+  file_name: string;
+  dpi: number | null;
+}
+
 export interface PurchaseSessionLine {
   session_po_line_id: string;
   component_id: string | null;
@@ -20,6 +46,12 @@ export interface PurchaseSessionLine {
   coverage_trace: unknown;
   is_user_added: boolean;
   is_dropped: boolean;
+  // 0250 / 0251 order-sheet enrichment. Optional — older API responses omit
+  // them; treated as false / null / [] at the read boundary.
+  is_label?: boolean;
+  label_size?: LineLabelSize | null;
+  procurement_spec?: LineProcurementSpec | null;
+  assets?: LineAsset[];
 }
 
 export interface PurchaseSessionPo {
