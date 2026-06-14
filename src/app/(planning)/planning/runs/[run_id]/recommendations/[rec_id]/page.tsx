@@ -26,15 +26,11 @@
 // ---------------------------------------------------------------------------
 
 import Link from "next/link";
-import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Check, X, Factory, FileOutput } from "lucide-react";
-import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
+import { useParams } from "next/navigation";
+import { ArrowLeft } from "lucide-react";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
 import { ErrorState } from "@/components/feedback/states";
-import { useSession } from "@/lib/auth/session-provider";
-import { cn } from "@/lib/cn";
 import { useRecDetail } from "./_lib/useRecDetail";
 import type { LeadTimeSource } from "./_lib/types";
 import { RecDetailHeader, RecDetailHeaderSkeleton } from "./_components/RecDetailHeader";
@@ -44,57 +40,6 @@ import { OpenPOsCard, OpenPOsCardSkeleton } from "./_components/OpenPOsCard";
 import { ExceptionsCard } from "./_components/ExceptionsCard";
 import { PolicyAppliedCard, PolicyAppliedCardSkeleton } from "./_components/PolicyAppliedCard";
 import { StockCurveCard, StockCurveCardSkeleton } from "./_components/StockCurveCard";
-
-function genIdempotencyKey(): string {
-  try {
-    return (globalThis as { crypto?: { randomUUID?: () => string } }).crypto
-      ?.randomUUID?.() ?? `rid-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  } catch {
-    return `rid-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  }
-}
-
-async function postRecAction(
-  recId: string,
-  action: "approve" | "dismiss",
-): Promise<void> {
-  const res = await fetch(
-    `/api/planning/recommendations/${encodeURIComponent(recId)}/${action}`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ idempotency_key: genIdempotencyKey() }),
-    },
-  );
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    let detail = "";
-    try {
-      detail = (JSON.parse(txt) as { detail?: string }).detail ?? "";
-    } catch {
-      /* ignore */
-    }
-    throw new Error(detail || `Could not ${action} this recommendation. Try again.`);
-  }
-}
-
-async function postConvertToPO(recId: string): Promise<{ po_id: string; po_number: string | null; idempotent_replay: boolean }> {
-  const res = await fetch(
-    `/api/planning/recommendations/${encodeURIComponent(recId)}/convert-to-po`,
-    {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ idempotency_key: genIdempotencyKey() }),
-    },
-  );
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    let detail = "";
-    try { detail = (JSON.parse(txt) as { detail?: string }).detail ?? ""; } catch { /* ignore */ }
-    throw new Error(detail || "Could not create the purchase order. Try again.");
-  }
-  return await res.json();
-}
 
 function fmtDateAgo(iso: string | null): string {
   if (!iso) return "—";
@@ -173,126 +118,14 @@ function SkeletonLayout(_props: { runId: string }) {
 }
 
 export default function RecommendationDrillDownPage() {
-  const { session } = useSession();
   const params = useParams();
-  const router = useRouter();
-  const queryClient = useQueryClient();
   const runId = String(params?.run_id ?? "");
   const recId = String(params?.rec_id ?? "");
 
-  const canExecute =
-    session.role === "planner" || session.role === "admin";
-
   const { data: result, isLoading, isError } = useRecDetail(recId);
 
-  // Loop 10 — inline approve / dismiss. The planner has every input here
-  // to decide (item, qty, MOQ, lead time, components, open POs, exceptions),
-  // so making them go back to the run-detail table to click Approve was
-  // pure friction. Mutations invalidate both rec-detail and run-detail
-  // queries so the parent table reflects the new state immediately.
-  const [actionToast, setActionToast] = useState<{
-    kind: "success" | "error";
-    message: string;
-  } | null>(null);
-
-  // Loop 12 — "approve and continue" navigates after a successful approve.
-  // Tracks the post-approve target so the same approve mutation can either
-  // stay on the page (manager wants to triage more recs first) or jump
-  // straight into execution (the common case for a clean rec).
-  const [postApproveTarget, setPostApproveTarget] = useState<
-    "stay" | "execute"
-  >("stay");
-
-  const convertMut = useMutation({
-    mutationFn: () => postConvertToPO(recId),
-    onSuccess: (data) => {
-      void queryClient.invalidateQueries({ queryKey: ["rec-detail", recId] });
-      void queryClient.invalidateQueries({
-        queryKey: ["planning", "run", runId, "recs"],
-      });
-      // Tranche 065 (FLOW-A6) — the new PO must appear in the PO list,
-      // PO detail surfaces, and the goods-receipt open-PO dropdown without
-      // a manual reload (same set as usePlacePo / manual creation).
-      void queryClient.invalidateQueries({
-        queryKey: ["planner", "purchase-orders"],
-      });
-      void queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
-      void queryClient.invalidateQueries({
-        queryKey: ["ops", "receipts", "open-pos"],
-      });
-      router.push(`/purchase-orders/${encodeURIComponent(data.po_id)}`);
-    },
-    onError: (err: Error) => {
-      // Approve already succeeded server-side; surface the convert failure
-      // honestly so the planner can finish the job manually instead of
-      // discovering the orphaned approval later. This toast is persistent
-      // (no auto-dismiss) so the "Create purchase order" recovery button
-      // stays paired with the message until the planner acts.
-      setActionToast({
-        kind: "error",
-        message:
-          err.message ||
-          "Recommendation approved, but the purchase order could not be created. You can create the PO manually from the run table.",
-      });
-    },
-  });
-
-  const approveMut = useMutation({
-    mutationFn: () => postRecAction(recId, "approve"),
-    onSuccess: () => {
-      setActionToast({ kind: "success", message: "Recommendation approved." });
-      void queryClient.invalidateQueries({ queryKey: ["rec-detail", recId] });
-      void queryClient.invalidateQueries({
-        queryKey: ["planning", "run", runId, "recs"],
-      });
-      // If the manager clicked "Approve and execute", jump into the right
-      // execution flow now that the rec is approved server-side.
-      if (postApproveTarget === "execute") {
-        const isProd = result?.data?.rec_type === "production";
-        const itemId = result?.data?.item_id ?? "";
-        const recommendedQty = result?.data?.recommended_qty ?? "";
-        if (isProd) {
-          router.push(
-            `/stock/production-actual` +
-              `?item_id=${encodeURIComponent(itemId)}` +
-              `&suggested_qty=${encodeURIComponent(recommendedQty)}` +
-              `&from_rec=${encodeURIComponent(recId)}` +
-              `&from_run=${encodeURIComponent(runId)}`,
-          );
-        } else {
-          // Purchase recs: chain straight into convert-to-PO. There is no
-          // /convert portal page — the API does the work and we navigate
-          // to the resulting PO. If convert fails, convertMut.onError
-          // surfaces the orphaned-approval message.
-          convertMut.mutate();
-        }
-        setPostApproveTarget("stay");
-        return;
-      }
-      window.setTimeout(() => setActionToast(null), 3500);
-    },
-    onError: (err: Error) => {
-      setActionToast({ kind: "error", message: err.message });
-      setPostApproveTarget("stay");
-      window.setTimeout(() => setActionToast(null), 6000);
-    },
-  });
-
-  const dismissMut = useMutation({
-    mutationFn: () => postRecAction(recId, "dismiss"),
-    onSuccess: () => {
-      setActionToast({ kind: "success", message: "Recommendation dismissed." });
-      void queryClient.invalidateQueries({ queryKey: ["rec-detail", recId] });
-      void queryClient.invalidateQueries({
-        queryKey: ["planning", "run", runId, "recs"],
-      });
-      window.setTimeout(() => setActionToast(null), 3500);
-    },
-    onError: (err: Error) => {
-      setActionToast({ kind: "error", message: err.message });
-      window.setTimeout(() => setActionToast(null), 6000);
-    },
-  });
+  // Tranche 072 — planning runs are diagnostic-only. No write mutations here;
+  // approve / dismiss live in the Inbox and convert-to-PO lives in Procurement.
 
   if (isLoading) {
     return <SkeletonLayout runId={runId} />;
@@ -368,38 +201,6 @@ export default function RecommendationDrillDownPage() {
   }
 
   const rec = result.data;
-  const isApprovedAndUnconverted =
-    rec.rec_status === "approved" && rec.converted_po_id === null;
-  const isProductionRec = rec.rec_type === "production";
-  const isDraft = rec.rec_status === "draft";
-  const isMutating = approveMut.isPending || dismissMut.isPending || convertMut.isPending;
-
-  // True when no action button renders in the "What to do next" card: either
-  // the role cannot execute, or the rec is in a terminal/non-actionable state.
-  // The converted_to_po case is excluded — it has its own "Converted" block.
-  const hasActionButton =
-    rec.converted_po_id !== null ||
-    (canExecute &&
-      (isDraft ||
-        isApprovedAndUnconverted ||
-        (isProductionRec && rec.rec_status === "approved")));
-  const noActionMessage = !canExecute
-    ? "View only — no action available for your role."
-    : rec.rec_status === "dismissed"
-      ? "This recommendation was dismissed — no action needed."
-      : rec.rec_status === "superseded"
-        ? "This recommendation was superseded by a newer run — no action needed."
-        : "No action available for this recommendation.";
-
-  // For production recs, deep-link to /stock/production-actual with
-  // item_id + suggested_qty + breadcrumb params. For purchase recs, route
-  // to the existing convert-to-PO flow.
-  const productionFormHref =
-    `/stock/production-actual` +
-    `?item_id=${encodeURIComponent(rec.item_id)}` +
-    `&suggested_qty=${encodeURIComponent(rec.recommended_qty)}` +
-    `&from_rec=${encodeURIComponent(recId)}` +
-    `&from_run=${encodeURIComponent(runId)}`;
 
   return (
     <div className="space-y-5">
@@ -486,94 +287,12 @@ export default function RecommendationDrillDownPage() {
             - approved purchase: "Create purchase order" → /convert flow
             - approved production: "Open production report" → /stock/production-actual
               with prefilled item_id + suggested_qty + back-chain breadcrumb */}
-        <div className="mt-4 flex flex-wrap items-center gap-3">
-          {canExecute && isDraft ? (
-            <>
-              {/* Loop 12 — "Approve and execute" collapses approve+execute into
-                  one click for the common case where the planner has already
-                  decided. Production: approve → production form prefilled.
-                  Purchase: approve → /convert flow. The standalone "Approve
-                  only" stays on this page so a planner who's batch-triaging
-                  many recs can approve without navigating away. */}
-              <button
-                type="button"
-                className="btn btn-primary btn-sm gap-1.5"
-                data-testid="rec-detail-approve-and-execute-btn"
-                disabled={isMutating}
-                onClick={() => {
-                  setPostApproveTarget("execute");
-                  approveMut.mutate();
-                }}
-                title={
-                  isProductionRec
-                    ? "Approve this rec and open the Production Actual form prefilled"
-                    : "Approve this rec and continue to the Create PO flow"
-                }
-              >
-                {isProductionRec ? (
-                  <Factory className="h-3 w-3" strokeWidth={2.5} />
-                ) : (
-                  <FileOutput className="h-3 w-3" strokeWidth={2.5} />
-                )}
-                {approveMut.isPending && postApproveTarget === "execute"
-                  ? "Approving…"
-                  : convertMut.isPending
-                    ? "Creating purchase order…"
-                    : isProductionRec
-                      ? "Approve and open production form"
-                      : "Approve and create purchase order"}
-              </button>
-              <button
-                type="button"
-                className="btn btn-sm gap-1.5"
-                data-testid="rec-detail-approve-btn"
-                disabled={isMutating}
-                onClick={() => {
-                  setPostApproveTarget("stay");
-                  approveMut.mutate();
-                }}
-                title="Approve only — stay on this page"
-              >
-                <Check className="h-3 w-3" strokeWidth={2.5} />
-                {approveMut.isPending && postApproveTarget === "stay"
-                  ? "Approving…"
-                  : "Approve only"}
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm gap-1.5 text-danger"
-                data-testid="rec-detail-dismiss-btn"
-                disabled={isMutating}
-                onClick={() => dismissMut.mutate()}
-              >
-                <X className="h-3 w-3" strokeWidth={2.5} />
-                {dismissMut.isPending ? "Dismissing…" : "Dismiss"}
-              </button>
-            </>
-          ) : null}
-          {canExecute && isApprovedAndUnconverted && !isProductionRec ? (
-            <button
-              type="button"
-              className="btn btn-sm gap-1.5"
-              data-testid="rec-detail-create-po-btn"
-              disabled={isMutating}
-              onClick={() => convertMut.mutate()}
-            >
-              <FileOutput className="h-3 w-3" strokeWidth={2.5} />
-              {convertMut.isPending ? "Creating purchase order…" : "Create purchase order"}
-            </button>
-          ) : null}
-          {canExecute && isProductionRec && rec.rec_status === "approved" ? (
-            <Link
-              href={productionFormHref}
-              className="btn btn-primary btn-sm gap-1.5"
-              data-testid="rec-detail-open-production-form-btn"
-              title={`Open Production Actual form prefilled with ${rec.item_name} × ${fmtQty(rec.recommended_qty)} (you can adjust before submit)`}
-            >
-              Open production report
-            </Link>
-          ) : null}
-
+        {/* Tranche 072 — planning runs are diagnostic-only. Recommendation
+            approve / dismiss live in the Inbox; converting an approved purchase
+            recommendation into a PO lives in Procurement. This drill-in is
+            read-only: it shows the conversion result when present, otherwise
+            points to where to act. */}
+        <div className="mt-4 space-y-3">
           {rec.converted_po_id !== null ? (
             <div className="flex items-center gap-2">
               <Badge tone="success" dotted>Converted</Badge>
@@ -585,32 +304,31 @@ export default function RecommendationDrillDownPage() {
                 Open purchase order →
               </Link>
             </div>
-          ) : null}
-
-          {!hasActionButton ? (
-            <p
-              className="text-xs text-fg-muted"
-              data-testid="rec-detail-no-action-message"
+          ) : (
+            <div
+              className="rounded-md border border-border/60 bg-bg-subtle/50 p-3 text-xs leading-relaxed text-fg-muted"
+              data-testid="rec-detail-diagnostic-guidance"
             >
-              {noActionMessage}
-            </p>
-          ) : null}
+              Planning runs are diagnostic. Approve or dismiss recommendations in
+              the{" "}
+              <Link
+                href="/inbox"
+                className="font-medium text-accent hover:underline"
+              >
+                Inbox
+              </Link>
+              ; convert approved purchase recommendations into purchase orders in{" "}
+              <Link
+                href="/planning/procurement"
+                className="font-medium text-accent hover:underline"
+              >
+                Procurement
+              </Link>
+              .
+            </div>
+          )}
         </div>
 
-        {actionToast ? (
-          <div
-            className={cn(
-              "mt-3 rounded-md border px-3 py-2 text-xs",
-              actionToast.kind === "success"
-                ? "border-success/40 bg-success-softer text-success-fg"
-                : "border-danger/40 bg-danger-softer text-danger-fg",
-            )}
-            data-testid="rec-detail-action-toast"
-            role="status"
-          >
-            {actionToast.message}
-          </div>
-        ) : null}
       </SectionCard>
 
       {/* 4. Open POs */}

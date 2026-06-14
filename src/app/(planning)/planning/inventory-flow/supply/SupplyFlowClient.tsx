@@ -70,30 +70,30 @@ function describeSupplyFlowError(raw: string): {
       };
     case 404:
       return {
-        title: "Endpoint missing",
+        title: "Feature not available",
         description:
-          "The Supply API route was not found upstream. The backend may be mid-deploy.",
-        hint: "Wait ~30 seconds and click Reload. If it sticks, ping the backend deploy.",
+          "This page isn't available right now. It may be updating.",
+        hint: "Wait 30 seconds and try again. If the problem continues, contact support.",
       };
     case 502:
       return {
-        title: "Upstream unreachable",
+        title: "Couldn't reach the service",
         description:
-          "The portal could not reach the Factory OS API. Likely a transient network blip.",
-        hint: "Try Reload. If it persists, the API service may be down.",
+          "We couldn't reach the system. This is usually a brief network blip.",
+        hint: "Try again. If the problem continues, contact support.",
       };
     case 504:
       return {
-        title: "Upstream timeout",
+        title: "Taking longer than expected",
         description:
-          "The cold-start projection took longer than the proxy timeout. The next call should hit a warm cache.",
-        hint: "Reload — repeat calls run from a 30-min server cache and return instantly.",
+          "The projection is taking longer than expected. Try again — repeat loads are much faster.",
+        hint: "Try again — repeat loads are much faster.",
       };
     case 500:
       return {
-        title: "Server error",
-        description: detail || "The API threw an error while computing the supply projection.",
-        hint: "If this persists, check Railway logs for a stack trace.",
+        title: "Something went wrong",
+        description: detail || "Something went wrong while building the supply projection.",
+        hint: "If this continues, contact support.",
       };
     default:
       return {
@@ -323,10 +323,10 @@ export function SupplyFlowClient() {
         <div className="rounded border border-info/30 bg-info-softer px-4 py-3 text-xs text-info-fg">
           <div className="font-semibold">Calculating projection…</div>
           <div className="mt-0.5 text-fg-muted">
-            Supply flow runs a heavy SQL pass over BOM consumption + open POs +
-            on-hand for every active component and bought-finished item. First
-            loads can take ~20 seconds. Subsequent loads use a cached snapshot
-            and should be instant.
+            This projection covers all active components and their planned
+            consumption across recipes, open purchase orders, and on-hand stock.
+            First-time loads can take up to 20 seconds. Subsequent loads are
+            instant.
           </div>
         </div>
         <InsightsHero items={[]} summary={null} isLoading />
@@ -402,7 +402,7 @@ export function SupplyFlowClient() {
             <FilterBar families={families} items={data.items} />
 
             {/* Groups v1 — two URL-backed single-select group chip rows:
-                "קבוצת חומר" (material_group) and "לפי קו מוצר"
+                "Material group" (material_group) and "Used by product line"
                 (used_by_product_group). Both refetch server-side. */}
             {materialGroups.length > 0 ? (
               <GroupFilterBar
@@ -415,8 +415,8 @@ export function SupplyFlowClient() {
                   )
                 }
                 onClear={() => updateParam("material_group", null)}
-                label="קבוצת חומר"
-                ariaLabel="קבוצת חומר"
+                label="Material group"
+                ariaLabel="Material group filter"
                 testId="supply-material-group-filter"
               />
             ) : null}
@@ -431,8 +431,8 @@ export function SupplyFlowClient() {
                   )
                 }
                 onClear={() => updateParam("used_by_product_group", null)}
-                label="לפי קו מוצר"
-                ariaLabel="לפי קו מוצר"
+                label="Used by product line"
+                ariaLabel="Product line filter"
                 testId="supply-used-by-filter"
               />
             ) : null}

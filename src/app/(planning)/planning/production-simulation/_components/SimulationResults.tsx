@@ -231,7 +231,7 @@ async function loadSimulationData(
       // usable ACTIVE BASE_BOM line. Refuse to guess — return a fix-the-data
       // message instead of a wrong answer.
       return {
-        blocked: `This product links a BASE recipe (${product.baseHead.bom_head_id}), but its PACK recipe version has no active BASE_BOM line stating how much base mix one unit consumes. The base-ingredient quantities cannot be computed from the recipe until that line is added. Fix the PACK BOM, then run the simulation again.`,
+        blocked: `This product's recipe is incomplete — its packaging recipe has no line stating how much base mix one unit uses, so the base-ingredient quantities cannot be computed. Fix the packaging recipe in recipe management, then run the simulation again.`,
         lines: [],
         packHeadId: product.packHead.bom_head_id,
         packVersionLabel: pack.version_label,

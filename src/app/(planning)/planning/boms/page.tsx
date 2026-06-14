@@ -64,7 +64,7 @@ import {
 } from "lucide-react";
 import Link from "next/link";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
-import { ErrorState } from "@/components/feedback/states";
+import { EmptyState, ErrorState } from "@/components/feedback/states";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
 import { BomSimulator } from "@/components/bom/BomSimulator";
@@ -1038,163 +1038,95 @@ export default function PlanningBomsPage(): JSX.Element {
     return { maxLeadDays, componentName };
   }, [bomPreviewQuery.data]);
 
-  // R43-1 — Substitution Panel
+  // R43-1 — Substitution Panel (no backing API yet — panel renders empty state)
   const [showSubstitutionPanel, setShowSubstitutionPanel] = useState(false);
-  const [showSubApplied, setShowSubApplied] = useState<number | null>(null);
 
-  const mockSubstitutionRules: { original: string; substitute: string; savingsPerUnit: number }[] = [
-    { original: "Citric Acid (food grade)", substitute: "Ascorbic Acid Blend", savingsPerUnit: 0.34 },
-    { original: "PET Bottle 500ml", substitute: "Glass Bottle 500ml", savingsPerUnit: -0.12 },
-    { original: "Sweetener Blend A", substitute: "Sweetener Blend B", savingsPerUnit: 0.58 },
-  ];
+  // R43-2 — Avg Yield Chip: real value when present, null otherwise (displayed as "—")
+  const avgYieldPct: number | null = (() => {
+    const raw = (headsQuery.data as any)?.avg_yield_pct;
+    return typeof raw === "number" ? Math.round(raw) : null;
+  })();
 
-  // R43-2 — Avg Yield Chip
-  const avgYieldPct = Math.round((headsQuery.data as any)?.avg_yield_pct ?? 92.4);
-
-  // R44-1 — Version Timeline Panel
+  // R44-1 — Version Timeline Panel (no backing API yet — panel renders empty state)
   const [showVersionTimeline, setShowVersionTimeline] = useState(false);
 
-  const mockVersionTimeline: {
-    version: string;
-    createdDate: string;
-    status: "Active" | "Archived";
-    note: string;
-  }[] = [
-    { version: "v4", createdDate: "2026-04-28", status: "Active", note: "Added Sweetener Blend B option" },
-    { version: "v3", createdDate: "2026-02-14", status: "Archived", note: "Adjusted PET bottle qty per run" },
-    { version: "v2", createdDate: "2025-11-03", status: "Archived", note: "Switched citric acid supplier" },
-    { version: "v1", createdDate: "2025-08-19", status: "Archived", note: "Initial BOM publish" },
-  ];
-
-  // R44-2 — Active Versions Chip: count of BOM heads with at least one active version
+  // R44-2 — Active Versions Chip: count of BOM heads with at least one active version (real)
   const activeVersionsBomCount = useMemo<number>(() => {
     const heads = headsQuery.data?.rows ?? [];
-    const count = heads.filter((h) => h.active_version_id !== null).length;
-    return count > 0 ? count : 6;
+    return heads.filter((h) => h.active_version_id !== null).length;
   }, [headsQuery.data]);
 
-  // R45-1 — Component Price Trend Panel
+  // R45-1 — Component Price Trend Panel (no backing API yet — panel renders empty state)
   const [showComponentPriceTrend, setShowComponentPriceTrend] = useState(false);
 
-  // R46-1 — Component Stock Coverage Panel
+  // R46-1 — Component Stock Coverage Panel (no backing API yet — panel renders empty state)
   const [showComponentStockCoverage, setShowComponentStockCoverage] = useState(false);
 
-  const mockStockCoverageData: {
-    component: string;
-    onHand: number;
-    requiredPerRun: number;
-    coverageWks: number;
-  }[] = [
-    { component: "Citric Acid (food grade)", onHand: 420, requiredPerRun: 80, coverageWks: 5.3 },
-    { component: "PET Bottle 500ml", onHand: 1200, requiredPerRun: 400, coverageWks: 3.0 },
-    { component: "Sweetener Blend A", onHand: 95, requiredPerRun: 60, coverageWks: 1.6 },
-    { component: "Lemon Concentrate", onHand: 340, requiredPerRun: 70, coverageWks: 4.9 },
-    { component: "Shrink Wrap Sleeve", onHand: 800, requiredPerRun: 500, coverageWks: 1.6 },
-  ];
+  // R46-2 — BOM Depth Chip: real value when present, null otherwise (displayed as "—")
+  const bomDepthValue: number | null =
+    typeof (headsQuery.data as any)?.max_bom_depth === "number"
+      ? (headsQuery.data as any).max_bom_depth
+      : null;
 
-  // R46-2 — BOM Depth Chip: max depth from query or fallback
-  const bomDepthValue: number = (headsQuery.data as any)?.max_bom_depth ?? 3;
-
-  // R47-1 — Packaging Material Usage Panel
+  // R47-1 — Packaging Material Usage Panel (no backing API yet — panel renders empty state)
   const [showPackagingMaterialUsage, setShowPackagingMaterialUsage] = useState(false);
 
-  // R48-1 — Approval Status Panel
+  // R48-1 — Approval Status Panel (no backing API yet — panel renders empty state)
   const [showApprovalStatusPanel, setShowApprovalStatusPanel] = useState(false);
 
-  const packagingMaterialData: { label: string; value: number; unit: string; colorClass: string }[] = [
-    { label: "Bottles",   value: 12000, unit: "units", colorClass: "bg-accent/70" },
-    { label: "Caps",      value: 12000, unit: "units", colorClass: "bg-info-fg/70" },
-    { label: "Labels",    value: 14500, unit: "units", colorClass: "bg-warning-fg/70" },
-    { label: "Cardboard", value: 800,   unit: "sheets", colorClass: "bg-success-fg/70" },
-  ];
-  const packagingMax: number = Math.max(...packagingMaterialData.map((d) => d.value));
+  // R47-2 — Inactive BOM Chip: real value when present, null otherwise (displayed as "—")
+  const inactiveBomCount: number | null =
+    typeof (headsQuery.data as any)?.inactive_count === "number"
+      ? (headsQuery.data as any).inactive_count
+      : null;
 
-  // R47-2 — Inactive BOM Chip
-  const inactiveBomCount: number = (headsQuery.data as any)?.inactive_count ?? 4;
+  // R48-2 — Orphaned Component Chip: real value when present, null otherwise (displayed as "—")
+  const orphanedComponentCount: number | null =
+    typeof (headsQuery.data as any)?.orphaned_component_count === "number"
+      ? (headsQuery.data as any).orphaned_component_count
+      : null;
 
-  // R48-2 — Orphaned Component Chip
-  const orphanedComponentCount: number = (headsQuery.data as any)?.orphaned_component_count ?? 2;
-
-  // R49-1 — Component Shortage Forecast Panel
+  // R49-1 — Component Shortage Forecast Panel (no backing API yet — panel renders empty state)
   const [showComponentShortageForecast, setShowComponentShortageForecast] = useState(false);
 
-  const mockShortageForecastData: {
-    name: string;
-    currentStock: number;
-    weeklyUsage: number;
-    stockoutWeeks: number;
-  }[] = [
-    { name: "Citric Acid (food grade)", currentStock: 95,   weeklyUsage: 60,  stockoutWeeks: 1.6 },
-    { name: "Shrink Wrap Sleeve",       currentStock: 480,  weeklyUsage: 200, stockoutWeeks: 2.4 },
-    { name: "Sweetener Blend A",        currentStock: 560,  weeklyUsage: 90,  stockoutWeeks: 6.2 },
-    { name: "PET Bottle 500ml",         currentStock: 1200, weeklyUsage: 400, stockoutWeeks: 3.0 },
-  ];
+  // R49-2 — Revision Frequency Chip: real value when present, null otherwise (displayed as "—")
+  const avgMonthlyRevisions: number | null =
+    typeof (headsQuery.data as any)?.avg_monthly_revisions === "number"
+      ? (headsQuery.data as any).avg_monthly_revisions
+      : null;
 
-  // R49-2 — Revision Frequency Chip
-  const avgMonthlyRevisions: number =
-    (headsQuery.data as any)?.avg_monthly_revisions ?? 2.1;
-
-  // R50-1 — Multi-BOM Cost Comparison Panel
+  // R50-1 — Multi-BOM Cost Comparison Panel (no backing API yet — panel renders empty state)
   const [showMultiBomCostComparison, setShowMultiBomCostComparison] = useState(false);
 
-  const mockMultiBomCostData: {
-    category: string;
-    v1: number;
-    v2: number;
-    v3: number;
-  }[] = [
-    { category: "Raw Materials", v1: 4.80, v2: 4.65, v3: 4.50 },
-    { category: "Packaging",     v1: 2.20, v2: 2.35, v3: 2.10 },
-    { category: "Labor",         v1: 1.50, v2: 1.50, v3: 1.45 },
-    { category: "Overhead",      v1: 0.90, v2: 0.88, v3: 0.85 },
-  ];
+  // R50-2 — Shared Component Chip: real value when present, null otherwise (displayed as "—")
+  const sharedComponentCount: number | null =
+    typeof (headsQuery.data as any)?.shared_component_count === "number"
+      ? (headsQuery.data as any).shared_component_count
+      : null;
 
-  // R50-2 — Shared Component Chip
-  const sharedComponentCount: number =
-    (headsQuery.data as any)?.shared_component_count ?? 7;
-
-  // R51-1 — Yield Variance Panel
+  // R51-1 — Yield Variance Panel (no backing API yet — panel renders empty state)
   const [showYieldVariancePanel, setShowYieldVariancePanel] = useState(false);
 
-  const YIELD_VARIANCE: { name: string; theoretical: number; actual: number }[] = [
-    { name: "Cocktail Base",  theoretical: 98.5, actual: 96.2 },
-    { name: "Tea Blend",      theoretical: 97.0, actual: 97.3 },
-    { name: "Smoothie Mix",   theoretical: 96.0, actual: 91.8 },
-    { name: "Margarita Mix",  theoretical: 98.0, actual: 97.5 },
-    { name: "Syrup Blend",    theoretical: 99.0, actual: 98.1 },
-  ];
+  // R51-2 — BOM Complexity Chip: real value when present, null otherwise (displayed as "—")
+  const bomComplexityScore: number | null =
+    typeof (headsQuery.data as any)?.avg_complexity_score === "number"
+      ? Number(((headsQuery.data as any).avg_complexity_score as number).toFixed(1))
+      : null;
 
-  // R51-2 — BOM Complexity Chip
-  const bomComplexityScore: number = Number(
-    ((headsQuery.data as any)?.avg_complexity_score ?? 4.2).toFixed(1),
-  );
-
-  // R52-1 — BOM Changelog Panel
+  // R52-1 — BOM Changelog Panel (no backing API yet — panel renders empty state)
   const [showBomChangelogPanel, setShowBomChangelogPanel] = useState(false);
 
-  const BOM_CHANGELOG: {
-    version: string;
-    date: string;
-    author: string;
-    change: string;
-    type: "quantity" | "substitution" | "structure" | "cost";
-  }[] = [
-    { version: "v3.2", date: "2 days ago",  author: "Tom W.",  change: "Updated Cocktail Base quantity +5%",          type: "quantity"     },
-    { version: "v3.1", date: "1 week ago",  author: "Alex R.", change: "Replaced Syrup A with Syrup B",               type: "substitution" },
-    { version: "v3.0", date: "2 weeks ago", author: "Tom W.",  change: "Added packaging line revision",               type: "structure"    },
-    { version: "v2.9", date: "1 month ago", author: "Admin",   change: "Cost update from supplier price change",      type: "cost"         },
-  ];
+  // R52-2 — Avg Component Cost Chip: real value when present, null otherwise (displayed as "—")
+  const avgComponentCostILS: number | null =
+    typeof (headsQuery.data as any)?.avg_component_cost_ils === "number"
+      ? Number(((headsQuery.data as any).avg_component_cost_ils as number).toFixed(2))
+      : null;
 
-  // R52-2 — Avg Component Cost Chip
-  const avgComponentCostILS = Number(
-    ((headsQuery.data as any)?.avg_component_cost_ils ?? 8.40).toFixed(2),
-  );
-
-  const mockPriceTrendData: number[] = [4.2, 4.5, 4.3, 4.8, 5.1, 4.9];
-
-  // R45-2 — BOM Cost Chip: unit cost for the selected BOM
-  const totalBomCostValue: number =
-    (headsQuery.data as any)?.selected_bom_unit_cost ?? 12.40;
+  // R45-2 — BOM Cost Chip: real value when present, null otherwise (displayed as "—")
+  const totalBomCostValue: number | null =
+    typeof (headsQuery.data as any)?.selected_bom_unit_cost === "number"
+      ? (headsQuery.data as any).selected_bom_unit_cost
+      : null;
 
   // R30 — BOM diff data: compare lines of two selected BOMs
   const bomDiffData = useMemo<{
@@ -1422,43 +1354,53 @@ export default function PlanningBomsPage(): JSX.Element {
                 Max lead: {componentLeadTimeChip.maxLeadDays}d ({componentLeadTimeChip.componentName})
               </span>
             )}
-            {/* R44-2 — Active Versions Chip */}
+            {/* R44-2 — Active Versions Chip (real — count of heads with active_version_id) */}
             <span className="inline-flex items-center gap-1 text-3xs rounded-full px-2 py-0.5 bg-bg-muted text-fg-muted">
               <GitCommit className="h-3 w-3 shrink-0" strokeWidth={2} />
               Active: {activeVersionsBomCount} BOMs
             </span>
-            {/* R45-2 — BOM Cost Chip */}
-            <span className="inline-flex items-center gap-1 text-3xs rounded-full px-2 py-0.5 bg-bg-muted text-fg-muted">
-              <Coins className="h-3 w-3 shrink-0" strokeWidth={2} />
-              BOM cost: ₪{totalBomCostValue.toFixed(2)}
-            </span>
-            {/* R46-2 — BOM Depth Chip */}
-            <span className="inline-flex items-center gap-1 text-3xs rounded-full px-2 py-0.5 bg-bg-muted text-fg-muted">
-              <Layers className="h-3 w-3 shrink-0" strokeWidth={2} />
-              Depth: {bomDepthValue} levels
-            </span>
-            {/* R47-2 — Inactive BOM Chip */}
-            <span className="inline-flex items-center gap-1 text-3xs rounded-full px-2 py-0.5 bg-bg-muted text-fg-muted">
-              <Archive className="h-3 w-3 shrink-0" strokeWidth={2} />
-              Inactive: {inactiveBomCount} BOMs
-            </span>
-            {/* R48-2 — Orphaned Component Chip */}
-            <span
-              className={`inline-flex items-center gap-1 text-3xs rounded-full px-2 py-0.5 ${
-                orphanedComponentCount > 0
-                  ? "bg-danger-softer text-danger-fg"
-                  : "bg-success-softer text-success-fg"
-              }`}
-              title={orphanedComponentCount > 0 ? "Components not referenced by any active BOM" : "No orphaned components"}
-            >
-              <Unlink className="h-3 w-3 shrink-0" strokeWidth={2} />
-              Orphaned: {orphanedComponentCount}
-            </span>
-            {/* R49-2 — Revision Frequency Chip */}
-            <span className="inline-flex items-center gap-1 text-3xs rounded-full px-2 py-0.5 bg-bg-muted text-fg-muted">
-              <RefreshCw className="h-3 w-3 shrink-0" strokeWidth={2} />
-              Avg revisions: {avgMonthlyRevisions.toFixed(1)}/mo
-            </span>
+            {/* R45-2 — BOM Cost Chip — hidden until real data lands (VISUAL-012 trim) */}
+            {totalBomCostValue !== null && (
+              <span className="inline-flex items-center gap-1 text-3xs rounded-full px-2 py-0.5 bg-bg-muted text-fg-muted">
+                <Coins className="h-3 w-3 shrink-0" strokeWidth={2} />
+                BOM cost: ₪{totalBomCostValue.toFixed(2)}
+              </span>
+            )}
+            {/* R46-2 — BOM Depth Chip — hidden until real data lands (VISUAL-012 trim) */}
+            {bomDepthValue !== null && (
+              <span className="inline-flex items-center gap-1 text-3xs rounded-full px-2 py-0.5 bg-bg-muted text-fg-muted">
+                <Layers className="h-3 w-3 shrink-0" strokeWidth={2} />
+                Depth: {bomDepthValue} levels
+              </span>
+            )}
+            {/* R47-2 — Inactive BOM Chip — hidden until real data lands (VISUAL-012 trim) */}
+            {inactiveBomCount !== null && (
+              <span className="inline-flex items-center gap-1 text-3xs rounded-full px-2 py-0.5 bg-bg-muted text-fg-muted">
+                <Archive className="h-3 w-3 shrink-0" strokeWidth={2} />
+                Inactive: {inactiveBomCount} BOMs
+              </span>
+            )}
+            {/* R48-2 — Orphaned Component Chip — hidden until real data lands (VISUAL-012 trim) */}
+            {orphanedComponentCount !== null && (
+              <span
+                className={`inline-flex items-center gap-1 text-3xs rounded-full px-2 py-0.5 ${
+                  orphanedComponentCount > 0
+                    ? "bg-danger-softer text-danger-fg"
+                    : "bg-success-softer text-success-fg"
+                }`}
+                title={orphanedComponentCount > 0 ? "Components not referenced by any active BOM" : "No orphaned components"}
+              >
+                <Unlink className="h-3 w-3 shrink-0" strokeWidth={2} />
+                Orphaned: {orphanedComponentCount}
+              </span>
+            )}
+            {/* R49-2 — Revision Frequency Chip — hidden until real data lands (VISUAL-012 trim) */}
+            {avgMonthlyRevisions !== null && (
+              <span className="inline-flex items-center gap-1 text-3xs rounded-full px-2 py-0.5 bg-bg-muted text-fg-muted">
+                <RefreshCw className="h-3 w-3 shrink-0" strokeWidth={2} />
+                Avg revisions: {avgMonthlyRevisions.toFixed(1)}/mo
+              </span>
+            )}
           </div>
         }
       />
@@ -1963,46 +1905,53 @@ export default function PlanningBomsPage(): JSX.Element {
               <GitCommit className="h-3 w-3 shrink-0" strokeWidth={2} />
               Changelog
             </button>
-            {/* R50-2 — Shared Component Chip */}
-            <span className="inline-flex items-center gap-1 text-3xs rounded-full px-2 py-0.5 bg-bg-muted text-fg-muted">
-              <Share2 className="h-3 w-3 shrink-0" strokeWidth={2} />
-              Shared: {sharedComponentCount} components
-            </span>
-            {/* R51-2 — BOM Complexity Chip */}
-            <span
-              className={`inline-flex items-center gap-1 text-3xs rounded-full px-2 py-0.5 ${
-                bomComplexityScore < 3
-                  ? "bg-success-softer text-success-fg"
-                  : bomComplexityScore < 6
-                    ? "bg-warning-softer text-warning-fg"
-                    : "bg-danger-softer text-danger-fg"
-              }`}
-              title="Average BOM complexity score"
-            >
-              <GitBranch className="h-3 w-3 shrink-0" strokeWidth={2} />
-              Complexity: {bomComplexityScore}
-            </span>
-            {/* R52-2 — Avg Component Cost Chip */}
+            {/* R50-2 — Shared Component Chip — "—" until real data lands */}
             <span
               className="inline-flex items-center gap-1 text-3xs rounded-full px-2 py-0.5 bg-bg-muted text-fg-muted"
-              title="Average component cost per unit"
+              title={sharedComponentCount === null ? "Not yet available" : undefined}
             >
-              <Coins className="h-3 w-3 shrink-0" strokeWidth={2} />
-              Avg: ₪{avgComponentCostILS}/u
+              <Share2 className="h-3 w-3 shrink-0" strokeWidth={2} />
+              Shared: {sharedComponentCount === null ? "—" : `${sharedComponentCount} components`}
             </span>
-            {/* R43-2 — Avg Yield Chip */}
+            {/* R51-2 — BOM Complexity Chip — "—" until real data lands */}
             <span
               className={`inline-flex items-center gap-1 text-3xs rounded-full px-2 py-0.5 ${
-                avgYieldPct >= 95
-                  ? "bg-success-softer text-success-fg"
-                  : avgYieldPct >= 85
-                    ? "bg-warning-softer text-warning-fg"
-                    : "bg-danger-softer text-danger-fg"
+                bomComplexityScore === null
+                  ? "bg-bg-muted text-fg-muted"
+                  : bomComplexityScore < 3
+                    ? "bg-success-softer text-success-fg"
+                    : bomComplexityScore < 6
+                      ? "bg-warning-softer text-warning-fg"
+                      : "bg-danger-softer text-danger-fg"
               }`}
-              title="Average yield across all BOMs"
+              title={bomComplexityScore === null ? "Not yet available" : "Average BOM complexity score"}
+            >
+              <GitBranch className="h-3 w-3 shrink-0" strokeWidth={2} />
+              Complexity: {bomComplexityScore === null ? "—" : bomComplexityScore}
+            </span>
+            {/* R52-2 — Avg Component Cost Chip — "—" until real data lands */}
+            <span
+              className="inline-flex items-center gap-1 text-3xs rounded-full px-2 py-0.5 bg-bg-muted text-fg-muted"
+              title={avgComponentCostILS === null ? "Not yet available" : "Average component cost per unit"}
+            >
+              <Coins className="h-3 w-3 shrink-0" strokeWidth={2} />
+              Avg: {avgComponentCostILS === null ? "—" : `₪${avgComponentCostILS}/u`}
+            </span>
+            {/* R43-2 — Avg Yield Chip — "—" until real data lands */}
+            <span
+              className={`inline-flex items-center gap-1 text-3xs rounded-full px-2 py-0.5 ${
+                avgYieldPct === null
+                  ? "bg-bg-muted text-fg-muted"
+                  : avgYieldPct >= 95
+                    ? "bg-success-softer text-success-fg"
+                    : avgYieldPct >= 85
+                      ? "bg-warning-softer text-warning-fg"
+                      : "bg-danger-softer text-danger-fg"
+              }`}
+              title={avgYieldPct === null ? "Not yet available" : "Average yield across all BOMs"}
             >
               <Percent className="h-3 w-3 shrink-0" strokeWidth={2} />
-              Avg yield: {avgYieldPct}%
+              Avg yield: {avgYieldPct === null ? "—" : `${avgYieldPct}%`}
             </span>
           </div>
           {/* I1 — BOM Metrics Comparison Table */}
@@ -2528,502 +2477,156 @@ export default function PlanningBomsPage(): JSX.Element {
             </div>
           )}
 
-          {/* R43-1 — Substitution Panel */}
+          {/* R43-1 — Substitution Panel — empty state until backing API ships */}
           {showSubstitutionPanel && (
             <div className="bg-bg-subtle border border-border rounded p-3 mt-2 mx-3 text-3xs">
               <div className="flex items-center gap-1 mb-2">
                 <Shuffle className="h-3 w-3 shrink-0 text-fg-strong" strokeWidth={2} />
                 <span className="text-xs font-semibold text-fg-strong">Substitution Rules</span>
               </div>
-              <ul className="space-y-1.5">
-                {mockSubstitutionRules.map((rule, idx) => (
-                  <li
-                    key={idx}
-                    className="flex items-center gap-2 py-1.5 px-2 border border-border/40 rounded bg-bg-muted/30"
-                  >
-                    <span className="flex-1 min-w-0 text-fg-muted truncate" title={rule.original}>
-                      {rule.original}
-                    </span>
-                    <Shuffle className="h-2.5 w-2.5 shrink-0 text-fg-faint" strokeWidth={2} />
-                    <span className="flex-1 min-w-0 text-fg truncate" title={rule.substitute}>
-                      {rule.substitute}
-                    </span>
-                    <span
-                      className={`shrink-0 rounded-full px-1.5 py-0.5 font-medium ${
-                        rule.savingsPerUnit > 0
-                          ? "bg-success-softer text-success-fg"
-                          : "bg-danger-softer text-danger-fg"
-                      }`}
-                    >
-                      {rule.savingsPerUnit > 0 ? "−" : "+"}₪{Math.abs(rule.savingsPerUnit).toFixed(2)}/unit
-                    </span>
-                    <div className="relative shrink-0">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setShowSubApplied(idx);
-                          setTimeout(() => setShowSubApplied(null), 2000);
-                        }}
-                        className="inline-flex items-center text-3xs px-2 py-0.5 rounded border border-accent/40 text-accent hover:bg-accent-softer transition-colors"
-                      >
-                        Apply
-                      </button>
-                      {showSubApplied === idx && (
-                        <div className="absolute right-0 -top-7 bg-success-fg text-white text-3xs rounded px-2 py-0.5 whitespace-nowrap shadow-sm">
-                          Applied
-                        </div>
-                      )}
-                    </div>
-                  </li>
-                ))}
-              </ul>
+              <EmptyState
+                icon={<Shuffle className="h-5 w-5 text-fg-faint" strokeWidth={1.5} />}
+                title="Not yet available"
+                description="Substitution rules data is coming soon."
+              />
             </div>
           )}
 
-          {/* R45-1 — Component Price Trend Panel */}
+          {/* R45-1 — Component Price Trend Panel — empty state until backing API ships */}
           {showComponentPriceTrend && (
             <div className="bg-bg-subtle border border-border rounded p-3 mt-2 mx-3 text-3xs">
               <div className="flex items-center gap-1 mb-2">
                 <TrendingUp className="h-3 w-3 shrink-0 text-fg-strong" strokeWidth={2} />
                 <span className="text-xs font-semibold text-fg-strong">Component Price Trend</span>
-                <span className="ml-1 text-fg-muted">&mdash; key component · last 6 months</span>
               </div>
-              {(() => {
-                const pts = mockPriceTrendData;
-                const min = Math.min(...pts);
-                const max = Math.max(...pts);
-                const range = max - min || 1;
-                const W = 240;
-                const H = 50;
-                const stepX = W / (pts.length - 1);
-                const coords = pts.map((v, i) => ({
-                  x: i * stepX,
-                  y: H - ((v - min) / range) * (H - 8) - 4,
-                }));
-                const polyPoints = coords.map((c) => `${c.x},${c.y}`).join(" ");
-                return (
-                  <div>
-                    <svg
-                      width={W}
-                      height={H}
-                      viewBox={`0 0 ${W} ${H}`}
-                      aria-label="6-month price sparkline"
-                      className="overflow-visible"
-                    >
-                      <polyline
-                        points={polyPoints}
-                        fill="none"
-                        stroke="currentColor"
-                        strokeWidth={1.5}
-                        className="text-accent"
-                      />
-                      {coords.map((c, i) => (
-                        <circle
-                          key={i}
-                          cx={c.x}
-                          cy={c.y}
-                          r={3}
-                          className="fill-accent stroke-bg-subtle"
-                          strokeWidth={1.5}
-                        />
-                      ))}
-                    </svg>
-                    <p className="mt-1 text-fg-muted">
-                      Last: ₪{pts[pts.length - 1].toFixed(2)}{" "}
-                      <span className="text-success-fg font-medium">(+16.7% YTD)</span>
-                    </p>
-                  </div>
-                );
-              })()}
+              <EmptyState
+                icon={<TrendingUp className="h-5 w-5 text-fg-faint" strokeWidth={1.5} />}
+                title="Not yet available"
+                description="Component price trend data is coming soon."
+              />
             </div>
           )}
 
-          {/* R46-1 — Component Stock Coverage Panel */}
+          {/* R46-1 — Component Stock Coverage Panel — empty state until backing API ships */}
           {showComponentStockCoverage && (
             <div className="bg-bg-subtle border border-border rounded p-3 mt-2 mx-3 text-3xs">
               <div className="flex items-center gap-1 mb-2">
                 <ShieldCheck className="h-3 w-3 shrink-0 text-fg-strong" strokeWidth={2} />
                 <span className="text-xs font-semibold text-fg-strong">Component Stock Coverage</span>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-bg-muted text-fg-faint uppercase tracking-wide">
-                      <th className="px-2 py-1 font-medium">Component</th>
-                      <th className="px-2 py-1 font-medium text-right">On Hand</th>
-                      <th className="px-2 py-1 font-medium text-right">Required/Run</th>
-                      <th className="px-2 py-1 font-medium text-right">Coverage Wks</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {mockStockCoverageData.map((row, idx) => {
-                      const coverageColorClass =
-                        row.coverageWks >= 4
-                          ? "text-success-fg font-semibold"
-                          : row.coverageWks >= 2
-                            ? "text-warning-fg font-semibold"
-                            : "text-danger-fg font-semibold";
-                      return (
-                        <tr
-                          key={row.component}
-                          className={idx % 2 === 0 ? "bg-bg-subtle" : "bg-bg-muted/30"}
-                        >
-                          <td className="px-2 py-1 text-fg-muted truncate max-w-[12rem]" title={row.component}>
-                            {row.component}
-                          </td>
-                          <td className="px-2 py-1 text-right text-fg-muted">{row.onHand}</td>
-                          <td className="px-2 py-1 text-right text-fg-muted">{row.requiredPerRun}</td>
-                          <td className={`px-2 py-1 text-right ${coverageColorClass}`}>
-                            {row.coverageWks.toFixed(1)}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              <EmptyState
+                icon={<ShieldCheck className="h-5 w-5 text-fg-faint" strokeWidth={1.5} />}
+                title="Not yet available"
+                description="Component stock coverage data is coming soon."
+              />
             </div>
           )}
 
-          {/* R47-1 — Packaging Material Usage Panel */}
+          {/* R47-1 — Packaging Material Usage Panel — empty state until backing API ships */}
           {showPackagingMaterialUsage && (
             <div className="bg-bg-subtle border border-border rounded p-3 mt-2 mx-3 text-3xs">
               <div className="flex items-center gap-1 mb-3">
                 <Box className="h-3 w-3 shrink-0 text-fg-strong" strokeWidth={2} />
                 <span className="text-xs font-semibold text-fg-strong">Packaging Material Usage</span>
               </div>
-              <div className="space-y-2">
-                {packagingMaterialData.map((item) => (
-                  <div key={item.label} className="flex items-center gap-2">
-                    <span className="w-20 shrink-0 text-fg-muted truncate">{item.label}</span>
-                    <div className="flex-1 bg-bg-muted rounded-full h-2 overflow-hidden">
-                      <div
-                        className={`h-2 rounded-full ${item.colorClass}`}
-                        style={{ width: `${Math.round((item.value / packagingMax) * 100)}%` }}
-                      />
-                    </div>
-                    <span className="shrink-0 text-fg-muted w-24 text-right">
-                      {item.value.toLocaleString()} {item.unit}
-                    </span>
-                  </div>
-                ))}
-              </div>
+              <EmptyState
+                icon={<Box className="h-5 w-5 text-fg-faint" strokeWidth={1.5} />}
+                title="Not yet available"
+                description="Packaging material usage data is coming soon."
+              />
             </div>
           )}
 
-          {/* R48-1 — Approval Status Panel */}
+          {/* R48-1 — Approval Status Panel — empty state until backing API ships */}
           {showApprovalStatusPanel && (
             <div className="bg-bg-subtle border border-border rounded p-3 mt-2 mx-3 text-3xs">
               <div className="flex items-center gap-1 mb-3">
                 <CheckCircle2 className="h-3 w-3 shrink-0 text-fg-strong" strokeWidth={2} />
                 <span className="text-xs font-semibold text-fg-strong">BOM Approval Status</span>
               </div>
-              {(() => {
-                const approvalRows: { label: string; count: number; colorClass: string; badgeClass: string }[] = [
-                  { label: "Draft",            count: 2, colorClass: "bg-bg-muted",         badgeClass: "bg-bg-muted text-fg-muted" },
-                  { label: "Pending Approval", count: 1, colorClass: "bg-warning-fg/70",    badgeClass: "bg-warning-softer text-warning-fg" },
-                  { label: "Approved",         count: 8, colorClass: "bg-success-fg/70",    badgeClass: "bg-success-softer text-success-fg" },
-                ];
-                const total = approvalRows.reduce((s, r) => s + r.count, 0);
-                return (
-                  <div className="space-y-2">
-                    {approvalRows.map((row) => {
-                      const pct = total > 0 ? Math.round((row.count / total) * 100) : 0;
-                      return (
-                        <div key={row.label} className="flex items-center gap-2">
-                          <span className="w-32 shrink-0 text-fg-muted truncate">{row.label}</span>
-                          <span
-                            className={`shrink-0 rounded-full px-1.5 py-0.5 font-semibold leading-none min-w-[1.5rem] text-center ${row.badgeClass}`}
-                          >
-                            {row.count}
-                          </span>
-                          <div className="flex-1 bg-bg-muted rounded-full h-2 overflow-hidden">
-                            <div
-                              className={`h-2 rounded-full ${row.colorClass}`}
-                              style={{ width: `${pct}%` }}
-                            />
-                          </div>
-                          <span className="w-8 text-right text-fg-faint shrink-0">{pct}%</span>
-                        </div>
-                      );
-                    })}
-                    <p className="text-fg-faint mt-1">{total} BOMs total</p>
-                  </div>
-                );
-              })()}
+              <EmptyState
+                icon={<CheckCircle2 className="h-5 w-5 text-fg-faint" strokeWidth={1.5} />}
+                title="Not yet available"
+                description="BOM approval status data is coming soon."
+              />
             </div>
           )}
 
-          {/* R49-1 — Component Shortage Forecast Panel */}
+          {/* R49-1 — Component Shortage Forecast Panel — empty state until backing API ships */}
           {showComponentShortageForecast && (
             <div className="bg-bg-subtle border border-border rounded p-3 mt-2 mx-3 text-3xs">
               <div className="flex items-center gap-1 mb-3">
                 <AlertTriangle className="h-3 w-3 shrink-0 text-fg-strong" strokeWidth={2} />
                 <span className="text-xs font-semibold text-fg-strong">Component Shortage Forecast</span>
-                <span className="ml-1 text-fg-muted">&mdash; 8-week horizon</span>
               </div>
-              <ul className="space-y-2">
-                {mockShortageForecastData.map((row) => {
-                  const stockoutColor =
-                    row.stockoutWeeks <= 2
-                      ? "text-danger-fg font-semibold"
-                      : row.stockoutWeeks <= 4
-                        ? "text-warning-fg font-semibold"
-                        : "text-success-fg font-semibold";
-                  return (
-                    <li
-                      key={row.name}
-                      className="flex items-center gap-2 py-1.5 px-2 border border-border/40 rounded bg-bg-muted/30"
-                    >
-                      <div className="flex-1 min-w-0">
-                        <div className="text-fg-muted truncate font-medium" title={row.name}>
-                          {row.name}
-                        </div>
-                        <div className="text-fg-faint mt-0.5">
-                          On hand: {row.currentStock.toLocaleString()} · Usage: {row.weeklyUsage}/wk
-                        </div>
-                      </div>
-                      <span className={`shrink-0 ${stockoutColor}`}>
-                        stockout in {row.stockoutWeeks.toFixed(1)} wks
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
+              <EmptyState
+                icon={<AlertTriangle className="h-5 w-5 text-fg-faint" strokeWidth={1.5} />}
+                title="Not yet available"
+                description="Component shortage forecast data is coming soon."
+              />
             </div>
           )}
 
-          {/* R50-1 — Multi-BOM Cost Comparison Panel */}
+          {/* R50-1 — Multi-BOM Cost Comparison Panel — empty state until backing API ships */}
           {showMultiBomCostComparison && (
             <div className="bg-bg-subtle border border-border rounded p-3 mt-2 mx-3 text-3xs">
               <div className="flex items-center gap-1 mb-3">
                 <GitCompare className="h-3 w-3 shrink-0 text-fg-strong" strokeWidth={2} />
                 <span className="text-xs font-semibold text-fg-strong">BOM Version Cost Comparison</span>
-                <span className="ml-1 text-fg-muted">&mdash; unit cost (₪) across versions</span>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-bg-muted text-fg-faint uppercase tracking-wide">
-                      <th className="px-2 py-1 font-medium">Category</th>
-                      <th className="px-2 py-1 font-medium text-right">v1</th>
-                      <th className="px-2 py-1 font-medium text-right">v2</th>
-                      <th className="px-2 py-1 font-medium text-right">v3</th>
-                      <th className="px-2 py-1 font-medium text-right">Δ vs v1</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {mockMultiBomCostData.map((row, idx) => {
-                      const delta = row.v3 - row.v1;
-                      const deltaSign = delta > 0 ? "+" : "";
-                      const deltaClass =
-                        delta < 0
-                          ? "text-success-fg font-semibold"
-                          : delta > 0
-                            ? "text-danger-fg font-semibold"
-                            : "text-fg-muted";
-                      return (
-                        <tr
-                          key={row.category}
-                          className={idx % 2 === 0 ? "bg-bg-subtle" : "bg-bg-muted/30"}
-                        >
-                          <td className="px-2 py-1 text-fg-muted">{row.category}</td>
-                          <td className="px-2 py-1 text-right text-fg-muted">₪{row.v1.toFixed(2)}</td>
-                          <td className="px-2 py-1 text-right text-fg-muted">₪{row.v2.toFixed(2)}</td>
-                          <td className="px-2 py-1 text-right text-fg-strong font-medium">₪{row.v3.toFixed(2)}</td>
-                          <td className={`px-2 py-1 text-right ${deltaClass}`}>
-                            {deltaSign}{delta.toFixed(2)}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                    {/* Totals row */}
-                    {(() => {
-                      const totV1 = mockMultiBomCostData.reduce((s, r) => s + r.v1, 0);
-                      const totV2 = mockMultiBomCostData.reduce((s, r) => s + r.v2, 0);
-                      const totV3 = mockMultiBomCostData.reduce((s, r) => s + r.v3, 0);
-                      const totDelta = totV3 - totV1;
-                      const totDeltaSign = totDelta > 0 ? "+" : "";
-                      const totDeltaClass = totDelta < 0 ? "text-success-fg" : totDelta > 0 ? "text-danger-fg" : "text-fg-muted";
-                      return (
-                        <tr className="bg-bg-muted border-t border-border font-semibold text-fg-strong">
-                          <td className="px-2 py-1.5">Total</td>
-                          <td className="px-2 py-1.5 text-right">₪{totV1.toFixed(2)}</td>
-                          <td className="px-2 py-1.5 text-right">₪{totV2.toFixed(2)}</td>
-                          <td className="px-2 py-1.5 text-right">₪{totV3.toFixed(2)}</td>
-                          <td className={`px-2 py-1.5 text-right ${totDeltaClass}`}>
-                            {totDeltaSign}{totDelta.toFixed(2)}
-                          </td>
-                        </tr>
-                      );
-                    })()}
-                  </tbody>
-                </table>
-              </div>
+              <EmptyState
+                icon={<GitCompare className="h-5 w-5 text-fg-faint" strokeWidth={1.5} />}
+                title="Not yet available"
+                description="Multi-BOM cost comparison data is coming soon."
+              />
             </div>
           )}
 
-          {/* R51-1 — Yield Variance Panel */}
+          {/* R51-1 — Yield Variance Panel — empty state until backing API ships */}
           {showYieldVariancePanel && (
             <div className="bg-bg-subtle border border-border rounded p-3 mt-2 mx-3 text-3xs">
               <div className="flex items-center gap-1 mb-3">
                 <FlaskConical className="h-3 w-3 shrink-0 text-fg-strong" strokeWidth={2} />
                 <span className="text-xs font-semibold text-fg-strong">Yield Variance</span>
-                <span className="ml-1 text-fg-muted">&mdash; theoretical vs actual yield (%)</span>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-bg-muted text-fg-faint uppercase tracking-wide">
-                      <th className="px-2 py-1 font-medium">Component</th>
-                      <th className="px-2 py-1 font-medium text-right">Theoretical %</th>
-                      <th className="px-2 py-1 font-medium text-right">Actual %</th>
-                      <th className="px-2 py-1 font-medium text-right">Variance</th>
-                      <th className="px-2 py-1 font-medium text-right">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {YIELD_VARIANCE.map((row, idx) => {
-                      const variance = row.actual - row.theoretical;
-                      const varianceSign = variance > 0 ? "+" : "";
-                      const varianceClass =
-                        variance < 0 ? "text-danger-fg font-semibold" : "text-success-fg font-semibold";
-                      const statusLabel =
-                        variance >= -2 ? "On Spec" : variance >= -5 ? "Minor" : "Off Spec";
-                      const statusClass =
-                        variance >= -2
-                          ? "bg-success-softer text-success-fg"
-                          : variance >= -5
-                            ? "bg-warning-softer text-warning-fg"
-                            : "bg-danger-softer text-danger-fg";
-                      return (
-                        <tr
-                          key={row.name}
-                          className={idx % 2 === 0 ? "bg-bg-subtle" : "bg-bg-muted/30"}
-                        >
-                          <td className="px-2 py-1 text-fg-muted">{row.name}</td>
-                          <td className="px-2 py-1 text-right text-fg-muted">{row.theoretical.toFixed(1)}</td>
-                          <td className="px-2 py-1 text-right text-fg-strong font-medium">{row.actual.toFixed(1)}</td>
-                          <td className={`px-2 py-1 text-right ${varianceClass}`}>
-                            {varianceSign}{variance.toFixed(1)}
-                          </td>
-                          <td className="px-2 py-1 text-right">
-                            <span className={`inline-block rounded-full px-1.5 py-0.5 leading-none font-medium ${statusClass}`}>
-                              {statusLabel}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              <EmptyState
+                icon={<FlaskConical className="h-5 w-5 text-fg-faint" strokeWidth={1.5} />}
+                title="Not yet available"
+                description="Yield variance data is coming soon."
+              />
             </div>
           )}
 
-          {/* R52-1 — BOM Changelog Panel */}
+          {/* R52-1 — BOM Changelog Panel — empty state until backing API ships
+              (The real BOM Change History panel above already uses
+              /api/boms/version-history. This summary changelog panel is a separate
+              surface with no backing endpoint yet.) */}
           {showBomChangelogPanel && (
             <div className="bg-bg-subtle border border-border rounded p-3 mt-2 mx-3 text-3xs">
               <div className="flex items-center gap-1 mb-3">
                 <GitCommit className="h-3 w-3 shrink-0 text-fg-strong" strokeWidth={2} />
                 <span className="text-xs font-semibold text-fg-strong">BOM Changelog</span>
-                <span className="ml-1 text-fg-muted">&mdash; recent version history</span>
               </div>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left border-collapse">
-                  <thead>
-                    <tr className="bg-bg-muted text-fg-faint uppercase tracking-wide">
-                      <th className="px-2 py-1 font-medium">Version</th>
-                      <th className="px-2 py-1 font-medium">Date</th>
-                      <th className="px-2 py-1 font-medium">Author</th>
-                      <th className="px-2 py-1 font-medium">Change</th>
-                      <th className="px-2 py-1 font-medium text-right">Type</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {BOM_CHANGELOG.map((entry, idx) => {
-                      const typeBadgeClass =
-                        entry.type === "quantity"
-                          ? "bg-info-softer text-info-fg"
-                          : entry.type === "substitution"
-                            ? "bg-warning-softer text-warning-fg"
-                            : entry.type === "structure"
-                              ? "bg-bg-muted text-fg-muted"
-                              : "bg-success-softer text-success-fg";
-                      return (
-                        <tr
-                          key={idx}
-                          className={idx % 2 === 0 ? "bg-bg-subtle" : "bg-bg-muted/30"}
-                        >
-                          <td className="px-2 py-1 text-fg-strong font-medium">{entry.version}</td>
-                          <td className="px-2 py-1 text-fg-muted">{entry.date}</td>
-                          <td className="px-2 py-1 text-fg-muted">{entry.author}</td>
-                          <td className="px-2 py-1 text-fg-muted">{entry.change}</td>
-                          <td className="px-2 py-1 text-right">
-                            <span className={`inline-block rounded-full px-1.5 py-0.5 leading-none font-medium capitalize ${typeBadgeClass}`}>
-                              {entry.type}
-                            </span>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
-              </div>
+              <EmptyState
+                icon={<GitCommit className="h-5 w-5 text-fg-faint" strokeWidth={1.5} />}
+                title="Not yet available"
+                description="Summary BOM changelog data is coming soon."
+              />
             </div>
           )}
 
-          {/* R44-1 — Version Timeline Panel */}
+          {/* R44-1 — Version Timeline Panel — empty state until backing API ships */}
           {showVersionTimeline && (
             <div className="bg-bg-subtle border border-border rounded p-3 mt-2 mx-3 text-3xs">
               <div className="flex items-center gap-1 mb-3">
                 <GitBranch className="h-3 w-3 shrink-0 text-fg-strong" strokeWidth={2} />
                 <span className="text-xs font-semibold text-fg-strong">Version Timeline</span>
               </div>
-              <div className="relative pl-4">
-                {/* Left border line */}
-                <div className="absolute left-1.5 top-1 bottom-1 w-px bg-border" />
-                <ul className="space-y-3">
-                  {mockVersionTimeline.map((entry) => (
-                    <li key={entry.version} className="relative flex items-start gap-2.5">
-                      {/* Dot indicator */}
-                      {entry.status === "Active" ? (
-                        <span
-                          className="absolute -left-[13px] top-0.5 h-3 w-3 rounded-full bg-accent border-2 border-bg-subtle shrink-0"
-                          aria-label="Active version"
-                        />
-                      ) : (
-                        <span
-                          className="absolute -left-[13px] top-0.5 h-3 w-3 rounded-full border-2 border-border bg-bg-subtle shrink-0"
-                          aria-label="Archived version"
-                        />
-                      )}
-                      <div className="flex-1 min-w-0">
-                        <div className="flex items-center gap-1.5 flex-wrap">
-                          <span
-                            className={`font-semibold ${entry.status === "Active" ? "text-fg-strong" : "text-fg-muted"}`}
-                          >
-                            {entry.version}
-                          </span>
-                          <span
-                            className={`rounded-full px-1.5 py-0.5 leading-none font-medium ${
-                              entry.status === "Active"
-                                ? "bg-accent/10 text-accent"
-                                : "bg-bg-muted text-fg-muted"
-                            }`}
-                          >
-                            {entry.status}
-                          </span>
-                          <span className="text-fg-faint">{entry.createdDate}</span>
-                        </div>
-                        <p className="text-fg-muted mt-0.5 truncate" title={entry.note}>
-                          {entry.note}
-                        </p>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </div>
+              <EmptyState
+                icon={<GitBranch className="h-5 w-5 text-fg-faint" strokeWidth={1.5} />}
+                title="Not yet available"
+                description="BOM version timeline data is coming soon."
+              />
             </div>
           )}
 

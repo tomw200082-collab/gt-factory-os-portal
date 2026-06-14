@@ -31,6 +31,7 @@ import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
 import { EmptyState } from "@/components/feedback/states";
+import { useConfirm } from "@/components/overlays/ConfirmDialog";
 import { useSession } from "@/lib/auth/session-provider";
 import { cn } from "@/lib/cn";
 import {
@@ -1084,6 +1085,7 @@ function Toast({
 export default function ProductionPlanPage() {
   const { session } = useSession();
   const canAct = session.role === "planner" || session.role === "admin";
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const weekEnd = addDays(weekStart, 6);
@@ -1326,15 +1328,14 @@ export default function ProductionPlanPage() {
   // D13 Tier 1 (Tranche 048) — quick "Move to tomorrow" for an unreported
   // today-plan. Reuses the existing date-edit PATCH; usePatchPlan already
   // invalidates the production-plan queries on success.
-  function handleMoveToTomorrow(p: ProductionPlanRow) {
+  async function handleMoveToTomorrow(p: ProductionPlanRow) {
     const label = `${p.item_name ?? p.item_id ?? "plan"} · ${fmtQty(p.planned_qty ?? "0", p.uom ?? "")}`;
-    if (
-      !window.confirm(
-        `Move "${label}" to tomorrow (${tomorrowIso})? Inventory is not affected.`,
-      )
-    ) {
-      return;
-    }
+    const ok = await confirm({
+      title: "Move plan to tomorrow?",
+      description: `Moves "${label}" to tomorrow (${tomorrowIso}). Inventory is not affected.`,
+      confirmLabel: "Move to tomorrow",
+    });
+    if (!ok) return;
     patchMut.mutate(
       { plan_id: p.plan_id, body: { plan_date: tomorrowIso } },
       {
@@ -1427,6 +1428,7 @@ export default function ProductionPlanPage() {
 
   return (
     <div dir="ltr">
+      {confirmDialog}
       {/* ── Layer 1: Week Command Header ── */}
       <WorkflowHeader
         eyebrow="Planning workspace"
@@ -1802,7 +1804,9 @@ export default function ProductionPlanPage() {
                     </Link>
                   ) : null}
                   {status && status >= 500 ? (
-                    <span className="ml-auto text-3xs text-fg-faint">Reference: HTTP {status}</span>
+                    <span className="ml-auto text-3xs text-fg-faint">
+                      If this continues, contact your system administrator.
+                    </span>
                   ) : null}
                 </div>
               </div>

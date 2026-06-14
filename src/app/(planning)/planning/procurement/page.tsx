@@ -41,6 +41,7 @@ import type { PurchaseSessionPo } from "../purchase-session/_lib/types";
 import { formatIls } from "@/lib/utils/format-money";
 import { ActionList } from "./_components/ActionList";
 import { CalendarView } from "./_components/CalendarView";
+import { RecommendationsToConvert } from "./_components/RecommendationsToConvert";
 import { FocusMode } from "./_components/FocusMode";
 import { buildFocusQueue } from "./_lib/focus-queue";
 
@@ -198,6 +199,11 @@ export default function ProcurementPage(): JSX.Element {
         </div>
       )}
 
+      {/* Approved purchase recommendations → PO. Canonical conversion home
+          after planning runs were made diagnostic-only (Tranche 072). Renders
+          nothing when there is nothing to convert. */}
+      <RecommendationsToConvert />
+
       {isLoading ? (
         <LoadingState />
       ) : isError ? (
@@ -304,7 +310,7 @@ function SessionView({
             <button
               type="button"
               onClick={onStartFocus}
-              className="btn btn-accent"
+              className="btn btn-primary"
               data-testid="procurement-start-focus"
             >
               <Target className="h-4 w-4" aria-hidden />

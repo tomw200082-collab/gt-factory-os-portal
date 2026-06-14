@@ -14,8 +14,9 @@
 //     severity badge, "Fix →" deep-link when a fix route is known
 //
 // Role gate:
-//   - operator/viewer: detail + recs + exceptions visible; no actions
-//   - planner/admin: per-row Approve / Dismiss / Convert-to-PO actions
+//   - all roles: read-only diagnostic view (detail + recs + exceptions).
+//     Tranche 072 — no write actions here. Approve / dismiss live in the
+//     Inbox; converting an approved purchase rec into a PO lives in Procurement.
 //
 // Deferred to future cycles: pagination, cross-run diff, full policy
 // snapshot drill-down.
@@ -23,9 +24,9 @@
 
 import Link from "next/link";
 import { useParams, useRouter, useSearchParams } from "next/navigation";
-import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
-import { ArrowLeft, Check, X, FileOutput, Loader2 } from "lucide-react";
+import { ArrowLeft } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
@@ -163,91 +164,6 @@ async function fetchRecsByType(
     );
   }
   return (await res.json()) as RecsResponse;
-}
-
-function genIdempotencyKey(): string {
-  try {
-    return (
-      (globalThis as { crypto?: { randomUUID?: () => string } }).crypto
-        ?.randomUUID?.() ??
-      `rid-${Date.now()}-${Math.random().toString(16).slice(2)}`
-    );
-  } catch {
-    return `rid-${Date.now()}-${Math.random().toString(16).slice(2)}`;
-  }
-}
-
-async function approveRec(session: Session, id: string): Promise<void> {
-  const res = await fetch(
-    `/api/planning/recommendations/${encodeURIComponent(id)}/approve`,
-    {
-      method: "POST",
-      headers: sessionHeaders(session),
-      body: JSON.stringify({ idempotency_key: genIdempotencyKey() }),
-    },
-  );
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    let detail = "";
-    try {
-      detail = (JSON.parse(txt) as { detail?: string }).detail ?? "";
-    } catch {
-      /* ignore */
-    }
-    throw new Error(detail || "Could not approve this recommendation. Try again.");
-  }
-}
-
-async function dismissRec(session: Session, id: string): Promise<void> {
-  const res = await fetch(
-    `/api/planning/recommendations/${encodeURIComponent(id)}/dismiss`,
-    {
-      method: "POST",
-      headers: sessionHeaders(session),
-      body: JSON.stringify({ idempotency_key: genIdempotencyKey() }),
-    },
-  );
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    let detail = "";
-    try {
-      detail = (JSON.parse(txt) as { detail?: string }).detail ?? "";
-    } catch {
-      /* ignore */
-    }
-    throw new Error(detail || "Could not dismiss this recommendation. Try again.");
-  }
-}
-
-interface ConvertToPOResult {
-  po_id: string;
-  po_number: string | null;
-  idempotent_replay: boolean;
-}
-
-async function convertRecToPO(
-  session: Session,
-  id: string,
-): Promise<ConvertToPOResult> {
-  const res = await fetch(
-    `/api/planning/recommendations/${encodeURIComponent(id)}/convert-to-po`,
-    {
-      method: "POST",
-      headers: sessionHeaders(session),
-      body: JSON.stringify({ idempotency_key: genIdempotencyKey() }),
-    },
-  );
-  if (!res.ok) {
-    const txt = await res.text().catch(() => "");
-    let detail = "";
-    try {
-      detail = (JSON.parse(txt) as { detail?: string }).detail ?? "";
-    } catch {
-      /* ignore */
-    }
-    throw new Error(detail || "Could not convert to purchase order. Try again.");
-  }
-  return (await res.json()) as ConvertToPOResult;
 }
 
 function RunStatusBadge({ status }: { status: PlanningRunStatus }) {
@@ -414,9 +330,7 @@ export default function PlanningRunDetailPage() {
   const params = useParams();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const queryClient = useQueryClient();
   const runId = String(params?.run_id ?? "");
-  const canAct = session.role === "planner" || session.role === "admin";
 
   // ?tab=recommendations|exceptions deep links. Default = recommendations.
   // (Legacy ?tab=purchase|production also lands on recommendations.)
@@ -436,20 +350,6 @@ export default function PlanningRunDetailPage() {
   const [recTypeFilter, setRecTypeFilter] = useState<
     "all" | "purchase" | "production"
   >("all");
-
-  const [toast, setToast] = useState<
-    {
-      kind: "success" | "error";
-      message: string;
-      href?: string;
-      hrefLabel?: string;
-    } | null
-  >(null);
-
-  function flashToast(t: NonNullable<typeof toast>, ttlMs = 3500) {
-    setToast(t);
-    window.setTimeout(() => setToast(null), ttlMs);
-  }
 
   const detailQuery = useQuery({
     queryKey: ["planning", "run", runId, session.role],
@@ -471,55 +371,9 @@ export default function PlanningRunDetailPage() {
     staleTime: 60_000,
   });
 
-  const approveMutation = useMutation({
-    mutationFn: (id: string) => approveRec(session, id),
-    onSuccess: () => {
-      flashToast({ kind: "success", message: "Recommendation approved." });
-      void queryClient.invalidateQueries({
-        queryKey: ["planning", "run", runId, "recs"],
-      });
-    },
-    onError: (err: Error) => {
-      flashToast({ kind: "error", message: err.message }, 6000);
-    },
-  });
-
-  const dismissMutation = useMutation({
-    mutationFn: (id: string) => dismissRec(session, id),
-    onSuccess: () => {
-      flashToast({ kind: "success", message: "Recommendation dismissed." });
-      void queryClient.invalidateQueries({
-        queryKey: ["planning", "run", runId, "recs"],
-      });
-    },
-    onError: (err: Error) => {
-      flashToast({ kind: "error", message: err.message }, 6000);
-    },
-  });
-
-  const convertMutation = useMutation({
-    mutationFn: (id: string) => convertRecToPO(session, id),
-    onSuccess: (result) => {
-      const poLabel = result.po_number ?? "PO";
-      flashToast(
-        {
-          kind: "success",
-          message: result.idempotent_replay
-            ? `Already converted to ${poLabel}.`
-            : `Converted to ${poLabel}.`,
-          href: `/purchase-orders/${encodeURIComponent(result.po_id)}`,
-          hrefLabel: `Open ${poLabel}`,
-        },
-        5000,
-      );
-      void queryClient.invalidateQueries({
-        queryKey: ["planning", "run", runId, "recs"],
-      });
-    },
-    onError: (err: Error) => {
-      flashToast({ kind: "error", message: err.message }, 6000);
-    },
-  });
+  // Tranche 072 — planning runs are diagnostic-only. Recommendation approve /
+  // dismiss live in the Inbox; recommendation→PO conversion lives in
+  // Procurement. No write mutations on this surface.
 
   // ---------------------------------------------------------------------------
   // Render
@@ -653,27 +507,6 @@ export default function PlanningRunDetailPage() {
           </Link>
         </div>
       </div>
-
-      {toast ? (
-        <div
-          role="status"
-          className={cn(
-            "rounded border px-3 py-2 text-sm",
-            toast.kind === "success"
-              ? "border-success/40 bg-success-softer text-success-fg"
-              : "border-danger/40 bg-danger-softer text-danger-fg",
-          )}
-        >
-          <div className="flex items-center justify-between gap-3">
-            <span>{toast.message}</span>
-            {toast.href && toast.hrefLabel ? (
-              <Link href={toast.href} className="font-semibold hover:underline">
-                {toast.hrefLabel} →
-              </Link>
-            ) : null}
-          </div>
-        </div>
-      ) : null}
 
       {/* Tab control */}
       <div
@@ -830,17 +663,6 @@ export default function PlanningRunDetailPage() {
                         r.item_name ??
                         r.component_name ??
                         "—";
-                      const isActionable =
-                        r.recommendation_status === "draft" ||
-                        r.recommendation_status === "pending_approval";
-                      const isMutating =
-                        approveMutation.isPending ||
-                        dismissMutation.isPending ||
-                        convertMutation.isPending;
-                      const isApprovedUnconverted =
-                        r.recommendation_status === "approved" &&
-                        !r.converted_to_po_id &&
-                        r.recommendation_type === "purchase";
                       return (
                         <tr
                           key={r.recommendation_id}
@@ -874,74 +696,13 @@ export default function PlanningRunDetailPage() {
                           <td className="px-3 py-3">
                             <RecStatusBadge status={r.recommendation_status} />
                           </td>
-                          <td className="px-3 py-3">
-                            <div className="flex flex-wrap items-center gap-1.5">
-                              {canAct && isActionable ? (
-                                <>
-                                  <button
-                                    type="button"
-                                    className="btn btn-xs gap-1"
-                                    disabled={isMutating}
-                                    onClick={() =>
-                                      approveMutation.mutate(r.recommendation_id)
-                                    }
-                                    data-testid="run-detail-rec-approve-btn"
-                                  >
-                                    <Check className="h-3 w-3" strokeWidth={2.5} />
-                                    Approve
-                                  </button>
-                                  <button
-                                    type="button"
-                                    className="btn btn-ghost btn-xs gap-1 text-danger"
-                                    disabled={isMutating}
-                                    onClick={() =>
-                                      dismissMutation.mutate(r.recommendation_id)
-                                    }
-                                    data-testid="run-detail-rec-dismiss-btn"
-                                  >
-                                    <X className="h-3 w-3" strokeWidth={2.5} />
-                                    Dismiss
-                                  </button>
-                                </>
-                              ) : null}
-                              {canAct && !isActionable && !isApprovedUnconverted ? (
-                                <span className="text-xs text-fg-faint">
-                                  {r.recommendation_status === "converted_to_po"
-                                    ? "Converted to PO"
-                                    : r.recommendation_status === "approved"
-                                      ? "Approved"
-                                      : r.recommendation_status === "dismissed"
-                                        ? "Dismissed"
-                                        : r.recommendation_status === "superseded"
-                                          ? "Superseded"
-                                          : "No action available"}
-                                </span>
-                              ) : null}
-                              {canAct && isApprovedUnconverted ? (
-                                <button
-                                  type="button"
-                                  className="btn btn-xs gap-1"
-                                  disabled={isMutating}
-                                  onClick={() =>
-                                    convertMutation.mutate(r.recommendation_id)
-                                  }
-                                  data-testid="run-detail-rec-convert-btn"
-                                >
-                                  {convertMutation.isPending ? (
-                                    <Loader2 className="h-3 w-3 animate-spin" />
-                                  ) : (
-                                    <FileOutput className="h-3 w-3" strokeWidth={2.5} />
-                                  )}
-                                  Create PO
-                                </button>
-                              ) : null}
-                              <Link
-                                href={`/planning/runs/${encodeURIComponent(runId)}/recommendations/${encodeURIComponent(r.recommendation_id)}`}
-                                className="text-xs text-accent hover:underline"
-                              >
-                                Open →
-                              </Link>
-                            </div>
+                          <td className="px-3 py-3 text-right">
+                            <Link
+                              href={`/planning/runs/${encodeURIComponent(runId)}/recommendations/${encodeURIComponent(r.recommendation_id)}`}
+                              className="text-xs text-accent hover:underline"
+                            >
+                              Open →
+                            </Link>
                           </td>
                         </tr>
                       );
