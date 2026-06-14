@@ -162,11 +162,11 @@ test.describe("Wave 5b — admin routes render (G6)", () => {
     assertNoRuntimeErrors(capture);
   });
 
-  test("/admin/boms — renders heading + fixture head + 3-table list fetch", async ({
+  test("/admin/masters/boms — renders heading + fixture head + 3-table list fetch", async ({
     page,
   }) => {
     const capture = attachConsoleCapture(page);
-    await page.goto("/admin/boms");
+    await page.goto("/admin/masters/boms");
 
     await expect(
       page.getByRole("heading", { level: 1, name: "Bills of materials" }),

@@ -69,6 +69,7 @@ import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
 import { Drawer } from "@/components/overlays/Drawer";
+import { useConfirm } from "@/components/overlays/ConfirmDialog";
 import { useCapability } from "@/lib/auth/role-gate";
 import { formatIls, formatPct, formatQtyInt } from "@/lib/utils/format-money";
 import { fmtNumStr } from "@/lib/utils/format-quantity";
@@ -603,6 +604,7 @@ function SalePriceEditCell({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [flash, setFlash] = useState(false);
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   const hasPrice = row.avg_sale_price_ils != null;
 
@@ -625,14 +627,18 @@ function SalePriceEditCell({
     let payload: number | null;
     if (trimmed === "") {
       // Clearing a price that was set is destructive — confirm first.
-      if (
-        row.avg_sale_price_ils != null &&
-        !window.confirm(
-          `Clear the average sale price for ${row.item_name}? Its margin and inventory-at-sale figures will go blank until a new price is entered.`,
-        )
-      ) {
-        cancel();
-        return;
+      if (row.avg_sale_price_ils != null) {
+        const ok = await confirm({
+          title: `Clear the average sale price for ${row.item_name}?`,
+          description:
+            "Its margin and inventory-at-sale figures will go blank until a new price is entered.",
+          confirmLabel: "Clear price",
+          tone: "danger",
+        });
+        if (!ok) {
+          cancel();
+          return;
+        }
       }
       payload = null;
     } else {
@@ -703,6 +709,7 @@ function SalePriceEditCell({
             }`}
             aria-label={`Edit average sale price for ${row.item_name}`}
           />
+          {confirmDialog}
           {busy ? (
             <span
               className="dot bg-info animate-pulse-soft"

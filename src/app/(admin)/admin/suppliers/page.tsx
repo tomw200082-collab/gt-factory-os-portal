@@ -23,6 +23,8 @@ import { ArrowRight, Phone, Plus, Power, X } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
+import { QueryCountChip } from "@/components/feedback/QueryCountChip";
+import { useConfirm } from "@/components/overlays/ConfirmDialog";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
 import { QuickCreateSupplier } from "@/components/admin/quick-create/QuickCreateSupplier";
 import { formatQty } from "@/lib/utils/format-quantity";
@@ -245,6 +247,7 @@ function SuppliersPageInner(): JSX.Element {
     | { kind: "success" | "error"; message: string }
     | null
   >(null);
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   const suppliersQuery = useQuery<ListEnvelope<SupplierRow>>({
     queryKey: ["admin", "suppliers", statusFilter],
@@ -277,7 +280,7 @@ function SuppliersPageInner(): JSX.Element {
     onError: (err: Error, vars) => {
       const msg =
         err instanceof AdminMutationError
-          ? `${err.status}${err.code ? ` ${err.code}` : ""}: ${err.message}`
+          ? err.message
           : err.message;
       setBanner({
         kind: "error",
@@ -351,10 +354,22 @@ function SuppliersPageInner(): JSX.Element {
     setStatusFilter("ACTIVE");
   };
 
-  const handleToggleStatus = (row: SupplierRow) => {
+  const handleToggleStatus = async (row: SupplierRow) => {
     if (!isAdmin) return;
     const next = row.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
-    if (!window.confirm(`Set ${row.supplier_id} status to ${next}?`)) return;
+    const ok = await confirm({
+      title:
+        next === "INACTIVE"
+          ? `Deactivate "${row.supplier_name_official}"?`
+          : `Reactivate "${row.supplier_name_official}"?`,
+      description:
+        next === "INACTIVE"
+          ? "It will stop appearing in the default active list. You can reactivate it later."
+          : "It will appear in the active list again.",
+      confirmLabel: next === "INACTIVE" ? "Deactivate" : "Reactivate",
+      tone: next === "INACTIVE" ? "danger" : "default",
+    });
+    if (!ok) return;
     setBanner(null);
     statusMutation.mutate({
       supplier_id: row.supplier_id,
@@ -372,11 +387,14 @@ function SuppliersPageInner(): JSX.Element {
         description="Supplier master. Click a row to see the per-supplier catalog and item coverage."
         meta={
           <>
-            <Badge tone="info" dotted>
-              {suppliersQuery.data?.count ?? 0} suppliers
-            </Badge>
+            <QueryCountChip
+              isLoading={suppliersQuery.isLoading}
+              isError={suppliersQuery.isError}
+              count={suppliersQuery.data?.count}
+              noun="suppliers"
+            />
             <Badge tone="neutral" dotted>
-              live API
+              Live data
             </Badge>
           </>
         }
@@ -394,8 +412,13 @@ function SuppliersPageInner(): JSX.Element {
         }
       />
 
+      {confirmDialog}
+
       {banner ? (
         <div
+          role={banner.kind === "error" ? "alert" : "status"}
+          aria-live={banner.kind === "error" ? "assertive" : "polite"}
+          aria-atomic="true"
           className={
             banner.kind === "success"
               ? "rounded-md border border-success/40 bg-success-softer p-3 text-sm text-success-fg"
@@ -499,30 +522,30 @@ function SuppliersPageInner(): JSX.Element {
               <thead>
                 <tr className="border-b border-border/70 bg-bg-subtle/60">
                   {/* Iter 16 — rich name cell */}
-                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Supplier
                   </th>
                   {/* Iter 17 — type badge */}
-                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Type
                   </th>
                   {/* Iter 19 — contact one-liner */}
-                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Contact
                   </th>
                   {/* Iter 17 — currency chip */}
-                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Currency
                   </th>
-                  <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Default lead
                   </th>
                   {/* Iter 18 — status dot badge */}
-                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Status
                   </th>
                   {/* Iter 20 — action column */}
-                  <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Actions
                   </th>
                 </tr>

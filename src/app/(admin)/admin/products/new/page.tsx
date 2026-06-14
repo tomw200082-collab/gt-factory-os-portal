@@ -263,9 +263,9 @@ function Step1ItemBasics({
             }
           >
             <option value="">(pick one)</option>
-            <option value="MANUFACTURED">MANUFACTURED</option>
-            <option value="BOUGHT_FINISHED">BOUGHT_FINISHED</option>
-            <option value="REPACK">REPACK</option>
+            <option value="MANUFACTURED">Manufactured</option>
+            <option value="BOUGHT_FINISHED">Bought finished</option>
+            <option value="REPACK">Repack</option>
           </select>
           <span className="mt-1 block text-3xs text-fg-subtle">
             MANUFACTURED / REPACK walk all 7 steps. BOUGHT_FINISHED skips BOM
@@ -566,16 +566,16 @@ function Step4Components({
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b border-border/70 bg-bg-subtle/60">
-                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Component
                   </th>
-                  <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Quantity per
                   </th>
-                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     UoM
                   </th>
-                  <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     &nbsp;
                   </th>
                 </tr>
@@ -1356,7 +1356,7 @@ export default function AdminNewProductWizardPage(): JSX.Element {
           void queryClient.invalidateQueries({
             queryKey: ["admin", "integration-sku-map"],
           });
-          router.push(`/admin/products/${encodeURIComponent(item_id)}`);
+          router.push(`/admin/masters/items/${encodeURIComponent(item_id)}`);
         }}
       />
     </>

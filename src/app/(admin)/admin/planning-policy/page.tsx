@@ -246,19 +246,19 @@ function PolicyTable({
       <table className="w-full border-collapse text-sm">
         <thead>
           <tr className="border-b border-border/70 bg-bg-subtle/60">
-            <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+            <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
               Key
             </th>
-            <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+            <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
               Value
             </th>
-            <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+            <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
               UoM
             </th>
-            <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+            <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
               Description
             </th>
-            <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+            <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
               Updated
             </th>
           </tr>
@@ -368,7 +368,7 @@ export default function AdminPlanningPolicyPage(): JSX.Element {
       setActiveSaveKey(null);
       const msg =
         err instanceof AdminMutationError
-          ? `${err.status}${err.code ? ` ${err.code}` : ""}: ${err.message}`
+          ? err.message
           : err.message;
       setFeedback({
         kind: "error",
@@ -425,7 +425,7 @@ export default function AdminPlanningPolicyPage(): JSX.Element {
               {policyQuery.data?.count ?? 0} keys
             </Badge>
             <Badge tone="neutral" dotted>
-              live API
+              Live data
             </Badge>
           </>
         }

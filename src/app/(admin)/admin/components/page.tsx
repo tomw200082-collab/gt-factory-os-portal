@@ -26,6 +26,8 @@ import { ArrowRight, ExternalLink, Plus, Power, X } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
+import { QueryCountChip } from "@/components/feedback/QueryCountChip";
+import { useConfirm } from "@/components/overlays/ConfirmDialog";
 import { ReadinessPill } from "@/components/readiness/ReadinessPill";
 import { QuickCreateComponent } from "@/components/admin/quick-create/QuickCreateComponent";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
@@ -272,6 +274,7 @@ function ComponentsPageInner(): JSX.Element {
     | { kind: "success" | "error"; message: string; componentId?: string }
     | null
   >(null);
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   const componentsQuery = useQuery<ListEnvelope<ComponentRow>>({
     queryKey: ["admin", "components", statusFilter],
@@ -304,7 +307,7 @@ function ComponentsPageInner(): JSX.Element {
     onError: (err: Error, vars) => {
       const msg =
         err instanceof AdminMutationError
-          ? `${err.status}${err.code ? ` ${err.code}` : ""}: ${err.message}`
+          ? err.message
           : err.message;
       setBanner({
         kind: "error",
@@ -448,7 +451,7 @@ function ComponentsPageInner(): JSX.Element {
     onError: (err: Error) => {
       const msg =
         err instanceof AdminMutationError
-          ? `${err.status}${err.code ? ` ${err.code}` : ""}: ${err.message}`
+          ? err.message
           : err.message;
       setBanner({ kind: "error", message: `Update failed: ${msg}` });
     },
@@ -544,10 +547,22 @@ function ComponentsPageInner(): JSX.Element {
     setGroupFilter("");
   };
 
-  const handleToggleStatus = (row: ComponentRow) => {
+  const handleToggleStatus = async (row: ComponentRow) => {
     if (!isAdmin) return;
     const next = row.status === "ACTIVE" ? "INACTIVE" : "ACTIVE";
-    if (!window.confirm(`Set ${row.component_id} status to ${next}?`)) return;
+    const ok = await confirm({
+      title:
+        next === "INACTIVE"
+          ? `Deactivate "${row.component_name}"?`
+          : `Reactivate "${row.component_name}"?`,
+      description:
+        next === "INACTIVE"
+          ? "It will stop appearing in the default active list. You can reactivate it later."
+          : "It will appear in the active list again.",
+      confirmLabel: next === "INACTIVE" ? "Deactivate" : "Reactivate",
+      tone: next === "INACTIVE" ? "danger" : "default",
+    });
+    if (!ok) return;
     setBanner(null);
     statusMutation.mutate({
       component_id: row.component_id,
@@ -564,11 +579,14 @@ function ComponentsPageInner(): JSX.Element {
         description="Raw material and packaging component master. Click a row for details including supplier coverage and BOM usage."
         meta={
           <>
-            <Badge tone="info" dotted>
-              {componentsQuery.data?.count ?? 0} components
-            </Badge>
+            <QueryCountChip
+              isLoading={componentsQuery.isLoading}
+              isError={componentsQuery.isError}
+              count={componentsQuery.data?.count}
+              noun="components"
+            />
             <Badge tone="neutral" dotted>
-              live API
+              Live data
             </Badge>
           </>
         }
@@ -586,8 +604,13 @@ function ComponentsPageInner(): JSX.Element {
         }
       />
 
+      {confirmDialog}
+
       {banner ? (
         <div
+          role={banner.kind === "error" ? "alert" : "status"}
+          aria-live={banner.kind === "error" ? "assertive" : "polite"}
+          aria-atomic="true"
           className={
             banner.kind === "success"
               ? "flex items-start justify-between gap-3 rounded-md border border-success/40 bg-success-softer p-3 text-sm text-success-fg"
@@ -730,31 +753,31 @@ function ComponentsPageInner(): JSX.Element {
               <thead>
                 <tr className="border-b border-border/70 bg-bg-subtle/60">
                   {/* Iter 9 — Name cell */}
-                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Component
                   </th>
                   {/* Iter 10 — Category breadcrumb */}
-                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Category
                   </th>
-                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Stock unit
                   </th>
-                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Primary supplier
                   </th>
-                  <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Lead time
                   </th>
                   {/* Iter 12 — Readiness pill */}
-                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Readiness
                   </th>
                   {/* Iter 11 — Status dot badge */}
-                  <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Status
                   </th>
-                  <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Actions
                   </th>
                 </tr>
@@ -933,7 +956,7 @@ function ComponentsPageInner(): JSX.Element {
               </div>
               <div>
                 <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Code (locked)
+                  Component ID (read-only)
                 </span>
                 <span className="font-mono text-fg">
                   {selectedComponent.component_id}
@@ -1010,7 +1033,7 @@ function ComponentsPageInner(): JSX.Element {
               </div>
               <div>
                 <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Stock unit (locked)
+                  Stock unit (read-only)
                 </span>
                 <span className="text-fg">
                   {selectedComponent.inventory_uom ?? "—"}
@@ -1018,7 +1041,7 @@ function ComponentsPageInner(): JSX.Element {
               </div>
               <div>
                 <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Purchase unit (locked)
+                  Purchase unit (read-only)
                 </span>
                 <span className="text-fg">
                   {selectedComponent.purchase_uom ?? "—"}
@@ -1026,7 +1049,7 @@ function ComponentsPageInner(): JSX.Element {
               </div>
               <div>
                 <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  Purchase → stock factor (locked)
+                  Units per purchase pack (read-only)
                 </span>
                 <span className="text-fg">
                   {formatQty(
@@ -1050,7 +1073,7 @@ function ComponentsPageInner(): JSX.Element {
               </div>
               <div>
                 <span className="block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                  MOQ (purchase UOM)
+                  Min. order quantity (purchase unit)
                 </span>
                 <span className="text-fg">
                   {selectedComponent.moq_purchase_uom != null
@@ -1182,7 +1205,7 @@ function ComponentsPageInner(): JSX.Element {
                           className="flex items-center justify-between text-sm"
                         >
                           <Link
-                            href={`/admin/boms?head=${encodeURIComponent(row.headId)}`}
+                            href={`/admin/masters/boms/${encodeURIComponent(row.headId)}`}
                             className="text-accent hover:underline"
                           >
                             {row.headName}

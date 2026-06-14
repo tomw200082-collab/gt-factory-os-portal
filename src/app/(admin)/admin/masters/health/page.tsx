@@ -178,6 +178,7 @@ function IssueTable({
           <tr className="border-b border-border/70 bg-bg-subtle/60">
             {headers.map((h) => (
               <th
+                scope="col"
                 key={h}
                 className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle"
               >

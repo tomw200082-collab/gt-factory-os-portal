@@ -30,6 +30,7 @@ import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2, Plus } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
+import { useConfirm } from "@/components/overlays/ConfirmDialog";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
 import { Breadcrumbs } from "@/components/layout/Breadcrumbs";
@@ -222,6 +223,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
   const [archivingRow, setArchivingRow] = useState<SupplierItemRow | null>(
     null,
   );
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   const sortedSuppliers = useMemo(
     () =>
@@ -283,7 +285,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
     onError: (err: Error) => {
       const msg =
         err instanceof AdminMutationError
-          ? `${err.status}${err.code ? ` ${err.code}` : ""}: ${err.message}`
+          ? err.message
           : err.message;
       setBanner({ kind: "error", message: `Update failed: ${msg}` });
     },
@@ -309,7 +311,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
     onError: (err: Error) => {
       const msg =
         err instanceof AdminMutationError
-          ? `${err.status}${err.code ? ` ${err.code}` : ""}: ${err.message}`
+          ? err.message
           : err.message;
       setBanner({ kind: "error", message: `Promote-primary failed: ${msg}` });
     },
@@ -377,7 +379,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
     onError: (err: Error) => {
       const msg =
         err instanceof AdminMutationError
-          ? `${err.status}${err.code ? ` ${err.code}` : ""}: ${err.message}`
+          ? err.message
           : err.message;
       setBanner({ kind: "error", message: `Archive failed: ${msg}` });
     },
@@ -437,6 +439,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
 
   return (
     <>
+      {confirmDialog}
       <Breadcrumbs
         items={[
           { label: "Admin", href: "/admin" },
@@ -453,7 +456,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
         description="Map suppliers to the components and items they supply. Set lead times, MOQ, and pack sizes. Mark the primary supplier per item."
         meta={
           <Badge tone="neutral" dotted>
-            live API
+            Live data
           </Badge>
         }
         actions={
@@ -464,7 +467,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
               onClick={() => setShowCreate(true)}
             >
               <Plus className="h-3.5 w-3.5" strokeWidth={2.5} />
-              New supplier-item
+              New sourcing link
             </button>
           ) : null
         }
@@ -606,7 +609,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
           </SectionCard>
 
           <SectionCard
-            eyebrow="Supplier-items"
+            eyebrow="Sourcing links"
             title={`Showing ${filtered.length} of ${rows.length}`}
             contentClassName="p-0"
           >
@@ -780,9 +783,9 @@ export default function AdminSupplierItemsPage(): JSX.Element {
                               }}
                             >
                               <option value="">— set —</option>
-                              <option value="approved">approved</option>
-                              <option value="pending">pending</option>
-                              <option value="rejected">rejected</option>
+                              <option value="approved">Approved</option>
+                              <option value="pending">Pending</option>
+                              <option value="rejected">Rejected</option>
                             </select>
                           ) : (
                             <ApprovalBadge status={r.approval_status} />
@@ -969,13 +972,14 @@ export default function AdminSupplierItemsPage(): JSX.Element {
                             <button
                               type="button"
                               className="btn btn-ghost btn-sm text-xs text-fg-muted hover:text-fg"
-                              onClick={() => {
-                                if (
-                                  !window.confirm(
-                                    `Set this as the primary source for ${r.component_id ?? r.item_id}? The existing primary (if any) will be demoted.`,
-                                  )
-                                )
-                                  return;
+                              onClick={async () => {
+                                const ok = await confirm({
+                                  title: `Set as the primary source for ${r.component_id ?? r.item_id}?`,
+                                  description:
+                                    "The existing primary (if any) will be demoted. This affects planning cost and lead time for this item.",
+                                  confirmLabel: "Set as primary",
+                                });
+                                if (!ok) return;
                                 promotePrimaryMutation.mutate({
                                   supplier_item_id: r.supplier_item_id,
                                   updated_at: r.updated_at,
@@ -1078,6 +1082,7 @@ function Th({
 }): JSX.Element {
   return (
     <th
+      scope="col"
       className={`px-3 py-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle ${
         align === "right" ? "text-right" : "text-left"
       }`}

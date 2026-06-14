@@ -21,6 +21,7 @@
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import * as Dialog from "@radix-ui/react-dialog";
 import {
   AlertTriangle,
   Archive,
@@ -456,12 +457,11 @@ export default function AdminHolidaysPage(): JSX.Element {
               Archived holidays are not yet excluded from planning runs.
             </div>
             <div className="mt-0.5 leading-relaxed text-fg-muted">
-              Soft-deleting a holiday hides it from this list, but the planning
-              engine and inventory-flow projection still treat it as a
-              non-working day until W1 cycle 8 ships the consumer-side filter
-              migration (GAP-AHC-1). Functional impact today is zero — no rows
-              are archived yet. If you need to restore a date as a working day
-              before cycle 8 lands, edit the row instead of archiving it.
+              Archiving a holiday hides it from this list, but the planning
+              engine and inventory projection still treat the date as a
+              non-working day for now. No dates are archived yet, so there is no
+              impact today. If you need a date to count as a working day, edit
+              the row instead of archiving it.
             </div>
           </div>
         </div>
@@ -989,6 +989,7 @@ function Th({
 }): JSX.Element {
   return (
     <th
+      scope="col"
       className={
         align === "right"
           ? "px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle"
@@ -1019,53 +1020,76 @@ function ModalShell({
   footer?: React.ReactNode;
   busy?: boolean;
 }): JSX.Element {
+  // Tranche 069 (A11Y-008): built on Radix Dialog so Radix provides the focus
+  // trap, focus return, Escape, aria-modal and a unique aria-labelledby (the
+  // previous custom overlay had no focus management and reused id="modal-title"
+  // across every modal variant). The parent mounts ModalShell only while open,
+  // so `open` is constant true. While busy, Escape / backdrop close are blocked.
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-end justify-center bg-black/40 p-0 backdrop-blur-[1px] sm:items-center sm:p-4"
-      onClick={(e) => {
-        if (busy) return;
-        if (e.target === e.currentTarget) onClose();
+    <Dialog.Root
+      open
+      onOpenChange={(next) => {
+        if (!next && !busy) onClose();
       }}
-      role="presentation"
     >
-      <div
-        className="flex max-h-[90vh] w-full max-w-lg flex-col rounded-t-lg border border-border/70 bg-bg-raised shadow-xl sm:rounded-lg"
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="modal-title"
-      >
-        <div className="flex items-start justify-between gap-3 border-b border-border/70 px-5 py-4">
-          <div className="min-w-0">
-            <h2
-              id="modal-title"
-              className="text-base font-semibold tracking-tightish text-fg-strong"
-            >
-              {title}
-            </h2>
-            {description ? (
-              <p className="mt-1 text-xs leading-relaxed text-fg-muted">
-                {description}
-              </p>
-            ) : null}
+      <Dialog.Portal>
+        <Dialog.Overlay
+          className={cn(
+            "fixed inset-0 z-50 bg-black/40 backdrop-blur-[1px]",
+            "duration-150 data-[state=open]:animate-in data-[state=closed]:animate-out",
+            "data-[state=closed]:fade-out data-[state=open]:fade-in",
+          )}
+        />
+        <Dialog.Content
+          onEscapeKeyDown={(e) => {
+            if (busy) e.preventDefault();
+          }}
+          onInteractOutside={(e) => {
+            if (busy) e.preventDefault();
+          }}
+          className={cn(
+            "fixed bottom-0 left-1/2 z-50 flex max-h-[90vh] w-full max-w-lg -translate-x-1/2 flex-col",
+            "rounded-t-lg border border-border/70 bg-bg-raised shadow-xl",
+            "sm:bottom-auto sm:top-1/2 sm:-translate-y-1/2 sm:rounded-lg",
+            "duration-150 data-[state=open]:animate-in data-[state=closed]:animate-out",
+            "data-[state=closed]:fade-out data-[state=open]:fade-in",
+          )}
+        >
+          <div className="flex items-start justify-between gap-3 border-b border-border/70 px-5 py-4">
+            <div className="min-w-0">
+              <Dialog.Title className="text-base font-semibold tracking-tightish text-fg-strong">
+                {title}
+              </Dialog.Title>
+              {description ? (
+                <Dialog.Description className="mt-1 text-xs leading-relaxed text-fg-muted">
+                  {description}
+                </Dialog.Description>
+              ) : (
+                <Dialog.Description className="sr-only">
+                  Holiday dialog
+                </Dialog.Description>
+              )}
+            </div>
+            <Dialog.Close asChild>
+              <button
+                type="button"
+                className="btn btn-ghost btn-sm h-8 w-8 shrink-0 justify-center p-0"
+                aria-label="Close"
+                disabled={busy}
+              >
+                <X className="h-4 w-4" strokeWidth={2} />
+              </button>
+            </Dialog.Close>
           </div>
-          <button
-            type="button"
-            className="btn btn-ghost btn-sm h-8 w-8 shrink-0 justify-center p-0"
-            aria-label="Close"
-            onClick={onClose}
-            disabled={busy}
-          >
-            <X className="h-4 w-4" strokeWidth={2} />
-          </button>
-        </div>
-        <div className="flex-1 overflow-y-auto p-5">{children}</div>
-        {footer ? (
-          <div className="border-t border-border/70 bg-bg-subtle/60 px-5 py-3">
-            {footer}
-          </div>
-        ) : null}
-      </div>
-    </div>
+          <div className="flex-1 overflow-y-auto p-5">{children}</div>
+          {footer ? (
+            <div className="border-t border-border/70 bg-bg-subtle/60 px-5 py-3">
+              {footer}
+            </div>
+          ) : null}
+        </Dialog.Content>
+      </Dialog.Portal>
+    </Dialog.Root>
   );
 }
 
@@ -1507,7 +1531,7 @@ function ArchiveHolidayModal({
   return (
     <ModalShell
       title={`Archive holiday — ${formatDateHuman(row.holiday_date)}`}
-      description="Archiving sets archived_at and hides this row from the default list. Historical planning runs are unaffected; future runs continue to treat the date as a non-working day until the W1 cycle 8 consumer-side filter ships (GAP-AHC-1)."
+      description="Archiving hides this date from the default list. Past planning records are not affected. Future planning runs may still treat it as a non-working day for now — if you need it to count as a working day, edit the row instead."
       onClose={onClose}
       busy={mutation.isPending}
       footer={
@@ -1759,7 +1783,7 @@ function BulkImportModal({
   return (
     <ModalShell
       title="Bulk import holidays"
-      description="Paste CSV or JSON. Preview shows the diff against the live DB; commit applies it."
+      description="Paste CSV or JSON. Preview shows what will change; commit applies it."
       onClose={onClose}
       busy={busy}
       footer={
@@ -1775,10 +1799,8 @@ function BulkImportModal({
                 }
                 disabled={busy}
               >
-                <option value="upsert">upsert (update existing)</option>
-                <option value="skip-existing">
-                  skip-existing (new only)
-                </option>
+                <option value="upsert">Update if it exists</option>
+                <option value="skip-existing">Add new only</option>
               </select>
             </label>
           </div>
@@ -1815,11 +1837,13 @@ function BulkImportModal({
                   errorCount > 0 && "opacity-70",
                 )}
                 onClick={onCommit}
-                disabled={busy}
+                disabled={busy || validCount === 0}
                 title={
-                  errorCount > 0
-                    ? `${errorCount} rows will be rejected — review before committing`
-                    : undefined
+                  validCount === 0
+                    ? "Nothing valid to import — fix the rows above first"
+                    : errorCount > 0
+                      ? `${errorCount} rows will be rejected — review before committing`
+                      : undefined
                 }
               >
                 {commitMutation.isPending ? (

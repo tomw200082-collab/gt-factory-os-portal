@@ -24,6 +24,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import { CircleDollarSign } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
+import { useConfirm } from "@/components/overlays/ConfirmDialog";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge, type BadgeTone } from "@/components/badges/StatusBadge";
 import { EmptyState, ErrorState } from "@/components/feedback/states";
@@ -180,6 +181,7 @@ export default function AdminCostDraftsPage(): JSX.Element {
   const [banner, setBanner] = useState<
     { kind: "success" | "error"; message: string } | null
   >(null);
+  const { confirm, dialog: confirmDialog } = useConfirm();
 
   const draftsQuery = useQuery<CostDraftsListResponse>({
     queryKey: ["admin", "cost-drafts", filter],
@@ -256,15 +258,34 @@ export default function AdminCostDraftsPage(): JSX.Element {
     ? decisionMutation.variables?.draftId
     : undefined;
 
-  const handleDecision = (
+  const handleDecision = async (
     row: CostDraftRow,
     action: "approve" | "reject",
-  ): void => {
+  ): Promise<void> => {
     const targetName = row.target_name ?? row.supplier_item_id;
     if (action === "reject") {
-      const ok = window.confirm(
-        `Reject this price update for ${targetName}? The catalog cost stays unchanged.`,
-      );
+      const ok = await confirm({
+        title: `Reject this price update for ${targetName}?`,
+        description: "The catalog cost stays unchanged.",
+        confirmLabel: "Reject price update",
+        tone: "danger",
+      });
+      if (!ok) return;
+    } else {
+      const pct = deltaPct(row);
+      const deltaText =
+        pct === null ? "" : `, ${pct > 0 ? "+" : ""}${formatPct(pct)}`;
+      const fromText =
+        row.current_effective_cost != null
+          ? ` (was ${formatIls(row.current_effective_cost)}${deltaText})`
+          : "";
+      const ok = await confirm({
+        title: `Approve price update for ${targetName}?`,
+        description: `This sets the catalog cost to ${formatIls(
+          row.suggested_cost_ils,
+        )}${fromText} and writes it to price history. It affects all BOM costing and stock value.`,
+        confirmLabel: "Approve price update",
+      });
       if (!ok) return;
     }
     setBanner(null);
@@ -280,6 +301,7 @@ export default function AdminCostDraftsPage(): JSX.Element {
 
   return (
     <>
+      {confirmDialog}
       <WorkflowHeader
         eyebrow="Admin · price updates"
         title="Price updates"
@@ -390,14 +412,14 @@ export default function AdminCostDraftsPage(): JSX.Element {
             <table className="table-base" data-testid="cost-drafts-table">
               <thead>
                 <tr>
-                  <th>Component / item</th>
-                  <th>Current cost</th>
-                  <th>Proposed cost</th>
-                  <th>Delta</th>
-                  <th>Source</th>
-                  <th>Created</th>
-                  <th>Status</th>
-                  <th>Actions</th>
+                  <th scope="col">Component / item</th>
+                  <th scope="col">Current cost</th>
+                  <th scope="col">Proposed cost</th>
+                  <th scope="col">Delta</th>
+                  <th scope="col">Source</th>
+                  <th scope="col">Created</th>
+                  <th scope="col">Status</th>
+                  <th scope="col">Actions</th>
                 </tr>
               </thead>
               <tbody>

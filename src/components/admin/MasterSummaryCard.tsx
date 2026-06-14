@@ -158,7 +158,7 @@ export function MasterSummaryCard({
   const completionPct = total === 0 ? null : Math.round((completed / total) * 100);
 
   return (
-    <div className="rounded-lg border border-border bg-bg-card p-4 space-y-3">
+    <div className="rounded-lg border border-border bg-bg-raised p-4 space-y-3">
       {/* --- Title block ---------------------------------------------------- */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div className="min-w-0 flex-1">
