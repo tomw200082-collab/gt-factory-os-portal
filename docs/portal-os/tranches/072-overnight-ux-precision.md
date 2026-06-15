@@ -39,4 +39,21 @@ today's APIs). No backend / schema / integration authoring (portal-only lane).
   (e.g. 125 vs 12.5) **before** it becomes PO truth and writes back to catalog.
 - Evidence: 43/43 PO tests pass (11 new); `tsc --noEmit` exit 0.
 
+### Wave 2 — App-wide keyboard focus visibility  ✅
+**Files:** `src/app/globals.css`, `tests/unit/globals-css-focus-visible.test.ts`.
+
+- The base `.btn` class had hover/active/disabled states but **no focus-visible
+  ring** — keyboard users could not see which button was focused (WCAG 2.4.7).
+  Added `focus-visible:ring-2 ring-accent/55 ring-offset-1 ring-offset-bg`.
+- `.input` / `.textarea` did `focus:outline-none` with only a border-colour
+  change (weak indicator). Added `focus:ring-2 focus:ring-accent/25`.
+- One base-class change lifts **every button and field in the app at once**.
+- New `globals-css-focus-visible` guard test locks it in (3 assertions).
+- Evidence: focus + mobile-zoom guard tests green; `next build` compiled OK.
+
+### CI note
+The `ci` workflow enforces that every new `docs/portal-os/**` file is listed in
+`registry.md` (registry-guard step). Tranche docs added this session are
+registered there. typecheck / vitest / `@mocked` Playwright all pass on the code.
+
 _Subsequent waves appended below as completed._

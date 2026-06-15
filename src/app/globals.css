@@ -472,6 +472,7 @@
       transition-all duration-150 ease-out-quart
       hover:border-border-strong hover:bg-bg
       active:translate-y-px active:shadow-none
+      focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/55 focus-visible:ring-offset-1 focus-visible:ring-offset-bg
       disabled:pointer-events-none disabled:opacity-45;
     box-shadow: inset 0 0 0 1px hsl(var(--btn-highlight));
   }
@@ -514,7 +515,7 @@
       transition-all duration-150 ease-out-quart
       placeholder:text-fg-faint
       hover:border-border-strong
-      focus:border-accent focus:outline-none
+      focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25
       disabled:cursor-not-allowed disabled:bg-bg-subtle disabled:text-fg-muted;
   }
 
@@ -523,7 +524,7 @@
       transition-all duration-150 ease-out-quart
       placeholder:text-fg-faint
       hover:border-border-strong
-      focus:border-accent focus:outline-none
+      focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25
       disabled:cursor-not-allowed disabled:bg-bg-subtle;
   }
 
