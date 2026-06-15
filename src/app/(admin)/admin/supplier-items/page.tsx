@@ -769,7 +769,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
                         <td className="px-3 py-2 text-xs">
                           {isAdmin ? (
                             <select
-                              className="rounded border border-border bg-background px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-ring"
+                              className="rounded border border-border bg-bg-raised px-1.5 py-0.5 text-xs focus:outline-none focus:ring-1 focus:ring-accent/50"
                               aria-label={`Approval status for ${r.component_id ?? r.item_id ?? r.supplier_item_id}`}
                               value={r.approval_status ?? ""}
                               onChange={(e) => {

@@ -828,32 +828,32 @@ export default function AdminComponentDetailPage({
             <table className="w-full text-sm">
               <tbody className="divide-y divide-border/50">
                 <tr>
-                  <td className="py-2 pr-4 text-muted-foreground w-1/2">Lead time</td>
+                  <td className="py-2 pr-4 text-fg-muted w-1/2">Lead time</td>
                   <td className="py-2 font-medium tabular-nums">{effectiveLeadTime}d</td>
-                  <td className="py-2 pl-4 text-xs text-muted-foreground">{leadTimeSource}</td>
+                  <td className="py-2 pl-4 text-xs text-fg-muted">{leadTimeSource}</td>
                 </tr>
                 <tr>
-                  <td className="py-2 pr-4 text-muted-foreground">MOQ</td>
+                  <td className="py-2 pr-4 text-fg-muted">MOQ</td>
                   <td className="py-2 font-medium tabular-nums">
                     {effectiveMoq != null
                       ? `${Number(effectiveMoq).toLocaleString()} ${row.purchase_uom ?? "UNIT"}`
                       : "—"}
                   </td>
-                  <td className="py-2 pl-4 text-xs text-muted-foreground">{moqSource ?? "—"}</td>
+                  <td className="py-2 pl-4 text-xs text-fg-muted">{moqSource ?? "—"}</td>
                 </tr>
                 <tr>
-                  <td className="py-2 pr-4 text-muted-foreground">Safety days</td>
+                  <td className="py-2 pr-4 text-fg-muted">Safety days</td>
                   <td className="py-2 font-medium tabular-nums">{effectiveSafetyDays}d</td>
-                  <td className="py-2 pl-4 text-xs text-muted-foreground">{safetyDaysSource}</td>
+                  <td className="py-2 pl-4 text-xs text-fg-muted">{safetyDaysSource}</td>
                 </tr>
                 <tr>
-                  <td className="py-2 pr-4 text-muted-foreground font-medium">Effective reorder lead</td>
+                  <td className="py-2 pr-4 text-fg-muted font-medium">Effective reorder lead</td>
                   <td className="py-2 font-semibold tabular-nums">{effectiveReorderLead}d</td>
-                  <td className="py-2 pl-4 text-xs text-muted-foreground">lead + safety</td>
+                  <td className="py-2 pl-4 text-xs text-fg-muted">lead + safety</td>
                 </tr>
               </tbody>
             </table>
-            <p className="mt-3 text-xs text-muted-foreground">
+            <p className="mt-3 text-xs text-fg-muted">
               <Link
                 href="?tab=supplier-items"
                 className="underline hover:no-underline"
