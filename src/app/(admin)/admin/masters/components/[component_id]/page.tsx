@@ -1037,8 +1037,8 @@ export default function AdminComponentDetailPage({
               projection computes: <code className="font-mono text-xs">current stock = last anchor qty + Σ ledger deltas since anchor</code>
             </p>
             <div className="flex flex-wrap gap-2 pt-1">
-              <Link href={`/stock/movements?component_id=${encodeURIComponent(component_id)}`} className="btn btn-ghost btn-sm text-xs">View stock movements →</Link>
-              <Link href="/forms/physical-count" className="btn btn-ghost btn-sm text-xs">Open Physical Count form →</Link>
+              <Link href={`/stock/movement-log?component_id=${encodeURIComponent(component_id)}`} className="btn btn-ghost btn-sm text-xs">View stock movements →</Link>
+              <Link href="/stock/physical-count" className="btn btn-ghost btn-sm text-xs">Open Physical Count form →</Link>
             </div>
           </div>
         </SectionCard>

@@ -1098,13 +1098,13 @@ export default function AdminItemDetailPage({
             </div>
             <div className="flex flex-wrap gap-2">
               <Link
-                href={`/stock/movements?item_id=${encodeURIComponent(item_id)}`}
+                href={`/stock/movement-log?item_id=${encodeURIComponent(item_id)}`}
                 className="inline-flex items-center gap-1 rounded border border-border/60 bg-bg-subtle/40 px-2.5 py-1.5 text-xs font-medium text-fg transition-colors hover:border-accent/60 hover:text-accent"
               >
                 View stock movements →
               </Link>
               <Link
-                href="/forms/physical-count"
+                href="/stock/physical-count"
                 className="inline-flex items-center gap-1 rounded border border-border/60 bg-bg-subtle/40 px-2.5 py-1.5 text-xs font-medium text-fg transition-colors hover:border-accent/60 hover:text-accent"
               >
                 Submit a Physical Count →
