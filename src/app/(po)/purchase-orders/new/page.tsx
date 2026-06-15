@@ -4,7 +4,8 @@
 // Purchase Orders · Manual Creation — /purchase-orders/new
 //
 // 2026-04-26 (CLAUDE.md §"PO workflow" amendment — planner/admin may create a
-// PO directly without a planning recommendation, with a mandatory reason).
+// PO directly without a planning recommendation, with an optional reason as of
+// 2026-06-15; reason was mandatory before that date).
 // 2026-04-27 — converted to English (matching portal convention per a558e9e),
 // added SearchableSelect comboboxes for supplier + line orderable, tightened
 // visual hierarchy.
@@ -272,11 +273,8 @@ function ManualPoFormInner(): JSX.Element {
 
     if (!supplierId.trim()) errs.supplier_id = "Required.";
     if (!expectedDate.trim()) errs.expected_receive_date = "Required.";
-    if (!manualReason.trim()) {
-      errs.manual_reason = "Required.";
-    } else if (manualReason.trim().length < 5) {
-      errs.manual_reason = "Reason must be at least 5 characters.";
-    }
+    // Reason is optional — no client-side validation. If provided, it is sent
+    // and recorded; if blank, the payload sends null (backend accepts null).
     if (lines.length === 0) {
       errs.lines = "At least one line is required.";
     } else {
@@ -318,7 +316,7 @@ function ManualPoFormInner(): JSX.Element {
       idempotency_key: newIdempotencyKey(),
       supplier_id: supplierId,
       expected_receive_date: expectedDate,
-      manual_reason: manualReason.trim(),
+      manual_reason: manualReason.trim() || null,
       notes: notes.trim() || null,
       source_type: "manual" as const,
       lines: lines.map((l) => {
@@ -526,7 +524,7 @@ function ManualPoFormInner(): JSX.Element {
       <WorkflowHeader
         eyebrow="Purchase Orders"
         title="New manual order"
-        description="Manual purchase order — created without a planning recommendation. A reason is required for traceability."
+        description="Manual purchase order — created without a planning recommendation. You can add a reason for traceability."
         meta={
           <span className="inline-flex items-center gap-1.5 rounded-full border border-warning/40 bg-warning/5 px-2.5 py-0.5 text-3xs font-semibold uppercase tracking-sops text-warning-fg">
             <AlertTriangle className="h-3 w-3" aria-hidden />
@@ -632,7 +630,9 @@ function ManualPoFormInner(): JSX.Element {
                 className="block text-xs font-semibold text-fg"
               >
                 Reason for manual order
-                {REQUIRED_LABEL}
+                <span className="ml-1 text-3xs font-normal text-fg-faint">
+                  (optional)
+                </span>
               </label>
               <textarea
                 id="po-new-reason"
@@ -648,7 +648,7 @@ function ManualPoFormInner(): JSX.Element {
                 disabled={phase === "submitting"}
               />
               <p className="text-3xs text-fg-faint">
-                Minimum 5 characters. This is recorded on the PO for audit.
+                Optional. If provided, it is recorded on the PO for audit.
               </p>
               {errors.manual_reason && (
                 <div className="text-xs text-danger-fg">
