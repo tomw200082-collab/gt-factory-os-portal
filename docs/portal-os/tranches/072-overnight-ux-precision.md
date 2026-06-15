@@ -263,4 +263,16 @@ upgrade* is a token/primitive change, not a per-file slog.
   components-flow and FG-flow cards. The 14-day gap ("Unfilled 14d") was already
   shown. UI-only. 11/11 inventory-flow tests; `npm run typecheck` exit 0.
 
+### Wave 19 — "Go to ordering" path from Components Flow  ✅
+**File:** `src/app/(planning)/planning/inventory-flow/supply/SupplyFlowClient.tsx`.
+
+- The Components Flow page showed what's short but dead-ended (no path to act).
+  Added a **"Go to ordering"** header link → `/planning/procurement` (the weekly
+  buy session), turning shortages into a clear next step. UI-only.
+  `npm run typecheck` exit 0.
+
+This completes the #1 plan item (make Components Flow answer "what to order &
+when"): order-by date on the item detail (w17) + card insight (w18), the 14-day
+gap already shown ("Unfilled 14d"), and now a path to ordering (w19).
+
 _Subsequent waves appended below as completed._

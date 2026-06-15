@@ -17,8 +17,9 @@
 // ---------------------------------------------------------------------------
 
 import { useRouter, useSearchParams } from "next/navigation";
+import Link from "next/link";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { RefreshCw } from "lucide-react";
+import { RefreshCw, ShoppingCart } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import {
   EmptyState,
@@ -237,6 +238,17 @@ export function SupplyFlowClient() {
       }
       actions={
         <div className="flex items-center gap-2">
+          {/* Turn "what is short" into action — this page used to dead-end with
+              no path to procurement (Tranche 072). */}
+          <Link
+            href="/planning/procurement"
+            className="btn btn-outline btn-sm gap-1.5"
+            data-testid="supply-flow-to-procurement"
+            title="Open the weekly buy session to turn these shortages into purchase orders"
+          >
+            <ShoppingCart className="h-3.5 w-3.5" strokeWidth={2} />
+            <span className="hidden sm:inline">Go to ordering</span>
+          </Link>
           <button
             type="button"
             onClick={() => void flowQuery.refetch()}
