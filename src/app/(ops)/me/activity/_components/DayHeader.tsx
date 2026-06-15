@@ -35,7 +35,7 @@ export function DayHeader({
     <div
       className={cn(
         "sticky top-0 z-10 flex items-baseline justify-between gap-2",
-        "border-b border-border/60 bg-bg-base/95 px-5 py-2 backdrop-blur"
+        "border-b border-border/60 bg-bg-raised/95 px-5 py-2 backdrop-blur"
       )}
     >
       <h3

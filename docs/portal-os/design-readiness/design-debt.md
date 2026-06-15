@@ -11,11 +11,13 @@
 - `--bg-base` — referenced 6× in `globals.css` (`fc-list-row-hero` block: lines
   ~2588, 2625, 2725, 2740, 2915, 2929), never declared. Renders transparent.
   Proposed: declare `--bg-base` (e.g. light `42 18% 96%`, dark `30 10% 12%`) or
-  replace each use with `--bg`/`--bg-raised`.
-- `--bg-elevated` — used as `bg-bg-elevated` in
-  `(planning)/planning/inventory-flow/supply/SupplyFlowClient.tsx:306` and
-  `auth/click-to-signin/page.tsx:88`, never declared. Proposed: alias to
-  `--bg-raised` (the nearest existing token).
+  replace each use with `--bg`/`--bg-raised`. _(still open — globals.css, Tom's call)_
+- `--bg-elevated` / the `bg-bg-base` & `bg-bg-elevated` Tailwind classes — these
+  classes were NOT defined in `tailwind.config.ts` (only `bg/subtle/muted/raised/
+  deep` exist), so they rendered **no background** across the whole `/me/activity`
+  surface + `SupplyFlowClient`/`click-to-signin`. **FIXED 2026-06-15:** all TSX
+  usages repointed to the existing `bg-bg-raised` token (8 sites). The CSS-var
+  `--bg-base` usages inside `globals.css` remain open (above).
 
 ### `credit-tracking` page — off-system + undefined shadcn token names  `[BUG] [NOW]`
 `(shared)/credit-tracking/page.tsx` uses shadcn defaults that don't exist here:

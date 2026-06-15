@@ -109,7 +109,7 @@ export function ActivityDrawer({
         onClick={(e) => e.stopPropagation()}
         className={cn(
           "flex h-full w-full max-w-lg flex-col overflow-y-auto",
-          "border-l border-border bg-bg-base shadow-xl"
+          "border-l border-border bg-bg-raised shadow-xl"
         )}
       >
         <div className="flex items-start justify-between gap-3 border-b border-border/60 px-5 py-4">

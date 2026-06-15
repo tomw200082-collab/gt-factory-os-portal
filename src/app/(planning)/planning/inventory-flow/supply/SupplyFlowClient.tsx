@@ -303,7 +303,7 @@ export function SupplyFlowClient() {
               ) : null}
               <details className="text-[10px] text-fg-muted/80">
                 <summary className="cursor-pointer">Show technical detail</summary>
-                <code className="mt-1 block rounded border border-border bg-bg-elevated px-2 py-1 text-left">
+                <code className="mt-1 block rounded border border-border bg-bg-raised px-2 py-1 text-left">
                   {rawMessage}
                 </code>
               </details>

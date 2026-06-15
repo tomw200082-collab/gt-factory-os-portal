@@ -112,7 +112,7 @@ export default function MyActivityPage() {
             disabled={query.isFetching}
             aria-label="Refresh activity"
             className={cn(
-              "inline-flex items-center gap-1.5 rounded-md border border-border bg-bg-base px-3 py-1.5 text-xs font-medium text-fg-muted",
+              "inline-flex items-center gap-1.5 rounded-md border border-border bg-bg-raised px-3 py-1.5 text-xs font-medium text-fg-muted",
               "hover:border-fg-muted hover:text-fg",
               "focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent",
               "disabled:opacity-50"
@@ -173,7 +173,7 @@ export default function MyActivityPage() {
                   <button
                     type="button"
                     onClick={() => setFilter({ ...filter, searchTerm: "" })}
-                    className="rounded-md border border-border bg-bg-base px-3 py-1.5 text-xs font-medium text-fg-muted hover:border-fg-muted hover:text-fg"
+                    className="rounded-md border border-border bg-bg-raised px-3 py-1.5 text-xs font-medium text-fg-muted hover:border-fg-muted hover:text-fg"
                   >
                     Clear search
                   </button>
@@ -187,7 +187,7 @@ export default function MyActivityPage() {
                   <button
                     type="button"
                     onClick={clearAll}
-                    className="rounded-md border border-border bg-bg-base px-3 py-1.5 text-xs font-medium text-fg-muted hover:border-fg-muted hover:text-fg"
+                    className="rounded-md border border-border bg-bg-raised px-3 py-1.5 text-xs font-medium text-fg-muted hover:border-fg-muted hover:text-fg"
                   >
                     Clear all filters
                   </button>
@@ -228,7 +228,7 @@ export default function MyActivityPage() {
               onClick={() => void query.fetchNextPage()}
               disabled={query.isFetchingNextPage}
               className={cn(
-                "inline-flex items-center gap-1.5 rounded-md border border-border bg-bg-base px-4 py-1.5 text-xs font-medium text-fg-muted",
+                "inline-flex items-center gap-1.5 rounded-md border border-border bg-bg-raised px-4 py-1.5 text-xs font-medium text-fg-muted",
                 "hover:border-fg-muted hover:text-fg",
                 "focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent",
                 "disabled:opacity-50"
