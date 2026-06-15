@@ -275,4 +275,20 @@ This completes the #1 plan item (make Components Flow answer "what to order &
 when"): order-by date on the item detail (w17) + card insight (w18), the 14-day
 gap already shown ("Unfilled 14d"), and now a path to ordering (w19).
 
+### Bug sweep (Tom-directed, 2026-06-15) — system-wide  ✅
+Read-only general-purpose agent scanned the whole portal for real, fixable bugs
+(broken links, ghost classes, no-op handlers, runtime crashes, logic errors).
+Findings fixed:
+
+- **P0 — 4 dead links (404):** master item/component pages linked `/stock/movements`
+  (→ `/stock/movement-log`) and `/forms/physical-count` (→ `/stock/physical-count`).
+  Both targets verified to exist; both broken sources verified absent.
+- **P1 — 4 datetime-local crash guards:** `new Date(eventAt).toISOString()` throws
+  on a cleared field in waste-adjustments / receipts / physical-count /
+  production-actual (incl. a render-time use). Guarded (block or now-fallback).
+
+Agent verified clean: ghost Tailwind tokens (none new), primary nav (all hrefs
+resolve), no-op handlers (none in prod), `JSON.parse` (all guarded), unguarded
+array access (none). `npm run typecheck` exit 0 across both fix commits.
+
 _Subsequent waves appended below as completed._
