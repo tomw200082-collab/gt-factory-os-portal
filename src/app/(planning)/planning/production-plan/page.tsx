@@ -26,7 +26,9 @@ import {
   Boxes,
   StickyNote,
   RefreshCw,
+  Loader2,
 } from "lucide-react";
+import { useFocusTrap } from "@/components/a11y/useFocusTrap";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
@@ -144,6 +146,13 @@ const MANUAL_ADD_FIELDS = [
   "notes",
 ] as const;
 
+// Stable error-element id per ManualAdd field (Tranche 079 A11Y-R06).
+// Used by both ManualAddFieldErrors (renders the element) and the matching
+// input/select/textarea (references it via aria-describedby).
+function manualAddFieldErrorId(field: string): string {
+  return `manual-add-field-error-${field}`;
+}
+
 // Inline per-field server-error list (INTER-004).
 function ManualAddFieldErrors({
   field,
@@ -156,6 +165,7 @@ function ManualAddFieldErrors({
   if (errors.length === 0) return null;
   return (
     <div
+      id={manualAddFieldErrorId(field)}
       className="mt-1 space-y-0.5"
       data-testid={`manual-add-field-error-${field}`}
     >
@@ -215,6 +225,8 @@ function ManualAddModal({
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const titleRef = useRef<HTMLHeadingElement | null>(null);
   const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+  // Tranche 079 (A11Y-R03) — Tab / Shift+Tab cycle inside the dialog.
+  const focusTrap = useFocusTrap(dialogRef, true);
 
   useEffect(() => {
     // Capture the element that had focus when the modal mounted; restore on
@@ -300,7 +312,9 @@ function ManualAddModal({
         if (e.key === "Escape" && !isSubmitting) {
           e.stopPropagation();
           onClose();
+          return;
         }
+        focusTrap.onKeyDown(e);
       }}
       tabIndex={-1}
     >
@@ -336,6 +350,12 @@ function ManualAddModal({
               value={planDate}
               onChange={(e) => setPlanDate(e.target.value)}
               required
+              aria-required="true"
+              aria-describedby={
+                serverErrors?.byField["plan_date"]?.length
+                  ? manualAddFieldErrorId("plan_date")
+                  : undefined
+              }
             />
             <ManualAddFieldErrors field="plan_date" serverErrors={serverErrors} />
           </label>
@@ -350,6 +370,12 @@ function ManualAddModal({
               onChange={(e) => handleItemChange(e.target.value)}
               disabled={itemsQuery.isLoading}
               required
+              aria-required="true"
+              aria-describedby={
+                serverErrors?.byField["item_id"]?.length
+                  ? manualAddFieldErrorId("item_id")
+                  : undefined
+              }
             >
               <option value="">— select a product —</option>
               <optgroup label="Manufactured">
@@ -387,9 +413,19 @@ function ManualAddModal({
                 className="input"
                 value={qty}
                 onChange={(e) => setQty(e.target.value)}
-                aria-describedby={qty && !(parseFloat(qty) > 0) ? "manual-add-qty-hint" : undefined}
+                aria-describedby={
+                  [
+                    qty && !(parseFloat(qty) > 0) ? "manual-add-qty-hint" : null,
+                    serverErrors?.byField["planned_qty"]?.length
+                      ? manualAddFieldErrorId("planned_qty")
+                      : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" ") || undefined
+                }
                 aria-invalid={qty && !(parseFloat(qty) > 0) ? true : undefined}
                 required
+                aria-required="true"
               />
               {qty && !(parseFloat(qty) > 0) ? (
                 <p
@@ -411,6 +447,12 @@ function ManualAddModal({
                 value={uom}
                 onChange={(e) => setUom(e.target.value)}
                 required
+                aria-required="true"
+                aria-describedby={
+                  serverErrors?.byField["uom"]?.length
+                    ? manualAddFieldErrorId("uom")
+                    : undefined
+                }
                 data-testid="manual-add-uom"
               >
                 <option value="">— select a unit —</option>
@@ -434,6 +476,11 @@ function ManualAddModal({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               placeholder="Optional notes about this plan"
+              aria-describedby={
+                serverErrors?.byField["notes"]?.length
+                  ? manualAddFieldErrorId("notes")
+                  : undefined
+              }
             />
             <ManualAddFieldErrors field="notes" serverErrors={serverErrors} />
           </label>
@@ -523,21 +570,64 @@ function AddFromRecommendationsModal({
   const selectedRec = rows.find((r) => r.recommendation_id === selectedRecId) ?? null;
   const canSubmit = !!selectedRec && !isSubmitting;
 
+  // Tranche 079 (A11Y-R02 / R10) — same dialog treatment as ManualAddModal:
+  // initial focus on heading, focus return to trigger on close,
+  // Escape-to-close, focus trap on Tab/Shift+Tab.
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const titleRef = useRef<HTMLHeadingElement | null>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+  const focusTrap = useFocusTrap(dialogRef, true);
+
+  useEffect(() => {
+    previouslyFocusedRef.current =
+      (document.activeElement as HTMLElement | null) ?? null;
+    queueMicrotask(() => {
+      if (titleRef.current) titleRef.current.focus();
+      else if (dialogRef.current) dialogRef.current.focus();
+    });
+    return () => {
+      const el = previouslyFocusedRef.current;
+      if (el && typeof el.focus === "function") {
+        try {
+          el.focus();
+        } catch {
+          /* trigger may have unmounted — ignore */
+        }
+      }
+    };
+  }, []);
+
   return (
     <div
+      ref={dialogRef}
       dir="ltr"
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 px-2 sm:px-4"
       role="dialog"
       aria-modal="true"
+      aria-labelledby="add-from-recs-modal-title"
       data-testid="add-from-recs-modal"
+      tabIndex={-1}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && !isSubmitting) {
+          e.stopPropagation();
+          onClose();
+          return;
+        }
+        focusTrap.onKeyDown(e);
+      }}
     >
       {/* FLOW-017 (Tranche 054) — cap the sheet height so the footer
           buttons stay reachable on short phones. */}
       <div className="w-full max-w-2xl rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-2xl max-h-[min(90vh,600px)] flex flex-col">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <h2 className="text-base font-semibold text-fg-strong">
+            <h2
+              id="add-from-recs-modal-title"
+              ref={titleRef}
+              tabIndex={-1}
+              className="text-base font-semibold text-fg-strong outline-none"
+            >
               Add from production recommendations
             </h2>
             <p className="mt-1 text-3xs text-fg-muted">
@@ -551,6 +641,7 @@ function AddFromRecommendationsModal({
             onClick={onClose}
             disabled={isSubmitting}
             title="Close"
+            aria-label="Close"
           >
             <XCircle className="h-3 w-3" strokeWidth={2.5} />
           </button>
@@ -729,6 +820,7 @@ function EditModal({
   onClose,
   onSubmit,
   isSubmitting,
+  uomOptions,
 }: {
   plan: ProductionPlanRow;
   onClose: () => void;
@@ -739,23 +831,75 @@ function EditModal({
     notes?: string;
   }) => void;
   isSubmitting: boolean;
+  uomOptions: string[];
 }) {
   const [planDate, setPlanDate] = useState(plan.plan_date);
   const [qty, setQty] = useState(plan.planned_qty ?? "");
   const [uom, setUom] = useState(plan.uom ?? "");
   const [notes, setNotes] = useState(plan.notes ?? "");
 
+  // Tranche 079 (INTER-002) — UoM is a select over the known universe;
+  // if the plan's current UoM is not in the option list keep it selectable
+  // so we don't silently drop a value.
+  const uomChoices = useMemo(
+    () => (uom && !uomOptions.includes(uom) ? [uom, ...uomOptions] : uomOptions),
+    [uom, uomOptions],
+  );
+
+  // Tranche 079 (A11Y-R02 / R10) — dialog treatment (matches ManualAddModal).
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const titleRef = useRef<HTMLHeadingElement | null>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+  const focusTrap = useFocusTrap(dialogRef, true);
+
+  useEffect(() => {
+    previouslyFocusedRef.current =
+      (document.activeElement as HTMLElement | null) ?? null;
+    queueMicrotask(() => {
+      if (titleRef.current) titleRef.current.focus();
+      else if (dialogRef.current) dialogRef.current.focus();
+    });
+    return () => {
+      const el = previouslyFocusedRef.current;
+      if (el && typeof el.focus === "function") {
+        try {
+          el.focus();
+        } catch {
+          /* trigger may have unmounted — ignore */
+        }
+      }
+    };
+  }, []);
+
   return (
     <div
+      ref={dialogRef}
       dir="ltr"
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 px-2 sm:px-4"
       role="dialog"
       aria-modal="true"
+      aria-labelledby="edit-modal-title"
       data-testid="edit-modal"
+      tabIndex={-1}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && !isSubmitting) {
+          e.stopPropagation();
+          onClose();
+          return;
+        }
+        focusTrap.onKeyDown(e);
+      }}
     >
       <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-2xl">
-        <h2 className="text-base font-semibold text-fg-strong">Edit plan</h2>
+        <h2
+          id="edit-modal-title"
+          ref={titleRef}
+          tabIndex={-1}
+          className="text-base font-semibold text-fg-strong outline-none"
+        >
+          Edit plan
+        </h2>
         <p className="mt-1 text-3xs text-fg-muted">{plan.item_name ?? plan.item_id}</p>
 
         <form
@@ -806,11 +950,22 @@ function EditModal({
               <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                 Unit of measure
               </span>
-              <input
+              {/* INTER-002 (Tranche 079) — UoM is a select over the known
+                  set the page already computes (uomOptions). The plan's
+                  current uom is appended if it's not in the option list so
+                  edits don't silently drop arbitrary historical values. */}
+              <select
                 className="input"
                 value={uom}
                 onChange={(e) => setUom(e.target.value)}
-              />
+                data-testid="edit-uom"
+              >
+                {uomChoices.map((u) => (
+                  <option key={u} value={u}>
+                    {u}
+                  </option>
+                ))}
+              </select>
             </label>
           </div>
 
@@ -861,17 +1016,60 @@ function AddNoteModal({
 
   const canSubmit = planDate && notes.trim().length > 0 && !isSubmitting;
 
+  // Tranche 079 (A11Y-R02 / R10) — dialog treatment.
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const titleRef = useRef<HTMLHeadingElement | null>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+  const focusTrap = useFocusTrap(dialogRef, true);
+
+  useEffect(() => {
+    previouslyFocusedRef.current =
+      (document.activeElement as HTMLElement | null) ?? null;
+    queueMicrotask(() => {
+      if (titleRef.current) titleRef.current.focus();
+      else if (dialogRef.current) dialogRef.current.focus();
+    });
+    return () => {
+      const el = previouslyFocusedRef.current;
+      if (el && typeof el.focus === "function") {
+        try {
+          el.focus();
+        } catch {
+          /* trigger may have unmounted — ignore */
+        }
+      }
+    };
+  }, []);
+
   return (
     <div
+      ref={dialogRef}
       dir="ltr"
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 px-2 sm:px-4"
       role="dialog"
       aria-modal="true"
+      aria-labelledby="add-note-modal-title"
       data-testid="add-note-modal"
+      tabIndex={-1}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && !isSubmitting) {
+          e.stopPropagation();
+          onClose();
+          return;
+        }
+        focusTrap.onKeyDown(e);
+      }}
     >
       <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-2xl">
-        <h2 className="text-base font-semibold text-fg-strong">Add a note</h2>
+        <h2
+          id="add-note-modal-title"
+          ref={titleRef}
+          tabIndex={-1}
+          className="text-base font-semibold text-fg-strong outline-none"
+        >
+          Add a note
+        </h2>
         <p className="mt-1 text-3xs text-fg-muted">
           Notes appear on the plan board but don&apos;t affect inventory.
         </p>
@@ -922,7 +1120,13 @@ function AddNoteModal({
               disabled={!canSubmit}
               data-testid="add-note-submit"
             >
-              <StickyNote className="h-3 w-3" strokeWidth={2} />
+              {/* INTER-001 (Tranche 079) — spinner alongside "Saving…" while
+                  pending, matching ManualAdd / AddFromRecs. */}
+              {isSubmitting ? (
+                <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} aria-hidden />
+              ) : (
+                <StickyNote className="h-3 w-3" strokeWidth={2} />
+              )}
               {isSubmitting ? "Saving…" : "Add note"}
             </button>
           </div>
@@ -948,17 +1152,60 @@ function EditNoteModal({
 
   const canSubmit = notes.trim().length > 0 && !isSubmitting;
 
+  // Tranche 079 (A11Y-R02 / R10) — dialog treatment.
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const titleRef = useRef<HTMLHeadingElement | null>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+  const focusTrap = useFocusTrap(dialogRef, true);
+
+  useEffect(() => {
+    previouslyFocusedRef.current =
+      (document.activeElement as HTMLElement | null) ?? null;
+    queueMicrotask(() => {
+      if (titleRef.current) titleRef.current.focus();
+      else if (dialogRef.current) dialogRef.current.focus();
+    });
+    return () => {
+      const el = previouslyFocusedRef.current;
+      if (el && typeof el.focus === "function") {
+        try {
+          el.focus();
+        } catch {
+          /* trigger may have unmounted — ignore */
+        }
+      }
+    };
+  }, []);
+
   return (
     <div
+      ref={dialogRef}
       dir="ltr"
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 px-2 sm:px-4"
       role="dialog"
       aria-modal="true"
+      aria-labelledby="edit-note-modal-title"
       data-testid="edit-note-modal"
+      tabIndex={-1}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && !isSubmitting) {
+          e.stopPropagation();
+          onClose();
+          return;
+        }
+        focusTrap.onKeyDown(e);
+      }}
     >
       <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-2xl">
-        <h2 className="text-base font-semibold text-fg-strong">Edit note</h2>
+        <h2
+          id="edit-note-modal-title"
+          ref={titleRef}
+          tabIndex={-1}
+          className="text-base font-semibold text-fg-strong outline-none"
+        >
+          Edit note
+        </h2>
 
         <form
           className="mt-4 space-y-3"
@@ -1027,17 +1274,60 @@ function CancelModal({
 }) {
   const [reason, setReason] = useState("");
 
+  // Tranche 079 (A11Y-R02 / R10) — dialog treatment.
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const titleRef = useRef<HTMLHeadingElement | null>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+  const focusTrap = useFocusTrap(dialogRef, true);
+
+  useEffect(() => {
+    previouslyFocusedRef.current =
+      (document.activeElement as HTMLElement | null) ?? null;
+    queueMicrotask(() => {
+      if (titleRef.current) titleRef.current.focus();
+      else if (dialogRef.current) dialogRef.current.focus();
+    });
+    return () => {
+      const el = previouslyFocusedRef.current;
+      if (el && typeof el.focus === "function") {
+        try {
+          el.focus();
+        } catch {
+          /* trigger may have unmounted — ignore */
+        }
+      }
+    };
+  }, []);
+
   return (
     <div
+      ref={dialogRef}
       dir="ltr"
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 px-2 sm:px-4"
       role="dialog"
       aria-modal="true"
+      aria-labelledby="cancel-modal-title"
       data-testid="cancel-modal"
+      tabIndex={-1}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && !isSubmitting) {
+          e.stopPropagation();
+          onClose();
+          return;
+        }
+        focusTrap.onKeyDown(e);
+      }}
     >
       <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-2xl">
-        <h2 className="text-base font-semibold text-fg-strong">Cancel plan</h2>
+        <h2
+          id="cancel-modal-title"
+          ref={titleRef}
+          tabIndex={-1}
+          className="text-base font-semibold text-fg-strong outline-none"
+        >
+          Cancel plan
+        </h2>
         <p className="mt-1 text-3xs text-fg-muted">
           {plan.plan_type === "note"
             ? "Note"
@@ -1069,6 +1359,7 @@ function CancelModal({
               onChange={(e) => setReason(e.target.value)}
               placeholder="e.g. schedule change, raw material shortage, demand updated"
               required
+              aria-required="true"
             />
           </label>
 
@@ -1112,7 +1403,10 @@ function Toast({
           ? "border-success/40 bg-success-softer text-success-fg"
           : "border-danger/40 bg-danger-softer text-danger-fg",
       )}
-      role="status"
+      // A11Y-R11 (Tranche 079) — errors interrupt (alert / assertive); success
+      // confirmations are polite status announcements.
+      role={kind === "error" ? "alert" : "status"}
+      aria-live={kind === "error" ? "assertive" : "polite"}
       data-testid="production-plan-toast"
     >
       <div className="flex items-start justify-between gap-3">
@@ -1158,6 +1452,10 @@ export default function ProductionPlanPage() {
   // INTER-004 (Tranche 048) — server 422 field errors for the ManualAddModal,
   // rendered inline under the matching fields instead of toast-only.
   const [manualAddErrors, setManualAddErrors] = useState<GroupedFieldErrors | null>(null);
+  // INTER-003 (Tranche 079) — when a per-card patch (Move-to-tomorrow today,
+  // future per-card actions) is in flight, disable only that card's buttons
+  // by id, not every card on the board via patchMut.isPending.
+  const [pendingPlanId, setPendingPlanId] = useState<string | null>(null);
 
   const plansQuery = usePlans(toIsoDate(weekStart), toIsoDate(weekEnd));
   const createMut = useCreatePlan();
@@ -1390,6 +1688,7 @@ export default function ProductionPlanPage() {
       confirmLabel: "Move to tomorrow",
     });
     if (!ok) return;
+    setPendingPlanId(p.plan_id);
     patchMut.mutate(
       { plan_id: p.plan_id, body: { plan_date: tomorrowIso } },
       {
@@ -1397,6 +1696,11 @@ export default function ProductionPlanPage() {
           flashToast("success", "Plan moved to tomorrow.");
         },
         onError: (err) => { flashToast("error", err.message); },
+        onSettled: () => {
+          // INTER-003 — clear the per-card lock whether the patch settled
+          // green or red. patchMut.isPending unwinds in the same tick.
+          setPendingPlanId(null);
+        },
       },
     );
   }
@@ -1772,8 +2076,19 @@ export default function ProductionPlanPage() {
                     type="button"
                     className="btn btn-xs shrink-0"
                     onClick={() => handleMoveToTomorrow(p)}
-                    disabled={patchMut.isPending}
-                    title="Move this plan to tomorrow's lane"
+                    // INTER-003 (Tranche 079) — disable only the in-flight
+                    // plan's row, plus any row when another row is updating
+                    // (with a clear "wait" tooltip). Rows that are NOT the
+                    // pending one stay clickable when nothing is in flight.
+                    disabled={
+                      pendingPlanId === p.plan_id ||
+                      (pendingPlanId !== null && pendingPlanId !== p.plan_id)
+                    }
+                    title={
+                      pendingPlanId !== null && pendingPlanId !== p.plan_id
+                        ? "Another plan is updating — please wait"
+                        : "Move this plan to tomorrow's lane"
+                    }
                     data-testid="today-strip-move-tomorrow"
                   >
                     Move to tomorrow
@@ -2061,6 +2376,7 @@ export default function ProductionPlanPage() {
           onClose={() => setEditingPlan(null)}
           onSubmit={handleEdit}
           isSubmitting={patchMut.isPending}
+          uomOptions={uomOptions}
         />
       ) : null}
 

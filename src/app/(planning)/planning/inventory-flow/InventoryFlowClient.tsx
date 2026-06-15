@@ -11,7 +11,7 @@ import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { FilterBar } from "./_components/FilterBar";
 import { FlowGridDesktop } from "./_components/FlowGridDesktop";
 import { InsightsHero } from "./_components/InsightsHero";
-import { InventoryFlowTabs } from "./_components/InventoryFlowTabs";
+import { InventoryFlowTabs, INVENTORY_FLOW_TAB_IDS } from "./_components/InventoryFlowTabs";
 import { MobileCardStream } from "./_components/MobileCardStream";
 import { PlannedFooterCaveat } from "./_components/PlannedFooterCaveat";
 import {
@@ -191,12 +191,21 @@ export function InventoryFlowClient() {
   // not yet known (FLOW-M01) — keep the skeleton so the desktop grid never
   // mounts-and-unmounts on a phone.
   // ---------------------------------------------------------------------------
+  // A11Y-R08 (Tranche 079) — content region is the tabpanel labelled by the
+  // currently-active tab. Reused across every return path below.
+  const panelProps = {
+    role: "tabpanel" as const,
+    "aria-labelledby": INVENTORY_FLOW_TAB_IDS.fg,
+  };
+
   if (!isMounted || isMobile === null) {
     return (
       <>
         {tabs}
-        {header}
-        <SkeletonGrid />
+        <div {...panelProps}>
+          {header}
+          <SkeletonGrid />
+        </div>
       </>
     );
   }
@@ -208,12 +217,14 @@ export function InventoryFlowClient() {
     return (
       <>
         {tabs}
-        {header}
-        <ErrorState
-          title="Could not load Inventory Flow"
-          description={(flowQuery.error as Error)?.message ?? "Unknown error"}
-          onRetry={() => void flowQuery.refetch()}
-        />
+        <div {...panelProps}>
+          {header}
+          <ErrorState
+            title="Could not load Inventory Flow"
+            description={(flowQuery.error as Error)?.message ?? "Unknown error"}
+            onRetry={() => void flowQuery.refetch()}
+          />
+        </div>
       </>
     );
   }
@@ -225,17 +236,19 @@ export function InventoryFlowClient() {
     return (
       <>
         {tabs}
-        {header}
-        <div className="rounded border border-info/30 bg-info-softer px-4 py-3 text-xs text-info-fg">
-          <div className="font-semibold">Calculating projection…</div>
-          <div className="mt-0.5 text-fg-muted">
-            This projection covers all active products across forecast, open
-            orders, recipes, and on-hand stock. First-time loads can take up to
-            20 seconds. Subsequent loads are instant.
+        <div {...panelProps}>
+          {header}
+          <div className="rounded border border-info/30 bg-info-softer px-4 py-3 text-xs text-info-fg">
+            <div className="font-semibold">Calculating projection…</div>
+            <div className="mt-0.5 text-fg-muted">
+              This projection covers all active products across forecast, open
+              orders, recipes, and on-hand stock. First-time loads can take up to
+              20 seconds. Subsequent loads are instant.
+            </div>
           </div>
+          <InsightsHero items={[]} summary={null} isLoading />
+          <SkeletonGrid />
         </div>
-        <InsightsHero items={[]} summary={null} isLoading />
-        <SkeletonGrid />
       </>
     );
   }
@@ -246,21 +259,23 @@ export function InventoryFlowClient() {
     return (
       <>
         {tabs}
-        {header}
-        <EmptyState
-          title="No projection available"
-          description="The inventory flow projection finished but returned no data. This usually clears on a retry."
-          action={
-            <button
-              type="button"
-              onClick={() => void flowQuery.refetch()}
-              className="btn btn-sm btn-outline"
-            >
-              <RefreshCw className="h-3.5 w-3.5" strokeWidth={2} />
-              Retry
-            </button>
-          }
-        />
+        <div {...panelProps}>
+          {header}
+          <EmptyState
+            title="No projection available"
+            description="The inventory flow projection finished but returned no data. This usually clears on a retry."
+            action={
+              <button
+                type="button"
+                onClick={() => void flowQuery.refetch()}
+                className="btn btn-sm btn-outline"
+              >
+                <RefreshCw className="h-3.5 w-3.5" strokeWidth={2} />
+                Retry
+              </button>
+            }
+          />
+        </div>
       </>
     );
   }
@@ -274,14 +289,15 @@ export function InventoryFlowClient() {
   return (
     <>
       {tabs}
-      {header}
-      <div className="space-y-4">
-        <InsightsHero
-          items={data.items}
-          summary={summary}
-          isLoading={false}
-          asOf={data.as_of}
-        />
+      <div {...panelProps}>
+        {header}
+        <div className="space-y-4">
+          <InsightsHero
+            items={data.items}
+            summary={summary}
+            isLoading={false}
+            asOf={data.as_of}
+          />
 
         {showUnmappedGate ? (
           <UnmappedSkusBanner fraction={fraction} />
@@ -328,6 +344,7 @@ export function InventoryFlowClient() {
             {overlayEnabled ? <PlannedFooterCaveat /> : null}
           </>
         )}
+        </div>
       </div>
     </>
   );

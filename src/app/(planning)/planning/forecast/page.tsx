@@ -442,10 +442,12 @@ export default function ForecastListPage() {
                 onClick={() => setStatusFilter(opt.id)}
                 data-testid={`forecast-status-${opt.id}`}
                 className={[
-                  "inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs font-medium transition-colors",
+                  // A11Y-R01 (Tranche 079) — active state adds font-semibold
+                  // so selection is communicated via more than color alone.
+                  "inline-flex items-center gap-1.5 rounded px-2.5 py-1 text-xs transition-colors",
                   isActive
-                    ? "bg-accent-soft text-accent"
-                    : "text-fg-muted hover:bg-bg-subtle hover:text-fg-strong",
+                    ? "bg-accent-soft text-accent font-semibold"
+                    : "text-fg-muted font-medium hover:bg-bg-subtle hover:text-fg-strong",
                 ].join(" ")}
               >
                 {opt.label}

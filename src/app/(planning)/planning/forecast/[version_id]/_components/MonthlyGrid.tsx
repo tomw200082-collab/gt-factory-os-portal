@@ -753,8 +753,10 @@ function BodyRow({
       })}
 
       {/* ── Sticky-right: ROW TOTAL hero ─────────────────────────────────── */}
+      {/* A11Y-R09 (Tranche 079) — aggregate cells are gridcells; only the
+          item-name cell at the row's left edge is the row's rowheader. */}
       <div
-        role="rowheader"
+        role="gridcell"
         className={cn(
           "sticky right-0 z-20 flex h-full items-center justify-end bg-bg-raised px-3",
           "border-l border-border/60",
@@ -800,9 +802,10 @@ function FooterTotalsRow({
       style={{ ...gs, gridAutoRows: `${FOOTER_H}px`, height: FOOTER_H }}
       data-testid="forecast-grid-totals-row"
     >
-      {/* Bottom-left corner — pinned both axes. */}
+      {/* Bottom-left corner — pinned both axes. A11Y-R09 (Tranche 079):
+          this is a footer-totals cell, not a row header. */}
       <div
-        role="rowheader"
+        role="gridcell"
         className="sticky left-0 z-30 flex h-full items-center bg-bg-raised px-3"
         style={{
           boxShadow:
@@ -834,9 +837,10 @@ function FooterTotalsRow({
           </div>
         );
       })}
-      {/* Bottom-right corner — grand total, pinned both axes. */}
+      {/* Bottom-right corner — grand total, pinned both axes. A11Y-R09
+          (Tranche 079): this is a footer-totals cell, not a row header. */}
       <div
-        role="rowheader"
+        role="gridcell"
         className="sticky right-0 z-30 flex h-full items-center justify-end bg-bg-raised px-3"
         style={{
           boxShadow:

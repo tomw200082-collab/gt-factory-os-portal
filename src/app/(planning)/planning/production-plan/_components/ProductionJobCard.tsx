@@ -244,7 +244,7 @@ export function ProductionJobCard({
               className="chip gap-1 text-[10px] text-fg-muted"
               data-testid="plan-card-draft-chip"
             >
-              Draft — not firmed
+              Draft — not yet confirmed
             </span>
           )}
 

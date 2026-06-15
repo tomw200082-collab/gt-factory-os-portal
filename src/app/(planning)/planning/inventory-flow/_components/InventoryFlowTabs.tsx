@@ -32,6 +32,15 @@ const TAB_HREFS: Record<Tab, string> = {
   supply: "/planning/inventory-flow/supply",
 };
 
+// A11Y-R08 (Tranche 079) — stable tab ids exported so the FG and supply
+// client pages can reference them from their `<div role="tabpanel"
+// aria-labelledby=…>` wrappers (the tabpanel's labelledby points at the
+// currently-active tab's id).
+export const INVENTORY_FLOW_TAB_IDS: Record<Tab, string> = {
+  fg: "inv-flow-tab-fg",
+  supply: "inv-flow-tab-supply",
+};
+
 export function InventoryFlowTabs({ activeTab }: { activeTab: Tab }) {
   const router = useRouter();
   const roving = useRovingTabList<Tab>({
@@ -44,7 +53,9 @@ export function InventoryFlowTabs({ activeTab }: { activeTab: Tab }) {
   });
 
   return (
-    <nav
+    // A11Y-R04 (Tranche 079) — the tablist sits on a `<div>` (was `<nav>`,
+    // which created a duplicate navigation landmark inside the planning shell).
+    <div
       {...roving.tabListProps}
       aria-label="Inventory flow view"
       className="inline-flex rounded-md border border-border bg-bg-muted p-0.5 text-sm"
@@ -54,6 +65,7 @@ export function InventoryFlowTabs({ activeTab }: { activeTab: Tab }) {
         return (
           <Link
             href={TAB_HREFS.fg}
+            id={INVENTORY_FLOW_TAB_IDS.fg}
             role={tp.role}
             tabIndex={tp.tabIndex}
             aria-selected={tp["aria-selected"]}
@@ -76,6 +88,7 @@ export function InventoryFlowTabs({ activeTab }: { activeTab: Tab }) {
         return (
           <Link
             href={TAB_HREFS.supply}
+            id={INVENTORY_FLOW_TAB_IDS.supply}
             role={tp.role}
             tabIndex={tp.tabIndex}
             aria-selected={tp["aria-selected"]}
@@ -92,6 +105,6 @@ export function InventoryFlowTabs({ activeTab }: { activeTab: Tab }) {
           </Link>
         );
       })()}
-    </nav>
+    </div>
   );
 }

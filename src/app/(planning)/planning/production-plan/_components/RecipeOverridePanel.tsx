@@ -113,6 +113,10 @@ export function RecipeOverridePanel({
   const [working, setWorking] = useState<WorkingRecipeLine[] | null>(null);
   const [dirty, setDirty] = useState(false);
   const [confirmRemoveId, setConfirmRemoveId] = useState<string | null>(null);
+  // INTER-009 (Tranche 079) — inline confirm before Reset-to-standard runs
+  // when there are unsaved edits, mirroring the per-line Remove/Keep two-step
+  // pattern used elsewhere in this panel.
+  const [confirmingReset, setConfirmingReset] = useState(false);
   const [addValue, setAddValue] = useState("");
   const [saveError, setSaveError] = useState<string | null>(null);
 
@@ -626,21 +630,62 @@ export function RecipeOverridePanel({
               <History className="h-3 w-3" strokeWidth={2} />
               Load last improvisation
             </button>
-            <button
-              type="button"
-              className="btn btn-sm gap-1.5"
-              onClick={resetToStandard}
-              disabled={!editable || saveMut.isPending || sameAsStandard}
-              title={
-                sameAsStandard
-                  ? "Already matching the standard recipe"
-                  : "Replace all lines with the standard recipe"
-              }
-              data-testid="recipe-reset-standard"
-            >
-              <RotateCcw className="h-3 w-3" strokeWidth={2} />
-              Reset to standard
-            </button>
+            {/* INTER-009 (Tranche 079) — two-step inline confirm before
+                reset wipes any unsaved edits. If there are no unsaved edits
+                (`dirty` false) the original one-click behaviour is preserved
+                because there's nothing to clobber. Matches the per-line
+                Remove/Keep pattern further up the table. */}
+            {confirmingReset ? (
+              <span className="inline-flex items-center gap-1">
+                <span className="text-3xs text-fg-muted">
+                  Reset wipes your unsaved edits.
+                </span>
+                <button
+                  type="button"
+                  className="btn btn-sm btn-danger gap-1.5"
+                  onClick={() => {
+                    resetToStandard();
+                    setConfirmingReset(false);
+                  }}
+                  disabled={!editable || saveMut.isPending}
+                  data-testid="recipe-reset-standard-confirm"
+                >
+                  <RotateCcw className="h-3 w-3" strokeWidth={2} />
+                  Reset
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-sm"
+                  onClick={() => setConfirmingReset(false)}
+                  disabled={saveMut.isPending}
+                  data-testid="recipe-reset-standard-cancel"
+                >
+                  Keep edits
+                </button>
+              </span>
+            ) : (
+              <button
+                type="button"
+                className="btn btn-sm gap-1.5"
+                onClick={() => {
+                  if (dirty) {
+                    setConfirmingReset(true);
+                    return;
+                  }
+                  resetToStandard();
+                }}
+                disabled={!editable || saveMut.isPending || sameAsStandard}
+                title={
+                  sameAsStandard
+                    ? "Already matching the standard recipe"
+                    : "Replace all lines with the standard recipe"
+                }
+                data-testid="recipe-reset-standard"
+              >
+                <RotateCcw className="h-3 w-3" strokeWidth={2} />
+                Reset to standard
+              </button>
+            )}
             <div className="ml-auto flex items-center gap-2">
               <button
                 type="button"

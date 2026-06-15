@@ -78,7 +78,21 @@ export function RecommendationsToConvert(): JSX.Element | null {
         className="card border-danger/40 p-4 text-sm text-danger-fg"
         role="alert"
       >
-        {(recsQuery.error as Error)?.message ?? "לא ניתן לטעון המלצות מאושרות."}
+        <div>
+          {(recsQuery.error as Error)?.message ?? "לא ניתן לטעון המלצות מאושרות."}
+        </div>
+        {/* INTER-010 (Tranche 079) — English-pattern retry, matching the
+            existing English-only structure on this component (component
+            comments and JSX prop names are already English; only Hebrew
+            data strings live in this surface and they are untouched). */}
+        <button
+          type="button"
+          onClick={() => void recsQuery.refetch()}
+          className="mt-2 text-xs font-medium underline hover:no-underline"
+          data-testid="procurement-recs-retry"
+        >
+          Try again
+        </button>
       </div>
     );
   }
