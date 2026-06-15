@@ -106,6 +106,28 @@ These need W1/W4 contract work and are **out of the portal lane**. Listed so the
 
 ---
 
+## Part 5 — Operator & approval surfaces (detailed findings)
+
+From dedicated interaction-design audits this session. **[FIXED]** items shipped in waves 4–5; others are prioritized recommendations.
+
+### Inbox / approvals
+- **[FIXED — wave 4, BLOCKER]** Physical-count & waste approval pages shared one `busy` flag → approving disabled+relabelled the reject button too. Split per-action; irreversible approve now behind an inline confirm gate.
+- **[FIXED — wave 4]** Waste page: status raw-string → pill chip; plain-text loading → skeleton.
+- **[FIXED — wave 5]** Credit "reject" trigger now danger-toned (was identical to acknowledge).
+- **[P1 — recommend]** `/inbox` bulk-resolve uses `window.confirm()` (thread-blocking native dialog, poor mobile UX, no item breakdown). Replace with an inline/modal confirm naming the N items + categories. *In-lane; the inbox page is large — its own tranche.*
+- **[P1 — recommend]** `/inbox` deep-link button promotes to `btn-primary` via a fragile Hebrew-regex label test; should be a declared `isDecision` flag per category. *In-lane.*
+- **[P1 — recommend, both pages]** When the detail GET errors, Approve/Reject stay enabled — approving with no visible item/qty/delta is decision-grade risk. Consider disabling actions on detail error. *In-lane; left as a deliberate call for Tom (the page intentionally says "you may still act").*
+- **[P2 — recommend]** Physical-count/credit approve success states carry no ledger-movement reference (waste does). Needs the success contract to expose the id → *backend, out of lane.*
+
+### Production report (`/ops/stock/production-actual`)
+- **[P0 — recommend]** "Cancel and start over" calls `resetFlow()` instantly — unrecoverable loss of mid-entry quantities/variance reason, and it sits ~8px from the primary submit in the sticky footer. Gate behind an inline "Lose changes?" confirm when any field is non-empty; give it ghost styling + more separation. *In-lane; 4k-line file — its own tranche.*
+- **[P1 — recommend]** "Open production form" (Step 1) has no loading/disabled state during the BOM open call → page blanks for 300–800ms, re-tap risk. Disable + "Opening…" while in-flight. *In-lane.*
+- **[P1 — recommend]** Recent-reports history section is absent during load and when empty (no skeleton, no empty state). Add both. *In-lane.*
+- **[P1 — recommend]** Three Hebrew UI strings in the BOM preview panel (composition banner + "רכיבי אריזה"/"רכיבי נוזל" headings) on an English-first operator surface not covered by the Recipe-Readiness Hebrew exception. Translate to English. *In-lane, but a language-policy call — confirm with Tom.*
+
+### Other operator surfaces (`/ops/stock/*`, bulk-count, submissions)
+Reviewed directly; broadly solid (skeletons, retry, role gates, mobile cards present). Candidate precision items fold into the cross-cutting passes in Part 3 (single-primary toolbars, shared `<ConfirmInline>`, guaranteed pending labels).
+
 ## Appendix — page inventory reviewed
 
 ~70 routes across `(po)`, `(planning)`, `(ops)`, `(inbox)`, `(admin)`, `(shared)`, `(auth)`. Deep-read this session: the full PO corridor + procurement + the design-system foundations (`globals.css`, `states.tsx`, patterns). Operator/inbox and admin/planning groups: see the per-group sections appended as audit agents complete (this is a living report on PR #95).
