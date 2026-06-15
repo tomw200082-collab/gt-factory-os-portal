@@ -209,4 +209,13 @@ highest-leverage, 100%-UI-only fix for the redirected ask.
   while ordering. Previously only the by-product view exposed this. UI-only.
   `npm run typecheck` exit 0.
 
+### Wave 15 — "Copy order list" per supplier (By-supplier view)  ✅
+**File:** `.../production-simulation/_components/date-range/BySupplierView.tsx`.
+
+- Each supplier with something to order gets a **Copy order list** button that
+  copies a plain-text "{supplier}\n• {component} — {qty} {uom}" list (short
+  components only, biggest shortfall first) to the clipboard — ready to paste
+  into WhatsApp/email, which is how the factory actually orders. UI-only.
+  `npm run typecheck` exit 0.
+
 _Subsequent waves appended below as completed._

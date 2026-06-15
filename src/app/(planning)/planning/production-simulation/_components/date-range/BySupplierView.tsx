@@ -1,7 +1,14 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import { ChevronDown, Phone, Truck, ShoppingCart } from "lucide-react";
+import {
+  Check,
+  ChevronDown,
+  ClipboardCopy,
+  Phone,
+  Truck,
+  ShoppingCart,
+} from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { MaterialComponentLine } from "./types";
 import {
@@ -95,6 +102,55 @@ export function buildGroups(
   return groups;
 }
 
+// Plain-text order list for one supplier — what to order, ready to paste into
+// WhatsApp/email, which is how a small factory actually places orders. Only the
+// short components (real shortfall) are included, biggest shortfall first.
+function buildOrderText(group: SupplierGroup): string {
+  const shorts = group.components
+    .filter(
+      (c) => isShortStatus(c.coverage_status) && parseFloat(c.net_shortage_qty) > 0,
+    )
+    .sort((a, b) => parseFloat(b.net_shortage_qty) - parseFloat(a.net_shortage_qty));
+  const lines = [group.supplierName];
+  for (const c of shorts) {
+    lines.push(
+      `• ${c.component_name} — ${fmtQtyStr(c.net_shortage_qty, c.component_uom)} ${c.component_uom}`,
+    );
+  }
+  return lines.join("\n");
+}
+
+function CopyOrderButton({ group }: { group: SupplierGroup }): JSX.Element {
+  const [copied, setCopied] = useState(false);
+  async function copy(): Promise<void> {
+    try {
+      await navigator.clipboard.writeText(buildOrderText(group));
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // clipboard unavailable — silently no-op
+    }
+  }
+  return (
+    <button
+      type="button"
+      onClick={() => void copy()}
+      className="inline-flex items-center gap-1.5 rounded-md border border-border/60 px-2.5 py-1 text-2xs font-semibold text-fg-muted transition-colors hover:border-border hover:text-fg"
+      data-testid="copy-order-list"
+    >
+      {copied ? (
+        <>
+          <Check className="h-3.5 w-3.5" aria-hidden /> Copied
+        </>
+      ) : (
+        <>
+          <ClipboardCopy className="h-3.5 w-3.5" aria-hidden /> Copy order list
+        </>
+      )}
+    </button>
+  );
+}
+
 export function BySupplierView({
   components,
 }: {
@@ -176,6 +232,11 @@ export function BySupplierView({
 
             {isOpen ? (
               <>
+                {group.toOrderCount > 0 ? (
+                  <div className="flex justify-end border-t border-border/50 bg-bg-subtle/20 px-3 pt-2">
+                    <CopyOrderButton group={group} />
+                  </div>
+                ) : null}
                 {/* Desktop — dense table. */}
                 <div className="hidden overflow-x-auto border-t border-border/50 bg-bg-subtle/20 lg:block">
                   <SupplierComponentTable components={group.components} />
