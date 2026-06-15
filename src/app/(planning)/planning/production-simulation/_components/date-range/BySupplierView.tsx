@@ -204,12 +204,12 @@ function SupplierComponentTable({
     <table className="w-full">
       <thead>
         <tr className="text-2xs font-bold uppercase tracking-sops text-fg-subtle">
-          <th className="px-4 py-2 text-left sm:px-5">Component</th>
-          <th className="px-4 py-2 text-left">First needed</th>
-          <th className="px-4 py-2 text-right">Required</th>
-          <th className="px-4 py-2 text-right">On hand</th>
-          <th className="px-4 py-2 text-right">To order</th>
-          <th className="px-4 py-2 text-left">Status</th>
+          <th scope="col" className="px-4 py-2 text-left sm:px-5">Component</th>
+          <th scope="col" className="px-4 py-2 text-left">First needed</th>
+          <th scope="col" className="px-4 py-2 text-right">Required</th>
+          <th scope="col" className="px-4 py-2 text-right">On hand</th>
+          <th scope="col" className="px-4 py-2 text-right">To order</th>
+          <th scope="col" className="px-4 py-2 text-left">Status</th>
         </tr>
       </thead>
       <tbody>

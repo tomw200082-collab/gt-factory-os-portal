@@ -2,7 +2,12 @@
 
 import Link from "next/link";
 import { useQuery } from "@tanstack/react-query";
-import { AlertTriangle, FileWarning, ShoppingCart } from "lucide-react";
+import {
+  AlertTriangle,
+  CalendarCheck,
+  FileWarning,
+  ShoppingCart,
+} from "lucide-react";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { cn } from "@/lib/cn";
 import type {
@@ -231,7 +236,7 @@ async function loadSimulationData(
       // usable ACTIVE BASE_BOM line. Refuse to guess — return a fix-the-data
       // message instead of a wrong answer.
       return {
-        blocked: `This product links a BASE recipe (${product.baseHead.bom_head_id}), but its PACK recipe version has no active BASE_BOM line stating how much base mix one unit consumes. The base-ingredient quantities cannot be computed from the recipe until that line is added. Fix the PACK BOM, then run the simulation again.`,
+        blocked: `This product's recipe is incomplete — its packaging recipe has no line stating how much base mix one unit uses, so the base-ingredient quantities cannot be computed. Fix the packaging recipe in recipe management, then run the simulation again.`,
         lines: [],
         packHeadId: product.packHead.bom_head_id,
         packVersionLabel: pack.version_label,
@@ -523,7 +528,21 @@ export function SimulationResults({
               Create a manual purchase order →
             </Link>
           </div>
-        ) : null}
+        ) : (
+          // Fully covered: stock already supports this run, so the onward step
+          // isn't ordering — it's scheduling. Bridge to the production board so
+          // the what-if doesn't dead-end on a green answer.
+          <div className="mt-4 flex flex-wrap items-center gap-3 border-t border-border/60 pt-4">
+            <Link
+              href="/planning/production-plan"
+              className="btn btn-sm btn-primary gap-1.5"
+              data-testid="production-simulation-go-production-plan"
+            >
+              <CalendarCheck className="h-3.5 w-3.5" strokeWidth={2.25} aria-hidden />
+              Stock covers this run — schedule it
+            </Link>
+          </div>
+        )}
       </div>
 
       {data.warnings.length > 0 ? (
@@ -540,7 +559,7 @@ export function SimulationResults({
         contentClassName="p-0"
         footer={
           <span>
-            Ratios from PACK recipe{" "}
+            Ratios from packaging recipe{" "}
             <span className="font-mono text-fg-subtle">
               {data.packHeadId}
             </span>{" "}
@@ -548,7 +567,7 @@ export function SimulationResults({
             {data.baseHeadId && data.baseVersionLabel ? (
               <>
                 {" "}
-                + BASE recipe{" "}
+                + liquid recipe{" "}
                 <span className="font-mono text-fg-subtle">
                   {data.baseHeadId}
                 </span>{" "}

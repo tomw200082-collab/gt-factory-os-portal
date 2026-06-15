@@ -27,6 +27,7 @@ import { Badge } from "@/components/badges/StatusBadge";
 import { EmptyState, ErrorState } from "@/components/feedback/states";
 import { useSession } from "@/lib/auth/session-provider";
 import type { Session } from "@/lib/auth/fake-auth";
+import { useRovingTabList } from "@/components/a11y/useRovingTabList";
 import { cn } from "@/lib/cn";
 
 type PlanningRunStatus =
@@ -188,6 +189,15 @@ export default function PlanningRunsListPage() {
   const [triggerError, setTriggerError] = useState<string | null>(null);
   const canAuthor = session.role === "planner" || session.role === "admin";
 
+  // Tranche 075 (A11Y-009) — roving tabindex + arrow keys for the planning-
+  // runs status filter. FILTER_OPTIONS is a module-level const.
+  const filterRoving = useRovingTabList<StatusFilter>({
+    keys: FILTER_OPTIONS.map((opt) => opt.key),
+    activeKey: filter,
+    onChange: setFilter,
+    orientation: "horizontal",
+  });
+
   const query = useQuery<ListResponse>({
     queryKey: ["planning", "runs", filter, session.role],
     queryFn: () => fetchRuns(session, filter),
@@ -330,19 +340,23 @@ export default function PlanningRunsListPage() {
         description="Most recent first. Click a row to open the run detail."
         actions={
           <div
-            role="tablist"
+            {...filterRoving.tabListProps}
             aria-label="Filter by status"
             className="inline-flex items-center gap-1 rounded border border-border/70 bg-bg-raised p-0.5"
             data-testid="planning-runs-filter"
           >
             {FILTER_OPTIONS.map((opt) => {
               const active = filter === opt.key;
+              const tabProps = filterRoving.getTabProps(opt.key);
               return (
                 <button
                   key={opt.key}
                   type="button"
-                  role="tab"
-                  aria-selected={active}
+                  role={tabProps.role}
+                  tabIndex={tabProps.tabIndex}
+                  aria-selected={tabProps["aria-selected"]}
+                  ref={(el) => tabProps.ref(el)}
+                  onKeyDown={tabProps.onKeyDown}
                   onClick={() => setFilter(opt.key)}
                   className={cn(
                     "rounded px-2.5 py-1 text-2xs font-semibold uppercase tracking-sops transition-colors",
@@ -427,11 +441,11 @@ export default function PlanningRunsListPage() {
               <table className="table-base" data-testid="planning-runs-table">
                 <thead>
                   <tr>
-                    <th>Run date</th>
-                    <th>Status</th>
-                    <th className="text-right">Recommendations</th>
-                    <th className="text-right">Exceptions</th>
-                    <th>Triggered by</th>
+                    <th scope="col">Run date</th>
+                    <th scope="col">Status</th>
+                    <th scope="col" className="text-right">Recommendations</th>
+                    <th scope="col" className="text-right">Exceptions</th>
+                    <th scope="col">Triggered by</th>
                   </tr>
                 </thead>
                 <tbody>

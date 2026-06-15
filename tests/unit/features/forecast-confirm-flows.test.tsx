@@ -38,6 +38,7 @@ const autoSaveState = {
     pendingCount: 2,
     queueChange: vi.fn(),
     flush: vi.fn(async () => true),
+    cancel: vi.fn(),
     clearError: vi.fn(),
   },
 };
@@ -101,6 +102,7 @@ beforeEach(() => {
     pendingCount: 2,
     queueChange: vi.fn(),
     flush: vi.fn(async () => true),
+    cancel: vi.fn(),
     clearError: vi.fn(),
   };
   vi.stubGlobal(
@@ -188,5 +190,8 @@ describe("forecast detail — discard two-step inline confirm (FLOW-014)", () =>
     expect(screen.queryByTestId("forecast-bottom-bar-discard-confirm")).toBeNull();
     expect(screen.getByTestId("forecast-bottom-bar-discard")).toBeTruthy();
     expect(confirmSpy).not.toHaveBeenCalled();
+    // INTER-007: discard must cancel the armed autosave timer + pending buffer,
+    // otherwise the discarded values get POSTed ~800ms later.
+    expect(autoSaveState.current.cancel).toHaveBeenCalledTimes(1);
   });
 });

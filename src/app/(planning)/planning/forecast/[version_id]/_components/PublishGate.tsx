@@ -210,11 +210,15 @@ export function PublishGate({
           <div className="flex items-start justify-between gap-3 border-b border-border/60 bg-gradient-to-b from-bg-raised to-bg/40 px-5 py-4">
             <div className="min-w-0">
               <div className="mb-1 flex items-center gap-1.5">
-                <span className="text-[9px] font-bold uppercase tracking-[0.08em] text-fg-faint">
+                {/* Tranche 075 (cross-cutting tiny-text): bumped text-[9px]
+                    arbitrary brackets to the existing scale class text-3xs
+                    used elsewhere in this surface (line ~330, ~467) and
+                    across planning. */}
+                <span className="text-3xs font-bold uppercase tracking-[0.08em] text-fg-faint">
                   Step {stage === "review" ? "1" : "2"} of 2
                 </span>
                 <span className="text-fg-faint">·</span>
-                <span className="text-[9px] font-semibold uppercase tracking-[0.08em] text-fg-muted">
+                <span className="text-3xs font-semibold uppercase tracking-[0.08em] text-fg-muted">
                   {stage === "review" ? "Review" : "Confirm"}
                 </span>
               </div>

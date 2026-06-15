@@ -186,7 +186,7 @@ export function MobileDaySheet({
                 />
               ) : null}
               <Row
-                label="Projected on-hand (eod)"
+                label="Projected on-hand (end of day)"
                 value={day.projected_on_hand_eod_with_production}
                 valueClassName={
                   day.shortfall_qty_with_production > 0

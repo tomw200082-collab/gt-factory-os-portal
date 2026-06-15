@@ -37,7 +37,7 @@
 // ---------------------------------------------------------------------------
 
 import Link from "next/link";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useState, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -236,8 +236,16 @@ export default function ForecastVersionDetailPage() {
   const params = useParams<{ version_id: string }>();
   const versionId = params.version_id;
   const queryClient = useQueryClient();
+  const router = useRouter();
   const { session } = useSession();
   const canAuthor = session.role === "planner" || session.role === "admin";
+
+  // INTER-008 (Tranche 079) — when the planner clicks "Back" with unsaved
+  // edits in flight, intercept the navigation and show an inline confirm row
+  // (Save / Discard / Cancel). When there's nothing pending the Link
+  // behaves as before.
+  const [backConfirmOpen, setBackConfirmOpen] = useState(false);
+  const [backConfirmBusy, setBackConfirmBusy] = useState(false);
 
   // ----- Data -----
   const versionQuery = useQuery<GetVersionResponse>({
@@ -313,6 +321,12 @@ export default function ForecastVersionDetailPage() {
     if (removeTarget) removeConfirmRef.current?.focus();
   }, [removeTarget]);
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
+
+  // INTER-006 (Tranche 079) — after performItemRemove, show a brief dismissible
+  // inline message naming the item and pointing at "Discard local edits" as
+  // the undo affordance. Clears when dismissed, the user discards, or auto-save
+  // settles.
+  const [removedItemMsg, setRemovedItemMsg] = useState<string | null>(null);
 
   // ----- Buckets + items derived -----
   const buckets = useMemo(() => {
@@ -583,9 +597,25 @@ export default function ForecastVersionDetailPage() {
         next.delete(itemId);
         return next;
       });
+      // INTER-006 (Tranche 079) — surface a brief inline message tying the
+      // removal to the Discard-to-undo path. The bottom-bar already shows
+      // the pending-edit count + Discard local edits affordance.
+      const meta = itemsForGrid.find((i) => i.item_id === itemId);
+      const name = meta?.item_name ?? itemId;
+      setRemovedItemMsg(
+        `Removed "${name}" from this forecast. Use "Discard local edits" in the bottom bar to undo before the next save.`,
+      );
     },
-    [autoSave, buckets],
+    [autoSave, buckets, itemsForGrid],
   );
+
+  // Clear the removed-item message once auto-save has flushed (the undo path
+  // via Discard only works while there are pending local edits to drop).
+  useEffect(() => {
+    if (autoSave.pendingCount === 0 && autoSave.state !== "saving") {
+      setRemovedItemMsg(null);
+    }
+  }, [autoSave.pendingCount, autoSave.state]);
 
   // FLOW-014: the grid's remove button now *requests* removal — this opens
   // the confirm sheet naming the item; performItemRemove runs on confirm.
@@ -764,13 +794,29 @@ export default function ForecastVersionDetailPage() {
                 onRetry={() => void autoSave.flush()}
               />
             ) : null}
-            <Link
-              href="/planning/forecast"
-              className="btn btn-sm gap-1.5"
-              data-testid="forecast-detail-back"
-            >
-              <ChevronLeft className="h-3 w-3" strokeWidth={2} /> Back
-            </Link>
+            {/* INTER-008 (Tranche 079) — guard the Back link when there are
+                unsaved or in-flight edits. The interception only kicks in
+                while `isEditable && (pendingCount > 0 || state === saving)`;
+                otherwise the original anchor navigation is used. */}
+            {isEditable &&
+            (autoSave.pendingCount > 0 || autoSave.state === "saving") ? (
+              <button
+                type="button"
+                className="btn btn-sm gap-1.5"
+                data-testid="forecast-detail-back"
+                onClick={() => setBackConfirmOpen(true)}
+              >
+                <ChevronLeft className="h-3 w-3" strokeWidth={2} /> Back
+              </button>
+            ) : (
+              <Link
+                href="/planning/forecast"
+                className="btn btn-sm gap-1.5"
+                data-testid="forecast-detail-back"
+              >
+                <ChevronLeft className="h-3 w-3" strokeWidth={2} /> Back
+              </Link>
+            )}
             {isEditable ? (
               <button
                 type="button"
@@ -831,11 +877,17 @@ export default function ForecastVersionDetailPage() {
         />
       </header>
 
-      {/* Inline success / error banners */}
+      {/* Inline success / error banners.
+          Tranche 075 (A11Y-019 / A11Y-026): publish outcome is announced —
+          success uses an aria-live="polite" status region (non-urgent
+          confirmation); error uses role="alert" so screen readers interrupt
+          and announce immediately. */}
       {publishSuccess ? (
         <div
           className="mb-3 flex items-center gap-2 rounded border border-success/30 bg-success-softer px-4 py-2 text-xs text-success-fg"
           data-testid="forecast-action-success"
+          role="status"
+          aria-live="polite"
         >
           <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
           {publishSuccess}
@@ -846,6 +898,7 @@ export default function ForecastVersionDetailPage() {
         <div
           className="mb-3 flex items-center gap-2 rounded border border-danger/30 bg-danger-softer px-4 py-2 text-xs text-danger-fg"
           data-testid="forecast-action-error"
+          role="alert"
         >
           <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
           <span className="min-w-0 flex-1">{publishError}</span>
@@ -854,6 +907,91 @@ export default function ForecastVersionDetailPage() {
             className="shrink-0 font-medium text-danger-fg underline underline-offset-2 hover:no-underline"
             onClick={() => setPublishError(null)}
             data-testid="forecast-action-error-dismiss"
+          >
+            Dismiss
+          </button>
+        </div>
+      ) : null}
+
+      {/* INTER-008 (Tranche 079) — Back-with-unsaved-edits confirm row. */}
+      {backConfirmOpen ? (
+        <div
+          className="mb-3 flex flex-wrap items-center gap-2 rounded border border-warning/40 bg-warning-softer px-4 py-2 text-xs text-warning-fg"
+          role="alertdialog"
+          aria-label="Unsaved forecast edits"
+          data-testid="forecast-back-confirm"
+        >
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
+          <span className="min-w-0 flex-1">
+            You have{" "}
+            <span className="font-semibold">{autoSave.pendingCount}</span>{" "}
+            unsaved change
+            {autoSave.pendingCount === 1 ? "" : "s"}. Save before leaving, or
+            discard them?
+          </span>
+          <button
+            type="button"
+            className="btn btn-primary btn-sm"
+            disabled={backConfirmBusy}
+            onClick={async () => {
+              setBackConfirmBusy(true);
+              try {
+                await autoSave.flush();
+              } finally {
+                setBackConfirmBusy(false);
+                setBackConfirmOpen(false);
+                router.push("/planning/forecast");
+              }
+            }}
+            data-testid="forecast-back-save"
+          >
+            {backConfirmBusy ? "Saving…" : "Save and leave"}
+          </button>
+          <button
+            type="button"
+            className="btn btn-danger btn-sm"
+            disabled={backConfirmBusy}
+            onClick={() => {
+              // Drop the debounce timer + queued payload, drop local cell
+              // overlays for unsaved edits, then navigate.
+              autoSave.cancel();
+              setLocalCells({});
+              setBackConfirmOpen(false);
+              router.push("/planning/forecast");
+            }}
+            data-testid="forecast-back-discard"
+          >
+            Discard and leave
+          </button>
+          <button
+            type="button"
+            className="btn btn-sm"
+            disabled={backConfirmBusy}
+            onClick={() => setBackConfirmOpen(false)}
+            data-testid="forecast-back-cancel"
+          >
+            Stay
+          </button>
+        </div>
+      ) : null}
+
+      {/* INTER-006 (Tranche 079) — brief, dismissible "item removed → undo via
+          Discard" inline message. Clears automatically once auto-save has
+          flushed (the Discard path only works while there are pending edits). */}
+      {removedItemMsg ? (
+        <div
+          className="mb-3 flex items-center gap-2 rounded border border-info/30 bg-info-softer px-4 py-2 text-xs text-info-fg"
+          data-testid="forecast-removed-item-notice"
+          role="status"
+          aria-live="polite"
+        >
+          <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
+          <span className="min-w-0 flex-1">{removedItemMsg}</span>
+          <button
+            type="button"
+            className="shrink-0 font-medium text-info-fg underline underline-offset-2 hover:no-underline"
+            onClick={() => setRemovedItemMsg(null)}
+            data-testid="forecast-removed-item-notice-dismiss"
           >
             Dismiss
           </button>
@@ -1117,10 +1255,11 @@ export default function ForecastVersionDetailPage() {
                 className="btn btn-danger btn-sm gap-1.5"
                 onClick={() => {
                   // "Discard" = drop local cell overlays for any unsaved
-                  // edits; already-saved cells stay on disk untouched. The
-                  // autosave queue is private, so the safest mass-undo is to
-                  // clear all overlays; the next refetch re-renders server
-                  // values.
+                  // edits; already-saved cells stay on disk untouched.
+                  // INTER-007: cancel() first — it clears the autosave queue
+                  // and the armed debounce timer. Without it the timer fires
+                  // ~800ms later and POSTs the very values just discarded.
+                  autoSave.cancel();
                   setLocalCells({});
                   setConfirmingDiscard(false);
                 }}

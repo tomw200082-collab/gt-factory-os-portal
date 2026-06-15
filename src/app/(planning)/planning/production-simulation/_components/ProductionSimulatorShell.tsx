@@ -250,20 +250,26 @@ export function ProductionSimulatorShell() {
             <span>
               Supply method{" "}
               <span className="font-semibold text-fg-strong">
-                {selectedProduct.supplyMethod}
+                {selectedProduct.supplyMethod === "MANUFACTURED"
+                  ? "Manufactured"
+                  : selectedProduct.supplyMethod === "BOUGHT_FINISHED"
+                    ? "Bought finished"
+                    : selectedProduct.supplyMethod === "REPACK"
+                      ? "Repack"
+                      : selectedProduct.supplyMethod}
               </span>
             </span>
             <span aria-hidden className="text-fg-faint">
               ·
             </span>
-            <span className="font-semibold text-fg-strong">PACK recipe</span>
+            <span className="font-semibold text-fg-strong">Packaging recipe</span>
             {selectedProduct.baseHead ? (
               <>
                 <span aria-hidden className="text-fg-faint">
                   +
                 </span>
                 <span className="font-semibold text-fg-strong">
-                  BASE recipe
+                  Liquid recipe
                 </span>
               </>
             ) : null}

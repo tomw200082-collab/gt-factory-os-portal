@@ -44,16 +44,16 @@ export function StockCurveCard({ rec }: StockCurveCardProps) {
       <table className="w-full text-xs">
         <thead>
           <tr className="border-b border-border/40">
-            <th className="pb-1.5 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+            <th scope="col" className="pb-1.5 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
               Week
             </th>
-            <th className="pb-1.5 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+            <th scope="col" className="pb-1.5 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
               Proj. on hand
             </th>
-            <th className="pb-1.5 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+            <th scope="col" className="pb-1.5 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
               Safety stock
             </th>
-            <th className="pb-1.5 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+            <th scope="col" className="pb-1.5 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
               Status
             </th>
           </tr>

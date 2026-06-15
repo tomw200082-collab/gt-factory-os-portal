@@ -399,23 +399,23 @@ export default function PlanningBlockersPage() {
             <table className="w-full text-sm">
               <thead className="border-b border-border/60 bg-bg-subtle/40 text-3xs uppercase tracking-sops text-fg-subtle">
                 <tr>
-                  <th className="px-3 py-2 text-left font-semibold">
+                  <th scope="col" className="px-3 py-2 text-left font-semibold">
                     What is blocked?
                   </th>
-                  <th className="px-3 py-2 text-left font-semibold">
+                  <th scope="col" className="px-3 py-2 text-left font-semibold">
                     Why is it blocked?
                   </th>
-                  <th className="px-3 py-2 text-left font-semibold">
+                  <th scope="col" className="px-3 py-2 text-left font-semibold">
                     What is the risk?
                   </th>
-                  <th className="px-3 py-2 text-left font-semibold">
+                  <th scope="col" className="px-3 py-2 text-left font-semibold">
                     What to do now?
                   </th>
-                  <th className="px-3 py-2 text-left font-semibold">
+                  <th scope="col" className="px-3 py-2 text-left font-semibold">
                     Where to fix it?
                   </th>
-                  <th className="px-3 py-2 text-left font-semibold">Emitted</th>
-                  <th className="px-3 py-2 text-left font-semibold">
+                  <th scope="col" className="px-3 py-2 text-left font-semibold">Emitted</th>
+                  <th scope="col" className="px-3 py-2 text-left font-semibold">
                     Due date
                   </th>
                 </tr>

@@ -156,7 +156,10 @@ test.describe("Planner runs — list / detail / trigger / approve / dismiss", ()
     expect(msg).toMatch(/HTTP (4\d\d|5\d\d)|Trigger planning run failed/);
   });
 
-  test("T04 planner approve flow — draft row transitions to approved in UI (skipped cleanly if no draft recs)", async ({
+  // Tranche 072 — planning runs are diagnostic-only; approve / dismiss moved to
+  // the Inbox and convert-to-PO to Procurement. The runs surface no longer
+  // carries these actions, so T04 / T05 are retired here.
+  test.skip("T04 planner approve flow — draft row transitions to approved in UI (skipped cleanly if no draft recs)", async ({
     page,
   }) => {
     await resetIdb(page);
@@ -249,7 +252,7 @@ test.describe("Planner runs — list / detail / trigger / approve / dismiss", ()
     });
   });
 
-  test("T05 planner dismiss flow — draft row transitions to dismissed in UI (skipped cleanly if no draft recs)", async ({
+  test.skip("T05 planner dismiss flow — draft row transitions to dismissed in UI (skipped cleanly if no draft recs)", async ({
     page,
   }) => {
     await resetIdb(page);

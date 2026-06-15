@@ -244,7 +244,7 @@ export function ProductionJobCard({
               className="chip gap-1 text-[10px] text-fg-muted"
               data-testid="plan-card-draft-chip"
             >
-              Draft — not firmed
+              Draft — not yet confirmed
             </span>
           )}
 
@@ -458,10 +458,10 @@ export function ProductionJobCard({
               <table className="w-full">
                 <thead>
                   <tr>
-                    <th className="text-left text-[9px] uppercase tracking-sops text-fg-faint font-semibold pb-1">
+                    <th scope="col" className="text-left text-[9px] uppercase tracking-sops text-fg-faint font-semibold pb-1">
                       Material
                     </th>
-                    <th className="text-right text-[9px] uppercase tracking-sops text-fg-faint font-semibold pb-1">
+                    <th scope="col" className="text-right text-[9px] uppercase tracking-sops text-fg-faint font-semibold pb-1">
                       Required
                     </th>
                   </tr>

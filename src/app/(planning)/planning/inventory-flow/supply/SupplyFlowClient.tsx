@@ -30,7 +30,7 @@ import { useMediaQuery } from "@/lib/hooks/useMediaQuery";
 import { FilterBar } from "../_components/FilterBar";
 import { FlowGridDesktop } from "../_components/FlowGridDesktop";
 import { InsightsHero } from "../_components/InsightsHero";
-import { InventoryFlowTabs } from "../_components/InventoryFlowTabs";
+import { InventoryFlowTabs, INVENTORY_FLOW_TAB_IDS } from "../_components/InventoryFlowTabs";
 import { MobileCardStream } from "../_components/MobileCardStream";
 import { UnmappedSkusBanner } from "../_components/UnmappedSkusBanner";
 import { useSupplyFlow } from "./_lib/useSupplyFlow";
@@ -70,30 +70,30 @@ function describeSupplyFlowError(raw: string): {
       };
     case 404:
       return {
-        title: "Endpoint missing",
+        title: "Feature not available",
         description:
-          "The Supply API route was not found upstream. The backend may be mid-deploy.",
-        hint: "Wait ~30 seconds and click Reload. If it sticks, ping the backend deploy.",
+          "This page isn't available right now. It may be updating.",
+        hint: "Wait 30 seconds and try again. If the problem continues, contact support.",
       };
     case 502:
       return {
-        title: "Upstream unreachable",
+        title: "Couldn't reach the service",
         description:
-          "The portal could not reach the Factory OS API. Likely a transient network blip.",
-        hint: "Try Reload. If it persists, the API service may be down.",
+          "We couldn't reach the system. This is usually a brief network blip.",
+        hint: "Try again. If the problem continues, contact support.",
       };
     case 504:
       return {
-        title: "Upstream timeout",
+        title: "Taking longer than expected",
         description:
-          "The cold-start projection took longer than the proxy timeout. The next call should hit a warm cache.",
-        hint: "Reload — repeat calls run from a 30-min server cache and return instantly.",
+          "The projection is taking longer than expected. Try again — repeat loads are much faster.",
+        hint: "Try again — repeat loads are much faster.",
       };
     case 500:
       return {
-        title: "Server error",
-        description: detail || "The API threw an error while computing the supply projection.",
-        hint: "If this persists, check Railway logs for a stack trace.",
+        title: "Something went wrong",
+        description: detail || "Something went wrong while building the supply projection.",
+        hint: "If this continues, contact support.",
       };
     default:
       return {
@@ -260,6 +260,13 @@ export function SupplyFlowClient() {
     />
   );
 
+  // A11Y-R08 (Tranche 079) — content region is the tabpanel labelled by the
+  // currently-active tab. Reused across every return path below.
+  const panelProps = {
+    role: "tabpanel" as const,
+    "aria-labelledby": INVENTORY_FLOW_TAB_IDS.supply,
+  };
+
   // SSR-safe: render skeleton until mounted AND the viewport is known
   // (FLOW-M01 — isMobile === null means useMediaQuery has not resolved;
   // without this gate the desktop grid would mount-and-unmount on phones).
@@ -267,8 +274,10 @@ export function SupplyFlowClient() {
     return (
       <>
         {tabs}
-        {header}
-        <SkeletonGrid />
+        <div {...panelProps}>
+          {header}
+          <SkeletonGrid />
+        </div>
       </>
     );
   }
@@ -284,32 +293,34 @@ export function SupplyFlowClient() {
     return (
       <>
         {tabs}
-        {header}
-        <ErrorState
-          title={title}
-          description={description}
-          action={
-            <div className="flex flex-col items-center gap-2">
-              <button
-                type="button"
-                onClick={() => window.location.reload()}
-                className="inline-flex items-center gap-1.5 rounded border border-danger/40 bg-danger-soft px-3 py-1.5 text-xs font-medium text-danger-fg hover:bg-danger-softer"
-              >
-                <RefreshCw className="h-3.5 w-3.5" strokeWidth={2} />
-                Reload
-              </button>
-              {hint ? (
-                <div className="text-[11px] text-fg-muted max-w-md">{hint}</div>
-              ) : null}
-              <details className="text-[10px] text-fg-muted/80">
-                <summary className="cursor-pointer">Show technical detail</summary>
-                <code className="mt-1 block rounded border border-border bg-bg-elevated px-2 py-1 text-left">
-                  {rawMessage}
-                </code>
-              </details>
-            </div>
-          }
-        />
+        <div {...panelProps}>
+          {header}
+          <ErrorState
+            title={title}
+            description={description}
+            action={
+              <div className="flex flex-col items-center gap-2">
+                <button
+                  type="button"
+                  onClick={() => window.location.reload()}
+                  className="inline-flex items-center gap-1.5 rounded border border-danger/40 bg-danger-soft px-3 py-1.5 text-xs font-medium text-danger-fg hover:bg-danger-softer"
+                >
+                  <RefreshCw className="h-3.5 w-3.5" strokeWidth={2} />
+                  Reload
+                </button>
+                {hint ? (
+                  <div className="text-[11px] text-fg-muted max-w-md">{hint}</div>
+                ) : null}
+                <details className="text-[10px] text-fg-muted/80">
+                  <summary className="cursor-pointer">Show technical detail</summary>
+                  <code className="mt-1 block rounded border border-border bg-bg-elevated px-2 py-1 text-left">
+                    {rawMessage}
+                  </code>
+                </details>
+              </div>
+            }
+          />
+        </div>
       </>
     );
   }
@@ -319,18 +330,20 @@ export function SupplyFlowClient() {
     return (
       <>
         {tabs}
-        {header}
-        <div className="rounded border border-info/30 bg-info-softer px-4 py-3 text-xs text-info-fg">
-          <div className="font-semibold">Calculating projection…</div>
-          <div className="mt-0.5 text-fg-muted">
-            Supply flow runs a heavy SQL pass over BOM consumption + open POs +
-            on-hand for every active component and bought-finished item. First
-            loads can take ~20 seconds. Subsequent loads use a cached snapshot
-            and should be instant.
+        <div {...panelProps}>
+          {header}
+          <div className="rounded border border-info/30 bg-info-softer px-4 py-3 text-xs text-info-fg">
+            <div className="font-semibold">Calculating projection…</div>
+            <div className="mt-0.5 text-fg-muted">
+              This projection covers all active components and their planned
+              consumption across recipes, open purchase orders, and on-hand stock.
+              First-time loads can take up to 20 seconds. Subsequent loads are
+              instant.
+            </div>
           </div>
+          <InsightsHero items={[]} summary={null} isLoading />
+          <SkeletonGrid />
         </div>
-        <InsightsHero items={[]} summary={null} isLoading />
-        <SkeletonGrid />
       </>
     );
   }
@@ -341,21 +354,23 @@ export function SupplyFlowClient() {
     return (
       <>
         {tabs}
-        {header}
-        <EmptyState
-          title="No projection available"
-          description="The components flow projection finished but returned no data. This usually clears on a retry."
-          action={
-            <button
-              type="button"
-              onClick={() => void flowQuery.refetch()}
-              className="btn btn-sm btn-outline"
-            >
-              <RefreshCw className="h-3.5 w-3.5" strokeWidth={2} />
-              Retry
-            </button>
-          }
-        />
+        <div {...panelProps}>
+          {header}
+          <EmptyState
+            title="No projection available"
+            description="The components flow projection finished but returned no data. This usually clears on a retry."
+            action={
+              <button
+                type="button"
+                onClick={() => void flowQuery.refetch()}
+                className="btn btn-sm btn-outline"
+              >
+                <RefreshCw className="h-3.5 w-3.5" strokeWidth={2} />
+                Retry
+              </button>
+            }
+          />
+        </div>
       </>
     );
   }
@@ -385,15 +400,16 @@ export function SupplyFlowClient() {
   return (
     <>
       {tabs}
-      {header}
-      {staleBanner}
-      <div className="space-y-6">
-        <InsightsHero
-          items={data.items}
-          summary={summary}
-          isLoading={false}
-          asOf={data.as_of}
-        />
+      <div {...panelProps}>
+        {header}
+        {staleBanner}
+        <div className="space-y-6">
+          <InsightsHero
+            items={data.items}
+            summary={summary}
+            isLoading={false}
+            asOf={data.as_of}
+          />
 
         {banner ? (
           <UnmappedSkusBanner fraction={fraction} />
@@ -402,7 +418,7 @@ export function SupplyFlowClient() {
             <FilterBar families={families} items={data.items} />
 
             {/* Groups v1 — two URL-backed single-select group chip rows:
-                "קבוצת חומר" (material_group) and "לפי קו מוצר"
+                "Material group" (material_group) and "Used by product line"
                 (used_by_product_group). Both refetch server-side. */}
             {materialGroups.length > 0 ? (
               <GroupFilterBar
@@ -415,8 +431,8 @@ export function SupplyFlowClient() {
                   )
                 }
                 onClear={() => updateParam("material_group", null)}
-                label="קבוצת חומר"
-                ariaLabel="קבוצת חומר"
+                label="Material group"
+                ariaLabel="Material group filter"
                 testId="supply-material-group-filter"
               />
             ) : null}
@@ -431,8 +447,8 @@ export function SupplyFlowClient() {
                   )
                 }
                 onClear={() => updateParam("used_by_product_group", null)}
-                label="לפי קו מוצר"
-                ariaLabel="לפי קו מוצר"
+                label="Used by product line"
+                ariaLabel="Product line filter"
                 testId="supply-used-by-filter"
               />
             ) : null}
@@ -457,6 +473,7 @@ export function SupplyFlowClient() {
             )}
           </>
         )}
+        </div>
       </div>
     </>
   );
