@@ -163,4 +163,13 @@ highest-leverage, 100%-UI-only fix for the redirected ask.
   banners above the action list so the planner sees why the buy list may be
   incomplete. UI-only. `tsc --noEmit` exit 0.
 
+### Wave 10 — Material-requirements card reads as the net-requirement equation  ✅
+**File:** `.../production-simulation/_components/date-range/ComponentCard.tsx`.
+
+- The component card showed Required / On hand / To order as three loose
+  numbers. Now rendered as the literal equation **Required − On hand = To
+  order** (− and = separators between the stats) so the suggested order qty
+  reads as an auditable subtraction. The other half of "what to order" (the MRP
+  simulation surface). UI-only. `tsc --noEmit` exit 0.
+
 _Subsequent waves appended below as completed._

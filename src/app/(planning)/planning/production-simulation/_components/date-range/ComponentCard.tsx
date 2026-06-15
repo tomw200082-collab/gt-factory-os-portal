@@ -82,29 +82,50 @@ function CardFace({
         </div>
       ) : null}
 
-      <div className="mt-2.5 grid grid-cols-3 gap-2 rounded-md border border-border/50 bg-bg-subtle/40 px-2.5 py-2">
-        <MiniStat
-          label="Required"
-          value={fmtQtyStr(c.total_required_qty, c.component_uom)}
-          uom={c.component_uom}
-          tone="text-fg-strong"
-        />
-        <MiniStat
-          label="On hand"
-          value={noData ? "—" : fmtQtyStr(c.on_hand_qty, c.component_uom)}
-          uom={c.component_uom}
-          tone="text-fg-muted"
-        />
-        <MiniStat
-          label="To order"
-          value={
-            netShortage > 0
-              ? fmtQtyStr(c.net_shortage_qty, c.component_uom)
-              : "—"
-          }
-          uom={c.component_uom}
-          tone={netShortage > 0 ? "text-danger-fg" : "text-success-fg"}
-        />
+      {/* Render the net-requirement as the literal equation the operator
+          needs — Required − On hand = To order — so the suggested order
+          quantity reads as an auditable subtraction, not three loose numbers. */}
+      <div className="mt-2.5 flex items-stretch gap-1 rounded-md border border-border/50 bg-bg-subtle/40 px-2.5 py-2">
+        <div className="min-w-0 flex-1">
+          <MiniStat
+            label="Required"
+            value={fmtQtyStr(c.total_required_qty, c.component_uom)}
+            uom={c.component_uom}
+            tone="text-fg-strong"
+          />
+        </div>
+        <span
+          className="self-center px-0.5 text-sm font-bold text-fg-faint"
+          aria-hidden
+        >
+          −
+        </span>
+        <div className="min-w-0 flex-1">
+          <MiniStat
+            label="On hand"
+            value={noData ? "—" : fmtQtyStr(c.on_hand_qty, c.component_uom)}
+            uom={c.component_uom}
+            tone="text-fg-muted"
+          />
+        </div>
+        <span
+          className="self-center px-0.5 text-sm font-bold text-fg-faint"
+          aria-hidden
+        >
+          =
+        </span>
+        <div className="min-w-0 flex-1">
+          <MiniStat
+            label="To order"
+            value={
+              netShortage > 0
+                ? fmtQtyStr(c.net_shortage_qty, c.component_uom)
+                : "—"
+            }
+            uom={c.component_uom}
+            tone={netShortage > 0 ? "text-danger-fg" : "text-success-fg"}
+          />
+        </div>
       </div>
 
       <div className="mt-2 flex items-center gap-2">
