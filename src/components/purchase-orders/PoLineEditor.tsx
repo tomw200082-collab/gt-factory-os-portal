@@ -25,6 +25,7 @@ import {
 import { cn } from "@/lib/cn";
 import {
   approvedSupplierItems,
+  computeLinePriceInsight,
   costPerOrderUom,
   dedupeBySupplier,
   type LineDraft,
@@ -484,6 +485,77 @@ export function PoLineEditor(props: PoLineEditorProps): JSX.Element {
                       {lineErr.unit_price_net}
                     </div>
                   )}
+                  {/* Price/cost accuracy — live line total + variance vs the
+                      catalog cost. Surfaces the resulting spend per line while
+                      typing and flags a unit price that is far from the catalog
+                      so a typo is caught before it becomes PO truth. */}
+                  {(() => {
+                    const insight = computeLinePriceInsight(
+                      line.quantity,
+                      line.unit_price_net,
+                      effectiveCost,
+                    );
+                    if (
+                      insight.lineTotal == null &&
+                      insight.varianceLevel === "none"
+                    ) {
+                      return null;
+                    }
+                    const v = insight.variancePct;
+                    const showVariance =
+                      v != null && insight.varianceLevel !== "none";
+                    const pct = v != null ? Math.round(Math.abs(v) * 100) : 0;
+                    const sign = v != null && v >= 0 ? "+" : "−";
+                    return (
+                      <div
+                        className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1"
+                        data-testid={`po-new-line-price-insight-${idx}`}
+                      >
+                        {insight.lineTotal != null && (
+                          <span className="text-3xs text-fg-muted">
+                            Line total{" "}
+                            <span className="font-mono tabular-nums font-semibold text-fg">
+                              {fmtIls(insight.lineTotal)}
+                            </span>
+                            {insight.effectiveSource === "catalog" && (
+                              <span className="text-fg-faint">
+                                {" "}
+                                · using catalog cost
+                              </span>
+                            )}
+                          </span>
+                        )}
+                        {showVariance && effectiveCost != null && (
+                          <span
+                            data-testid={`po-new-line-price-variance-${idx}`}
+                            data-variance-level={insight.varianceLevel}
+                            title={
+                              insight.varianceLevel === "high"
+                                ? `This is far from the catalog cost of ${fmtIls(effectiveCost)} — double-check for a typo.`
+                                : `Catalog cost is ${fmtIls(effectiveCost)} per ${effectiveSi?.order_uom ?? "order unit"}.`
+                            }
+                            className={cn(
+                              "inline-flex items-center gap-1 rounded-sm border px-1.5 py-0.5 text-3xs font-semibold tabular-nums",
+                              insight.varianceLevel === "high"
+                                ? "border-danger/50 bg-danger/5 text-danger-fg"
+                                : insight.varianceLevel === "warn"
+                                  ? "border-warning/50 bg-warning/5 text-warning-fg"
+                                  : "border-border/70 bg-bg-raised text-fg-muted",
+                            )}
+                          >
+                            {insight.varianceLevel !== "info" && (
+                              <AlertTriangle
+                                className="h-3 w-3"
+                                aria-hidden
+                              />
+                            )}
+                            {sign}
+                            {pct}% vs catalog {fmtIls(effectiveCost)}
+                          </span>
+                        )}
+                      </div>
+                    );
+                  })()}
                 </div>
 
                 {/* Tranche 047 (D1b) — header supplier has no approved

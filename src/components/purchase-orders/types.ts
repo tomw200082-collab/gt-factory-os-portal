@@ -211,6 +211,78 @@ export function summarizePoDraft(lines: LineDraft[]): PoDraftSummary {
   };
 }
 
+// --- Price/cost accuracy — per-line price insight ---------------------------
+// Pure rollup that powers the per-line "Line total" preview and the
+// price-variance signal in the editor. Both are derived entirely from values
+// already in the line draft plus the resolved catalog cost — no backend call.
+//
+// Purpose: give the operator immediate cost feedback while typing and catch a
+// fat-fingered unit price (e.g. 125 instead of 12.5) BEFORE it becomes PO
+// truth and writes back to the supplier-item catalog. Variance is the signed
+// fraction (entered − catalog) / catalog, bucketed so normal price movement
+// stays quiet and gross errors stand out.
+
+export type PriceVarianceLevel = "none" | "info" | "warn" | "high";
+
+export interface LinePriceInsight {
+  /** Parsed entered price, or null when blank / not a valid non-negative number. */
+  enteredPrice: number | null;
+  /** Price used for the line total: entered when given, else the catalog cost. */
+  effectiveUnitPrice: number | null;
+  effectiveSource: "entered" | "catalog" | null;
+  /** quantity × effectiveUnitPrice, or null when either is missing. */
+  lineTotal: number | null;
+  /** Signed fraction vs catalog (0.18 = +18%); null when not comparable. */
+  variancePct: number | null;
+  varianceLevel: PriceVarianceLevel;
+}
+
+export function computeLinePriceInsight(
+  quantityRaw: string,
+  unitPriceRaw: string | undefined,
+  catalogCost: number | null,
+): LinePriceInsight {
+  const qty = Number((quantityRaw ?? "").trim());
+  const hasQty = Number.isFinite(qty) && qty > 0;
+
+  const priceStr = (unitPriceRaw ?? "").trim();
+  const enteredParsed = priceStr === "" ? NaN : Number(priceStr);
+  const enteredPrice =
+    Number.isFinite(enteredParsed) && enteredParsed >= 0 ? enteredParsed : null;
+
+  const catalog =
+    catalogCost != null && Number.isFinite(catalogCost) && catalogCost >= 0
+      ? catalogCost
+      : null;
+
+  const effectiveUnitPrice = enteredPrice ?? catalog;
+  const effectiveSource: LinePriceInsight["effectiveSource"] =
+    enteredPrice != null ? "entered" : catalog != null ? "catalog" : null;
+
+  const lineTotal =
+    hasQty && effectiveUnitPrice != null ? qty * effectiveUnitPrice : null;
+
+  let variancePct: number | null = null;
+  let varianceLevel: PriceVarianceLevel = "none";
+  if (enteredPrice != null && catalog != null && catalog > 0) {
+    variancePct = (enteredPrice - catalog) / catalog;
+    const abs = Math.abs(variancePct);
+    if (abs < 0.05) varianceLevel = "none";
+    else if (abs < 0.5) varianceLevel = "info";
+    else if (abs < 2) varianceLevel = "warn";
+    else varianceLevel = "high";
+  }
+
+  return {
+    enteredPrice,
+    effectiveUnitPrice,
+    effectiveSource,
+    lineTotal,
+    variancePct,
+    varianceLevel,
+  };
+}
+
 // --- Shared client-side validation -----------------------------------------
 // Mirrors the original /new validate() exactly; the only mode-dependent rule
 // is manual_reason, which is skipped entirely in "recommendation" mode.
