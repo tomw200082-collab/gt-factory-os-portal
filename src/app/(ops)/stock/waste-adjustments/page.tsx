@@ -286,9 +286,22 @@ export default function WasteAdjustmentPage() {
       });
       return;
     }
+    // Guard the datetime-local: a cleared field yields "" and
+    // new Date("").toISOString() throws, crashing the submit.
+    const whenIso = (() => {
+      const d = new Date(eventAt);
+      return Number.isNaN(d.getTime()) ? null : d.toISOString();
+    })();
+    if (whenIso === null) {
+      setDone({
+        kind: "error",
+        message: "Enter a valid event date and time before submitting.",
+      });
+      return;
+    }
     const envelope: WasteAdjustmentRequest = {
       idempotency_key: newIdempotencyKey(),
-      event_at: new Date(eventAt).toISOString(),
+      event_at: whenIso,
       direction,
       item_type: row.item_type,
       item_id: row.id,

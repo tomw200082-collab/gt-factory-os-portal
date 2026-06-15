@@ -1848,7 +1848,7 @@ export default function ProductionActualPage() {
       setVarianceReasonError(null);
       const envelope: ProductionActualSubmit = {
         idempotency_key: newIdempotencyKey(),
-        event_at: new Date(eventAt).toISOString(),
+        event_at: (Number.isNaN(new Date(eventAt).getTime()) ? new Date() : new Date(eventAt)).toISOString(),
         item_id: snapshot.item_id,
         bom_version_id_pinned: snapshot.bom_version_id_pinned,
         // Two-head pin pass-through (Tranche 4). Forward exactly what the
@@ -3356,7 +3356,7 @@ export default function ProductionActualPage() {
                       className="mt-1 text-xs text-fg-muted"
                       key={relTimeTick}
                     >
-                      {fmtRelativeTime(new Date(eventAt).toISOString())}
+                      {fmtRelativeTime((Number.isNaN(new Date(eventAt).getTime()) ? new Date() : new Date(eventAt)).toISOString())}
                     </div>
                   ) : null}
                 </label>
