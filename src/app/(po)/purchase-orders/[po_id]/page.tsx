@@ -1116,6 +1116,29 @@ export default function PurchaseOrderDetailPage({
             </Link>
           ) : "—",
         },
+        {
+          label: "Source",
+          value:
+            po.source_type === "manual"
+              ? "Manual entry"
+              : po.source_type === "recommendation"
+                ? "From planning recommendation"
+                : "—",
+        },
+        // FLOW-002 (2026-06-15): expose the manual reason as a named field so a
+        // reviewer can tell "no reason provided" from "field absent". Only shown
+        // for manual POs (reason is always null for recommendation-sourced POs).
+        ...(po.source_type === "manual"
+          ? [
+              {
+                label: "Reason",
+                value:
+                  po.manual_reason && po.manual_reason.trim().length > 0
+                    ? po.manual_reason
+                    : <span className="text-fg-faint">None provided</span>,
+              } as FieldRow,
+            ]
+          : []),
         { label: "Created by", value: po.created_by_snapshot },
         { label: "Created", value: fmtDateTime(po.created_at) },
         { label: "Last updated", value: fmtDateTime(po.updated_at) },

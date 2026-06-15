@@ -1344,13 +1344,15 @@ function CancelModal({
           className="mt-4 space-y-3"
           onSubmit={(e) => {
             e.preventDefault();
-            if (reason.trim().length === 0) return;
+            // Reason is OPTIONAL (Tom-directed 2026-06-15): cancelling a plan row
+            // does not change inventory, so no explanation is forced. A blank
+            // reason is submitted and stored as null.
             onSubmit(reason.trim());
           }}
         >
           <label className="block">
             <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              Reason for cancellation *
+              Reason for cancellation (optional)
             </span>
             <textarea
               rows={3}
@@ -1358,8 +1360,6 @@ function CancelModal({
               value={reason}
               onChange={(e) => setReason(e.target.value)}
               placeholder="e.g. schedule change, raw material shortage, demand updated"
-              required
-              aria-required="true"
             />
           </label>
 
@@ -1372,7 +1372,7 @@ function CancelModal({
               // INTER-005 (Tranche 048) — destructive confirm is the filled
               // danger pattern, matching the repo-wide btn-danger usage.
               className="btn btn-sm btn-danger gap-1.5"
-              disabled={!reason.trim() || isSubmitting}
+              disabled={isSubmitting}
               data-testid="cancel-submit"
             >
               <Ban className="h-3 w-3" strokeWidth={2.5} />
@@ -1773,7 +1773,7 @@ export default function ProductionPlanPage() {
   function handleCancel(reason: string) {
     if (!cancellingPlan) return;
     patchMut.mutate(
-      { plan_id: cancellingPlan.plan_id, body: { action: "cancel", cancel_reason: reason } },
+      { plan_id: cancellingPlan.plan_id, body: { action: "cancel", cancel_reason: reason.trim() || null } },
       {
         onSuccess: () => {
           flashToast("success", "Plan cancelled. Inventory has not changed.");

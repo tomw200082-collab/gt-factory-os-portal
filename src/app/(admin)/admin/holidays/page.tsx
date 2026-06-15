@@ -1514,19 +1514,17 @@ function ArchiveHolidayModal({
 }): JSX.Element {
   const [reason, setReason] = useState("");
 
-  const mutation = useMutation<unknown, Error, { reason: string }>({
+  const mutation = useMutation<unknown, Error, { reason?: string | null }>({
     mutationFn: async ({ reason: r }) => {
       return postJson(
         `/api/admin/holidays/${encodeURIComponent(row.holiday_date)}`,
-        { reason: r },
+        { reason: r && r.length > 0 ? r : null },
         "DELETE",
       );
     },
     onSuccess: () => onSuccess(row.holiday_date),
     onError,
   });
-
-  const isValid = reason.trim().length > 0;
 
   return (
     <ModalShell
@@ -1547,8 +1545,8 @@ function ArchiveHolidayModal({
           <button
             type="button"
             className="btn btn-danger"
-            disabled={!isValid || mutation.isPending}
-            onClick={() => mutation.mutate({ reason: reason.trim() })}
+            disabled={mutation.isPending}
+            onClick={() => mutation.mutate({ reason: reason.trim() || null })}
           >
             {mutation.isPending ? (
               <>
@@ -1575,7 +1573,7 @@ function ArchiveHolidayModal({
           </div>
         </div>
 
-        <Field label="Reason" hint="Required. Captured in the audit log.">
+        <Field label="Reason" hint="Optional. Captured in the audit log if provided.">
           <textarea
             className="input min-h-[80px]"
             value={reason}
