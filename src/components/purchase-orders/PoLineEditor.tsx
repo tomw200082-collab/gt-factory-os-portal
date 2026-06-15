@@ -223,7 +223,9 @@ export function PoLineEditor(props: PoLineEditorProps): JSX.Element {
                 className="block text-sm font-semibold text-fg"
               >
                 Reason for manual order
-                {REQUIRED_LABEL}
+                <span className="ml-1 text-3xs font-normal text-fg-faint">
+                  (optional)
+                </span>
               </label>
               <textarea
                 id="po-new-reason"
@@ -239,7 +241,7 @@ export function PoLineEditor(props: PoLineEditorProps): JSX.Element {
                 disabled={disabled}
               />
               <p className="text-3xs text-fg-faint">
-                Minimum 5 characters. This is recorded on the PO for audit.
+                Optional. If provided, it is recorded on the PO for audit.
               </p>
               {errors.manual_reason && (
                 <div className="text-xs text-danger-fg">

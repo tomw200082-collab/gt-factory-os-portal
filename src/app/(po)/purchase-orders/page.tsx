@@ -360,7 +360,7 @@ function NewPoDropdown(): JSX.Element | null {
             <div className="flex flex-col gap-0.5 min-w-0">
               <span className="font-semibold">Manual entry</span>
               <span className="text-3xs text-fg-faint">
-                Create a PO directly without a recommendation. Reason required.
+                Create a PO directly without a recommendation. Reason optional.
               </span>
             </div>
           </button>
