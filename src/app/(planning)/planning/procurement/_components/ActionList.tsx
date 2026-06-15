@@ -315,8 +315,27 @@ export interface ActionListProps {
 export function ActionList({ pos, onOpen, today }: ActionListProps): JSX.Element {
   const groups = useMemo(() => groupByDecision(pos, today), [pos, today]);
 
+  // One orienting line for the whole session — how much must move today and
+  // the money at risk — so the planner knows where to start before scanning.
+  const mustToday = groups.must_today;
+  const atRiskTotal = mustToday.reduce((s, r) => s + (r.po.total_cost || 0), 0);
+
   return (
     <div className="space-y-5">
+      {mustToday.length > 0 && (
+        <div
+          className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-danger/40 bg-danger-softer/40 px-4 py-3 text-sm"
+          data-testid="procurement-at-risk-summary"
+        >
+          <AlertTriangle className="h-4 w-4 shrink-0 text-danger-fg" aria-hidden />
+          <span className="font-bold text-danger-fg">
+            {mustToday.length} חייב לצאת היום
+          </span>
+          <span className="tabular-nums text-fg-muted">
+            · {formatIls(atRiskTotal)} בסיכון
+          </span>
+        </div>
+      )}
       {SECTIONS.map((section) => {
         const rows = groups[section.key];
         const Icon = section.icon;

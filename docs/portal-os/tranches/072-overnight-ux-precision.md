@@ -218,4 +218,12 @@ highest-leverage, 100%-UI-only fix for the redirected ask.
   into WhatsApp/email, which is how the factory actually orders. UI-only.
   `npm run typecheck` exit 0.
 
+### Wave 16 — "At-risk today" session summary on the procurement list  ✅
+**File:** `src/app/(planning)/planning/procurement/_components/ActionList.tsx`.
+
+- One orienting line at the top of the buy session: **{N} חייב לצאת היום ·
+  ₪{total} בסיכון** (shown only when must-today is non-empty), so the planner
+  knows where to start before scanning. Uses the existing `groupByDecision`
+  output. UI-only. 5/5 ActionList tests; `npm run typecheck` exit 0.
+
 _Subsequent waves appended below as completed._
