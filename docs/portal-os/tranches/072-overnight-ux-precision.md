@@ -172,4 +172,13 @@ highest-leverage, 100%-UI-only fix for the redirected ask.
   reads as an auditable subtraction. The other half of "what to order" (the MRP
   simulation surface). UI-only. `tsc --noEmit` exit 0.
 
+### Wave 11 — Coverage reasoning in the ActionList scan view  ✅
+**File:** `src/app/(planning)/planning/procurement/_components/ActionList.tsx`.
+
+- The decision-grouped scan list's row expansion showed only label/qty/cost per
+  line. Now each line carries a compact `CoverageCaption` (severity headline +
+  demand/on-hand/projected-at-need) decoded from `coverage_trace` — the same
+  "why this quantity" reasoning as focus mode, available without opening each
+  order. UI-only. 5/5 ActionList tests pass; `tsc --noEmit` exit 0.
+
 _Subsequent waves appended below as completed._
