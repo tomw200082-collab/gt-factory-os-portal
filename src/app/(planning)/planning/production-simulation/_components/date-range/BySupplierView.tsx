@@ -215,6 +215,12 @@ function SupplierComponentTable({
       <tbody>
         {components.map((c) => {
           const netShortage = parseFloat(c.net_shortage_qty);
+          // Demand drivers — which planned products create this requirement,
+          // biggest first. The "why" the owner needs while ordering; today this
+          // only appears in the by-product view.
+          const driverNames = [...c.sources]
+            .sort((a, b) => parseFloat(b.qty) - parseFloat(a.qty))
+            .map((s) => s.item_name ?? s.item_id ?? "Unknown product");
           return (
             <tr
               key={c.component_id}
@@ -232,6 +238,20 @@ function SupplierComponentTable({
                   {c.component_class ? `${c.component_class} · ` : ""}
                   {c.component_id}
                 </div>
+                {driverNames.length > 0 && (
+                  <div
+                    className="mt-0.5 text-2xs text-fg-faint"
+                    data-testid="supplier-component-drivers"
+                  >
+                    <span className="font-medium text-fg-subtle">For </span>
+                    <bdi>
+                      {driverNames.slice(0, 2).join(", ")}
+                      {driverNames.length > 2
+                        ? ` +${driverNames.length - 2} more`
+                        : ""}
+                    </bdi>
+                  </div>
+                )}
               </td>
               <td className="px-4 py-3">
                 <DateChip iso={c.first_needed_date} />

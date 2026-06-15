@@ -198,4 +198,15 @@ highest-leverage, 100%-UI-only fix for the redirected ask.
   (consistent with the ActionList rows from wave 12). UI-only. 5/5 FocusCard
   tests; `npm run typecheck` exit 0.
 
+### Wave 14 — Demand drivers in the material-requirements By-supplier view  ✅
+**File:** `.../production-simulation/_components/date-range/BySupplierView.tsx`.
+**Source:** material-requirements analysis option 2 (top UI-only win).
+
+- The By-supplier view — the one you actually order from — showed *what* and
+  *how much* but never *why*. Each short component now carries a compact **"For
+  {top products} +N more"** caption (drivers sorted by qty, from the already-
+  present `sources[]`), so you see which planned drinks create the requirement
+  while ordering. Previously only the by-product view exposed this. UI-only.
+  `npm run typecheck` exit 0.
+
 _Subsequent waves appended below as completed._
