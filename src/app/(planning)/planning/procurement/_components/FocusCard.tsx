@@ -316,14 +316,29 @@ export function FocusCard({
         >
           {whyNow}
         </div>
-        <div className="flex items-center gap-3 text-xs text-fg-faint">
+        <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-fg-faint">
           <span className="tabular-nums">
             {activeLines.length} פריט{activeLines.length === 1 ? "" : "ים"}
           </span>
           <span className="font-mono tabular-nums text-base font-semibold text-fg">
             {formatIls(po.total_cost)}
           </span>
-          {po.covered_through_date && <span>מכוסה עד {po.covered_through_date}</span>}
+          {po.order_by_date && (
+            <span
+              className={cn(
+                "tabular-nums",
+                isOverdue && "text-danger-fg font-medium",
+              )}
+            >
+              להזמין עד {po.order_by_date}
+            </span>
+          )}
+          {po.earliest_need_date && (
+            <span className="tabular-nums">נדרש {po.earliest_need_date}</span>
+          )}
+          {po.covered_through_date && (
+            <span className="tabular-nums">מכוסה עד {po.covered_through_date}</span>
+          )}
         </div>
       </div>
 

@@ -189,4 +189,13 @@ highest-leverage, 100%-UI-only fix for the redirected ask.
   pressure (act-by vs need-by) legible without parsing the `whyNow` sentence.
   Uses dates already on the PO. UI-only. 5/5 tests; `tsc` exit 0.
 
+### Wave 13 — Date pair in the FocusCard header  ✅
+**File:** `src/app/(planning)/planning/procurement/_components/FocusCard.tsx`.
+
+- Focus-mode header now also shows **להזמין עד {order_by_date}** (red when
+  overdue) **· נדרש {earliest_need_date} · מכוסה עד {covered_through_date}**, so
+  the act-by / need-by / covered-through timing is legible in focus mode too
+  (consistent with the ActionList rows from wave 12). UI-only. 5/5 FocusCard
+  tests; `npm run typecheck` exit 0.
+
 _Subsequent waves appended below as completed._
