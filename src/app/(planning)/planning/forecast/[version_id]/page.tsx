@@ -1124,10 +1124,11 @@ export default function ForecastVersionDetailPage() {
                 className="btn btn-danger btn-sm gap-1.5"
                 onClick={() => {
                   // "Discard" = drop local cell overlays for any unsaved
-                  // edits; already-saved cells stay on disk untouched. The
-                  // autosave queue is private, so the safest mass-undo is to
-                  // clear all overlays; the next refetch re-renders server
-                  // values.
+                  // edits; already-saved cells stay on disk untouched.
+                  // INTER-007: cancel() first — it clears the autosave queue
+                  // and the armed debounce timer. Without it the timer fires
+                  // ~800ms later and POSTs the very values just discarded.
+                  autoSave.cancel();
                   setLocalCells({});
                   setConfirmingDiscard(false);
                 }}

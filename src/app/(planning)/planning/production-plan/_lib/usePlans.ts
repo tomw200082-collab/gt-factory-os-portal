@@ -215,6 +215,10 @@ export function usePatchPlan() {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["production-plan"] });
+      // FLOW-B: cancel / edit / move-to-tomorrow also change what the planning
+      // overview summarises (completion %, pipeline). Mirror useCreatePlan so
+      // the overview can't lag behind a board edit.
+      void qc.invalidateQueries({ queryKey: ["planning"] });
     },
   });
 }

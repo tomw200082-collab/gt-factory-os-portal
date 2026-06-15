@@ -63,6 +63,10 @@ function usePurchaseMutation<TArgs, TResult>(
     mutationFn: fn,
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["purchase-session"] });
+      // FLOW-C: a purchase session changes demand-coverage inputs the planning
+      // overview summarises; refresh it so its freshness/coverage panels can't
+      // lag after start / approve / skip.
+      void qc.invalidateQueries({ queryKey: ["planning", "overview"] });
       for (const key of extraInvalidateKeys ?? []) {
         void qc.invalidateQueries({ queryKey: [...key] });
       }

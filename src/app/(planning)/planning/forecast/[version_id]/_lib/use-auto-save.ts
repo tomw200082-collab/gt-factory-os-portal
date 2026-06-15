@@ -45,6 +45,12 @@ export interface UseAutoSaveResult {
   queueChange: (change: PendingChange) => void;
   /** Force an immediate flush (e.g., before publish). Returns true on success. */
   flush: () => Promise<boolean>;
+  /**
+   * Drop all queued-but-unsaved changes and cancel the armed debounce timer.
+   * Used by "Discard edits": without this the timer fires after the discard
+   * and POSTs the very values the user just discarded.
+   */
+  cancel: () => void;
   /** Manually clear error after user acknowledges. */
   clearError: () => void;
 }
@@ -169,6 +175,16 @@ export function useAutoSave(
     return flushNow();
   }, [flushNow]);
 
+  const cancel = useCallback(() => {
+    if (timerRef.current) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+    pendingRef.current = new Map();
+    setPendingCount(0);
+    setState((prev) => (prev === "saving" ? prev : "idle"));
+  }, []);
+
   const clearError = useCallback(() => {
     setErrorMessage(null);
     setState((prev) => (prev === "error" ? "idle" : prev));
@@ -188,6 +204,7 @@ export function useAutoSave(
     pendingCount,
     queueChange,
     flush,
+    cancel,
     clearError,
   };
 }
