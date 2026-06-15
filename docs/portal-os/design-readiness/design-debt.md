@@ -19,13 +19,15 @@
   usages repointed to the existing `bg-bg-raised` token (8 sites). The CSS-var
   `--bg-base` usages inside `globals.css` remain open (above).
 
-### `credit-tracking` page — off-system + undefined shadcn token names  `[BUG] [NOW]`
-`(shared)/credit-tracking/page.tsx` uses shadcn defaults that don't exist here:
-`text-muted-foreground`, `bg-background`, `text-foreground`, `focus:ring-ring`
-(lines ~443-502, 675, 697, 819, 857) → resolve to nothing (e.g. no focus ring).
-Plus raw palette: `bg-emerald-50/text-emerald-700/border-emerald-200`,
-`bg-sky-*`, `bg-amber-*`, `bg-slate-*`, `bg-emerald-500/sky-500/slate-400`
-(lines ~80-104). Migration table in `restyle-playbook.md` PREP-02.
+### `credit-tracking` page — off-system + undefined shadcn token names  `[BUG] [NOW]`  — **FIXED 2026-06-15**
+`(shared)/credit-tracking/page.tsx` used shadcn defaults that don't exist here
+(`text-muted-foreground`, `bg-background`, `text-foreground`, `bg-card`,
+`bg-muted`, `focus:ring-ring`, `hover:bg-accent`) + raw palette (emerald/sky/
+amber/rose/slate). **FIXED:** all 87 class usages repointed to the system's own
+tokens (emerald→success, sky→info, amber→warning, rose→danger, slate→neutral;
+shadcn ghosts→fg/bg/ring tokens) via a boundary-safe pass — no new colors. The
+page now responds to a restyle and its focus rings work. Remaining polish
+(raw `<input>` → `.input` class) is optional, not a bug.
 
 ## P1 — restyle blockers (highest leverage)
 
