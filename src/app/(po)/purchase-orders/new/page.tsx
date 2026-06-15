@@ -217,7 +217,7 @@ function ManualPoFormInner(): JSX.Element {
       idempotency_key: newIdempotencyKey(),
       supplier_id: supplierId,
       expected_receive_date: expectedDate,
-      manual_reason: manualReason.trim(),
+      manual_reason: manualReason.trim() || null,
       notes: notes.trim() || null,
       source_type: "manual" as const,
       lines: lines.map((l) => {

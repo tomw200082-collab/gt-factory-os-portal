@@ -4,8 +4,8 @@
 //
 // Coverage:
 //   Validation (mode-aware):
-//     V1 — manual mode: empty reason → manual_reason error
-//     V2 — manual mode: reason < 5 chars → manual_reason error
+//     V1 — manual mode: empty reason → NO error (optional since 2026-06-15)
+//     V2 — manual mode: short reason → NO error (no min-length rule)
 //     V3 — recommendation mode: empty reason → NO manual_reason error
 //     V4 — missing supplier / expected date are flagged in both modes
 //     V5 — line rules: no orderable, blank qty, qty <= 0
@@ -51,14 +51,14 @@ function baseDraft(overrides: Partial<PoDraft> = {}): PoDraft {
 }
 
 describe("validatePoDraft", () => {
-  it("V1 manual mode flags an empty reason", () => {
+  it("V1 manual mode does NOT require a reason (optional since 2026-06-15)", () => {
     const errs = validatePoDraft(baseDraft({ manualReason: "" }), "manual");
-    expect(errs.manual_reason).toBeTruthy();
+    expect(errs.manual_reason).toBeUndefined();
   });
 
-  it("V2 manual mode flags a reason shorter than 5 chars", () => {
+  it("V2 manual mode accepts a short reason (no min-length rule)", () => {
     const errs = validatePoDraft(baseDraft({ manualReason: "ok" }), "manual");
-    expect(errs.manual_reason).toMatch(/at least 5/i);
+    expect(errs.manual_reason).toBeUndefined();
   });
 
   it("V3 recommendation mode does NOT require a reason", () => {
