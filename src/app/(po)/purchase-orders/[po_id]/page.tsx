@@ -33,6 +33,8 @@ import {
 } from "@/components/patterns/DetailPage";
 import { Badge } from "@/components/badges/StatusBadge";
 import { fmtNumStr } from "@/lib/utils/format-quantity";
+import { cn } from "@/lib/cn";
+import { summarizePoLineCosts } from "@/components/purchase-orders/po-cost-summary";
 
 // --- Types (mirrors of upstream schemas) ------------------------------------
 
@@ -781,8 +783,72 @@ export default function PurchaseOrderDetailPage({
         (l) => l.line_status === "CLOSED" || l.line_status === "CANCELLED",
       );
       const supplierLabel = po?.supplier_name ?? po?.supplier_id ?? "supplier";
+      const cost = summarizePoLineCosts(lineRows);
+      const cur = po?.currency ?? "ILS";
+      const receivedPct = Math.round(cost.receivedFraction * 100);
       return (
         <div className="space-y-3">
+        {/* Price/cost accuracy — committed / received / outstanding value at a
+            glance, derived from the lines already loaded. Hidden when no line
+            carries a price (avoids a misleading ₪0). */}
+        {cost.hasPrices && (
+          <div
+            className="rounded-md border border-border/60 bg-bg-subtle/40 px-4 py-3"
+            data-testid="po-cost-summary"
+          >
+            <div className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
+              <div className="flex flex-col">
+                <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Ordered value
+                </span>
+                <span className="font-mono text-sm font-semibold tabular-nums text-fg">
+                  {fmtMoney(String(cost.orderedValue), cur)}
+                </span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Received
+                </span>
+                <span className="font-mono text-sm font-semibold tabular-nums text-success-fg">
+                  {fmtMoney(String(cost.receivedValue), cur)}
+                </span>
+              </div>
+              <div className="flex flex-col">
+                <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                  Outstanding
+                </span>
+                <span
+                  className={cn(
+                    "font-mono text-sm font-semibold tabular-nums",
+                    cost.openValue > 0 ? "text-warning-fg" : "text-fg-muted",
+                  )}
+                >
+                  {fmtMoney(String(cost.openValue), cur)}
+                </span>
+              </div>
+              <div className="min-w-[140px] flex-1">
+                <div className="mb-1 text-3xs font-medium text-fg-muted tabular-nums">
+                  {receivedPct}% received by value
+                </div>
+                <div
+                  className="h-1.5 w-full overflow-hidden rounded-full bg-border/40"
+                  role="progressbar"
+                  aria-valuenow={receivedPct}
+                  aria-valuemin={0}
+                  aria-valuemax={100}
+                >
+                  <div
+                    className={cn(
+                      "h-full rounded-full transition-all",
+                      receivedPct >= 100 ? "bg-success" : "bg-warning",
+                    )}
+                    style={{ width: `${receivedPct}%` }}
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
         {po?.status !== "CANCELLED" && allSettled ? (
           <div className="rounded-md border border-success/40 bg-success/5 px-4 py-3 text-xs text-success-fg" role="note" data-testid="po-all-received-banner">
             <span className="font-semibold">All items received.</span>{" "}

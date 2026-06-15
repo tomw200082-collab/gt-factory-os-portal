@@ -56,4 +56,18 @@ The `ci` workflow enforces that every new `docs/portal-os/**` file is listed in
 `registry.md` (registry-guard step). Tranche docs added this session are
 registered there. typecheck / vitest / `@mocked` Playwright all pass on the code.
 
+### Wave 3 — PO detail cost summary (committed / received / outstanding)  ✅
+**Files:** `src/components/purchase-orders/po-cost-summary.ts` (+ test),
+`src/app/(po)/purchase-orders/[po_id]/page.tsx`.
+
+- New pure helper `summarizePoLineCosts(lines)` → ordered / received /
+  outstanding value + received-by-value fraction (cancelled lines excluded;
+  `hasPrices=false` when no line is priced).
+- The PO detail **Lines** tab now opens with a cost-summary strip: Ordered
+  value · Received (green) · Outstanding (amber when > 0) · a "% received by
+  value" bar. Answers "how much have I committed, received, and still owe?" at
+  a glance — the cost half of price/cost accuracy. Hidden when the PO carries
+  no prices (no misleading ₪0).
+- Evidence: 48/48 PO tests pass (5 new); `tsc --noEmit` exit 0.
+
 _Subsequent waves appended below as completed._
