@@ -115,4 +115,30 @@ registered there. typecheck / vitest / `@mocked` Playwright all pass on the code
   the loop from wave 1 — a fat-finger price can no longer silently write back.
 - Evidence: 53/53 PO tests pass (5 new); `tsc --noEmit` exit 0.
 
+### Focus redirect (Tom, 2026-06-15 mid-session)
+
+New priority: NOT the mechanics of *creating* a PO (that works) but the
+**decision upstream** — forecast → production plan → **"what exactly to order,
+how much, by when, and WHY."** Make that decision surface mature and
+self-explaining. Skip backend-blocked; UI-only where today's APIs already carry
+the data. Broad edits welcome.
+
+**Key discovery:** the purchase-session API already returns a per-line
+`coverage_trace` JSON (db fn 0235) carrying the full derivation — demand over
+horizon, on-hand, incoming open-PO receipts, projected balance at need date
+(negative = runs out), safety floor, cover days, lead time, order qty — but the
+portal typed it `unknown` and **never surfaced it.** Surfacing it is the
+highest-leverage, 100%-UI-only fix for the redirected ask.
+
+### Wave 7 — Coverage-trace reasoning model (foundation)  ✅
+**Files:** `src/app/(planning)/planning/procurement/_lib/coverage-trace.ts` (+ test).
+
+- Typed `CoverageTrace` + safe `parseCoverageTrace(unknown)` (pg-numeric-as-text
+  tolerant) + `buildCoverageReasoning` → `{ onHand, incoming, demand,
+  projectedAtNeed, safetyFloor, coverDays, leadTimeDays, wouldRunOut,
+  belowSafety, severity }`. Severity: `stockout` (runs out) / `below_safety` /
+  `ok`. This is the "why this quantity" engine that the procurement decision
+  surfaces will render next.
+- Evidence: 7/7 new tests; `tsc --noEmit` exit 0.
+
 _Subsequent waves appended below as completed._
