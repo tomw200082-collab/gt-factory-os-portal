@@ -254,4 +254,13 @@ upgrade* is a token/primitive change, not a per-file slog.
   turning "runs out on X" into the actionable "place the order by Y". Grid now
   `1 / sm:2 / lg:4`. UI-only, uses existing data. `npm run typecheck` exit 0.
 
+### Wave 18 — "Order by" date in the flow item-card insight  ✅
+**File:** `src/app/(planning)/planning/inventory-flow/_components/MobileItemCard.tsx`.
+
+- The stockout insight sentence now appends **"— order by {date}"** (stockout
+  date − `effective_lead_time_days`, UTC-safe), so the card tells the planner
+  WHEN to place the order, not just when stock runs out. Benefits both the
+  components-flow and FG-flow cards. The 14-day gap ("Unfilled 14d") was already
+  shown. UI-only. 11/11 inventory-flow tests; `npm run typecheck` exit 0.
+
 _Subsequent waves appended below as completed._

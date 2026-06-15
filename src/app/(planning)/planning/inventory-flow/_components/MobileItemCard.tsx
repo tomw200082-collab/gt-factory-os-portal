@@ -436,7 +436,12 @@ function buildInsight(item: FlowItem): string {
   const stockoutDate =
     item.stockout_at_day_with_production ?? item.earliest_stockout_date;
   if (item.risk_tier === "stockout" && stockoutDate) {
-    return `Stockout projected ${fmtDateLong(stockoutDate)}.`;
+    // Back-date the stockout by the supplier lead time → the actionable
+    // "place the order by" date, not just when it runs out (Tranche 072).
+    const orderBy = subtractDaysISO(stockoutDate, item.effective_lead_time_days);
+    return `Stockout projected ${fmtDateLong(stockoutDate)}${
+      orderBy ? ` — order by ${fmtDateLong(orderBy)}` : ""
+    }.`;
   }
   if (item.risk_tier === "critical") {
     return `Cover below lead time (${item.effective_lead_time_days}d). Replenish soon.`;
@@ -445,6 +450,19 @@ function buildInsight(item: FlowItem): string {
     return `Within 1.5× lead time (${item.effective_lead_time_days}d). Monitor.`;
   }
   return "Healthy through the visible horizon.";
+}
+
+// UTC-safe "YYYY-MM-DD minus N days" → "YYYY-MM-DD" (null when inputs missing).
+function subtractDaysISO(
+  iso: string,
+  days: number | null | undefined,
+): string | null {
+  if (!iso || days == null) return null;
+  const [y, m, d] = iso.split("-").map(Number);
+  if (!y || !m || !d) return null;
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  dt.setUTCDate(dt.getUTCDate() - days);
+  return dt.toISOString().slice(0, 10);
 }
 
 function DigestStat({
