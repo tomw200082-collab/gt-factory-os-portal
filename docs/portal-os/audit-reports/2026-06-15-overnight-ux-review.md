@@ -128,6 +128,62 @@ From dedicated interaction-design audits this session. **[FIXED]** items shipped
 ### Other operator surfaces (`/ops/stock/*`, bulk-count, submissions)
 Reviewed directly; broadly solid (skeletons, retry, role gates, mobile cards present). Candidate precision items fold into the cross-cutting passes in Part 3 (single-primary toolbars, shared `<ConfirmInline>`, guaranteed pending labels).
 
+## Part 6 — "What to order" decision support (the redirected priority)
+
+Tom's redirect (mid-session): the emphasis is **not** PO-creation mechanics but the decision **upstream** — forecast → production plan → *"what exactly to order, how much, by when, and why."* Two deep agent analyses + direct reading produced the menu below. **Central finding:** every ingredient of a trustworthy order decision already exists *somewhere* in the payloads; it's a **surfacing + fragmentation** problem, not missing data.
+
+### Shipped this session (UI-only, all green)
+- **[wave 7]** `coverage-trace.ts` — decodes the per-line `coverage_trace` (demand / on-hand / incoming / projected-at-need / safety / cover-days) the API already returns and the portal threw away.
+- **[wave 8]** Focus mode renders the **"why this quantity"** line under each order line — recommended qty as an auditable subtraction with stockout/below-safety severity.
+- **[wave 9]** Procurement **session warnings** surfaced (overdue-PO / no-supplier).
+
+### Procurement decision layer — option menu (16)
+`[✓shipped] [UI]=buildable now [UI*]=decode coverage_trace [BE]=needs backend DTO field`
+1. [✓ wave 8 / UI*] Coverage-math line per order line.
+2. [UI for `covered_through_date`; BE for true `stockout_date`] "If you don't order, runs out by…" risk line in list rows.
+3. [UI] Need-by **vs** order-by date pair + lead-gap (replace the run-on `whyNow`).
+4. [UI*] Per-line need dates + per-line why in ActionList expansion.
+5. [UI for delta; BE for reason] Recommended-vs-final variance badge ("rounded to MOQ/pack").
+6. [UI* — needs `blocking_issues` shape] Decode `blocking_issues` into readable severity items + a count chip on the row.
+7. [✓ wave 9 / UI] Surface `session.warnings`.
+8. [UI/UI*] "At-risk today" header summary — counts · ₪ at risk · soonest stockout (uses `totals.by_tier`, unused today).
+9. [BE] Demand-source split chip (forecast vs confirmed orders) — `demand_breakdown`.
+10. [BE] Mini coverage curve / sparkline — `coverage_curve[]`.
+11. [BE] Lead-time provenance chip — `lead_time_days` + `lead_time_source`.
+12. [UI] Sort-within-bucket by composite urgency (tier → ₪ → date) + a sort toggle.
+13. [UI*/BE] Decision-readiness chip per PO (green = math present + no blockers + real lead-time).
+14. [UI/BE] Consolidation rationale note ("merged — {window} day window").
+15. [UI refactor] Structured `whyNow` object `{headline, driver, needBy, risk}` — enabler for 1/3/8/13.
+16. [BE link] Drill-through from a session PO to the rich recommendation-detail screen (needs a `rec_id`/`run_id` on the session line).
+
+### Material-requirements / simulation surface — option menu (14)
+The MRP-style answer lives in `production-simulation` date-range mode; it computes demand−on-hand=shortfall but stops short, and the **procurement handoff is a blind link** carrying no context.
+1. [UI] Inline net-requirement equation: `Required − On hand = Order N`.
+2. [UI] Show demand drivers (`sources[]`) in the **By-supplier** view (today only in By-product).
+3. [UI] Per-supplier order summary header (count · earliest-needed · groups).
+4. [UI] Contextual procurement handoff — pass `?from&to` (+ supplier focus) instead of a blind link.
+5. [UI] Honest "needed by" vs future "order by" date separation.
+6. [BE] Fold MOQ / lead-time / pack-size into the *suggested* qty/date (add to `MaterialComponentLine`).
+7. [UI] Use `shortage_date` (runs-out) as the urgency driver in both views.
+8. [UI] "Copy order list per supplier" (WhatsApp/email — how the factory really orders).
+9. [UI] Coverage mini-bar (on-hand vs shortfall proportion).
+10. [UI] Roll-up totals per material group.
+11. [UI] Per-row provenance for `no_stock_data` / open-PO caveats (vs one global footer).
+12. [UI] Sort/filter (shortfall magnitude, earliest need, "to-order only").
+13. [UI] "Biggest buys first" hero callout.
+14. [UI] Auto-run simulate when the URL carries a committed range (shareable result).
+
+### Components-flow surface (`/inventory-flow/supply`) — it dead-ends today
+15. [UI] "Short by N over 14 days" per item (`shortfall_qty_with_production`, already summed for sorting, never shown).
+16. [UI] "Order by" date = `earliest_stockout_date − effective_lead_time_days` (both present, unused).
+17. [UI] Open-PO awareness inline ("150 arriving Tue (PO)") to avoid double-ordering.
+18. [UI] Plan-rescue vs needs-action badge (`coveredByPlan` already computes it).
+19. [UI] "Take to ordering" CTA (page currently has no path to procurement).
+20. [BE] Supplier grouping (`supplier_id` not on `FlowItem`).
+
+### The single highest-leverage next step
+Unify demand and decision: make the **By-supplier** simulation view render the full line — `Required − On hand = Order N (rounded) · because [top drivers] · order by [date] · from [supplier]` — and carry that window into procurement via URL. The only backend-blocked piece is folding MOQ/lead-time/pack into the *suggested* qty/date (material-requirements option 6) — worth one additive backend DTO request, since it's the difference between "you're short 150 kg" and "order 4 sacks by Monday."
+
 ## Appendix — page inventory reviewed
 
 ~70 routes across `(po)`, `(planning)`, `(ops)`, `(inbox)`, `(admin)`, `(shared)`, `(auth)`. Deep-read this session: the full PO corridor + procurement + the design-system foundations (`globals.css`, `states.tsx`, patterns). Operator/inbox and admin/planning groups: see the per-group sections appended as audit agents complete (this is a living report on PR #95).
