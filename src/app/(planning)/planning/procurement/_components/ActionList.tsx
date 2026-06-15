@@ -238,10 +238,18 @@ function ProcurementRow({
           >
             {whyNow}
           </div>
-          <div className="text-3xs text-fg-faint tabular-nums">
-            {lineCount} פריט{lineCount === 1 ? "" : "ים"}
-            {" · "}
-            {formatIls(po.total_cost)}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-3xs text-fg-faint tabular-nums">
+            <span>
+              {lineCount} פריט{lineCount === 1 ? "" : "ים"}
+              {" · "}
+              {formatIls(po.total_cost)}
+            </span>
+            <span
+              className={cn(isOverdue ? "text-danger-fg font-medium" : "text-fg-subtle")}
+            >
+              להזמין עד {po.order_by_date}
+            </span>
+            {po.earliest_need_date && <span>· נדרש {po.earliest_need_date}</span>}
           </div>
         </div>
 

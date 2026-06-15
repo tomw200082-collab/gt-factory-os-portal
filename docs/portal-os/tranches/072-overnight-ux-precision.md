@@ -181,4 +181,12 @@ highest-leverage, 100%-UI-only fix for the redirected ask.
   "why this quantity" reasoning as focus mode, available without opening each
   order. UI-only. 5/5 ActionList tests pass; `tsc --noEmit` exit 0.
 
+### Wave 12 — Need-by / order-by date pair on ActionList rows  ✅
+**File:** `src/app/(planning)/planning/procurement/_components/ActionList.tsx`.
+
+- Each row now shows **להזמין עד {order_by_date}** (red when overdue) **· נדרש
+  {earliest_need_date}** alongside item count + total, making the lead-time
+  pressure (act-by vs need-by) legible without parsing the `whyNow` sentence.
+  Uses dates already on the PO. UI-only. 5/5 tests; `tsc` exit 0.
+
 _Subsequent waves appended below as completed._
