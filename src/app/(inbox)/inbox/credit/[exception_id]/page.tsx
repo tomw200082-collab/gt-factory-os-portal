@@ -135,7 +135,7 @@ type CreditActionOutcome =
 async function postCreditAction(
   endpoint: "approve" | "reject",
   exceptionId: string,
-  body: { idempotency_key: string; reason?: string },
+  body: { idempotency_key: string; reason?: string | null },
   fallbackErrorHe: string,
 ): Promise<CreditActionOutcome> {
   let res: Response;
@@ -225,7 +225,8 @@ function postReject(
   return postCreditAction(
     "reject",
     exceptionId,
-    { idempotency_key: newIdempotencyKey(), reason },
+    // reason is OPTIONAL since 2026-06-15: a blank reason is sent as null.
+    { idempotency_key: newIdempotencyKey(), reason: reason.trim() || null },
     "הדחייה נכשלה.",
   );
 }
@@ -338,13 +339,7 @@ export default function CreditDetailPage(): ReactNode {
   };
 
   const handleReject = async () => {
-    if (rejectReason.trim().length < 5) {
-      setFeedback({
-        kind: "error",
-        text: "סיבת הדחייה חייבת להכיל לפחות 5 תווים.",
-      });
-      return;
-    }
+    // Reason is OPTIONAL (Tom-directed 2026-06-15): no minimum length is forced.
     setBusy(true);
     setFeedback(null);
     const res = await postReject(exceptionId, rejectReason);
@@ -571,7 +566,7 @@ export default function CreditDetailPage(): ReactNode {
             data-testid="credit-reject-panel"
           >
             <div className="text-3xs font-semibold uppercase tracking-sops text-warning-fg">
-              סיבת דחייה (חובה — לפחות 5 תווים)
+              סיבת דחייה (רשות)
             </div>
             <NotesBox
               data-testid="credit-reject-reason"
@@ -584,7 +579,7 @@ export default function CreditDetailPage(): ReactNode {
                 type="button"
                 data-testid="credit-reject-confirm"
                 className="btn btn-danger btn-sm"
-                disabled={busy || rejectReason.trim().length < 5}
+                disabled={busy}
                 onClick={handleReject}
               >
                 {busy ? "שולח..." : "אישור דחייה"}

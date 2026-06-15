@@ -218,7 +218,9 @@ async function postReject(
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
         idempotency_key: newIdempotencyKey(),
-        rejection_reason: rejectionReason,
+        // rejection_reason is OPTIONAL (Tom-directed 2026-06-15): a blank reason
+        // is sent as null rather than forcing the operator to type something.
+        rejection_reason: rejectionReason.trim() || null,
       }),
     });
     const body = await res.json().catch(() => undefined);
@@ -351,13 +353,13 @@ function RejectPanel({
   return (
     <div className="mt-3 rounded-md border border-danger/40 bg-danger-softer/60 p-3">
       <div className="text-3xs font-semibold uppercase tracking-sops text-danger">
-        סיבת דחייה (חובה)
+        סיבת דחייה (רשות)
       </div>
       <textarea
         ref={taRef}
         value={reason}
         onChange={(e) => setReason(e.target.value)}
-        placeholder="מה הסיבה לדחות את הבקשה? יוצג בנתיב הביקורת."
+        placeholder="סיבה (רשות) — אם תוזן, תוצג בנתיב הביקורת."
         rows={2}
         className="mt-1.5 w-full rounded border border-border/60 bg-bg px-2.5 py-1.5 text-sm text-fg placeholder:text-fg-subtle focus:outline-none focus:ring-1 focus:ring-danger/50"
         disabled={busy}
@@ -367,7 +369,7 @@ function RejectPanel({
         <button
           type="button"
           className="btn btn-sm btn-danger"
-          disabled={busy || !reason.trim()}
+          disabled={busy}
           onClick={() => onConfirm(reason)}
         >
           {busy ? "שולח…" : "אשר דחייה"}

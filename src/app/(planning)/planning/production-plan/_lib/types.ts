@@ -100,7 +100,9 @@ export interface CreateProductionPlanResponse {
 }
 
 export type PatchProductionPlanRequest =
-  | { action: "cancel"; cancel_reason: string }
+  // cancel_reason is OPTIONAL since 2026-06-15 (Tom-directed): a blank cancel
+  // sends null and the backend stores null.
+  | { action: "cancel"; cancel_reason?: string | null }
   | {
       action?: undefined;
       plan_date?: string;
