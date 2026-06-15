@@ -70,4 +70,22 @@ registered there. typecheck / vitest / `@mocked` Playwright all pass on the code
   no prices (no misleading ₪0).
 - Evidence: 48/48 PO tests pass (5 new); `tsc --noEmit` exit 0.
 
+### Wave 4 — Approval buttons: split busy flags + approve confirmation gate  ✅
+**Files:** `src/app/(inbox)/inbox/approvals/physical-count/[submission_id]/page.tsx`,
+`src/app/(inbox)/inbox/approvals/waste/[submission_id]/page.tsx`.
+**Source:** interaction-design-specialist audit (INTER-001/002, BLOCKER).
+
+- **Bug fixed:** both pages shared ONE `busy` flag — clicking *Approve* disabled
+  **and** relabelled the *Reject* button "Submitting…" (and vice versa). Split
+  into `approveBusy` / `rejectBusy`; each button now reflects only its own
+  action (the other is disabled but keeps its label). Every button hits its own
+  target.
+- **Irreversible-action gate:** Approve replaces the stock anchor / posts to the
+  ledger. It now goes through an inline confirm zone ("Approving replaces the
+  stock anchor for X with N… / posts a loss of N… — confirm?") matching the
+  existing PO-cancel inline-confirm pattern, instead of firing on first click.
+- Waste page also: status raw-string → pill chip; plain-text loading → skeleton
+  (matches the physical-count page).
+- Evidence: full suite **698/698** green (86 files); `tsc --noEmit` exit 0.
+
 _Subsequent waves appended below as completed._
