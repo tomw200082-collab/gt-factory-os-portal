@@ -6,9 +6,12 @@
 // authorizeCapability(role, required) to decide whether to render.
 //
 // Hard locks from the plan:
-//   - Planner does NOT inherit operator stock-execute. This is enforced here,
-//     NOT at the call site. Call sites may not supply a wider grant than the
-//     table below.
+//   - Planner HAS stock:execute (Tom-approved 2026-06-15 — planners report
+//     production in this factory). The table below is authoritative; call
+//     sites must honor it and may not supply a wider grant than it allows.
+//     (Earlier this comment claimed planners did not inherit stock-execute,
+//     which contradicted the table; the production-report surface even
+//     hard-coded operator||admin and locked planners out. Reconciled here.)
 //   - Admin is the ONLY role with `admin` axis grants.
 //   - Viewer is the ONLY role with strictly-read grants on all three axes.
 //

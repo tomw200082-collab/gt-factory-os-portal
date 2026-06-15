@@ -43,8 +43,9 @@
 //   PLAN_ALREADY_COMPLETED → "Plan was already completed."
 //   PLAN_CANCELLED      → "Plan was cancelled. Submit without linking?"
 //
-// Role gate: operator + admin submit; planner / viewer see read-only banner
+// Role gate: operator + planner + admin submit; viewer sees read-only banner
 // (middleware allows access, backend returns 403 on submit attempts).
+// Tom-approved 2026-06-15: planners report production in this factory.
 // ---------------------------------------------------------------------------
 
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
@@ -1302,7 +1303,12 @@ function SubmissionDetailView({ submissionId }: { submissionId: string }) {
 
 export default function ProductionActualPage() {
   const { session } = useSession();
-  const canSubmit = session.role === "operator" || session.role === "admin";
+  // Tom-approved 2026-06-15: planners may report production (matches backend
+  // gate + the authorize.ts stock:execute lattice). Only viewer is read-only.
+  const canSubmit =
+    session.role === "operator" ||
+    session.role === "planner" ||
+    session.role === "admin";
   const isAdmin = session.role === "admin";
 
   const queryClient = useQueryClient();
@@ -2085,7 +2091,7 @@ export default function ProductionActualPage() {
             message:
               res.status === 401
                 ? "Not authenticated. Please sign in again."
-                : "Not authorized. Operator or admin role is required to submit.",
+                : "Not authorized. Operator, planner, or admin role is required to submit.",
             detail: isAdmin
               ? body
                 ? JSON.stringify(body)
@@ -2518,11 +2524,11 @@ export default function ProductionActualPage() {
         >
           <div className="font-medium">Read-only view.</div>
           <div className="mt-1 text-xs opacity-80">
-            You can view the form and BOM preview, but only operators and admins
-            can submit production reports. Your current role is{" "}
+            You can view the form and BOM preview, but operators, planners, and
+            admins submit production reports. Your current role is{" "}
             <span className="font-semibold">{session.role}</span>.{" "}
             <span className="opacity-70">
-              Contact your administrator to request the operator role.
+              Contact your administrator if you need to report production.
             </span>
           </div>
         </div>
