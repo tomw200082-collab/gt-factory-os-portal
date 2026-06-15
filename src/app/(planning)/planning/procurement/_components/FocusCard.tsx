@@ -13,7 +13,7 @@
 // "דלג" is available until resolved. Line edit (final_qty + drop) is inline.
 // ---------------------------------------------------------------------------
 
-import { useEffect, useRef, useState } from "react";
+import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -40,6 +40,10 @@ import type {
   PurchaseSessionPo,
 } from "../../purchase-session/_lib/types";
 import { AddLineForm } from "./AddLineForm";
+import {
+  buildCoverageReasoning,
+  parseCoverageTrace,
+} from "../_lib/coverage-trace";
 
 const TIER_LABEL: Record<PoTier, string> = {
   urgent: "דחוף",
@@ -66,6 +70,102 @@ const STATUS_TONE: Record<PoStatus, BadgeTone> = {
 
 function fmtQty(n: number): string {
   return Number.isInteger(n) ? String(n) : String(Math.round(n * 1000) / 1000);
+}
+
+// ---------------------------------------------------------------------------
+// CoverageReasonRow — the "why this quantity" line. Decodes the per-line
+// coverage_trace the session engine already returns (demand vs on-hand vs
+// incoming → projected balance at need date) so the recommended quantity reads
+// as an auditable subtraction instead of an unexplained number. Figures are in
+// inventory units. Renders only when the trace carries usable signal.
+// ---------------------------------------------------------------------------
+function fmtTraceNum(n: number | null): string {
+  if (n == null) return "—";
+  return Number.isInteger(n) ? String(n) : String(Math.round(n * 1000) / 1000);
+}
+
+function CoverageReasonRow({
+  trace,
+  colSpan,
+}: {
+  trace: unknown;
+  colSpan: number;
+}): JSX.Element | null {
+  const r = buildCoverageReasoning(parseCoverageTrace(trace));
+  if (!r || !r.hasSignal) return null;
+  const tone =
+    r.severity === "stockout"
+      ? "text-danger-fg"
+      : r.severity === "below_safety"
+        ? "text-warning-fg"
+        : "text-fg-faint";
+  const headline =
+    r.severity === "stockout"
+      ? r.needDate
+        ? `צפוי להיגמר לפני ${r.needDate}`
+        : "המלאי צפוי להיגמר"
+      : r.severity === "below_safety"
+        ? "יורד מתחת לרצפת הביטחון"
+        : "כיסוי מספק";
+  return (
+    <tr
+      className="border-b border-border/20 bg-bg-subtle/20"
+      data-testid="focus-line-coverage"
+    >
+      <td colSpan={colSpan} className="px-3 py-1.5">
+        <div
+          className="flex flex-wrap items-center gap-x-3 gap-y-1 text-3xs text-fg-muted"
+          dir="rtl"
+        >
+          <span className={cn("font-semibold", tone)}>{headline}</span>
+          {r.demand != null && (
+            <span>
+              ביקוש{" "}
+              <span className="font-mono tabular-nums text-fg">
+                {fmtTraceNum(r.demand)}
+              </span>
+            </span>
+          )}
+          {r.onHand != null && (
+            <span>
+              במלאי{" "}
+              <span className="font-mono tabular-nums text-fg">
+                {fmtTraceNum(r.onHand)}
+              </span>
+            </span>
+          )}
+          {r.incoming != null && r.incoming > 0 && (
+            <span>
+              בדרך{" "}
+              <span className="font-mono tabular-nums text-fg">
+                {fmtTraceNum(r.incoming)}
+              </span>
+            </span>
+          )}
+          {r.projectedAtNeed != null && (
+            <span>
+              צפי במועד{" "}
+              <span
+                className={cn(
+                  "font-mono tabular-nums",
+                  r.wouldRunOut
+                    ? "text-danger-fg font-semibold"
+                    : "text-fg",
+                )}
+              >
+                {fmtTraceNum(r.projectedAtNeed)}
+              </span>
+            </span>
+          )}
+          {r.coverDays != null && (
+            <span className="text-fg-faint">
+              מספיק ל-{fmtTraceNum(r.coverDays)} ימים
+            </span>
+          )}
+        </div>
+      </td>
+    </tr>
+  );
 }
 
 export interface FocusResolveResult {
@@ -312,8 +412,8 @@ export function FocusCard({
                 ? (draftDrop[l.session_po_line_id] ?? l.is_dropped)
                 : l.is_dropped;
               return (
+                <Fragment key={l.session_po_line_id}>
                 <tr
-                  key={l.session_po_line_id}
                   className={cn(
                     "border-b border-border/20",
                     dropped && "opacity-40 line-through",
@@ -389,6 +489,15 @@ export function FocusCard({
                     </td>
                   )}
                 </tr>
+                {!dropped && (
+                  <CoverageReasonRow
+                    trace={l.coverage_trace}
+                    colSpan={
+                      5 + (!isResolved ? 1 : 0) + (editing ? 1 : 0)
+                    }
+                  />
+                )}
+                </Fragment>
               );
             })}
           </tbody>

@@ -141,4 +141,17 @@ highest-leverage, 100%-UI-only fix for the redirected ask.
   surfaces will render next.
 - Evidence: 7/7 new tests; `tsc --noEmit` exit 0.
 
+### Wave 8 — "Why this quantity" reasoning in procurement focus mode  ✅
+**File:** `src/app/(planning)/planning/procurement/_components/FocusCard.tsx`.
+**Source:** both deep-analysis agents' #1 recommendation.
+
+- Under each order line, a coverage sub-row now renders the derivation from
+  `coverage_trace`: **ביקוש (demand) · במלאי (on-hand) · בדרך (incoming) · צפי
+  במועד (projected at need) · מספיק ל-N ימים**, with a severity headline
+  (stockout → "צפוי להיגמר לפני {date}" in danger; below-safety in warning; ok
+  muted). The recommended quantity is no longer an unexplained oracle — it reads
+  as an auditable subtraction, exactly the "make what-to-order obvious" ask.
+- 100% UI-only — the data was already on the wire, thrown away. No backend.
+- Evidence: 57/57 procurement tests pass; `tsc --noEmit` exit 0; build OK.
+
 _Subsequent waves appended below as completed._
