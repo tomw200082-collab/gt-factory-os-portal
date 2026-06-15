@@ -226,4 +226,24 @@ highest-leverage, 100%-UI-only fix for the redirected ask.
   knows where to start before scanning. Uses the existing `groupByDecision`
   output. UI-only. 5/5 ActionList tests; `npm run typecheck` exit 0.
 
+### Design-prep — restyle-readiness foundation (Tom request, 2026-06-15)  ✅
+**Goal:** prepare the whole portal so a future *system-wide premium visual
+upgrade* is a token/primitive change, not a per-file slog.
+
+- Deep read-only `visual-system-designer` audit → **readiness 72/100**. Token
+  layer excellent (semantic, dual-theme); blockers are token-bypassing debt
+  (50+ raw font-sizes in globals.css, 113 `text-[Npx]`, 29 off-system shadows),
+  the off-system `credit-tracking` page, and 2 ghost tokens (`--bg-base`,
+  `--bg-elevated` = live transparent-bg bugs).
+- **`docs/portal-os/design-readiness/`** authored: `README` (leverage chain),
+  `tokens.md` (every restyle knob), `primitives.md` (component vocabulary +
+  thin React layer), `design-debt.md` (quantified, file:line, tagged), and
+  `restyle-playbook.md` (ordered restyle + PREP-01..10 backlog + owner-decision
+  list + drift-prevention rules).
+- **PREP-10 shipped:** `src/components/ui/Button.tsx` — React primitive over the
+  `.btn` classes (typed variant/size, additive, no visual change). 4/4 tests;
+  `npm run typecheck` exit 0.
+- Remaining PREP items await Tom: `[NOW]` mechanical fixes can run as a bounded
+  tranche; `[DECIDE]` items (ghost-token values, sub-10px type step) need his call.
+
 _Subsequent waves appended below as completed._
