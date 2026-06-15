@@ -154,4 +154,13 @@ highest-leverage, 100%-UI-only fix for the redirected ask.
 - 100% UI-only — the data was already on the wire, thrown away. No backend.
 - Evidence: 57/57 procurement tests pass; `tsc --noEmit` exit 0; build OK.
 
+### Wave 9 — Surface procurement session warnings  ✅
+**File:** `src/app/(planning)/planning/procurement/page.tsx`.
+
+- `session.warnings[]` (typed `{code, detail}`) was emitted by the engine but
+  never rendered — e.g. "an open PO is overdue, hold back re-ordering" or
+  "components with no resolvable supplier were not placed." Now shown as warning
+  banners above the action list so the planner sees why the buy list may be
+  incomplete. UI-only. `tsc --noEmit` exit 0.
+
 _Subsequent waves appended below as completed._
