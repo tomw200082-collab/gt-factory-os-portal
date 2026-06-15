@@ -88,4 +88,18 @@ registered there. typecheck / vitest / `@mocked` Playwright all pass on the code
   (matches the physical-count page).
 - Evidence: full suite **698/698** green (86 files); `tsc --noEmit` exit 0.
 
+### Wave 5 — Credit reject button gets destructive styling  ✅
+**File:** `src/app/(inbox)/inbox/credit/[exception_id]/page.tsx`.
+**Source:** interaction-design-specialist audit (INTER-004).
+
+- "דחה זיכוי" (reject credit) trigger was `btn btn-sm` — visually identical to
+  the benign "ראיתי" (acknowledge). Now danger-toned
+  (`border-danger/40 text-danger-fg hover:bg-danger/10`) so a consequential
+  reject is distinguishable from acknowledge at a glance. The final commit
+  inside the reject panel keeps its full `btn-danger`.
+- INTER-006 (add post-approve states to the exceptions query) deliberately
+  **not** done — it depends on which `status` filter values the exceptions API
+  accepts, which is backend knowledge outside this lane. Logged in the report.
+- Evidence: `tsc --noEmit` exit 0.
+
 _Subsequent waves appended below as completed._
