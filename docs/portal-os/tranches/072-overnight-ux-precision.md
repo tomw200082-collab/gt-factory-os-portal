@@ -246,4 +246,12 @@ upgrade* is a token/primitive change, not a per-file slog.
 - Remaining PREP items await Tom: `[NOW]` mechanical fixes can run as a bounded
   tranche; `[DECIDE]` items (ghost-token values, sub-10px type step) need his call.
 
+### Wave 17 — "Order by" date on the inventory-flow item detail  ✅
+**File:** `src/app/(planning)/planning/inventory-flow/[itemId]/page.tsx`.
+
+- The item KPI strip showed "Earliest stockout" but not WHEN to act. Added an
+  **"Order by"** KPI = stockout date − `effective_lead_time_days` (UTC-safe),
+  turning "runs out on X" into the actionable "place the order by Y". Grid now
+  `1 / sm:2 / lg:4`. UI-only, uses existing data. `npm run typecheck` exit 0.
+
 _Subsequent waves appended below as completed._
