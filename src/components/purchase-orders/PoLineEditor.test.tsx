@@ -26,8 +26,10 @@ import {
   approvedSupplierItems,
   computeLinePriceInsight,
   costPerOrderUom,
+  countPriceVarianceWarnings,
   dedupeBySupplier,
   emptyLine,
+  resolveLineCatalogCost,
   validatePoDraft,
   type OrderableRow,
   type PoDraft,
@@ -302,6 +304,40 @@ describe("computeLinePriceInsight", () => {
     expect(i.variancePct).toBeNull();
     expect(i.varianceLevel).toBe("none");
     expect(i.lineTotal).toBe(5);
+  });
+});
+
+describe("resolveLineCatalogCost / countPriceVarianceWarnings", () => {
+  const SI = new Map([["component:c_1", TWO_SUPPLIERS]]); // sup_1=₪30, sup_2=₪36
+  const ln = (price?: string) => ({
+    orderable_key: "component:c_1",
+    quantity: "1",
+    uom: "UNIT" as const,
+    unit_price_net: price,
+  });
+
+  it("CC1 resolves the header supplier's catalog cost", () => {
+    expect(resolveLineCatalogCost(ln(), TWO_SUPPLIERS, "sup_1")).toBe(30);
+    expect(resolveLineCatalogCost(ln(), TWO_SUPPLIERS, "sup_2")).toBe(36);
+  });
+
+  it("CC2 returns null when supplier rows are not loaded", () => {
+    expect(resolveLineCatalogCost(ln(), undefined, "sup_1")).toBeNull();
+  });
+
+  it("CC3 counts lines whose price diverges materially (warn/high)", () => {
+    expect(countPriceVarianceWarnings([ln("300")], SI, "sup_1")).toBe(1); // +900%
+    expect(countPriceVarianceWarnings([ln("60")], SI, "sup_1")).toBe(1); // +100%
+  });
+
+  it("CC4 ignores small differences, matches, and unpriced lines", () => {
+    expect(countPriceVarianceWarnings([ln("33")], SI, "sup_1")).toBe(0); // +10%
+    expect(countPriceVarianceWarnings([ln("30")], SI, "sup_1")).toBe(0); // match
+    expect(countPriceVarianceWarnings([ln("")], SI, "sup_1")).toBe(0);
+  });
+
+  it("CC5 returns 0 when there is no catalog cost to compare", () => {
+    expect(countPriceVarianceWarnings([ln("300")], new Map(), "sup_1")).toBe(0);
   });
 });
 

@@ -283,6 +283,53 @@ export function computeLinePriceInsight(
   };
 }
 
+// --- Price/cost accuracy — catalog cost resolution + variance count ---------
+// Resolves the catalog cost for a draft line the same way the editor does
+// (pinned supplier item → header supplier's item → primary), then counts how
+// many lines carry an entered price that diverges materially (warn/high) from
+// that catalog cost. Powers the caution shown next to the "update catalog
+// prices" confirmation so a bad price never silently writes back.
+
+export function resolveLineCatalogCost(
+  line: LineDraft,
+  supplierRows: SupplierItemRow[] | undefined,
+  headerSupplierId: string,
+): number | null {
+  if (!supplierRows) return null;
+  const approved = approvedSupplierItems(supplierRows);
+  const choices = dedupeBySupplier(approved);
+  const pinned = line.supplier_item_id
+    ? (approved.find((r) => r.supplier_item_id === line.supplier_item_id) ??
+      null)
+    : null;
+  const header = headerSupplierId
+    ? (choices.find((r) => r.supplier_id === headerSupplierId) ?? null)
+    : null;
+  const primary = choices.find((r) => r.is_primary) ?? choices[0] ?? null;
+  const effective = pinned ?? header ?? primary;
+  return effective ? costPerOrderUom(effective) : null;
+}
+
+export function countPriceVarianceWarnings(
+  lines: LineDraft[],
+  supplierItemsByOrderable: Map<string, SupplierItemRow[]>,
+  headerSupplierId: string,
+): number {
+  let n = 0;
+  for (const l of lines) {
+    const catalog = resolveLineCatalogCost(
+      l,
+      supplierItemsByOrderable.get(l.orderable_key),
+      headerSupplierId,
+    );
+    const insight = computeLinePriceInsight(l.quantity, l.unit_price_net, catalog);
+    if (insight.varianceLevel === "warn" || insight.varianceLevel === "high") {
+      n++;
+    }
+  }
+  return n;
+}
+
 // --- Shared client-side validation -----------------------------------------
 // Mirrors the original /new validate() exactly; the only mode-dependent rule
 // is manual_reason, which is skipped entirely in "recommendation" mode.

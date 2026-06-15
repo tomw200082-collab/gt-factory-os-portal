@@ -102,4 +102,17 @@ registered there. typecheck / vitest / `@mocked` Playwright all pass on the code
   accepts, which is backend knowledge outside this lane. Logged in the report.
 - Evidence: `tsc --noEmit` exit 0.
 
+### Wave 6 — Catalog write-back caution on price variance  ✅
+**Files:** `src/components/purchase-orders/types.ts` (+ tests),
+`src/app/(po)/purchase-orders/new/page.tsx`.
+
+- New pure helpers `resolveLineCatalogCost(line, rows, headerSupplier)` and
+  `countPriceVarianceWarnings(lines, map, headerSupplier)`.
+- On `/purchase-orders/new`, when "Update catalog prices from this order" is
+  checked AND any line's entered price diverges materially (warn/high) from the
+  catalog, a caution appears: "N lines have prices that differ a lot from the
+  catalog. Review them before letting this order update catalog prices." Closes
+  the loop from wave 1 — a fat-finger price can no longer silently write back.
+- Evidence: 53/53 PO tests pass (5 new); `tsc --noEmit` exit 0.
+
 _Subsequent waves appended below as completed._
