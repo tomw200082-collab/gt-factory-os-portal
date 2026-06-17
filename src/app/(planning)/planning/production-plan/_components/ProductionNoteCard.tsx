@@ -1,6 +1,6 @@
 "use client";
 
-import { StickyNote, Pencil, Ban } from "lucide-react";
+import { StickyNote, Pencil, Ban, Trash2 } from "lucide-react";
 import { cn } from "@/lib/cn";
 import type { ProductionPlanRow } from "../_lib/types";
 
@@ -9,11 +9,13 @@ export function ProductionNoteCard({
   canAct,
   onEdit,
   onCancel,
+  onDelete,
 }: {
   plan: ProductionPlanRow;
   canAct: boolean;
   onEdit: (p: ProductionPlanRow) => void;
   onCancel: (p: ProductionPlanRow) => void;
+  onDelete: (p: ProductionPlanRow) => void;
 }) {
   const isCancelled = plan.rendered_state === "cancelled";
 
@@ -60,7 +62,28 @@ export function ProductionNoteCard({
             >
               <Ban className="h-2.5 w-2.5" strokeWidth={2.5} />
             </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-xs text-danger"
+              onClick={() => onDelete(plan)}
+              aria-label="Delete note"
+              data-testid="note-card-delete"
+            >
+              <Trash2 className="h-2.5 w-2.5" strokeWidth={2.5} />
+            </button>
           </div>
+        ) : isCancelled && canAct ? (
+          // A cancelled note can be deleted to clear the board (it never
+          // touched inventory). The line-through text marks it cancelled.
+          <button
+            type="button"
+            className="btn btn-ghost btn-xs text-danger"
+            onClick={() => onDelete(plan)}
+            aria-label="Delete note"
+            data-testid="note-card-delete"
+          >
+            <Trash2 className="h-2.5 w-2.5" strokeWidth={2.5} />
+          </button>
         ) : isCancelled ? (
           <Ban className="h-3 w-3 text-fg-faint shrink-0" strokeWidth={2} />
         ) : null}
