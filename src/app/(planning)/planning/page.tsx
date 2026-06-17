@@ -174,6 +174,15 @@ function fmtNum(n: number | null | undefined): string {
   return n.toLocaleString();
 }
 
+// Resolved-share as a whole percent. Clamped to 1–99 in between so a near-miss
+// never reads as a clean 100% (or a non-zero remainder as 0%).
+function coveragePct(resolved: number, total: number): number {
+  if (total <= 0) return 0;
+  if (resolved >= total) return 100;
+  if (resolved <= 0) return 0;
+  return Math.min(99, Math.max(1, Math.round((resolved / total) * 100)));
+}
+
 const RUN_STATUS_LABEL: Record<RunStatus, string> = {
   completed: "Completed",
   failed: "Failed",
@@ -565,6 +574,10 @@ export default function PlanningOverviewPage() {
       latestRun?.status === "failed" ||
       criticalBlockers > 0);
 
+  // A data source that failed to load means we cannot certify a green state.
+  const aDataSourceUnavailable =
+    blockersQuery.isError || coverageQuery.isError || jobsQuery.isError;
+
   const isAttention =
     queriesSettled &&
     !isCritical &&
@@ -572,7 +585,8 @@ export default function PlanningOverviewPage() {
       coverage?.is_partial === true ||
       latestRun?.status === "running" ||
       lionwheelJob?.last_status === "failed" ||
-      Number(lionwheelJob?.failed_count_24h ?? 0) > 0);
+      Number(lionwheelJob?.failed_count_24h ?? 0) > 0 ||
+      aDataSourceUnavailable);
 
   // ----- render ------------------------------------------------------------
   return (
@@ -694,7 +708,9 @@ export default function PlanningOverviewPage() {
                 ? "danger"
                 : coverage?.is_partial
                   ? "warning"
-                  : "success"
+                  : coverage
+                    ? "success"
+                    : "neutral"
             }
             loading={forecastQuery.isLoading}
             testId="pipeline-stage-demand"
@@ -753,19 +769,33 @@ export default function PlanningOverviewPage() {
             eyebrow="Recommendations"
             icon={<ClipboardList className="h-4 w-4" strokeWidth={2} />}
             tone={
-              !latestRun ? "neutral" : totalRecs > 0 ? "accent" : "success"
+              !latestRun
+                ? "neutral"
+                : latestRun.status === "failed"
+                  ? "danger"
+                  : latestRun.status === "running" ||
+                      latestRun.status === "draft"
+                    ? "warning"
+                    : totalRecs > 0
+                      ? "accent"
+                      : "success"
             }
             loading={runsQuery.isLoading}
             testId="pipeline-stage-recs"
             headline={latestRun ? fmtNum(totalRecs) : "—"}
             sub={
-              latestRun ? (
+              !latestRun ? (
+                "No recommendations available."
+              ) : latestRun.status === "failed" ? (
+                "Run failed — totals may be incomplete."
+              ) : latestRun.status === "running" ||
+                latestRun.status === "draft" ? (
+                "Run in progress — totals not final."
+              ) : (
                 <>
                   {fmtNum(latestRun.summary.purchase_recs_count)} purchase ·{" "}
                   {fmtNum(latestRun.summary.production_recs_count)} production
                 </>
-              ) : (
-                "No recommendations available."
               )
             }
           />
@@ -1025,11 +1055,7 @@ export default function PlanningOverviewPage() {
                   <span className="text-3xl font-semibold tabular-nums text-fg-strong">
                     {coverage.total_lines === 0
                       ? "—"
-                      : `${Math.round(
-                          (coverage.resolved_lines /
-                            Math.max(coverage.total_lines, 1)) *
-                            100,
-                        )}%`}
+                      : `${coveragePct(coverage.resolved_lines, coverage.total_lines)}%`}
                   </span>
                   <span className="text-xs text-fg-muted">
                     of {fmtNum(coverage.total_lines)} order lines resolved
