@@ -68,6 +68,7 @@ manifest:
   - src/app/(economics)/admin/decision-board/page.tsx
   - src/app/api/orders/by-item-and-period/route.ts
   - src/lib/nav/manifest.ts
+  - docs/portal-os/registry.md
   - docs/portal-os/tranches/080-product-decision-board.md
   - docs/portal-os/tranches/_active.txt
 
