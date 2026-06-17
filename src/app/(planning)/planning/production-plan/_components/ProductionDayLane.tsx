@@ -57,6 +57,7 @@ export function ProductionDayLane({
   onAddNote,
   onEdit,
   onCancel,
+  onDelete,
   onAdjustRecipe,
 }: {
   date: Date;
@@ -74,6 +75,7 @@ export function ProductionDayLane({
   onAddNote: (date: Date) => void;
   onEdit: (p: ProductionPlanRow) => void;
   onCancel: (p: ProductionPlanRow) => void;
+  onDelete: (p: ProductionPlanRow) => void;
   onAdjustRecipe: (p: ProductionPlanRow) => void;
 }) {
   const liveCount = plans.filter((p) => p.rendered_state === "planned").length;
@@ -200,6 +202,7 @@ export function ProductionDayLane({
                 canAct={canAct}
                 onEdit={onEdit}
                 onCancel={onCancel}
+                onDelete={onDelete}
               />
             ) : (
               <ProductionJobCard
@@ -209,6 +212,7 @@ export function ProductionDayLane({
                 isToday={isToday}
                 onEdit={onEdit}
                 onCancel={onCancel}
+                onDelete={onDelete}
                 onAdjustRecipe={onAdjustRecipe}
               />
             )

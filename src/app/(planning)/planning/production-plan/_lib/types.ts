@@ -112,6 +112,13 @@ export type PatchProductionPlanRequest =
       bom_version_id_pinned?: string;
     };
 
+// DELETE /api/v1/mutations/production-plan/:id — hard-delete response.
+// Mirror of api/src/production-plan/schemas.ts DeleteProductionPlanResponse.
+export interface DeleteProductionPlanResponse {
+  deleted: true;
+  plan_id: string;
+}
+
 // GET /api/v1/queries/production-plan/recommendation-candidates
 // W1 contract: docs/recommendation_candidates_endpoint_checkpoint.md §6.2.
 // Mirrors api/src/production-plan/schemas.ts.

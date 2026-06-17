@@ -27,6 +27,7 @@ import {
   StickyNote,
   RefreshCw,
   Loader2,
+  Trash2,
 } from "lucide-react";
 import { useFocusTrap } from "@/components/a11y/useFocusTrap";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
@@ -40,6 +41,7 @@ import {
   usePlans,
   useCreatePlan,
   usePatchPlan,
+  useDeletePlan,
   useRecommendationCandidates,
   FetchError,
   PlanMutationError,
@@ -1385,6 +1387,105 @@ function CancelModal({
   );
 }
 
+function DeleteModal({
+  plan,
+  onClose,
+  onConfirm,
+  isSubmitting,
+}: {
+  plan: ProductionPlanRow;
+  onClose: () => void;
+  onConfirm: () => void;
+  isSubmitting: boolean;
+}) {
+  // A11Y — same dialog treatment as CancelModal (focus trap + restore).
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const titleRef = useRef<HTMLHeadingElement | null>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+  const focusTrap = useFocusTrap(dialogRef, true);
+
+  useEffect(() => {
+    previouslyFocusedRef.current =
+      (document.activeElement as HTMLElement | null) ?? null;
+    queueMicrotask(() => {
+      if (titleRef.current) titleRef.current.focus();
+      else if (dialogRef.current) dialogRef.current.focus();
+    });
+    return () => {
+      const el = previouslyFocusedRef.current;
+      if (el && typeof el.focus === "function") {
+        try {
+          el.focus();
+        } catch {
+          /* trigger may have unmounted — ignore */
+        }
+      }
+    };
+  }, []);
+
+  const isCancelled = plan.rendered_state === "cancelled";
+
+  return (
+    <div
+      ref={dialogRef}
+      dir="ltr"
+      className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 px-2 sm:px-4"
+      role="dialog"
+      aria-modal="true"
+      aria-labelledby="delete-modal-title"
+      data-testid="delete-modal"
+      tabIndex={-1}
+      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && !isSubmitting) {
+          e.stopPropagation();
+          onClose();
+          return;
+        }
+        focusTrap.onKeyDown(e);
+      }}
+    >
+      <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-2xl">
+        <h2
+          id="delete-modal-title"
+          ref={titleRef}
+          tabIndex={-1}
+          className="text-base font-semibold text-fg-strong outline-none"
+        >
+          Delete this record?
+        </h2>
+        <p className="mt-1 text-3xs text-fg-muted">
+          {plan.plan_type === "note"
+            ? "Note"
+            : `${plan.item_name ?? plan.item_id} · ${fmtQty(plan.planned_qty ?? "0", plan.uom ?? "")}`}
+          {isCancelled ? " · cancelled" : ""}
+        </p>
+
+        <div className="mt-3 rounded border border-danger/30 bg-danger-softer/30 p-3 text-xs text-danger-fg">
+          This permanently removes the record from the production plan. It
+          won&apos;t change any inventory, and it can&apos;t be undone.
+        </div>
+
+        <div className="mt-4 flex flex-wrap items-center justify-end gap-2">
+          <button type="button" className="btn btn-sm" onClick={onClose} disabled={isSubmitting}>
+            Keep record
+          </button>
+          <button
+            type="button"
+            className="btn btn-sm btn-danger gap-1.5"
+            disabled={isSubmitting}
+            onClick={onConfirm}
+            data-testid="delete-submit"
+          >
+            <Trash2 className="h-3 w-3" strokeWidth={2.5} />
+            {isSubmitting ? "Deleting…" : "Delete"}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function Toast({
   kind,
   message,
@@ -1444,6 +1545,7 @@ export default function ProductionPlanPage() {
   const [showAddNote, setShowAddNote] = useState<{ defaultDate: string } | null>(null);
   const [editingPlan, setEditingPlan] = useState<ProductionPlanRow | null>(null);
   const [cancellingPlan, setCancellingPlan] = useState<ProductionPlanRow | null>(null);
+  const [deletingPlan, setDeletingPlan] = useState<ProductionPlanRow | null>(null);
   // Tranche 052 — plan whose improvised liquid recipe is being edited.
   // Opened from the ManualAdd "Review recipe" step or a card's
   // "Adjust recipe" action.
@@ -1460,6 +1562,7 @@ export default function ProductionPlanPage() {
   const plansQuery = usePlans(toIsoDate(weekStart), toIsoDate(weekEnd));
   const createMut = useCreatePlan();
   const patchMut = usePatchPlan();
+  const deleteMut = useDeletePlan();
 
   function flashToast(kind: "success" | "error", message: string) {
     setToast({ kind, message });
@@ -1778,6 +1881,20 @@ export default function ProductionPlanPage() {
         onSuccess: () => {
           flashToast("success", "Plan cancelled. Inventory has not changed.");
           setCancellingPlan(null);
+        },
+        onError: (err) => { flashToast("error", err.message); },
+      },
+    );
+  }
+
+  function handleDelete() {
+    if (!deletingPlan) return;
+    deleteMut.mutate(
+      { plan_id: deletingPlan.plan_id },
+      {
+        onSuccess: () => {
+          flashToast("success", "Record deleted.");
+          setDeletingPlan(null);
         },
         onError: (err) => { flashToast("error", err.message); },
       },
@@ -2263,6 +2380,7 @@ export default function ProductionPlanPage() {
                       onAddNote={(d) => setShowAddNote({ defaultDate: toIsoDate(d) })}
                       onEdit={setEditingPlan}
                       onCancel={setCancellingPlan}
+                      onDelete={setDeletingPlan}
                       onAdjustRecipe={(p) => setRecipePanelPlanId(p.plan_id)}
                     />
                   </div>
@@ -2386,6 +2504,15 @@ export default function ProductionPlanPage() {
           onClose={() => setCancellingPlan(null)}
           onSubmit={handleCancel}
           isSubmitting={patchMut.isPending}
+        />
+      ) : null}
+
+      {deletingPlan ? (
+        <DeleteModal
+          plan={deletingPlan}
+          onClose={() => setDeletingPlan(null)}
+          onConfirm={handleDelete}
+          isSubmitting={deleteMut.isPending}
         />
       ) : null}
 

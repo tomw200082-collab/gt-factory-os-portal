@@ -17,6 +17,7 @@ import {
   Factory,
   FlaskConical,
   Pencil,
+  Trash2,
   Boxes,
   ChevronDown,
   ChevronUp,
@@ -77,6 +78,7 @@ export function ProductionJobCard({
   isToday,
   onEdit,
   onCancel,
+  onDelete,
   onAdjustRecipe,
 }: {
   plan: ProductionPlanRow;
@@ -84,6 +86,7 @@ export function ProductionJobCard({
   isToday: boolean;
   onEdit: (p: ProductionPlanRow) => void;
   onCancel: (p: ProductionPlanRow) => void;
+  onDelete: (p: ProductionPlanRow) => void;
   onAdjustRecipe: (p: ProductionPlanRow) => void;
 }) {
   const isLive = plan.rendered_state === "planned";
@@ -97,6 +100,14 @@ export function ProductionJobCard({
   // surfaces untouched.
   const isDraft = plan.status === "draft";
   const isInProduction = plan.status === "in_production";
+
+  // Delete is only for not-yet-produced rows. A done row (item-linked actual),
+  // an in-flight run, or a closed base batch (status 'completed' with no
+  // submission link) all represent real production — even though
+  // in_production / completed base-batch rows derive to rendered_state
+  // 'planned' — so they must NOT offer delete. The backend enforces the same
+  // rule (409 PLAN_NOT_DELETABLE); this just keeps the button off those cards.
+  const canDelete = !isDone && !isInProduction && plan.status !== "completed";
 
   // B4 (Tranche 050) — base-batch rows plan a BASE liquid batch across N
   // pack SKUs; item_id/item_name are null, so render the batch label
@@ -389,7 +400,40 @@ export function ProductionJobCard({
             >
               <Ban className="h-2.5 w-2.5" strokeWidth={2.5} />
             </button>
+            {/* Delete — permanently removes a not-yet-produced row. Distinct
+                from cancel (which keeps a reasoned record). Hidden once a run
+                is in production / completed (backend would 409). */}
+            {canDelete && (
+              <button
+                type="button"
+                className="btn btn-ghost btn-xs min-h-[32px] min-w-[32px] text-danger"
+                onClick={() => onDelete(plan)}
+                title="Delete record"
+                aria-label="Delete record"
+                data-testid="plan-row-delete"
+              >
+                <Trash2 className="h-2.5 w-2.5" strokeWidth={2.5} />
+              </button>
+            )}
           </div>
+        </div>
+      )}
+
+      {/* Cancelled action strip — cancelled cards otherwise expose no actions.
+          A cancelled row never touched inventory, so it can be deleted to
+          clear the board. */}
+      {canAct && isCancelled && canDelete && (
+        <div className="flex items-center justify-end gap-1.5 px-3 pb-2.5 border-t border-border/20 pt-2">
+          <button
+            type="button"
+            className="btn btn-ghost btn-xs min-h-[32px] min-w-[32px] text-danger"
+            onClick={() => onDelete(plan)}
+            title="Delete record"
+            aria-label="Delete record"
+            data-testid="plan-row-delete"
+          >
+            <Trash2 className="h-2.5 w-2.5" strokeWidth={2.5} />
+          </button>
         </div>
       )}
 
