@@ -3,6 +3,9 @@
 import { useRouter, useSearchParams } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { RefreshCw } from "lucide-react";
+import { RowFocusControls } from "./_components/RowFocusControls";
+import { useRowVisibility } from "./_lib/useRowVisibility";
+import { selectVisible, emptyStateKind } from "./_lib/visibility";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { EmptyState, ErrorState } from "@/components/feedback/states";
 import { Badge } from "@/components/badges/StatusBadge";
@@ -117,6 +120,26 @@ export function InventoryFlowClient() {
     }
     return [...seen].sort();
   }, [data]);
+
+  const vis = useRowVisibility();
+
+  const visibleItems = useMemo(
+    () => selectVisible(filteredItems, vis.hiddenIds),
+    [filteredItems, vis.hiddenIds],
+  );
+
+  const hiddenItems = useMemo(
+    () =>
+      (data?.items ?? [])
+        .filter((it) => vis.hiddenIds.has(it.item_id))
+        .map((it) => ({ item_id: it.item_id, item_name: it.item_name })),
+    [data, vis.hiddenIds],
+  );
+
+  const hideOtherCount = useMemo(
+    () => visibleItems.filter((it) => !vis.isSelected(it.item_id)).length,
+    [visibleItems, vis],
+  );
 
   // ---------------------------------------------------------------------------
   // Shared layout elements
@@ -309,37 +332,82 @@ export function InventoryFlowClient() {
               productGroups={productGroups}
             />
 
-            {filteredItems.length === 0 ? (
-              <EmptyState
-                title="No items match your filters"
-                description={
-                  atRiskOnlyClient
-                    ? "No products at risk in the next 14 days. Toggle to All items to see the full view."
-                    : "No items match the current search or family filter."
-                }
-              />
-            ) : isMobile ? (
-              <MobileCardStream
-                items={filteredItems}
-                summary={summary}
-                overlayEnabled={overlayEnabled}
-                plannedByItemDate={plannedByItemDate}
-                sortKey={sortKey}
-              />
-            ) : (
-              <FlowGridDesktop
-                items={filteredItems}
-                overlayEnabled={overlayEnabled}
-                plannedByItemDate={plannedByItemDate}
-                plannedRows={plannedRows}
-                sortKey={sortKey}
-                onSelectItem={(itemId) =>
-                  router.push(
-                    `/planning/inventory-flow/${encodeURIComponent(itemId)}`,
-                  )
-                }
-              />
-            )}
+            <RowFocusControls
+              focusMode={vis.focusMode}
+              onEnterFocus={vis.enterFocus}
+              onCancelFocus={vis.cancelFocus}
+              onConfirmFocus={() => vis.confirmFocus(visibleItems.map((it) => it.item_id))}
+              selectedCount={vis.selectedCount}
+              hideOtherCount={hideOtherCount}
+              hiddenItems={hiddenItems}
+              onRestore={vis.restore}
+              onShowAll={vis.showAll}
+            />
+
+            {(() => {
+              const kind = emptyStateKind(visibleItems.length, filteredItems.length);
+              if (kind === "all-hidden") {
+                return (
+                  <div className="space-y-3">
+                    <EmptyState
+                      title="All rows hidden"
+                      description="You hid every row in view. Show all to bring them back."
+                    />
+                    <div className="flex justify-center">
+                      <button
+                        type="button"
+                        onClick={vis.showAll}
+                        className="btn btn-ghost btn-sm"
+                      >
+                        Show all
+                      </button>
+                    </div>
+                  </div>
+                );
+              }
+              if (kind === "no-match") {
+                return (
+                  <EmptyState
+                    title="No items match your filters"
+                    description={
+                      atRiskOnlyClient
+                        ? "No products at risk in the next 14 days. Toggle to All items to see the full view."
+                        : "No items match the current search or family filter."
+                    }
+                  />
+                );
+              }
+              return isMobile ? (
+                <MobileCardStream
+                  items={visibleItems}
+                  summary={summary}
+                  overlayEnabled={overlayEnabled}
+                  plannedByItemDate={plannedByItemDate}
+                  sortKey={sortKey}
+                  onHide={vis.hide}
+                  selectMode={vis.focusMode}
+                  selectedIds={vis.selectedIds}
+                  onToggleSelect={vis.toggleSelect}
+                />
+              ) : (
+                <FlowGridDesktop
+                  items={visibleItems}
+                  overlayEnabled={overlayEnabled}
+                  plannedByItemDate={plannedByItemDate}
+                  plannedRows={plannedRows}
+                  sortKey={sortKey}
+                  onSelectItem={(itemId) =>
+                    router.push(
+                      `/planning/inventory-flow/${encodeURIComponent(itemId)}`,
+                    )
+                  }
+                  onHide={vis.hide}
+                  selectMode={vis.focusMode}
+                  selectedIds={vis.selectedIds}
+                  onToggleSelect={vis.toggleSelect}
+                />
+              );
+            })()}
 
             {overlayEnabled ? <PlannedFooterCaveat /> : null}
           </>
