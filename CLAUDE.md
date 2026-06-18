@@ -23,7 +23,7 @@ A GitHub-first, mobile-driveable operating layer for making this portal producti
 - GitHub Actions: `claude.yml` (@claude trigger), `portal-pr-guard.yml`, `portal-drift-weekly.yml`.
 
 ## Relationship to the PRODUCTION multi-lane harness
-This portal repo and its `.claude/` config is **portal-only**. It does NOT author backend contracts, schema, or integrations. Those lanes (W1 / W4) remain governed by the PRODUCTION harness at `PRODUCTION/.claude/`. The Portal OS honors W2 Mode A / Mode B semantics via a manually-synced snapshot in `docs/portal-os/runtime_ready.snapshot.json`.
+This portal repo and its `.claude/` config is **portal-only**. It does NOT author backend contracts, schema, or integrations. Those lanes (W1 / W4) remain governed by the PRODUCTION harness at `PRODUCTION/.claude/`. The Portal OS honors W2 Mode A / Mode B semantics as defined by the PRODUCTION harness (W2 mode authority: `PRODUCTION/.claude/state/active_mode.json`).
 
 ## The six ways to use this OS
 - Open a PR comment `@claude /portal-audit` — mobile-friendly, CI-driven.
@@ -53,4 +53,4 @@ This portal repo and its `.claude/` config is **portal-only**. It does NOT autho
 If a request conflicts with these invariants, stop and propose a tranche plan instead.
 
 ---
-last_reviewed: 2026-04-22
+last_reviewed: 2026-05-29
