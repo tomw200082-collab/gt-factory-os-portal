@@ -1,5 +1,5 @@
 import { afterEach, describe, it, expect, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, act } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import "@testing-library/jest-dom/vitest";
 import { RowFocusControls } from "./RowFocusControls";
@@ -75,5 +75,38 @@ describe("RowFocusControls", () => {
     await user.click(screen.getByRole("button", { name: /hidden \(1\)/i }));
     await user.click(screen.getByTestId("show-all"));
     expect(props.onShowAll).toHaveBeenCalledTimes(1);
+  });
+
+  it("trayOpen resets when hidden set empties and does not auto-open on next hide", async () => {
+    const user = userEvent.setup();
+    const baseProps = {
+      focusMode: false,
+      onEnterFocus: vi.fn(),
+      onCancelFocus: vi.fn(),
+      onConfirmFocus: vi.fn(),
+      selectedCount: 0,
+      hideOtherCount: 0,
+      hiddenItems: [{ item_id: "a", item_name: "Babka Red" }] as { item_id: string; item_name: string }[],
+      onRestore: vi.fn(),
+      onShowAll: vi.fn(),
+    };
+    const { rerender } = render(<RowFocusControls {...baseProps} />);
+
+    // Open the tray
+    await user.click(screen.getByRole("button", { name: /hidden \(1\)/i }));
+    expect(screen.getByText("Babka Red")).toBeInTheDocument();
+
+    // Empty the hidden set (tray toggle disappears)
+    act(() => {
+      rerender(<RowFocusControls {...baseProps} hiddenItems={[]} />);
+    });
+    expect(screen.queryByRole("button", { name: /hidden \(/i })).toBeNull();
+
+    // Restore an item — tray must NOT auto-open
+    act(() => {
+      rerender(<RowFocusControls {...baseProps} hiddenItems={[{ item_id: "a", item_name: "Babka Red" }]} />);
+    });
+    expect(screen.getByRole("button", { name: /hidden \(1\)/i })).toBeInTheDocument();
+    expect(screen.queryByText("Babka Red")).toBeNull();
   });
 });

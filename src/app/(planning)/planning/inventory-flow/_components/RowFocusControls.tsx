@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Eye, EyeOff, RotateCcw } from "lucide-react";
 
 interface RowFocusControlsProps {
@@ -28,6 +28,10 @@ export function RowFocusControls({
 }: RowFocusControlsProps) {
   const [trayOpen, setTrayOpen] = useState(false);
   const hiddenCount = hiddenItems.length;
+
+  useEffect(() => {
+    if (hiddenCount === 0) setTrayOpen(false);
+  }, [hiddenCount]);
 
   return (
     <div className="flex flex-wrap items-center gap-2">

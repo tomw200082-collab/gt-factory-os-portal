@@ -59,7 +59,7 @@ export function RowVisibilityToggle({
       title={`Hide ${itemName}`}
       className={cn(
         "inline-flex items-center justify-center rounded-sm text-fg-faint transition-colors hover:bg-bg-muted hover:text-fg-muted",
-        touch ? "h-11 w-11" : "h-7 w-7 opacity-50 hover:opacity-100",
+        touch ? "h-11 w-11" : "h-7 w-7 opacity-50 hover:opacity-100 focus-visible:opacity-100 focus-visible:ring-1 focus-visible:ring-accent/40",
       )}
     >
       <EyeOff size={touch ? 18 : 14} strokeWidth={2} aria-hidden />
