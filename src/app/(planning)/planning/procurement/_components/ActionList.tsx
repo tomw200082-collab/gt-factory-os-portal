@@ -37,6 +37,7 @@ import {
   type ClassifiedPo,
   type DecisionBucket,
 } from "../_lib/decision";
+import { CountdownChip } from "./CountdownChip";
 
 // Tranche 047 — fallback link when no onOpen handler is supplied. The
 // classic per-PO session URL is a redirect stub back to
@@ -153,6 +154,9 @@ function ProcurementRow({
             <Badge tone={STATUS_TONE[po.status]} size="xs">
               {STATUS_LABEL[po.status]}
             </Badge>
+            {actionable && (
+              <CountdownChip days={classified.daysUntilOrderBy} />
+            )}
             {isOverdue && (
               <Badge tone="danger" size="xs" dot animated>
                 באיחור

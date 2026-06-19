@@ -76,6 +76,32 @@ export function daysHe(n: number): string {
   return `${abs} ימים`;
 }
 
+// --- order-by countdown (Tranche 066) --------------------------------------
+
+export type CountdownLevel = "overdue" | "today" | "soon" | "later";
+
+/** Whole days from today to an order-by date (negative = overdue); null if unparseable. */
+export function daysUntil(
+  orderByDate: string,
+  today: string = todayISO(),
+): number | null {
+  return diffDays(today, orderByDate);
+}
+
+/**
+ * Scannable countdown for an order-by date: an urgency level + a Hebrew label.
+ * overdue ("N ימים באיחור") / today ("היום") / soon, ≤3d / later ("בעוד N ימים").
+ */
+export function orderByCountdown(
+  days: number | null,
+): { level: CountdownLevel; label: string } {
+  if (days == null) return { level: "later", label: "—" };
+  if (days < 0) return { level: "overdue", label: `${daysHe(days)} באיחור` };
+  if (days === 0) return { level: "today", label: "היום" };
+  if (days <= 3) return { level: "soon", label: `בעוד ${daysHe(days)}` };
+  return { level: "later", label: `בעוד ${daysHe(days)}` };
+}
+
 // --- classification --------------------------------------------------------
 
 function whyNowLabel(

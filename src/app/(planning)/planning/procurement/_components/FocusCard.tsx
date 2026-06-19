@@ -38,7 +38,9 @@ import type {
   PoTier,
   PurchaseSessionPo,
 } from "../../purchase-session/_lib/types";
+import { daysUntil } from "../_lib/decision";
 import { AddLineForm } from "./AddLineForm";
+import { CountdownChip } from "./CountdownChip";
 
 const TIER_LABEL: Record<PoTier, string> = {
   urgent: "דחוף",
@@ -201,6 +203,9 @@ export function FocusCard({
           <Badge tone={STATUS_TONE[po.status]} size="xs">
             {STATUS_LABEL[po.status]}
           </Badge>
+          {po.status !== "placed" && po.status !== "skipped" && (
+            <CountdownChip days={daysUntil(po.order_by_date)} />
+          )}
           {isOverdue && (
             <Badge tone="danger" size="xs" dot animated>
               באיחור

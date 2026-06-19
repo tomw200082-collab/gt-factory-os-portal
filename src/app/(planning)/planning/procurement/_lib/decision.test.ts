@@ -16,7 +16,9 @@ import { describe, expect, it } from "vitest";
 import {
   classifyPo,
   daysHe,
+  daysUntil,
   groupByDecision,
+  orderByCountdown,
   type DecisionInput,
 } from "./decision";
 
@@ -111,5 +113,36 @@ describe("groupByDecision", () => {
     // most-overdue (smallest daysUntilOrderBy) first
     expect(groups.must_today[0].po.order_by_date).toBe("2026-05-20");
     expect(groups.must_today[1].po.order_by_date).toBe("2026-05-28");
+  });
+});
+
+describe("daysUntil (Tranche 066)", () => {
+  it("returns whole-day diff from today (negative = overdue)", () => {
+    expect(daysUntil("2026-06-05", TODAY)).toBe(7);
+    expect(daysUntil(TODAY, TODAY)).toBe(0);
+    expect(daysUntil("2026-05-26", TODAY)).toBe(-3);
+  });
+  it("returns null for an unparseable date", () => {
+    expect(daysUntil("n/a", TODAY)).toBeNull();
+  });
+});
+
+describe("orderByCountdown (Tranche 066)", () => {
+  it("null days → later, em-dash label", () => {
+    expect(orderByCountdown(null)).toEqual({ level: "later", label: "—" });
+  });
+  it("negative days → overdue with Hebrew count", () => {
+    expect(orderByCountdown(-1)).toEqual({ level: "overdue", label: "יום באיחור" });
+    expect(orderByCountdown(-3)).toEqual({ level: "overdue", label: "3 ימים באיחור" });
+  });
+  it("zero days → today", () => {
+    expect(orderByCountdown(0)).toEqual({ level: "today", label: "היום" });
+  });
+  it("1–3 days → soon", () => {
+    expect(orderByCountdown(2)).toEqual({ level: "soon", label: "בעוד יומיים" });
+    expect(orderByCountdown(3)).toEqual({ level: "soon", label: "בעוד 3 ימים" });
+  });
+  it("4+ days → later", () => {
+    expect(orderByCountdown(7)).toEqual({ level: "later", label: "בעוד 7 ימים" });
   });
 });
