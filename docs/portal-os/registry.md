@@ -149,3 +149,4 @@ Index of every operating artifact. Entries use repo-root-relative paths so the P
 - `docs/portal-os/audit-reports/2026-06-19-ux-mobile-audit.md` — read-only UX/mobile audit of all ~80 pages; finding: portal already premium (88/100); ranked list-page mobile-card program; flags what NOT to churn + backend-blocked gaps.
 - `docs/portal-os/tranches/082-admin-suppliers-mobile-cards.md` — adds `<md` mobile card view to the suppliers master list (table preserved at md+); pattern-setter for the list-page mobile-card program.
 - `docs/portal-os/tranches/083-admin-items-mobile-cards.md` — adds `<md` mobile card view to the items master list (name/health/status + facts + inline group assign + actions; table preserved at md+).
+- `docs/portal-os/tranches/084-admin-components-mobile-cards.md` — adds `<md` mobile card view to the components (RM/PKG) master list (category/readiness/status + unit/lead/supplier + actions; table preserved at md+).
