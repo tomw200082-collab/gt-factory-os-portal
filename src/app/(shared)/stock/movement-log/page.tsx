@@ -33,7 +33,40 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
+import { useSession } from "@/lib/auth/session-provider";
 import { cn } from "@/lib/cn";
+
+function newIdempotencyKey(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `pcundo_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+}
+
+// Operator-facing copy for a failed count-undo, mapped from the reverse
+// endpoint's reason codes (api physical-counts §1.10). Raw codes never shown.
+export function friendlyReverseError(httpStatus: number, body: unknown): string {
+  const reason =
+    body && typeof body === "object" && "reason_code" in body
+      ? String((body as { reason_code: unknown }).reason_code)
+      : undefined;
+  switch (reason) {
+    case "ANCHOR_SUPERSEDED":
+      return "A newer count or correction has replaced this one — only the latest count for an item can be undone.";
+    case "ALREADY_REVERSED":
+      return "This count was already undone.";
+    case "COUNT_FREEZE_ACTIVE":
+      return "A count is currently open on this item. Finish or cancel it before undoing.";
+    case "NOT_POSTED":
+      return "Only a posted count can be undone.";
+    case "NO_PRIOR_ANCHOR":
+      return "There's no previous value to restore — set the stock level manually instead.";
+    default:
+      if (httpStatus === 403)
+        return "You can't undo this count. Operators can undo only their own count within 30 minutes of posting; otherwise ask a planner.";
+      return "Could not undo the count. Try again, or contact an admin if it keeps failing.";
+  }
+}
 
 interface LedgerRow {
   movement_id: string;
@@ -64,6 +97,11 @@ interface LedgerRow {
   related_movement_id?: string | null;
   original_event_at?: string | null;
   original_movement_type?: string | null;
+  // Physical-count synthetic-row context (0240 / Phase B). Counts are
+  // anchor-first, surfaced as COUNT_ADJUST / COUNT_ADJUST_REVERSAL rows.
+  pc_submission_id?: string | null;
+  pc_reversed?: boolean | null;
+  pc_reversible?: boolean | null;
 }
 
 interface LedgerResponse {
@@ -109,6 +147,7 @@ const MOVEMENT_REGISTRY: Record<string, MvMeta> = {
   production_consumption: { label: "Production Consumption", kind: "out",      glyph: "↓" },
   production_scrap:       { label: "Production Scrap",       kind: "audit",    glyph: "·" },
   COUNT_ADJUST:           { label: "Count Adjustment",       kind: "audit",    glyph: "=" },
+  COUNT_ADJUST_REVERSAL:  { label: "Count Undo",             kind: "reversal", glyph: "↶" },
 };
 
 function mvMeta(raw: string): MvMeta {
@@ -146,6 +185,7 @@ const MOVEMENT_KIND_FILTERS: { value: string; label: string; kind: MvKind }[] = 
   { value: "WASTE_POSTED",      label: "Waste",         kind: "out" },
   { value: "LIONWHEEL_PICK",    label: "Shipments",     kind: "out" },
   { value: "production_output", label: "Production",    kind: "in" },
+  { value: "COUNT_ADJUST",      label: "Counts",        kind: "audit" },
   { value: "GR_REVERSAL",       label: "Reversals",     kind: "reversal" },
 ];
 
@@ -357,10 +397,27 @@ function QtyDeltaCell({
 function DetailsDrawer({
   row,
   onClose,
+  onReversed,
 }: {
   row: LedgerRow | null;
   onClose: () => void;
+  /** Called after a successful undo so the parent can refresh + close. */
+  onReversed: () => void;
 }) {
+  const { session } = useSession();
+  const [undoOpen, setUndoOpen] = useState(false);
+  const [undoReason, setUndoReason] = useState("");
+  const [undoBusy, setUndoBusy] = useState(false);
+  const [undoErr, setUndoErr] = useState<string | null>(null);
+
+  // Reset the undo sub-form whenever the drawer target changes.
+  useEffect(() => {
+    setUndoOpen(false);
+    setUndoReason("");
+    setUndoBusy(false);
+    setUndoErr(null);
+  }, [row?.movement_id]);
+
   useEffect(() => {
     if (!row) return;
     function onKey(e: KeyboardEvent) {
@@ -370,7 +427,42 @@ function DetailsDrawer({
     return () => document.removeEventListener("keydown", onKey);
   }, [row, onClose]);
 
+  async function doUndo() {
+    if (!row?.pc_submission_id) return;
+    const reason = undoReason.trim();
+    if (!reason) return;
+    setUndoBusy(true);
+    setUndoErr(null);
+    try {
+      const res = await fetch(
+        `/api/physical-count/${encodeURIComponent(row.pc_submission_id)}/reverse`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ idempotency_key: newIdempotencyKey(), reason }),
+        },
+      );
+      if (res.ok) {
+        onReversed();
+        return;
+      }
+      const body = await res.json().catch(() => null);
+      setUndoErr(friendlyReverseError(res.status, body));
+    } catch {
+      setUndoErr("Network error — the count was not undone.");
+    } finally {
+      setUndoBusy(false);
+    }
+  }
+
   if (!row) return null;
+  // The Undo affordance is for posted counts that are still the latest anchor.
+  const canUndo =
+    row.movement_type === "COUNT_ADJUST" &&
+    row.pc_reversible === true &&
+    (session.role === "operator" ||
+      session.role === "planner" ||
+      session.role === "admin");
   const meta = mvMeta(row.movement_type);
   return (
     <>
@@ -540,6 +632,87 @@ function DetailsDrawer({
               <div className="whitespace-pre-wrap rounded border border-border/70 bg-bg-subtle/40 px-3 py-2 text-xs text-fg-muted">
                 {row.notes}
               </div>
+            </section>
+          ) : null}
+
+          {/* Count undo (0240 / Phase B) — restores the stock value this
+              count set, identical to the API the count form rides on. */}
+          {row.movement_type === "COUNT_ADJUST" && row.pc_reversed ? (
+            <section
+              className="rounded-md border border-border/70 bg-bg-subtle/40 px-3 py-2.5 text-xs text-fg-muted"
+              data-testid="movement-log-count-reversed"
+            >
+              <span className="font-medium text-fg">This count was undone.</span>{" "}
+              The stock level was restored to its previous value — see the
+              matching “Count Undo” entry in the log.
+            </section>
+          ) : canUndo ? (
+            <section data-testid="movement-log-count-undo">
+              <h3 className="mb-1.5 text-2xs font-semibold uppercase tracking-sops text-fg-subtle">
+                Undo this count
+              </h3>
+              {!undoOpen ? (
+                <>
+                  <p className="mb-2 text-2xs text-fg-subtle">
+                    Restores the stock level to the value before this count.
+                    Operators can undo their own count within 30 minutes;
+                    planners and admins can undo the latest count anytime.
+                  </p>
+                  <button
+                    type="button"
+                    className="btn btn-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                    onClick={() => setUndoOpen(true)}
+                    data-testid="movement-log-undo-open"
+                  >
+                    <span className="inline-flex items-center gap-1.5">
+                      <span aria-hidden>↶</span>
+                      Undo count
+                    </span>
+                  </button>
+                </>
+              ) : (
+                <div className="space-y-2 rounded-md border border-warning/40 bg-warning-softer/40 p-3">
+                  <label className="block text-2xs font-semibold text-fg">
+                    Reason <span className="font-normal text-danger-fg">*</span>
+                    <textarea
+                      className="mt-1 w-full rounded border border-border bg-bg px-2 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-accent/40"
+                      rows={2}
+                      value={undoReason}
+                      onChange={(e) => setUndoReason(e.target.value)}
+                      placeholder="Why is this count being undone? (kept on the audit trail)"
+                      disabled={undoBusy}
+                      data-testid="movement-log-undo-reason"
+                    />
+                  </label>
+                  {undoErr ? (
+                    <p className="text-2xs text-danger-fg" role="alert" data-testid="movement-log-undo-error">
+                      {undoErr}
+                    </p>
+                  ) : null}
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      className="btn btn-sm btn-danger"
+                      onClick={() => void doUndo()}
+                      disabled={undoBusy || !undoReason.trim()}
+                      data-testid="movement-log-undo-confirm"
+                    >
+                      {undoBusy ? "Undoing…" : "Confirm undo"}
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => {
+                        setUndoOpen(false);
+                        setUndoErr(null);
+                      }}
+                      disabled={undoBusy}
+                    >
+                      Cancel
+                    </button>
+                  </div>
+                </div>
+              )}
             </section>
           ) : null}
 
@@ -1554,7 +1727,14 @@ export default function MovementLogPage() {
         )}
       </SectionCard>
 
-      <DetailsDrawer row={drawerRow} onClose={() => setDrawerRow(null)} />
+      <DetailsDrawer
+        row={drawerRow}
+        onClose={() => setDrawerRow(null)}
+        onReversed={() => {
+          setDrawerRow(null);
+          void refetch();
+        }}
+      />
     </div>
   );
 }
