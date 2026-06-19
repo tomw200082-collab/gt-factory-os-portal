@@ -60,9 +60,20 @@ const browser = await chromium.launch(launchOptions);
 const ctx = await browser.newContext({ viewport, deviceScaleFactor: 2 });
 const page = await ctx.newPage();
 
+const dark = process.env.SHOT_DARK === "1";
+// ThemeProvider reads theme_preference off the session (it wins over the
+// gt-theme localStorage pre-paint hint), so set both for a stable dark render.
+const session = dark ? { ...SESSIONS[role], theme_preference: "dark" } : SESSIONS[role];
+
 await page.addInitScript(
-  (value) => window.localStorage.setItem("gt.fakeauth.v1", value),
-  JSON.stringify(SESSIONS[role]),
+  (args) => {
+    window.localStorage.setItem("gt.fakeauth.v1", args.session);
+    if (args.dark) {
+      window.localStorage.setItem("gt-theme", "dark");
+      document.documentElement.classList.add("dark");
+    }
+  },
+  { session: JSON.stringify(session), dark },
 );
 
 const url = BASE + route;
