@@ -680,7 +680,9 @@ function ItemsPageInner(): JSX.Element {
             onReset={handleResetFilters}
           />
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* Desktop table (md+) */}
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b border-border/70 bg-bg-subtle/60">
@@ -848,6 +850,132 @@ function ItemsPageInner(): JSX.Element {
               </tbody>
             </table>
           </div>
+
+          {/* Mobile card view (<md) — Tranche 083. Same rows, no horizontal
+              scroll. Reuses the desktop badge/pill/cell components. */}
+          <ul className="divide-y divide-border/40 md:hidden">
+            {filtered.map((r) => (
+              <li
+                key={r.item_id}
+                className={`px-3 py-3 ${
+                  highlightedId === r.item_id ? "bg-accent-softer/60" : ""
+                }`}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <Link
+                    href={`/admin/masters/items/${encodeURIComponent(r.item_id)}`}
+                    className="group min-w-0 flex-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                  >
+                    <span
+                      className="block text-sm font-medium leading-snug text-fg-strong group-hover:text-accent"
+                      dir="auto"
+                    >
+                      {r.item_name}
+                    </span>
+                    <span className="mt-0.5 block font-mono text-3xs text-fg-subtle">
+                      {r.item_id}
+                      {r.sku && r.sku !== r.item_id ? (
+                        <span className="ml-1.5 text-fg-faint">· {r.sku}</span>
+                      ) : null}
+                    </span>
+                  </Link>
+                  <ItemStatusBadge status={r.status} />
+                </div>
+
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <SupplyMethodBadge method={r.supply_method} />
+                  <HealthPill
+                    readiness={r.readiness}
+                    supplyMethod={r.supply_method}
+                    primaryBomHeadId={r.primary_bom_head_id}
+                  />
+                </div>
+
+                <dl className="mt-2 grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs">
+                  <div>
+                    <dt className="text-3xs uppercase tracking-sops text-fg-subtle">
+                      Family
+                    </dt>
+                    <dd className="text-fg-muted" dir="auto">
+                      {r.family ?? "—"}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-3xs uppercase tracking-sops text-fg-subtle">
+                      Sales unit
+                    </dt>
+                    <dd className="text-fg-muted">{r.sales_uom ?? "—"}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-3xs uppercase tracking-sops text-fg-subtle">
+                      Case pack
+                    </dt>
+                    <dd className="text-fg-muted">
+                      {r.case_pack != null && r.sales_uom
+                        ? formatQty(r.case_pack, r.sales_uom)
+                        : r.case_pack != null
+                        ? r.case_pack
+                        : "—"}
+                    </dd>
+                  </div>
+                  <div className="min-w-0">
+                    <dt className="text-3xs uppercase tracking-sops text-fg-subtle">
+                      Product group
+                    </dt>
+                    <dd className="text-fg-muted">
+                      {isAdmin ? (
+                        <InlineEditSelectCell
+                          value={r.product_group_key}
+                          options={groupOptions}
+                          fieldLabel="Product group"
+                          placeholder="— No group —"
+                          allowClear={false}
+                          ariaLabel={`Edit product group for ${r.item_id}`}
+                          testId={`items-group-select-mobile-${r.item_id}`}
+                          onSave={async (newValue) => {
+                            if (!newValue) return;
+                            await assignGroupMutation.mutateAsync({
+                              item_id: r.item_id,
+                              key: newValue,
+                            });
+                          }}
+                        />
+                      ) : (
+                        <span dir="auto">
+                          {r.product_group_key
+                            ? groupLabelByKey.get(r.product_group_key) ??
+                              r.product_group_key
+                            : "—"}
+                        </span>
+                      )}
+                    </dd>
+                  </div>
+                </dl>
+
+                <div className="mt-3 flex items-center gap-2">
+                  <Link
+                    href={`/admin/masters/items/${encodeURIComponent(r.item_id)}`}
+                    className="btn btn-sm inline-flex min-h-[44px] flex-1 items-center justify-center gap-1"
+                  >
+                    View
+                    <ArrowRight className="h-3 w-3" strokeWidth={2} />
+                  </Link>
+                  {isAdmin ? (
+                    <button
+                      type="button"
+                      className="btn btn-sm inline-flex min-h-[44px] flex-1 items-center justify-center gap-1"
+                      onClick={() => handleToggleStatus(r)}
+                      disabled={statusMutation.isPending}
+                    >
+                      <Power className="h-3 w-3" strokeWidth={2} />
+                      {r.status === "ACTIVE" ? "Deactivate" : "Activate"}
+                    </button>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+          </>
         )}
       </SectionCard>
 
