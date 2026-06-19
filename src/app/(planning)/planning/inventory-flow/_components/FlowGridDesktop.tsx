@@ -53,6 +53,7 @@ import {
 import { cn } from "@/lib/cn";
 import { DayCell } from "./DayCell";
 import { DayHeaderRow } from "./DayHeaderRow";
+import { RowVisibilityToggle } from "./RowVisibilityToggle";
 import { StickyItemPanel } from "./StickyItemPanel";
 import { WeekCell } from "./WeekCell";
 
@@ -111,6 +112,14 @@ interface FlowGridDesktopProps {
   /** Production-lens ordering (Tranche 058). Default "urgency" preserves
    *  the pre-058 risk sort exactly. */
   sortKey?: FlowSortKey;
+  /** Called with item_id when the user clicks the hide button. Absent = no hide button. */
+  onHide?: (id: string) => void;
+  /** When true, render a select checkbox instead of the hide button (focus mode). */
+  selectMode?: boolean;
+  /** Set of currently selected item IDs (used in select mode). */
+  selectedIds?: Set<string>;
+  /** Called with item_id when the user toggles a row's checkbox. */
+  onToggleSelect?: (id: string) => void;
 }
 
 export function FlowGridDesktop({
@@ -125,6 +134,10 @@ export function FlowGridDesktop({
   showMovementSparklines = false,
   movementByItemId,
   sortKey = "urgency",
+  onHide,
+  selectMode,
+  selectedIds,
+  onToggleSelect,
 }: FlowGridDesktopProps) {
   const sortedItems = useMemo(
     () => sortItems(items, sortKey),
@@ -211,6 +224,10 @@ export function FlowGridDesktop({
               onSelectItem={onSelectItem}
               showMovementSparklines={showMovementSparklines}
               movementByItemId={movementByItemId}
+              onHide={onHide}
+              selectMode={selectMode}
+              selectedIds={selectedIds}
+              onToggleSelect={onToggleSelect}
             />
           ))}
         </div>
@@ -240,6 +257,14 @@ interface ItemRowProps {
   showMovementSparklines?: boolean;
   /** item_id → array of 4 weekly net movement values. */
   movementByItemId?: Map<string, number[]>;
+  /** Called with item_id when the user clicks the hide button. Absent = no hide button. */
+  onHide?: (id: string) => void;
+  /** When true, render a select checkbox instead of the hide button (focus mode). */
+  selectMode?: boolean;
+  /** Set of currently selected item IDs. */
+  selectedIds?: Set<string>;
+  /** Called with item_id when the user toggles a row's checkbox. */
+  onToggleSelect?: (id: string) => void;
 }
 
 function ItemRow({
@@ -257,6 +282,10 @@ function ItemRow({
   onSelectItem,
   showMovementSparklines = false,
   movementByItemId,
+  onHide,
+  selectMode,
+  selectedIds,
+  onToggleSelect,
 }: ItemRowProps) {
   const dailyWeekCount = Math.ceil(item.days.length / 7);
   const weeklyOnly = item.weeks.slice(dailyWeekCount);
@@ -355,6 +384,20 @@ function ItemRow({
             aria-label={`Coverage: ${coverageDays} days`}
           >
             {coverageDays}d
+          </span>
+        ) : null}
+        {/* Task 4 — row hide / select toggle; only when onHide or selectMode is active */}
+        {(onHide || selectMode) ? (
+          <span className="absolute right-1 top-1 z-30">
+            <RowVisibilityToggle
+              itemId={item.item_id}
+              itemName={item.item_name}
+              onHide={onHide}
+              selectMode={selectMode}
+              selected={selectedIds?.has(item.item_id) ?? false}
+              onToggleSelect={onToggleSelect}
+              size="sm"
+            />
           </span>
         ) : null}
         {/* R-NEW-5 — detail-chevron button; only when parent wires onSelectItem */}

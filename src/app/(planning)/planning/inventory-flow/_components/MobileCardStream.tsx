@@ -50,6 +50,14 @@ interface MobileCardStreamProps {
   /** Production-lens ordering (Tranche 058). Default "urgency" preserves
    *  the pre-058 risk sort exactly. */
   sortKey?: FlowSortKey;
+  /** Called with item_id when the user clicks the hide button. Absent = no hide button. */
+  onHide?: (id: string) => void;
+  /** When true, render a select checkbox instead of the hide button (focus mode). */
+  selectMode?: boolean;
+  /** Set of currently selected item IDs. */
+  selectedIds?: Set<string>;
+  /** Called with item_id when the user toggles a row's checkbox. */
+  onToggleSelect?: (id: string) => void;
 }
 
 export function MobileCardStream({
@@ -64,6 +72,10 @@ export function MobileCardStream({
   showMovementSparklines = false,
   movementByItemId,
   sortKey = "urgency",
+  onHide,
+  selectMode,
+  selectedIds,
+  onToggleSelect,
 }: MobileCardStreamProps) {
   const sorted = useMemo(() => sortItems(items, sortKey), [items, sortKey]);
   const queryClient = useQueryClient();
@@ -145,6 +157,10 @@ export function MobileCardStream({
           coverageDays={coverageDaysMap?.get(item.item_id) ?? null}
           showMovementSparklines={showMovementSparklines}
           movementWeeks={movementByItemId?.get(item.item_id)}
+          onHide={onHide}
+          selectMode={selectMode}
+          selected={selectedIds?.has(item.item_id) ?? false}
+          onToggleSelect={onToggleSelect}
         />
       ))}
     </div>

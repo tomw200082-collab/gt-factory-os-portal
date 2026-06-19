@@ -50,6 +50,7 @@ import {
 import type { FlowDay, FlowItem } from "../_lib/types";
 import type { PlannedInflowRow } from "../_lib/plannedInflow";
 import { MobileDaySheet } from "./MobileDaySheet";
+import { RowVisibilityToggle } from "./RowVisibilityToggle";
 import { Sparkline } from "./Sparkline";
 
 interface MobileItemCardProps {
@@ -76,6 +77,14 @@ interface MobileItemCardProps {
   showMovementSparklines?: boolean;
   /** Array of 4 weekly net movement values for this item. */
   movementWeeks?: number[];
+  /** Called with item_id when the user clicks the hide button. Absent = no hide button. */
+  onHide?: (id: string) => void;
+  /** When true, render a select checkbox instead of the hide button (focus mode). */
+  selectMode?: boolean;
+  /** Whether this item is currently selected (focus mode). */
+  selected?: boolean;
+  /** Called with item_id when the user toggles a row's checkbox. */
+  onToggleSelect?: (id: string) => void;
 }
 
 function MobileItemCardInner({
@@ -87,6 +96,10 @@ function MobileItemCardInner({
   coverageDays = null,
   showMovementSparklines = false,
   movementWeeks,
+  onHide,
+  selectMode,
+  selected = false,
+  onToggleSelect,
 }: MobileItemCardProps) {
   const style = RISK_TIER_STYLE[item.risk_tier];
   const insight = buildInsight(item);
@@ -310,6 +323,23 @@ function MobileItemCardInner({
         </span>
       ) : null}
 
+      {/* Task 4 — row hide / select toggle; rendered outside the Link so
+          tapping hide/checkbox does not trigger navigation. Absolute-
+          positioned at the top-right of the card (relative parent is the
+          outer wrapper div). */}
+      {(onHide || selectMode) ? (
+        <span className="absolute right-2 top-2 z-10">
+          <RowVisibilityToggle
+            itemId={item.item_id}
+            itemName={item.item_name}
+            onHide={onHide}
+            selectMode={selectMode}
+            selected={selected}
+            onToggleSelect={onToggleSelect}
+            size="touch"
+          />
+        </span>
+      ) : null}
       <div className="flex-1 px-4 pb-3 pt-4">
         {/* Card body — navigates to the per-item drill-down (FG only). */}
         {disableRowLink ? (
