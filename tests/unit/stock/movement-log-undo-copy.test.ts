@@ -20,6 +20,15 @@ describe("friendlyReverseError (count undo)", () => {
     }
   });
 
+  it("gives an actionable next step for the two recoverable conflicts (FLOW-307)", () => {
+    expect(friendlyReverseError(409, { reason_code: "ANCHOR_SUPERSEDED" })).toMatch(
+      /movement log|undo that one/i,
+    );
+    expect(friendlyReverseError(409, { reason_code: "COUNT_FREEZE_ACTIVE" })).toMatch(
+      /cancel|expire|ask the operator/i,
+    );
+  });
+
   it("explains the operator window on a 403", () => {
     const msg = friendlyReverseError(403, { reason_code: "FORBIDDEN_BY_ROLE" });
     expect(msg).toMatch(/30 minutes/);

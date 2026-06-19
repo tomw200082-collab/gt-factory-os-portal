@@ -903,11 +903,26 @@ export default function BulkCountPage() {
           </div>
           <span className="shrink-0 text-2xs tabular-nums text-fg-muted">{pct}%</span>
           {pendingCount > 0 ? (
-            <span className="hidden shrink-0 rounded-full border border-warning/30 bg-warning-softer px-2 py-0.5 text-2xs font-medium text-warning-fg sm:inline">
-              {pendingCount} awaiting approval
+            <span
+              className="shrink-0 rounded-full border border-warning/30 bg-warning-softer px-2 py-0.5 text-2xs font-medium text-warning-fg"
+              title={`${pendingCount} count(s) awaiting planner approval`}
+            >
+              <span aria-hidden>⏳</span> {pendingCount}
+              <span className="hidden sm:inline"> awaiting approval</span>
             </span>
           ) : null}
         </div>
+        {!walkComplete && postedCount > 0 ? (
+          <div className="mt-1.5 text-2xs" data-testid="bulk-count-view-log">
+            <Link
+              href="/stock/movement-log"
+              className="font-medium text-accent underline hover:text-accent-hover hover:no-underline"
+            >
+              View movement log
+            </Link>
+            <span className="text-fg-subtle"> to see or undo posted counts</span>
+          </div>
+        ) : null}
         {walkComplete ? (
           <div
             className="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs"

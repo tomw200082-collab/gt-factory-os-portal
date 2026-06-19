@@ -70,11 +70,11 @@ export function friendlyReverseError(httpStatus: number, body: unknown): string 
       : undefined;
   switch (reason) {
     case "ANCHOR_SUPERSEDED":
-      return "A newer count or correction has replaced this one — only the latest count for an item can be undone.";
+      return "A newer count or correction has replaced this one — only the latest count for an item can be undone. Find the most recent Count Adjustment for this item in the log and undo that one instead.";
     case "ALREADY_REVERSED":
       return "This count was already undone.";
     case "COUNT_FREEZE_ACTIVE":
-      return "A count is currently open on this item. Finish or cancel it before undoing.";
+      return "A count is currently open on this item. If it's yours, submit or cancel it first; otherwise ask the operator who started it, or wait for it to expire, then try again.";
     case "NOT_POSTED":
       return "Only a posted count can be undone.";
     case "NO_PRIOR_ANCHOR":
