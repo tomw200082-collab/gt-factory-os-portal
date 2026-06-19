@@ -1,41 +1,29 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// Product Decision Board — Tranche 080 (2026-06-16).
+// Product Decision Board — Tranche 080 (created) · Tranche 081 (premium rebuild).
 //
 // Access: planner + admin (the (economics) route group gates on
 // planning:execute).
 //
-// Mission: one screen that answers a single question — for each finished
-// product, should we PROTECT it, PROMOTE it, FIX ITS PRICE, or REVIEW IT FOR
-// DROP — and shows the "why" transparently.
+// Mission: one screen that answers, per finished product, the only question
+// that matters for a small factory — should we PROTECT it, PROMOTE it, FIX ITS
+// PRICE, or DROP it — framed around money at stake, and shown transparently.
 //
-// This is a decision surface, not a measurement-completeness surface. It is
-// deliberately distinct from /admin/economics (which is the analyst table for
-// closing the books). The reframe matters: the demand-weighted P&L-coverage
-// view (migration 0210 / tranche 026) was reverted in 0211 for being "more
-// complexity than insight." The data was never the problem — the accounting
-// framing was. Here the same numbers drive a Star / Gem / Workhorse / Drag
-// quadrant.
-//
-// Zero backend change. The board joins two EXISTING, live read endpoints in
-// the browser:
+// Zero backend change. Joins two EXISTING live read endpoints in the browser:
 //   GET /api/economics                      → COGS, margin, price, confidence,
 //                                              inventory value (v_fg_economics).
 //   GET /api/orders/by-item-and-period       → units sold per item per month
-//                                              (LionWheel mirror, resolved
-//                                              lines). This is the velocity
-//                                              axis /economics cannot supply.
-//
-// Revenue and contribution are derived in-browser:
-//   contribution_90d = material_margin_ils × units_sold_90d
-//   revenue_90d      = avg_sale_price_ils  × units_sold_90d
-// avg_sale_price_ils is the manual interim price (migration 0207); when it is
-// unset the product is classed "Needs data" and excluded from the quadrant —
-// we never plot a decision we cannot ground.
+//                                              (LionWheel mirror) = velocity.
+// Derived in-browser:
+//   contribution = material_margin_ils × units_sold
+//   revenue      = avg_sale_price_ils  × units_sold
+//   annualised   = window value × (365 / window_days)
+// Products missing cost/price are "Needs data" and never plotted — we do not
+// ground a recommendation on a number we don't have.
 // ---------------------------------------------------------------------------
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Info,
@@ -46,105 +34,60 @@ import {
   ArrowDownRight,
   Minus,
   Scale,
+  ShieldCheck,
+  Rocket,
+  Tag,
+  TrendingDown,
+  AlertTriangle,
+  Moon,
+  HelpCircle,
 } from "lucide-react";
+import type { LucideIcon } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { formatIls, formatPct, formatQtyInt } from "@/lib/utils/format-money";
 
 // ---------------------------------------------------------------------------
-// Decision rules — TRANSPARENT and tunable. Surfaced in the UI via the rules
-// popover so a decision is never a black box.
+// Decision rules — transparent + tunable. Surfaced in the rules popover.
 // ---------------------------------------------------------------------------
+const MARGIN_HEALTHY_PCT = 25; // ≥ this on price = healthy margin (quadrant Y split)
+const MARGIN_THIN_PCT = 10; // < this = thin
 
-// Margin at or above this %, on price, is "healthy" (the quadrant's Y split).
-const MARGIN_HEALTHY_PCT = 25;
-// Margin below this % (but ≥0) is "thin" — a reprice candidate.
-const MARGIN_THIN_PCT = 10;
-// Trailing window for velocity + contribution.
-const WINDOW_DAYS = 90;
-
-type DecisionKey =
-  | "star"
-  | "gem"
-  | "workhorse"
-  | "drag"
-  | "loss"
-  | "dormant"
-  | "needs_data";
+type DecisionKey = "star" | "gem" | "workhorse" | "drag" | "loss" | "dormant" | "needs_data";
 
 interface DecisionMeta {
   key: DecisionKey;
   label: string;
   action: string;
   tone: BadgeTone;
-  fill: string; // SVG bubble fill (Badge tones don't reach into raw SVG)
+  fill: string;
+  icon: LucideIcon;
   blurb: string;
 }
 
 const DECISION: Record<DecisionKey, DecisionMeta> = {
-  star: {
-    key: "star",
-    label: "Star",
-    action: "Protect",
-    tone: "success",
-    fill: "#16a34a",
-    blurb: "Healthy margin and selling well. Protect supply and shelf space.",
-  },
-  gem: {
-    key: "gem",
-    label: "Hidden gem",
-    action: "Promote",
-    tone: "info",
-    fill: "#2563eb",
-    blurb: "Healthy margin but low volume. Push marketing / distribution.",
-  },
-  workhorse: {
-    key: "workhorse",
-    label: "Workhorse",
-    action: "Fix price",
-    tone: "warning",
-    fill: "#d97706",
-    blurb: "Sells well but margin is thin. Reprice or cut cost.",
-  },
-  drag: {
-    key: "drag",
-    label: "Drag",
-    action: "Review for drop",
-    tone: "warning",
-    fill: "#b45309",
-    blurb: "Thin margin and low volume. Candidate to drop or relaunch.",
-  },
-  loss: {
-    key: "loss",
-    label: "Losing money",
-    action: "Act now",
-    tone: "danger",
-    fill: "#dc2626",
-    blurb: "Sells below cost. Reprice immediately or drop.",
-  },
-  dormant: {
-    key: "dormant",
-    label: "Not selling",
-    action: "Review",
-    tone: "muted",
-    fill: "#94a3b8",
-    blurb: `No units sold in ${WINDOW_DAYS} days. Review whether to keep listing.`,
-  },
-  needs_data: {
-    key: "needs_data",
-    label: "Needs data",
-    action: "Set cost & price",
-    tone: "muted",
-    fill: "#cbd5e1",
-    blurb: "Cost or sale price missing — cannot judge yet. Complete the data.",
-  },
+  star: { key: "star", label: "Star", action: "Protect", tone: "success", fill: "#16a34a", icon: ShieldCheck, blurb: "Healthy margin, sells well. Protect supply and shelf space." },
+  gem: { key: "gem", label: "Hidden gem", action: "Promote", tone: "info", fill: "#2563eb", icon: Rocket, blurb: "Healthy margin, low volume. Push marketing / distribution." },
+  workhorse: { key: "workhorse", label: "Workhorse", action: "Fix price", tone: "warning", fill: "#d97706", icon: Tag, blurb: "Sells well but margin is thin. Reprice or cut cost." },
+  drag: { key: "drag", label: "Drag", action: "Review for drop", tone: "warning", fill: "#b45309", icon: TrendingDown, blurb: "Thin margin and low volume. Candidate to drop or relaunch." },
+  loss: { key: "loss", label: "Losing money", action: "Act now", tone: "danger", fill: "#dc2626", icon: AlertTriangle, blurb: "Sells below cost. Reprice immediately or drop." },
+  dormant: { key: "dormant", label: "Not selling", action: "Review", tone: "muted", fill: "#94a3b8", icon: Moon, blurb: "No sales in the window. Review whether to keep listing." },
+  needs_data: { key: "needs_data", label: "Needs data", action: "Set cost & price", tone: "muted", fill: "#cbd5e1", icon: HelpCircle, blurb: "Cost or price missing — cannot judge yet. Complete the data." },
 };
+
+// Quadrant cards, in reading order.
+const SEGMENT_ORDER: DecisionKey[] = ["star", "gem", "workhorse", "drag", "loss", "dormant", "needs_data"];
+
+const WINDOWS = [
+  { days: 30, label: "30d" },
+  { days: 90, label: "90d" },
+  { days: 180, label: "180d" },
+] as const;
 
 // ---------------------------------------------------------------------------
 // Wire types
 // ---------------------------------------------------------------------------
-
 interface EconomicsRow {
   item_id: string;
   item_name: string;
@@ -156,25 +99,9 @@ interface EconomicsRow {
   material_margin_ils: string | null;
   material_margin_pct: string | null;
 }
-interface EconomicsResponse {
-  rows: EconomicsRow[];
-  count: number;
-}
-
-interface VelocityRow {
-  item_id: string;
-  period_bucket_key: string; // YYYY-MM-DD bucket start
-  qty_total: string;
-  order_count: number;
-}
-interface VelocityResponse {
-  rows: VelocityRow[];
-  bucket_cadence: string;
-}
-
-// ---------------------------------------------------------------------------
-// Derived shape — one per finished product after the join
-// ---------------------------------------------------------------------------
+interface EconomicsResponse { rows: EconomicsRow[]; count: number }
+interface VelocityRow { item_id: string; period_bucket_key: string; qty_total: string; order_count: number }
+interface VelocityResponse { rows: VelocityRow[]; bucket_cadence: string }
 
 type Trend = "up" | "down" | "flat" | "none";
 
@@ -187,10 +114,11 @@ interface DecisionItem {
   marginPct: number | null;
   qtyOnHand: number;
   invAtCost: number | null;
-  units90: number;
-  orders90: number;
-  contribution90: number | null;
-  revenue90: number | null;
+  units: number;
+  orders: number;
+  series: number[]; // monthly units, oldest→newest
+  contribution: number | null;
+  revenue: number | null;
   trend: Trend;
   decision: DecisionKey;
 }
@@ -200,27 +128,30 @@ function toNum(v: string | null | undefined): number | null {
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 }
-
+function median(xs: number[]): number {
+  if (xs.length === 0) return 0;
+  const s = [...xs].sort((a, b) => a - b);
+  const m = Math.floor(s.length / 2);
+  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
+}
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) {
-    throw new Error(
-      `Could not load data (HTTP ${res.status}). Check your connection and try refreshing.`,
-    );
-  }
+  if (!res.ok) throw new Error(`Could not load data (HTTP ${res.status}). Try refreshing.`);
   return (await res.json()) as T;
 }
 
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
-
 export default function DecisionBoardPage(): JSX.Element {
+  const [windowDays, setWindowDays] = useState<number>(90);
+  const annualise = 365 / windowDays;
+
   const { from, to } = useMemo(() => {
     const now = new Date();
-    const fromDate = new Date(now.getTime() - WINDOW_DAYS * 86_400_000);
-    return { from: fromDate.toISOString().slice(0, 10), to: now.toISOString().slice(0, 10) };
-  }, []);
+    const f = new Date(now.getTime() - windowDays * 86_400_000);
+    return { from: f.toISOString().slice(0, 10), to: now.toISOString().slice(0, 10) };
+  }, [windowDays]);
 
   const econQuery = useQuery<EconomicsResponse>({
     queryKey: ["decision-board", "economics"],
@@ -228,18 +159,13 @@ export default function DecisionBoardPage(): JSX.Element {
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   });
-
   const velQuery = useQuery<VelocityResponse>({
     queryKey: ["decision-board", "velocity", from, to],
-    queryFn: () =>
-      fetchJson<VelocityResponse>(
-        `/api/orders/by-item-and-period?from=${from}&to=${to}&cadence=monthly`,
-      ),
+    queryFn: () => fetchJson<VelocityResponse>(`/api/orders/by-item-and-period?from=${from}&to=${to}&cadence=monthly`),
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   });
 
-  // -- Build the velocity index: item_id → { total units, orders, monthly buckets }.
   const velocityByItem = useMemo(() => {
     const map = new Map<string, { units: number; orders: number; buckets: { key: string; qty: number }[] }>();
     for (const r of velQuery.data?.rows ?? []) {
@@ -253,17 +179,14 @@ export default function DecisionBoardPage(): JSX.Element {
     return map;
   }, [velQuery.data]);
 
-  // -- Join + classify.
   const items = useMemo<DecisionItem[]>(() => {
     const rows = econQuery.data?.rows ?? [];
-    // First pass to learn the velocity median among selling products, so the
-    // X-axis split adapts to this factory's scale instead of a guessed constant.
-    const sellingUnits: number[] = [];
+    const selling: number[] = [];
     for (const r of rows) {
       const v = velocityByItem.get(r.item_id);
-      if (v && v.units > 0) sellingUnits.push(v.units);
+      if (v && v.units > 0) selling.push(v.units);
     }
-    const velMedian = median(sellingUnits);
+    const velMedian = median(selling);
 
     return rows.map((r) => {
       const cogs = toNum(r.cogs_per_unit_ils);
@@ -271,209 +194,164 @@ export default function DecisionBoardPage(): JSX.Element {
       const marginIls = toNum(r.material_margin_ils);
       const marginPct = toNum(r.material_margin_pct);
       const v = velocityByItem.get(r.item_id);
-      const units90 = v?.units ?? 0;
-      const orders90 = v?.orders ?? 0;
+      const units = v?.units ?? 0;
+      const orders = v?.orders ?? 0;
+      const series = v ? [...v.buckets].sort((a, b) => a.key.localeCompare(b.key)).map((b) => b.qty) : [];
 
       const needsData = !r.cogs_complete || cogs == null || price == null || marginPct == null;
-      const contribution90 = marginIls != null ? marginIls * units90 : null;
-      const revenue90 = price != null ? price * units90 : null;
+      const contribution = marginIls != null ? marginIls * units : null;
+      const revenue = price != null ? price * units : null;
 
-      // Trend: last monthly bucket vs the previous one.
       let trend: Trend = "none";
-      if (v && v.buckets.length >= 2) {
-        const sorted = [...v.buckets].sort((a, b) => a.key.localeCompare(b.key));
-        const last = sorted[sorted.length - 1].qty;
-        const prev = sorted[sorted.length - 2].qty;
+      if (series.length >= 2) {
+        const last = series[series.length - 1];
+        const prev = series[series.length - 2];
         trend = last > prev * 1.1 ? "up" : last < prev * 0.9 ? "down" : "flat";
       }
 
       let decision: DecisionKey;
-      if (needsData) {
-        decision = "needs_data";
-      } else if (marginPct! < 0) {
-        decision = "loss";
-      } else if (units90 === 0) {
-        decision = "dormant";
-      } else {
-        const highMargin = marginPct! >= MARGIN_HEALTHY_PCT;
-        const highVel = units90 >= velMedian;
-        decision = highMargin
-          ? highVel
-            ? "star"
-            : "gem"
-          : highVel
-            ? "workhorse"
-            : "drag";
+      if (needsData) decision = "needs_data";
+      else if (marginPct! < 0) decision = "loss";
+      else if (units === 0) decision = "dormant";
+      else {
+        const hiM = marginPct! >= MARGIN_HEALTHY_PCT;
+        const hiV = units >= velMedian;
+        decision = hiM ? (hiV ? "star" : "gem") : hiV ? "workhorse" : "drag";
       }
 
       return {
-        id: r.item_id,
-        name: r.item_name,
-        cogs,
-        price,
-        marginIls,
-        marginPct,
-        qtyOnHand: toNum(r.qty_on_hand) ?? 0,
-        invAtCost: toNum(r.fg_inventory_value_at_cost),
-        units90,
-        orders90,
-        contribution90,
-        revenue90,
-        trend,
-        decision,
+        id: r.item_id, name: r.item_name, cogs, price, marginIls, marginPct,
+        qtyOnHand: toNum(r.qty_on_hand) ?? 0, invAtCost: toNum(r.fg_inventory_value_at_cost),
+        units, orders, series, contribution, revenue, trend, decision,
       };
     });
   }, [econQuery.data, velocityByItem]);
 
-  const velMedian = useMemo(() => {
-    const selling = items.filter((i) => i.units90 > 0).map((i) => i.units90);
-    return median(selling);
-  }, [items]);
+  const velMedian = useMemo(() => median(items.filter((i) => i.units > 0).map((i) => i.units)), [items]);
 
-  // -- KPIs.
   const kpis = useMemo(() => {
-    const measurable = items.filter((i) => i.contribution90 != null);
-    const profitPool = measurable.reduce((s, i) => s + (i.contribution90 ?? 0), 0);
-    const lossCount = items.filter((i) => i.marginPct != null && i.marginPct < 0).length;
+    const measurable = items.filter((i) => i.contribution != null);
+    const profitPool = measurable.reduce((s, i) => s + (i.contribution ?? 0), 0);
+    const lossItems = items.filter((i) => i.marginPct != null && i.marginPct < 0 && i.units > 0);
+    const riskPerWindow = lossItems.reduce((s, i) => s + Math.abs(i.contribution ?? 0), 0);
     const needsData = items.filter((i) => i.decision === "needs_data").length;
-    const sortedContrib = measurable
-      .map((i) => i.contribution90 ?? 0)
-      .filter((c) => c > 0)
-      .sort((a, b) => b - a);
-    const top3 = sortedContrib.slice(0, 3).reduce((s, c) => s + c, 0);
+    const contribDesc = measurable.map((i) => i.contribution ?? 0).filter((c) => c > 0).sort((a, b) => b - a);
+    const top3 = contribDesc.slice(0, 3).reduce((s, c) => s + c, 0);
     const concentration = profitPool > 0 ? (top3 / profitPool) * 100 : null;
-    return { profitPool, lossCount, needsData, concentration, measurableCount: measurable.length };
+    return {
+      profitPool, profitPoolAnnual: profitPool * annualise,
+      lossCount: lossItems.length, riskAnnual: riskPerWindow * annualise,
+      needsData, concentration, measurableCount: measurable.length,
+    };
+  }, [items, annualise]);
+
+  const segments = useMemo(() => {
+    const out = new Map<DecisionKey, { count: number; contribution: number }>();
+    SEGMENT_ORDER.forEach((k) => out.set(k, { count: 0, contribution: 0 }));
+    for (const i of items) {
+      const s = out.get(i.decision)!;
+      s.count += 1;
+      s.contribution += i.contribution ?? 0;
+    }
+    return out;
   }, [items]);
 
-  // -- Interaction + table state.
+  // -- interaction + table state
   const [activeId, setActiveId] = useState<string | null>(null);
-  const [activeFilters, setActiveFilters] = useState<Set<DecisionKey>>(new Set());
-  const [sortKey, setSortKey] = useState<SortKey>("contribution90");
+  const [filter, setFilter] = useState<DecisionKey | null>(null);
+  const [sortKey, setSortKey] = useState<SortKey>("contribution");
   const [sortDir, setSortDir] = useState<"asc" | "desc">("desc");
 
-  const toggleFilter = (k: DecisionKey) => {
-    setActiveFilters((prev) => {
-      const next = new Set(prev);
-      if (next.has(k)) next.delete(k);
-      else next.add(k);
-      return next;
-    });
-  };
-
-  const counts = useMemo(() => {
-    const c = {} as Record<DecisionKey, number>;
-    (Object.keys(DECISION) as DecisionKey[]).forEach((k) => (c[k] = 0));
-    items.forEach((i) => (c[i.decision] += 1));
-    return c;
-  }, [items]);
-
   const tableRows = useMemo(() => {
-    const filtered =
-      activeFilters.size === 0 ? items : items.filter((i) => activeFilters.has(i.decision));
+    const base = filter ? items.filter((i) => i.decision === filter) : items;
     const dir = sortDir === "asc" ? 1 : -1;
-    return [...filtered].sort((a, b) => {
-      const av = sortValue(a, sortKey);
-      const bv = sortValue(b, sortKey);
+    return [...base].sort((a, b) => {
+      const av = sortValue(a, sortKey), bv = sortValue(b, sortKey);
       if (av == null && bv == null) return 0;
       if (av == null) return 1;
       if (bv == null) return -1;
       if (typeof av === "string" && typeof bv === "string") return av.localeCompare(bv) * dir;
       return ((av as number) - (bv as number)) * dir;
     });
-  }, [items, activeFilters, sortKey, sortDir]);
+  }, [items, filter, sortKey, sortDir]);
 
   const onSort = (k: SortKey) => {
     if (k === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
-    else {
-      setSortKey(k);
-      setSortDir(k === "name" ? "asc" : "desc");
-    }
+    else { setSortKey(k); setSortDir(k === "name" ? "asc" : "desc"); }
   };
 
   const active = items.find((i) => i.id === activeId) ?? null;
   const isLoading = econQuery.isLoading || velQuery.isLoading;
   const velUnavailable = velQuery.isError;
+  const verdict = buildVerdict(kpis, items.length);
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-5" data-testid="decision-board">
       <WorkflowHeader
         eyebrow="Economics"
         title="Product Decision Board"
-        description={`Which products to protect, promote, reprice, or drop — margin × velocity over the last ${WINDOW_DAYS} days.`}
-        actions={<RulesPopover velMedian={velMedian} />}
+        description="Protect · promote · reprice · drop — every product on margin × velocity."
+        actions={
+          <div className="flex items-center gap-2">
+            <WindowToggle value={windowDays} onChange={setWindowDays} />
+            <RulesPopover velMedian={velMedian} windowDays={windowDays} />
+          </div>
+        }
       />
+
+      {/* Verdict band — the single most important thing right now */}
+      <VerdictBand verdict={verdict} loading={isLoading} onAct={() => verdict.filter && setFilter(verdict.filter)} />
 
       {velUnavailable ? (
         <SectionCard tone="warning" density="compact">
           <p className="text-sm text-fg">
-            Sales velocity is temporarily unavailable, so products can&apos;t be ranked by what
-            sells. Margin and inventory figures below are still accurate.
+            Sales velocity is temporarily unavailable, so products can&apos;t be ranked by what sells.
+            Margin and inventory figures remain accurate.
           </p>
         </SectionCard>
       ) : null}
 
-      {/* KPI strip */}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <KpiTile
-          label={`Profit pool (${WINDOW_DAYS}d)`}
-          value={formatIls(kpis.profitPool)}
-          hint={`Sum of margin × units sold across ${kpis.measurableCount} priced, costed products.`}
-          loading={isLoading}
-        />
-        <KpiTile
-          label="Losing money"
-          value={String(kpis.lossCount)}
-          tone={kpis.lossCount > 0 ? "danger" : "default"}
-          hint="Products whose sale price is below cost. Reprice or drop."
-          loading={isLoading}
-        />
-        <KpiTile
-          label="Can't decide yet"
-          value={String(kpis.needsData)}
-          tone={kpis.needsData > 0 ? "warning" : "default"}
-          hint="Products missing cost or price. Complete the data before judging."
-          loading={isLoading}
-        />
-        <KpiTile
-          label="Top-3 concentration"
-          value={kpis.concentration != null ? formatPct(kpis.concentration, 0) : "—"}
-          hint="Share of the profit pool from your 3 biggest contributors. High = fragile."
-          loading={isLoading}
-        />
+      {/* Decision segments — clickable filters with money attached */}
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6" data-testid="segments">
+        {(["star", "gem", "workhorse", "drag", "loss", "dormant"] as DecisionKey[]).map((k) => (
+          <SegmentCard
+            key={k}
+            meta={DECISION[k]}
+            count={segments.get(k)?.count ?? 0}
+            contribution={segments.get(k)?.contribution ?? 0}
+            active={filter === k}
+            onClick={() => setFilter((f) => (f === k ? null : k))}
+            loading={isLoading}
+          />
+        ))}
       </div>
 
       {/* Quadrant + inspector */}
-      <div className="grid gap-4 lg:grid-cols-[2fr_1fr]">
+      <div className="grid gap-4 lg:grid-cols-[1.9fr_1fr]">
         <SectionCard
           title="Decision quadrant"
-          description="Each bubble is a product. Right = sells more. Up = higher margin. Bubble size = contribution. Hover or tap to inspect."
+          description="Right = sells more · Up = higher margin · bubble = contribution. Hover to inspect."
         >
           {isLoading ? (
-            <div className="flex h-[460px] items-center justify-center text-sm text-fg-subtle">
-              Loading…
-            </div>
+            <div className="flex h-[520px] items-center justify-center text-sm text-fg-subtle">Loading…</div>
           ) : (
-            <Quadrant
-              items={items}
-              velMedian={velMedian}
-              activeId={activeId}
-              onHover={setActiveId}
-            />
+            <Quadrant items={items} velMedian={velMedian} activeId={activeId} onHover={setActiveId} windowDays={windowDays} />
           )}
         </SectionCard>
-
         <SectionCard title="Inspector" density="compact">
-          <Inspector item={active} />
+          <Inspector item={active} windowDays={windowDays} annualise={annualise} />
         </SectionCard>
       </div>
 
-      {/* Decision table */}
+      {/* Table */}
       <SectionCard
         title="All products"
-        description="Sorted by contribution. Filter by decision."
-        actions={
-          <FilterChips counts={counts} active={activeFilters} onToggle={toggleFilter} />
-        }
+        description={filter ? `Filtered: ${DECISION[filter].label}. Click the chip again to clear.` : "Sorted by contribution. Click a segment above to filter."}
+        actions={filter ? (
+          <button type="button" onClick={() => setFilter(null)} className="text-xs font-medium text-fg-subtle underline-offset-2 hover:underline">
+            Clear filter
+          </button>
+        ) : null}
       >
         <div className="overflow-x-auto">
           <table className="w-full border-collapse text-sm">
@@ -482,8 +360,8 @@ export default function DecisionBoardPage(): JSX.Element {
                 <SortTh label="Product" k="name" sortKey={sortKey} dir={sortDir} onSort={onSort} />
                 <th className="px-2 py-2 font-semibold">Decision</th>
                 <SortTh label="Margin %" k="marginPct" sortKey={sortKey} dir={sortDir} onSort={onSort} align="right" />
-                <SortTh label={`Contribution ${WINDOW_DAYS}d`} k="contribution90" sortKey={sortKey} dir={sortDir} onSort={onSort} align="right" />
-                <SortTh label={`Units ${WINDOW_DAYS}d`} k="units90" sortKey={sortKey} dir={sortDir} onSort={onSort} align="right" />
+                <SortTh label={`Contribution ${windowDays}d`} k="contribution" sortKey={sortKey} dir={sortDir} onSort={onSort} align="right" />
+                <SortTh label={`Units ${windowDays}d`} k="units" sortKey={sortKey} dir={sortDir} onSort={onSort} align="right" />
                 <th className="px-2 py-2 text-center font-semibold">Trend</th>
                 <SortTh label="Stock @ cost" k="invAtCost" sortKey={sortKey} dir={sortDir} onSort={onSort} align="right" />
               </tr>
@@ -495,31 +373,24 @@ export default function DecisionBoardPage(): JSX.Element {
                   <tr
                     key={i.id}
                     onMouseEnter={() => setActiveId(i.id)}
-                    className={`border-b border-border/30 transition-colors hover:bg-bg-subtle/50 ${
-                      activeId === i.id ? "bg-bg-subtle/60" : ""
-                    }`}
+                    className={`border-b border-border/30 transition-colors hover:bg-bg-subtle/50 ${activeId === i.id ? "bg-bg-subtle/60" : ""}`}
                   >
                     <td className="px-2 py-2 font-medium text-fg-strong">{i.name}</td>
-                    <td className="px-2 py-2">
-                      <Badge tone={d.tone}>{d.label}</Badge>
+                    <td className="px-2 py-2"><Badge tone={d.tone}>{d.label}</Badge></td>
+                    <td className="px-2 py-2 text-right tabular-nums">
+                      {i.marginPct != null ? <span className={i.marginPct < 0 ? "text-danger-fg" : ""}>{formatPct(i.marginPct, 1)}</span> : <span className="text-fg-subtle">—</span>}
                     </td>
                     <td className="px-2 py-2 text-right tabular-nums">
-                      {i.marginPct != null ? (
-                        <span className={i.marginPct < 0 ? "text-danger-fg" : ""}>
-                          {formatPct(i.marginPct, 1)}
-                        </span>
-                      ) : (
-                        <span className="text-fg-subtle">—</span>
-                      )}
+                      {i.contribution != null ? formatIls(i.contribution) : <span className="text-fg-subtle">—</span>}
                     </td>
                     <td className="px-2 py-2 text-right tabular-nums">
-                      {i.contribution90 != null ? formatIls(i.contribution90) : <span className="text-fg-subtle">—</span>}
+                      {i.units > 0 ? formatQtyInt(i.units) : <span className="text-fg-subtle">0</span>}
                     </td>
-                    <td className="px-2 py-2 text-right tabular-nums">
-                      {i.units90 > 0 ? formatQtyInt(i.units90) : <span className="text-fg-subtle">0</span>}
-                    </td>
-                    <td className="px-2 py-2 text-center">
-                      <TrendIcon trend={i.trend} />
+                    <td className="px-1 py-2">
+                      <div className="flex items-center justify-center gap-1">
+                        <Sparkline values={i.series} trend={i.trend} />
+                        <TrendIcon trend={i.trend} />
+                      </div>
                     </td>
                     <td className="px-2 py-2 text-right tabular-nums text-fg-subtle">
                       {i.invAtCost != null ? formatIls(i.invAtCost) : "—"}
@@ -528,11 +399,7 @@ export default function DecisionBoardPage(): JSX.Element {
                 );
               })}
               {tableRows.length === 0 ? (
-                <tr>
-                  <td colSpan={7} className="px-2 py-8 text-center text-sm text-fg-subtle">
-                    No products match the selected filters.
-                  </td>
-                </tr>
+                <tr><td colSpan={7} className="px-2 py-8 text-center text-sm text-fg-subtle">No products match this filter.</td></tr>
               ) : null}
             </tbody>
           </table>
@@ -543,168 +410,231 @@ export default function DecisionBoardPage(): JSX.Element {
 }
 
 // ---------------------------------------------------------------------------
-// Sorting helpers
+// Sorting
 // ---------------------------------------------------------------------------
-
-type SortKey = "name" | "marginPct" | "contribution90" | "units90" | "invAtCost";
-
+type SortKey = "name" | "marginPct" | "contribution" | "units" | "invAtCost";
 function sortValue(i: DecisionItem, k: SortKey): number | string | null {
   switch (k) {
-    case "name":
-      return i.name;
-    case "marginPct":
-      return i.marginPct;
-    case "contribution90":
-      return i.contribution90;
-    case "units90":
-      return i.units90;
-    case "invAtCost":
-      return i.invAtCost;
+    case "name": return i.name;
+    case "marginPct": return i.marginPct;
+    case "contribution": return i.contribution;
+    case "units": return i.units;
+    case "invAtCost": return i.invAtCost;
   }
 }
 
-function median(xs: number[]): number {
-  if (xs.length === 0) return 0;
-  const s = [...xs].sort((a, b) => a - b);
-  const mid = Math.floor(s.length / 2);
-  return s.length % 2 ? s[mid] : (s[mid - 1] + s[mid]) / 2;
+// ---------------------------------------------------------------------------
+// Verdict band
+// ---------------------------------------------------------------------------
+interface Verdict {
+  tone: "danger" | "warning" | "success";
+  headline: string;
+  sub: string;
+  cta: string | null;
+  filter: DecisionKey | null;
+}
+function buildVerdict(
+  k: { lossCount: number; riskAnnual: number; needsData: number; concentration: number | null; profitPoolAnnual: number },
+  total: number,
+): Verdict {
+  if (k.lossCount > 0) {
+    return {
+      tone: "danger",
+      headline: `${k.lossCount} product${k.lossCount > 1 ? "s" : ""} sell below cost`,
+      sub: `Leaking about ${formatIls(k.riskAnnual)}/yr at the current pace. Reprice or drop them first.`,
+      cta: "Show losing products", filter: "loss",
+    };
+  }
+  if (k.needsData > 0) {
+    return {
+      tone: "warning",
+      headline: `${k.needsData} product${k.needsData > 1 ? "s" : ""} can't be judged yet`,
+      sub: "Set a cost and a sale price so they enter the decision quadrant.",
+      cta: "Show what's missing", filter: "needs_data",
+    };
+  }
+  return {
+    tone: "success",
+    headline: `All ${total} products are priced above cost`,
+    sub: k.concentration != null
+      ? `Annual profit pool ≈ ${formatIls(k.profitPoolAnnual)}. Top 3 products drive ${formatPct(k.concentration, 0)} of it — protect them.`
+      : `Annual profit pool ≈ ${formatIls(k.profitPoolAnnual)}.`,
+    cta: null, filter: null,
+  };
 }
 
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
-
-function KpiTile({
-  label,
-  value,
-  hint,
-  tone = "default",
-  loading,
-}: {
-  label: string;
-  value: string;
-  hint: string;
-  tone?: "default" | "danger" | "warning";
-  loading?: boolean;
-}): JSX.Element {
-  const valueColor =
-    tone === "danger" ? "text-danger-fg" : tone === "warning" ? "text-warning-fg" : "text-fg-strong";
+function VerdictBand({ verdict, loading, onAct }: { verdict: Verdict; loading?: boolean; onAct: () => void }): JSX.Element {
+  const toneRing: Record<Verdict["tone"], string> = {
+    danger: "border-danger/40 bg-danger/5",
+    warning: "border-warning/40 bg-warning/5",
+    success: "border-success/40 bg-success/5",
+  };
+  const dot: Record<Verdict["tone"], string> = { danger: "bg-danger", warning: "bg-warning", success: "bg-success" };
+  const Icon = verdict.tone === "danger" ? AlertTriangle : verdict.tone === "warning" ? HelpCircle : ShieldCheck;
   return (
-    <div className="rounded-lg border border-border/60 bg-bg-subtle/40 p-3">
-      <div className="flex items-center gap-1 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-        {label}
-        <span title={hint} className="cursor-help">
-          <Info className="h-3 w-3 opacity-60" />
+    <div data-testid="verdict-band" className={`flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between ${toneRing[verdict.tone]}`}>
+      <div className="flex items-start gap-3">
+        <span className={`mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${dot[verdict.tone]}/15`}>
+          <Icon className={`h-5 w-5 ${verdict.tone === "danger" ? "text-danger-fg" : verdict.tone === "warning" ? "text-warning-fg" : "text-success-fg"}`} />
         </span>
+        <div>
+          <div className="text-base font-semibold text-fg-strong">{loading ? "Reading the numbers…" : verdict.headline}</div>
+          <div className="mt-0.5 text-sm text-fg-subtle">{loading ? " " : verdict.sub}</div>
+        </div>
       </div>
-      <div className={`mt-1 text-2xl font-semibold tabular-nums ${valueColor}`}>
-        {loading ? "…" : value}
-      </div>
+      {!loading && verdict.cta ? (
+        <button
+          type="button"
+          onClick={onAct}
+          className="shrink-0 self-start rounded-lg border border-fg/15 bg-bg px-3 py-2 text-sm font-medium text-fg-strong shadow-sm transition-colors hover:bg-bg-subtle/70 sm:self-auto"
+        >
+          {verdict.cta}
+        </button>
+      ) : null}
     </div>
   );
 }
 
+// ---------------------------------------------------------------------------
+// Window toggle
+// ---------------------------------------------------------------------------
+function WindowToggle({ value, onChange }: { value: number; onChange: (d: number) => void }): JSX.Element {
+  return (
+    <div className="inline-flex items-center rounded-lg border border-border/60 p-0.5">
+      {WINDOWS.map((w) => (
+        <button
+          key={w.days}
+          type="button"
+          onClick={() => onChange(w.days)}
+          className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${value === w.days ? "bg-fg/10 text-fg-strong" : "text-fg-subtle hover:text-fg"}`}
+        >
+          {w.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Segment card
+// ---------------------------------------------------------------------------
+function SegmentCard({
+  meta, count, contribution, active, onClick, loading,
+}: {
+  meta: DecisionMeta; count: number; contribution: number; active: boolean; onClick: () => void; loading?: boolean;
+}): JSX.Element {
+  const Icon = meta.icon;
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      data-testid={`segment-${meta.key}`}
+      className={`group flex flex-col gap-1 rounded-xl border p-3 text-left transition-all ${
+        active ? "border-fg/40 bg-bg-subtle/70 shadow-sm" : "border-border/60 hover:border-fg/25 hover:bg-bg-subtle/40"
+      }`}
+    >
+      <div className="flex items-center gap-1.5">
+        <span className="inline-flex h-5 w-5 items-center justify-center rounded-md" style={{ backgroundColor: `${meta.fill}1a` }}>
+          <Icon className="h-3.5 w-3.5" style={{ color: meta.fill }} />
+        </span>
+        <span className="text-2xs font-semibold uppercase tracking-sops text-fg-subtle">{meta.label}</span>
+      </div>
+      <div className="text-2xl font-semibold tabular-nums text-fg-strong">{loading ? "·" : count}</div>
+      <div className="text-2xs text-fg-subtle">
+        {meta.key === "loss" || meta.key === "drag"
+          ? contribution < 0 ? `${formatIls(contribution)} drain` : meta.action
+          : count > 0 && contribution > 0 ? formatIls(contribution) : meta.action}
+      </div>
+    </button>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Sparkline (zero-dependency)
+// ---------------------------------------------------------------------------
+function Sparkline({ values, trend }: { values: number[]; trend: Trend }): JSX.Element {
+  const w = 52, h = 18, pad = 2;
+  if (values.length < 2) return <span className="inline-block" style={{ width: w }} />;
+  const max = Math.max(...values), min = Math.min(...values);
+  const span = max - min || 1;
+  const stroke = trend === "up" ? "#16a34a" : trend === "down" ? "#dc2626" : "#94a3b8";
+  const pts = values.map((v, i) => {
+    const x = pad + (i / (values.length - 1)) * (w - pad * 2);
+    const y = pad + (1 - (v - min) / span) * (h - pad * 2);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  }).join(" ");
+  const lastX = pad + (w - pad * 2), lastY = pad + (1 - (values[values.length - 1] - min) / span) * (h - pad * 2);
+  return (
+    <svg width={w} height={h} className="shrink-0" aria-hidden>
+      <polyline points={pts} fill="none" stroke={stroke} strokeWidth={1.5} strokeLinejoin="round" strokeLinecap="round" />
+      <circle cx={lastX} cy={lastY} r={1.8} fill={stroke} />
+    </svg>
+  );
+}
+
 function TrendIcon({ trend }: { trend: Trend }): JSX.Element {
-  if (trend === "up") return <ArrowUpRight className="mx-auto h-4 w-4 text-success-fg" aria-label="rising" />;
-  if (trend === "down") return <ArrowDownRight className="mx-auto h-4 w-4 text-danger-fg" aria-label="falling" />;
-  if (trend === "flat") return <Minus className="mx-auto h-4 w-4 text-fg-subtle" aria-label="flat" />;
+  if (trend === "up") return <ArrowUpRight className="h-4 w-4 text-success-fg" aria-label="rising" />;
+  if (trend === "down") return <ArrowDownRight className="h-4 w-4 text-danger-fg" aria-label="falling" />;
+  if (trend === "flat") return <Minus className="h-4 w-4 text-fg-subtle" aria-label="flat" />;
   return <span className="text-fg-subtle">—</span>;
 }
 
 function SortTh({
-  label,
-  k,
-  sortKey,
-  dir,
-  onSort,
-  align = "left",
+  label, k, sortKey, dir, onSort, align = "left",
 }: {
-  label: string;
-  k: SortKey;
-  sortKey: SortKey;
-  dir: "asc" | "desc";
-  onSort: (k: SortKey) => void;
-  align?: "left" | "right";
+  label: string; k: SortKey; sortKey: SortKey; dir: "asc" | "desc"; onSort: (k: SortKey) => void; align?: "left" | "right";
 }): JSX.Element {
   const activeCol = sortKey === k;
   return (
     <th className={`px-2 py-2 font-semibold ${align === "right" ? "text-right" : "text-left"}`}>
-      <button
-        type="button"
-        onClick={() => onSort(k)}
-        className={`inline-flex items-center gap-1 hover:text-fg ${align === "right" ? "flex-row-reverse" : ""}`}
-      >
+      <button type="button" onClick={() => onSort(k)} className={`inline-flex items-center gap-1 hover:text-fg ${align === "right" ? "flex-row-reverse" : ""}`}>
         {label}
-        {activeCol ? (
-          dir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />
-        ) : (
-          <ChevronsUpDown className="h-3 w-3 opacity-40" />
-        )}
+        {activeCol ? (dir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />) : <ChevronsUpDown className="h-3 w-3 opacity-40" />}
       </button>
     </th>
   );
 }
 
-function FilterChips({
-  counts,
-  active,
-  onToggle,
-}: {
-  counts: Record<DecisionKey, number>;
-  active: Set<DecisionKey>;
-  onToggle: (k: DecisionKey) => void;
-}): JSX.Element {
-  const order: DecisionKey[] = ["star", "gem", "workhorse", "drag", "loss", "dormant", "needs_data"];
-  return (
-    <div className="flex flex-wrap gap-1.5">
-      {order.map((k) => {
-        const d = DECISION[k];
-        const on = active.has(k);
-        return (
-          <button
-            key={k}
-            type="button"
-            onClick={() => onToggle(k)}
-            className={`rounded-full border px-2 py-0.5 text-2xs font-medium transition-colors ${
-              on
-                ? "border-fg/40 bg-fg/10 text-fg-strong"
-                : "border-border/60 text-fg-subtle hover:bg-bg-subtle/60"
-            }`}
-          >
-            {d.label} <span className="tabular-nums opacity-70">{counts[k]}</span>
-          </button>
-        );
-      })}
-    </div>
-  );
-}
-
-function Inspector({ item }: { item: DecisionItem | null }): JSX.Element {
+// ---------------------------------------------------------------------------
+// Inspector
+// ---------------------------------------------------------------------------
+function Inspector({ item, windowDays, annualise }: { item: DecisionItem | null; windowDays: number; annualise: number }): JSX.Element {
   if (!item) {
     return (
-      <p className="py-6 text-center text-sm text-fg-subtle">
-        Hover a bubble or a row to inspect a product.
-      </p>
+      <div className="flex h-full flex-col items-center justify-center gap-2 py-8 text-center">
+        <Scale className="h-7 w-7 text-fg-subtle/50" />
+        <p className="text-sm text-fg-subtle">Hover a bubble or row to inspect a product.</p>
+      </div>
     );
   }
   const d = DECISION[item.decision];
+  const Icon = d.icon;
+  const annualContribution = item.contribution != null ? item.contribution * annualise : null;
   return (
     <div className="space-y-3">
       <div>
         <div className="text-base font-semibold text-fg-strong">{item.name}</div>
-        <div className="mt-1 flex items-center gap-2">
-          <Badge tone={d.tone}>{d.label}</Badge>
+        <div className="mt-1.5 flex items-center gap-2">
+          <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold" style={{ backgroundColor: `${d.fill}1a`, color: d.fill }}>
+            <Icon className="h-3.5 w-3.5" /> {d.label}
+          </span>
           <span className="text-xs font-medium text-fg">→ {d.action}</span>
         </div>
       </div>
       <p className="text-xs text-fg-subtle">{d.blurb}</p>
+      {item.series.length >= 2 ? (
+        <div className="flex items-center justify-between rounded-lg border border-border/50 bg-bg-subtle/40 px-3 py-2">
+          <span className="text-2xs uppercase tracking-sops text-fg-subtle">Monthly units</span>
+          <Sparkline values={item.series} trend={item.trend} />
+        </div>
+      ) : null}
       <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
         <Stat label="Margin" value={item.marginPct != null ? formatPct(item.marginPct, 1) : "—"} danger={item.marginPct != null && item.marginPct < 0} />
         <Stat label="Margin / unit" value={item.marginIls != null ? formatIls(item.marginIls) : "—"} />
-        <Stat label={`Units ${WINDOW_DAYS}d`} value={item.units90 > 0 ? formatQtyInt(item.units90) : "0"} />
-        <Stat label={`Orders ${WINDOW_DAYS}d`} value={String(item.orders90)} />
-        <Stat label={`Contribution ${WINDOW_DAYS}d`} value={item.contribution90 != null ? formatIls(item.contribution90) : "—"} strong />
-        <Stat label={`Revenue ${WINDOW_DAYS}d`} value={item.revenue90 != null ? formatIls(item.revenue90) : "—"} />
+        <Stat label={`Units ${windowDays}d`} value={item.units > 0 ? formatQtyInt(item.units) : "0"} />
+        <Stat label={`Orders ${windowDays}d`} value={String(item.orders)} />
+        <Stat label={`Contribution ${windowDays}d`} value={item.contribution != null ? formatIls(item.contribution) : "—"} strong />
+        <Stat label="Annualised" value={annualContribution != null ? formatIls(annualContribution) : "—"} strong danger={annualContribution != null && annualContribution < 0} />
         <Stat label="Sale price" value={item.price != null ? formatIls(item.price) : "—"} />
         <Stat label="Unit cost" value={item.cogs != null ? formatIls(item.cogs) : "—"} />
         <Stat label="On hand" value={formatQtyInt(item.qtyOnHand)} />
@@ -713,45 +643,44 @@ function Inspector({ item }: { item: DecisionItem | null }): JSX.Element {
     </div>
   );
 }
-
 function Stat({ label, value, strong, danger }: { label: string; value: string; strong?: boolean; danger?: boolean }): JSX.Element {
   return (
     <div>
       <dt className="text-3xs uppercase tracking-sops text-fg-subtle">{label}</dt>
-      <dd className={`tabular-nums ${danger ? "text-danger-fg" : strong ? "font-semibold text-fg-strong" : "text-fg"}`}>
-        {value}
-      </dd>
+      <dd className={`tabular-nums ${danger ? "text-danger-fg" : strong ? "font-semibold text-fg-strong" : "text-fg"}`}>{value}</dd>
     </div>
   );
 }
 
-function RulesPopover({ velMedian }: { velMedian: number }): JSX.Element {
+// ---------------------------------------------------------------------------
+// Rules popover
+// ---------------------------------------------------------------------------
+function RulesPopover({ velMedian, windowDays }: { velMedian: number; windowDays: number }): JSX.Element {
   const [open, setOpen] = useState(false);
   return (
     <div className="relative">
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="inline-flex items-center gap-1.5 rounded-md border border-border/60 px-2.5 py-1.5 text-xs font-medium text-fg-subtle hover:bg-bg-subtle/60"
+        className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 px-2.5 py-1.5 text-xs font-medium text-fg-subtle hover:bg-bg-subtle/60"
       >
-        <Scale className="h-3.5 w-3.5" /> How decisions are made
+        <Info className="h-3.5 w-3.5" /> How it decides
       </button>
       {open ? (
-        <div className="absolute right-0 z-10 mt-2 w-80 rounded-lg border border-border/60 bg-bg p-3 text-xs shadow-lg">
+        <div className="absolute right-0 z-20 mt-2 w-80 rounded-xl border border-border/60 bg-bg p-3 text-xs shadow-lg">
           <p className="mb-2 font-semibold text-fg-strong">Transparent rules</p>
           <ul className="space-y-1.5 text-fg-subtle">
-            <li>• <b className="text-fg">Healthy</b> margin = ≥ {MARGIN_HEALTHY_PCT}% · <b className="text-fg">thin</b> &lt; {MARGIN_THIN_PCT}%.</li>
-            <li>• <b className="text-fg">High velocity</b> = units sold ≥ this factory&apos;s median of selling products ({formatQtyInt(velMedian)}).</li>
-            <li>• <b className="text-success-fg">Star</b>: healthy margin + high velocity → protect.</li>
-            <li>• <b className="text-info-fg">Hidden gem</b>: healthy margin + low velocity → promote.</li>
-            <li>• <b className="text-warning-fg">Workhorse</b>: thin margin + high velocity → reprice.</li>
-            <li>• <b className="text-warning-fg">Drag</b>: thin margin + low velocity → review for drop.</li>
+            <li>• <b className="text-fg">Healthy</b> margin ≥ {MARGIN_HEALTHY_PCT}% · <b className="text-fg">thin</b> &lt; {MARGIN_THIN_PCT}%.</li>
+            <li>• <b className="text-fg">High velocity</b> = units sold ≥ this factory&apos;s median of selling products ({formatQtyInt(velMedian)} in {windowDays}d).</li>
+            <li>• <b className="text-success-fg">Star</b>: healthy + high velocity → protect.</li>
+            <li>• <b className="text-info-fg">Hidden gem</b>: healthy + low velocity → promote.</li>
+            <li>• <b className="text-warning-fg">Workhorse</b>: thin + high velocity → reprice.</li>
+            <li>• <b className="text-warning-fg">Drag</b>: thin + low velocity → review for drop.</li>
             <li>• <b className="text-danger-fg">Losing money</b>: sells below cost → act now.</li>
             <li>• <b>Needs data</b>: cost or price missing → excluded from the quadrant.</li>
           </ul>
           <p className="mt-2 border-t border-border/40 pt-2 text-3xs text-fg-subtle">
-            Velocity from delivered orders (LionWheel). Revenue uses the manual average sale price
-            until automated price snapshots land.
+            Velocity from delivered orders (LionWheel). Revenue uses the manual average sale price until automated price snapshots land.
           </p>
         </div>
       ) : null}
@@ -760,109 +689,131 @@ function RulesPopover({ velMedian }: { velMedian: number }): JSX.Element {
 }
 
 // ---------------------------------------------------------------------------
-// Quadrant — zero-dependency interactive SVG scatter
+// Quadrant — zero-dependency interactive SVG scatter (upgraded)
 // ---------------------------------------------------------------------------
-
 function Quadrant({
-  items,
-  velMedian,
-  activeId,
-  onHover,
+  items, velMedian, activeId, onHover, windowDays,
 }: {
-  items: DecisionItem[];
-  velMedian: number;
-  activeId: string | null;
-  onHover: (id: string | null) => void;
+  items: DecisionItem[]; velMedian: number; activeId: string | null; onHover: (id: string | null) => void; windowDays: number;
 }): JSX.Element {
-  // Only plot products we can place: a margin% and at least the velocity axis.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => { const t = setTimeout(() => setMounted(true), 30); return () => clearTimeout(t); }, []);
+
   const plotted = items.filter((i) => i.decision !== "needs_data" && i.marginPct != null);
 
-  const W = 800;
-  const H = 460;
-  const padL = 56;
-  const padR = 24;
-  const padT = 24;
-  const padB = 48;
-  const plotW = W - padL - padR;
-  const plotH = H - padT - padB;
+  const W = 880, H = 520, padL = 60, padR = 24, padT = 28, padB = 52;
+  const plotW = W - padL - padR, plotH = H - padT - padB;
 
-  const maxUnits = Math.max(velMedian * 2, ...plotted.map((i) => i.units90), 10);
+  const peakUnits = Math.max(0, ...plotted.map((i) => i.units));
+  // Headroom so the largest bubble (and its label) sits inside the frame.
+  const maxUnits = Math.max(velMedian * 2, peakUnits * 1.12, 10);
   const margins = plotted.map((i) => i.marginPct ?? 0);
-  const maxMargin = Math.max(40, ...margins);
-  const minMargin = Math.min(0, ...margins);
+  const maxMargin = Math.max(40, Math.ceil((Math.max(0, ...margins) + 5) / 10) * 10);
+  const minMargin = Math.min(0, Math.floor((Math.min(0, ...margins) - 5) / 10) * 10);
 
   const xOf = (u: number) => padL + (u / maxUnits) * plotW;
   const yOf = (m: number) => padT + (1 - (m - minMargin) / (maxMargin - minMargin || 1)) * plotH;
+  const maxContrib = Math.max(1, ...plotted.map((i) => Math.abs(i.contribution ?? 0)));
+  const rOf = (c: number | null) => 6 + Math.sqrt(Math.abs(c ?? 0) / maxContrib) * 24;
 
-  const maxContrib = Math.max(1, ...plotted.map((i) => Math.abs(i.contribution90 ?? 0)));
-  const rOf = (c: number | null) => {
-    const v = Math.abs(c ?? 0);
-    return 5 + Math.sqrt(v / maxContrib) * 22;
-  };
+  const xSplit = xOf(velMedian), ySplit = yOf(MARGIN_HEALTHY_PCT), yZero = yOf(0);
 
-  const xSplit = xOf(velMedian);
-  const ySplit = yOf(MARGIN_HEALTHY_PCT);
-  const yZero = yOf(0);
+  // y gridline ticks every 10/20% depending on range
+  const step = maxMargin - minMargin > 80 ? 20 : 10;
+  const yTicks: number[] = [];
+  for (let m = minMargin; m <= maxMargin + 0.001; m += step) yTicks.push(m);
+  const xTicks = [0, 0.25, 0.5, 0.75, 1].map((f) => f * maxUnits);
+
+  // top contributors get a name label
+  const labelled = new Set([...plotted].sort((a, b) => Math.abs(b.contribution ?? 0) - Math.abs(a.contribution ?? 0)).slice(0, 5).map((i) => i.id));
+  const active = plotted.find((i) => i.id === activeId) ?? null;
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Margin versus velocity decision quadrant">
-      {/* quadrant background tints */}
-      <rect x={xSplit} y={padT} width={padL + plotW - xSplit} height={ySplit - padT} fill="#16a34a" opacity={0.04} />
-      <rect x={padL} y={padT} width={xSplit - padL} height={ySplit - padT} fill="#2563eb" opacity={0.04} />
-      <rect x={xSplit} y={ySplit} width={padL + plotW - xSplit} height={padT + plotH - ySplit} fill="#d97706" opacity={0.05} />
-      <rect x={padL} y={ySplit} width={xSplit - padL} height={padT + plotH - ySplit} fill="#b45309" opacity={0.05} />
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Margin versus velocity decision quadrant" data-testid="quadrant">
+      <defs>
+        <clipPath id="db-plot"><rect x={padL} y={padT} width={plotW} height={plotH} /></clipPath>
+      </defs>
 
-      {/* axes frame */}
+      {/* quadrant tints */}
+      <g clipPath="url(#db-plot)">
+        <rect x={xSplit} y={padT} width={padL + plotW - xSplit} height={ySplit - padT} fill="#16a34a" opacity={0.05} />
+        <rect x={padL} y={padT} width={xSplit - padL} height={ySplit - padT} fill="#2563eb" opacity={0.05} />
+        <rect x={xSplit} y={ySplit} width={padL + plotW - xSplit} height={padT + plotH - ySplit} fill="#d97706" opacity={0.06} />
+        <rect x={padL} y={ySplit} width={xSplit - padL} height={padT + plotH - ySplit} fill="#b45309" opacity={0.06} />
+        {minMargin < 0 ? <rect x={padL} y={yZero} width={plotW} height={padT + plotH - yZero} fill="#dc2626" opacity={0.06} /> : null}
+      </g>
+
+      {/* y gridlines + labels */}
+      {yTicks.map((m) => (
+        <g key={`y${m}`}>
+          <line x1={padL} y1={yOf(m)} x2={padL + plotW} y2={yOf(m)} stroke="currentColor" strokeOpacity={m === 0 ? 0.18 : 0.07} />
+          <text x={padL - 8} y={yOf(m) + 3} textAnchor="end" className="fill-current" fontSize="10" opacity={0.5}>{m}%</text>
+        </g>
+      ))}
+      {/* x ticks + labels */}
+      {xTicks.map((u, idx) => (
+        <text key={`x${idx}`} x={xOf(u)} y={padT + plotH + 16} textAnchor="middle" className="fill-current" fontSize="10" opacity={0.5}>{formatQtyInt(u)}</text>
+      ))}
+
+      {/* frame */}
       <line x1={padL} y1={padT} x2={padL} y2={padT + plotH} stroke="currentColor" strokeOpacity={0.2} />
       <line x1={padL} y1={padT + plotH} x2={padL + plotW} y2={padT + plotH} stroke="currentColor" strokeOpacity={0.2} />
 
       {/* split lines */}
-      <line x1={xSplit} y1={padT} x2={xSplit} y2={padT + plotH} stroke="currentColor" strokeOpacity={0.25} strokeDasharray="4 4" />
-      <line x1={padL} y1={ySplit} x2={padL + plotW} y2={ySplit} stroke="currentColor" strokeOpacity={0.25} strokeDasharray="4 4" />
-      {/* zero-margin reference (only if visible) */}
-      {minMargin < 0 ? (
-        <line x1={padL} y1={yZero} x2={padL + plotW} y2={yZero} stroke="#dc2626" strokeOpacity={0.4} />
-      ) : null}
+      <line x1={xSplit} y1={padT} x2={xSplit} y2={padT + plotH} stroke="currentColor" strokeOpacity={0.28} strokeDasharray="4 4" />
+      <line x1={padL} y1={ySplit} x2={padL + plotW} y2={ySplit} stroke="currentColor" strokeOpacity={0.28} strokeDasharray="4 4" />
+      <text x={xSplit + 4} y={padT + plotH - 4} className="fill-current" fontSize="9" opacity={0.45}>median {formatQtyInt(velMedian)}</text>
+      <text x={padL + 4} y={ySplit - 4} className="fill-current" fontSize="9" opacity={0.45}>{MARGIN_HEALTHY_PCT}% margin</text>
 
       {/* quadrant captions */}
-      <text x={padL + plotW - 4} y={padT + 14} textAnchor="end" className="fill-current" fontSize="11" opacity={0.45}>★ Stars · protect</text>
-      <text x={padL + 4} y={padT + 14} textAnchor="start" className="fill-current" fontSize="11" opacity={0.45}>◆ Gems · promote</text>
-      <text x={padL + plotW - 4} y={padT + plotH - 6} textAnchor="end" className="fill-current" fontSize="11" opacity={0.45}>⚙ Workhorses · reprice</text>
-      <text x={padL + 4} y={padT + plotH - 6} textAnchor="start" className="fill-current" fontSize="11" opacity={0.45}>▽ Drag · review</text>
+      <text x={padL + plotW - 6} y={padT + 15} textAnchor="end" className="fill-current" fontSize="11" fontWeight={600} opacity={0.5}>★ Stars · protect</text>
+      <text x={padL + 6} y={padT + 15} textAnchor="start" className="fill-current" fontSize="11" fontWeight={600} opacity={0.5}>◆ Gems · promote</text>
+      <text x={padL + plotW - 6} y={padT + plotH - 8} textAnchor="end" className="fill-current" fontSize="11" fontWeight={600} opacity={0.5}>⚙ Workhorses · reprice</text>
+      <text x={padL + 6} y={padT + plotH - 8} textAnchor="start" className="fill-current" fontSize="11" fontWeight={600} opacity={0.5}>▽ Drag · review</text>
 
-      {/* axis labels */}
-      <text x={padL + plotW / 2} y={H - 10} textAnchor="middle" className="fill-current" fontSize="11" opacity={0.6}>
-        Units sold (last {WINDOW_DAYS}d) →
-      </text>
-      <text x={16} y={padT + plotH / 2} textAnchor="middle" className="fill-current" fontSize="11" opacity={0.6} transform={`rotate(-90 16 ${padT + plotH / 2})`}>
-        Margin % →
-      </text>
+      {/* axis titles */}
+      <text x={padL + plotW / 2} y={H - 8} textAnchor="middle" className="fill-current" fontSize="11" opacity={0.6}>Units sold (last {windowDays}d) →</text>
+      <text x={16} y={padT + plotH / 2} textAnchor="middle" className="fill-current" fontSize="11" opacity={0.6} transform={`rotate(-90 16 ${padT + plotH / 2})`}>Margin % →</text>
+
+      {/* hover crosshair */}
+      {active ? (
+        <g>
+          <line x1={xOf(active.units)} y1={padT} x2={xOf(active.units)} y2={padT + plotH} stroke={DECISION[active.decision].fill} strokeOpacity={0.35} strokeDasharray="3 3" />
+          <line x1={padL} y1={yOf(active.marginPct ?? 0)} x2={padL + plotW} y2={yOf(active.marginPct ?? 0)} stroke={DECISION[active.decision].fill} strokeOpacity={0.35} strokeDasharray="3 3" />
+        </g>
+      ) : null}
 
       {/* bubbles */}
-      {plotted.map((i) => {
-        const cx = xOf(i.units90);
-        const cy = yOf(i.marginPct ?? 0);
-        const r = rOf(i.contribution90);
+      {plotted.map((i, idx) => {
+        const cx = xOf(i.units), cy = yOf(i.marginPct ?? 0), r = rOf(i.contribution);
         const isActive = activeId === i.id;
         const d = DECISION[i.decision];
         return (
-          <circle
-            key={i.id}
-            cx={cx}
-            cy={cy}
-            r={r}
-            fill={d.fill}
-            fillOpacity={isActive ? 0.85 : 0.5}
-            stroke={d.fill}
-            strokeWidth={isActive ? 2.5 : 1}
-            className="cursor-pointer transition-opacity"
-            onMouseEnter={() => onHover(i.id)}
-            onMouseLeave={() => onHover(null)}
-          >
-            <title>
-              {i.name} · margin {i.marginPct != null ? `${i.marginPct.toFixed(1)}%` : "—"} · {formatQtyInt(i.units90)} units · contribution {i.contribution90 != null ? formatIls(i.contribution90) : "—"}
-            </title>
-          </circle>
+          <g key={i.id}>
+            <circle
+              cx={cx} cy={cy} r={mounted ? r : 0}
+              fill={d.fill} fillOpacity={isActive ? 0.9 : 0.5}
+              stroke={d.fill} strokeWidth={isActive ? 2.5 : 1}
+              className="cursor-pointer"
+              style={{ transition: `r 600ms cubic-bezier(.22,1,.36,1) ${idx * 25}ms, fill-opacity 150ms, stroke-width 150ms` }}
+              onMouseEnter={() => onHover(i.id)}
+              onMouseLeave={() => onHover(null)}
+            >
+              <title>{i.name} · margin {i.marginPct != null ? `${i.marginPct.toFixed(1)}%` : "—"} · {formatQtyInt(i.units)} units · contribution {i.contribution != null ? formatIls(i.contribution) : "—"}</title>
+            </circle>
+            {(labelled.has(i.id) || isActive) && mounted ? (
+              (() => {
+                const nearRight = cx > padL + plotW - 80;
+                const nearLeft = cx < padL + 80;
+                const anchor = nearRight ? "end" : nearLeft ? "start" : "middle";
+                return (
+                  <text x={cx} y={cy - r - 4} textAnchor={anchor} className="pointer-events-none fill-current" fontSize="10" fontWeight={isActive ? 700 : 500} opacity={isActive ? 0.95 : 0.65}>
+                    {i.name.replace(/\s\d+ml$/, "")}
+                  </text>
+                );
+              })()
+            ) : null}
+          </g>
         );
       })}
     </svg>
