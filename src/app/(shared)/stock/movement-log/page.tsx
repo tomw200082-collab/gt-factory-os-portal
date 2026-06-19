@@ -343,6 +343,21 @@ function MovementPill({ raw }: { raw: string }) {
   );
 }
 
+// "Undone" marker for a COUNT_ADJUST row whose count has been reversed, so
+// the list view distinguishes undone counts without opening the drawer.
+function UndoneBadge({ row }: { row: LedgerRow }) {
+  if (row.movement_type !== "COUNT_ADJUST" || !row.pc_reversed) return null;
+  return (
+    <span
+      className="inline-flex items-center gap-1 rounded-full border border-border bg-bg-subtle px-1.5 py-0.5 text-3xs font-medium text-fg-muted"
+      title="This count was undone — the stock level was restored to its previous value."
+    >
+      <span aria-hidden>↶</span>
+      Undone
+    </span>
+  );
+}
+
 // === Iteration 3 + 5 — Quantity cell ======================================
 function QtyDeltaCell({
   value,
@@ -385,6 +400,10 @@ function DetailsDrawer({
   const [undoReason, setUndoReason] = useState("");
   const [undoBusy, setUndoBusy] = useState(false);
   const [undoErr, setUndoErr] = useState<string | null>(null);
+  // Explicit success state — the undo confirmation stays in the drawer so the
+  // operator gets unambiguous feedback (no silent close), with a path to verify
+  // the restored balance. Closing it triggers the parent refetch.
+  const [undoDone, setUndoDone] = useState(false);
 
   // Reset the undo sub-form whenever the drawer target changes.
   useEffect(() => {
@@ -392,6 +411,7 @@ function DetailsDrawer({
     setUndoReason("");
     setUndoBusy(false);
     setUndoErr(null);
+    setUndoDone(false);
   }, [row?.movement_id]);
 
   useEffect(() => {
@@ -419,7 +439,7 @@ function DetailsDrawer({
         },
       );
       if (res.ok) {
-        onReversed();
+        setUndoDone(true);
         return;
       }
       const body = await res.json().catch(() => null);
@@ -613,14 +633,47 @@ function DetailsDrawer({
 
           {/* Count undo (0240 / Phase B) — restores the stock value this
               count set, identical to the API the count form rides on. */}
-          {row.movement_type === "COUNT_ADJUST" && row.pc_reversed ? (
+          {undoDone ? (
+            <section
+              className="rounded-md border border-success/40 bg-success-softer/50 px-3 py-3 text-xs"
+              role="status"
+              data-testid="movement-log-undo-done"
+            >
+              <div className="flex items-center gap-1.5 font-semibold text-success-fg">
+                <span aria-hidden>✓</span>
+                Count undone — stock restored to its previous level.
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-3">
+                <Link
+                  href={`/inventory?item_id=${encodeURIComponent(row.item_id)}`}
+                  className="font-medium text-accent underline hover:text-accent-hover hover:no-underline"
+                >
+                  Check current balance
+                </Link>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  onClick={onReversed}
+                  data-testid="movement-log-undo-done-close"
+                >
+                  Close
+                </button>
+              </div>
+            </section>
+          ) : row.movement_type === "COUNT_ADJUST" && row.pc_reversed ? (
             <section
               className="rounded-md border border-border/70 bg-bg-subtle/40 px-3 py-2.5 text-xs text-fg-muted"
               data-testid="movement-log-count-reversed"
             >
               <span className="font-medium text-fg">This count was undone.</span>{" "}
               The stock level was restored to its previous value — see the
-              matching “Count Undo” entry in the log.
+              matching “Count Undo” entry in the log.{" "}
+              <Link
+                href={`/inventory?item_id=${encodeURIComponent(row.item_id)}`}
+                className="font-medium text-accent underline hover:text-accent-hover hover:no-underline"
+              >
+                Check current balance
+              </Link>
             </section>
           ) : canUndo ? (
             <section data-testid="movement-log-count-undo">
@@ -636,7 +689,7 @@ function DetailsDrawer({
                   </p>
                   <button
                     type="button"
-                    className="btn btn-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                    className="btn btn-sm border-warning/50 text-warning-fg hover:bg-warning-softer focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
                     onClick={() => setUndoOpen(true)}
                     data-testid="movement-log-undo-open"
                   >
@@ -660,6 +713,12 @@ function DetailsDrawer({
                       data-testid="movement-log-undo-reason"
                     />
                   </label>
+                  {session.role === "operator" ? (
+                    <p className="text-2xs text-fg-muted">
+                      Operators can undo only their own count within 30 minutes
+                      of posting. If that window has passed, ask a planner.
+                    </p>
+                  ) : null}
                   {undoErr ? (
                     <p className="text-2xs text-danger-fg" role="alert" data-testid="movement-log-undo-error">
                       {undoErr}
@@ -808,7 +867,10 @@ function MovementCardMobile({
       aria-label={`Open details for ${meta.label} on ${row.item_name ?? row.item_id}`}
     >
       <div className="flex items-center justify-between gap-2">
-        <MovementPill raw={row.movement_type} />
+        <span className="flex flex-wrap items-center gap-1.5">
+          <MovementPill raw={row.movement_type} />
+          <UndoneBadge row={row} />
+        </span>
         <span className="font-mono text-2xs tabular-nums text-fg-subtle">
           {formatTimeOnly(row.event_at)}
         </span>
@@ -1575,7 +1637,10 @@ export default function MovementLogPage() {
                               {formatTimeOnly(row.event_at)}
                             </td>
                             <td className="pr-4">
-                              <MovementPill raw={row.movement_type} />
+                              <span className="inline-flex flex-wrap items-center gap-1.5">
+                                <MovementPill raw={row.movement_type} />
+                                <UndoneBadge row={row} />
+                              </span>
                             </td>
                             <td className="pr-4">
                               <ItemDisplay row={row} />

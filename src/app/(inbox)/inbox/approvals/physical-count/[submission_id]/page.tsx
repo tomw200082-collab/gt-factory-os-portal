@@ -239,6 +239,15 @@ export default function PhysicalCountReviewPage() {
                 View in inventory
               </Link>
             ) : null}
+            {d?.item_id ? (
+              <Link
+                href={`/stock/movement-log?item_id=${encodeURIComponent(d.item_id)}`}
+                className="btn btn-sm"
+                data-testid="pc-review-approved-view-log"
+              >
+                View in movement log
+              </Link>
+            ) : null}
           </>
         }
       />
