@@ -100,7 +100,9 @@ export interface CreateProductionPlanResponse {
 }
 
 export type PatchProductionPlanRequest =
-  | { action: "cancel"; cancel_reason: string }
+  // cancel_reason is OPTIONAL since 2026-06-15 (Tom-directed): a blank cancel
+  // sends null and the backend stores null.
+  | { action: "cancel"; cancel_reason?: string | null }
   | {
       action?: undefined;
       plan_date?: string;
@@ -109,6 +111,13 @@ export type PatchProductionPlanRequest =
       notes?: string;
       bom_version_id_pinned?: string;
     };
+
+// DELETE /api/v1/mutations/production-plan/:id — hard-delete response.
+// Mirror of api/src/production-plan/schemas.ts DeleteProductionPlanResponse.
+export interface DeleteProductionPlanResponse {
+  deleted: true;
+  plan_id: string;
+}
 
 // GET /api/v1/queries/production-plan/recommendation-candidates
 // W1 contract: docs/recommendation_candidates_endpoint_checkpoint.md §6.2.

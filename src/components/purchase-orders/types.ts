@@ -331,8 +331,8 @@ export function countPriceVarianceWarnings(
 }
 
 // --- Shared client-side validation -----------------------------------------
-// Mirrors the original /new validate() exactly; the only mode-dependent rule
-// is manual_reason, which is skipped entirely in "recommendation" mode.
+// Mirrors the original /new validate(). manual_reason is OPTIONAL since
+// 2026-06-15 (Tom-directed) and is no longer validated in either mode.
 
 export function validatePoDraft(
   draft: PoDraft,
@@ -352,12 +352,11 @@ export function validatePoDraft(
   if (!draft.supplierId.trim()) errs.supplier_id = "Required.";
   if (!draft.expectedDate.trim()) errs.expected_receive_date = "Required.";
 
+  // manual_reason is OPTIONAL since 2026-06-15 (Tom-directed): no client-side
+  // validation in either mode. A provided reason is sent and recorded; a blank
+  // one is sent as null. `mode` retained for future mode-specific rules.
   if (mode === "manual") {
-    if (!draft.manualReason.trim()) {
-      errs.manual_reason = "Required.";
-    } else if (draft.manualReason.trim().length < 5) {
-      errs.manual_reason = "Reason must be at least 5 characters.";
-    }
+    // (manual_reason intentionally not validated — optional)
   }
 
   if (draft.lines.length === 0) {

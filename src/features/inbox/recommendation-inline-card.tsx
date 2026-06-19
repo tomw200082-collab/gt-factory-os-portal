@@ -26,6 +26,7 @@
 // ---------------------------------------------------------------------------
 
 import { useState } from "react";
+import { useQueryClient } from "@tanstack/react-query";
 import { CheckCircle2, XCircle, Factory, ShoppingCart } from "lucide-react";
 import type { InboxRow } from "@/features/inbox/types";
 
@@ -91,6 +92,19 @@ export function RecommendationInlineCard({ row }: { row: InboxRow }) {
   const [busy, setBusy] = useState<RecAction | null>(null);
   const [confirmDismiss, setConfirmDismiss] = useState(false);
   const [outcome, setOutcome] = useState<Outcome | null>(null);
+  const qc = useQueryClient();
+
+  // FLOW-A / FLOW-E: approving or dismissing here flips recommendation_status
+  // server-side. Without invalidation the downstream surfaces stay stale — the
+  // Procurement convert-queue keeps showing a not-yet-approved rec (or hides a
+  // just-approved one), the rec-detail drill-down shows the old status, and the
+  // run / planning-overview counts lag. Refresh them all on a real outcome.
+  function invalidateAfterRecAction() {
+    void qc.invalidateQueries({ queryKey: ["procurement", "approved-purchase-recs"] });
+    void qc.invalidateQueries({ queryKey: ["rec-detail", recId] });
+    void qc.invalidateQueries({ queryKey: ["planning"] });
+    void qc.invalidateQueries({ queryKey: ["inbox"] });
+  }
 
   const qty = readRecommendedQty(row.raw);
 
@@ -157,6 +171,7 @@ export function RecommendationInlineCard({ row }: { row: InboxRow }) {
               setBusy("approve");
               const result = await postRecAction(recId, "approve");
               setOutcome(result);
+              if (result.kind === "approved") invalidateAfterRecAction();
               setBusy(null);
             }}
           >
@@ -185,6 +200,7 @@ export function RecommendationInlineCard({ row }: { row: InboxRow }) {
               setBusy("dismiss");
               const result = await postRecAction(recId, "dismiss");
               setOutcome(result);
+              if (result.kind === "dismissed") invalidateAfterRecAction();
               setBusy(null);
             }}
           >

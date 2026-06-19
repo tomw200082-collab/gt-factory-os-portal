@@ -228,7 +228,7 @@ function ManualPoFormInner(): JSX.Element {
       idempotency_key: newIdempotencyKey(),
       supplier_id: supplierId,
       expected_receive_date: expectedDate,
-      manual_reason: manualReason.trim(),
+      manual_reason: manualReason.trim() || null,
       notes: notes.trim() || null,
       source_type: "manual" as const,
       lines: lines.map((l) => {
@@ -568,7 +568,7 @@ function ManualPoFormInner(): JSX.Element {
         size="section"
         eyebrow="Purchase Orders"
         title="New manual order"
-        description="Manual purchase orders are not reviewed by the planning engine. Use this only for urgent or exceptional needs not covered by a planning recommendation. A reason is required for traceability."
+        description="Manual purchase orders are not reviewed by the planning engine. Use this only for urgent or exceptional needs not covered by a planning recommendation. Providing a reason is optional but recommended for audit traceability."
         meta={
           <span className="inline-flex items-center gap-1.5 rounded-full border border-warning/40 bg-warning/5 px-2.5 py-0.5 text-3xs font-semibold uppercase tracking-sops text-warning-fg">
             <AlertTriangle className="h-3 w-3" aria-hidden />

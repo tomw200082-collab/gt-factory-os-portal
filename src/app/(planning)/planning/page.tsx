@@ -923,7 +923,7 @@ export default function PlanningOverviewPage() {
               {/* Run stats */}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
                 <StatPanel
-                  label="FG evaluated"
+                  label="Finished goods evaluated"
                   value={fmtNum(latestRun.summary.fg_coverage_count)}
                   hint="Finished goods covered"
                 />

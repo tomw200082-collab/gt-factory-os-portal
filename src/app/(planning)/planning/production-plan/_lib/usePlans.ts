@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import type {
   CreatePlanOrNoteRequest,
   CreateProductionPlanResponse,
+  DeleteProductionPlanResponse,
   ListProductionPlanResponse,
   PatchProductionPlanRequest,
   ProductionPlanRow,
@@ -174,6 +175,13 @@ export function useCreatePlan() {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["production-plan"] });
+      // F3 (data integrity): a plan can be created from a recommendation, which
+      // consumes it. Without these, the runs / run-detail / recommendations /
+      // overview surfaces (all under the ["planning"] prefix) and the inbox keep
+      // showing the consumed rec as actionable — risking double-consumption.
+      // Prefix invalidation; a no-op refetch for manually-created plans.
+      void qc.invalidateQueries({ queryKey: ["planning"] });
+      void qc.invalidateQueries({ queryKey: ["inbox"] });
     },
   });
 }
@@ -208,6 +216,44 @@ export function usePatchPlan() {
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ["production-plan"] });
+      // FLOW-B: cancel / edit / move-to-tomorrow also change what the planning
+      // overview summarises (completion %, pipeline). Mirror useCreatePlan so
+      // the overview can't lag behind a board edit.
+      void qc.invalidateQueries({ queryKey: ["planning"] });
+    },
+  });
+}
+
+// useDeletePlan — hard-deletes a production_plan row (planned or cancelled).
+// Mirrors usePatchPlan: manual fetch, status→message mapping, and the shared
+// ["production-plan"] + ["planning"] cache invalidation so the board and the
+// planning overview both refresh once the row is gone.
+export function useDeletePlan() {
+  const qc = useQueryClient();
+  return useMutation<DeleteProductionPlanResponse, Error, { plan_id: string }>({
+    mutationFn: async ({ plan_id }) => {
+      const res = await fetch(
+        `/api/production-plan/${encodeURIComponent(plan_id)}`,
+        { method: "DELETE" },
+      );
+      if (!res.ok) {
+        const text = await res.text().catch(() => "");
+        let detail = "";
+        try {
+          detail = (JSON.parse(text) as { detail?: string }).detail ?? "";
+        } catch {
+          /* ignore */
+        }
+        throw new Error(mapDeleteStatus(res.status) + (detail && res.status === 409 ? ` (${detail})` : ""));
+      }
+      return (await res.json()) as DeleteProductionPlanResponse;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["production-plan"] });
+      // A delete frees any linked recommendation back into the candidate pool
+      // (source_recommendation_id FK is ON DELETE SET NULL), and changes what
+      // the planning overview summarises — mirror usePatchPlan.
+      void qc.invalidateQueries({ queryKey: ["planning"] });
     },
   });
 }
@@ -221,6 +267,16 @@ function mapStatusToHebrew(status: number): string {
   if (status === 422) return "The data you entered isn't valid. Check the form and try again.";
   if (status === 503) return "The system is locked right now. Try again later.";
   return "Something went wrong. Try again.";
+}
+
+function mapDeleteStatus(status: number): string {
+  if (status === 401) return "You need to sign in again.";
+  if (status === 403) return "You don't have permission to delete records.";
+  if (status === 404) return "This record no longer exists.";
+  // A done record (linked to a reported production actual) cannot be deleted.
+  if (status === 409) return "This record can't be deleted because production has already been reported against it.";
+  if (status === 503) return "The system is locked right now. Try again later.";
+  return "Couldn't delete the record. Try again.";
 }
 
 // ---------------------------------------------------------------------------

@@ -41,6 +41,7 @@ import type { PurchaseSessionPo } from "../purchase-session/_lib/types";
 import { formatIls } from "@/lib/utils/format-money";
 import { ActionList } from "./_components/ActionList";
 import { CalendarView } from "./_components/CalendarView";
+import { RecommendationsToConvert } from "./_components/RecommendationsToConvert";
 import { FocusMode } from "./_components/FocusMode";
 import { buildFocusQueue } from "./_lib/focus-queue";
 
@@ -217,6 +218,11 @@ export default function ProcurementPage(): JSX.Element {
         </div>
       )}
 
+      {/* Approved purchase recommendations → PO. Canonical conversion home
+          after planning runs were made diagnostic-only (Tranche 072). Renders
+          nothing when there is nothing to convert. */}
+      <RecommendationsToConvert />
+
       {isLoading ? (
         <LoadingState />
       ) : isError ? (
@@ -323,7 +329,7 @@ function SessionView({
             <button
               type="button"
               onClick={onStartFocus}
-              className="btn btn-accent"
+              className="btn btn-primary"
               data-testid="procurement-start-focus"
             >
               <Target className="h-4 w-4" aria-hidden />
@@ -402,12 +408,44 @@ function ViewTab({
 }
 
 function LoadingState(): JSX.Element {
+  // INTER-011 (Tranche 079) — skeleton blocks approximating the live session
+  // view (summary strip, then a stack of action rows). Structural only — no
+  // Hebrew copy is added or altered here; the existing Hebrew waiting line
+  // is replaced by visible placeholder shapes so the planner sees layout
+  // continuity instead of a centered string.
   return (
     <div
-      className="card p-6 text-center text-sm text-fg-muted"
+      className="space-y-5"
+      aria-busy="true"
+      aria-live="polite"
       data-testid="procurement-loading"
     >
-      טוען מושב רכש…
+      {/* Summary strip placeholder — matches SessionView's top card */}
+      <div className="card flex flex-wrap items-center justify-between gap-3 p-4">
+        <div className="flex flex-col gap-2">
+          <div className="h-4 w-40 animate-pulse rounded bg-bg-subtle" />
+          <div className="h-3 w-24 animate-pulse rounded bg-bg-subtle" />
+        </div>
+        <div className="h-8 w-32 animate-pulse rounded bg-bg-subtle" />
+      </div>
+      {/* View-toggle placeholder */}
+      <div className="h-8 w-44 animate-pulse rounded bg-bg-subtle" />
+      {/* Action-list row placeholders — three groups by decision */}
+      <div className="space-y-3">
+        {Array.from({ length: 3 }).map((_, i) => (
+          <div key={i} className="card p-4">
+            <div className="mb-3 h-3 w-32 animate-pulse rounded bg-bg-subtle" />
+            <div className="space-y-2">
+              {Array.from({ length: 2 }).map((__, j) => (
+                <div
+                  key={j}
+                  className="h-10 w-full animate-pulse rounded bg-bg-subtle"
+                />
+              ))}
+            </div>
+          </div>
+        ))}
+      </div>
     </div>
   );
 }
