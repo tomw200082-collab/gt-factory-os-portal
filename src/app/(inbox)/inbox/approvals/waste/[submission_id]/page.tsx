@@ -141,7 +141,12 @@ export default function WasteReviewPage() {
   const [approvalNotes, setApprovalNotes] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
   const [outcome, setOutcome] = useState<ReviewOutcome | null>(null);
-  const [busy, setBusy] = useState(false);
+  // Separate busy flags so approving never disables/relabels the reject button
+  // (and vice versa). confirmingApprove gates the irreversible ledger post
+  // behind an explicit confirm step.
+  const [approveBusy, setApproveBusy] = useState(false);
+  const [rejectBusy, setRejectBusy] = useState(false);
+  const [confirmingApprove, setConfirmingApprove] = useState(false);
 
   const detailQuery = useQuery<WasteAdjustmentDetail>({
     queryKey: ["waste-adjustment-detail", submissionId],
@@ -171,19 +176,20 @@ export default function WasteReviewPage() {
   };
 
   const handleApprove = async () => {
-    setBusy(true);
+    setApproveBusy(true);
     const r = await callApprove(submissionId, session, approvalNotes || null);
     if (r.kind === "approved") invalidateInboxSources();
     setOutcome(r);
-    setBusy(false);
+    setApproveBusy(false);
+    setConfirmingApprove(false);
   };
   const handleReject = async () => {
     if (!rejectionReason.trim()) return;
-    setBusy(true);
+    setRejectBusy(true);
     const r = await callReject(submissionId, session, rejectionReason);
     if (r.kind === "rejected") invalidateInboxSources();
     setOutcome(r);
-    setBusy(false);
+    setRejectBusy(false);
   };
 
   if (outcome?.kind === "approved") {
@@ -279,8 +285,18 @@ export default function WasteReviewPage() {
       />
 
       {detailQuery.isLoading ? (
-        <div className="mb-4 rounded-md border border-border/60 bg-bg-subtle/40 p-4 text-xs text-fg-muted">
-          Loading submission details…
+        <div
+          className="mb-6 space-y-3 rounded-xl border border-border/60 bg-bg-subtle/40 p-5"
+          aria-busy="true"
+          aria-live="polite"
+        >
+          <div className="h-5 w-32 animate-pulse rounded bg-bg-subtle" />
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="flex animate-pulse gap-3">
+              <div className="h-4 w-32 shrink-0 rounded bg-bg-subtle" />
+              <div className="h-4 w-40 rounded bg-bg-subtle" />
+            </div>
+          ))}
         </div>
       ) : detailQuery.isError ? (
         <div className="mb-4 rounded-md border border-danger/40 bg-danger-softer p-4 text-xs text-danger-fg">
@@ -329,17 +345,23 @@ export default function WasteReviewPage() {
           <DetailRow
             label="Current status"
             value={
-              <span
-                className={
-                  d.status === "pending"
-                    ? "text-warning-fg font-medium"
-                    : d.status === "posted"
-                      ? "text-success-fg font-medium"
-                      : "text-fg-muted"
-                }
-              >
-                {d.status}
-              </span>
+              d.status === "pending" ? (
+                <span className="inline-flex items-center rounded-full border border-warning/40 bg-warning-softer px-2 py-0.5 text-xs font-medium text-warning-fg">
+                  Awaiting approval
+                </span>
+              ) : d.status === "posted" ? (
+                <span className="inline-flex items-center rounded-full border border-success/30 bg-success-softer px-2 py-0.5 text-xs font-medium text-success-fg">
+                  Approved — stock updated
+                </span>
+              ) : d.status === "rejected" ? (
+                <span className="inline-flex items-center rounded-full border border-border bg-bg-subtle px-2 py-0.5 text-xs font-medium text-fg-muted">
+                  Rejected — stock unchanged
+                </span>
+              ) : (
+                <span className="inline-flex items-center rounded-full border border-border bg-bg-subtle px-2 py-0.5 text-xs font-medium text-fg-muted">
+                  {d.status.replace(/_/g, " ")}
+                </span>
+              )
             }
           />
         </div>
@@ -380,21 +402,71 @@ export default function WasteReviewPage() {
           placeholder="Internal audit trail."
         />
         <div className="mt-5">
-          <button
-            type="button"
-            data-testid="waste-review-approve"
-            className="btn btn-lg btn-primary"
-            disabled={
-              busy ||
-              (d?.submitted_by_user_id != null &&
-                d.submitted_by_user_id === session.user_id &&
-                session.role !== "admin" &&
-                session.role !== "planner")
-            }
-            onClick={handleApprove}
-          >
-            {busy ? "Submitting…" : "Approve adjustment"}
-          </button>
+          {confirmingApprove ? (
+            <div
+              className="flex flex-wrap items-center gap-3 rounded-md border border-warning/40 bg-warning-softer px-4 py-3"
+              role="alertdialog"
+              aria-label="Confirm approval"
+              data-testid="waste-review-approve-confirm-zone"
+            >
+              <span className="text-sm text-warning-fg">
+                Approving posts a{" "}
+                <span className="font-semibold">
+                  {d?.direction === "loss" ? "loss" : "positive correction"}
+                </span>
+                {d ? (
+                  <>
+                    {" "}
+                    of{" "}
+                    <span className="font-semibold tabular-nums">
+                      {d.quantity} {d.unit}
+                    </span>{" "}
+                    for{" "}
+                    <span className="font-semibold">
+                      {d.item_display_name ?? d.item_id}
+                    </span>
+                  </>
+                ) : null}{" "}
+                to the stock ledger. This cannot be undone here.
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  data-testid="waste-review-approve-confirm"
+                  className="btn btn-sm btn-primary"
+                  disabled={approveBusy}
+                  onClick={handleApprove}
+                >
+                  {approveBusy ? "Submitting…" : "Yes, approve"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  disabled={approveBusy}
+                  onClick={() => setConfirmingApprove(false)}
+                >
+                  Keep reviewing
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              data-testid="waste-review-approve"
+              className="btn btn-lg btn-primary"
+              disabled={
+                approveBusy ||
+                rejectBusy ||
+                (d?.submitted_by_user_id != null &&
+                  d.submitted_by_user_id === session.user_id &&
+                  session.role !== "admin" &&
+                  session.role !== "planner")
+              }
+              onClick={() => setConfirmingApprove(true)}
+            >
+              Approve adjustment
+            </button>
+          )}
         </div>
       </SectionCard>
 
@@ -417,7 +489,8 @@ export default function WasteReviewPage() {
             data-testid="waste-review-reject"
             className="btn btn-lg btn-danger"
             disabled={
-              busy ||
+              rejectBusy ||
+              approveBusy ||
               !rejectionReason.trim() ||
               (d?.submitted_by_user_id != null &&
                 d.submitted_by_user_id === session.user_id &&
@@ -426,7 +499,7 @@ export default function WasteReviewPage() {
             }
             onClick={handleReject}
           >
-            {busy ? "Submitting…" : "Reject adjustment"}
+            {rejectBusy ? "Submitting…" : "Reject adjustment"}
           </button>
         </div>
       </SectionCard>

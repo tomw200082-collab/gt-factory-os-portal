@@ -494,7 +494,7 @@ export default function PhysicalCountPage() {
     const envelope: PhysicalCountSubmit = {
       idempotency_key: newIdempotencyKey(),
       snapshot_id: snapshot.snapshot_id,
-      event_at: new Date(eventAt).toISOString(),
+      event_at: (Number.isNaN(new Date(eventAt).getTime()) ? new Date() : new Date(eventAt)).toISOString(),
       counted_quantity: qtyNum,
       unit,
       notes: notes ? notes : null,

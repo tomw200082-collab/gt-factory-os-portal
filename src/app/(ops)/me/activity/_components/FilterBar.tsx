@@ -104,7 +104,7 @@ export function FilterBar({
           onChange={(e) => setDraftSearch(e.target.value)}
           placeholder="Search loaded activity"
           className={cn(
-            "w-full rounded-md border border-border bg-bg-base py-1.5 pl-8 pr-8 text-sm",
+            "w-full rounded-md border border-border bg-bg-raised py-1.5 pl-8 pr-8 text-sm",
             "focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
           )}
         />

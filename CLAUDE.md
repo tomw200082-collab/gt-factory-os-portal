@@ -6,6 +6,15 @@
 
 The durable contract states "English-first UI with plain, accessible English labels; Hebrew appears only in data values." The Recipe-Health surface (`/admin/masters/items/[item_id]` for MANUFACTURED items, plus the BOM draft editor at `/admin/masters/boms/[bom_head_id]/[version_id]/edit` and the quick-fix drawer) uses Hebrew operator labels (e.g., "מתכון ייצור", "מוכן לייצור עם אזהרות", "אני מאשר את האזהרות הללו") per Tom's UX target. This is an explicit, scoped deviation from English-first, not a general policy change.
 
+### Extension (2026-06-17, authorized by Tom via `/ux-release-gate`)
+
+The exception now also covers two operator-facing surfaces that are Hebrew + `dir="rtl"` by Tom's UX target:
+
+- **`/planning/procurement`** — the weekly "what to order" purchase-session flow, including its `FocusCard` and `ActionList` components (status/tier labels, action buttons, banners).
+- **`/credit-tracking`** — the picking-shortage tracking surface for the bookkeeper (KPIs, status pills, filters, error/empty copy).
+
+These were flagged by the UX content auditor as English-first violations because they were not previously listed here; Tom confirmed the Hebrew is intentional. English remains the default for all other operator surfaces; this list is the complete set of authorized Hebrew-operator-label surfaces.
+
 ## Read these, in order, at the start of any portal session
 1. `docs/portal-os/registry.md` — index of all OS artifacts (≤1 line per entry).
 2. `docs/portal-os/scorecard.md` — current readiness, last updated.

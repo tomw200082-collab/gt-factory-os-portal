@@ -821,7 +821,12 @@ export default function GoodsReceiptPage() {
 
     const envelope: GoodsReceiptRequest = {
       idempotency_key: newIdempotencyKey(),
-      event_at: new Date(eventAt).toISOString(),
+      // Guard a cleared/invalid datetime-local (new Date("").toISOString()
+      // throws) — fall back to now, which is what the field pre-fills.
+      event_at: (Number.isNaN(new Date(eventAt).getTime())
+        ? new Date()
+        : new Date(eventAt)
+      ).toISOString(),
       supplier_id: supplierId,
       po_id: poId ? poId : null,
       notes: notes ? notes : null,

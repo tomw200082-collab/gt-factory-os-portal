@@ -37,6 +37,10 @@ import {
   type ClassifiedPo,
   type DecisionBucket,
 } from "../_lib/decision";
+import {
+  buildCoverageReasoning,
+  parseCoverageTrace,
+} from "../_lib/coverage-trace";
 
 // Tranche 047 — fallback link when no onOpen handler is supplied. The
 // classic per-PO session URL is a redirect stub back to
@@ -100,6 +104,72 @@ const SECTIONS: SectionMeta[] = [
 
 function activeLineCount(po: PurchaseSessionPo): number {
   return po.lines.filter((l) => !l.is_dropped).length;
+}
+
+function fmtCovNum(n: number | null): string {
+  if (n == null) return "—";
+  return Number.isInteger(n) ? String(n) : String(Math.round(n * 1000) / 1000);
+}
+
+// Compact one-line "why this quantity" caption for the row expansion — decodes
+// the per-line coverage_trace (demand / on-hand / projected-at-need) so the scan
+// view explains each line without opening focus mode.
+function CoverageCaption({ trace }: { trace: unknown }): JSX.Element | null {
+  const r = buildCoverageReasoning(parseCoverageTrace(trace));
+  if (!r || !r.hasSignal) return null;
+  const tone =
+    r.severity === "stockout"
+      ? "text-danger-fg"
+      : r.severity === "below_safety"
+        ? "text-warning-fg"
+        : "text-fg-faint";
+  const head =
+    r.severity === "stockout"
+      ? r.needDate
+        ? `נגמר לפני ${r.needDate}`
+        : "צפוי להיגמר"
+      : r.severity === "below_safety"
+        ? "מתחת לרצפת ביטחון"
+        : "כיסוי מספק";
+  return (
+    <div
+      className="flex flex-wrap items-center gap-x-2 text-3xs text-fg-faint"
+      data-testid="procurement-line-coverage"
+    >
+      <span className={cn("font-semibold", tone)}>{head}</span>
+      {r.demand != null && (
+        <span>
+          ביקוש{" "}
+          <span className="tabular-nums text-fg-muted">
+            {fmtCovNum(r.demand)}
+          </span>
+        </span>
+      )}
+      {r.onHand != null && (
+        <span>
+          במלאי{" "}
+          <span className="tabular-nums text-fg-muted">
+            {fmtCovNum(r.onHand)}
+          </span>
+        </span>
+      )}
+      {r.projectedAtNeed != null && (
+        <span>
+          צפי{" "}
+          <span
+            className={cn(
+              "tabular-nums",
+              r.wouldRunOut
+                ? "text-danger-fg font-semibold"
+                : "text-fg-muted",
+            )}
+          >
+            {fmtCovNum(r.projectedAtNeed)}
+          </span>
+        </span>
+      )}
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -168,10 +238,18 @@ function ProcurementRow({
           >
             {whyNow}
           </div>
-          <div className="text-3xs text-fg-faint tabular-nums">
-            {lineCount} פריט{lineCount === 1 ? "" : "ים"}
-            {" · "}
-            {formatIls(po.total_cost)}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5 text-3xs text-fg-faint tabular-nums">
+            <span>
+              {lineCount} פריט{lineCount === 1 ? "" : "ים"}
+              {" · "}
+              {formatIls(po.total_cost)}
+            </span>
+            <span
+              className={cn(isOverdue ? "text-danger-fg font-medium" : "text-fg-subtle")}
+            >
+              להזמין עד {po.order_by_date}
+            </span>
+            {po.earliest_need_date && <span>· נדרש {po.earliest_need_date}</span>}
           </div>
         </div>
 
@@ -204,14 +282,14 @@ function ProcurementRow({
             po.lines
               .filter((l) => !l.is_dropped)
               .map((l) => (
-                <div
-                  key={l.session_po_line_id}
-                  className="flex items-center justify-between gap-3 text-xs"
-                >
-                  <span className="truncate text-fg">{l.line_label}</span>
-                  <span className="shrink-0 tabular-nums text-fg-muted">
-                    {l.final_qty} {l.uom} · {formatIls(l.line_cost)}
-                  </span>
+                <div key={l.session_po_line_id} className="space-y-0.5">
+                  <div className="flex items-center justify-between gap-3 text-xs">
+                    <span className="truncate text-fg">{l.line_label}</span>
+                    <span className="shrink-0 tabular-nums text-fg-muted">
+                      {l.final_qty} {l.uom} · {formatIls(l.line_cost)}
+                    </span>
+                  </div>
+                  <CoverageCaption trace={l.coverage_trace} />
                 </div>
               ))
           )}
@@ -237,8 +315,27 @@ export interface ActionListProps {
 export function ActionList({ pos, onOpen, today }: ActionListProps): JSX.Element {
   const groups = useMemo(() => groupByDecision(pos, today), [pos, today]);
 
+  // One orienting line for the whole session — how much must move today and
+  // the money at risk — so the planner knows where to start before scanning.
+  const mustToday = groups.must_today;
+  const atRiskTotal = mustToday.reduce((s, r) => s + (r.po.total_cost || 0), 0);
+
   return (
     <div className="space-y-5">
+      {mustToday.length > 0 && (
+        <div
+          className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-danger/40 bg-danger-softer/40 px-4 py-3 text-sm"
+          data-testid="procurement-at-risk-summary"
+        >
+          <AlertTriangle className="h-4 w-4 shrink-0 text-danger-fg" aria-hidden />
+          <span className="font-bold text-danger-fg">
+            {mustToday.length} חייב לצאת היום
+          </span>
+          <span className="tabular-nums text-fg-muted">
+            · {formatIls(atRiskTotal)} בסיכון
+          </span>
+        </div>
+      )}
       {SECTIONS.map((section) => {
         const rows = groups[section.key];
         const Icon = section.icon;

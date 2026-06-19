@@ -38,6 +38,7 @@ import { useOrderables } from "@/components/purchase-orders/useOrderables";
 import { useSupplierItemsByOrderable } from "@/components/purchase-orders/useSupplierItems";
 import {
   approvedSupplierItems,
+  countPriceVarianceWarnings,
   emptyLine,
   summarizePoDraft,
   todayPlusDays,
@@ -193,6 +194,16 @@ function ManualPoFormInner(): JSX.Element {
   // checkbox) only exist when at least one line carries a price.
   const anyPriceEntered = lines.some(
     (l) => (l.unit_price_net ?? "").trim() !== "",
+  );
+
+  // Price/cost accuracy — how many lines carry a price that diverges materially
+  // from the catalog cost (warn/high). Drives a caution next to the catalog
+  // write-back confirmation so a fat-finger price is reviewed before it updates
+  // the supplier catalog.
+  const priceVarianceWarnings = countPriceVarianceWarnings(
+    lines,
+    supplierItemsByOrderable,
+    supplierId,
   );
 
   // --- Submit ---------------------------------------------------------------
@@ -683,26 +694,50 @@ function ManualPoFormInner(): JSX.Element {
 
         {/* Price write-back confirmation — only when a price was entered */}
         {anyPriceEntered && (
-          <div className="flex items-start gap-2">
-            <input
-              id="po-new-confirm-price-update"
-              data-testid="po-new-confirm-price-update"
-              type="checkbox"
-              checked={confirmPriceUpdate}
-              onChange={(e) => setConfirmPriceUpdate(e.target.checked)}
-              disabled={phase === "submitting"}
-              className="mt-0.5"
-            />
-            <label
-              htmlFor="po-new-confirm-price-update"
-              className="text-sm text-fg"
-            >
-              Update catalog prices from this order
-              <span className="block text-3xs font-normal text-fg-faint">
-                Small changes apply right away; bigger changes wait for admin
-                approval under Price updates.
-              </span>
-            </label>
+          <div className="space-y-2">
+            <div className="flex items-start gap-2">
+              <input
+                id="po-new-confirm-price-update"
+                data-testid="po-new-confirm-price-update"
+                type="checkbox"
+                checked={confirmPriceUpdate}
+                onChange={(e) => setConfirmPriceUpdate(e.target.checked)}
+                disabled={phase === "submitting"}
+                className="mt-0.5"
+              />
+              <label
+                htmlFor="po-new-confirm-price-update"
+                className="text-sm text-fg"
+              >
+                Update catalog prices from this order
+                <span className="block text-3xs font-normal text-fg-faint">
+                  Small changes apply right away; bigger changes wait for admin
+                  approval under Price updates.
+                </span>
+              </label>
+            </div>
+            {confirmPriceUpdate && priceVarianceWarnings > 0 && (
+              <div
+                role="alert"
+                data-testid="po-new-price-variance-caution"
+                className="flex items-start gap-1.5 rounded-md border border-warning/50 bg-warning/5 px-3 py-2 text-xs text-warning-fg"
+              >
+                <AlertTriangle
+                  className="mt-0.5 h-3.5 w-3.5 shrink-0"
+                  aria-hidden
+                />
+                <span>
+                  {priceVarianceWarnings} line
+                  {priceVarianceWarnings === 1 ? "" : "s"}{" "}
+                  {priceVarianceWarnings === 1
+                    ? "has a price that differs"
+                    : "have prices that differ"}{" "}
+                  a lot from the catalog. Review{" "}
+                  {priceVarianceWarnings === 1 ? "it" : "them"} before letting
+                  this order update catalog prices.
+                </span>
+              </div>
+            )}
           </div>
         )}
 

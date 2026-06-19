@@ -24,9 +24,12 @@ import type { SearchableSelectOption } from "@/components/fields/SearchableSelec
 import { PoLineEditor, type PoLineEditorProps } from "./PoLineEditor";
 import {
   approvedSupplierItems,
+  computeLinePriceInsight,
   costPerOrderUom,
+  countPriceVarianceWarnings,
   dedupeBySupplier,
   emptyLine,
+  resolveLineCatalogCost,
   validatePoDraft,
   type OrderableRow,
   type PoDraft,
@@ -253,6 +256,139 @@ describe("supplier-item helpers (T047)", () => {
     const out = dedupeBySupplier(rows);
     expect(out).toHaveLength(2);
     expect(out[0].supplier_item_id).toBe("b");
+  });
+});
+
+// --- Price/cost accuracy — line price insight -------------------------------
+
+describe("computeLinePriceInsight", () => {
+  it("P1 line total uses the entered price when given", () => {
+    const i = computeLinePriceInsight("10", "5", 4);
+    expect(i.lineTotal).toBe(50);
+    expect(i.effectiveSource).toBe("entered");
+  });
+
+  it("P2 falls back to the catalog cost when no price is entered", () => {
+    const i = computeLinePriceInsight("10", "", 4);
+    expect(i.lineTotal).toBe(40);
+    expect(i.effectiveSource).toBe("catalog");
+    expect(i.variancePct).toBeNull();
+  });
+
+  it("P3 no line total without a positive quantity", () => {
+    expect(computeLinePriceInsight("0", "5", 4).lineTotal).toBeNull();
+    expect(computeLinePriceInsight("", "5", 4).lineTotal).toBeNull();
+  });
+
+  it("P4 small deltas stay quiet (none)", () => {
+    expect(computeLinePriceInsight("1", "4.1", 4).varianceLevel).toBe("none");
+  });
+
+  it("P5 a normal increase reads as info", () => {
+    const i = computeLinePriceInsight("1", "4.8", 4); // +20%
+    expect(i.varianceLevel).toBe("info");
+    expect(Math.round((i.variancePct ?? 0) * 100)).toBe(20);
+  });
+
+  it("P6 a large delta reads as warn", () => {
+    expect(computeLinePriceInsight("1", "6", 4).varianceLevel).toBe("warn"); // +50%
+  });
+
+  it("P7 a 10× fat-finger reads as high", () => {
+    const i = computeLinePriceInsight("1", "125", 12.5); // +900%
+    expect(i.varianceLevel).toBe("high");
+  });
+
+  it("P8 no variance when there is no catalog cost to compare", () => {
+    const i = computeLinePriceInsight("1", "5", null);
+    expect(i.variancePct).toBeNull();
+    expect(i.varianceLevel).toBe("none");
+    expect(i.lineTotal).toBe(5);
+  });
+});
+
+describe("resolveLineCatalogCost / countPriceVarianceWarnings", () => {
+  const SI = new Map([["component:c_1", TWO_SUPPLIERS]]); // sup_1=₪30, sup_2=₪36
+  const ln = (price?: string) => ({
+    orderable_key: "component:c_1",
+    quantity: "1",
+    uom: "UNIT" as const,
+    unit_price_net: price,
+  });
+
+  it("CC1 resolves the header supplier's catalog cost", () => {
+    expect(resolveLineCatalogCost(ln(), TWO_SUPPLIERS, "sup_1")).toBe(30);
+    expect(resolveLineCatalogCost(ln(), TWO_SUPPLIERS, "sup_2")).toBe(36);
+  });
+
+  it("CC2 returns null when supplier rows are not loaded", () => {
+    expect(resolveLineCatalogCost(ln(), undefined, "sup_1")).toBeNull();
+  });
+
+  it("CC3 counts lines whose price diverges materially (warn/high)", () => {
+    expect(countPriceVarianceWarnings([ln("300")], SI, "sup_1")).toBe(1); // +900%
+    expect(countPriceVarianceWarnings([ln("60")], SI, "sup_1")).toBe(1); // +100%
+  });
+
+  it("CC4 ignores small differences, matches, and unpriced lines", () => {
+    expect(countPriceVarianceWarnings([ln("33")], SI, "sup_1")).toBe(0); // +10%
+    expect(countPriceVarianceWarnings([ln("30")], SI, "sup_1")).toBe(0); // match
+    expect(countPriceVarianceWarnings([ln("")], SI, "sup_1")).toBe(0);
+  });
+
+  it("CC5 returns 0 when there is no catalog cost to compare", () => {
+    expect(countPriceVarianceWarnings([ln("300")], new Map(), "sup_1")).toBe(0);
+  });
+});
+
+describe("PoLineEditor price insight rendering", () => {
+  const SI = new Map([
+    ["component:c_1", [TWO_SUPPLIERS[0]]], // sup_1 catalog = 2.5 × 12 = ₪30/CARTON
+  ]);
+
+  it("PR1 shows a line total once qty + price are present", () => {
+    renderEditor({
+      supplierId: "sup_1",
+      lines: [{ orderable_key: "component:c_1", quantity: "2", uom: "UNIT" }],
+      supplierItemsByOrderable: SI,
+    });
+    expect(
+      screen.getByTestId("po-new-line-price-insight-0").textContent,
+    ).toContain("Line total");
+  });
+
+  it("PR2 flags a fat-finger price as a high-severity variance", () => {
+    renderEditor({
+      supplierId: "sup_1",
+      lines: [
+        {
+          orderable_key: "component:c_1",
+          quantity: "2",
+          uom: "UNIT",
+          unit_price_net: "300", // 10× the ₪30 catalog cost
+        },
+      ],
+      supplierItemsByOrderable: SI,
+    });
+    const chip = screen.getByTestId("po-new-line-price-variance-0");
+    expect(chip.getAttribute("data-variance-level")).toBe("high");
+    expect(chip.textContent).toContain("vs catalog");
+  });
+
+  it("PR3 no variance chip when the entered price matches the catalog", () => {
+    renderEditor({
+      supplierId: "sup_1",
+      lines: [
+        {
+          orderable_key: "component:c_1",
+          quantity: "2",
+          uom: "UNIT",
+          unit_price_net: "30",
+        },
+      ],
+      supplierItemsByOrderable: SI,
+    });
+    expect(screen.queryByTestId("po-new-line-price-variance-0")).toBeNull();
   });
 });
 

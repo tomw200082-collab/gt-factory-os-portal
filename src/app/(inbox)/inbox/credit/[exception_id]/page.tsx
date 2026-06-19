@@ -549,7 +549,7 @@ export default function CreditDetailPage(): ReactNode {
           <button
             type="button"
             data-testid="credit-action-reject"
-            className="btn btn-sm"
+            className="btn btn-sm border-danger/40 text-danger-fg hover:bg-danger/10"
             disabled={busy || isTerminal || !canActOnCredits}
             onClick={() => {
               setShowRejectPanel(true);

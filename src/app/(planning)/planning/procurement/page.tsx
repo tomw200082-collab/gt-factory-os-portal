@@ -199,6 +199,25 @@ export default function ProcurementPage(): JSX.Element {
         </div>
       )}
 
+      {/* Session warnings — typed {code, detail} the engine emits (e.g. an
+          overdue open-PO that should hold back re-ordering, or components with
+          no resolvable supplier). Previously never rendered, so the planner
+          could under-order without knowing why. */}
+      {session && session.warnings.length > 0 && (
+        <div className="space-y-2" data-testid="procurement-warnings">
+          {session.warnings.map((w, i) => (
+            <div
+              key={`${w.code}-${i}`}
+              role="alert"
+              className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning-softer px-4 py-3 text-sm text-warning-fg"
+            >
+              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+              <span className="min-w-0 flex-1">{w.detail}</span>
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* Approved purchase recommendations → PO. Canonical conversion home
           after planning runs were made diagnostic-only (Tranche 072). Renders
           nothing when there is nothing to convert. */}

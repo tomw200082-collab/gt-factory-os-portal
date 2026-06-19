@@ -157,7 +157,7 @@ export default function InventoryFlowItemPage({ params }: PageParams) {
           {/* KPI strip — FLOW-M11: stacks to one column on phones so long
               values ("STOCKOUT", ">8 weeks", "14,520") never overflow the
               ~114px cells that grid-cols-3 produces at 390px. */}
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
             <Kpi
               label="Days of cover"
               value={fmtDaysOfCover(detail.days_of_cover)}
@@ -177,6 +177,26 @@ export default function InventoryFlowItemPage({ params }: PageParams) {
                   : "—"
               }
               tone={detail.earliest_stockout_date ? "danger" : "neutral"}
+            />
+            <Kpi
+              label="Order by"
+              value={(() => {
+                // Back-date the stockout by the supplier lead time so the
+                // planner sees WHEN to place the order, not just when it runs
+                // out. UTC-safe day subtraction.
+                if (
+                  !detail.earliest_stockout_date ||
+                  detail.effective_lead_time_days == null
+                )
+                  return "—";
+                const [y, m, d] = detail.earliest_stockout_date
+                  .split("-")
+                  .map(Number);
+                const dt = new Date(Date.UTC(y, m - 1, d));
+                dt.setUTCDate(dt.getUTCDate() - detail.effective_lead_time_days);
+                return fmtDate(dt.toISOString().slice(0, 10));
+              })()}
+              tone={detail.earliest_stockout_date ? "warning" : "neutral"}
             />
             <Kpi
               label="Current on-hand"

@@ -165,7 +165,12 @@ export default function PhysicalCountReviewPage() {
   const [approvalNotes, setApprovalNotes] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
   const [outcome, setOutcome] = useState<ReviewOutcome | null>(null);
-  const [busy, setBusy] = useState(false);
+  // Separate busy flags so approving never disables/relabels the reject button
+  // (and vice versa). confirmingApprove gates the irreversible anchor
+  // replacement behind an explicit confirm step.
+  const [approveBusy, setApproveBusy] = useState(false);
+  const [rejectBusy, setRejectBusy] = useState(false);
+  const [confirmingApprove, setConfirmingApprove] = useState(false);
 
   const detailQuery = useQuery<PhysicalCountDetail>({
     queryKey: ["physical-count-detail", submissionId],
@@ -192,19 +197,20 @@ export default function PhysicalCountReviewPage() {
   };
 
   const handleApprove = async () => {
-    setBusy(true);
+    setApproveBusy(true);
     const r = await callApprove(submissionId, session, approvalNotes || null);
     if (r.kind === "approved") invalidateInboxSources();
     setOutcome(r);
-    setBusy(false);
+    setApproveBusy(false);
+    setConfirmingApprove(false);
   };
   const handleReject = async () => {
     if (!rejectionReason.trim()) return;
-    setBusy(true);
+    setRejectBusy(true);
     const r = await callReject(submissionId, session, rejectionReason);
     if (r.kind === "rejected") invalidateInboxSources();
     setOutcome(r);
-    setBusy(false);
+    setRejectBusy(false);
   };
 
   if (outcome?.kind === "approved") {
@@ -433,21 +439,67 @@ export default function PhysicalCountReviewPage() {
           placeholder="Internal audit trail."
         />
         <div className="mt-5">
-          <button
-            type="button"
-            data-testid="pc-review-approve"
-            className="btn btn-lg btn-primary"
-            disabled={
-              busy ||
-              (d?.submitted_by_user_id != null &&
-                d.submitted_by_user_id === session.user_id &&
-                session.role !== "admin" &&
-                session.role !== "planner")
-            }
-            onClick={handleApprove}
-          >
-            {busy ? "Submitting…" : "Approve count"}
-          </button>
+          {confirmingApprove ? (
+            <div
+              className="flex flex-wrap items-center gap-3 rounded-md border border-warning/40 bg-warning-softer px-4 py-3"
+              role="alertdialog"
+              aria-label="Confirm approval"
+              data-testid="pc-review-approve-confirm-zone"
+            >
+              <span className="text-sm text-warning-fg">
+                Approving replaces the stock anchor for{" "}
+                <span className="font-semibold">
+                  {d?.item_display_name ?? d?.item_id ?? "this item"}
+                </span>
+                {d ? (
+                  <>
+                    {" "}
+                    with{" "}
+                    <span className="font-semibold tabular-nums">
+                      {fmtNumStr(d.counted_quantity)} {d.unit}
+                    </span>
+                  </>
+                ) : null}
+                . This becomes the authoritative balance.
+              </span>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  data-testid="pc-review-approve-confirm"
+                  className="btn btn-sm btn-primary"
+                  disabled={approveBusy}
+                  onClick={handleApprove}
+                >
+                  {approveBusy ? "Submitting…" : "Yes, approve"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  disabled={approveBusy}
+                  onClick={() => setConfirmingApprove(false)}
+                >
+                  Keep reviewing
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              data-testid="pc-review-approve"
+              className="btn btn-lg btn-primary"
+              disabled={
+                approveBusy ||
+                rejectBusy ||
+                (d?.submitted_by_user_id != null &&
+                  d.submitted_by_user_id === session.user_id &&
+                  session.role !== "admin" &&
+                  session.role !== "planner")
+              }
+              onClick={() => setConfirmingApprove(true)}
+            >
+              Approve count
+            </button>
+          )}
         </div>
       </SectionCard>
 
@@ -470,7 +522,8 @@ export default function PhysicalCountReviewPage() {
             data-testid="pc-review-reject"
             className="btn btn-lg btn-danger"
             disabled={
-              busy ||
+              rejectBusy ||
+              approveBusy ||
               !rejectionReason.trim() ||
               (d?.submitted_by_user_id != null &&
                 d.submitted_by_user_id === session.user_id &&
@@ -479,7 +532,7 @@ export default function PhysicalCountReviewPage() {
             }
             onClick={handleReject}
           >
-            {busy ? "Submitting…" : "Reject count"}
+            {rejectBusy ? "Submitting…" : "Reject count"}
           </button>
         </div>
       </SectionCard>

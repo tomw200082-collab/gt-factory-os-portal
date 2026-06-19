@@ -77,33 +77,33 @@ const STATUS_META: Record<
 > = {
   PENDING: {
     label: "ממתין",
-    badge: "bg-amber-50 text-amber-700 border-amber-200",
-    dot: "bg-amber-500",
+    badge: "bg-warning-softer text-warning-fg border-warning/30",
+    dot: "bg-warning",
   },
   CREDITED: {
     label: "זוכה",
-    badge: "bg-emerald-50 text-emerald-700 border-emerald-200",
-    dot: "bg-emerald-500",
+    badge: "bg-success-softer text-success-fg border-success/30",
+    dot: "bg-success",
   },
   DEFERRED: {
     label: "נדחה ללקוח",
-    badge: "bg-sky-50 text-sky-700 border-sky-200",
-    dot: "bg-sky-500",
+    badge: "bg-info-softer text-info-fg border-info/30",
+    dot: "bg-info",
   },
   SUPPLIED: {
     label: "סופק בהמשך",
-    badge: "bg-slate-100 text-slate-600 border-slate-200",
-    dot: "bg-slate-400",
+    badge: "bg-bg-subtle text-fg-muted border-border/60",
+    dot: "bg-fg-faint",
   },
   WAIVED: {
     label: "ויתור",
-    badge: "bg-slate-100 text-slate-500 border-slate-200",
-    dot: "bg-slate-400",
+    badge: "bg-bg-subtle text-fg-muted border-border/60",
+    dot: "bg-fg-faint",
   },
   DISPUTED: {
     label: "במחלוקת",
-    badge: "bg-rose-50 text-rose-700 border-rose-200",
-    dot: "bg-rose-500",
+    badge: "bg-danger-softer text-danger-fg border-danger/30",
+    dot: "bg-danger",
   },
 };
 
@@ -388,10 +388,10 @@ export default function CreditTrackingPage() {
       {/* Header */}
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
+          <h1 className="text-2xl font-bold tracking-tight text-fg">
             מעקב חוסרים בליקוט
           </h1>
-          <p className="mt-1 max-w-2xl text-sm text-muted-foreground">
+          <p className="mt-1 max-w-2xl text-sm text-fg-muted">
             כל פער ליקוט מופיע כאן אוטומטית. סמני לכל שורה — זוכה, נדחה ללקוח, או
             סופק בהמשך — והסימון נשמר מיד ומופיע גם בקובץ המצורף למייל היומי.
           </p>
@@ -399,7 +399,7 @@ export default function CreditTrackingPage() {
         <button
           type="button"
           onClick={() => void listQuery.refetch()}
-          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm text-muted-foreground transition-colors hover:bg-accent"
+          className="inline-flex h-9 items-center gap-1.5 rounded-lg border border-border px-3 text-sm text-fg-muted transition-colors hover:bg-bg-subtle"
         >
           <RefreshCw
             className={cn("h-3.5 w-3.5", listQuery.isFetching && "animate-spin")}
@@ -440,14 +440,14 @@ export default function CreditTrackingPage() {
       <div className="mt-6 space-y-3">
         {/* Search */}
         <div className="relative">
-          <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+          <Search className="pointer-events-none absolute right-3 top-1/2 h-4 w-4 -translate-y-1/2 text-fg-muted" />
           <input
             type="search"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="חיפוש לפי לקוח, מספר הזמנה, פריט או מק״ט…"
             aria-label="חיפוש"
-            className="h-10 w-full rounded-lg border border-border bg-background pr-10 pl-3 text-sm placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-ring"
+            className="h-10 w-full rounded-lg border border-border bg-bg-raised pr-10 pl-3 text-sm placeholder:text-fg-muted/60 focus:outline-none focus:ring-2 focus:ring-accent/50"
           />
         </div>
 
@@ -461,8 +461,8 @@ export default function CreditTrackingPage() {
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-full border px-3.5 py-1.5 text-sm transition-colors",
                 status === f.key
-                  ? "border-foreground bg-foreground font-semibold text-background"
-                  : "border-border text-muted-foreground hover:bg-accent",
+                  ? "border-fg bg-fg font-semibold text-fg-inverted"
+                  : "border-border text-fg-muted hover:bg-bg-subtle",
               )}
             >
               {f.label}
@@ -470,8 +470,8 @@ export default function CreditTrackingPage() {
                 className={cn(
                   "rounded-full px-1.5 text-xs tabular-nums",
                   status === f.key
-                    ? "bg-background/20 text-background"
-                    : "bg-muted text-muted-foreground",
+                    ? "bg-bg-raised/20 text-fg-inverted"
+                    : "bg-bg-muted text-fg-muted",
                 )}
               >
                 {statusCounts[f.key] ?? 0}
@@ -494,12 +494,12 @@ export default function CreditTrackingPage() {
             value={group}
             onChange={setGroup}
           />
-          <label className="flex items-center gap-2 text-xs text-muted-foreground">
+          <label className="flex items-center gap-2 text-xs text-fg-muted">
             מיון
             <select
               value={sort}
               onChange={(e) => setSort(e.target.value as SortKey)}
-              className="h-8 rounded-md border border-border bg-background px-2 text-xs text-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+              className="h-8 rounded-md border border-border bg-bg-raised px-2 text-xs text-fg focus:outline-none focus:ring-2 focus:ring-accent/50"
             >
               {SORTS.map((s) => (
                 <option key={s.key} value={s.key}>
@@ -517,7 +517,7 @@ export default function CreditTrackingPage() {
           {[0, 1, 2, 3].map((i) => (
             <div
               key={i}
-              className="h-12 animate-pulse rounded-lg border border-border bg-muted/40"
+              className="h-12 animate-pulse rounded-lg border border-border bg-bg-muted/40"
             />
           ))}
         </div>
@@ -530,8 +530,8 @@ export default function CreditTrackingPage() {
       )}
       {!listQuery.isLoading && !listQuery.isError && visible.length === 0 && (
         <div className="mt-12 flex flex-col items-center gap-2 text-center">
-          <CheckCircle2 className="h-9 w-9 text-emerald-500" />
-          <div className="text-sm font-medium text-foreground">
+          <CheckCircle2 className="h-9 w-9 text-success-fg" />
+          <div className="text-sm font-medium text-fg">
             {isFiltering ? "אין שורות שתואמות את הסינון" : "אין חוסרים פתוחים"}
           </div>
           {isFiltering && (
@@ -542,7 +542,7 @@ export default function CreditTrackingPage() {
                 setStatus("ALL");
                 setRange("all");
               }}
-              className="text-xs text-muted-foreground underline-offset-2 hover:underline"
+              className="text-xs text-fg-muted underline-offset-2 hover:underline"
             >
               ניקוי סינון
             </button>
@@ -581,16 +581,16 @@ export default function CreditTrackingPage() {
                 <button
                   type="button"
                   onClick={() => toggleGroup(g.key)}
-                  className="flex w-full items-center justify-between gap-3 bg-muted/40 px-4 py-3 text-right transition-colors hover:bg-muted/70"
+                  className="flex w-full items-center justify-between gap-3 bg-bg-muted/40 px-4 py-3 text-right transition-colors hover:bg-bg-muted/70"
                 >
                   <div className="flex items-center gap-2">
                     <ChevronDown
                       className={cn(
-                        "h-4 w-4 text-muted-foreground transition-transform",
+                        "h-4 w-4 text-fg-muted transition-transform",
                         isCollapsed && "-rotate-90",
                       )}
                     />
-                    <span className="font-semibold text-foreground">
+                    <span className="font-semibold text-fg">
                       {group === "order" ? (
                         <span dir="ltr">{g.key}</span>
                       ) : (
@@ -598,11 +598,11 @@ export default function CreditTrackingPage() {
                       )}
                     </span>
                   </div>
-                  <div className="flex items-center gap-3 text-xs text-muted-foreground">
+                  <div className="flex items-center gap-3 text-xs text-fg-muted">
                     <span>
                       {g.rows.length} {g.rows.length === 1 ? "שורה" : "שורות"}
                     </span>
-                    <span className="rounded-md bg-rose-50 px-2 py-0.5 font-semibold text-rose-700">
+                    <span className="rounded-md bg-danger-softer px-2 py-0.5 font-semibold text-danger-fg">
                       חסר {g.missing}
                     </span>
                   </div>
@@ -644,10 +644,10 @@ export default function CreditTrackingPage() {
 // ---------------------------------------------------------------------------
 
 const KPI_TONES: Record<string, string> = {
-  amber: "text-amber-600",
-  rose: "text-rose-600",
-  sky: "text-sky-600",
-  emerald: "text-emerald-600",
+  amber: "text-warning-fg",
+  rose: "text-danger-fg",
+  sky: "text-info-fg",
+  emerald: "text-success-fg",
 };
 
 function KpiCard({
@@ -662,17 +662,17 @@ function KpiCard({
   hint: string;
 }) {
   return (
-    <div className="rounded-xl border border-border bg-card px-4 py-3">
-      <div className="text-xs text-muted-foreground">{label}</div>
+    <div className="rounded-xl border border-border bg-bg-raised px-4 py-3">
+      <div className="text-xs text-fg-muted">{label}</div>
       <div
         className={cn(
           "mt-1 text-2xl font-bold tabular-nums",
-          KPI_TONES[tone] ?? "text-foreground",
+          KPI_TONES[tone] ?? "text-fg",
         )}
       >
         {value.toLocaleString("he-IL")}
       </div>
-      <div className="mt-0.5 text-[11px] text-muted-foreground/80">{hint}</div>
+      <div className="mt-0.5 text-[11px] text-fg-muted/80">{hint}</div>
     </div>
   );
 }
@@ -694,7 +694,7 @@ function Segmented<T extends string>({
 }) {
   return (
     <div className="flex items-center gap-2">
-      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-xs text-fg-muted">{label}</span>
       <div className="inline-flex rounded-lg border border-border p-0.5">
         {options.map((o) => (
           <button
@@ -704,8 +704,8 @@ function Segmented<T extends string>({
             className={cn(
               "rounded-md px-2.5 py-1 text-xs transition-colors",
               value === o.key
-                ? "bg-foreground font-semibold text-background"
-                : "text-muted-foreground hover:bg-accent",
+                ? "bg-fg font-semibold text-fg-inverted"
+                : "text-fg-muted hover:bg-bg-subtle",
             )}
           >
             {o.label}
@@ -741,7 +741,7 @@ function RowsTable({
     <div className="overflow-x-auto">
       <table className="w-full min-w-[820px] border-collapse text-sm">
         <thead>
-          <tr className="border-b border-border bg-muted/30 text-xs text-muted-foreground">
+          <tr className="border-b border-border bg-bg-muted/30 text-xs text-fg-muted">
             <th className="px-3 py-2.5 text-right font-medium">תאריך</th>
             {hideGroupedColumn !== "customer" && (
               <th className="px-3 py-2.5 text-right font-medium">לקוח</th>
@@ -766,17 +766,17 @@ function RowsTable({
               <tr
                 key={row.credit_task_id}
                 className={cn(
-                  "border-b border-border transition-colors last:border-b-0 hover:bg-muted/20",
+                  "border-b border-border transition-colors last:border-b-0 hover:bg-bg-muted/20",
                   isMutating && "opacity-60",
                 )}
               >
-                <td className="whitespace-nowrap px-3 py-2.5 align-top text-muted-foreground">
+                <td className="whitespace-nowrap px-3 py-2.5 align-top text-fg-muted">
                   <div>{formatIsraelDate(row.created_at)}</div>
                   {showAge && (
                     <div
                       className={cn(
                         "mt-0.5 inline-flex items-center gap-1 text-[11px]",
-                        age >= 7 ? "text-rose-600" : "text-amber-600",
+                        age >= 7 ? "text-danger-fg" : "text-warning-fg",
                       )}
                     >
                       <Clock className="h-3 w-3" />
@@ -785,7 +785,7 @@ function RowsTable({
                   )}
                 </td>
                 {hideGroupedColumn !== "customer" && (
-                  <td className="px-3 py-2.5 align-top font-medium text-foreground">
+                  <td className="px-3 py-2.5 align-top font-medium text-fg">
                     {row.customer_name ?? "—"}
                   </td>
                 )}
@@ -795,16 +795,16 @@ function RowsTable({
                   </td>
                 )}
                 <td className="px-3 py-2.5 align-top">
-                  <div className="text-foreground">{row.item_name}</div>
-                  <div className="text-xs text-muted-foreground" dir="ltr">
+                  <div className="text-fg">{row.item_name}</div>
+                  <div className="text-xs text-fg-muted" dir="ltr">
                     {row.item_id}
                   </div>
                 </td>
                 <td className="whitespace-nowrap px-3 py-2.5 align-top">
-                  <span className="font-bold text-rose-600 tabular-nums">
+                  <span className="font-bold text-danger-fg tabular-nums">
                     {row.qty_missing}
                   </span>
-                  <span className="text-xs text-muted-foreground">
+                  <span className="text-xs text-fg-muted">
                     {" "}
                     מתוך {row.qty_ordered}
                   </span>
@@ -816,9 +816,9 @@ function RowsTable({
                     disabled={isMutating}
                     aria-label="סטטוס טיפול"
                     className={cn(
-                      "rounded-md border px-2 py-1 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-ring",
+                      "rounded-md border px-2 py-1 text-xs font-medium focus:outline-none focus:ring-2 focus:ring-accent/50",
                       STATUS_META[row.status]?.badge ??
-                        "border-border bg-muted text-muted-foreground",
+                        "border-border bg-bg-muted text-fg-muted",
                     )}
                   >
                     {SETTABLE_STATUSES.map((s) => (
@@ -854,12 +854,12 @@ function RowsTable({
                         (e.target as HTMLInputElement).blur();
                       }
                     }}
-                    className="w-full min-w-[140px] rounded-md border border-border bg-transparent px-2 py-1 text-xs placeholder:text-muted-foreground/60 focus:outline-none focus:ring-2 focus:ring-ring"
+                    className="w-full min-w-[140px] rounded-md border border-border bg-transparent px-2 py-1 text-xs placeholder:text-fg-muted/60 focus:outline-none focus:ring-2 focus:ring-accent/50"
                   />
                 </td>
-                <td className="whitespace-nowrap px-3 py-2.5 align-top text-xs text-muted-foreground">
+                <td className="whitespace-nowrap px-3 py-2.5 align-top text-xs text-fg-muted">
                   {isSaved ? (
-                    <span className="inline-flex items-center gap-1 text-emerald-600">
+                    <span className="inline-flex items-center gap-1 text-success-fg">
                       <CheckCircle2 className="h-3.5 w-3.5" />
                       נשמר
                     </span>
