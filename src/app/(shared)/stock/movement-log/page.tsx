@@ -27,7 +27,7 @@
 //  19. Mobile card layout at <md — touch targets ≥44px, no horizontal scroll.
 //  20. Click row → side drawer with full row detail incl. raw IDs collapsed.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
@@ -404,6 +404,14 @@ function DetailsDrawer({
   // operator gets unambiguous feedback (no silent close), with a path to verify
   // the restored balance. Closing it triggers the parent refetch.
   const [undoDone, setUndoDone] = useState(false);
+  // Bring the undo confirm form into view when it opens, so the soft keyboard
+  // on mobile doesn't hide the Confirm button (FLOW-309).
+  const undoFormRef = useRef<HTMLDivElement | null>(null);
+  useEffect(() => {
+    if (undoOpen) {
+      undoFormRef.current?.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+  }, [undoOpen]);
 
   // Reset the undo sub-form whenever the drawer target changes.
   useEffect(() => {
@@ -700,7 +708,7 @@ function DetailsDrawer({
                   </button>
                 </>
               ) : (
-                <div className="space-y-2 rounded-md border border-warning/40 bg-warning-softer/40 p-3">
+                <div ref={undoFormRef} className="space-y-2 rounded-md border border-warning/40 bg-warning-softer/40 p-3">
                   <label className="block text-2xs font-semibold text-fg">
                     Reason <span className="font-normal text-danger-fg">*</span>
                     <textarea
@@ -918,7 +926,7 @@ function DayHeader({ iso, count }: { iso: string; count: number }) {
 }
 
 // === Iteration 9 — Trust strip ============================================
-function TrustStrip({ totalRows }: { totalRows: number }) {
+function TrustStrip({ totalRows, refreshing }: { totalRows: number; refreshing?: boolean }) {
   return (
     <div
       className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border border-info/20 bg-info-softer/40 px-3 py-2 text-2xs text-info-fg"
@@ -927,11 +935,17 @@ function TrustStrip({ totalRows }: { totalRows: number }) {
       <span>
         <strong className="font-semibold">Source:</strong> Stock Ledger
       </span>
-      <span>
-        <strong className="font-semibold tabular-nums">
-          {totalRows.toLocaleString()}
-        </strong>{" "}
-        movements in scope
+      <span aria-live="polite">
+        {refreshing ? (
+          <span className="text-fg-muted">Updating…</span>
+        ) : (
+          <>
+            <strong className="font-semibold tabular-nums">
+              {totalRows.toLocaleString()}
+            </strong>{" "}
+            movements in scope
+          </>
+        )}
       </span>
       <span className="text-fg-muted">
         Event time = when it happened · Posted time = when it was recorded
@@ -1159,7 +1173,7 @@ export default function MovementLogPage() {
         title="Movement Log"
         description="Ledger history for all stock movements. Search, filter by type or date, click a row for full details."
       >
-        <TrustStrip totalRows={total} />
+        <TrustStrip totalRows={total} refreshing={isFetching && !isLoading} />
       </WorkflowHeader>
 
       {urlPoId ? (
@@ -1405,32 +1419,11 @@ export default function MovementLogPage() {
                 ))}
               </select>
             </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-fg-muted">
-                From
-              </label>
-              <input
-                type="date"
-                value={filters.from_date}
-                onChange={(e) => handleDateChange("from_date", e.target.value)}
-                className="w-full rounded border border-border bg-bg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40"
-              />
-            </div>
-            <div>
-              <label className="mb-1 block text-xs font-medium text-fg-muted">
-                To
-              </label>
-              <input
-                type="date"
-                value={filters.to_date}
-                onChange={(e) => handleDateChange("to_date", e.target.value)}
-                className="w-full rounded border border-border bg-bg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-accent/40"
-              />
-            </div>
           </div>
         </details>
 
-        {/* Iteration 23 — quick date range up front (no Advanced unfold needed) */}
+        {/* Iteration 23 — quick date range up front (no Advanced unfold needed).
+            The canonical date inputs; Advanced keeps SKU + Item Type only. */}
         <div className="mt-3 flex flex-wrap items-end gap-3">
           <div>
             <label className="mb-1 block text-xs font-medium text-fg-muted" htmlFor="ml-from-quick">
