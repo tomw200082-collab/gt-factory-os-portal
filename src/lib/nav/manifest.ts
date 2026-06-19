@@ -40,6 +40,7 @@ import {
   Package,
   PackageOpen,
   Plug,
+  Scale,
   ScrollText,
   Settings2,
   Shapes,
@@ -271,6 +272,18 @@ export const NAV_MANIFEST: NavGroup[] = [
         href: "/admin/economics",
         label: "Economics",
         icon: TrendingUp,
+        min_role: "planner",
+        required_capability: "planning:execute",
+      },
+      {
+        // Tranche 080 — Product Decision Board. Joins /economics (margin,
+        // cost, confidence) with /orders/by-item-and-period (units sold) in the
+        // browser to rank products for protect / promote / reprice / drop. A
+        // decision surface, distinct from the analyst-grade Economics table.
+        // Same (economics) route group → planner+admin via planning:execute.
+        href: "/admin/decision-board",
+        label: "Decision Board",
+        icon: Scale,
         min_role: "planner",
         required_capability: "planning:execute",
       },
