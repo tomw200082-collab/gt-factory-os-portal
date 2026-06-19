@@ -57,3 +57,31 @@ export function friendlyCountError(
   }
   return `The count could not be submitted${reason ? ` (code: ${reason})` : ""}. Try again, or contact an admin if it keeps failing.`;
 }
+
+/**
+ * Operator-facing copy for a failed count UNDO (reverse), mapped from the
+ * reverse endpoint's reason codes (api physical-counts §1.10). Raw codes are
+ * never shown; unknown codes / no body fall back to a safe retry sentence.
+ */
+export function friendlyReverseError(httpStatus: number, body: unknown): string {
+  const reason =
+    body && typeof body === "object" && "reason_code" in body
+      ? String((body as { reason_code: unknown }).reason_code)
+      : undefined;
+  switch (reason) {
+    case "ANCHOR_SUPERSEDED":
+      return "A newer count or correction has replaced this one — only the latest count for an item can be undone.";
+    case "ALREADY_REVERSED":
+      return "This count was already undone.";
+    case "COUNT_FREEZE_ACTIVE":
+      return "A count is currently open on this item. Finish or cancel it before undoing.";
+    case "NOT_POSTED":
+      return "Only a posted count can be undone.";
+    case "NO_PRIOR_ANCHOR":
+      return "There's no previous value to restore — set the stock level manually instead.";
+    default:
+      if (httpStatus === 403)
+        return "You can't undo this count. Operators can undo only their own count within 30 minutes of posting; otherwise ask a planner.";
+      return "Could not undo the count. Try again, or contact an admin if it keeps failing.";
+  }
+}

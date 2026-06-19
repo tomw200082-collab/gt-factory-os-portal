@@ -34,6 +34,7 @@ import { useQuery } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { useSession } from "@/lib/auth/session-provider";
+import { friendlyReverseError } from "@/lib/copy/physical-count-errors";
 import { cn } from "@/lib/cn";
 
 function newIdempotencyKey(): string {
@@ -41,31 +42,6 @@ function newIdempotencyKey(): string {
     return crypto.randomUUID();
   }
   return `pcundo_${Date.now()}_${Math.random().toString(36).slice(2)}`;
-}
-
-// Operator-facing copy for a failed count-undo, mapped from the reverse
-// endpoint's reason codes (api physical-counts §1.10). Raw codes never shown.
-export function friendlyReverseError(httpStatus: number, body: unknown): string {
-  const reason =
-    body && typeof body === "object" && "reason_code" in body
-      ? String((body as { reason_code: unknown }).reason_code)
-      : undefined;
-  switch (reason) {
-    case "ANCHOR_SUPERSEDED":
-      return "A newer count or correction has replaced this one — only the latest count for an item can be undone.";
-    case "ALREADY_REVERSED":
-      return "This count was already undone.";
-    case "COUNT_FREEZE_ACTIVE":
-      return "A count is currently open on this item. Finish or cancel it before undoing.";
-    case "NOT_POSTED":
-      return "Only a posted count can be undone.";
-    case "NO_PRIOR_ANCHOR":
-      return "There's no previous value to restore — set the stock level manually instead.";
-    default:
-      if (httpStatus === 403)
-        return "You can't undo this count. Operators can undo only their own count within 30 minutes of posting; otherwise ask a planner.";
-      return "Could not undo the count. Try again, or contact an admin if it keeps failing.";
-  }
 }
 
 interface LedgerRow {

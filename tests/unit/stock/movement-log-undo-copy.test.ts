@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { friendlyReverseError } from "@/app/(shared)/stock/movement-log/page";
+import { friendlyReverseError } from "@/lib/copy/physical-count-errors";
 
 // The count-undo error copy must always be plain English mapped from the
 // reverse endpoint's reason codes (api physical-counts §1.10) — never a raw
