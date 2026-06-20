@@ -150,3 +150,5 @@ Index of every operating artifact. Entries use repo-root-relative paths so the P
 - `docs/portal-os/tranches/082-admin-suppliers-mobile-cards.md` — adds `<md` mobile card view to the suppliers master list (table preserved at md+); pattern-setter for the list-page mobile-card program.
 - `docs/portal-os/tranches/083-admin-items-mobile-cards.md` — adds `<md` mobile card view to the items master list (name/health/status + facts + inline group assign + actions; table preserved at md+).
 - `docs/portal-os/tranches/084-admin-components-mobile-cards.md` — adds `<md` mobile card view to the components (RM/PKG) master list (category/readiness/status + unit/lead/supplier + actions; table preserved at md+).
+- `docs/portal-os/mobile-perfection-program.md` — Tom-directed program: make every page perfect on mobile via ui-ux-pro-max + Playwright visual iteration; holds the proven screenshot recipe, priority order, mobile rubric, and progress tracker.
+- `docs/portal-os/tranches/085-planning-mobile-touch-targets.md` — PlanningSubNav tabs get `min-h-[44px]` (WCAG/HIG touch target) across every /planning/* page; verified with an iPhone-14 Playwright shot.
