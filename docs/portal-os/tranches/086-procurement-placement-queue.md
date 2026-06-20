@@ -77,12 +77,25 @@ Blocked on backend for live wiring → ships in two parts:
     Part B just skips the form for the full-receipt happy path). Partial/discrepancy
     still opens the detailed form.
 
-## Payment-terms model (DECIDED 2026-06-20, Tom delegated)
-Free-text string on the PO, default = supplier `payment_terms`, editable. Dropdown
-= distinct existing supplier values via `distinctWithCounts`
-(`src/lib/admin/supplier-field-options.ts`; current set NET_14/30/45/60), operator
-may type a custom term. ⊥ new enum, ⊥ migration of supplier values. Locked — no
-further input needed.
+## Payment-terms model (REVISED 2026-06-20 — cash-flow-ready foundation, Tom)
+Supersedes the earlier "free text only" decision. Tom: lay the payment-terms
+infrastructure so a future **cash-flow / treasury** view can plug in — but DON'T
+build cash flow now. ∴ capture terms structured enough to compute a supplier
+due-date later, **snapshotted on the PO** so historical due dates never move when a
+term definition is edited later.
+
+Model (additive · lazy · forward-compatible · ⊥ cash-flow build now):
+- Shared **terms vocabulary** = a constant (NOT a master table): code → {label, net_days, eom}.
+  Covers the Israeli reality: CASH/מזומן (0, eom=false); NET_14/30/45/60 (eom=false);
+  EOM_30/60/90 = שוטף+30/60/90 (eom=true). Custom term allowed → label only, structured=null.
+- PO snapshots at place time: `payment_terms` (label) + `payment_terms_net_days int NULL`
+  + `payment_terms_eom boolean NULL`. Default from the supplier's term; office manager may change.
+- Supplier `payment_terms` stays free text (current); mapped to a vocabulary code for the
+  default when it matches, else the manager picks/types.
+- Cash flow LATER (not now) = pure read, no schema change: due_date =
+  `(eom ? endOfMonth(basis) : basis) + net_days`, basis = receipt/invoice date (chosen then).
+
+⊥ now: cash-flow/treasury surface, due-date column, invoice-date capture, AP aging.
 
 ## UX spec — placement queue (ui-ux-pro-max, applied lazily)
 Reuse existing tokens/components; no new design system.
@@ -145,6 +158,33 @@ PR; backend state/field are separately owned and unaffected by a portal revert.
 ## Operator approval
 - [ ] Tom approves this plan (comment `@claude /portal-tranche-fix 086` on the PR)
 - [ ] Tom approves the backend contract-requirements (so W1 can ship the dependency)
+
+## Backend build map (recon 2026-06-20 — in build via backend-db-executor)
+Facts (all `private_core`, repo `gt-factory-os`):
+- `purchase_orders.status` CHECK = DRAFT/OPEN/PARTIAL/RECEIVED/CANCELLED (`0049:87-95`).
+  `payment_terms` ⊥ on PO (only on `suppliers`/`supplier_items`, free text). Next migration = `0258`.
+- All create paths hard-code OPEN: `fn_create_manual_po` (`0252:258`), convert-rec (`0056`/`0096`),
+  session place via `handlePlacePo` → `fn_create_manual_po` (`handler.actions.ts:366`).
+- ⚠ CRITICAL: `fn_po_line_rollup_header` (`0054`, v2 `0242`) skips only `'DRAFT'`; any other pre-OPEN
+  state silently rolls to OPEN on first line insert (GUC-bypassed UPDATE). New state MUST join the skip.
+- Price write-back ("sync") is baked in `fn_create_manual_po` via `fn_approve_supplier_cost_draft`
+  (gated by `p_confirm_price_update` + policy `pricing.write_back.auto_approve_max_delta_pct`). Reuse it — ⊥ re-implement.
+- Queue read needs ⊥ change: `GET /api/v1/queries/purchase-orders?status=APPROVED_TO_ORDER` already filters any status string.
+- Audit = actor passed into the fn (`created_by_*`) + GUCs `audit.actor_*`; mirror `handlePlacePo`.
+
+Decisions (locked): new state `APPROVED_TO_ORDER` (⊥ reuse DRAFT — contracted meaning). `payment_terms`
+on PO = 3 snapshot cols (`payment_terms` text, `payment_terms_net_days int`, `payment_terms_eom bool`) — cash-flow-ready, ⊥ master table.
+
+Build (migration `0258` + api):
+1. `0258_*.sql`: widen status CHECK (+APPROVED_TO_ORDER); transition guard +`APPROVED_TO_ORDER→OPEN|CANCELLED`;
+   **add APPROVED_TO_ORDER to the DRAFT-skip in `fn_po_line_rollup_header` (0054 + 0242 copies)**; add 3 payment_terms cols;
+   new `fn_place_purchase_order(po_id, actor, snapshot, payment_terms, net_days, eom, line_prices jsonb, confirm_price_update)`
+   = FOR UPDATE + assert status=APPROVED_TO_ORDER + per-line `unit_price_net` + price write-back + set terms + →OPEN.
+   New `p_initial_status default 'OPEN'` param on a new `fn_create_manual_po` version (back-com-compat).
+2. Wire entry: session place + convert-rec create in APPROVED_TO_ORDER (the office-manager queue input); manual `/new` stays OPEN (urgent bypass).
+3. api: `POST /api/v1/mutations/purchase-orders/:po_id/place` (route+Zod `PlaceOrderBodySchema`+`handlePlaceOrder`, mirror `handlePlacePo` break-glass/idempotency/FOR-UPDATE). Add `payment_terms` to `PurchaseOrderRow` SELECTs for display.
+4. Tests: `db/tests/0258_*.test.sql` (enum, transitions, **APPROVED_TO_ORDER does NOT auto-roll to OPEN on line insert**), `api/test/purchase_order_place.test.ts`. Update contract docs `purchase_order_status_lifecycle_contract.md` + `purchase_orders_schema_contract.md`.
+Governance: draft PR only · ⊥ merge/deploy/flag-flip.
 
 ## Execution log — Part B (2026-06-20, Tom approved the plan)
 
