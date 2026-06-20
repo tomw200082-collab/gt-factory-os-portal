@@ -208,5 +208,25 @@ W1 backend dependency (PO state + `payment_terms`) — not built.
 the authorized Hebrew-surface list in CLAUDE.md; adding Hebrew here needs a Tom
 CLAUDE.md entry. Manifest add: `_components/ReceiptLandingPicker.test.tsx`.
 
+## Execution log — Part A (2026-06-20, end-to-end build)
+
+**Backend (`gt-factory-os`, draft PR #91):** migration `0258` (APPROVED_TO_ORDER state +
+rollup-skip fix + 3 payment-terms snapshot cols), `fn_place_purchase_order`, `p_initial_status`
+param, session-place + convert-rec create in APPROVED_TO_ORDER, `POST /mutations/purchase-orders/:po_id/place`.
+pgTAP 14/14, place API 10/10, PO regression 55/55, tsc clean. ⊥ merge/deploy/flag/ledger.
+
+**Portal (this repo):**
+- `src/app/api/purchase-orders/[po_id]/place/route.ts` — proxy to the place mutation.
+- `src/lib/payment-terms.ts` (+ `.test.ts`) — cash-flow-ready terms vocabulary (code→{label,net_days,eom}) + supplier-term mapper.
+- `src/app/(po)/purchase-orders/placement-queue/_lib/api.ts` — `usePlacementQueue` (status=APPROVED_TO_ORDER) + `usePoLines` + `usePlaceOrder`.
+- `src/app/(po)/purchase-orders/placement-queue/_components/PlacementRow.tsx` (+ `.test.tsx`) — per-PO expand→price+terms→`בצע הזמנה`.
+- `src/app/(po)/purchase-orders/placement-queue/page.tsx` — Hebrew/RTL queue, RoleGate `planning:execute`.
+- `src/lib/nav/manifest.ts` — "Orders to Place" nav (planning:execute).
+- `CLAUDE.md` — Hebrew-exception entry for `/purchase-orders/placement-queue` (Tom authorized 2026-06-20).
+- `docs/portal-os/route-manifest.json` — route row + note.
+
+Gates: tsc 0 · eslint 0 · vitest 7/7 new (payment-terms 6, PlacementRow 1). Verification pending:
+`/ux-flow-audit` (procurement→place→receipt) + `/ui-ux-pro-max` (queue) — running next.
+
 ## Actual evidence (filled by /portal-tranche-fix run)
 <pasted after execution: typecheck, vitest N/N, playwright, PR URL, scorecard delta>
