@@ -49,7 +49,7 @@ import type { ReceiptTrack } from "./_components/types";
 import { fmtNumStr } from "@/lib/utils/format-quantity";
 // Tranche 023 — Lucide icons replace decorative emojis for a more
 // professional surface.
-import { FilePen, Lightbulb, ArrowDown, Lock } from "lucide-react";
+import { FilePen, Lightbulb, ArrowDown, Lock, PackageCheck } from "lucide-react";
 
 // ---------------------------------------------------------------------------
 // Goods Receipt contract — inlined.
@@ -597,6 +597,12 @@ export default function GoodsReceiptPage() {
   // is enforced separately by the urlPoLocked flag below.
   const [poId, setPoId] = useState<string>(urlPoId);
 
+  // Tranche 086 (Part B) — "receive all in full" express path. Set when the
+  // operator taps "Receive all in full" on a PO in the landing picker: the PO
+  // is selected (lines prefill to full open qty) and a one-tap confirm banner
+  // replaces the need to scroll the editable form. Cleared on un-link / post.
+  const [fullReceiveRequested, setFullReceiveRequested] = useState(false);
+
   // Cycle 16: when prefill is driven by the URL we lock the supplier picker
   // per W4 spec §3.4 step 1. The operator MUST NOT change supplier in this
   // path — the handler-side SUPPLIER_MISMATCH 409 guard remains the
@@ -738,6 +744,8 @@ export default function GoodsReceiptPage() {
     if (!nextPoId) {
       // Clear per-line po_line_id selections when un-linking the PO.
       setLines((prev) => prev.map((l) => ({ ...l, po_line_id: "" })));
+      // Leaving the PO also cancels any pending "receive all in full" intent.
+      setFullReceiveRequested(false);
       return;
     }
     const picked = openPosQuery.data?.rows.find((p) => p.po_id === nextPoId);
@@ -771,8 +779,8 @@ export default function GoodsReceiptPage() {
     setLines((prev) => [...prev, emptyLine()]);
   }
 
-  async function handleSubmit(e: React.FormEvent): Promise<void> {
-    e.preventDefault();
+  async function handleSubmit(e?: React.FormEvent): Promise<void> {
+    e?.preventDefault();
     setDone(null);
     if (!supplierId) {
       setDone({ kind: "error", message: "Supplier is required." });
@@ -917,6 +925,9 @@ export default function GoodsReceiptPage() {
         // Reset form for a fresh submission
         setLines([emptyLine()]);
         setNotes("");
+        // Tranche 086 — the express full-receive intent is consumed on a
+        // successful post; clear it so the banner doesn't linger.
+        setFullReceiveRequested(false);
       } else {
         // Tranche 041 — never show stringified JSON to the operator; prefer
         // the server's message string, else a plain-English fallback.
@@ -1021,6 +1032,14 @@ export default function GoodsReceiptPage() {
   // while true, the submit button is replaced by the amber inline
   // confirmation zone in the sticky bar.
   const [confirmingOverReceipt, setConfirmingOverReceipt] = useState(false);
+
+  // Tranche 086 (Part B) — lines ready to post as a full receipt (linked to a
+  // PO line with a positive quantity). Drives the express-confirm banner's
+  // readiness and count copy.
+  const fullReceiveLineCount = lines.filter(
+    (l) => l.po_line_id && Number(l.quantity) > 0,
+  ).length;
+  const fullReceiveReady = prefillApplied && fullReceiveLineCount > 0;
 
   // "Review quantities" — leave the confirmation zone and put focus on the
   // first over-receipt line's quantity input.
@@ -1498,6 +1517,14 @@ export default function GoodsReceiptPage() {
             handlePoChange(po.po_id);
             setLines([emptyLine()]);
           }}
+          onReceiveAllInFull={(po) => {
+            // Express full-receipt: same selection as onSelectPo, but raise
+            // the one-tap confirm banner so the operator posts the prefilled
+            // full quantities without touching the line editor.
+            handlePoChange(po.po_id);
+            setLines([emptyLine()]);
+            setFullReceiveRequested(true);
+          }}
           onStartManual={() => {
             setManualConfirmed(true);
             // Manual mode: clear any prior PO selection.
@@ -1601,6 +1628,62 @@ export default function GoodsReceiptPage() {
           />
 
           <form ref={formRef} onSubmit={handleSubmit} className="space-y-5">
+            {/* Tranche 086 (Part B) — express "receive all in full" confirm.
+                Raised when the operator chose "Receive all in full" on the
+                landing picker. Posts the prefilled full quantities via the
+                same handleSubmit (over-receipt guard included) — no line
+                editing needed. */}
+            {fullReceiveRequested ? (
+              <div
+                className="rounded-md border border-success/40 bg-success-softer px-4 py-3"
+                role="group"
+                aria-label="Receive this purchase order in full"
+                data-testid="receipt-full-receive-confirm"
+              >
+                <div className="flex items-start gap-2">
+                  <PackageCheck
+                    className="mt-0.5 h-5 w-5 shrink-0 text-success-fg"
+                    aria-hidden="true"
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="text-sm font-semibold text-success-fg">
+                      Receive everything on this PO
+                    </div>
+                    <p
+                      className="mt-0.5 text-xs text-success-fg/90"
+                      aria-live="polite"
+                    >
+                      {!prefillApplied
+                        ? "Preparing the full receipt…"
+                        : fullReceiveReady
+                          ? `All ${fullReceiveLineCount} open line${fullReceiveLineCount !== 1 ? "s are" : " is"} set to the full open quantity. Post to receive in full, or review the lines first.`
+                          : "This PO has no open lines left to receive."}
+                    </p>
+                    <div className="mt-2 flex flex-wrap items-center gap-2">
+                      <button
+                        type="button"
+                        className="btn btn-primary btn-sm"
+                        disabled={!fullReceiveReady || phase === "submitting"}
+                        onClick={() => void handleSubmit()}
+                        data-testid="receipt-full-receive-submit"
+                      >
+                        {phase === "submitting"
+                          ? "Posting…"
+                          : "Confirm & receive all"}
+                      </button>
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-sm"
+                        onClick={() => setFullReceiveRequested(false)}
+                        data-testid="receipt-full-receive-review"
+                      >
+                        Review lines instead
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            ) : null}
             <SectionCard title="Receipt context">
               <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
                 <label className="block min-w-0">

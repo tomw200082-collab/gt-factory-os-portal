@@ -595,7 +595,7 @@ export function FocusCard({
         >
           <Check className="h-5 w-5 shrink-0" aria-hidden />
           <span>
-            ההזמנה נוצרה.
+            ההזמנה נוצרה וממתינה לביצוע מול הספק.
             {po.po_id && (
               <span className="font-mono text-xs">
                 {" "}·{" "}

@@ -15,6 +15,14 @@ The exception now also covers two operator-facing surfaces that are Hebrew + `di
 
 These were flagged by the UX content auditor as English-first violations because they were not previously listed here; Tom confirmed the Hebrew is intentional. English remains the default for all other operator surfaces; this list is the complete set of authorized Hebrew-operator-label surfaces.
 
+### Extension (2026-06-20, authorized by Tom — procurement placement queue)
+
+The exception also covers the office-manager (bookkeeping) **placement queue**, Hebrew + `dir="rtl"` by Tom's explicit UX target (Tom 2026-06-20: "keep everything English; only the bookkeeper's page stays Hebrew"):
+
+- **`/purchase-orders/placement-queue`** — the office manager's "orders to place" surface (tranche 086): lists POs the planner approved into `APPROVED_TO_ORDER`, where she enters supplier-confirmed price + payment terms and places the order (`בצע הזמנה`). Includes its `PlacementRow` component (status/term labels, price/terms inputs, action buttons, banners).
+
+The goods-receipt surface (`/stock/receipts`) and all other operator surfaces remain English. This and the two lists above are the complete set of authorized Hebrew-operator-label surfaces.
+
 ## Read these, in order, at the start of any portal session
 1. `docs/portal-os/registry.md` — index of all OS artifacts (≤1 line per entry).
 2. `docs/portal-os/scorecard.md` — current readiness, last updated.

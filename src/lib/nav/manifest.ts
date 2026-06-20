@@ -299,6 +299,16 @@ export const NAV_MANIFEST: NavGroup[] = [
         min_role: "viewer",
         required_capability: "viewer:read",
       },
+      {
+        // Tranche 086 — office-manager queue of APPROVED_TO_ORDER POs awaiting
+        // placement (price + payment terms → OPEN). Hebrew page; English nav
+        // label like the rest of the shell.
+        href: "/purchase-orders/placement-queue",
+        label: "Orders to Place",
+        icon: ClipboardCheck,
+        min_role: "planner",
+        required_capability: "planning:execute",
+      },
     ],
   },
   {

@@ -275,6 +275,10 @@ function SessionView({
 }): JSX.Element {
   const [view, setView] = useState<"list" | "calendar">(initialView);
   const actionableCount = buildFocusQueue(pos).length;
+  // Tranche 086 (FLOW-004) — POs placed in this session now wait in the
+  // office-manager placement queue (APPROVED_TO_ORDER). Surface a bridge so the
+  // planner has a forward path after finishing.
+  const placedCount = pos.filter((p) => p.status === "placed").length;
 
   if (pos.length === 0) {
     return (
@@ -310,6 +314,15 @@ function SessionView({
           </div>
         </div>
         <div className="flex items-center gap-3">
+          {placedCount > 0 && (
+            <Link
+              href="/purchase-orders/placement-queue"
+              className="text-xs font-medium text-accent underline-offset-2 hover:underline"
+              data-testid="procurement-to-placement-queue"
+            >
+              {placedCount} הזמנות ממתינות לביצוע ←
+            </Link>
+          )}
           {/* Tranche 065 (FLOW-PC04) — quiet exit to the full PO history. */}
           <Link
             href="/purchase-orders"

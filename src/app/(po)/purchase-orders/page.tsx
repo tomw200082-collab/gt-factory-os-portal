@@ -89,8 +89,19 @@ interface PurchaseOrdersListResponse {
   count: number;
 }
 
-type POStatus = "OPEN" | "PARTIAL" | "RECEIVED" | "CANCELLED";
-const STATUS_OPTIONS: POStatus[] = ["OPEN", "PARTIAL", "RECEIVED", "CANCELLED"];
+type POStatus =
+  | "APPROVED_TO_ORDER"
+  | "OPEN"
+  | "PARTIAL"
+  | "RECEIVED"
+  | "CANCELLED";
+const STATUS_OPTIONS: POStatus[] = [
+  "APPROVED_TO_ORDER",
+  "OPEN",
+  "PARTIAL",
+  "RECEIVED",
+  "CANCELLED",
+];
 
 // ---------------------------------------------------------------------------
 // Formatting helpers — locale forced to en-US for stable, predictable display
@@ -153,6 +164,8 @@ async function fetchJson<T>(url: string): Promise<T> {
 }
 
 function POStatusBadge({ status }: { status: string }): JSX.Element {
+  if (status === "APPROVED_TO_ORDER")
+    return <Badge tone="warning" dotted>To place</Badge>;
   if (status === "OPEN") return <Badge tone="info" dotted>Open</Badge>;
   if (status === "PARTIAL") return <Badge tone="warning" dotted>Partial</Badge>;
   if (status === "RECEIVED")
@@ -463,7 +476,9 @@ export default function PurchaseOrdersListPage() {
     (s): s is POStatus => STATUS_OPTIONS.includes(s as POStatus),
   );
   const [statusFilter, setStatusFilter] = useState<POStatus[] | null>(
-    initialStatuses.length > 0 ? initialStatuses : ["OPEN", "PARTIAL"],
+    initialStatuses.length > 0
+      ? initialStatuses
+      : ["APPROVED_TO_ORDER", "OPEN", "PARTIAL"],
   );
   // Tranche 065 (FLOW-A13) — search text and the Late-only flag mirror into
   // the URL (?q=, ?late=1) like status already does, restoring on load.
@@ -527,6 +542,9 @@ export default function PurchaseOrdersListPage() {
 
   const stats = useMemo(() => {
     const today = new Date().toISOString().slice(0, 10);
+    const approvedRows = allRows.filter(
+      (r) => r.status === "APPROVED_TO_ORDER",
+    );
     const openRows = allRows.filter((r) => r.status === "OPEN");
     const partialRows = allRows.filter((r) => r.status === "PARTIAL");
     const receivedRows = allRows.filter((r) => r.status === "RECEIVED");
@@ -546,6 +564,7 @@ export default function PurchaseOrdersListPage() {
     );
     const currency = allRows[0]?.currency ?? "ILS";
     return {
+      approvedCount: approvedRows.length,
       openCount: openRows.length,
       partialCount: partialRows.length,
       receivedCount: receivedRows.length,
@@ -656,6 +675,26 @@ export default function PurchaseOrdersListPage() {
           className="flex flex-wrap gap-3 mb-2"
           data-testid="po-stats-bar"
         >
+          <KpiTile
+            icon={<ClipboardList className="h-3.5 w-3.5" aria-hidden />}
+            label="To place"
+            count={stats.approvedCount}
+            sublabel="Awaiting placement"
+            tone="warning"
+            active={
+              statusFilter?.length === 1 &&
+              statusFilter.includes("APPROVED_TO_ORDER") &&
+              !lateOnly
+            }
+            onClick={() => {
+              const only =
+                statusFilter?.length === 1 &&
+                statusFilter.includes("APPROVED_TO_ORDER") &&
+                !lateOnly;
+              applyStatusFilter(only ? null : ["APPROVED_TO_ORDER"]);
+            }}
+            testId="po-stat-approved"
+          />
           <KpiTile
             icon={<ClipboardList className="h-3.5 w-3.5" aria-hidden />}
             label="Open"

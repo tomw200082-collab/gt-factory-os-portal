@@ -394,15 +394,17 @@ function DoneSummary({
           חזרה לרשימה
         </button>
       </div>
-      {/* Tranche 065 (FLOW-A12) — close the loop: the orders this session
-          created are visible on the PO list. */}
+      {/* Tranche 086 (FLOW-001) — placed session POs now land in
+          APPROVED_TO_ORDER (the office-manager queue), not OPEN. Point the
+          planner at the placement queue, not the OPEN PO list (which would
+          show zero). */}
       {placed > 0 && (
         <Link
-          href="/purchase-orders?status=OPEN"
+          href="/purchase-orders/placement-queue"
           className="text-xs font-medium text-fg-muted underline-offset-2 hover:text-fg hover:underline"
           data-testid="focus-done-view-orders"
         >
-          צפייה בהזמנות שנוצרו ←
+          ההזמנות שנוצרו ממתינות לביצוע מול הספק ←
         </Link>
       )}
     </div>
