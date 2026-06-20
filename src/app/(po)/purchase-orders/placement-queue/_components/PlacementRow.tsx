@@ -34,7 +34,15 @@ function lineName(l: QueuePoLine): string {
   );
 }
 
-export function PlacementRow({ po }: { po: QueuePo }): JSX.Element {
+export function PlacementRow({
+  po,
+  onPlaced,
+}: {
+  po: QueuePo;
+  // Called after a successful place so the page can show a durable success
+  // banner — the row itself unmounts when the queue refetch drops this PO.
+  onPlaced?: (po: QueuePo) => void;
+}): JSX.Element {
   const { confirm, dialog } = useConfirm();
   const [open, setOpen] = useState(false);
   const linesQuery = usePoLines(po.po_id, open);
@@ -111,9 +119,12 @@ export function PlacementRow({ po }: { po: QueuePo }): JSX.Element {
       },
       {
         // On success the queue refetch drops this PO (no longer
-        // APPROVED_TO_ORDER), so the row unmounts — the shrinking list is the
-        // confirmation. Collapse defensively in case it lingers.
-        onSuccess: () => setOpen(false),
+        // APPROVED_TO_ORDER), so the row unmounts. Collapse defensively and
+        // hand the success up to the page for a durable confirmation banner.
+        onSuccess: () => {
+          setOpen(false);
+          onPlaced?.(po);
+        },
         onError: (e: Error) => setErrorMsg(e.message),
       },
     );
