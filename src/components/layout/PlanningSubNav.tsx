@@ -172,8 +172,10 @@ export function PlanningSubNav() {
                 ref={active ? activeTabRef : undefined}
                 aria-current={active ? "page" : undefined}
                 className={cn(
-                  // Base layout
-                  "group relative flex shrink-0 items-center gap-1.5 px-3.5 py-2.5",
+                  // Base layout. min-h-[44px] meets the WCAG/HIG 44px touch
+                  // target on mobile (content is ~38px; min-h only grows the
+                  // hit area, content stays vertically centered).
+                  "group relative flex min-h-[44px] shrink-0 items-center gap-1.5 px-3.5 py-2.5",
                   "text-xs font-medium",
                   // Transitions
                   "transition-colors duration-150",

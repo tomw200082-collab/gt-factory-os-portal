@@ -517,7 +517,9 @@ function SuppliersPageInner(): JSX.Element {
             onNew={() => setShowCreate(true)}
           />
         ) : (
-          <div className="overflow-x-auto">
+          <>
+          {/* Desktop table (md+) */}
+          <div className="hidden overflow-x-auto md:block">
             <table className="w-full border-collapse text-sm">
               <thead>
                 <tr className="border-b border-border/70 bg-bg-subtle/60">
@@ -648,6 +650,87 @@ function SuppliersPageInner(): JSX.Element {
               </tbody>
             </table>
           </div>
+
+          {/* Mobile card view (<md) — Tranche 082. Same rows, no horizontal
+              scroll. Reuses the desktop badge/cell components. */}
+          <ul className="divide-y divide-border/40 md:hidden">
+            {filtered.map((r) => (
+              <li
+                key={r.supplier_id}
+                className={`px-3 py-3 ${
+                  r.supplier_id === selectedId ? "bg-bg-subtle/60" : ""
+                }`}
+                onClick={() => setSelectedId(r.supplier_id)}
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <Link
+                    href={`/admin/masters/suppliers/${encodeURIComponent(r.supplier_id)}`}
+                    className="min-w-0 flex-1 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <span
+                      className="block text-sm font-medium leading-snug text-fg-strong"
+                      dir="auto"
+                    >
+                      {r.supplier_name_official}
+                    </span>
+                    {r.supplier_name_short ? (
+                      <span className="block text-xs text-fg-muted" dir="auto">
+                        {r.supplier_name_short}
+                      </span>
+                    ) : null}
+                    <span className="mt-0.5 block font-mono text-3xs text-fg-subtle">
+                      {r.supplier_id}
+                    </span>
+                  </Link>
+                  <SupplierStatusBadge status={r.status} />
+                </div>
+
+                <div className="mt-2 flex flex-wrap items-center gap-1.5">
+                  <SupplierTypeBadge type={r.supplier_type} />
+                  <CurrencyChip currency={r.currency} />
+                  <span className="rounded-full bg-bg-subtle px-2 py-0.5 text-2xs tabular-nums text-fg-subtle ring-1 ring-border">
+                    {r.default_lead_time_days != null
+                      ? `${r.default_lead_time_days}d lead`
+                      : "no lead set"}
+                  </span>
+                </div>
+
+                <div className="mt-2">
+                  <ContactCell
+                    name={r.primary_contact_name}
+                    phone={r.primary_contact_phone}
+                  />
+                </div>
+
+                <div className="mt-3 flex items-center gap-2">
+                  <Link
+                    href={`/admin/masters/suppliers/${encodeURIComponent(r.supplier_id)}`}
+                    className="btn btn-sm inline-flex min-h-[44px] flex-1 items-center justify-center gap-1"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    View
+                    <ArrowRight className="h-3 w-3" strokeWidth={2} />
+                  </Link>
+                  {isAdmin ? (
+                    <button
+                      type="button"
+                      className="btn btn-sm inline-flex min-h-[44px] flex-1 items-center justify-center gap-1"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleToggleStatus(r);
+                      }}
+                      disabled={statusMutation.isPending}
+                    >
+                      <Power className="h-3 w-3" strokeWidth={2} />
+                      {r.status === "ACTIVE" ? "Deactivate" : "Activate"}
+                    </button>
+                  ) : null}
+                </div>
+              </li>
+            ))}
+          </ul>
+          </>
         )}
       </SectionCard>
 
