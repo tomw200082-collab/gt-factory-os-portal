@@ -911,11 +911,11 @@ function ItemsPageInner(): JSX.Element {
                       Case pack
                     </dt>
                     <dd className="text-fg-muted">
-                      {r.case_pack != null && r.sales_uom
+                      {r.case_pack == null
+                        ? "—"
+                        : r.sales_uom
                         ? formatQty(r.case_pack, r.sales_uom)
-                        : r.case_pack != null
-                        ? r.case_pack
-                        : "—"}
+                        : r.case_pack}
                     </dd>
                   </div>
                   <div className="min-w-0">
