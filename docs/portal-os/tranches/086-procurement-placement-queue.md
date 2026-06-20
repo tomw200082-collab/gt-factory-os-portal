@@ -1,10 +1,22 @@
 # Tranche 086 — Procurement placement queue (Tom → office-manager handoff)
 
-status: proposed — pending Tom approval + backend dependency (W1)
+status: IN PROGRESS — Part B shipped; Part A (backend + Hebrew queue) authorized end-to-end by Tom 2026-06-20
 created: 2026-06-20
 scorecard_target_category: flow-continuity (procurement → PO → receipt)
 expected_delta: +1 flow-continuity (closes the decide→place handoff gap)
 sizing: M (portal: 5-8 files) + backend dependency (separate lane, Tom-gated)
+
+## End-to-end goal (Tom, 2026-06-20)
+Goal: the Tom→office-manager procurement handoff is implemented **end-to-end** and
+verified by me at both the `/ux-flow-audit` (operator flow) and `/ui-ux-pro-max`
+(UI/UX quality) levels before it counts as done. Tom authorized the backend lane
+build. Hard limit retained: **draft PRs only — ⊥ merge, ⊥ deploy, ⊥ frozen-flag
+flips** (those stay Tom's). Definition of done:
+1. backend (`gt-factory-os`): `APPROVED_TO_ORDER` PO state + `payment_terms` +
+   place-order mutation + queue read + tests → draft PR.
+2. portal: Hebrew/RTL placement queue wired to the above; Part B (receipts) intact.
+3. verification: `/ux-flow-audit` clean on procurement→place→receipt; `/ui-ux-pro-max`
+   review on the queue; typecheck + vitest + (where runnable) backend tests green.
 
 ## Why this tranche
 Today `/planning/procurement` mixes *deciding what to order* and *placing the PO*
