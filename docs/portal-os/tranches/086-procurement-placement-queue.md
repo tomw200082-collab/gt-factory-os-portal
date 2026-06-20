@@ -86,9 +86,17 @@ Reuse existing tokens/components; no new design system.
 - skipped: list virtualization (queue <50 rows), calendar view, multi-supplier
   compare strip (that lives on `/purchase-orders/new`). Add when measured.
 
+## Language decision (Tom, 2026-06-20 — locked)
+- English everywhere by default. The **only** Hebrew surface in this tranche is the
+  bookkeeper placement queue (`/purchase-orders/placement-queue`, Part A).
+- `/stock/receipts` (Part B) and every other surface stay English.
+- ∴ Part A is built Hebrew + `dir="rtl"`; CLAUDE.md exception entry added **when
+  Part A ships** (the route does not exist yet — recording an exception for a 404
+  would mislead the UX auditor). Tom is sole writer of CLAUDE.md.
+
 ## Governance flags (Tom)
-- [ ] CLAUDE.md Hebrew-exception entry needed for `/purchase-orders/placement-queue`
-      (new Hebrew operator surface). Tom is sole writer of CLAUDE.md.
+- [ ] CLAUDE.md Hebrew-exception entry for `/purchase-orders/placement-queue` —
+      add when Part A lands (Tom-authored; authorization given 2026-06-20).
 - [ ] Backend dependency above must ship first for Part A (Mode B gate). Part B
       ships independently.
 - [ ] Bookkeeper-as-role is a separate locked decision; not in this tranche.
