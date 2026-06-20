@@ -125,5 +125,27 @@ PR; backend state/field are separately owned and unaffected by a portal revert.
 - [ ] Tom approves this plan (comment `@claude /portal-tranche-fix 086` on the PR)
 - [ ] Tom approves the backend contract-requirements (so W1 can ship the dependency)
 
+## Execution log — Part B (2026-06-20, Tom approved the plan)
+
+Part B shipped (portal-only, no backend dependency). Part A stays blocked on the
+W1 backend dependency (PO state + `payment_terms`) — not built.
+
+- `_components/ReceiptLandingPicker.tsx` — optional `onReceiveAllInFull` prop; each
+  open-PO row (expected + search) gains a sibling "Receive all in full" express
+  button (distinct from the row's "Receive →" editable path).
+- `receipts/page.tsx` — `fullReceiveRequested` state; landing picker wired so the
+  express button selects the PO (lines prefill to full open qty) and raises a
+  top-of-form confirm banner ("Confirm & receive all") that posts via the existing
+  `handleSubmit` — over-receipt guard intact, full invalidation set reused. Cleared
+  on un-link and on successful post. `handleSubmit(e?)` made event-optional so the
+  banner can call it.
+- `_components/ReceiptLandingPicker.test.tsx` — new vitest: express action calls
+  `onReceiveAllInFull` (not `onSelectPo`); absent handler hides the action.
+
+**Deviation from plan:** label is English ("Receive all in full"), NOT the Hebrew
+"קיבלתי הכול" the plan sketched. `/stock/receipts` is English-first and is not on
+the authorized Hebrew-surface list in CLAUDE.md; adding Hebrew here needs a Tom
+CLAUDE.md entry. Manifest add: `_components/ReceiptLandingPicker.test.tsx`.
+
 ## Actual evidence (filled by /portal-tranche-fix run)
 <pasted after execution: typecheck, vitest N/N, playwright, PR URL, scorecard delta>

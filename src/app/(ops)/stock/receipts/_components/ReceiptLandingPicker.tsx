@@ -23,7 +23,7 @@
 
 import { useMemo, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
-import { Truck, Search, Plus, ChevronDown, ChevronUp, CornerDownLeft } from "lucide-react";
+import { Truck, Search, Plus, ChevronDown, ChevronUp, CornerDownLeft, PackageCheck } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { fmtNumStr } from "@/lib/utils/format-quantity";
 import {
@@ -59,6 +59,10 @@ interface ReceiptLandingPickerProps {
   onSelectPo: (po: PoOption) => void;
   onStartManual: () => void;
   isLoadingPos: boolean;
+  // Tranche 086 (Part B) — express "receive all in full". When provided, each
+  // open-PO row gets a secondary action that posts the full open quantity
+  // without opening the editable form. Optional so other callers are unchanged.
+  onReceiveAllInFull?: (po: PoOption) => void;
 }
 
 export function ReceiptLandingPicker({
@@ -67,6 +71,7 @@ export function ReceiptLandingPicker({
   onSelectPo,
   onStartManual,
   isLoadingPos,
+  onReceiveAllInFull,
 }: ReceiptLandingPickerProps) {
   const [query, setQuery] = useState("");
   const [showAll, setShowAll] = useState(false);
@@ -227,6 +232,7 @@ export function ReceiptLandingPicker({
                         {po.po_number}
                       </div>
                     </button>
+                    <ReceiveAllRow po={po} onReceiveAllInFull={onReceiveAllInFull} />
                     <POCardContents poId={po.po_id} />
                   </li>
                 );
@@ -382,6 +388,7 @@ export function ReceiptLandingPicker({
                           {po.po_number}
                         </div>
                       </button>
+                      <ReceiveAllRow po={po} onReceiveAllInFull={onReceiveAllInFull} />
                       <POCardContents poId={po.po_id} />
                     </li>
                   );
@@ -421,6 +428,37 @@ export function ReceiptLandingPicker({
         </div>
       </div>
     </section>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// ReceiveAllRow — Tranche 086 (Part B) express full-receive action.
+//
+// Sibling of the PO row button (never nested — a button-in-button is invalid).
+// Renders only when the parent supplies onReceiveAllInFull. Distinct from the
+// row's "Receive →" (which opens the editable form): this posts the full open
+// quantity behind a confirm on the receipts page.
+// ---------------------------------------------------------------------------
+function ReceiveAllRow({
+  po,
+  onReceiveAllInFull,
+}: {
+  po: PoOption;
+  onReceiveAllInFull?: (po: PoOption) => void;
+}) {
+  if (!onReceiveAllInFull) return null;
+  return (
+    <div className="mt-1 px-3">
+      <button
+        type="button"
+        className="inline-flex min-h-[40px] items-center gap-1.5 rounded-md border border-success/40 bg-success-softer px-3 py-1.5 text-xs font-semibold text-success-fg transition-colors hover:bg-success/15 focus:outline-none focus-visible:ring-2 focus-visible:ring-success"
+        onClick={() => onReceiveAllInFull(po)}
+        data-testid={`receipt-landing-receive-all-${po.po_id}`}
+      >
+        <PackageCheck className="h-3.5 w-3.5" aria-hidden="true" />
+        Receive all in full
+      </button>
+    </div>
   );
 }
 
