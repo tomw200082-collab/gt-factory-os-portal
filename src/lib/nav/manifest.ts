@@ -305,7 +305,7 @@ export const NAV_MANIFEST: NavGroup[] = [
         // label like the rest of the shell.
         href: "/purchase-orders/placement-queue",
         label: "Orders to Place",
-        icon: ShoppingCart,
+        icon: ClipboardCheck,
         min_role: "planner",
         required_capability: "planning:execute",
       },

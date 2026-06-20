@@ -314,6 +314,13 @@ export function ReceiptLandingPicker({
                     </span>
                     .
                   </div>
+                  {/* Tranche 086 (FLOW-008) — an approved PO that the office
+                      manager hasn't placed yet is not OPEN, so it won't appear
+                      here. Point the operator at the likely cause. */}
+                  <div className="mt-1 text-3xs text-fg-faint">
+                    Expecting a delivery? The purchase order may not be placed
+                    yet — check with the purchasing team.
+                  </div>
                   {!hasNoOpenPos ? (
                     <button
                       type="button"

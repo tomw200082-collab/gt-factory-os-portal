@@ -225,8 +225,21 @@ pgTAP 14/14, place API 10/10, PO regression 55/55, tsc clean. ⊥ merge/deploy/f
 - `CLAUDE.md` — Hebrew-exception entry for `/purchase-orders/placement-queue` (Tom authorized 2026-06-20).
 - `docs/portal-os/route-manifest.json` — route row + note.
 
-Gates: tsc 0 · eslint 0 · vitest 7/7 new (payment-terms 6, PlacementRow 1). Verification pending:
-`/ux-flow-audit` (procurement→place→receipt) + `/ui-ux-pro-max` (queue) — running next.
+Gates: tsc 0 · eslint 0 · vitest 7/7 new (payment-terms 6, PlacementRow 1).
+
+**Verification done:**
+- `/ui-ux-pro-max` (queue): checklist mostly met; fixed the one decision-grade gap (silent
+  terminal action → durable page-level success banner naming the PO).
+- `/ux-flow-audit` (ux-flow-architect, procurement→place→receipt): 10 findings, all fixed —
+  several were real breaks the two-stage change introduced:
+  - FLOW-001/002: FocusMode/FocusCard pointed the planner at OPEN POs, but placed POs are now
+    APPROVED_TO_ORDER → repointed to the placement queue + corrected copy.
+  - FLOW-007: APPROVED_TO_ORDER was invisible on `/purchase-orders` → added status type, "To place"
+    filter chip + KPI tile, badge, and default-filter inclusion.
+  - FLOW-006: removed raw `(OPEN)` enum from the Hebrew confirm dialog.
+  - FLOW-004/003/005: added procurement→queue bridge link; success banner now links to the PO + receipts.
+  - FLOW-008/009/010: receipts zero-results hint; prefix-match comment; distinct nav icon.
+  Re-verified: tsc 0 · eslint 0 (2 pre-existing warnings) · vitest 68/68 across PO + procurement.
 
 ## Actual evidence (filled by /portal-tranche-fix run)
 <pasted after execution: typecheck, vitest N/N, playwright, PR URL, scorecard delta>

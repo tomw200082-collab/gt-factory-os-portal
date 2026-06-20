@@ -13,6 +13,7 @@
 // ---------------------------------------------------------------------------
 
 import { useState } from "react";
+import Link from "next/link";
 import {
   AlertTriangle,
   RefreshCw,
@@ -30,7 +31,10 @@ function QueueInner(): JSX.Element {
   const rows = data?.rows ?? [];
   // Durable success confirmation: a placed PO's row unmounts (it leaves the
   // queue), so the page owns the "order placed" banner.
-  const [placed, setPlaced] = useState<{ po_number: string } | null>(null);
+  const [placed, setPlaced] = useState<{
+    po_id: string;
+    po_number: string;
+  } | null>(null);
 
   return (
     <div dir="rtl" className="flex flex-col gap-5">
@@ -50,9 +54,23 @@ function QueueInner(): JSX.Element {
         >
           <CheckCircle2 className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
           <span className="min-w-0 flex-1">
-            ההזמנה{" "}
-            <span className="font-semibold">{placed.po_number}</span> בוצעה
-            ונפתחה. היא תופיע ברשימת ההזמנות ובקבלת הסחורה.
+            ההזמנה <span className="font-semibold">{placed.po_number}</span>{" "}
+            בוצעה ונפתחה.{" "}
+            <Link
+              href={`/purchase-orders/${encodeURIComponent(placed.po_id)}`}
+              className="font-medium underline-offset-2 hover:underline"
+              data-testid="placement-queue-success-po-link"
+            >
+              צפה בהזמנה
+            </Link>{" "}
+            ·{" "}
+            <Link
+              href="/stock/receipts"
+              className="font-medium underline-offset-2 hover:underline"
+              data-testid="placement-queue-success-receipts-link"
+            >
+              קבלת סחורה ←
+            </Link>
           </span>
           <button
             type="button"
@@ -113,7 +131,9 @@ function QueueInner(): JSX.Element {
             <PlacementRow
               key={po.po_id}
               po={po}
-              onPlaced={(p) => setPlaced({ po_number: p.po_number })}
+              onPlaced={(p) =>
+                setPlaced({ po_id: p.po_id, po_number: p.po_number })
+              }
             />
           ))}
         </ul>

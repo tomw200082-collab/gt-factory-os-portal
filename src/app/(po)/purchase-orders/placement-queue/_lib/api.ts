@@ -149,6 +149,8 @@ export function usePlaceOrder() {
       // A placed PO leaves the queue and becomes a real OPEN order visible to
       // the PO list, PO detail, and the goods-receipt open-PO picker.
       void qc.invalidateQueries({ queryKey: QUEUE_KEY });
+      // Prefix match — invalidates every ["planner","purchase-orders", <status>]
+      // query on the PO list regardless of its status-filter suffix.
       void qc.invalidateQueries({ queryKey: ["planner", "purchase-orders"] });
       void qc.invalidateQueries({ queryKey: ["purchase-orders"] });
       void qc.invalidateQueries({ queryKey: ["ops", "receipts", "open-pos"] });

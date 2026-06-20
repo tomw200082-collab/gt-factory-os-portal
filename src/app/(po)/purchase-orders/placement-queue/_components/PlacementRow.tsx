@@ -101,9 +101,9 @@ export function PlacementRow({
     }
     const ok = await confirm({
       title: `לבצע את ההזמנה ${po.po_number}?`,
-      description: `ההזמנה תיפתח (OPEN) עם תנאי תשלום "${termLabel}"${
+      description: `ההזמנה תבוצע מול הספק ותהיה מוכנה לקבלת סחורה, עם תנאי תשלום "${termLabel}"${
         totalPreview != null ? ` · ${formatIls(totalPreview)}` : ""
-      }. פעולה זו מאשרת את ההזמנה לספק.`,
+      }.`,
       confirmLabel: "בצע הזמנה",
       cancelLabel: "ביטול",
     });
