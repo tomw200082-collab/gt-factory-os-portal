@@ -65,11 +65,12 @@ Blocked on backend for live wiring → ships in two parts:
     Part B just skips the form for the full-receipt happy path). Partial/discrepancy
     still opens the detailed form.
 
-## Payment-terms model (lazy)
-Free-text string, default = supplier `payment_terms`, editable. Dropdown options =
-distinct existing values via the existing `distinctWithCounts` pattern in
-`src/lib/admin/supplier-field-options.ts` (current set: NET_14/30/45/60). No new
-enum. `? confirm real terms with Tom (מזומן/שוטף+30/60…) before seeding the datalist`.
+## Payment-terms model (DECIDED 2026-06-20, Tom delegated)
+Free-text string on the PO, default = supplier `payment_terms`, editable. Dropdown
+= distinct existing supplier values via `distinctWithCounts`
+(`src/lib/admin/supplier-field-options.ts`; current set NET_14/30/45/60), operator
+may type a custom term. ⊥ new enum, ⊥ migration of supplier values. Locked — no
+further input needed.
 
 ## UX spec — placement queue (ui-ux-pro-max, applied lazily)
 Reuse existing tokens/components; no new design system.
