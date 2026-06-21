@@ -12,7 +12,8 @@
         "matcher": "",
         "hooks": [
           { "type": "command", "command": "bash .claude/hooks/session_start.sh" },
-          { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session_start_remote_deps.sh" }
+          { "type": "command", "command": "bash \"$CLAUDE_PROJECT_DIR\"/.claude/hooks/session_start_remote_deps.sh" },
+          { "type": "command", "command": "sh -c 'exec sh \"${CLAUDE_PROJECT_DIR:-.}/scripts/setup-graphify.sh\"'", "timeout": 120000 }
         ]
       }
     ],
