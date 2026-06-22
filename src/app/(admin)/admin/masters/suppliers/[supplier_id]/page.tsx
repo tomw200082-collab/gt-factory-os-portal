@@ -801,7 +801,7 @@ export default function AdminSupplierDetailPage({
 
               <EditableField
                 label="Green Invoice Supplier ID"
-                help="The Green Invoice supplier/contact UUID. Setting this links this platform supplier to Green Invoice and resolves its 'gi_unmapped_supplier' exception (auto-clears on the next GI sync cycle). Copy the UUID from the exception detail in the inbox."
+                help="The Green Invoice supplier ID links this supplier to your Green Invoice account. Once set, the matching 'supplier not mapped' alert clears on the next sync. Copy the ID from the alert detail in your inbox."
               >
                 {isAdmin ? (
                   <InlineEditCell
@@ -966,6 +966,25 @@ export default function AdminSupplierDetailPage({
                 : supplierFieldMutation.error instanceof AdminMutationError
                   ? supplierFieldMutation.error.message
                   : "Save failed. Please try again."}
+            </p>
+          ) : null}
+
+          {/* FLOW-004 — confirm the GI link saved and point back to the inbox so
+              the operator knows the gi_unmapped_supplier exception will clear. */}
+          {supplierFieldMutation.isSuccess &&
+          supplierFieldMutation.variables?.field === "green_invoice_supplier_id" ? (
+            <p
+              role="status"
+              aria-live="polite"
+              aria-atomic
+              className="text-xs text-success-fg"
+            >
+              Green Invoice supplier ID saved. The{" "}
+              <span className="font-medium">gi_unmapped_supplier</span> exception
+              clears on the next GI sync.{" "}
+              <Link href="/inbox?view=exceptions" className="link font-medium">
+                Back to inbox to verify →
+              </Link>
             </p>
           ) : null}
         </div>

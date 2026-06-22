@@ -1048,7 +1048,7 @@ function AdminSkuAliasesContent(): JSX.Element {
         <SectionCard
           eyebrow="Step 2"
           title={`Batch approve (${selected.size} selected)`}
-          description="Approval inserts an integration_sku_map row with approval_status='approved' for each selected SKU and auto-resolves matching open exceptions."
+          description="Approving links each selected SKU to its assigned item and clears any matching open alerts automatically."
           density="compact"
         >
           <div className="flex flex-wrap items-center gap-3">
@@ -1264,7 +1264,7 @@ function AdminSkuAliasesContent(): JSX.Element {
             setQuickCreateForSku(null);
             setBanner({
               kind: "success",
-              message: `Item ${newItemId} created and assigned to ${quickCreateForSku}. Click Approve to confirm the mapping.`,
+              message: `New item created and assigned to SKU ${quickCreateForSku}. Click Approve to confirm the mapping.`,
             });
           }}
         />
@@ -1279,6 +1279,14 @@ function AdminSkuAliasesContent(): JSX.Element {
 
 const SUPPLY_METHODS = ["BOUGHT_FINISHED", "MANUFACTURED", "REPACK"] as const;
 type SupplyMethod = (typeof SUPPLY_METHODS)[number];
+
+// Human-readable labels for the supply-method select — never show the raw enum
+// value to the operator (portal_ux_standard §1).
+const SUPPLY_METHOD_LABELS: Record<SupplyMethod, string> = {
+  BOUGHT_FINISHED: "Purchased / ready-made",
+  MANUFACTURED: "Manufactured in-house",
+  REPACK: "Repack",
+};
 
 const COMMON_SALES_UOMS = ["EACH", "BOTTLE", "CAN", "BOX", "PACK"] as const;
 
@@ -1426,7 +1434,7 @@ function QuickCreateItemModal({
         <form className="space-y-3" onSubmit={handleSubmit}>
           <label className="block">
             <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-              item_id <span className="text-danger">*</span>
+              Item ID <span className="text-danger">*</span>
             </span>
             <input
               className="input font-mono"
@@ -1458,7 +1466,7 @@ function QuickCreateItemModal({
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
               <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                supply_method <span className="text-danger">*</span>
+                Supply type <span className="text-danger">*</span>
               </span>
               <select
                 className="input"
@@ -1469,18 +1477,19 @@ function QuickCreateItemModal({
               >
                 {SUPPLY_METHODS.map((m) => (
                   <option key={m} value={m}>
-                    {m}
+                    {SUPPLY_METHOD_LABELS[m]}
                   </option>
                 ))}
               </select>
               <span className="mt-1 block text-3xs text-fg-subtle">
-                BOUGHT_FINISHED for most external items.
+                &ldquo;Purchased / ready-made&rdquo; is correct for most items
+                sourced externally.
               </span>
             </label>
 
             <label className="block">
               <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                sales_uom <span className="text-danger">*</span>
+                Sales unit <span className="text-danger">*</span>
               </span>
               <input
                 className="input font-mono"
@@ -1516,7 +1525,7 @@ function QuickCreateItemModal({
 
             <label className="block">
               <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-                case_pack
+                Case pack
               </span>
               <input
                 className="input tabular-nums"

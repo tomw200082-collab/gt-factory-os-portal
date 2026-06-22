@@ -56,6 +56,7 @@ interface SupplierRow {
   default_lead_time_days: number | null;
   default_moq: string | null;
   approval_status: string | null;
+  green_invoice_supplier_id: string | null;
   site_id: string;
   created_at: string;
   updated_at: string;
@@ -343,7 +344,10 @@ function SuppliersPageInner(): JSX.Element {
         r.supplier_name_official.toLowerCase().includes(qLower) ||
         (r.supplier_name_short ?? "").toLowerCase().includes(qLower) ||
         (r.primary_contact_name ?? "").toLowerCase().includes(qLower) ||
-        (r.primary_contact_phone ?? "").toLowerCase().includes(qLower),
+        (r.primary_contact_phone ?? "").toLowerCase().includes(qLower) ||
+        // Lets the operator paste the GI vendor name/UUID from a
+        // gi_unmapped_supplier exception and jump straight to the matching row.
+        (r.green_invoice_supplier_id ?? "").toLowerCase().includes(qLower),
     );
   }, [rows, query]);
 
@@ -413,6 +417,21 @@ function SuppliersPageInner(): JSX.Element {
       />
 
       {confirmDialog}
+
+      {searchParams.get("hint") === "gi_unmapped" ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className="rounded-md border border-info/40 bg-info-softer p-3 text-sm text-info-fg"
+        >
+          <span className="font-semibold">Map a Green Invoice supplier.</span>{" "}
+          You were sent here from the inbox. The GI vendor name appears in that
+          exception&rsquo;s summary — search for the matching supplier below (you can
+          paste the GI vendor name or ID into Search), open it, and set its{" "}
+          <span className="font-medium">Green Invoice Supplier ID</span> in the
+          Identity section. The exception clears on the next GI sync.
+        </div>
+      ) : null}
 
       {banner ? (
         <div

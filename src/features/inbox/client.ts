@@ -259,27 +259,37 @@ function resolveExceptionDeepLink(
   if (c === "lionwheel_order_note") {
     return "/inbox";
   }
-  // LionWheel unknown SKU → SKU-alias mapper (LionWheel is the default channel).
+  // LionWheel unknown SKU → SKU-alias mapper, LionWheel channel made explicit
+  // (don't depend on the page's default tab).
   if (c.includes("lionwheel_unknown_sku") || c.includes("sku_unresolved") || c.includes("unknown_sku"))
-    return "/admin/sku-aliases";
-  // Shopify SKU / variant / AfS-mapping gaps → the Shopify channel of the alias
-  // mapper, which carries the real terminal action (assign item → approve →
-  // auto-resolve). Previously these fell through to /admin/integrations (a
-  // read-only health page) — a dead-end.
-  if (
-    c === "shopify_unmapped_item" ||
-    c === "shopify_variant_not_found" ||
-    c === "shopify_available_mapping_missing" ||
-    c === "shopify_available_mapping_stale"
-  )
+    return "/admin/sku-aliases?channel=lionwheel";
+  // Shopify unmapped FG item → the Shopify channel of the alias mapper, which
+  // carries the real terminal action (assign item → approve → auto-resolve).
+  if (c === "shopify_unmapped_item")
     return "/admin/sku-aliases?channel=shopify";
-  // GI supplier not mapped → the suppliers list, where the operator opens the
-  // matching platform supplier and sets its Green Invoice ID (now editable).
-  // The exception carries no platform supplier_id (the supplier is unmapped by
-  // definition — the GI UUID lives in the title/detail), so we route to the
-  // list, not a detail page. Previously this dead-ended at /admin/integrations.
+  // Shopify variant-not-found is a decision (approve/reject) the operator makes
+  // inline in the inbox. The alias mapper only lists `shopify_unmapped_item`, so
+  // routing there would dead-end (the exception is invisible). Resolve inline.
+  if (c === "shopify_variant_not_found")
+    return "/inbox";
+  // Shopify Available-for-Sale mapping gaps have no operator mapping surface in
+  // the portal, and the alias mapper cannot display them. Route to the
+  // integrations health view where AfS sync state is visible — not a dead-end on
+  // a page that silently shows nothing.
+  if (c === "shopify_available_mapping_missing" || c === "shopify_available_mapping_stale")
+    return "/admin/integrations";
+  // GI expense review is an inline triage TODO; there is no GI invoice surface in
+  // the portal, so resolve it inline rather than dead-ending on the integrations
+  // health page (the `gi_` catch-all below would otherwise send it there).
+  if (c === "gi_expense_review")
+    return "/inbox";
+  // GI supplier not mapped → the suppliers list with a mapping-hint banner. The
+  // exception carries no platform supplier_id (the supplier is unmapped by
+  // definition — the GI vendor name/UUID lives in the title/detail), so we route
+  // to the list (the operator finds the matching supplier and sets its GI ID),
+  // and the `?hint=gi_unmapped` param triggers a guiding banner there.
   if (c === "gi_unmapped_supplier")
-    return "/admin/suppliers";
+    return "/admin/suppliers?hint=gi_unmapped";
   // PO over-receipt → the specific PO when the exception names it, else the list.
   if (c.includes("po_line_over_receipt"))
     return relatedEntityId
