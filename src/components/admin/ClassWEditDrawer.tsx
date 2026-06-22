@@ -28,6 +28,9 @@ interface ClassWEditDrawerProps {
   onSave: () => Promise<void>;
   isSaving?: boolean;
   error?: string | null;
+  /** Confirm-button label. Should mirror the action verb (e.g. "Archive
+   *  supplier"). Defaults to "Save change". */
+  confirmLabel?: string;
   children: ReactNode;
 }
 
@@ -40,6 +43,7 @@ export function ClassWEditDrawer({
   onSave,
   isSaving,
   error,
+  confirmLabel,
   children,
 }: ClassWEditDrawerProps) {
   return (
@@ -104,7 +108,11 @@ export function ClassWEditDrawer({
 
             <div className="space-y-3">{children}</div>
 
-            {error ? <p className="text-sm text-danger-fg">{error}</p> : null}
+            {error ? (
+              <p role="alert" className="text-sm text-danger-fg">
+                {error}
+              </p>
+            ) : null}
           </div>
 
           <div className="border-t border-border px-4 py-3 flex items-center justify-end gap-2">
@@ -122,7 +130,7 @@ export function ClassWEditDrawer({
               onClick={onSave}
               disabled={isSaving}
             >
-              {isSaving ? "Saving…" : "Save change"}
+              {isSaving ? "Saving…" : (confirmLabel ?? "Save change")}
             </button>
           </div>
         </Dialog.Content>

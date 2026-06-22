@@ -1444,6 +1444,7 @@ export default function AdminItemDetailPage({
         open={showStatusDrawer}
         onClose={() => setShowStatusDrawer(false)}
         title={drawerStatusTarget === "INACTIVE" ? "Archive item" : "Restore item"}
+        confirmLabel={drawerStatusTarget === "INACTIVE" ? "Archive item" : "Restore item"}
         warning={
           drawerStatusTarget === "INACTIVE"
             ? "Archiving this item hides it from planning, ordering, and production workflows. Existing stock events and BOMs are not deleted."

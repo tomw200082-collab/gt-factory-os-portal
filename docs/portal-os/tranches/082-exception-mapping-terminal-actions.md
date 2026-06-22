@@ -73,6 +73,8 @@ manifest:
   - src/components/tables/InlineEditCell.tsx
   - src/components/tables/InlineEditSelectCell.tsx
   - src/components/admin/ClassWEditDrawer.tsx
+  - src/app/(admin)/admin/masters/items/[item_id]/page.tsx
+  - src/app/(admin)/admin/masters/components/[component_id]/page.tsx
   - docs/portal-os/registry.md
   - docs/portal-os/tranches/082-exception-mapping-terminal-actions.md
   - docs/portal-os/tranches/_active.txt
@@ -114,12 +116,19 @@ Revert the listed source files to their pre-082 form. No backend or token change
   recommendation-inline-card approved/dismissed → aria-live polite,
   conflict/error → aria-live assertive (A11Y-017). Pure aria/logic — no Hebrew
   copy touched. Verified: typecheck 0, eslint 0, vitest 754/754.
+- **Iteration 4 (2026-06-22) — landed:** confirm buttons now mirror the action
+  verb — `ClassWEditDrawer` gained an optional `confirmLabel` (default unchanged
+  "Save change") + role="alert" on its error; wired at the Archive/Restore call
+  sites for suppliers, items, and components ("Archive supplier" / "Restore
+  item" / etc. instead of the generic "Save change") (INTER-006). Verified:
+  typecheck 0, eslint 0 errors, vitest 754/754.
 - **Deferred to later iterations:** in-page bulk-resolve confirm (INTER-003);
-  QuickCreate focus trap (A11Y-006); per-row approve loading (INTER-004);
-  metric-chip load gating (INTER-011); ClassWEditDrawer confirmLabel
-  (INTER-006); "Add sourcing link" loading-disable (INTER-007); integrations
-  copy (COPY-016/018/020); density button aria-label/touch target
-  (A11Y-002/008); reject double-submit guard (INTER-001).
+  QuickCreate focus trap (A11Y-006 — note: ClassWEditDrawer already Radix, but
+  QuickCreateItemModal is a custom div); per-row approve loading (INTER-004);
+  metric-chip load gating (INTER-011); "Add sourcing link" loading-disable
+  (INTER-007); integrations copy (COPY-016/018/020); density button
+  aria-label/touch target (A11Y-002/008); reject double-submit guard
+  (INTER-001).
 - **HOLD for Tom (out of scope — see PR notes):** convert inbox Hebrew to
   English (COPY-001/003/004/005/006/007 + credit-card; A11Y-018). `/inbox` is
   not on the CLAUDE.md authorized-Hebrew list, but the strings carry explicit

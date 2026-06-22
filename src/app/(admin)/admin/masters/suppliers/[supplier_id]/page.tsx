@@ -1472,6 +1472,7 @@ export default function AdminSupplierDetailPage({
         open={showStatusDrawer}
         onClose={() => setShowStatusDrawer(false)}
         title={drawerStatusTarget === "INACTIVE" ? "Archive supplier" : "Restore supplier"}
+        confirmLabel={drawerStatusTarget === "INACTIVE" ? "Archive supplier" : "Restore supplier"}
         warning={
           drawerStatusTarget === "INACTIVE"
             ? "Archiving this supplier hides it from sourcing workflows and purchase order creation. Existing POs and sourcing links are not deleted."

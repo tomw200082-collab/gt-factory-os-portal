@@ -1217,6 +1217,9 @@ export default function AdminComponentDetailPage({
             ? "Archive this component?"
             : "Restore this component?"
         }
+        confirmLabel={
+          drawerStatusTarget === "INACTIVE" ? "Archive component" : "Restore component"
+        }
         warning={
           drawerStatusTarget === "INACTIVE"
             ? "Archiving hides this raw material from active lists and excludes it from planning. Recipes that reference it still exist but this component won't appear in purchase recommendations."
