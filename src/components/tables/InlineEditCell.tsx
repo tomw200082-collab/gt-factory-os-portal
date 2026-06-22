@@ -150,10 +150,10 @@ export function InlineEditCell({
           "group inline-flex items-center gap-1 rounded-sm px-1 py-0.5",
           disabled
             ? "cursor-not-allowed text-fg-faint"
-            : "cursor-pointer border-b border-dashed border-accent/40 hover:border-accent hover:bg-accent/5",
+            : "cursor-pointer border-b border-dashed border-accent/40 hover:border-accent hover:bg-accent/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1",
           error && "text-danger-fg",
         )}
-        title={error ? error : disabled ? undefined : "Click to edit"}
+        title={disabled ? undefined : "Click to edit"}
       >
         <span className="truncate">
           {format ? format(value) : String(value)}
@@ -170,6 +170,12 @@ export function InlineEditCell({
             strokeWidth={2}
           />
         )}
+        {/* A11Y-012 — save errors must be visible (and announced), not tooltip-only. */}
+        {error ? (
+          <span role="alert" className="ml-1 text-2xs font-normal text-danger-fg">
+            {error}
+          </span>
+        ) : null}
       </span>
     );
   }

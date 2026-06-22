@@ -241,7 +241,7 @@ export function InlineEditSelectCell({
             "group inline-flex max-w-full items-center gap-1 rounded-sm px-1 py-0.5",
             disabled
               ? "cursor-not-allowed text-fg-faint"
-              : "cursor-pointer border-b border-dashed border-accent/40 hover:border-accent hover:bg-accent/5",
+              : "cursor-pointer border-b border-dashed border-accent/40 hover:border-accent hover:bg-accent/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1",
             error && "text-danger-fg",
           )}
           title={error ? error : disabled ? undefined : `Click to change ${fieldLabel}`}
@@ -293,6 +293,7 @@ export function InlineEditSelectCell({
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKey}
               placeholder={`Search ${fieldLabel.toLowerCase()}…`}
+              aria-label={`Search ${fieldLabel}`}
               autoComplete="off"
               spellCheck={false}
               dir="auto"
@@ -320,7 +321,7 @@ export function InlineEditSelectCell({
           )}
 
           {/* Options */}
-          <div ref={listRef} role="listbox" className="max-h-72 overflow-y-auto py-1">
+          <div ref={listRef} role="listbox" aria-label={fieldLabel} className="max-h-72 overflow-y-auto py-1">
             {options.length === 0 ? (
               <div className="px-3 py-6 text-center text-xs text-fg-muted">
                 {emptyMessage}

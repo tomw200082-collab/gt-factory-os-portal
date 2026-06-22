@@ -100,13 +100,19 @@ Revert the listed source files to their pre-082 form. No backend or token change
   de-jargoned approve description + raw-id-free success copy
   (INTER-005/COPY-010/011/012/013/014). Verified: typecheck 0, eslint 0 errors,
   vitest 754/754.
+- **Iteration 2 (2026-06-22) — landed:** shared inline-edit a11y (high leverage —
+  every admin inline-edit surface): `InlineEditCell` focus-visible ring +
+  visible role=alert save error instead of tooltip-only (A11Y-005/012,
+  INTER-008); `InlineEditSelectCell` focus-visible ring + search-input aria-label
+  + listbox accessible name (A11Y-005/013/016); supplier `CostEditCell` visible
+  role=alert error + cancel-button aria-label (A11Y-014/015, INTER-009 partial);
+  sku-aliases per-row notes aria-label (A11Y-010). Verified: typecheck 0,
+  eslint 0 errors, vitest 754/754.
 - **Deferred to later iterations:** in-page bulk-resolve confirm + success-banner
-  auto-dismiss + aria-live banners (INTER-003/012, A11Y-020/017); InlineEditCell
-  visible-error + focus ring (INTER-008, A11Y-005/012); CostEditCell visible
-  error + cancel aria-label (A11Y-014/015, INTER-009); QuickCreate focus trap
-  (A11Y-006); per-row approve loading (INTER-004); metric-chip load gating
-  (INTER-011); ClassWEditDrawer confirmLabel (INTER-006); integrations copy
-  (COPY-016/018/020).
+  auto-dismiss + aria-live banners (INTER-003/012, A11Y-020/017); QuickCreate
+  focus trap (A11Y-006); per-row approve loading (INTER-004); metric-chip load
+  gating (INTER-011); ClassWEditDrawer confirmLabel (INTER-006); integrations
+  copy (COPY-016/018/020); density button aria-label/touch target (A11Y-002/008).
 - **HOLD for Tom (out of scope — see PR notes):** convert inbox Hebrew to
   English (COPY-001/003/004/005/006/007 + credit-card; A11Y-018). `/inbox` is
   not on the CLAUDE.md authorized-Hebrew list, but the strings carry explicit

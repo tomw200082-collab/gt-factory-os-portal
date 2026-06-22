@@ -996,6 +996,7 @@ function AdminSkuAliasesContent(): JSX.Element {
                           type="text"
                           className="input min-w-[140px] text-xs"
                           placeholder="optional"
+                          aria-label={`Notes for ${row.external_sku}`}
                           value={note}
                           onChange={(e) =>
                             setNotes((prev) => ({

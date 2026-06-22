@@ -415,13 +415,15 @@ function CostEditCell({
         </button>
         <button
           onClick={() => { setEditing(false); setInputValue(currentCost ?? ""); }}
+          aria-label="Cancel cost edit"
           className="rounded px-1 py-0.5 text-xs text-fg-muted hover:text-fg"
         >
           ✕
         </button>
         {mutation.isError ? (
-          <span className="text-xs text-danger-fg" title={(mutation.error as Error).message}>
-            Error saving
+          <span role="alert" className="text-2xs text-danger-fg">
+            {(mutation.error as Error).message ||
+              "Could not save. Check your connection and try again."}
           </span>
         ) : null}
       </span>
