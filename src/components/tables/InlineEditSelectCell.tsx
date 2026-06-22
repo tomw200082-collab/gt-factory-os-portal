@@ -244,7 +244,7 @@ export function InlineEditSelectCell({
               : "cursor-pointer border-b border-dashed border-accent/40 hover:border-accent hover:bg-accent/5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1",
             error && "text-danger-fg",
           )}
-          title={error ? error : disabled ? undefined : `Click to change ${fieldLabel}`}
+          title={disabled ? undefined : `Click to change ${fieldLabel}`}
         >
           <span className={cn("truncate", !selected && "italic text-fg-faint")}>
             {selected ? selected.label : (value && value !== "" ? value : placeholder)}
@@ -257,6 +257,15 @@ export function InlineEditSelectCell({
           ) : disabled ? null : (
             <ChevronDown className="h-3 w-3 text-accent/60 opacity-60 transition-opacity duration-150 group-hover:opacity-100" strokeWidth={2} />
           )}
+          {/* A11Y-012 — save errors must be visible (and announced), not
+              tooltip-only. Shown in read mode (popover closed); while the
+              popover is open the error renders inside it (below) to avoid a
+              double announcement. */}
+          {!open && error ? (
+            <span role="alert" className="ml-1 text-2xs font-normal text-danger-fg">
+              {error}
+            </span>
+          ) : null}
         </span>
       </Popover.Trigger>
       <Popover.Portal>
@@ -435,7 +444,10 @@ export function InlineEditSelectCell({
           ) : null}
 
           {error ? (
-            <div className="border-t border-danger/40 bg-danger-softer px-3 py-1.5 text-3xs text-danger-fg">
+            <div
+              role="alert"
+              className="border-t border-danger/40 bg-danger-softer px-3 py-1.5 text-3xs text-danger-fg"
+            >
               {error}
             </div>
           ) : null}

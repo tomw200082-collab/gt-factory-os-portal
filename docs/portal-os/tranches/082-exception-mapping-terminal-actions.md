@@ -122,6 +122,20 @@ Revert the listed source files to their pre-082 form. No backend or token change
   sites for suppliers, items, and components ("Archive supplier" / "Restore
   item" / etc. instead of the generic "Save change") (INTER-006). Verified:
   typecheck 0, eslint 0 errors, vitest 754/754.
+- **Iteration 6 (2026-06-22) — code-review fixes (max-effort review of PR #114):**
+  three real findings fixed. (1) P1 — `resolveExceptionDeepLink` sent
+  `po_line_over_receipt` to `/purchase-orders/{related_entity_id}`, but that id
+  is the PO *line* id (the `[po_id]` route fetches a PO header), so it 404'd — a
+  dead-end in the no-dead-ends PR; now routes to the `/purchase-orders` list.
+  (2) P3 — sku-aliases KPI skeleton pulsed forever on a query error; now shows
+  the skeleton only while genuinely loading (the backend-down SectionCard
+  covers the error case). (3) P3 — `InlineEditSelectCell` save errors were
+  tooltip-only while its sibling `InlineEditCell` got the visible/announced
+  A11Y-012 treatment; added a `role="alert"` visible error (read mode) +
+  `role="alert"` on the open-popover error block. Review also REFUTED a
+  suspected cross-repo gap: backend `handleSuppliersList` does project
+  `green_invoice_supplier_id`, so the supplier-mapping search/flow is sound.
+  Verified: typecheck 0, eslint 0 errors, vitest 754/754.
 - **Iteration 5 (2026-06-22) — landed:** sku-aliases KPI chips no longer flash
   "0" while the approved/pending/rejected queries load — gated on `countsReady`
   with a skeleton placeholder, removing the false "all-clear" read (INTER-011).

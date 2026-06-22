@@ -459,6 +459,11 @@ function AdminSkuAliasesContent(): JSX.Element {
     !pendingQuery.isLoading &&
     !rejectedQuery.isLoading &&
     backendLive;
+  // Distinguish "still loading" (show skeleton) from "settled but errored"
+  // (show nothing here — the dedicated backend-down SectionCard explains it,
+  // so the KPI skeleton must not pulse forever).
+  const countsLoading =
+    approvedQuery.isLoading || pendingQuery.isLoading || rejectedQuery.isLoading;
 
   // iter 9: filtered unmapped rows (search on external_sku + assigned item name)
   const filteredUnmapped = useMemo<UnmappedSkuRow[]>(() => {
@@ -654,7 +659,7 @@ function AdminSkuAliasesContent(): JSX.Element {
                 />
               ) : null}
             </div>
-          ) : (
+          ) : countsLoading ? (
             <div className="flex flex-wrap gap-2" aria-hidden>
               {[0, 1, 2, 3].map((i) => (
                 <div
@@ -663,7 +668,7 @@ function AdminSkuAliasesContent(): JSX.Element {
                 />
               ))}
             </div>
-          )
+          ) : null
         }
       />
 

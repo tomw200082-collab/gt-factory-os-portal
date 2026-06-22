@@ -248,7 +248,11 @@ function toApprovalInboxRow(
 function resolveExceptionDeepLink(
   category: string,
   exceptionId?: string,
-  relatedEntityId?: string,
+  // related_entity_id is intentionally not consumed: for the only category that
+  // carried one (po_line_over_receipt) it is a PO *line* id, not a routable PO
+  // id, so the deep link goes to the PO list instead. Kept in the signature for
+  // call-site stability.
+  _relatedEntityId?: string,
 ): string {
   const c = category.toLowerCase();
   if (c === "lionwheel_credit_needed" && exceptionId) {
@@ -290,11 +294,13 @@ function resolveExceptionDeepLink(
   // and the `?hint=gi_unmapped` param triggers a guiding banner there.
   if (c === "gi_unmapped_supplier")
     return "/admin/suppliers?hint=gi_unmapped";
-  // PO over-receipt → the specific PO when the exception names it, else the list.
+  // PO over-receipt → the purchase-orders list. The exception's related_entity_id
+  // is the PO *line* id (the PO detail page matches it via lineIds.has(...)), not
+  // the po_id — and the [po_id] route fetches a PO header by id, so linking to
+  // /purchase-orders/{line_id} would 404. Route to the list (no dead-end); the
+  // operator opens the over-received PO from there.
   if (c.includes("po_line_over_receipt"))
-    return relatedEntityId
-      ? `/purchase-orders/${encodeURIComponent(relatedEntityId)}`
-      : "/purchase-orders";
+    return "/purchase-orders";
   if (c.includes("missing_supplier") || c.includes("missing_bom"))
     return "/admin/sku-map";
   // Remaining lionwheel_/shopify_/gi_/*stale* signals are system-health → the
