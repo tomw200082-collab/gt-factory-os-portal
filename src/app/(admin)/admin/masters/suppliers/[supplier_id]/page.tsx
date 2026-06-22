@@ -732,7 +732,6 @@ export default function AdminSupplierDetailPage({
         { label: "Supplier code", value: row.supplier_id, mono: true },
         { label: "Official name", value: row.supplier_name_official },
         { label: "Currency", value: row.currency ?? "—", mono: true },
-        { label: "Green Invoice ID", value: row.green_invoice_supplier_id ?? "—", mono: true },
         { label: "Site", value: row.site_id, mono: true },
         { label: "Approval status", value: row.approval_status ?? "—" },
         { label: "Created", value: fmtDateTime(row.created_at) },
@@ -797,6 +796,23 @@ export default function AdminSupplierDetailPage({
                   />
                 ) : (
                   <span className="text-fg">{row.supplier_type ?? <span className="text-fg-faint">—</span>}</span>
+                )}
+              </EditableField>
+
+              <EditableField
+                label="Green Invoice Supplier ID"
+                help="The Green Invoice supplier/contact UUID. Setting this links this platform supplier to Green Invoice and resolves its 'gi_unmapped_supplier' exception (auto-clears on the next GI sync cycle). Copy the UUID from the exception detail in the inbox."
+              >
+                {isAdmin ? (
+                  <InlineEditCell
+                    value={row.green_invoice_supplier_id ?? ""}
+                    onSave={(val) =>
+                      supplierFieldMutation.mutateAsync({ field: "green_invoice_supplier_id", value: (val as string) || null, updated_at: row.updated_at }) as Promise<void>
+                    }
+                    ariaLabel="Edit Green Invoice supplier ID"
+                  />
+                ) : (
+                  <span className="font-mono text-fg">{row.green_invoice_supplier_id ?? <span className="text-fg-faint">—</span>}</span>
                 )}
               </EditableField>
             </div>

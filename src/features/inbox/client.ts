@@ -248,6 +248,7 @@ function toApprovalInboxRow(
 function resolveExceptionDeepLink(
   category: string,
   exceptionId?: string,
+  relatedEntityId?: string,
 ): string {
   const c = category.toLowerCase();
   if (c === "lionwheel_credit_needed" && exceptionId) {
@@ -258,14 +259,38 @@ function resolveExceptionDeepLink(
   if (c === "lionwheel_order_note") {
     return "/inbox";
   }
+  // LionWheel unknown SKU → SKU-alias mapper (LionWheel is the default channel).
   if (c.includes("lionwheel_unknown_sku") || c.includes("sku_unresolved") || c.includes("unknown_sku"))
     return "/admin/sku-aliases";
-  if (c.startsWith("lionwheel_") || c.startsWith("shopify_") || c.startsWith("gi_") || c.includes("stale"))
-    return "/admin/integrations";
+  // Shopify SKU / variant / AfS-mapping gaps → the Shopify channel of the alias
+  // mapper, which carries the real terminal action (assign item → approve →
+  // auto-resolve). Previously these fell through to /admin/integrations (a
+  // read-only health page) — a dead-end.
+  if (
+    c === "shopify_unmapped_item" ||
+    c === "shopify_variant_not_found" ||
+    c === "shopify_available_mapping_missing" ||
+    c === "shopify_available_mapping_stale"
+  )
+    return "/admin/sku-aliases?channel=shopify";
+  // GI supplier not mapped → the suppliers list, where the operator opens the
+  // matching platform supplier and sets its Green Invoice ID (now editable).
+  // The exception carries no platform supplier_id (the supplier is unmapped by
+  // definition — the GI UUID lives in the title/detail), so we route to the
+  // list, not a detail page. Previously this dead-ended at /admin/integrations.
+  if (c === "gi_unmapped_supplier")
+    return "/admin/suppliers";
+  // PO over-receipt → the specific PO when the exception names it, else the list.
   if (c.includes("po_line_over_receipt"))
-    return "/purchase-orders";
+    return relatedEntityId
+      ? `/purchase-orders/${encodeURIComponent(relatedEntityId)}`
+      : "/purchase-orders";
   if (c.includes("missing_supplier") || c.includes("missing_bom"))
     return "/admin/sku-map";
+  // Remaining lionwheel_/shopify_/gi_/*stale* signals are system-health → the
+  // integrations dashboard. Specific actionable categories are handled above.
+  if (c.startsWith("lionwheel_") || c.startsWith("shopify_") || c.startsWith("gi_") || c.includes("stale"))
+    return "/admin/integrations";
   return "/inbox";
 }
 
@@ -289,7 +314,11 @@ function toExceptionInboxRow(row: ExceptionRow): InboxRow {
     summary: summarizeException(row),
     item_id: itemId,
     component_id: componentId,
-    deep_link: resolveExceptionDeepLink(row.category, row.exception_id),
+    deep_link: resolveExceptionDeepLink(
+      row.category,
+      row.exception_id,
+      row.related_entity_id ?? undefined,
+    ),
     inline_actions:
       row.status === "open"
         ? ["acknowledge", "resolve"]
