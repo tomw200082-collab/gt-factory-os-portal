@@ -23,6 +23,7 @@
 export type InboxRowType =
   | "approval:waste"
   | "approval:physical_count"
+  | "approval:inventory_movement"
   | "approval:purchase_recommendation"
   | "approval:production_recommendation"
   // Non-approval exceptions keep the upstream category as the discriminator
@@ -100,7 +101,14 @@ export const PHYSICAL_COUNT_APPROVAL_CATEGORIES = [
   "count_large_variance",
 ] as const;
 
+// Inventory-movement proposals from the daily route pack (returns, exchanges,
+// pickups). Source: api/src/inventory-movements/handler.ts submit insert.
+export const INVENTORY_MOVEMENT_APPROVAL_CATEGORIES = [
+  "inventory_movement_pending",
+] as const;
+
 export const ALL_APPROVAL_EXCEPTION_CATEGORIES: readonly string[] = [
   ...WASTE_APPROVAL_CATEGORIES,
   ...PHYSICAL_COUNT_APPROVAL_CATEGORIES,
+  ...INVENTORY_MOVEMENT_APPROVAL_CATEGORIES,
 ];

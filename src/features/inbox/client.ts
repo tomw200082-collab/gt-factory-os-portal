@@ -23,6 +23,7 @@ import { get } from "@/lib/api/client";
 import type { Result } from "@/lib/api/client";
 import {
   ALL_APPROVAL_EXCEPTION_CATEGORIES,
+  INVENTORY_MOVEMENT_APPROVAL_CATEGORIES,
   PHYSICAL_COUNT_APPROVAL_CATEGORIES,
   WASTE_APPROVAL_CATEGORIES,
   type InboxFilter,
@@ -196,9 +197,24 @@ async function fetchAllWorkingExceptions(
 // ---------------------------------------------------------------------------
 // Shared mapping helpers for exception → InboxRow.
 // ---------------------------------------------------------------------------
+const APPROVAL_PATH_BASE: Record<
+  Extract<
+    InboxRowType,
+    "approval:waste" | "approval:physical_count" | "approval:inventory_movement"
+  >,
+  string
+> = {
+  "approval:waste": "/inbox/approvals/waste/",
+  "approval:physical_count": "/inbox/approvals/physical-count/",
+  "approval:inventory_movement": "/inbox/approvals/inventory-movement/",
+};
+
 function toApprovalInboxRow(
   row: ExceptionRow,
-  type: Extract<InboxRowType, "approval:waste" | "approval:physical_count">,
+  type: Extract<
+    InboxRowType,
+    "approval:waste" | "approval:physical_count" | "approval:inventory_movement"
+  >,
 ): InboxRow {
   // Deep-link relies on related_entity_id being the submission_id. Upstream
   // handlers always set this when related_entity_type === 'form_submission'.
@@ -206,10 +222,7 @@ function toApprovalInboxRow(
   // 404 on click, which is the correct visible failure mode rather than a
   // silent misroute).
   const submissionId = row.related_entity_id ?? row.exception_id;
-  const pathBase =
-    type === "approval:waste"
-      ? "/inbox/approvals/waste/"
-      : "/inbox/approvals/physical-count/";
+  const pathBase = APPROVAL_PATH_BASE[type];
 
   const itemId = rawIsObject(row)
     ? readEntityIdFromExceptionRaw(row as unknown as Record<string, unknown>, "item_id")
@@ -345,6 +358,28 @@ export async function fetchPendingPhysicalCountApprovals(
     ),
   );
   return rows.map((r) => toApprovalInboxRow(r, "approval:physical_count"));
+}
+
+/**
+ * Pending Inventory-Movement approvals (route-print-pack proposals).
+ *
+ * Maps exceptions with category in INVENTORY_MOVEMENT_APPROVAL_CATEGORIES to
+ * `approval:inventory_movement` inbox rows. Deep-links to
+ * /inbox/approvals/inventory-movement/{submission_id}.
+ */
+export async function fetchPendingInventoryMovementApprovals(
+  signal?: AbortSignal,
+): Promise<InboxRow[]> {
+  const res = await fetchAllWorkingExceptions(signal);
+  if (!res.ok) {
+    throw buildFetchError("pending inventory movement approvals", res);
+  }
+  const rows = res.data.rows.filter((r) =>
+    (INVENTORY_MOVEMENT_APPROVAL_CATEGORIES as readonly string[]).includes(
+      r.category,
+    ),
+  );
+  return rows.map((r) => toApprovalInboxRow(r, "approval:inventory_movement"));
 }
 
 /**
@@ -541,6 +576,7 @@ function rowMatchesView(
     return (
       row.type === "approval:waste" ||
       row.type === "approval:physical_count" ||
+      row.type === "approval:inventory_movement" ||
       (row.type.startsWith("exception:") && row.category.startsWith("stock_"))
     );
   }

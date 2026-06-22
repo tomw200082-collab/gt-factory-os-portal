@@ -52,6 +52,7 @@ export const CATEGORY_FRIENDLY: Record<string, string> = {
   count_large_variance: "ספירה — סטייה גדולה",
   positive_adjustment: "התאמה חיובית",
   loss_above_threshold: "פחת מעל סף",
+  inventory_movement_pending: "תזוזת מלאי — לאישור",
   po_line_over_receipt: "PO — קבלה עודפת",
   forecast_stale: "תחזית — מיושנת",
   rebuild_stale: "Rebuild — תקוע",
@@ -69,6 +70,7 @@ export const DECISION_CATEGORIES = new Set([
   "count_large_variance",
   "positive_adjustment",
   "loss_above_threshold",
+  "inventory_movement_pending",
   "po_line_over_receipt",
   "shopify_variant_not_found",
 ]);
