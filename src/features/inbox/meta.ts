@@ -29,6 +29,9 @@ export const CATEGORY_FRIENDLY: Record<string, string> = {
   // Shopify
   shopify_unmapped_item: "Shopify — מוצר לא ממופה",
   shopify_variant_not_found: "Shopify — variant חסר",
+  shopify_available_mapping_missing: "Shopify — מיפוי AfS חסר",
+  shopify_available_mapping_stale: "Shopify — מיפוי AfS מיושן",
+  shopify_available_v2_unhealthy: "Shopify — AfS v2 לא תקין",
   shopify_stale: "Shopify — סנכרון תקוע",
   shopify_auth_failure: "Shopify — כשל אימות",
   shopify_rate_limit_stuck: "Shopify — rate-limit",
@@ -59,6 +62,9 @@ export const CATEGORY_FRIENDLY: Record<string, string> = {
   supplier_price_anomaly: "מחיר ספק — חריג",
   alias_revoked_with_dependencies: "Alias בוטל עם תלויות",
   bom_version_published: "BOM — גרסה פורסמה",
+  inventory_movement_proposal: "הצעת תנועת מלאי",
+  ledger_at_anchor_review: "ספר תנועות — בדיקת עוגן",
+  lw_pick_pre_anchor_skipped: "LionWheel — pick לפני עוגן (דולג)",
 };
 
 // Decision categories — the ones where the action verb is "אשר/דחה" and the
@@ -76,6 +82,8 @@ export const DECISION_CATEGORIES = new Set([
 // To-Do categories — work that needs to happen but isn't a yes/no decision.
 export const TODO_CATEGORIES = new Set([
   "shopify_unmapped_item",
+  "shopify_available_mapping_missing",
+  "shopify_available_mapping_stale",
   "lionwheel_unknown_sku",
   "gi_unmapped_supplier",
   "gi_expense_review",
@@ -106,6 +114,7 @@ export const WARNING_CATEGORIES = new Set([
   "shopify_api_version_drift",
   "shopify_drift",
   "shopify_network_failure",
+  "shopify_available_v2_unhealthy",
   "alias_revoked_with_dependencies",
 ]);
 
