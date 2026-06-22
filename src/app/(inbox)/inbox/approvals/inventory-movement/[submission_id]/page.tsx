@@ -148,7 +148,14 @@ export default function InventoryMovementReviewPage() {
   // drop a partial line (that would post a half-exchange to the ledger and
   // resolve the proposal with a missing leg). Approve posts ALL lines.
   const allLinesValid = lines.length > 0 && lines.every(lineIsValid);
-  const canApprove = allLinesValid && !approveBusy && !rejectBusy;
+  // Self-approval guard (parity with the physical-count page): admin/planner may
+  // approve their own submission; operator/viewer may not. Backend also enforces.
+  const isOwnUnprivileged =
+    !!d?.submitted_by_user_id &&
+    d.submitted_by_user_id === session.user_id &&
+    session.role !== "admin" &&
+    session.role !== "planner";
+  const canApprove = allLinesValid && !approveBusy && !rejectBusy && !isOwnUnprivileged;
 
   const handleApprove = async () => {
     if (!allLinesValid) return;
@@ -317,6 +324,23 @@ export default function InventoryMovementReviewPage() {
         </div>
       ) : null}
 
+      {detailQuery.isError ? (
+        <div className="mb-5 rounded-md border border-danger/40 bg-danger-softer p-4 text-xs text-danger-fg">
+          Could not load the proposal details. Context is unavailable — review the
+          item in the inbox before approving or rejecting.
+        </div>
+      ) : null}
+
+      {isOwnUnprivileged ? (
+        <div className="mb-5 rounded-md border border-warning/40 bg-warning-softer/60 p-4 text-sm text-warning-fg">
+          <div className="font-semibold">You cannot approve your own submission</div>
+          <div className="mt-1 text-xs">
+            Only an admin or planner may approve a movement. Ask another reviewer
+            to action it from the inbox.
+          </div>
+        </div>
+      ) : null}
+
       <SectionCard
         eyebrow="Approve"
         title="Confirm the stock move"
@@ -430,7 +454,7 @@ export default function InventoryMovementReviewPage() {
         </label>
         <NotesBox value={rejectionReason} onChange={(e) => setRejectionReason(e.target.value)} placeholder="Shown on the audit trail." />
         <div className="mt-5">
-          <button type="button" className="btn btn-lg btn-danger" disabled={rejectBusy || approveBusy} onClick={handleReject}>
+          <button type="button" className="btn btn-lg btn-danger" disabled={rejectBusy || approveBusy || isOwnUnprivileged} onClick={handleReject}>
             {rejectBusy ? "Submitting…" : "Reject movement"}
           </button>
         </div>
