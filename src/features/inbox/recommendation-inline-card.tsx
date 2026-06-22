@@ -111,6 +111,8 @@ export function RecommendationInlineCard({ row }: { row: InboxRow }) {
   if (outcome?.kind === "approved") {
     return (
       <div
+        role="status"
+        aria-live="polite"
         className="mt-3 flex items-center gap-2 rounded-md border border-success/40 bg-success-subtle/30 px-3 py-2.5 text-sm text-success-fg"
         data-testid="rec-inline-success"
       >
@@ -122,6 +124,8 @@ export function RecommendationInlineCard({ row }: { row: InboxRow }) {
   if (outcome?.kind === "dismissed") {
     return (
       <div
+        role="status"
+        aria-live="polite"
         className="mt-3 flex items-center gap-2 rounded-md border border-border/60 bg-bg-subtle/50 px-3 py-2.5 text-sm text-fg-muted"
         data-testid="rec-inline-dismissed"
       >
@@ -133,6 +137,8 @@ export function RecommendationInlineCard({ row }: { row: InboxRow }) {
   if (outcome?.kind === "conflict" || outcome?.kind === "error") {
     return (
       <div
+        role="alert"
+        aria-live="assertive"
         className="mt-3 rounded-md border border-warning/40 bg-warning-softer px-3 py-2.5 text-sm text-warning-fg"
         data-testid="rec-inline-problem"
       >

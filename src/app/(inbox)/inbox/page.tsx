@@ -586,6 +586,14 @@ export default function InboxListPage() {
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  // INTER-012 — success toast auto-dismisses after 4.5s (errors persist until
+  // the operator dismisses them).
+  useEffect(() => {
+    if (!actionSuccess) return;
+    const t = window.setTimeout(() => setActionSuccess(null), 4500);
+    return () => window.clearTimeout(t);
+  }, [actionSuccess]);
+
   // Tom 2026-05-06 §94: recently-dismissed pill for one-tap undo.
   type RecentAction = {
     id: string;
@@ -1443,6 +1451,9 @@ export default function InboxListPage() {
         {/* ---- Action toasts ------------------------------------------- */}
         {actionSuccess ? (
           <div
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
             className="flex items-center gap-2 border-b border-success/30 bg-success-subtle/40 px-5 py-2 text-xs text-success-fg"
             data-testid="inbox-action-success"
           >
@@ -1460,6 +1471,9 @@ export default function InboxListPage() {
         ) : null}
         {actionError ? (
           <div
+            role="alert"
+            aria-live="assertive"
+            aria-atomic="true"
             className="flex items-center gap-2 border-b border-danger/30 bg-danger-softer px-5 py-2 text-xs text-danger-fg"
             data-testid="inbox-action-error"
           >
