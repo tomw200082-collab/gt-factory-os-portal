@@ -452,6 +452,14 @@ function AdminSkuAliasesContent(): JSX.Element {
     !pendingQuery.isError &&
     !rejectedQuery.isError;
 
+  // INTER-011 — don't flash "0" counts while the status queries are loading
+  // (a false "all clear" read). Only show the KPI chips once all three resolve.
+  const countsReady =
+    !approvedQuery.isLoading &&
+    !pendingQuery.isLoading &&
+    !rejectedQuery.isLoading &&
+    backendLive;
+
   // iter 9: filtered unmapped rows (search on external_sku + assigned item name)
   const filteredUnmapped = useMemo<UnmappedSkuRow[]>(() => {
     if (!unmappedSearch.trim()) return unmappedRows;
@@ -616,35 +624,46 @@ function AdminSkuAliasesContent(): JSX.Element {
         title="External SKU → Item mapping"
         description="Map external SKUs observed in LionWheel and Shopify to canonical items. Approved aliases unblock planning demand calculations and FG stock sync."
         meta={
-          <div className="flex flex-wrap gap-2">
-            <MetricChip
-              label="Total aliases"
-              value={totalCount}
-              tone="neutral"
-            />
-            <MetricChip
-              label="Approved"
-              value={approvedCount}
-              tone="success"
-            />
-            <MetricChip
-              label="Pending"
-              value={pendingCount}
-              tone={pendingCount > 0 ? "warning" : "neutral"}
-            />
-            <MetricChip
-              label="Rejected"
-              value={rejectedCount}
-              tone={rejectedCount > 0 ? "danger" : "neutral"}
-            />
-            {unmappedRows.length > 0 ? (
+          countsReady ? (
+            <div className="flex flex-wrap gap-2">
               <MetricChip
-                label="Unmapped (open)"
-                value={unmappedRows.length}
-                tone="warning"
+                label="Total aliases"
+                value={totalCount}
+                tone="neutral"
               />
-            ) : null}
-          </div>
+              <MetricChip
+                label="Approved"
+                value={approvedCount}
+                tone="success"
+              />
+              <MetricChip
+                label="Pending"
+                value={pendingCount}
+                tone={pendingCount > 0 ? "warning" : "neutral"}
+              />
+              <MetricChip
+                label="Rejected"
+                value={rejectedCount}
+                tone={rejectedCount > 0 ? "danger" : "neutral"}
+              />
+              {unmappedRows.length > 0 ? (
+                <MetricChip
+                  label="Unmapped (open)"
+                  value={unmappedRows.length}
+                  tone="warning"
+                />
+              ) : null}
+            </div>
+          ) : (
+            <div className="flex flex-wrap gap-2" aria-hidden>
+              {[0, 1, 2, 3].map((i) => (
+                <div
+                  key={i}
+                  className="h-6 w-24 animate-pulse rounded-full bg-bg-subtle"
+                />
+              ))}
+            </div>
+          )
         }
       />
 

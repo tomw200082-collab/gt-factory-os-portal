@@ -122,13 +122,16 @@ Revert the listed source files to their pre-082 form. No backend or token change
   sites for suppliers, items, and components ("Archive supplier" / "Restore
   item" / etc. instead of the generic "Save change") (INTER-006). Verified:
   typecheck 0, eslint 0 errors, vitest 754/754.
+- **Iteration 5 (2026-06-22) — landed:** sku-aliases KPI chips no longer flash
+  "0" while the approved/pending/rejected queries load — gated on `countsReady`
+  with a skeleton placeholder, removing the false "all-clear" read (INTER-011).
+  Verified: typecheck 0, eslint 0 errors, vitest 754/754.
 - **Deferred to later iterations:** in-page bulk-resolve confirm (INTER-003);
   QuickCreate focus trap (A11Y-006 — note: ClassWEditDrawer already Radix, but
   QuickCreateItemModal is a custom div); per-row approve loading (INTER-004);
-  metric-chip load gating (INTER-011); "Add sourcing link" loading-disable
-  (INTER-007); integrations copy (COPY-016/018/020); density button
-  aria-label/touch target (A11Y-002/008); reject double-submit guard
-  (INTER-001).
+  "Add sourcing link" loading-disable (INTER-007); integrations copy
+  (COPY-016/018/020); density button aria-label/touch target (A11Y-002/008);
+  reject double-submit guard (INTER-001).
 - **HOLD for Tom (out of scope — see PR notes):** convert inbox Hebrew to
   English (COPY-001/003/004/005/006/007 + credit-card; A11Y-018). `/inbox` is
   not on the CLAUDE.md authorized-Hebrew list, but the strings carry explicit
