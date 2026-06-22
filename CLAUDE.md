@@ -15,6 +15,14 @@ The exception now also covers two operator-facing surfaces that are Hebrew + `di
 
 These were flagged by the UX content auditor as English-first violations because they were not previously listed here; Tom confirmed the Hebrew is intentional. English remains the default for all other operator surfaces; this list is the complete set of authorized Hebrew-operator-label surfaces.
 
+### Extension (2026-06-22, authorized by Tom)
+
+The exception now also covers the operator exception inbox:
+
+- **`/inbox`** — the exception/triage inbox. Operator-facing Hebrew category names and friendly labels (`CATEGORY_FRIENDLY` and related copy in `src/features/inbox/meta.ts`, plus the inbox page banners/buttons) are Hebrew by Tom's UX target.
+
+Flagged by the code-review conventions check during tranche 082 (PR #114) because `/inbox` was not previously listed; Tom confirmed the Hebrew is intentional and chose to keep it ("מה שבעברית תשאיר בעברית" — leave what's in Hebrew in Hebrew). The complete set of authorized Hebrew-operator-label surfaces is now: the Recipe-Health item page + BOM draft editor + quick-fix drawer, `/planning/procurement`, `/credit-tracking`, and `/inbox`. English remains the default for all other operator surfaces.
+
 ## Read these, in order, at the start of any portal session
 1. `docs/portal-os/registry.md` — index of all OS artifacts (≤1 line per entry).
 2. `docs/portal-os/scorecard.md` — current readiness, last updated.

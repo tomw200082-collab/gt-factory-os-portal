@@ -146,12 +146,13 @@ Revert the listed source files to their pre-082 form. No backend or token change
   "Add sourcing link" loading-disable (INTER-007); integrations copy
   (COPY-016/018/020); density button aria-label/touch target (A11Y-002/008);
   reject double-submit guard (INTER-001).
-- **HOLD for Tom (out of scope — see PR notes):** convert inbox Hebrew to
-  English (COPY-001/003/004/005/006/007 + credit-card; A11Y-018). `/inbox` is
-  not on the CLAUDE.md authorized-Hebrew list, but the strings carry explicit
-  `Tom-locked Hebrew` comments and the operator Hebrew is plainly intentional.
-  CLAUDE.md is Tom-only — recommend adding `/inbox` to the authorized list
-  rather than de-Hebraizing.
+- **RESOLVED by Tom (2026-06-22):** keep `/inbox` Hebrew as-is — Tom's
+  instruction "מה שבעברית תשאיר בעברית" (leave what's in Hebrew in Hebrew).
+  No code change; COPY-001/003/004/005/006/007 + credit-card + A11Y-018 are
+  closed as won't-fix (Hebrew is intentional, per Tom-locked comments).
+  Remaining durable step: add `/inbox` to the CLAUDE.md authorized-Hebrew-surface
+  list. CLAUDE.md is Tom-only — pending Tom's edit or his explicit go-ahead for
+  the executor to make that one-line addition.
 
 ## Actual evidence
 - Iteration 1: `tsc --noEmit` → 0; `eslint` on touched files → 0 errors (11
