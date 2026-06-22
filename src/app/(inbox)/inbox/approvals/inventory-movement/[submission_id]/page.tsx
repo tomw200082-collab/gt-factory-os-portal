@@ -144,11 +144,14 @@ export default function InventoryMovementReviewPage() {
   const addLine = () => setLines((prev) => [...prev, emptyLine()]);
   const removeLine = (i: number) => setLines((prev) => (prev.length <= 1 ? prev : prev.filter((_, idx) => idx !== i)));
 
-  const validLines = lines.filter(lineIsValid);
-  const canApprove = validLines.length > 0 && !approveBusy && !rejectBusy;
+  // Every entered line must be complete before approving — we never silently
+  // drop a partial line (that would post a half-exchange to the ledger and
+  // resolve the proposal with a missing leg). Approve posts ALL lines.
+  const allLinesValid = lines.length > 0 && lines.every(lineIsValid);
+  const canApprove = allLinesValid && !approveBusy && !rejectBusy;
 
   const handleApprove = async () => {
-    if (validLines.length === 0) return;
+    if (!allLinesValid) return;
     setApproveBusy(true);
     try {
       const res = await fetch(`/api/inventory-movements/${encodeURIComponent(submissionId)}/approve`, {
@@ -157,7 +160,7 @@ export default function InventoryMovementReviewPage() {
         body: JSON.stringify({
           idempotency_key: newIdempotencyKey(),
           approval_notes: approvalNotes || null,
-          lines: validLines.map((l) => ({
+          lines: lines.map((l) => ({
             direction: l.direction,
             item_type: l.item_type,
             item_id: l.item_id.trim(),
@@ -170,7 +173,7 @@ export default function InventoryMovementReviewPage() {
       const body = await res.json().catch(() => undefined);
       if (res.status === 200) {
         invalidateInboxSources();
-        setOutcome({ kind: "approved", postedCount: validLines.length });
+        setOutcome({ kind: "approved", postedCount: lines.length });
       } else if (res.status === 409 && body && "reason_code" in body) {
         setOutcome({ kind: "conflict", detail: friendlyConflict(body.reason_code, body.detail) });
       } else {
@@ -411,10 +414,12 @@ export default function InventoryMovementReviewPage() {
 
         <div className="mt-5">
           <button type="button" className="btn btn-lg btn-primary" disabled={!canApprove} onClick={handleApprove}>
-            {approveBusy ? "Posting…" : `Approve & post ${validLines.length || ""}`.trim()}
+            {approveBusy ? "Posting…" : `Approve & post ${lines.length}`}
           </button>
-          {validLines.length === 0 ? (
-            <p className="mt-2 text-xs text-fg-muted">Enter at least one line (item id, quantity, unit) to approve.</p>
+          {!allLinesValid ? (
+            <p className="mt-2 text-xs text-fg-muted">
+              Complete every line (item id, quantity, unit) before approving, or remove the incomplete ones — all lines are posted.
+            </p>
           ) : null}
         </div>
       </SectionCard>
