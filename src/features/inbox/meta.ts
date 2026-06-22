@@ -52,7 +52,7 @@ export const CATEGORY_FRIENDLY: Record<string, string> = {
   count_large_variance: "ספירה — סטייה גדולה",
   positive_adjustment: "התאמה חיובית",
   loss_above_threshold: "פחת מעל סף",
-  inventory_movement_pending: "תזוזת מלאי — לאישור",
+  inventory_movement_pending: "Stock movement — pending",
   po_line_over_receipt: "PO — קבלה עודפת",
   forecast_stale: "תחזית — מיושנת",
   rebuild_stale: "Rebuild — תקוע",

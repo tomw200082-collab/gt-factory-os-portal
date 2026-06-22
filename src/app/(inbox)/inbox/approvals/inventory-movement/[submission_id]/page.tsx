@@ -14,7 +14,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft, Plus, Trash2 } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Info, Plus, Trash2 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "@/lib/auth/session-provider";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
@@ -44,6 +44,18 @@ interface InventoryMovementDetail {
   }>;
 }
 
+// Mirrors the backend InventoryMovementPostedLine shape — inlined here
+// because no portal-side contract module exists yet for inventory-movement
+// and this lane does not author contracts.
+interface PostedLine {
+  item_type: "FG" | "RM" | "PKG";
+  item_id: string;
+  direction: "in" | "out";
+  quantity: string;
+  unit: string;
+  stock_ledger_movement_id: string;
+}
+
 interface LineDraft {
   direction: "in" | "out";
   item_type: "FG" | "RM" | "PKG";
@@ -64,8 +76,36 @@ const REASON_CODES = [
   "other",
 ] as const;
 
+// FLOW-IM-012 — plain-English labels for the reason_code <select>. Value
+// posted to the backend is unchanged (the snake_case code); only the
+// human-readable label changes.
+const REASON_CODE_LABELS: Record<(typeof REASON_CODES)[number], string> = {
+  goods_pickup: "Goods pickup",
+  return_in: "Return (in)",
+  goods_out: "Goods out",
+  exchange_in: "Exchange – received",
+  exchange_out: "Exchange – sent",
+  tasting: "Tasting / sample",
+  correction: "Stock correction",
+  other: "Other",
+};
+
+// FLOW-IM-013 — plain-English label for the proposal's `kind` field.
+const KIND_LABELS: Record<string, string> = {
+  pickup: "Pickup",
+  exchange: "Exchange",
+  return: "Return",
+  tasting: "Tasting",
+  goods_receipt: "Goods receipt",
+  other: "Other",
+};
+
+function kindLabel(kind: string): string {
+  return KIND_LABELS[kind] ?? kind;
+}
+
 type Outcome =
-  | { kind: "approved"; postedCount: number }
+  | { kind: "approved"; postedLines: PostedLine[] }
   | { kind: "rejected" }
   | { kind: "conflict"; detail: string }
   | { kind: "network"; message: string };
@@ -116,6 +156,9 @@ export default function InventoryMovementReviewPage() {
   const [outcome, setOutcome] = useState<Outcome | null>(null);
   const [approveBusy, setApproveBusy] = useState(false);
   const [rejectBusy, setRejectBusy] = useState(false);
+  // FLOW-IM-001 — gate the irreversible post behind an explicit confirm step,
+  // mirroring the physical-count page's confirmingApprove pattern.
+  const [confirmingApprove, setConfirmingApprove] = useState(false);
 
   const detailQuery = useQuery<InventoryMovementDetail>({
     queryKey: ["inventory-movement-detail", submissionId],
@@ -155,7 +198,17 @@ export default function InventoryMovementReviewPage() {
     d.submitted_by_user_id === session.user_id &&
     session.role !== "admin" &&
     session.role !== "planner";
-  const canApprove = allLinesValid && !approveBusy && !rejectBusy && !isOwnUnprivileged;
+  // FLOW-IM-009 — disable approve / reject when the proposal is no longer
+  // pending (e.g. another reviewer already actioned it).
+  const isPending = !d || d.status === "pending";
+  const canApprove = allLinesValid && !approveBusy && !rejectBusy && !isOwnUnprivileged && isPending;
+  // FLOW-IM-010 — Reject requires a non-empty reason (mirror waste / PC).
+  const canReject = !rejectBusy && !approveBusy && !isOwnUnprivileged && isPending && rejectionReason.trim().length > 0;
+
+  // FLOW-IM-014 — exchange-leg warning: posting one leg only leaves the other
+  // unrecorded. Non-blocking; informational + a near-button reminder.
+  const isExchange = d?.kind === "exchange";
+  const exchangeSingleLineWarning = isExchange && lines.length === 1;
 
   const handleApprove = async () => {
     if (!allLinesValid) return;
@@ -180,7 +233,11 @@ export default function InventoryMovementReviewPage() {
       const body = await res.json().catch(() => undefined);
       if (res.status === 200) {
         invalidateInboxSources();
-        setOutcome({ kind: "approved", postedCount: lines.length });
+        // FLOW-IM-002 / FLOW-IM-003 — keep the backend's posted_lines[] so the
+        // success state can list each posted ledger row and link out.
+        const postedLines: PostedLine[] =
+          body && Array.isArray(body.posted_lines) ? (body.posted_lines as PostedLine[]) : [];
+        setOutcome({ kind: "approved", postedLines });
       } else if (res.status === 409 && body && "reason_code" in body) {
         setOutcome({ kind: "conflict", detail: friendlyConflict(body.reason_code, body.detail) });
       } else {
@@ -190,9 +247,11 @@ export default function InventoryMovementReviewPage() {
       setOutcome({ kind: "network", message: err instanceof Error ? err.message : String(err) });
     }
     setApproveBusy(false);
+    setConfirmingApprove(false);
   };
 
   const handleReject = async () => {
+    if (!rejectionReason.trim()) return;
     setRejectBusy(true);
     try {
       const res = await fetch(`/api/inventory-movements/${encodeURIComponent(submissionId)}/reject`, {
@@ -219,16 +278,66 @@ export default function InventoryMovementReviewPage() {
   };
 
   if (outcome?.kind === "approved") {
+    const posted = outcome.postedLines;
+    const firstItemId = posted[0]?.item_id ?? null;
     return (
       <SuccessState
         title="Approved — stock posted"
-        description={`Posted ${outcome.postedCount} movement line${outcome.postedCount === 1 ? "" : "s"} to the stock ledger.`}
+        description={`Posted ${posted.length} movement line${posted.length === 1 ? "" : "s"} to the stock ledger.`}
         action={
-          <Link href="/inbox" className="btn btn-sm btn-primary">
-            Back to inbox
-          </Link>
+          <>
+            <Link href="/inbox" className="btn btn-sm btn-primary">
+              Back to inbox
+            </Link>
+            {firstItemId ? (
+              <Link
+                href={`/stock/movement-log?item_id=${encodeURIComponent(firstItemId)}`}
+                className="btn btn-sm"
+                data-testid="im-review-approved-view-log"
+              >
+                View in movement log
+              </Link>
+            ) : null}
+            {posted.length === 1 && firstItemId ? (
+              <Link
+                href={`/inventory?item_id=${encodeURIComponent(firstItemId)}`}
+                className="btn btn-sm"
+                data-testid="im-review-approved-view-inventory"
+              >
+                View in inventory
+              </Link>
+            ) : null}
+          </>
         }
-      />
+      >
+        {posted.length > 0 ? (
+          <div className="mt-2" data-testid="im-review-approved-posted-lines">
+            <div className="mb-1.5 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+              Posted lines
+            </div>
+            <ul className="space-y-1 text-sm">
+              {posted.map((p) => (
+                <li key={p.stock_ledger_movement_id} className="flex gap-2 tabular-nums">
+                  <span
+                    className={
+                      p.direction === "in"
+                        ? "font-semibold text-success-fg"
+                        : "font-semibold text-danger-fg"
+                    }
+                  >
+                    {p.direction === "in" ? "In" : "Out"}
+                  </span>
+                  <span>
+                    {p.quantity} {p.unit}
+                  </span>
+                  <span className="text-fg-muted">·</span>
+                  <span className="font-mono text-fg">{p.item_id}</span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        ) : null}
+      </SuccessState>
     );
   }
   if (outcome?.kind === "rejected") {
@@ -283,7 +392,11 @@ export default function InventoryMovementReviewPage() {
       />
 
       {detailQuery.isLoading ? (
-        <div className="mb-6 space-y-3 rounded-xl border border-border/60 bg-bg-subtle/40 p-5" aria-busy="true">
+        <div
+          className="mb-6 space-y-3 rounded-xl border border-border/60 bg-bg-subtle/40 p-5"
+          aria-busy="true"
+          aria-live="polite"
+        >
           <div className="h-5 w-32 animate-pulse rounded bg-bg-subtle" />
           {Array.from({ length: 4 }).map((_, i) => (
             <div key={i} className="h-4 w-48 animate-pulse rounded bg-bg-subtle" />
@@ -300,7 +413,7 @@ export default function InventoryMovementReviewPage() {
           ) : null}
           <div className="flex gap-3">
             <span className="w-32 shrink-0 font-medium text-fg-muted">Kind</span>
-            <span className="text-fg">{d.kind}</span>
+            <span className="text-fg">{kindLabel(d.kind)}</span>
           </div>
           {d.note ? (
             <div className="flex gap-3">
@@ -321,6 +434,29 @@ export default function InventoryMovementReviewPage() {
               {d.submitted_by_display_name ? ` by ${d.submitted_by_display_name}` : ""}
             </span>
           </div>
+          {/* FLOW-IM-009 — plain-English current-status chip, never the raw enum. */}
+          <div className="flex gap-3">
+            <span className="w-32 shrink-0 font-medium text-fg-muted">Current status</span>
+            <span>
+              {d.status === "pending" ? (
+                <span className="inline-flex items-center rounded-full border border-warning/40 bg-warning-softer px-2 py-0.5 text-xs font-medium text-warning-fg">
+                  Awaiting approval
+                </span>
+              ) : d.status === "posted" ? (
+                <span className="inline-flex items-center rounded-full border border-success/30 bg-success-softer px-2 py-0.5 text-xs font-medium text-success-fg">
+                  Approved — posted to stock
+                </span>
+              ) : d.status === "rejected" ? (
+                <span className="inline-flex items-center rounded-full border border-border bg-bg-subtle px-2 py-0.5 text-xs font-medium text-fg-muted">
+                  Rejected — no stock change
+                </span>
+              ) : (
+                <span className="inline-flex items-center rounded-full border border-border bg-bg-subtle px-2 py-0.5 text-xs font-medium text-fg-muted">
+                  {d.status.replace(/_/g, " ")}
+                </span>
+              )}
+            </span>
+          </div>
         </div>
       ) : null}
 
@@ -331,12 +467,49 @@ export default function InventoryMovementReviewPage() {
         </div>
       ) : null}
 
+      {/* FLOW-IM-009 — when the proposal is no longer pending, warn loudly
+          above the editor and disable both actions (handled via canApprove /
+          canReject below). */}
+      {d && d.status !== "pending" ? (
+        <div
+          className="mb-5 rounded-md border border-warning/40 bg-warning-softer/60 p-4 text-sm text-warning-fg"
+          data-testid="im-review-not-pending-banner"
+        >
+          <div className="font-semibold">This movement is no longer pending</div>
+          <div className="mt-1 text-xs">
+            {d.status === "posted"
+              ? "It has already been approved and posted to the stock ledger. Approve and Reject are disabled."
+              : d.status === "rejected"
+                ? "It has already been rejected. Approve and Reject are disabled."
+                : "Another reviewer may have actioned it. Approve and Reject are disabled — refresh the inbox."}
+          </div>
+        </div>
+      ) : null}
+
       {isOwnUnprivileged ? (
         <div className="mb-5 rounded-md border border-warning/40 bg-warning-softer/60 p-4 text-sm text-warning-fg">
           <div className="font-semibold">You cannot approve your own submission</div>
           <div className="mt-1 text-xs">
             Only an admin or planner may approve a movement. Ask another reviewer
             to action it from the inbox.
+          </div>
+        </div>
+      ) : null}
+
+      {/* FLOW-IM-014 — exchange info banner. Two lines (out + in) are required
+          to record the full swap; posting only one leaves the other unrecorded. */}
+      {isExchange ? (
+        <div
+          className="mb-5 flex items-start gap-2 rounded-md border border-info/40 bg-info-softer/60 p-4 text-sm text-info-fg"
+          data-testid="im-review-exchange-banner"
+        >
+          <Info className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={2.25} />
+          <div>
+            <div className="font-semibold">This is an exchange</div>
+            <div className="mt-1 text-xs">
+              Enter one Out line and one In line; posting one leg only leaves
+              the other unrecorded.
+            </div>
           </div>
         </div>
       ) : null}
@@ -372,14 +545,19 @@ export default function InventoryMovementReviewPage() {
                   <option value="PKG">PKG</option>
                 </select>
               </label>
+              {/* FLOW-IM-004 Path B — rename "Item id" to "Item code" and add
+                  a helper note. Typeahead (Path A) is out of scope. */}
               <label className="flex flex-col gap-1 grow">
-                <span className="text-xs font-medium text-fg-muted">Item id</span>
+                <span className="text-xs font-medium text-fg-muted">Item code</span>
                 <input
                   className={inputCls}
                   value={l.item_id}
                   onChange={(e) => updateLine(i, { item_id: e.target.value })}
-                  placeholder="item / component id"
+                  placeholder="item / component code"
                 />
+                <span className="text-3xs text-fg-subtle">
+                  Enter the exact code from Admin → Items.
+                </span>
               </label>
               <label className="flex flex-col gap-1 w-24">
                 <span className="text-xs font-medium text-fg-muted">Qty</span>
@@ -409,7 +587,7 @@ export default function InventoryMovementReviewPage() {
                 >
                   {REASON_CODES.map((rc) => (
                     <option key={rc} value={rc}>
-                      {rc}
+                      {REASON_CODE_LABELS[rc]}
                     </option>
                   ))}
                 </select>
@@ -437,24 +615,109 @@ export default function InventoryMovementReviewPage() {
         <NotesBox value={approvalNotes} onChange={(e) => setApprovalNotes(e.target.value)} placeholder="Internal audit trail." />
 
         <div className="mt-5">
-          <button type="button" className="btn btn-lg btn-primary" disabled={!canApprove} onClick={handleApprove}>
-            {approveBusy ? "Posting…" : `Approve & post ${lines.length}`}
-          </button>
+          {/* FLOW-IM-001 — two-step confirm zone before Approve fires.
+              Mirrors the physical-count alertdialog pattern. */}
+          {confirmingApprove ? (
+            <div
+              className="flex flex-col gap-3 rounded-md border border-warning/40 bg-warning-softer px-4 py-3"
+              role="alertdialog"
+              aria-label="Confirm approval"
+              data-testid="im-review-approve-confirm-zone"
+            >
+              <div className="text-sm text-warning-fg">
+                Approving posts the following{" "}
+                <span className="font-semibold">
+                  {lines.length} stock-ledger row{lines.length === 1 ? "" : "s"}
+                </span>{" "}
+                and cannot be undone:
+              </div>
+              <ul className="space-y-1 text-sm">
+                {lines.map((l, i) => (
+                  <li key={i} className="flex gap-2 tabular-nums">
+                    <span
+                      className={
+                        l.direction === "in"
+                          ? "font-semibold text-success-fg"
+                          : "font-semibold text-danger-fg"
+                      }
+                    >
+                      {l.direction === "in" ? "In" : "Out"}
+                    </span>
+                    <span>
+                      {l.quantity} {l.unit}
+                    </span>
+                    <span className="text-fg-muted">·</span>
+                    <span className="font-mono text-fg">{l.item_id}</span>
+                  </li>
+                ))}
+              </ul>
+              <div className="flex items-center gap-1.5">
+                <button
+                  type="button"
+                  data-testid="im-review-approve-confirm"
+                  className="btn btn-sm btn-primary"
+                  disabled={approveBusy}
+                  onClick={handleApprove}
+                >
+                  {approveBusy ? "Posting…" : "Yes, approve"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-ghost btn-sm"
+                  disabled={approveBusy}
+                  onClick={() => setConfirmingApprove(false)}
+                >
+                  Keep reviewing
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button
+              type="button"
+              data-testid="im-review-approve"
+              className="btn btn-lg btn-primary"
+              disabled={!canApprove}
+              onClick={() => setConfirmingApprove(true)}
+            >
+              {`Approve & post ${lines.length}`}
+            </button>
+          )}
           {!allLinesValid ? (
             <p className="mt-2 text-xs text-fg-muted">
-              Complete every line (item id, quantity, unit) before approving, or remove the incomplete ones — all lines are posted.
+              Complete every line (item code, quantity, unit) before approving, or remove the incomplete ones — all lines are posted.
             </p>
+          ) : null}
+          {/* FLOW-IM-014 — non-blocking single-line-exchange warning. */}
+          {exchangeSingleLineWarning && !confirmingApprove ? (
+            <div
+              className="mt-2 flex items-start gap-1.5 text-xs text-warning-fg"
+              data-testid="im-review-exchange-single-line-warn"
+            >
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={2.25} />
+              <span>
+                This exchange has only one line. Add the matching{" "}
+                {lines[0]?.direction === "in" ? "Out" : "In"} line so both legs
+                are recorded.
+              </span>
+            </div>
           ) : null}
         </div>
       </SectionCard>
 
-      <SectionCard eyebrow="Reject" title="Refuse this movement" description="Nothing is posted to the stock ledger. Reason is optional and surfaces on the audit trail.">
+      <SectionCard eyebrow="Reject" title="Refuse this movement" description="Nothing is posted to the stock ledger. The reason surfaces on the audit trail.">
+        {/* FLOW-IM-010 — rejection reason is required (mirror waste / PC). */}
         <label className="block mb-2 text-sm font-semibold text-fg">
-          Rejection reason <span className="font-normal text-fg-muted">(optional)</span>
+          Rejection reason <span className="font-normal text-danger-fg">*</span>
         </label>
         <NotesBox value={rejectionReason} onChange={(e) => setRejectionReason(e.target.value)} placeholder="Shown on the audit trail." />
         <div className="mt-5">
-          <button type="button" className="btn btn-lg btn-danger" disabled={rejectBusy || approveBusy || isOwnUnprivileged} onClick={handleReject}>
+          <button
+            type="button"
+            data-testid="im-review-reject"
+            className="btn btn-lg btn-danger"
+            disabled={!canReject}
+            onClick={handleReject}
+          >
             {rejectBusy ? "Submitting…" : "Reject movement"}
           </button>
         </div>

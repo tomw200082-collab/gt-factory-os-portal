@@ -164,6 +164,12 @@ const CATEGORY_BUTTON_LABELS: Record<string, CategoryButtonLabels> = {
     resolveConfirm: "אשר דחיה",
     notesPlaceholder: "סיבה לדחיית העודף (אופציונלי)…",
   },
+  // Decision category for inventory-movement approvals. Approvals are
+  // actioned on the dedicated review page (not inline); only `deepLink` is
+  // consumed here for the "Fix this" link label.
+  inventory_movement_pending: {
+    deepLink: "Review movement",
+  },
   shopify_variant_not_found: {
     deepLink: "פתור פער",
     acknowledge: "ראיתי",
@@ -305,6 +311,7 @@ const SEVERITY_CONFIG: Record<
 const TYPE_LABELS: Record<string, string> = {
   "approval:waste": "Waste approval",
   "approval:physical_count": "Count approval",
+  "approval:inventory_movement": "Movement approval",
   "approval:purchase_recommendation": "Purchase rec",
   "approval:production_recommendation": "Production rec",
 };
