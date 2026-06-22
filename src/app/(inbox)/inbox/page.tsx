@@ -63,6 +63,7 @@ import { ScrollFade } from "@/components/ui/ScrollFade";
 import {
   fetchExceptions,
   fetchPendingPhysicalCountApprovals,
+  fetchPendingInventoryMovementApprovals,
   fetchPendingPlanningRecApprovals,
   fetchPendingWasteApprovals,
   mergeInboxRows,
@@ -243,6 +244,7 @@ function buttonLabelsFor(category: string | null | undefined): CategoryButtonLab
 // ---------------------------------------------------------------------------
 const QK_WASTE = ["inbox", "source", "approvals", "waste"] as const;
 const QK_PC = ["inbox", "source", "approvals", "physical_count"] as const;
+const QK_IM = ["inbox", "source", "approvals", "inventory_movement"] as const;
 const QK_REC = ["inbox", "source", "approvals", "recommendations"] as const;
 const QK_EXC = ["inbox", "source", "exceptions"] as const;
 const QK_ALL = ["inbox", "all_rows"] as const;
@@ -645,6 +647,12 @@ export default function InboxListPage() {
         staleTime: 30_000,
       },
       {
+        queryKey: QK_IM,
+        queryFn: ({ signal }: { signal: AbortSignal }) =>
+          fetchPendingInventoryMovementApprovals(signal),
+        staleTime: 30_000,
+      },
+      {
         queryKey: QK_REC,
         queryFn: ({ signal }: { signal: AbortSignal }) =>
           fetchPendingPlanningRecApprovals(signal),
@@ -659,16 +667,17 @@ export default function InboxListPage() {
     ],
   });
 
-  const [wasteQ, pcQ, recQ, excQ] = sources;
+  const [wasteQ, pcQ, imQ, recQ, excQ] = sources;
 
   const anyLoading =
-    wasteQ.isLoading || pcQ.isLoading || recQ.isLoading || excQ.isLoading;
+    wasteQ.isLoading || pcQ.isLoading || imQ.isLoading || recQ.isLoading || excQ.isLoading;
   const anyFetching =
-    wasteQ.isFetching || pcQ.isFetching || recQ.isFetching || excQ.isFetching;
+    wasteQ.isFetching || pcQ.isFetching || imQ.isFetching || recQ.isFetching || excQ.isFetching;
 
   const sourceErrors: Array<{ label: string; queryKey: readonly string[] }> = [];
   if (wasteQ.isError) sourceErrors.push({ label: "Waste / adjustment approvals", queryKey: QK_WASTE });
   if (pcQ.isError) sourceErrors.push({ label: "Physical count approvals", queryKey: QK_PC });
+  if (imQ.isError) sourceErrors.push({ label: "Inventory movement approvals", queryKey: QK_IM });
   if (recQ.isError) sourceErrors.push({ label: "Planning recommendation approvals", queryKey: QK_REC });
   if (excQ.isError) sourceErrors.push({ label: "Exceptions", queryKey: QK_EXC });
 
@@ -676,10 +685,11 @@ export default function InboxListPage() {
     return Math.max(
       wasteQ.dataUpdatedAt ?? 0,
       pcQ.dataUpdatedAt ?? 0,
+      imQ.dataUpdatedAt ?? 0,
       recQ.dataUpdatedAt ?? 0,
       excQ.dataUpdatedAt ?? 0,
     );
-  }, [wasteQ.dataUpdatedAt, pcQ.dataUpdatedAt, recQ.dataUpdatedAt, excQ.dataUpdatedAt]);
+  }, [wasteQ.dataUpdatedAt, pcQ.dataUpdatedAt, imQ.dataUpdatedAt, recQ.dataUpdatedAt, excQ.dataUpdatedAt]);
 
   // -------------------------------------------------------------------------
   // Merge + filter.
@@ -690,12 +700,13 @@ export default function InboxListPage() {
         [
           wasteQ.data ?? [],
           pcQ.data ?? [],
+          imQ.data ?? [],
           recQ.data ?? [],
           excQ.data ?? [],
         ],
         filter,
       ),
-    [wasteQ.data, pcQ.data, recQ.data, excQ.data, filter],
+    [wasteQ.data, pcQ.data, imQ.data, recQ.data, excQ.data, filter],
   );
 
   useQuery<InboxRow[]>({
@@ -915,6 +926,7 @@ export default function InboxListPage() {
     void queryClient.invalidateQueries({ queryKey: QK_EXC });
     void queryClient.invalidateQueries({ queryKey: QK_WASTE });
     void queryClient.invalidateQueries({ queryKey: QK_PC });
+    void queryClient.invalidateQueries({ queryKey: QK_IM });
   }, [queryClient]);
 
   const refetchAll = useCallback(() => {
@@ -922,9 +934,10 @@ export default function InboxListPage() {
     setActionError(null);
     void wasteQ.refetch();
     void pcQ.refetch();
+    void imQ.refetch();
     void recQ.refetch();
     void excQ.refetch();
-  }, [wasteQ, pcQ, recQ, excQ]);
+  }, [wasteQ, pcQ, imQ, recQ, excQ]);
 
   const recordRecentAction = useCallback(
     (row: InboxRow, kind: "ack" | "resolve") => {
