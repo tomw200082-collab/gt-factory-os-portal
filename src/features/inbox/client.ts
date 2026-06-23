@@ -498,6 +498,89 @@ export async function fetchExceptions(
 }
 
 // ---------------------------------------------------------------------------
+// Supplier cost-draft (price-change) decisions.
+//
+// Price changes are NOT exceptions — they live in supplier_cost_drafts
+// (Price-Truth substrate, migrations 0188/0227/0228) with admin-only,
+// atomic, tested decision endpoints. Pending drafts otherwise surface only on
+// /admin/cost-drafts; here we lift them into the unified inbox as one-tap
+// approve/reject rows. No backend authorship — we consume the existing
+// GET /api/cost-drafts list and the per-id approve/reject proxy routes.
+//
+// The source is admin-gated at the page level (only admins can decide), so a
+// non-admin never receives an un-actionable row.
+// ---------------------------------------------------------------------------
+export interface CostDraftRow {
+  supplier_cost_draft_id: string;
+  supplier_item_id: string;
+  supplier_id: string;
+  supplier_name: string | null;
+  component_id: string | null;
+  item_id: string | null;
+  target_name: string | null;
+  suggested_cost_ils: string;
+  current_supplier_cost: string | null;
+  current_effective_cost: string | null;
+  source_invoice_id: string | null;
+  source_invoice_date: string | null;
+  status: string;
+  created_at: string;
+}
+
+interface CostDraftsListResponse {
+  rows: CostDraftRow[];
+  count: number;
+  pending_count: number;
+}
+
+/**
+ * Map a pending supplier cost-draft to an inbox decision row. Pure + exported
+ * for unit testing. The full draft is carried on `raw` so the inline card can
+ * render current→suggested price without a second fetch.
+ */
+export function toCostDraftInboxRow(d: CostDraftRow): InboxRow {
+  const target = d.target_name ?? d.component_id ?? d.item_id ?? "פריט";
+  const supplierTail = d.supplier_name ? ` — ${d.supplier_name}` : "";
+  return {
+    id: d.supplier_cost_draft_id,
+    type: "approval:cost_draft",
+    category: "cost_draft_pending",
+    // Price decisions need human action but are not severity-ranked upstream;
+    // 'warning' groups them with the other actionable approvals. UI projection.
+    severity: "warning",
+    created_at: d.created_at,
+    summary: `שינוי מחיר ספק: ${target}${supplierTail}`,
+    item_id: d.item_id,
+    component_id: d.component_id,
+    // Deep link to the full cost-drafts surface for the audit trail / history.
+    deep_link: "/admin/cost-drafts",
+    // Decision happens inline via the cost-draft card; no acknowledge/resolve.
+    inline_actions: [],
+    raw: d,
+  };
+}
+
+/**
+ * Pending supplier price-change drafts as inbox rows.
+ *
+ * Admin-only upstream — the page enables this source only for admins.
+ */
+export async function fetchPendingCostDrafts(
+  signal?: AbortSignal,
+): Promise<InboxRow[]> {
+  const res = await get<CostDraftsListResponse>(
+    "/api/cost-drafts?status=pending",
+    { signal },
+  );
+  if (!res.ok) {
+    throw buildFetchError("supplier price-change drafts", res);
+  }
+  return res.data.rows
+    .filter((r) => r.status === "pending")
+    .map(toCostDraftInboxRow);
+}
+
+// ---------------------------------------------------------------------------
 // Merging + sorting.
 // ---------------------------------------------------------------------------
 

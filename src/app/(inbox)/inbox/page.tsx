@@ -62,6 +62,7 @@ import { ScrollFade } from "@/components/ui/ScrollFade";
 
 import {
   fetchExceptions,
+  fetchPendingCostDrafts,
   fetchPendingPhysicalCountApprovals,
   fetchPendingPlanningRecApprovals,
   fetchPendingWasteApprovals,
@@ -73,6 +74,7 @@ import {
   extractCreditNeededPayload,
 } from "@/features/inbox/credit-card";
 import { ApprovalInlineCard } from "@/features/inbox/approval-inline-card";
+import { CostDraftInlineCard } from "@/features/inbox/cost-draft-card";
 import { RecommendationInlineCard } from "@/features/inbox/recommendation-inline-card";
 import {
   acknowledgeException,
@@ -245,6 +247,7 @@ const QK_WASTE = ["inbox", "source", "approvals", "waste"] as const;
 const QK_PC = ["inbox", "source", "approvals", "physical_count"] as const;
 const QK_REC = ["inbox", "source", "approvals", "recommendations"] as const;
 const QK_EXC = ["inbox", "source", "exceptions"] as const;
+const QK_COST_DRAFTS = ["inbox", "source", "cost_drafts"] as const;
 const QK_ALL = ["inbox", "all_rows"] as const;
 
 // ---------------------------------------------------------------------------
@@ -637,7 +640,12 @@ export default function InboxListPage() {
 
   // -------------------------------------------------------------------------
   // Source fetchers (parallel).
+  //
+  // Cost-draft (supplier price-change) decisions are admin-only upstream, so
+  // that source is enabled only for admins — a non-admin never receives an
+  // un-actionable row.
   // -------------------------------------------------------------------------
+  const isAdmin = session.role === "admin";
   const sources = useQueries({
     queries: [
       {
@@ -664,21 +672,37 @@ export default function InboxListPage() {
           fetchExceptions(signal),
         staleTime: 30_000,
       },
+      {
+        queryKey: QK_COST_DRAFTS,
+        queryFn: ({ signal }: { signal: AbortSignal }) =>
+          fetchPendingCostDrafts(signal),
+        staleTime: 30_000,
+        enabled: isAdmin,
+      },
     ],
   });
 
-  const [wasteQ, pcQ, recQ, excQ] = sources;
+  const [wasteQ, pcQ, recQ, excQ, cdQ] = sources;
 
   const anyLoading =
-    wasteQ.isLoading || pcQ.isLoading || recQ.isLoading || excQ.isLoading;
+    wasteQ.isLoading ||
+    pcQ.isLoading ||
+    recQ.isLoading ||
+    excQ.isLoading ||
+    cdQ.isLoading;
   const anyFetching =
-    wasteQ.isFetching || pcQ.isFetching || recQ.isFetching || excQ.isFetching;
+    wasteQ.isFetching ||
+    pcQ.isFetching ||
+    recQ.isFetching ||
+    excQ.isFetching ||
+    cdQ.isFetching;
 
   const sourceErrors: Array<{ label: string; queryKey: readonly string[] }> = [];
   if (wasteQ.isError) sourceErrors.push({ label: "Waste / adjustment approvals", queryKey: QK_WASTE });
   if (pcQ.isError) sourceErrors.push({ label: "Physical count approvals", queryKey: QK_PC });
   if (recQ.isError) sourceErrors.push({ label: "Planning recommendation approvals", queryKey: QK_REC });
   if (excQ.isError) sourceErrors.push({ label: "Exceptions", queryKey: QK_EXC });
+  if (cdQ.isError) sourceErrors.push({ label: "Supplier price-change drafts", queryKey: QK_COST_DRAFTS });
 
   const lastRefreshedAt = useMemo<number>(() => {
     return Math.max(
@@ -686,8 +710,9 @@ export default function InboxListPage() {
       pcQ.dataUpdatedAt ?? 0,
       recQ.dataUpdatedAt ?? 0,
       excQ.dataUpdatedAt ?? 0,
+      cdQ.dataUpdatedAt ?? 0,
     );
-  }, [wasteQ.dataUpdatedAt, pcQ.dataUpdatedAt, recQ.dataUpdatedAt, excQ.dataUpdatedAt]);
+  }, [wasteQ.dataUpdatedAt, pcQ.dataUpdatedAt, recQ.dataUpdatedAt, excQ.dataUpdatedAt, cdQ.dataUpdatedAt]);
 
   // -------------------------------------------------------------------------
   // Merge + filter.
@@ -700,10 +725,11 @@ export default function InboxListPage() {
           pcQ.data ?? [],
           recQ.data ?? [],
           excQ.data ?? [],
+          cdQ.data ?? [],
         ],
         filter,
       ),
-    [wasteQ.data, pcQ.data, recQ.data, excQ.data, filter],
+    [wasteQ.data, pcQ.data, recQ.data, excQ.data, cdQ.data, filter],
   );
 
   useQuery<InboxRow[]>({
@@ -932,7 +958,8 @@ export default function InboxListPage() {
     void pcQ.refetch();
     void recQ.refetch();
     void excQ.refetch();
-  }, [wasteQ, pcQ, recQ, excQ]);
+    void cdQ.refetch();
+  }, [wasteQ, pcQ, recQ, excQ, cdQ]);
 
   const recordRecentAction = useCallback(
     (row: InboxRow, kind: "ack" | "resolve") => {
@@ -1797,12 +1824,15 @@ function InboxRowCard({
     isApproval &&
     (row.type === "approval:production_recommendation" ||
       row.type === "approval:purchase_recommendation");
+  const isCostDraft = isApproval && row.type === "approval:cost_draft";
   // Inline panels render only on non-compact density. Recommendation
   // approve/dismiss is additionally gated to planner/admin (canAct), matching
-  // the Inbox audience for approvals.
+  // the Inbox audience for approvals. Cost-draft rows only ever reach admins
+  // (admin-gated source), and admin ∈ canAct.
   const showWastePCInline = isInlineApproval && density !== "compact";
   const showRecInline = isRecApproval && canAct && density !== "compact";
-  const hasInlinePanel = showWastePCInline || showRecInline;
+  const showCostDraftInline = isCostDraft && canAct && density !== "compact";
+  const hasInlinePanel = showWastePCInline || showRecInline || showCostDraftInline;
 
   const labels = buttonLabelsFor(row.category);
   const isResolveDestructive = labels.resolve === "דחה";
@@ -1981,6 +2011,15 @@ function InboxRowCard({
           {showRecInline ? (
             <div onClick={(e) => e.stopPropagation()}>
               <RecommendationInlineCard row={row} />
+            </div>
+          ) : null}
+
+          {showCostDraftInline ? (
+            <div
+              data-testid="inbox-row-cost-draft-card"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <CostDraftInlineCard row={row} />
             </div>
           ) : null}
 

@@ -25,6 +25,10 @@ export type InboxRowType =
   | "approval:physical_count"
   | "approval:purchase_recommendation"
   | "approval:production_recommendation"
+  // Supplier price-change (cost-draft) decision surfaced in the inbox.
+  // Backed by supplier_cost_drafts + the admin-only cost-draft decision
+  // endpoints — not the exceptions table. See client.ts fetchPendingCostDrafts.
+  | "approval:cost_draft"
   // Non-approval exceptions keep the upstream category as the discriminator
   // suffix. Free-form by migration invariant (0010_exceptions.sql) — do not
   // enumerate the tail.

@@ -60,6 +60,7 @@ export const CATEGORY_FRIENDLY: Record<string, string> = {
   rebuild_stale: "Rebuild — תקוע",
   export_stale: "Export — תקוע",
   supplier_price_anomaly: "מחיר ספק — חריג",
+  cost_draft_pending: "שינוי מחיר ספק",
   alias_revoked_with_dependencies: "Alias בוטל עם תלויות",
   bom_version_published: "BOM — גרסה פורסמה",
   inventory_movement_proposal: "הצעת תנועת מלאי",
@@ -77,6 +78,7 @@ export const DECISION_CATEGORIES = new Set([
   "loss_above_threshold",
   "po_line_over_receipt",
   "shopify_variant_not_found",
+  "cost_draft_pending",
 ]);
 
 // To-Do categories — work that needs to happen but isn't a yes/no decision.
@@ -123,6 +125,7 @@ export const WARNING_CATEGORIES = new Set([
 export const PINNED_CATEGORIES = new Set([
   "lionwheel_credit_needed",
   "supplier_price_anomaly",
+  "cost_draft_pending",
   "po_line_over_receipt",
 ]);
 
