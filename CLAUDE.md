@@ -70,4 +70,4 @@ This portal repo and its `.claude/` config is **portal-only**. It does NOT autho
 If a request conflicts with these invariants, stop and propose a tranche plan instead.
 
 ---
-last_reviewed: 2026-04-22
+last_reviewed: 2026-06-19
