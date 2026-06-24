@@ -20,8 +20,7 @@ playwright-report/
 
 .vercel
 
-# Local design-intelligence tooling (ui-ux-pro-max skill installed via
-# `uipro init --ai claude` for design system queries). Skill artefacts
-# are local tooling, not portal source — don't ship them.
-.claude/skills/
+# Claude skills are shipped (cavekit spec-driven-dev + ui-ux-pro-max design
+# tooling) so they're available in every web/remote session, not just locally.
+# `design-system/` below stays local — it's generated query output, not source.
 design-system/
