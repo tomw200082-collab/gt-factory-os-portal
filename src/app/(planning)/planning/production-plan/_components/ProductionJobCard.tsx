@@ -145,28 +145,41 @@ export function ProductionJobCard({
     setImpactOpen((v) => !v);
   }
 
-  const rmLines = useMemo(() => {
-    const snap = bomQuery.data;
-    if (!snap) return [];
-    const outputQty = parseFloat(snap.bom_final_output_qty);
-    const plannedQty = parseFloat(plan.planned_qty ?? "0");
-    if (!Number.isFinite(outputQty) || outputQty <= 0) return [];
-    if (!Number.isFinite(plannedQty) || plannedQty <= 0) return [];
-    const multiplier = plannedQty / outputQty;
-    return snap.bom_lines.map((line) => ({
-      name: line.component_name,
-      required: parseFloat(line.final_component_qty) * multiplier,
-      uom: line.component_uom ?? "",
-    }));
-  }, [bomQuery.data, plan.planned_qty]);
-
   const qty = parseFloat(plan.planned_qty ?? "0");
-  const qtyStr = Number.isInteger(qty) ? qty.toFixed(0) : qty.toFixed(1);
 
   const completedActual = plan.completed_actual;
   const varianceSign = completedActual
     ? computeVarianceSign(completedActual.variance_qty, plan.planned_qty ?? "0")
     : null;
+
+  // Hero number = what the operator most needs to see. Before reporting that
+  // is the planned target; AFTER a production report it is the quantity that
+  // was actually produced. The plan then survives as a small "vs planned"
+  // context line in the footer, and the variance badge quantifies the gap.
+  const reportedQty =
+    isDone && completedActual ? parseFloat(completedActual.output_qty) : NaN;
+  const showActual = Number.isFinite(reportedQty);
+  const heroQty = showActual ? reportedQty : qty;
+  const heroQtyStr = Number.isInteger(heroQty)
+    ? heroQty.toFixed(0)
+    : heroQty.toFixed(1);
+  const heroUom = showActual ? completedActual!.output_uom : plan.uom;
+
+  // Inventory impact scales off the same hero quantity: a done run consumed
+  // raw materials against its ACTUAL output, an open plan against its target.
+  const rmLines = useMemo(() => {
+    const snap = bomQuery.data;
+    if (!snap) return [];
+    const outputQty = parseFloat(snap.bom_final_output_qty);
+    if (!Number.isFinite(outputQty) || outputQty <= 0) return [];
+    if (!Number.isFinite(heroQty) || heroQty <= 0) return [];
+    const multiplier = heroQty / outputQty;
+    return snap.bom_lines.map((line) => ({
+      name: line.component_name,
+      required: parseFloat(line.final_component_qty) * multiplier,
+      uom: line.component_uom ?? "",
+    }));
+  }, [bomQuery.data, heroQty]);
 
   return (
     <div
@@ -186,6 +199,16 @@ export function ProductionJobCard({
       data-plan-status={plan.status}
     >
       <div className="px-3 pt-3 pb-2.5">
+        {/* Produced eyebrow — after a report, signals the hero number is the
+            actual output that was produced, not the original plan. */}
+        {showActual && (
+          <div
+            className="text-[9px] font-semibold uppercase tracking-sops text-success-fg/70 leading-none mb-1"
+            data-testid="plan-card-produced-label"
+          >
+            Produced
+          </div>
+        )}
         {/* Quantity (dominant signal) */}
         <div className="flex items-start justify-between gap-2 mb-0.5">
           <div
@@ -196,8 +219,9 @@ export function ProductionJobCard({
               isDone && "text-success-fg",
               isCancelled && "text-fg-muted line-through",
             )}
+            data-testid="plan-card-hero-qty"
           >
-            {qtyStr}
+            {heroQtyStr}
             <span
               className={cn(
                 "ml-1.5 text-sm font-semibold align-baseline",
@@ -207,7 +231,7 @@ export function ProductionJobCard({
                 isCancelled && "text-fg-muted",
               )}
             >
-              {plan.uom}
+              {heroUom}
             </span>
           </div>
 
@@ -446,10 +470,11 @@ export function ProductionJobCard({
                 varianceSign === "on_target" ? "text-success-fg" : "text-warning-fg"
               }
             >
-              {VARIANCE_SIGN_LABEL[varianceSign]} ·{" "}
-              <span className="tabular-nums font-mono">
-                {fmtQty(completedActual.output_qty, completedActual.output_uom)}
-              </span>
+              {VARIANCE_SIGN_LABEL[varianceSign]}
+            </span>
+            {" vs planned "}
+            <span className="tabular-nums font-mono">
+              {fmtQty(plan.planned_qty ?? "0", plan.uom ?? "")}
             </span>
           </div>
           <Link
@@ -471,7 +496,7 @@ export function ProductionJobCard({
             <Package className="h-3 w-3 text-success shrink-0" strokeWidth={2} />
             <span className="text-xs text-success-fg">
               <span className="font-semibold tabular-nums">
-                +{fmtQty(plan.planned_qty ?? "0", plan.uom ?? "")}
+                +{fmtQty(heroQtyStr, heroUom ?? "")}
               </span>
               {" of "}
               <span className="font-medium">{cardTitle}</span>
