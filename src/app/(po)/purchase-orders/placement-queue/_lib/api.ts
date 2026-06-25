@@ -21,6 +21,12 @@ export interface QueuePo {
   expected_receive_date: string | null;
   currency: string;
   total_net: string;
+  // 0261 enrichment from the originating session PO (null for manual POs):
+  // order_by_date drives the urgency sort; order_document_text is the
+  // paste-ready Hebrew supplier message.
+  order_by_date: string | null;
+  tier: string | null;
+  order_document_text: string | null;
 }
 
 interface QueueResponse {
@@ -54,6 +60,10 @@ export interface PlaceArgs {
   payment_terms_eom: boolean | null;
   line_prices: { po_line_id: string; unit_price_net: number }[];
   confirm_price_update?: boolean;
+  // 0261: supplier-confirmed arrival date the office manager records at
+  // placement (ISO YYYY-MM-DD). Optional per-line qty adjustments too.
+  expected_receive_date?: string | null;
+  line_qty_overrides?: { po_line_id: string; ordered_qty: number }[];
 }
 
 const QUEUE_KEY = ["po-placement-queue"] as const;
@@ -96,10 +106,18 @@ export function usePlacementQueue() {
         "/api/purchase-orders?status=APPROVED_TO_ORDER&limit=200",
         { headers: { Accept: "application/json" } },
       );
-      return (await jsonOrThrow(
+      const data = (await jsonOrThrow(
         res,
         "לא ניתן לטעון את תור ההזמנות.",
       )) as QueueResponse;
+      // FLOW-005: most-urgent-first. Sort by order-by date asc (nulls last —
+      // manual POs without a session origin), then po_number for stability.
+      data.rows.sort((a, b) => {
+        const ax = a.order_by_date ?? "9999-12-31";
+        const bx = b.order_by_date ?? "9999-12-31";
+        return ax < bx ? -1 : ax > bx ? 1 : a.po_number.localeCompare(b.po_number);
+      });
+      return data;
     },
     staleTime: 30_000,
     retry: false,
@@ -140,6 +158,8 @@ export function usePlaceOrder() {
             payment_terms_eom: args.payment_terms_eom,
             line_prices: args.line_prices,
             confirm_price_update: args.confirm_price_update ?? true,
+            expected_receive_date: args.expected_receive_date ?? null,
+            line_qty_overrides: args.line_qty_overrides ?? undefined,
           }),
         },
       );
