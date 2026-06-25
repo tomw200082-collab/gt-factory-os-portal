@@ -666,7 +666,7 @@ export function PoLineEditor(props: PoLineEditorProps): JSX.Element {
           <button
             type="button"
             onClick={onAddLine}
-            className="inline-flex items-center gap-1.5 text-xs font-semibold text-accent hover:text-accent/80 transition-colors disabled:opacity-50"
+            className="inline-flex min-h-[32px] items-center gap-1.5 text-xs font-semibold text-accent hover:text-accent/80 transition-colors disabled:opacity-50"
             data-testid="po-new-add-line"
             disabled={disabled}
           >

@@ -296,6 +296,7 @@ function POTrackCard({
           disabled={disabled}
           data-testid={`${testIdPrefix}-match-toggle`}
           aria-expanded={pickerOpen}
+          aria-controls={`${testIdPrefix}-match-list`}
         >
           {selected ? "Change" : "Pick line"}
         </button>
@@ -309,6 +310,7 @@ function POTrackCard({
           className="max-h-60 space-y-1 overflow-y-auto rounded border border-border/60 bg-bg-raised p-1 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           role="listbox"
           tabIndex={0}
+          id={`${testIdPrefix}-match-list`}
           data-testid={`${testIdPrefix}-match-list`}
           aria-activedescendant={
             orderedLines[highlightIdx]

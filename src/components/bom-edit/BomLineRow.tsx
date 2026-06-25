@@ -242,7 +242,7 @@ export function BomLineRow({
               type="button"
               onClick={() => del.mutate()}
               disabled={del.isPending}
-              className="rounded-sm bg-danger px-2 py-0.5 text-3xs font-medium text-danger-soft hover:bg-danger/90 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex min-h-[32px] items-center rounded-sm bg-danger px-2 py-0.5 text-3xs font-medium text-danger-soft hover:bg-danger/90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {del.isPending ? "Removing…" : "Delete"}
             </button>
@@ -250,7 +250,7 @@ export function BomLineRow({
               type="button"
               onClick={() => setConfirmDelete(false)}
               disabled={del.isPending}
-              className="rounded-sm border border-border bg-bg-raised px-2 py-0.5 text-3xs text-fg hover:bg-bg-subtle disabled:cursor-not-allowed disabled:opacity-40"
+              className="inline-flex min-h-[32px] items-center rounded-sm border border-border bg-bg-raised px-2 py-0.5 text-3xs text-fg hover:bg-bg-subtle disabled:cursor-not-allowed disabled:opacity-40"
             >
               Cancel
             </button>
