@@ -73,6 +73,7 @@ import { useConfirm } from "@/components/overlays/ConfirmDialog";
 import { useCapability } from "@/lib/auth/role-gate";
 import { formatIls, formatPct, formatQtyInt } from "@/lib/utils/format-money";
 import { fmtNumStr } from "@/lib/utils/format-quantity";
+import { ProfitabilityTab } from "./ProfitabilityTab";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -1808,7 +1809,7 @@ export default function AdminEconomicsPage(): JSX.Element {
   const queryClient = useQueryClient();
 
   const [activeTab, setActiveTab] = useState<
-    "overview" | "component-costs" | "raw-materials"
+    "overview" | "profitability" | "component-costs" | "raw-materials"
   >("overview");
   const [banner, setBanner] = useState<
     | { kind: "success" | "error"; message: string }
@@ -2430,26 +2431,33 @@ export default function AdminEconomicsPage(): JSX.Element {
 
       {/* Tabs */}
       <div className="flex gap-1 border-b border-border pb-0">
-        {(["overview", "component-costs", "raw-materials"] as const).map(
-          (tab) => (
-            <button
-              key={tab}
-              type="button"
-              onClick={() => setActiveTab(tab)}
-              className={`px-4 py-2 text-sm font-medium ${
-                activeTab === tab
-                  ? "border-b-2 border-accent text-accent -mb-px"
-                  : "text-fg-muted hover:text-fg"
-              }`}
-            >
-              {tab === "overview"
-                ? "Overview"
+        {(
+          [
+            "overview",
+            "profitability",
+            "component-costs",
+            "raw-materials",
+          ] as const
+        ).map((tab) => (
+          <button
+            key={tab}
+            type="button"
+            onClick={() => setActiveTab(tab)}
+            className={`px-4 py-2 text-sm font-medium ${
+              activeTab === tab
+                ? "border-b-2 border-accent text-accent -mb-px"
+                : "text-fg-muted hover:text-fg"
+            }`}
+          >
+            {tab === "overview"
+              ? "Overview"
+              : tab === "profitability"
+                ? "Profitability"
                 : tab === "component-costs"
                   ? "Component Costs"
                   : "Raw Materials"}
-            </button>
-          ),
-        )}
+          </button>
+        ))}
       </div>
 
       {activeTab === "overview" ? (
@@ -2871,6 +2879,27 @@ export default function AdminEconomicsPage(): JSX.Element {
             </div>
           ) : null}
         </>
+      ) : null}
+
+      {activeTab === "profitability" ? (
+        <ProfitabilityTab
+          rows={economicsQuery.data?.rows ?? []}
+          canEdit={canEdit}
+          loading={economicsQuery.isLoading}
+          isError={economicsQuery.isError}
+          errorMessage={
+            economicsQuery.error instanceof Error
+              ? economicsQuery.error.message
+              : undefined
+          }
+          onRetry={() => void economicsQuery.refetch()}
+          onPriceApplied={() => {
+            setPriceSavedHint(true);
+            void queryClient.invalidateQueries({
+              queryKey: ["admin", "economics"],
+            });
+          }}
+        />
       ) : null}
 
       {activeTab === "component-costs" ? (
