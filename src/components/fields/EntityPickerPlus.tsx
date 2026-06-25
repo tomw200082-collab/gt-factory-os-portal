@@ -114,6 +114,8 @@ export function EntityPickerPlus({
         type="button"
         disabled={disabled}
         onClick={() => setOpen((o) => !o)}
+        aria-haspopup="listbox"
+        aria-expanded={open}
         className={cn(
           "input flex items-center justify-between text-left",
           errored && "input-error",
@@ -177,7 +179,7 @@ export function EntityPickerPlus({
               className="h-9 w-full bg-transparent pl-9 pr-3 text-sm text-fg-strong placeholder:text-fg-faint focus:outline-none"
             />
           </div>
-          <ul className="max-h-64 overflow-y-auto py-1">
+          <ul className="max-h-64 overflow-y-auto py-1" role="listbox">
             {filtered.length === 0 ? (
               <li className="px-3 py-3 text-center text-xs text-fg-subtle">
                 {emptyLabel}
@@ -190,6 +192,8 @@ export function EntityPickerPlus({
                   <li key={o.id}>
                     <button
                       type="button"
+                      role="option"
+                      aria-selected={isSelected}
                       onClick={() => {
                         onChange(o);
                         setOpen(false);
