@@ -16,6 +16,7 @@
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { submitStockEvent } from "@/lib/stock/submit";
 import {
   AlertTriangle,
   ArrowDown,
@@ -313,68 +314,64 @@ export default function WasteAdjustmentPage() {
     };
 
     setPhase("submitting");
-    try {
-      const res = await fetch("/api/waste-adjustments", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(envelope),
-      });
-      const body = (await res.json().catch(() => null)) as
-        | { status?: string; submission_id?: string; idempotent_replay?: boolean }
-        | null;
-      if (body && body.status === "posted") {
+    const summary = `${row.label} · ${direction === "loss" ? "−" : "+"}${qtyNumLocal} ${unit} · ${REASON_LABELS[reasonCode as WasteReasonCode] ?? String(reasonCode).replace(/_/g, " ")}`;
+    const result = await submitStockEvent<{
+      status?: string;
+      submission_id?: string;
+      idempotent_replay?: boolean;
+    }>("/api/waste-adjustments", envelope);
+    switch (result.kind) {
+      case "posted":
         setDone({
           kind: "success",
-          message: body.idempotent_replay
+          message: result.idempotentReplay
             ? "Already posted earlier — no duplicate created."
             : "Adjustment posted successfully.",
-          itemSummary: `${row.label} · ${direction === "loss" ? "−" : "+"}${qtyNumLocal} ${unit} · ${REASON_LABELS[reasonCode as WasteReasonCode] ?? String(reasonCode).replace(/_/g, " ")}`,
-          detail: `ref: ${body.submission_id}`,
+          itemSummary: summary,
+          detail: `ref: ${result.submissionId}`,
         });
         setQuantity("");
         setNotes("");
         setReasonCode("");
-      } else if (body && body.status === "pending") {
-        const sid = body.submission_id;
+        break;
+      case "pending":
         // A new approval was created; refresh the inbox so its waste-approval
         // source and unread count reflect it immediately (not after staleTime).
         void queryClient.invalidateQueries({ queryKey: ["inbox"] });
         setDone({
           kind: "pending",
           message: "Adjustment submitted — held for planner approval.",
-          itemSummary: `${row.label} · ${direction === "loss" ? "−" : "+"}${qtyNumLocal} ${unit} · ${REASON_LABELS[reasonCode as WasteReasonCode] ?? String(reasonCode).replace(/_/g, " ")}`,
-          detail: `ref: ${sid}`,
-          href: sid
-            ? `/inbox/approvals/waste/${encodeURIComponent(sid)}`
+          itemSummary: summary,
+          detail: `ref: ${result.submissionId}`,
+          href: result.submissionId
+            ? `/inbox/approvals/waste/${encodeURIComponent(result.submissionId)}`
             : undefined,
           hrefLabel: "Open approval",
         });
         setQuantity("");
         setNotes("");
         setReasonCode("");
-      } else {
-        // Never render raw JSON to the operator (portal_ux_standard §1).
-        // Surface a server-provided human message only if it is a plain string.
-        const serverMessage =
-          body && typeof body === "object"
-            ? (body as { message?: unknown; error?: unknown }).message ??
-              (body as { error?: unknown }).error
-            : null;
+        break;
+      case "rejected":
+        // Generic operator line; only a §1-safe string server message reaches detail.
         setDone({
           kind: "error",
           message: "Could not submit. Check your connection and try again.",
-          detail: typeof serverMessage === "string" ? serverMessage : undefined,
+          detail: result.serverMessage,
         });
-      }
-    } catch (err) {
-      setDone({
-        kind: "error",
-        message: "Network error submitting adjustment.",
-        detail: err instanceof Error ? err.message : String(err),
-      });
-    } finally {
-      setPhase("done");
+        break;
+      case "network":
+        setDone({
+          kind: "error",
+          message: "Network error submitting adjustment.",
+          detail:
+            result.error instanceof Error
+              ? result.error.message
+              : String(result.error),
+        });
+        break;
     }
+    setPhase("done");
   }
 
   // ---------------------------------------------------------------------------

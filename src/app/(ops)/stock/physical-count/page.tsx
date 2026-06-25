@@ -20,6 +20,7 @@ import { useSearchParams } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { submitStockEvent } from "@/lib/stock/submit";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { UOMS, type Uom } from "@/lib/contracts/enums";
@@ -501,75 +502,70 @@ export default function PhysicalCountPage() {
       notes: notes ? notes : null,
     };
     setPhase("submitting");
-    try {
-      const res = await fetch("/api/physical-count", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(envelope),
-      });
-      const body = (await res.json().catch(() => null)) as
-        | {
-            status?: string;
-            submission_id?: string;
-            computed_delta?: string;
-            approval_reason?: string;
-            idempotent_replay?: boolean;
-          }
-        | null;
-      if (body && body.status === "posted") {
-        const itemLabel = snapshot
-          ? `${snapshot.item_display_name} (${snapshot.item_type} ${snapshot.item_id})`
-          : "?";
+    const itemLabel = snapshot
+      ? `${snapshot.item_display_name} (${snapshot.item_type} ${snapshot.item_id})`
+      : "?";
+    const result = await submitStockEvent<{
+      status?: string;
+      submission_id?: string;
+      computed_delta?: string;
+      approval_reason?: string;
+      idempotent_replay?: boolean;
+    }>("/api/physical-count", envelope);
+    switch (result.kind) {
+      case "posted":
         setDone({
           kind: "success",
-          message: body.idempotent_replay
+          message: result.idempotentReplay
             ? "Already posted earlier — no duplicate created."
             : "Count posted successfully.",
           itemName: snapshot?.item_display_name,
-          delta: body.computed_delta,
-          itemSummary: `${itemLabel} · counted: ${qtyNum} ${unit} · adjustment: ${body.computed_delta ?? "?"}`,
-          detail: `ref: ${body.submission_id}`,
+          delta: result.body.computed_delta,
+          itemSummary: `${itemLabel} · counted: ${qtyNum} ${unit} · adjustment: ${result.body.computed_delta ?? "?"}`,
+          detail: `ref: ${result.submissionId}`,
           snapshotIdShort: snapshot?.snapshot_id?.slice(0, 8),
         });
         resetFlow();
-      } else if (body && body.status === "pending") {
-        const sid = body.submission_id;
+        break;
+      case "pending":
         // A new approval was created; refresh the inbox so its physical-count
         // source and unread count reflect it immediately (not after staleTime).
         void queryClient.invalidateQueries({ queryKey: ["inbox"] });
-        const itemLabel = snapshot
-          ? `${snapshot.item_display_name} (${snapshot.item_type} ${snapshot.item_id})`
-          : "?";
         setDone({
           kind: "pending",
           message:
             "Count variance exceeds threshold — held for planner approval.",
           itemName: snapshot?.item_display_name,
-          delta: body.computed_delta,
-          itemSummary: `${itemLabel} · counted: ${qtyNum} ${unit} · adjustment: ${body.computed_delta ?? "?"}`,
-          detail: `ref: ${sid}`,
-          href: sid
-            ? `/inbox/approvals/physical-count/${encodeURIComponent(sid)}`
+          delta: result.body.computed_delta,
+          itemSummary: `${itemLabel} · counted: ${qtyNum} ${unit} · adjustment: ${result.body.computed_delta ?? "?"}`,
+          detail: `ref: ${result.submissionId}`,
+          href: result.submissionId
+            ? `/inbox/approvals/physical-count/${encodeURIComponent(result.submissionId)}`
             : undefined,
           hrefLabel: "Open approval",
           snapshotIdShort: snapshot?.snapshot_id?.slice(0, 8),
         });
         resetFlow();
-      } else {
+        break;
+      case "rejected":
         setDone({
           kind: "error",
           message: "Could not submit the count.",
-          detail: friendlyCountError(body, res.status),
+          detail: friendlyCountError(result.body, result.status),
         });
         setPhase("counting");
-      }
-    } catch (err) {
-      setDone({
-        kind: "error",
-        message: "Network error submitting count.",
-        detail: err instanceof Error ? err.message : String(err),
-      });
-      setPhase("counting");
+        break;
+      case "network":
+        setDone({
+          kind: "error",
+          message: "Network error submitting count.",
+          detail:
+            result.error instanceof Error
+              ? result.error.message
+              : String(result.error),
+        });
+        setPhase("counting");
+        break;
     }
   }
 
