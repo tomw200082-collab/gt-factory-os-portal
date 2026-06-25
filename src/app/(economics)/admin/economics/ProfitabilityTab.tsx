@@ -44,6 +44,7 @@ import {
   Crown,
   Gem,
   Boxes,
+  Coins,
   Search,
   SlidersHorizontal,
   ChevronsUpDown,
@@ -375,33 +376,20 @@ function matchesFilters(s: SkuEconomics, f: Filters): boolean {
 // Small presentational primitives.
 // ---------------------------------------------------------------------------
 
-function HelpHint({ text }: { text: string }): JSX.Element {
-  return (
-    <span
-      className="ml-1 inline-flex cursor-help align-middle text-fg-subtle"
-      title={text}
-      aria-label={text}
-      role="img"
-    >
-      <Info className="h-3 w-3" strokeWidth={2.25} />
-    </span>
-  );
-}
-
-function KpiStat({
+// HeroStat — a hairline stat cell for the secondary cluster in the hero. The
+// label carries its explanation as a title so the figure stays uncluttered.
+function HeroStat({
   label,
   value,
   sub,
   hint,
   tone = "default",
-  accent = false,
 }: {
   label: string;
   value: string;
   sub?: string;
-  hint: string;
+  hint?: string;
   tone?: "default" | "success" | "danger" | "warning";
-  accent?: boolean;
 }): JSX.Element {
   const valueColor =
     tone === "success"
@@ -412,25 +400,75 @@ function KpiStat({
           ? "text-warning-fg"
           : "text-fg-strong";
   return (
-    <div
-      className={`rounded-lg border p-3 ${
-        accent
-          ? "border-accent/40 bg-accent-soft/20"
-          : "border-border/60 bg-bg-subtle/40"
-      }`}
-    >
-      <div className="flex items-center text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-        {label}
-        <HelpHint text={hint} />
-      </div>
+    <div className="bg-bg-raised p-4">
       <div
-        className={`mt-1 font-semibold tabular-nums ${valueColor} ${
-          accent ? "text-2xl" : "text-lg"
-        }`}
+        className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle"
+        title={hint}
       >
+        {label}
+      </div>
+      <div className={`mt-1 text-xl font-semibold tabular-nums ${valueColor}`}>
         {value}
       </div>
       {sub ? <div className="mt-0.5 text-3xs text-fg-subtle">{sub}</div> : null}
+    </div>
+  );
+}
+
+// MarginRibbon — the signature element. One jewel-toned bar that fingerprints
+// the whole portfolio's margin composition: each segment is a margin band,
+// width ∝ how many SKUs sit in it, the tooltip carries the margin value held
+// there. It is also a filter — click a segment (or its legend) to slice the
+// page to that band.
+function MarginRibbon({
+  skus,
+  active,
+  onToggle,
+}: {
+  skus: SkuEconomics[];
+  active: Set<MarginBandKey>;
+  onToggle: (k: MarginBandKey) => void;
+}): JSX.Element {
+  const segs = MARGIN_BANDS.map((b) => {
+    const inBand = skus.filter((s) => s.marginPct != null && b.match(s.marginPct));
+    return {
+      b,
+      count: inBand.length,
+      value: inBand.reduce((a, s) => a + (s.embedded ?? 0), 0),
+    };
+  });
+  const dim = (k: MarginBandKey) => active.size > 0 && !active.has(k);
+  return (
+    <div>
+      <div className="flex h-3.5 w-full gap-px overflow-hidden rounded-full bg-bg-subtle">
+        {segs.map(({ b, count, value }) =>
+          count === 0 ? null : (
+            <button
+              key={b.key}
+              type="button"
+              onClick={() => onToggle(b.key)}
+              aria-pressed={active.has(b.key)}
+              title={`${b.label}: ${count} SKU${count === 1 ? "" : "s"} · ${formatIls(value)} margin in stock`}
+              style={{ flexGrow: count, flexBasis: 0, minWidth: 6 }}
+              className={`${TONE_BG[b.tone]} h-full transition-opacity focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${dim(b.key) ? "opacity-30 hover:opacity-60" : "opacity-90 hover:opacity-100"}`}
+            />
+          ),
+        )}
+      </div>
+      <div className="mt-2 flex flex-wrap gap-x-3 gap-y-1">
+        {segs.map(({ b, count }) => (
+          <button
+            key={b.key}
+            type="button"
+            onClick={() => onToggle(b.key)}
+            className={`inline-flex items-center gap-1.5 text-3xs transition-colors ${active.has(b.key) ? TONE_TEXT[b.tone] : "text-fg-subtle hover:text-fg"}`}
+          >
+            <span className={`h-2 w-2 rounded-sm ${TONE_BG[b.tone]} ${dim(b.key) ? "opacity-40" : ""}`} />
+            {b.label}
+            <span className="tabular-nums opacity-70">{count}</span>
+          </button>
+        ))}
+      </div>
     </div>
   );
 }
@@ -1391,15 +1429,57 @@ export function ProfitabilityTab({
 
         <div className="space-y-4">
           {/* Hero KPI band */}
-          <SectionCard eyebrow="Profitability" title="Where the margin is" description="Margin and the gross margin locked in current stock. Filters on the left distil every panel below.">
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
-              <KpiStat accent label="Margin in stock" value={loading ? "…" : formatIls(agg.embedded)} sub={loading ? undefined : `inventory ${formatIls(agg.invCost)} → ${formatIls(agg.invSale)}`} hint="Gross margin embedded in current finished-goods stock: Σ (sale price − COGS) × on-hand units. This is the margin value sitting in your warehouse right now." tone={agg.embedded < 0 ? "danger" : "default"} />
-              <KpiStat label="Stock-weighted margin" value={loading ? "…" : formatPct(agg.stockMargin)} sub={loading ? undefined : agg.avgMargin != null ? `simple avg ${formatPct(agg.avgMargin)}` : undefined} hint="Margin in stock ÷ inventory at sale price — the true blended margin of what you're holding, weighted by value. The simple average treats every SKU equally." />
-              <KpiStat label="Measured" value={loading ? "…" : `${agg.measured}`} sub={loading ? undefined : `of ${agg.total} in view`} hint="SKUs with a computable margin (COGS complete AND a sale price set). Only these can be placed on the matrix." tone="success" />
-              <KpiStat label="Margin spread" value={loading || agg.minMargin == null ? "…" : `${agg.minMargin.toFixed(0)}–${agg.maxMargin?.toFixed(0)}%`} sub={loading ? undefined : agg.avgMargin != null ? `avg ${formatPct(agg.avgMargin)}` : undefined} hint="Lowest to highest gross margin % across measured SKUs in view." tone={agg.loss > 0 ? "warning" : "default"} />
-              <KpiStat label="Top-5 concentration" value={loading ? "…" : formatPct(agg.concentration)} sub={loading ? undefined : `${agg.loss} loss · ${agg.lowMargin} thin`} hint="Share of the in-stock margin held by the five biggest SKUs. High concentration means the value leans on a few products." tone={agg.concentration != null && agg.concentration >= 80 ? "warning" : "default"} />
+          <div className="card overflow-hidden motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:duration-500">
+            <div className="grid gap-px bg-border/50 lg:grid-cols-[1.5fr_1fr]">
+              <div className="bg-bg-raised p-5 sm:p-6">
+                <div className="flex items-center gap-2 text-2xs font-semibold uppercase tracking-sops text-accent">
+                  <Coins className="h-3.5 w-3.5" strokeWidth={2.25} />
+                  Margin in your stock
+                </div>
+                <div className="mt-2 flex flex-wrap items-end gap-x-3 gap-y-1">
+                  <span className={`text-4xl font-bold tabular-nums sm:text-5xl ${agg.embedded < 0 ? "text-danger-fg" : "text-fg-strong"}`}>
+                    {loading ? "…" : formatIls(agg.embedded)}
+                  </span>
+                  <span className="mb-1.5 text-sm text-fg-subtle">
+                    gross margin held in finished goods
+                  </span>
+                </div>
+                <p className="mt-2 max-w-lg text-sm leading-relaxed text-fg-muted">
+                  {loading ? (
+                    "Computing margins…"
+                  ) : (
+                    <>
+                      Stock worth{" "}
+                      <span className="font-medium tabular-nums text-fg-strong">
+                        {formatIls(agg.invCost)}
+                      </span>{" "}
+                      at cost is{" "}
+                      <span className="font-medium tabular-nums text-fg-strong">
+                        {formatIls(agg.invSale)}
+                      </span>{" "}
+                      at sale — that gap is the margin waiting in your warehouse.
+                    </>
+                  )}
+                </p>
+                <div className="mt-5">
+                  <div className="mb-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    Margin composition
+                  </div>
+                  <MarginRibbon
+                    skus={filteredMeasured}
+                    active={filters.margin}
+                    onToggle={(k) => toggleFacet("margin", k)}
+                  />
+                </div>
+              </div>
+              <div className="grid grid-cols-2 gap-px bg-border/50">
+                <HeroStat label="Stock-weighted margin" value={loading ? "…" : formatPct(agg.stockMargin)} sub={loading ? undefined : agg.avgMargin != null ? `simple avg ${formatPct(agg.avgMargin)}` : undefined} hint="Margin in stock ÷ inventory at sale price — the true blended margin of what you're holding, weighted by value." />
+                <HeroStat label="Measured" value={loading ? "…" : `${agg.measured}`} sub={loading ? undefined : `of ${agg.total} in view`} hint="SKUs with a computable margin: COGS complete AND a sale price set." tone="success" />
+                <HeroStat label="Margin spread" value={loading || agg.minMargin == null ? "…" : `${agg.minMargin.toFixed(0)}–${agg.maxMargin?.toFixed(0)}%`} sub={loading ? undefined : agg.avgMargin != null ? `avg ${formatPct(agg.avgMargin)}` : undefined} hint="Lowest to highest gross margin % across measured SKUs in view." tone={agg.loss > 0 ? "warning" : "default"} />
+                <HeroStat label="Loss · thin" value={loading ? "…" : `${agg.loss} · ${agg.lowMargin}`} sub="below cost · under 20%" hint="SKUs selling below cost, and SKUs under a 20% margin." tone={agg.loss > 0 ? "danger" : "default"} />
+              </div>
             </div>
-          </SectionCard>
+          </div>
 
           {loading ? (
             <SectionCard title="Loading…"><div className="h-72 animate-pulse rounded-lg bg-bg-subtle/50" /></SectionCard>
