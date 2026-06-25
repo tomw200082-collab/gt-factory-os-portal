@@ -19,7 +19,7 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { UOMS, type Uom } from "@/lib/contracts/enums";
@@ -266,6 +266,7 @@ function BlindCountBanner({ compact = false }: { compact?: boolean }) {
 }
 
 export default function PhysicalCountPage() {
+  const queryClient = useQueryClient();
   const itemsQuery = useQuery<ListEnvelope<ItemRow>>({
     queryKey: ["master", "items", "ACTIVE"],
     queryFn: () => fetchJson("/api/items?status=ACTIVE&limit=1000"),
@@ -533,6 +534,9 @@ export default function PhysicalCountPage() {
         resetFlow();
       } else if (body && body.status === "pending") {
         const sid = body.submission_id;
+        // A new approval was created; refresh the inbox so its physical-count
+        // source and unread count reflect it immediately (not after staleTime).
+        void queryClient.invalidateQueries({ queryKey: ["inbox"] });
         const itemLabel = snapshot
           ? `${snapshot.item_display_name} (${snapshot.item_type} ${snapshot.item_id})`
           : "?";

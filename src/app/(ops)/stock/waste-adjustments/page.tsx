@@ -15,7 +15,7 @@
 
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   AlertTriangle,
   ArrowDown,
@@ -193,6 +193,7 @@ const REASON_LABELS: Record<WasteReasonCode, string> = {
 // Page component
 // ---------------------------------------------------------------------------
 export default function WasteAdjustmentPage() {
+  const queryClient = useQueryClient();
   const itemsQuery = useQuery<ListEnvelope<ItemRow>>({
     queryKey: ["master", "items", "ACTIVE"],
     queryFn: () => fetchJson("/api/items?status=ACTIVE&limit=1000"),
@@ -335,6 +336,9 @@ export default function WasteAdjustmentPage() {
         setReasonCode("");
       } else if (body && body.status === "pending") {
         const sid = body.submission_id;
+        // A new approval was created; refresh the inbox so its waste-approval
+        // source and unread count reflect it immediately (not after staleTime).
+        void queryClient.invalidateQueries({ queryKey: ["inbox"] });
         setDone({
           kind: "pending",
           message: "Adjustment submitted — held for planner approval.",
