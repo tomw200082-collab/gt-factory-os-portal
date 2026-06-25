@@ -269,7 +269,7 @@ export function ProductionJobCard({
           {isRec && (
             <span className="chip chip-accent gap-1 text-[10px]">
               <Sparkles className="h-2.5 w-2.5" strokeWidth={2.5} />
-              Rec
+              Recommended
             </span>
           )}
 

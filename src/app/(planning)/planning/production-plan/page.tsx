@@ -1908,9 +1908,9 @@ export default function ProductionPlanPage() {
       <WorkflowHeader
         eyebrow="Planning workspace"
         title="Production plan"
-        description="Plan production for the week. Inventory updates only when actuals are reported."
+        description="Plan production for the week."
         actions={
-          <div className="flex flex-wrap items-center gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             {canAct && (
               <>
                 <button
