@@ -1669,9 +1669,14 @@ export default function GoodsReceiptPage() {
                         onClick={() => void handleSubmit()}
                         data-testid="receipt-full-receive-submit"
                       >
-                        {phase === "submitting"
-                          ? "Posting…"
-                          : "Confirm & receive all"}
+                        {phase === "submitting" ? (
+                          <>
+                            <Spinner className="h-4 w-4" />
+                            Posting…
+                          </>
+                        ) : (
+                          "Confirm & receive all"
+                        )}
                       </button>
                       <button
                         type="button"
@@ -1754,9 +1759,19 @@ export default function GoodsReceiptPage() {
                     fetch remain here, so picker degradation is still
                     surfaced to the operator. */}
                 {poId && poDetailQuery.isError ? (
-                  <div className="sm:col-span-2 rounded-md border border-warning/40 bg-warning-softer px-3 py-2 text-xs text-warning-fg">
-                    Couldn&apos;t load PO lines — per-line match will fall
-                    back to unmatched. Try refreshing if this persists.
+                  <div className="sm:col-span-2 flex flex-wrap items-center gap-2 rounded-md border border-warning/40 bg-warning-softer px-3 py-2 text-xs text-warning-fg">
+                    <span>
+                      Couldn&apos;t load PO lines — per-line match will fall
+                      back to unmatched.
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => void poDetailQuery.refetch()}
+                      data-testid="receipt-po-lines-retry"
+                    >
+                      Retry
+                    </button>
                   </div>
                 ) : null}
                 {poId && !poDetailQuery.isLoading && !poDetailQuery.isError && poLines.length === 0 ? (
@@ -1937,7 +1952,10 @@ export default function GoodsReceiptPage() {
                             type="button"
                             aria-label="Decrease quantity"
                             className="flex h-12 w-12 shrink-0 items-center justify-center rounded border border-border text-lg font-bold leading-none text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors duration-150 disabled:opacity-40"
-                            disabled={phase === "submitting"}
+                            disabled={
+                              phase === "submitting" ||
+                              (Number(line.quantity) || 0) <= 1
+                            }
                             onClick={() => {
                               const cur = Number(line.quantity) || 0;
                               if (cur > 1) updateLine(idx, { quantity: String(cur - 1) });

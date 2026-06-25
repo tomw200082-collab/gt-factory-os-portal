@@ -556,7 +556,7 @@ export default function WasteAdjustmentPage() {
                 void itemsQuery.refetch();
                 void componentsQuery.refetch();
               }}
-              className="mt-2 text-xs font-medium text-danger-fg underline hover:no-underline transition-colors duration-150"
+              className="btn btn-sm mt-2"
             >
               Retry
             </button>
