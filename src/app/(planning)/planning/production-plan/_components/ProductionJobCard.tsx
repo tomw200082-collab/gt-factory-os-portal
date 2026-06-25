@@ -28,10 +28,7 @@ import { cn } from "@/lib/cn";
 import { usePlanRecipeFlag } from "../_lib/useRecipe";
 import {
   fmtQty,
-  computeVarianceSign,
-  fmtVarianceQty,
-  fmtVariancePct,
-  VARIANCE_SIGN_LABEL,
+  describeVariance,
   VARIANCE_TOOLTIP,
 } from "../_lib/helpers";
 import type { ProductionPlanRow } from "../_lib/types";
@@ -148,8 +145,12 @@ export function ProductionJobCard({
   const qty = parseFloat(plan.planned_qty ?? "0");
 
   const completedActual = plan.completed_actual;
-  const varianceSign = completedActual
-    ? computeVarianceSign(completedActual.variance_qty, plan.planned_qty ?? "0")
+  const variance = completedActual
+    ? describeVariance(
+        completedActual.variance_qty,
+        completedActual.variance_pct,
+        plan.planned_qty ?? "0",
+      )
     : null;
 
   // Hero number = what the operator most needs to see. Before reporting that
@@ -340,12 +341,12 @@ export function ProductionJobCard({
           )}
 
           {/* Done variance badge */}
-          {isDone && completedActual && varianceSign && (
+          {isDone && completedActual && variance && (
             <Badge
-              tone={varianceSign === "on_target" ? "success" : "warning"}
+              tone={variance.isOnTarget ? "success" : "warning"}
               variant="soft"
             >
-              {fmtVarianceQty(completedActual.variance_qty)} ({fmtVariancePct(completedActual.variance_pct)})
+              {variance.qtyText} ({variance.pctText})
             </Badge>
           )}
 
@@ -462,15 +463,15 @@ export function ProductionJobCard({
       )}
 
       {/* Done: link to submission */}
-      {isDone && completedActual && varianceSign && (
+      {isDone && completedActual && variance && (
         <div className="px-3 pb-2.5 border-t border-border/20 pt-2 flex items-center justify-between gap-2">
           <div className="text-[10px] text-fg-muted" title={VARIANCE_TOOLTIP}>
             <span
               className={
-                varianceSign === "on_target" ? "text-success-fg" : "text-warning-fg"
+                variance.isOnTarget ? "text-success-fg" : "text-warning-fg"
               }
             >
-              {VARIANCE_SIGN_LABEL[varianceSign]}
+              {variance.signLabel}
             </span>
             {" vs planned "}
             <span className="tabular-nums font-mono">
