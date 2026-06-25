@@ -68,7 +68,7 @@ export default function MyActivityPage() {
   });
 
   const allRows: ActivityRowT[] = useMemo(
-    () => (query.data?.pages ?? []).flatMap((p) => p.rows),
+    () => (query.data?.pages ?? []).flatMap((p) => p.rows ?? []),
     [query.data],
   );
 

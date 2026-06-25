@@ -97,7 +97,7 @@ export function InventoryFlowClient() {
 
   const filteredItems: FlowItem[] = useMemo(() => {
     if (!data) return [];
-    let items = data.items;
+    let items = data.items ?? [];
     if (q) {
       items = items.filter(
         (it) =>
@@ -115,7 +115,7 @@ export function InventoryFlowClient() {
   const families = useMemo(() => {
     if (!data) return [];
     const seen = new Set<string>();
-    for (const it of data.items) {
+    for (const it of data.items ?? []) {
       if (it.family) seen.add(it.family);
     }
     return [...seen].sort();
@@ -316,7 +316,7 @@ export function InventoryFlowClient() {
         {header}
         <div className="space-y-4">
           <InsightsHero
-            items={data.items}
+            items={data.items ?? []}
             summary={summary}
             isLoading={false}
             asOf={data.as_of}
@@ -328,7 +328,7 @@ export function InventoryFlowClient() {
           <>
             <FilterBar
               families={families}
-              items={data.items}
+              items={data.items ?? []}
               productGroups={productGroups}
             />
 
