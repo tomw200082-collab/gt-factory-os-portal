@@ -98,7 +98,7 @@ interface SkuEconomics {
   analysable: boolean;
 }
 
-function deriveSku(row: ProfitRow): SkuEconomics {
+export function deriveSku(row: ProfitRow): SkuEconomics {
   const price = num(row.avg_sale_price_ils);
   const cogs = num(row.cogs_per_unit_ils);
   const qty90d = num(row.qty_sold_90d) ?? 0;
@@ -174,7 +174,7 @@ const SEGMENT_META: Record<
   },
 };
 
-function classifySegment(
+export function classifySegment(
   s: SkuEconomics,
   targetMarginPct: number,
   medianRevenue: number,
