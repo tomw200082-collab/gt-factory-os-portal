@@ -681,6 +681,8 @@ export default function InboxListPage() {
   const anyFetching =
     wasteQ.isFetching || pcQ.isFetching || imQ.isFetching || recQ.isFetching || excQ.isFetching;
 
+  // ponytail: keep in sync with the 5 source queries below (waste/pc/im/rec/exc)
+  const TOTAL_SOURCES = 5;
   const sourceErrors: Array<{ label: string; queryKey: readonly string[] }> = [];
   if (wasteQ.isError) sourceErrors.push({ label: "Waste / adjustment approvals", queryKey: QK_WASTE });
   if (pcQ.isError) sourceErrors.push({ label: "Physical count approvals", queryKey: QK_PC });
@@ -1437,7 +1439,7 @@ export default function InboxListPage() {
               <AlertCircle className="mt-0.5 h-3.5 w-3.5 shrink-0" />
               <div className="flex-1">
                 <div className="font-semibold">
-                  Some sources failed to load ({sourceErrors.length}/4):
+                  Some sources failed to load ({sourceErrors.length}/{TOTAL_SOURCES}):
                 </div>
                 <ul className="mt-1 list-disc space-y-0.5 pl-5">
                   {sourceErrors.map((e) => (
@@ -1537,6 +1539,7 @@ export default function InboxListPage() {
                 allRowsCount={allRows.length}
                 viewedRowsCount={viewedRows.length}
                 mutedCount={mutedRows.length}
+                allSourcesFailed={sourceErrors.length === TOTAL_SOURCES}
                 onClearSearch={() => setSearchInput("")}
                 onSwitchToAll={() => setView("all")}
               />
@@ -1650,6 +1653,7 @@ function InboxEmptyState({
   allRowsCount,
   viewedRowsCount,
   mutedCount,
+  allSourcesFailed,
   onClearSearch,
   onSwitchToAll,
 }: {
@@ -1658,6 +1662,7 @@ function InboxEmptyState({
   allRowsCount: number;
   viewedRowsCount: number;
   mutedCount: number;
+  allSourcesFailed: boolean;
   onClearSearch: () => void;
   onSwitchToAll: () => void;
 }) {
@@ -1701,6 +1706,10 @@ function InboxEmptyState({
       description = `No decisions or to-dos need you right now. ${mutedCount} background ${
         mutedCount === 1 ? "notice is" : "notices are"
       } tucked into System & diagnostics below — open it only if you want to look.`;
+    } else if (allSourcesFailed) {
+      title = "Couldn't load your inbox.";
+      description =
+        "Every source failed to load — pending approvals may be hidden. Use Retry above.";
     } else {
       title = "Nothing in your inbox.";
       description = "All approvals and exceptions are clear. Nice work.";

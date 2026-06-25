@@ -106,9 +106,11 @@ export default function SegmentError({
                 : "The page couldn't render. Your form state may be lost. If this keeps happening, give the support code below to your ops lead."}
             </p>
             <div className="mt-3 rounded border border-danger/30 bg-bg px-3 py-2 font-mono text-xs text-fg-muted">
-              <div>
-                <span className="text-fg-subtle">message:</span> {error.message}
-              </div>
+              {process.env.NODE_ENV !== "production" ? (
+                <div>
+                  <span className="text-fg-subtle">message:</span> {error.message}
+                </div>
+              ) : null}
               {error.digest ? (
                 <div>
                   <span className="text-fg-subtle">support code:</span>{" "}
