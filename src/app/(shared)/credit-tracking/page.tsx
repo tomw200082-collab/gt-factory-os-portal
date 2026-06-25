@@ -672,7 +672,7 @@ function KpiCard({
       >
         {value.toLocaleString("he-IL")}
       </div>
-      <div className="mt-0.5 text-[11px] text-fg-muted/80">{hint}</div>
+      <div className="mt-0.5 text-2xs text-fg-muted/80">{hint}</div>
     </div>
   );
 }
@@ -775,7 +775,7 @@ function RowsTable({
                   {showAge && (
                     <div
                       className={cn(
-                        "mt-0.5 inline-flex items-center gap-1 text-[11px]",
+                        "mt-0.5 inline-flex items-center gap-1 text-2xs",
                         age >= 7 ? "text-danger-fg" : "text-warning-fg",
                       )}
                     >

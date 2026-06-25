@@ -231,7 +231,7 @@ function UserMenu({ compact = false }: UserMenuProps) {
             aria-label="Open user menu"
           >
             <div className="hidden flex-col items-end leading-none sm:flex">
-              <span className="text-[0.75rem] font-medium text-fg-strong">
+              <span className="text-xs font-medium text-fg-strong">
                 {displayName}
               </span>
               <span className="mt-0.5 font-mono text-3xs uppercase tracking-sops text-fg-muted">
@@ -239,7 +239,7 @@ function UserMenu({ compact = false }: UserMenuProps) {
               </span>
             </div>
             <div
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/15 text-[0.6875rem] font-bold text-accent"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/15 text-2xs font-bold text-accent"
               title={displayName}
             >
               {initials}

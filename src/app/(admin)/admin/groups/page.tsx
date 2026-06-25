@@ -647,7 +647,7 @@ export default function AdminGroupsPage(): JSX.Element {
                   className={cn(
                     "rounded-full px-1.5 py-0 text-2xs tabular-nums ring-1",
                     isActive
-                      ? "bg-accent-softer text-accent-fg ring-accent/30"
+                      ? "bg-accent-soft text-accent ring-accent/30"
                       : "bg-bg-subtle text-fg-subtle ring-border",
                   )}
                 >

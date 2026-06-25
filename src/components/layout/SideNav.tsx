@@ -180,7 +180,7 @@ export function SideNav({ onNavigate, density = "compact" }: SideNavProps = {}) 
   if (loadError) {
     return (
       <div className="rounded-md border border-warning/50 bg-warning-softer p-3">
-        <div className="text-[0.75rem] font-semibold text-warning-fg">
+        <div className="text-xs font-semibold text-warning-fg">
           Session unavailable
         </div>
         <div className="mt-1 text-3xs text-fg-muted">
@@ -273,7 +273,7 @@ export function SideNav({ onNavigate, density = "compact" }: SideNavProps = {}) 
                   {group.title}
                 </div>
                 {!isExpanded && (
-                  <span className="inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-bg-subtle px-1 text-[0.625rem] font-semibold tabular-nums text-fg-muted ring-1 ring-border/60">
+                  <span className="inline-flex h-4 min-w-[1rem] items-center justify-center rounded-full bg-bg-subtle px-1 text-3xs font-semibold tabular-nums text-fg-muted ring-1 ring-border/60">
                     {entries.length}
                   </span>
                 )}
@@ -444,7 +444,7 @@ function UserCard({ session }: { session: DevShimSession }) {
     <div className="rounded-md border border-border/70 bg-bg-subtle/60 p-3">
       <div className="flex items-center gap-2.5">
         <div
-          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/15 text-[0.6875rem] font-bold text-accent"
+          className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/15 text-2xs font-bold text-accent"
           aria-hidden
         >
           {initials}
