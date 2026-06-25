@@ -159,7 +159,7 @@ export function BomLineRow({
         {editable ? (
           editing ? (
             <input
-              role="textbox"
+              aria-label={`Quantity for ${componentDisplay}`}
               defaultValue={line.final_component_qty}
               onBlur={(e) => patch.mutate(e.currentTarget.value)}
               autoFocus
@@ -169,7 +169,7 @@ export function BomLineRow({
           ) : (
             <button
               type="button"
-              aria-label={`qty-edit-${line.line_id}`}
+              aria-label={`Edit quantity for ${componentDisplay}`}
               onClick={() => setEditing(true)}
               className="group inline-flex items-center gap-1.5 rounded-sm border border-dashed border-accent/40 px-1.5 py-0.5 font-mono tabular-nums text-sm text-fg hover:border-accent hover:bg-accent-softer"
             >

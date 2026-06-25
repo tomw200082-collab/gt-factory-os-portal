@@ -106,6 +106,12 @@ function DayCellInner({
     <div
       role="gridcell"
       tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          e.currentTarget.click();
+        }
+      }}
       data-day={day.day}
       data-today={isToday ? "true" : undefined}
       data-testid="day-cell"

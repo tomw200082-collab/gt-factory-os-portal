@@ -210,7 +210,7 @@ function UserMenu({ compact = false }: UserMenuProps) {
             type="button"
             className={cn(
               "flex h-8 w-8 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-bg-subtle hover:text-fg",
-              "focus-visible:outline-none",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
             )}
             aria-label="Open user menu"
             title="User menu"
@@ -226,7 +226,7 @@ function UserMenu({ compact = false }: UserMenuProps) {
             type="button"
             className={cn(
               "flex items-center gap-2 rounded-md px-1.5 py-1 transition-colors",
-              "hover:bg-bg-subtle focus-visible:outline-none",
+              "hover:bg-bg-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
             )}
             aria-label="Open user menu"
           >

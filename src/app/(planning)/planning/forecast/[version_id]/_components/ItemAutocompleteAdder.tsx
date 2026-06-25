@@ -334,6 +334,8 @@ export function ItemAutocompleteAdder({
             type="button"
             className="inline-flex items-center gap-1 text-3xs font-medium text-fg-muted underline-offset-2 hover:text-fg hover:underline"
             onClick={() => setFamilyOpen((v) => !v)}
+            aria-expanded={familyOpen}
+            aria-controls="forecast-bulk-add-panel"
             data-testid="forecast-bulk-add-toggle"
           >
             <Layers className="h-2.5 w-2.5" strokeWidth={2} />
@@ -351,6 +353,8 @@ export function ItemAutocompleteAdder({
             <div
               className="absolute left-0 top-full z-30 mt-1 w-72 overflow-hidden rounded-md border border-border/70 bg-bg-raised shadow-pop"
               role="dialog"
+              id="forecast-bulk-add-panel"
+              aria-label="Add items by product family"
               data-testid="forecast-bulk-add-panel"
             >
               <div className="fc-autocomplete-section-label">
