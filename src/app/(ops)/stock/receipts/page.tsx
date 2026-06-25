@@ -678,7 +678,7 @@ export default function GoodsReceiptPage() {
     if (poLines.length === 0) return; // wait for lines
 
     // Sync supplier from whichever source is available.
-    const landingPick = openPosQuery.data?.rows.find((p) => p.po_id === poId);
+    const landingPick = (openPosQuery.data?.rows ?? []).find((p) => p.po_id === poId);
     const supplierFromPo =
       urlPoHeader?.supplier_id ?? landingPick?.supplier_id ?? "";
     if (supplierFromPo && supplierId !== supplierFromPo) {
@@ -748,7 +748,7 @@ export default function GoodsReceiptPage() {
       setFullReceiveRequested(false);
       return;
     }
-    const picked = openPosQuery.data?.rows.find((p) => p.po_id === nextPoId);
+    const picked = (openPosQuery.data?.rows ?? []).find((p) => p.po_id === nextPoId);
     if (picked) {
       // Always sync supplier to the picked PO. Diverging here would just
       // trip the SUPPLIER_MISMATCH 409 at submit.
@@ -868,7 +868,7 @@ export default function GoodsReceiptPage() {
         const committed = body as GoodsReceiptCommittedResponse;
         // Capture display context from current form state before reset clears it.
         const supplierName =
-          suppliersQuery.data?.rows.find((s) => s.supplier_id === supplierId)
+          (suppliersQuery.data?.rows ?? []).find((s) => s.supplier_id === supplierId)
             ?.supplier_name_official ?? supplierId;
         const lineParts = lines
           .map((l) => {
@@ -1099,7 +1099,7 @@ export default function GoodsReceiptPage() {
 
   // Selected supplier display name (improvement #6)
   const selectedSupplierName = useMemo(() => {
-    return suppliersQuery.data?.rows.find((s) => s.supplier_id === supplierId)?.supplier_name_official ?? "";
+    return (suppliersQuery.data?.rows ?? []).find((s) => s.supplier_id === supplierId)?.supplier_name_official ?? "";
   }, [suppliersQuery.data, supplierId]);
 
   // Tranche 020 — open POs for the selected supplier. Used by the manual-
@@ -1115,7 +1115,7 @@ export default function GoodsReceiptPage() {
   // Selected PO display (improvement #8)
   const selectedPo = useMemo(() => {
     if (!poId) return null;
-    const fromList = openPosQuery.data?.rows.find((p) => p.po_id === poId);
+    const fromList = (openPosQuery.data?.rows ?? []).find((p) => p.po_id === poId);
     if (fromList) return fromList;
     if (urlPoLocked && urlPoHeader && urlPoHeader.po_id === poId) {
       return {
@@ -1237,7 +1237,7 @@ export default function GoodsReceiptPage() {
           poNumber={selectedPo.po_number}
           supplierName={
             urlPoHeader?.supplier_name ??
-            suppliersQuery.data?.rows.find(
+            (suppliersQuery.data?.rows ?? []).find(
               (s) => s.supplier_id === selectedPo.supplier_id,
             )?.supplier_name_official ??
             selectedPo.supplier_id
