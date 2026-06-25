@@ -17,6 +17,7 @@ import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { submitStockEvent } from "@/lib/stock/submit";
+import { fetchJson } from "@/lib/http/fetchJson";
 import {
   AlertTriangle,
   ArrowDown,
@@ -139,14 +140,6 @@ function newIdempotencyKey(): string {
 function toUom(raw: string | null | undefined): Uom {
   if (raw && (UOMS as readonly string[]).includes(raw)) return raw as Uom;
   return "UNIT";
-}
-
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) {
-    throw new Error(`Could not load data (HTTP ${res.status}). Check your connection and try refreshing.`);
-  }
-  return (await res.json()) as T;
 }
 
 type SubmitPhase = "idle" | "submitting" | "done";

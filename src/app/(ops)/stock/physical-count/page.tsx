@@ -21,6 +21,7 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { submitStockEvent } from "@/lib/stock/submit";
+import { fetchJson } from "@/lib/http/fetchJson";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { UOMS, type Uom } from "@/lib/contracts/enums";
@@ -116,14 +117,6 @@ function newIdempotencyKey(): string {
 function toUom(raw: string | null | undefined): Uom {
   if (raw && (UOMS as readonly string[]).includes(raw)) return raw as Uom;
   return "UNIT";
-}
-
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) {
-    throw new Error(`Could not load data (HTTP ${res.status}). Check your connection and try refreshing.`);
-  }
-  return (await res.json()) as T;
 }
 
 /** Format a date string as relative time (e.g. "just now", "3 min ago"). */
