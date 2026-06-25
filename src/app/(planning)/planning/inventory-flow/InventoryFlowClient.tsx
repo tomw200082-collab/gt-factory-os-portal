@@ -25,8 +25,8 @@ import { UnmappedSkusBanner } from "./_components/UnmappedSkusBanner";
 import { useInventoryFlow } from "./_lib/useInventoryFlow";
 import { usePlannedInflow, indexByItemDate } from "./_lib/plannedInflow";
 import { useGroups } from "@/lib/taxonomy/groups";
-import type { FlowItem, FlowQueryParams } from "./_lib/types";
-import { isAtRisk } from "./_lib/risk";
+import type { FlowQueryParams } from "./_lib/types";
+import { useFlowItems } from "./_lib/useFlowItems";
 import { parseSortKey } from "./_lib/production-lens";
 import { cn } from "@/lib/cn";
 
@@ -95,31 +95,7 @@ export function InventoryFlowClient() {
   // FilterBar). Honored by both the mobile card stream and the desktop grid.
   const sortKey = parseSortKey(searchParams.get("sort"));
 
-  const filteredItems: FlowItem[] = useMemo(() => {
-    if (!data) return [];
-    let items = data.items ?? [];
-    if (q) {
-      items = items.filter(
-        (it) =>
-          it.item_name.toLowerCase().includes(q) ||
-          it.item_id.toLowerCase().includes(q) ||
-          (it.family ?? "").toLowerCase().includes(q),
-      );
-    }
-    if (atRiskOnlyClient) {
-      items = items.filter((it) => isAtRisk(it.risk_tier));
-    }
-    return items;
-  }, [data, q, atRiskOnlyClient]);
-
-  const families = useMemo(() => {
-    if (!data) return [];
-    const seen = new Set<string>();
-    for (const it of data.items ?? []) {
-      if (it.family) seen.add(it.family);
-    }
-    return [...seen].sort();
-  }, [data]);
+  const { filteredItems, families } = useFlowItems(data, q, atRiskOnlyClient);
 
   const vis = useRowVisibility();
 
