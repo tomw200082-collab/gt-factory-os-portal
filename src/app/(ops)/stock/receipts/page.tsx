@@ -492,6 +492,11 @@ function Spinner({ className }: { className?: string }) {
 }
 
 export default function GoodsReceiptPage() {
+  // Idempotency key for the in-progress receipt. Generated once per submission
+  // attempt and REUSED across retries, so a retry after a lost response cannot
+  // post a second ledger event (the backend dedups on this key). Cleared on a
+  // successful post or an explicit reset, so the next receipt gets a fresh key.
+  const idemKeyRef = useRef<string | null>(null);
   // Cycle 16 — URL-driven prefill (W4 spec §3.4). When the operator arrives
   // here from the "Receive against this PO →" CTA on /purchase-orders/[po_id]
   // (cycle 14, commit 19c0025), the URL carries ?po_id=<uuid>. We read it
@@ -820,8 +825,9 @@ export default function GoodsReceiptPage() {
       });
     }
 
+    if (!idemKeyRef.current) idemKeyRef.current = newIdempotencyKey();
     const envelope: GoodsReceiptRequest = {
-      idempotency_key: newIdempotencyKey(),
+      idempotency_key: idemKeyRef.current,
       // Guard a cleared/invalid datetime-local (new Date("").toISOString()
       // throws) — fall back to now, which is what the field pre-fills.
       event_at: (Number.isNaN(new Date(eventAt).getTime())
@@ -918,6 +924,9 @@ export default function GoodsReceiptPage() {
         // Reset form for a fresh submission
         setLines([emptyLine()]);
         setNotes("");
+        // The receipt posted — the next submission is a NEW operation, so issue
+        // a fresh idempotency key (lazily, on the next submit).
+        idemKeyRef.current = null;
         // Tranche 086 — the express full-receive intent is consumed on a
         // successful post; clear it so the banner doesn't linger.
         setFullReceiveRequested(false);
@@ -2147,6 +2156,8 @@ export default function GoodsReceiptPage() {
                       setPoId("");
                       setManualConfirmed(false);
                       setDone(null);
+                      // Abandoning this receipt — next submit is a new op.
+                      idemKeyRef.current = null;
                     }}
                     disabled={phase === "submitting"}
                     data-testid="receipt-back-to-picker"
@@ -2166,6 +2177,8 @@ export default function GoodsReceiptPage() {
                     // URL-locked).
                     setManualConfirmed(false);
                     setDone(null);
+                    // Abandoning this receipt — next submit is a new op.
+                    idemKeyRef.current = null;
                   }}
                   disabled={phase === "submitting"}
                   data-testid="receipt-reset"

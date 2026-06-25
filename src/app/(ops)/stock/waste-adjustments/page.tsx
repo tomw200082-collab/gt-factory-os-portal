@@ -14,7 +14,7 @@
 // ---------------------------------------------------------------------------
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { submitStockEvent } from "@/lib/stock/submit";
 import { fetchJson } from "@/lib/http/fetchJson";
@@ -188,6 +188,10 @@ const REASON_LABELS: Record<WasteReasonCode, string> = {
 // ---------------------------------------------------------------------------
 export default function WasteAdjustmentPage() {
   const queryClient = useQueryClient();
+  // Idempotency key for the in-progress adjustment. Generated once and REUSED
+  // across retries so a retry after a lost response cannot post a second ledger
+  // event (backend dedups on this key). Cleared on a successful post or reset.
+  const idemKeyRef = useRef<string | null>(null);
   const itemsQuery = useQuery<ListEnvelope<ItemRow>>({
     queryKey: ["master", "items", "ACTIVE"],
     queryFn: () => fetchJson("/api/items?status=ACTIVE&limit=1000"),
@@ -294,8 +298,9 @@ export default function WasteAdjustmentPage() {
       });
       return;
     }
+    if (!idemKeyRef.current) idemKeyRef.current = newIdempotencyKey();
     const envelope: WasteAdjustmentRequest = {
-      idempotency_key: newIdempotencyKey(),
+      idempotency_key: idemKeyRef.current,
       event_at: whenIso,
       direction,
       item_type: row.item_type,
@@ -326,6 +331,8 @@ export default function WasteAdjustmentPage() {
         setQuantity("");
         setNotes("");
         setReasonCode("");
+        // Submission completed — next submit is a new op; issue a fresh key.
+        idemKeyRef.current = null;
         break;
       case "pending":
         // A new approval was created; refresh the inbox so its waste-approval
@@ -344,6 +351,8 @@ export default function WasteAdjustmentPage() {
         setQuantity("");
         setNotes("");
         setReasonCode("");
+        // Submission completed — next submit is a new op; issue a fresh key.
+        idemKeyRef.current = null;
         break;
       case "rejected":
         // Generic operator line; only a §1-safe string server message reaches detail.
@@ -412,6 +421,8 @@ export default function WasteAdjustmentPage() {
     setReasonCode("");
     setDone(null);
     setConfirmPending(false);
+    // Form reset — next submit is a new op; issue a fresh idempotency key.
+    idemKeyRef.current = null;
     setNotesAttempted(false);
   }
 

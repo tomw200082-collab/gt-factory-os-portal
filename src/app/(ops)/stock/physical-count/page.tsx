@@ -261,6 +261,11 @@ function BlindCountBanner({ compact = false }: { compact?: boolean }) {
 
 export default function PhysicalCountPage() {
   const queryClient = useQueryClient();
+  // Idempotency key for the in-progress count submission. Generated once and
+  // REUSED across retries so a retry after a lost response cannot post a second
+  // ledger event (backend dedups on this key). Cleared in resetFlow() — i.e. on
+  // a successful post or a cancel — so the next count gets a fresh key.
+  const idemKeyRef = useRef<string | null>(null);
   const itemsQuery = useQuery<ListEnvelope<ItemRow>>({
     queryKey: ["master", "items", "ACTIVE"],
     queryFn: () => fetchJson("/api/items?status=ACTIVE&limit=1000"),
@@ -486,8 +491,9 @@ export default function PhysicalCountPage() {
       });
       return;
     }
+    if (!idemKeyRef.current) idemKeyRef.current = newIdempotencyKey();
     const envelope: PhysicalCountSubmit = {
-      idempotency_key: newIdempotencyKey(),
+      idempotency_key: idemKeyRef.current,
       snapshot_id: snapshot.snapshot_id,
       event_at: (Number.isNaN(new Date(eventAt).getTime()) ? new Date() : new Date(eventAt)).toISOString(),
       counted_quantity: qtyNum,
@@ -572,6 +578,9 @@ export default function PhysicalCountPage() {
     setCancelConfirm(false);
     setSearchQuery("");
     setComboOpen(false);
+    // Flow reset (after a successful post or a cancel) — next count is a new
+    // operation; issue a fresh idempotency key on its next submit.
+    idemKeyRef.current = null;
   }
 
   async function handleCancel(): Promise<void> {
