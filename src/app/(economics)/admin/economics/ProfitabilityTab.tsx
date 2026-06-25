@@ -50,6 +50,7 @@ import {
 } from "lucide-react";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Drawer } from "@/components/overlays/Drawer";
+import { useConfirm } from "@/components/overlays/ConfirmDialog";
 import { formatIls, formatPct, formatQtyInt } from "@/lib/utils/format-money";
 
 // ---------------------------------------------------------------------------
@@ -257,7 +258,7 @@ function KpiStat({
           {icon ?? <Info className="h-3 w-3" strokeWidth={2.25} />}
         </span>
       </div>
-      <div className={`mt-1 text-xl font-bold tabular-nums ${valueColor}`}>
+      <div className={`mt-1 text-lg font-semibold tabular-nums ${valueColor}`}>
         {value}
       </div>
       {sub ? (
@@ -521,7 +522,7 @@ function ViabilityMatrix({
               {formatQtyInt(tip.sku.qty90d)}
             </dd>
           </dl>
-          <div className="mt-1.5 text-3xs text-accent">Click to model →</div>
+          <div className="mt-1.5 text-3xs text-accent">Open simulator →</div>
         </div>
       ) : null}
     </div>
@@ -597,6 +598,7 @@ function ContributionPareto({
                 negative ? "text-danger-fg" : "text-fg-strong"
               }`}
             >
+              {negative ? <span className="sr-only">Loss-making: </span> : null}
               {formatIls(c)}
             </span>
             <span
@@ -703,15 +705,18 @@ function DeltaRow({
 function WhatIfSimulator({
   sku,
   canEdit,
+  targetMargin,
   onClose,
   onApplied,
 }: {
   sku: SkuEconomics | null;
   canEdit: boolean;
+  targetMargin: number;
   onClose: () => void;
   onApplied: () => void;
 }): JSX.Element {
   const open = sku != null;
+  const { confirm, dialog: confirmDialog } = useConfirm();
   const basePrice = sku?.price ?? 0;
   const baseCogs = sku?.cogs ?? 0;
   const baseQty = sku?.qty90d ?? 0;
@@ -723,6 +728,7 @@ function WhatIfSimulator({
   const [keyId, setKeyId] = useState<string | null>(null);
   const [applying, setApplying] = useState(false);
   const [applyMsg, setApplyMsg] = useState<string | null>(null);
+  const [wasOpen, setWasOpen] = useState(false);
 
   // Re-seed inputs when a different SKU is opened.
   if (sku && keyId !== sku.row.item_id) {
@@ -731,6 +737,12 @@ function WhatIfSimulator({
     setCogsPct(0);
     setVolPct(0);
     setApplyMsg(null);
+  }
+  // Clear stale apply feedback whenever the drawer (re)opens — even on the
+  // same SKU, where the keyId guard above would not fire.
+  if (open !== wasOpen) {
+    setWasOpen(open);
+    if (open) setApplyMsg(null);
   }
 
   const modelCogs = baseCogs * (1 + cogsPct / 100);
@@ -753,6 +765,13 @@ function WhatIfSimulator({
 
   async function applyPrice(): Promise<void> {
     if (!sku || applying) return;
+    const ok = await confirm({
+      title: `Apply ${formatIls(Number(price.toFixed(2)))} as the sale price for ${sku.row.item_name}?`,
+      description:
+        "This updates the live average sale price and immediately changes margin and inventory-at-sale figures. You can change it again at any time.",
+      confirmLabel: "Apply price",
+    });
+    if (!ok) return;
     setApplying(true);
     setApplyMsg(null);
     try {
@@ -857,12 +876,13 @@ function WhatIfSimulator({
             />
             <button
               type="button"
+              disabled={applying}
               onClick={() => {
                 setPrice(basePrice);
                 setCogsPct(0);
                 setVolPct(0);
               }}
-              className="inline-flex items-center gap-1.5 text-3xs font-medium text-fg-subtle hover:text-accent"
+              className="inline-flex items-center gap-1.5 rounded text-3xs font-medium text-fg-subtle hover:text-accent disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
             >
               <RotateCcw className="h-3 w-3" strokeWidth={2.5} />
               Reset to current
@@ -917,19 +937,20 @@ function WhatIfSimulator({
             </div>
             <div className="rounded-md border border-border/60 bg-bg-subtle/40 p-3">
               <div className="text-3xs uppercase tracking-sops text-fg-subtle">
-                Price for 30% margin
+                Price for {targetMargin}% margin
               </div>
               <div className="mt-0.5 text-sm font-semibold tabular-nums text-fg-strong">
-                {formatIls(priceForTarget(30))}
+                {formatIls(priceForTarget(targetMargin))}
               </div>
               <button
                 type="button"
                 onClick={() =>
-                  setPrice(Number(priceForTarget(30).toFixed(2)))
+                  setPrice(Number(priceForTarget(targetMargin).toFixed(2)))
                 }
-                className="mt-0.5 text-3xs font-medium text-accent hover:underline"
+                title={`Set the price slider to ${formatIls(priceForTarget(targetMargin))} (${targetMargin}% margin)`}
+                className="mt-1 min-h-[1.75rem] rounded px-2 py-1 text-3xs font-medium text-accent hover:bg-accent-soft/60 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent"
               >
-                use this price
+                Use this price
               </button>
             </div>
           </div>
@@ -946,7 +967,11 @@ function WhatIfSimulator({
 
           {/* Commit. */}
           <div className="flex items-center justify-between gap-3 border-t border-border/60 pt-3">
-            <div className="text-3xs text-fg-subtle">
+            <div
+              className="text-3xs text-fg-subtle"
+              aria-live="polite"
+              aria-atomic="true"
+            >
               {applyMsg ? (
                 <span
                   className={
@@ -957,8 +982,10 @@ function WhatIfSimulator({
                 >
                   {applyMsg}
                 </span>
+              ) : !canEdit ? (
+                "Modelled values — applying a price needs planner or admin access."
               ) : dirty ? (
-                "Applies the modelled price to the live avg sale price."
+                "Applies the modelled price to the live average sale price."
               ) : (
                 "Move the price slider to model a change."
               )}
@@ -968,6 +995,13 @@ function WhatIfSimulator({
                 type="button"
                 onClick={() => void applyPrice()}
                 disabled={!dirty || applying}
+                title={
+                  !dirty
+                    ? "Move the price slider to model a change first"
+                    : applying
+                      ? "Applying…"
+                      : "Apply the modelled price to the live sale price"
+                }
                 className="btn-primary inline-flex shrink-0 items-center gap-1.5"
               >
                 <Check className="h-3.5 w-3.5" strokeWidth={2.5} />
@@ -975,6 +1009,7 @@ function WhatIfSimulator({
               </button>
             ) : null}
           </div>
+          {confirmDialog}
         </div>
       ) : (
         <div />
@@ -1130,7 +1165,7 @@ export function ProfitabilityTab({
     return (
       <SectionCard title="Profitability">
         <div className="rounded border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg">
-          <div className="font-semibold">Could not load data</div>
+          <div className="font-semibold">We couldn&apos;t load profitability data</div>
           {errorMessage ? (
             <div className="mt-1 text-xs">{errorMessage}</div>
           ) : null}
@@ -1150,7 +1185,7 @@ export function ProfitabilityTab({
     return (
       <SectionCard
         eyebrow="Profitability"
-        title="Nothing to analyse yet"
+        title="No profitability data yet"
         description="Profitability analysis needs SKUs that sold in the last 90 days and have both a COGS and an average sale price. Fix the measurement gaps on the Overview tab, then come back."
       >
         <div className="rounded-lg border border-dashed border-border bg-bg-subtle/40 p-6 text-center text-xs text-fg-subtle">
@@ -1315,6 +1350,7 @@ export function ProfitabilityTab({
       <WhatIfSimulator
         sku={selectedSku}
         canEdit={canEdit}
+        targetMargin={targetMargin}
         onClose={() => setSelectedId(null)}
         onApplied={onPriceApplied}
       />
