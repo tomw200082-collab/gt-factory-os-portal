@@ -50,7 +50,7 @@
 
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
-import { FlaskConical } from "lucide-react";
+import { FlaskConical, Loader2 } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
@@ -1288,9 +1288,14 @@ function SubmissionDetailView({ submissionId }: { submissionId: string }) {
                   }
                   data-testid="production-actual-reverse-confirm"
                 >
-                  {reverse.state === "pending"
-                    ? "Reversing…"
-                    : "Reverse report"}
+                  {reverse.state === "pending" ? (
+                    <>
+                      <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden />
+                      Reversing…
+                    </>
+                  ) : (
+                    "Reverse report"
+                  )}
                 </button>
               </div>
             </form>
@@ -3234,6 +3239,7 @@ export default function ProductionActualPage() {
                 type="submit"
                 className="btn btn-lg btn-primary"
                 disabled={!selectedItemId}
+                title={!selectedItemId ? "Select an item first" : undefined}
               >
                 Open production form →
               </button>

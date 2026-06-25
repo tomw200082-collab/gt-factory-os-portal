@@ -1667,9 +1667,14 @@ export default function GoodsReceiptPage() {
                         onClick={() => void handleSubmit()}
                         data-testid="receipt-full-receive-submit"
                       >
-                        {phase === "submitting"
-                          ? "Posting…"
-                          : "Confirm & receive all"}
+                        {phase === "submitting" ? (
+                          <>
+                            <Spinner className="h-4 w-4" />
+                            Posting…
+                          </>
+                        ) : (
+                          "Confirm & receive all"
+                        )}
                       </button>
                       <button
                         type="button"
@@ -2203,7 +2208,14 @@ export default function GoodsReceiptPage() {
                       disabled={phase === "submitting"}
                       data-testid="receipt-over-receipt-confirm"
                     >
-                      {phase === "submitting" ? "Submitting…" : "Confirm and submit"}
+                      {phase === "submitting" ? (
+                        <>
+                          <Spinner className="h-4 w-4" />
+                          Submitting…
+                        </>
+                      ) : (
+                        "Confirm and submit"
+                      )}
                     </button>
                     <button
                       type="button"

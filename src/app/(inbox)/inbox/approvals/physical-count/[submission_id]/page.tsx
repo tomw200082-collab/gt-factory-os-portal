@@ -13,7 +13,7 @@
 import { useState, type ReactNode } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Loader2 } from "lucide-react";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useSession } from "@/lib/auth/session-provider";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
@@ -479,6 +479,9 @@ export default function PhysicalCountReviewPage() {
                   disabled={approveBusy}
                   onClick={handleApprove}
                 >
+                  {approveBusy && (
+                    <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden />
+                  )}
                   {approveBusy ? "Submitting…" : "Yes, approve"}
                 </button>
                 <button
@@ -541,6 +544,9 @@ export default function PhysicalCountReviewPage() {
             }
             onClick={handleReject}
           >
+            {rejectBusy && (
+              <Loader2 className="h-4 w-4 animate-spin" strokeWidth={2} aria-hidden />
+            )}
             {rejectBusy ? "Submitting…" : "Reject count"}
           </button>
         </div>
