@@ -279,6 +279,18 @@ const PRICE_BANDS: Array<{
 type InventoryKey = "in_stock" | "no_stock";
 type ReadinessKey = "measured" | "unpriced" | "cogs_gap";
 
+// Each multi-select facet's key type, pinned in one place. Toggling a key on
+// the wrong facet (e.g. an inventory key on the margin facet) is then a compile
+// error, not a silent no-op — the mismatch is designed out of existence.
+type SetFacet = "margin" | "price" | "inventory" | "readiness" | "reliability";
+interface FacetKeyMap {
+  margin: MarginBandKey;
+  price: PriceBandKey;
+  inventory: InventoryKey;
+  readiness: ReadinessKey;
+  reliability: string;
+}
+
 // ---------------------------------------------------------------------------
 // Filter state — one object, recomputed against every visual.
 // ---------------------------------------------------------------------------
@@ -1251,13 +1263,13 @@ export function ProfitabilityTab({
   const selectedSku = useMemo(() => (selectedId ? all.find((s) => s.row.item_id === selectedId) ?? null : null), [selectedId, all]);
 
   // --- filter mutators ---------------------------------------------------
-  function toggle<K>(setName: keyof Filters, key: K): void {
+  function toggleFacet<F extends SetFacet>(facet: F, key: FacetKeyMap[F]): void {
     setActivePreset(null);
     setFilters((f) => {
-      const cur = f[setName] as unknown as Set<K>;
-      const next = new Set(cur);
-      if (next.has(key)) next.delete(key); else next.add(key);
-      return { ...f, [setName]: next };
+      const next = new Set<FacetKeyMap[F]>(f[facet] as Set<FacetKeyMap[F]>);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return { ...f, [facet]: next } as Filters;
     });
   }
   function clearAll(): void {
@@ -1313,27 +1325,27 @@ export function ProfitabilityTab({
       </FacetGroup>
 
       <FacetGroup title="Margin band">
-        {MARGIN_BANDS.map((b) => <FacetChip key={b.key} label={b.label} tone={b.tone} count={facetCounts.margin[b.key]} active={filters.margin.has(b.key)} onToggle={() => toggle("margin", b.key)} />)}
+        {MARGIN_BANDS.map((b) => <FacetChip key={b.key} label={b.label} tone={b.tone} count={facetCounts.margin[b.key]} active={filters.margin.has(b.key)} onToggle={() => toggleFacet("margin", b.key)} />)}
       </FacetGroup>
 
       <FacetGroup title="Price band">
-        {PRICE_BANDS.map((b) => <FacetChip key={b.key} label={b.label} count={facetCounts.price[b.key]} active={filters.price.has(b.key)} onToggle={() => toggle("price", b.key)} />)}
+        {PRICE_BANDS.map((b) => <FacetChip key={b.key} label={b.label} count={facetCounts.price[b.key]} active={filters.price.has(b.key)} onToggle={() => toggleFacet("price", b.key)} />)}
       </FacetGroup>
 
       <FacetGroup title="Inventory">
-        <FacetChip label="In stock" tone="info" count={facetCounts.inStock} active={filters.inventory.has("in_stock")} onToggle={() => toggle("inventory", "in_stock")} />
-        <FacetChip label="No stock" count={facetCounts.noStock} active={filters.inventory.has("no_stock")} onToggle={() => toggle("inventory", "no_stock")} />
+        <FacetChip label="In stock" tone="info" count={facetCounts.inStock} active={filters.inventory.has("in_stock")} onToggle={() => toggleFacet("inventory", "in_stock")} />
+        <FacetChip label="No stock" count={facetCounts.noStock} active={filters.inventory.has("no_stock")} onToggle={() => toggleFacet("inventory", "no_stock")} />
       </FacetGroup>
 
       <FacetGroup title="Data readiness">
-        <FacetChip label="Measured" tone="success" count={facetCounts.measured} active={filters.readiness.has("measured")} onToggle={() => toggle("readiness", "measured")} />
-        <FacetChip label="Needs price" tone="warning" count={facetCounts.unpriced} active={filters.readiness.has("unpriced")} onToggle={() => toggle("readiness", "unpriced")} />
-        <FacetChip label="COGS gap" tone="danger" count={facetCounts.cogsGap} active={filters.readiness.has("cogs_gap")} onToggle={() => toggle("readiness", "cogs_gap")} />
+        <FacetChip label="Measured" tone="success" count={facetCounts.measured} active={filters.readiness.has("measured")} onToggle={() => toggleFacet("readiness", "measured")} />
+        <FacetChip label="Needs price" tone="warning" count={facetCounts.unpriced} active={filters.readiness.has("unpriced")} onToggle={() => toggleFacet("readiness", "unpriced")} />
+        <FacetChip label="COGS gap" tone="danger" count={facetCounts.cogsGap} active={filters.readiness.has("cogs_gap")} onToggle={() => toggleFacet("readiness", "cogs_gap")} />
       </FacetGroup>
 
       {reliabilityValues.length > 0 ? (
         <FacetGroup title="Price reliability">
-          {reliabilityValues.map((r) => <FacetChip key={r} label={r.replace(/_/g, " ")} count={facetCounts.reliability[r] ?? 0} active={filters.reliability.has(r)} onToggle={() => toggle("reliability", r)} />)}
+          {reliabilityValues.map((r) => <FacetChip key={r} label={r.replace(/_/g, " ")} count={facetCounts.reliability[r] ?? 0} active={filters.reliability.has(r)} onToggle={() => toggleFacet("reliability", r)} />)}
         </FacetGroup>
       ) : null}
 
@@ -1401,7 +1413,7 @@ export function ProfitabilityTab({
             <>
               {/* Margin distribution */}
               <SectionCard eyebrow="Distribution" title="Margin shape" description="How many measured SKUs sit in each margin band. Click a bar to filter the whole page to it.">
-                <MarginHistogram skus={filteredMeasured} active={filters.margin} onToggleBand={(k) => toggle("margin", k)} />
+                <MarginHistogram skus={filteredMeasured} active={filters.margin} onToggleBand={(k) => toggleFacet("margin", k)} />
               </SectionCard>
 
               {/* Viability matrix */}
