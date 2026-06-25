@@ -3,10 +3,11 @@
     "Frozen snapshot the regression-sentinel compares against.",
     "This file is human-ritual-only — hook refuses normal edits.",
     "Update via a tranche-fix with kind=baseline-update after an intentional surface change has landed.",
-    "Tranche 046 (2026-06-11, kind=baseline-update): anchors populated from live repo truth — routes[] mirrors the regenerated route-manifest.json (path+status), nav_items[] mirrors src/lib/nav/manifest.ts NAV_MANIFEST (href+label+min_role), role_gates{} mirrors src/middleware.ts ROLE_GATES (prefix → allowed roles, first-match-wins order). critical_invariants corrected to state the actual layout gating. anchor_sha unchanged from seed — supersede on next intentional surface change."
+    "Tranche 046 (2026-06-11, kind=baseline-update): anchors populated from live repo truth — routes[] mirrors the regenerated route-manifest.json (path+status), nav_items[] mirrors src/lib/nav/manifest.ts NAV_MANIFEST (href+label+min_role), role_gates{} mirrors src/middleware.ts ROLE_GATES (prefix → allowed roles, first-match-wins order). critical_invariants corrected to state the actual layout gating. anchor_sha unchanged from seed — supersede on next intentional surface change.",
+    "Tranche 090 (2026-06-25, kind=baseline-update): re-anchored after the regression-sentinel flagged 4 authorized post-baseline surface additions as low-severity drift. anchor_sha advanced to 096467f. Added: nav_items credit-tracking (CLAUDE.md bookkeeper surface), /admin/decision-board (tranche 080), /purchase-orders/placement-queue (tranche 086); role_gate /inventory/bulk-count (mirrors middleware, before broader /inventory); routes rows for the three new manifest orphans. Additive only — nothing removed."
   ],
   "generated_at": "2026-06-11T00:00:00Z",
-  "anchor_sha": "55682bb",
+  "anchor_sha": "096467f",
   "routes": [
     { "path": "/", "status": "live" },
     { "path": "/login", "status": "live" },
@@ -17,11 +18,13 @@
     { "path": "/dashboard/v2", "status": "redirect" },
     { "path": "/profile", "status": "live" },
     { "path": "/inventory", "status": "live" },
+    { "path": "/credit-tracking", "status": "live" },
     { "path": "/stock/movement-log", "status": "live" },
     { "path": "/inbox", "status": "live" },
     { "path": "/inbox/credit/[exception_id]", "status": "live" },
     { "path": "/inbox/approvals/waste/[submission_id]", "status": "live" },
     { "path": "/inbox/approvals/physical-count/[submission_id]", "status": "live" },
+    { "path": "/inbox/approvals/inventory-movement/[submission_id]", "status": "live" },
     { "path": "/stock/receipts", "status": "live" },
     { "path": "/stock/waste-adjustments", "status": "live" },
     { "path": "/stock/physical-count", "status": "live" },
@@ -52,6 +55,7 @@
     { "path": "/purchase-orders/new", "status": "live" },
     { "path": "/purchase-orders/[po_id]", "status": "live" },
     { "path": "/admin/economics", "status": "live" },
+    { "path": "/admin/decision-board", "status": "live" },
     { "path": "/admin", "status": "redirect" },
     { "path": "/admin/items", "status": "live" },
     { "path": "/admin/items/[item_id]", "status": "redirect" },
@@ -94,6 +98,7 @@
     { "href": "/stock/physical-count", "label": "Physical Count", "min_role": "viewer" },
     { "href": "/stock/production-actual", "label": "Production Actual", "min_role": "viewer" },
     { "href": "/inventory", "label": "Inventory", "min_role": "viewer" },
+    { "href": "/credit-tracking", "label": "Credit Tracking", "min_role": "viewer" },
     { "href": "/stock/movement-log", "label": "Movement Log", "min_role": "viewer" },
     { "href": "/planning", "label": "Planning Overview", "min_role": "viewer" },
     { "href": "/planning/forecast", "label": "Forecast", "min_role": "viewer" },
@@ -103,7 +108,9 @@
     { "href": "/planning/inventory-flow", "label": "Inventory Flow", "min_role": "viewer" },
     { "href": "/planning/blockers", "label": "Blockers", "min_role": "viewer" },
     { "href": "/admin/economics", "label": "Economics", "min_role": "planner" },
+    { "href": "/admin/decision-board", "label": "Decision Board", "min_role": "planner" },
     { "href": "/purchase-orders", "label": "Purchase Orders", "min_role": "viewer" },
+    { "href": "/purchase-orders/placement-queue", "label": "Orders to Place", "min_role": "planner" },
     { "href": "/admin/items", "label": "Items", "min_role": "admin" },
     { "href": "/admin/components", "label": "Components", "min_role": "admin" },
     { "href": "/admin/groups", "label": "Groups", "min_role": "admin" },
@@ -127,6 +134,7 @@
     "/inbox/approvals": ["planner", "admin"],
     "/admin/economics": ["planner", "admin"],
     "/admin": ["admin"],
+    "/inventory/bulk-count": ["operator", "planner", "admin"],
     "/stock/movement-log": ["operator", "planner", "admin", "viewer"],
     "/stock": ["operator", "planner", "admin"],
     "/planning": ["operator", "planner", "admin", "viewer"],
@@ -141,6 +149,6 @@
     "(planning)/* and (planner)/* pages gate on planning:read — all four roles pass; writes are gated server-side on planning:execute",
     "(po)/* pages gate on viewer:read — all four roles pass; create/transition actions are gated server-side on planning:execute",
     "(economics)/* pages gate on planning:execute — role in {planner, admin}",
-    "middleware.ts ROLE_GATES protects /inbox/approvals, /admin/economics, /admin, /stock/movement-log, /stock, /planning, /purchase-orders, /exceptions (first-match-wins, specific prefixes before general — tranche 046 alignment)"
+    "middleware.ts ROLE_GATES protects /inbox/approvals, /admin/economics, /admin, /inventory/bulk-count, /stock/movement-log, /stock, /planning, /purchase-orders, /exceptions (first-match-wins, specific prefixes before general — tranche 046 alignment; /inventory/bulk-count added tranche 090)"
   ]
 }
