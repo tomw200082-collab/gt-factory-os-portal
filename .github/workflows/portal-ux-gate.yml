@@ -1,0 +1,99 @@
+# GT Factory OS Portal — UX release gate (per-PR, label-gated)
+#
+# The render-grade UX team (5 UX agents → one ranked report) as a per-PR door.
+# NOT part of the required `portal-pr-guard` ci job — gated behind the 'ux-gate'
+# label so it never slows the required merge check (SPEC §V10).
+#
+# The 5 UX agents and the /ux-release-gate command are the SOURCE OF TRUTH in
+# gt-factory-os-production-brain. This workflow checks out BOTH repos and assembles
+# an EPHEMERAL runtime `.claude` (CI-only, never committed here) so
+# claude-code-action can resolve them — no duplicated agent source in this repo's
+# tree (SPEC §V11).
+#
+# Rendering auth is the sanctioned dev-shim + browser-stubbed APIs — never a
+# fake-session header, never a Supabase production login (SPEC §V8/§V9).
+
+name: portal-ux-gate
+
+on:
+  pull_request:
+    branches: [main]
+    types: [labeled, synchronize, reopened]
+
+jobs:
+  ux-gate:
+    # Runs ONLY when the PR carries the 'ux-gate' label → off the hot path.
+    if: contains(github.event.pull_request.labels.*.name, 'ux-gate')
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      pull-requests: write
+    env:
+      # next dev (Playwright webServer) inherits this → dev-shim auth path active,
+      # no Supabase backend needed. Same mechanism as portal-pr-guard's @mocked e2e.
+      NEXT_PUBLIC_ENABLE_DEV_SHIM_AUTH: 'true'
+    steps:
+      - name: Checkout portal (this repo)
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Checkout production-brain (.claude source of truth)
+        uses: actions/checkout@v4
+        with:
+          repository: tomw200082-collab/gt-factory-os-production-brain
+          ref: claude/happy-ramanujan-sjuoia
+          path: PRODUCTION
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Assemble runtime .claude (UX agents + gate command from PRODUCTION)
+        run: |
+          set -euo pipefail
+          mkdir -p .claude/agents .claude/commands
+          for a in ux-flow-architect visual-system-designer interaction-design-specialist \
+                   ux-content-state-designer accessibility-usability-auditor \
+                   factory-os-governor; do
+            cp "PRODUCTION/.claude/agents/$a.md" ".claude/agents/$a.md"
+          done
+          cp PRODUCTION/.claude/commands/ux-release-gate.md .claude/commands/ux-release-gate.md
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - run: npm ci
+
+      - name: Install Playwright (chromium)
+        run: npx playwright install --with-deps chromium
+
+      - name: Compute changed app routes
+        id: routes
+        run: |
+          set -euo pipefail
+          git fetch origin main
+          CHANGED=$(git diff --name-only origin/main...HEAD | grep -E '^src/app/' || true)
+          echo "changed<<EOF" >> "$GITHUB_OUTPUT"
+          echo "${CHANGED:-"(no src/app changes detected — fall back to full sweep)"}" >> "$GITHUB_OUTPUT"
+          echo "EOF" >> "$GITHUB_OUTPUT"
+
+      - name: Run UX release gate
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            /ux-release-gate --scope changed
+            Changed app paths in this PR:
+            ${{ steps.routes.outputs.changed }}
+            Render each changed route with the ux-shot harness (UX_SHOT_OUT=/tmp/ux-shots,
+            dev-shim auth), attach screenshots, score every finding severity×effort, and
+            post the single Top-N ranked report as a PR comment.
+
+      - name: Upload UX screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ux-shots
+          path: /tmp/ux-shots
+          if-no-files-found: ignore
