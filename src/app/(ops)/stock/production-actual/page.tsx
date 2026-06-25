@@ -487,7 +487,10 @@ const REASON_CODE_LABELS: Record<string, string> = {
 };
 
 function reasonCodeLabel(reason: string): string {
-  return REASON_CODE_LABELS[reason] ?? `Submission rejected. Code: ${reason}.`;
+  return (
+    REASON_CODE_LABELS[reason] ??
+    "Could not submit the production report. Contact the system administrator if this keeps happening."
+  );
 }
 
 async function fetchJson<T>(url: string): Promise<T> {
@@ -3241,7 +3244,7 @@ export default function ProductionActualPage() {
                 disabled={!selectedItemId}
                 title={!selectedItemId ? "Select an item first" : undefined}
               >
-                Open production form →
+                Open Production Report →
               </button>
             </div>
           </form>

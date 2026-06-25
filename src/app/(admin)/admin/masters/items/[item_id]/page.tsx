@@ -882,7 +882,7 @@ export default function AdminItemDetailPage({
       if (!row) return <DetailTabEmpty message="Item row not loaded yet." />;
       if (row.supply_method === "BOUGHT_FINISHED") {
         return (
-          <DetailTabEmpty message="BOUGHT_FINISHED items are resold as-is and have no BOM." />
+          <DetailTabEmpty message="Purchased-finished products are resold as-is and have no recipe." />
         );
       }
       const hasPack = Boolean(row.primary_bom_head_id);

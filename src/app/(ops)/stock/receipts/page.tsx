@@ -1955,7 +1955,7 @@ export default function GoodsReceiptPage() {
                             step="any"
                             min="0"
                             className="input flex-1 min-w-0 h-12 text-center text-xl font-mono font-semibold tabular-nums transition-colors duration-150"
-                            placeholder="Qty"
+                            placeholder="Quantity"
                             value={line.quantity}
                             onChange={(e) =>
                               updateLine(idx, { quantity: e.target.value })

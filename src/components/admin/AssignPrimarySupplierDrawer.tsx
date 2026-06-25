@@ -212,7 +212,7 @@ export function AssignPrimarySupplierDrawer({
     } catch (err) {
       const msg =
         err instanceof AdminMutationError
-          ? `${err.status}${err.code ? ` ${err.code}` : ""}: ${err.message}`
+          ? err.message || "Could not assign supplier. Please try again."
           : err instanceof Error
             ? err.message
             : "Could not assign supplier. Please try again.";

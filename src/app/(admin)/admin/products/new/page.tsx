@@ -268,8 +268,8 @@ function Step1ItemBasics({
             <option value="REPACK">Repack</option>
           </select>
           <span className="mt-1 block text-3xs text-fg-subtle">
-            MANUFACTURED / REPACK walk all 7 steps. BOUGHT_FINISHED skips BOM
-            + component setup.
+            Manufactured and Repack products walk all 7 steps. Purchased
+            finished products skip the recipe and component steps.
           </span>
         </label>
 
@@ -768,7 +768,7 @@ function Step5Suppliers({
       {isBoughtFinished ? (
         <SectionCard
           title="Supplier mapping"
-          description="This is a BOUGHT_FINISHED item. Supplier-item mapping will be set up from /admin/supplier-items after publish — the item_id must exist in the database first."
+          description="This is a purchased-finished product. You can link it to a supplier after saving — the product record must be created first."
           tone="info"
         >
           <p className="text-sm text-fg-muted">
@@ -1333,7 +1333,7 @@ export default function AdminNewProductWizardPage(): JSX.Element {
         id="new-product"
         eyebrow="Admin · new product"
         title="New product wizard"
-        description="Guided 7-step flow to create a new item + aliases + BOM + supplier-items + policy review. BOUGHT_FINISHED items skip the BOM and component steps."
+        description="Guided 7-step flow to create a new product with aliases, recipe, supplier links, and policy review. Purchased-finished products skip the recipe and component steps."
         steps={activeSteps}
         initialState={{
           aliases: [],

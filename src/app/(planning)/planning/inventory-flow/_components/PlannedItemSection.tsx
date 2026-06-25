@@ -141,7 +141,7 @@ export function PlannedItemSection({
                   className="inline-flex min-h-[44px] items-center rounded-sm border border-info/40 bg-bg-raised px-3 py-2 text-2xs font-semibold uppercase tracking-sops text-info-fg hover:bg-info-softer sm:min-h-0 sm:px-2 sm:py-1"
                   data-testid="planned-item-section-open-form"
                 >
-                  Open production form
+                  Open Production Report
                 </Link>
               </div>
             </li>
