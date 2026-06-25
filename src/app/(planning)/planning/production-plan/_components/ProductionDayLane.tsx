@@ -102,7 +102,7 @@ export function ProductionDayLane({
         <div className="flex flex-col gap-0.5">
           <span
             className={cn(
-              "text-[10px] font-bold uppercase tracking-wider leading-none",
+              "text-[10px] font-bold uppercase tracking-sopsr leading-none",
               dayNameColor(isToday, isOverdue, isPast),
             )}
           >
@@ -120,12 +120,12 @@ export function ProductionDayLane({
 
         <div className="flex flex-col items-end gap-1 shrink-0">
           {isToday && (
-            <span className="text-[9px] font-bold uppercase tracking-wider text-accent leading-none">
+            <span className="text-[9px] font-bold uppercase tracking-sopsr text-accent leading-none">
               Today
             </span>
           )}
           {isOverdue && liveCount > 0 && (
-            <span className="text-[9px] font-bold uppercase tracking-wider text-danger leading-none">
+            <span className="text-[9px] font-bold uppercase tracking-sopsr text-danger leading-none">
               {liveCount} overdue
             </span>
           )}

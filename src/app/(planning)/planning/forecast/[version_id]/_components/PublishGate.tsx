@@ -214,11 +214,11 @@ export function PublishGate({
                     arbitrary brackets to the existing scale class text-3xs
                     used elsewhere in this surface (line ~330, ~467) and
                     across planning. */}
-                <span className="text-3xs font-bold uppercase tracking-[0.08em] text-fg-faint">
+                <span className="text-3xs font-bold uppercase tracking-ops text-fg-faint">
                   Step {stage === "review" ? "1" : "2"} of 2
                 </span>
                 <span className="text-fg-faint">·</span>
-                <span className="text-3xs font-semibold uppercase tracking-[0.08em] text-fg-muted">
+                <span className="text-3xs font-semibold uppercase tracking-ops text-fg-muted">
                   {stage === "review" ? "Review" : "Confirm"}
                 </span>
               </div>

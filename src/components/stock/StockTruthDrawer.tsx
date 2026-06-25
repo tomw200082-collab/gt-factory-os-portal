@@ -103,7 +103,7 @@ export function StockTruthDrawer({
       </div>
 
       {/* Recent ledger events */}
-      <h3 className="mt-5 text-2xs font-semibold uppercase tracking-wider text-fg-subtle">
+      <h3 className="mt-5 text-2xs font-semibold uppercase tracking-sopsr text-fg-subtle">
         Recent ledger events
       </h3>
       {isLoading && (

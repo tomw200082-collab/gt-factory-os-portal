@@ -276,7 +276,7 @@ export function ItemAutocompleteAdder({
     >
       <label
         htmlFor="forecast-item-autocomplete-input"
-        className="mb-1.5 block text-3xs font-semibold uppercase tracking-[0.08em] text-fg-subtle"
+        className="mb-1.5 block text-3xs font-semibold uppercase tracking-ops text-fg-subtle"
       >
         Add item to forecast
       </label>

@@ -66,7 +66,7 @@ export function TopBar() {
         <div className="flex items-center gap-3">
           <BrandMark />
           <div className="hidden flex-col leading-none sm:flex">
-            <div className="text-[0.8125rem] font-semibold tracking-tightish text-fg-strong">
+            <div className="text-sm font-semibold tracking-tightish text-fg-strong">
               GT Factory OS
             </div>
             <div className="mt-0.5 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
@@ -82,7 +82,7 @@ export function TopBar() {
             className="min-w-0 flex-1 sm:hidden"
             data-testid="topbar-mobile-page-label"
           >
-            <div className="truncate text-[0.8125rem] font-semibold text-fg-strong">
+            <div className="truncate text-sm font-semibold text-fg-strong">
               {mobileLabel}
             </div>
           </div>

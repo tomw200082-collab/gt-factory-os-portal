@@ -124,7 +124,7 @@ export function POLedgerHeader({
         ) : null}
         {isComplete ? (
           <span
-            className="inline-flex items-center gap-1 rounded-full bg-success-softer px-2 py-0.5 text-3xs font-semibold uppercase tracking-wide text-success-fg"
+            className="inline-flex items-center gap-1 rounded-full bg-success-softer px-2 py-0.5 text-3xs font-semibold uppercase tracking-sops text-success-fg"
             data-testid="receipt-po-ledger-complete-badge"
           >
             <svg

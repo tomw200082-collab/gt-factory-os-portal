@@ -335,7 +335,7 @@ export function SideNav({ onNavigate, density = "compact" }: SideNavProps = {}) 
                     <span
                       className={cn(
                         "flex-1 truncate",
-                        comfortable ? "text-[0.9375rem]" : "text-[0.8125rem]",
+                        comfortable ? "text-md" : "text-sm",
                         active && "font-semibold tracking-tightish",
                         subdued && "text-fg-faint",
                       )}
@@ -450,7 +450,7 @@ function UserCard({ session }: { session: DevShimSession }) {
           {initials}
         </div>
         <div className="min-w-0 flex-1">
-          <div className="truncate text-[0.8125rem] font-semibold text-fg-strong">
+          <div className="truncate text-sm font-semibold text-fg-strong">
             {displayName}
           </div>
           <div className="mt-0.5 truncate font-mono text-3xs uppercase tracking-sops text-fg-muted">

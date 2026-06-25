@@ -440,9 +440,9 @@ function StepIndicator({ steps, current }: { steps: string[]; current: number })
               className={cn(
                 "flex h-7 w-7 items-center justify-center rounded-full text-xs font-semibold transition-colors duration-150",
                 i < current
-                  ? "bg-accent text-white"
+                  ? "bg-accent text-accent-fg"
                   : i === current
-                    ? "bg-accent text-white ring-2 ring-accent ring-offset-2"
+                    ? "bg-accent text-accent-fg ring-2 ring-accent ring-offset-2"
                     : "bg-bg-subtle text-fg-muted",
               )}
             >
@@ -1886,7 +1886,7 @@ export default function GoodsReceiptPage() {
                         className={cn(
                           "absolute -left-2 -top-2 flex h-7 w-7 items-center justify-center rounded-full text-xs font-bold shadow-sm transition-colors",
                           isComplete
-                            ? "bg-accent text-white"
+                            ? "bg-accent text-accent-fg"
                             : "bg-bg-raised border border-border text-fg",
                         )}
                         aria-label={`Line ${idx + 1}${isComplete ? " — complete" : ""}`}

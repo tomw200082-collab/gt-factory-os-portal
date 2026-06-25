@@ -612,7 +612,7 @@ function Pill({
         toneClasses[tone],
       )}
     >
-      <span className="font-medium uppercase tracking-wide opacity-70">
+      <span className="font-medium uppercase tracking-sops opacity-70">
         {label}
       </span>
       <span className="font-semibold">{value}</span>

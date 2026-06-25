@@ -743,7 +743,7 @@ export default function ForecastVersionDetailPage() {
           <div className="min-w-0 flex-1">
             <div className="mb-1.5 flex items-center gap-2">
               <span className="dot bg-accent" aria-hidden />
-              <span className="text-2xs font-semibold uppercase tracking-[0.08em] text-fg-muted">
+              <span className="text-2xs font-semibold uppercase tracking-ops text-fg-muted">
                 Planner workspace
               </span>
             </div>

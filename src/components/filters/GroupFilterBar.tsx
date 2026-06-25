@@ -142,7 +142,7 @@ export function GroupFilterBar({
           type="button"
           onClick={onClear}
           data-testid={`${testId}-clear`}
-          className="text-2xs font-medium text-accent-fg underline hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 max-sm:shrink-0"
+          className="text-2xs font-medium text-accent underline hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 max-sm:shrink-0"
         >
           Clear
         </button>

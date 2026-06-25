@@ -549,8 +549,8 @@ function StepIndicator({ phase }: { phase: Phase }) {
           className={cn(
             "flex h-10 w-10 items-center justify-center rounded-full text-base font-bold transition-colors shadow-sm",
             step === 1
-              ? "bg-accent text-white"
-              : "bg-success text-white",
+              ? "bg-accent text-accent-fg"
+              : "bg-success text-fg-inverted",
           )}
           aria-current={step === 1 ? "step" : undefined}
         >
@@ -584,7 +584,7 @@ function StepIndicator({ phase }: { phase: Phase }) {
           className={cn(
             "flex h-10 w-10 items-center justify-center rounded-full text-base font-bold transition-colors shadow-sm",
             step === 2
-              ? "bg-accent text-white"
+              ? "bg-accent text-accent-fg"
               : "border-2 border-border bg-bg text-fg-muted",
           )}
           aria-current={step === 2 ? "step" : undefined}
@@ -951,7 +951,7 @@ function SubmissionDetailView({ submissionId }: { submissionId: string }) {
             <div className="flex flex-wrap items-baseline gap-x-6 gap-y-3">
               {detail.output_qty !== null ? (
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-fg-subtle">
+                  <div className="text-xs uppercase tracking-sops text-fg-subtle">
                     Output
                   </div>
                   <div className="mt-0.5 font-mono text-3xl font-bold tabular-nums text-fg">
@@ -964,7 +964,7 @@ function SubmissionDetailView({ submissionId }: { submissionId: string }) {
               ) : null}
               {detail.scrap_qty !== null && Number(detail.scrap_qty) > 0 ? (
                 <div>
-                  <div className="text-xs uppercase tracking-wide text-fg-subtle">
+                  <div className="text-xs uppercase tracking-sops text-fg-subtle">
                     Scrap
                   </div>
                   <div className="mt-0.5 font-mono text-lg tabular-nums text-fg">
@@ -1158,7 +1158,7 @@ function SubmissionDetailView({ submissionId }: { submissionId: string }) {
                               {c.item_name ?? c.item_id}
                             </span>
                             {c.source ? (
-                              <span className="rounded-sm border border-border/60 px-1 py-px text-[10px] uppercase tracking-wide text-fg-muted">
+                              <span className="rounded-sm border border-border/60 px-1 py-px text-[10px] uppercase tracking-sops text-fg-muted">
                                 {c.source}
                               </span>
                             ) : null}
@@ -2391,7 +2391,7 @@ export default function ProductionActualPage() {
             <div>
               <div className="flex flex-wrap items-start gap-4">
                 <div>
-                  <div className="text-xs uppercase tracking-wide opacity-70">
+                  <div className="text-xs uppercase tracking-sops opacity-70">
                     Plan date
                   </div>
                   <div className="mt-0.5 text-base font-semibold">
@@ -2399,7 +2399,7 @@ export default function ProductionActualPage() {
                   </div>
                 </div>
                 <div>
-                  <div className="text-xs uppercase tracking-wide opacity-70">
+                  <div className="text-xs uppercase tracking-sops opacity-70">
                     Target
                   </div>
                   <div className="mt-0.5 text-base font-mono font-bold tabular-nums">
@@ -2408,7 +2408,7 @@ export default function ProductionActualPage() {
                   </div>
                 </div>
                 <div>
-                  <div className="text-xs uppercase tracking-wide opacity-70">
+                  <div className="text-xs uppercase tracking-sops opacity-70">
                     Item
                   </div>
                   <div className="mt-0.5 font-medium">
@@ -2603,13 +2603,13 @@ export default function ProductionActualPage() {
                     <table className="w-full border-collapse text-xs">
                       <thead>
                         <tr className="border-b border-success/20">
-                          <th className="px-3 py-1.5 text-left text-3xs font-semibold uppercase tracking-wide opacity-70">
+                          <th className="px-3 py-1.5 text-left text-3xs font-semibold uppercase tracking-sops opacity-70">
                             Component
                           </th>
-                          <th className="px-3 py-1.5 text-right text-3xs font-semibold uppercase tracking-wide opacity-70">
+                          <th className="px-3 py-1.5 text-right text-3xs font-semibold uppercase tracking-sops opacity-70">
                             Consumed
                           </th>
-                          <th className="px-3 py-1.5 text-left text-3xs font-semibold uppercase tracking-wide opacity-70">
+                          <th className="px-3 py-1.5 text-left text-3xs font-semibold uppercase tracking-sops opacity-70">
                             Unit
                           </th>
                         </tr>
@@ -2628,7 +2628,7 @@ export default function ProductionActualPage() {
                                   <span className="flex flex-wrap items-baseline gap-x-2">
                                     <span className="font-medium">{info.name}</span>
                                     {source ? (
-                                      <span className="rounded-sm border border-success/30 px-1 py-px text-[10px] uppercase tracking-wide opacity-70">
+                                      <span className="rounded-sm border border-success/30 px-1 py-px text-[10px] uppercase tracking-sops opacity-70">
                                         {source}
                                       </span>
                                     ) : null}
@@ -4037,7 +4037,7 @@ export default function ProductionActualPage() {
                           </Link>
                           {r.reversed ? (
                             <span
-                              className="rounded-sm border border-border/60 bg-bg-subtle px-1.5 py-px text-[10px] font-semibold uppercase tracking-wide text-fg-muted"
+                              className="rounded-sm border border-border/60 bg-bg-subtle px-1.5 py-px text-[10px] font-semibold uppercase tracking-sops text-fg-muted"
                               data-testid="production-actual-history-reversed-badge"
                             >
                               Reversed
