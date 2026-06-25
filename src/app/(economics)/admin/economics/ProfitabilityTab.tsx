@@ -45,6 +45,8 @@ import {
   Gem,
   Boxes,
   Coins,
+  Wallet,
+  PieChart,
   Search,
   SlidersHorizontal,
   ChevronsUpDown,
@@ -569,6 +571,129 @@ function MarginHistogram({
             <span className="text-3xs tabular-nums text-fg-subtle">
               {b.label}
             </span>
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Margin treemap — the "gold map". Each tile is a SKU, area ∝ margin held in
+// its stock, colour = margin band. A binary slice-and-dice layout (alternating
+// orientation) keeps it robust and dependency-free. Click a tile to model it.
+// ---------------------------------------------------------------------------
+
+export interface TreemapRect {
+  sku: SkuEconomics;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export function treemapLayout(
+  items: SkuEconomics[],
+  x: number,
+  y: number,
+  w: number,
+  h: number,
+  horizontal: boolean,
+  out: TreemapRect[],
+): void {
+  if (items.length === 0) return;
+  if (items.length === 1) {
+    out.push({ sku: items[0], x, y, w, h });
+    return;
+  }
+  const val = (s: SkuEconomics) => Math.max(0, s.embedded ?? 0);
+  const total = items.reduce((a, s) => a + val(s), 0);
+  const half = total / 2;
+  let acc = 0;
+  let split = 1;
+  for (let k = 0; k < items.length; k++) {
+    acc += val(items[k]);
+    if (acc >= half) {
+      split = k + 1;
+      break;
+    }
+  }
+  split = Math.max(1, Math.min(items.length - 1, split));
+  const first = items.slice(0, split);
+  const second = items.slice(split);
+  const firstSum = first.reduce((a, s) => a + val(s), 0);
+  const ratio = total > 0 ? firstSum / total : first.length / items.length;
+  if (horizontal) {
+    const wl = w * ratio;
+    treemapLayout(first, x, y, wl, h, false, out);
+    treemapLayout(second, x + wl, y, w - wl, h, false, out);
+  } else {
+    const ht = h * ratio;
+    treemapLayout(first, x, y, w, ht, true, out);
+    treemapLayout(second, x, y + ht, w, h - ht, true, out);
+  }
+}
+
+function MarginTreemap({
+  skus,
+  onSelect,
+}: {
+  skus: SkuEconomics[];
+  onSelect: (id: string) => void;
+}): JSX.Element {
+  const top = useMemo(
+    () =>
+      skus
+        .filter((s) => (s.embedded ?? 0) > 0)
+        .sort((a, b) => (b.embedded ?? 0) - (a.embedded ?? 0))
+        .slice(0, 28),
+    [skus],
+  );
+  const rects = useMemo(() => {
+    const out: TreemapRect[] = [];
+    if (top.length) treemapLayout(top, 0, 0, 100, 100, true, out);
+    return out;
+  }, [top]);
+
+  if (top.length === 0) {
+    return (
+      <div className="rounded-lg border border-dashed border-border bg-bg-subtle/40 p-6 text-center text-xs text-fg-subtle">
+        No positive margin in stock to map in this view.
+      </div>
+    );
+  }
+  return (
+    <div
+      className="relative w-full overflow-hidden rounded-lg bg-bg-subtle"
+      style={{ aspectRatio: "16 / 7" }}
+    >
+      {rects.map(({ sku, x, y, w, h }) => {
+        const band =
+          MARGIN_BANDS.find((b) => b.match(sku.marginPct ?? 0)) ??
+          MARGIN_BANDS[MARGIN_BANDS.length - 1];
+        const big = w > 11 && h > 18;
+        return (
+          <button
+            key={sku.row.item_id}
+            type="button"
+            onClick={() => onSelect(sku.row.item_id)}
+            title={`${sku.row.item_name}: ${formatIls(sku.embedded)} margin in stock · ${formatPct(sku.marginPct)} margin`}
+            style={{ left: `${x}%`, top: `${y}%`, width: `${w}%`, height: `${h}%` }}
+            className={`group absolute flex flex-col justify-between overflow-hidden border border-bg-raised p-1.5 text-left transition-all hover:z-10 hover:brightness-110 focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-fg-strong ${TONE_BG[band.tone]}`}
+          >
+            {big ? (
+              <>
+                <span
+                  className="truncate text-3xs font-semibold leading-tight text-bg-raised"
+                  dir="auto"
+                >
+                  {sku.row.item_name}
+                </span>
+                <span className="text-3xs font-bold tabular-nums text-bg-raised">
+                  {formatIls(sku.embedded)}
+                </span>
+              </>
+            ) : null}
           </button>
         );
       })}
@@ -1269,6 +1394,56 @@ export function ProfitabilityTab({
     };
   }, [filtered, all]);
 
+  // Opportunities — portfolio-wide, money-sized actions. The distillation: what
+  // is worth doing, each sized in ₪ at stake. Every card cross-filters the page
+  // to exactly the SKUs behind it.
+  const opportunities = useMemo(() => {
+    let bleedCount = 0;
+    let bleedIls = 0;
+    let thinCount = 0;
+    let thinCapital = 0;
+    let unpricedCount = 0;
+    let unpricedCapital = 0;
+    const embPos: number[] = [];
+    let embPosTotal = 0;
+    for (const s of all) {
+      if (s.measured && (s.marginUnit ?? 0) < 0) {
+        bleedCount += 1;
+        bleedIls += Math.min(0, s.embedded ?? 0);
+      }
+      if (
+        s.measured &&
+        s.inStock &&
+        (s.marginPct ?? 0) >= 0 &&
+        (s.marginPct ?? 0) < 20
+      ) {
+        thinCount += 1;
+        thinCapital += s.invAtCost ?? 0;
+      }
+      if (!s.priced && s.inStock) {
+        unpricedCount += 1;
+        unpricedCapital += s.invAtCost ?? 0;
+      }
+      const e = s.embedded ?? 0;
+      if (e > 0) {
+        embPos.push(e);
+        embPosTotal += e;
+      }
+    }
+    embPos.sort((a, b) => b - a);
+    const top5 = embPos.slice(0, 5).reduce((a, b) => a + b, 0);
+    return {
+      bleedCount,
+      bleedIls: Math.abs(bleedIls),
+      thinCount,
+      thinCapital,
+      unpricedCount,
+      unpricedCapital,
+      concentrationPct: embPosTotal > 0 ? (top5 / embPosTotal) * 100 : null,
+      concentrationIls: top5,
+    };
+  }, [all]);
+
   const segmentStats = useMemo(() => {
     const counts: Record<Segment, number> = { crown: 0, risk: 0, premium: 0, review: 0, loss: 0 };
     const embedded: Record<Segment, number> = { crown: 0, risk: 0, premium: 0, review: 0, loss: 0 };
@@ -1314,6 +1489,11 @@ export function ProfitabilityTab({
     setActivePreset(null);
     setFilters(emptyFilters());
   }
+  // Apply a fully-specified slice (used by the opportunity cards).
+  function setSlice(f: Filters): void {
+    setActivePreset(null);
+    setFilters(f);
+  }
   function applyPreset(p: (typeof PRESETS)[number]): void {
     if (activePreset === p.key) { clearAll(); return; }
     setActivePreset(p.key);
@@ -1341,6 +1521,72 @@ export function ProfitabilityTab({
   }
 
   const hasFilters = filtersActive(filters);
+
+  // Opportunity cards — built from the money-sized signals above. Only the
+  // ones that actually have something at stake are shown.
+  type Opp = {
+    key: string;
+    icon: typeof Target;
+    tone: ChartTone;
+    value: string;
+    label: string;
+    sub: string;
+    onClick: () => void;
+  };
+  const oppCards: Opp[] = [];
+  if (opportunities.bleedCount > 0)
+    oppCards.push({
+      key: "bleed",
+      icon: TrendingDown,
+      tone: "danger",
+      value: formatIls(opportunities.bleedIls),
+      label: `${opportunities.bleedCount} SKU${opportunities.bleedCount === 1 ? "" : "s"} sell below cost`,
+      sub: "Margin lost in current stock — re-price above cost.",
+      onClick: () => setSlice({ ...emptyFilters(), margin: new Set(["loss"]) }),
+    });
+  if (opportunities.thinCapital > 0)
+    oppCards.push({
+      key: "thin",
+      icon: Wallet,
+      tone: "warning",
+      value: formatIls(opportunities.thinCapital),
+      label: "Capital in thin-margin stock",
+      sub: `${opportunities.thinCount} in-stock SKU${opportunities.thinCount === 1 ? "" : "s"} earn under 20% — lift price or cut cost.`,
+      onClick: () =>
+        setSlice({
+          ...emptyFilters(),
+          margin: new Set(["b0_20"]),
+          inventory: new Set(["in_stock"]),
+        }),
+    });
+  if (opportunities.unpricedCapital > 0)
+    oppCards.push({
+      key: "unpriced",
+      icon: Target,
+      tone: "info",
+      value: formatIls(opportunities.unpricedCapital),
+      label: `${opportunities.unpricedCount} unpriced in stock`,
+      sub: "Set a sale price to start measuring this margin.",
+      onClick: () =>
+        setSlice({
+          ...emptyFilters(),
+          readiness: new Set(["unpriced"]),
+          inventory: new Set(["in_stock"]),
+        }),
+    });
+  if (opportunities.concentrationPct != null)
+    oppCards.push({
+      key: "conc",
+      icon: PieChart,
+      tone: opportunities.concentrationPct >= 80 ? "warning" : "info",
+      value: formatPct(opportunities.concentrationPct),
+      label: "Margin on the top 5 SKUs",
+      sub: `${formatIls(opportunities.concentrationIls)} of in-stock margin rides on five products.`,
+      onClick: () => {
+        setSlice({ ...emptyFilters(), inventory: new Set(["in_stock"]) });
+        setSort({ col: "embedded", dir: "desc" });
+      },
+    });
 
   // --- filter rail (shared desktop + mobile) -----------------------------
   const filterRail = (
@@ -1491,6 +1737,46 @@ export function ProfitabilityTab({
             </SectionCard>
           ) : (
             <>
+              {/* Opportunities — what to act on */}
+              {oppCards.length > 0 ? (
+                <SectionCard
+                  eyebrow="Act on this"
+                  title="Biggest opportunities"
+                  description="Computed from your portfolio and sized in shekels. Click a card to filter the page to exactly those products."
+                >
+                  <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-4">
+                    {oppCards.map((o) => {
+                      const Icon = o.icon;
+                      return (
+                        <button
+                          key={o.key}
+                          type="button"
+                          onClick={o.onClick}
+                          className="group relative overflow-hidden rounded-lg border border-border/60 bg-bg-subtle/40 p-3 text-left transition-colors hover:border-border hover:bg-bg-subtle/70 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+                        >
+                          <span className={`absolute inset-y-0 left-0 w-1 ${TONE_BG[o.tone]}`} aria-hidden />
+                          <div className="flex items-center justify-between gap-2 pl-1.5">
+                            <Icon className={`h-4 w-4 ${TONE_TEXT[o.tone]}`} strokeWidth={2.25} />
+                            <span className="text-3xs font-medium text-accent opacity-0 transition-opacity group-hover:opacity-100">
+                              Filter →
+                            </span>
+                          </div>
+                          <div className={`mt-1.5 pl-1.5 text-2xl font-bold tabular-nums ${TONE_TEXT[o.tone]}`}>
+                            {o.value}
+                          </div>
+                          <div className="mt-0.5 pl-1.5 text-xs font-semibold text-fg-strong">
+                            {o.label}
+                          </div>
+                          <div className="mt-0.5 pl-1.5 text-3xs leading-snug text-fg-muted">
+                            {o.sub}
+                          </div>
+                        </button>
+                      );
+                    })}
+                  </div>
+                </SectionCard>
+              ) : null}
+
               {/* Margin distribution */}
               <SectionCard eyebrow="Distribution" title="Margin shape" description="How many measured SKUs sit in each margin band. Click a bar to filter the whole page to it.">
                 <MarginHistogram skus={filteredMeasured} active={filters.margin} onToggleBand={(k) => toggleFacet("margin", k)} />
@@ -1519,6 +1805,13 @@ export function ProfitabilityTab({
                   <SegmentLegend counts={segmentStats.counts} embedded={segmentStats.embedded} />
                 </div>
               </SectionCard>
+
+              {/* Treemap — the gold map */}
+              {filteredMeasured.some((s) => (s.embedded ?? 0) > 0) ? (
+                <SectionCard eyebrow="Gold map" title="Where the margin is concentrated" description="Every tile is a product; its area is the gross margin held in its stock, its colour the margin band. The biggest tiles are where your inventory value lives — click a tile to model it.">
+                  <MarginTreemap skus={filteredMeasured} onSelect={setSelectedId} />
+                </SectionCard>
+              ) : null}
 
               {/* Pareto */}
               {filteredMeasured.some((s) => (s.embedded ?? 0) > 0) ? (

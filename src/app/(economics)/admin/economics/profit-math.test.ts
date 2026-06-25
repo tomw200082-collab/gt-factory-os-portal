@@ -3,7 +3,14 @@
 // view lies — so they get the one check.
 
 import { describe, expect, it } from "vitest";
-import { deriveSku, classifySegment, type ProfitRow } from "./ProfitabilityTab";
+import {
+  deriveSku,
+  classifySegment,
+  treemapLayout,
+  type ProfitRow,
+  type SkuEconomics,
+  type TreemapRect,
+} from "./ProfitabilityTab";
 
 function row(p: Partial<ProfitRow>): ProfitRow {
   return {
@@ -73,5 +80,44 @@ describe("classifySegment", () => {
   it("review = low margin and little at stake", () => {
     const s = deriveSku(row({ avg_sale_price_ils: "7", qty_on_hand: "0" }));
     expect(classifySegment(s, 30, medianEmbedded)).toBe("review");
+  });
+});
+
+describe("treemapLayout", () => {
+  // Tiles must cover the box exactly, never overlap-by-area, and produce one
+  // rect per item with finite, in-bounds coordinates.
+  function skuWith(id: string, embedded: number): SkuEconomics {
+    return deriveSku(
+      row({
+        item_id: id,
+        embedded_material_margin_in_stock: String(embedded),
+        qty_on_hand: "1",
+      }),
+    );
+  }
+  it("emits one in-bounds rect per item whose areas sum to the box", () => {
+    const items = [10, 7, 5, 3, 2, 1].map((v, i) => skuWith(`s${i}`, v));
+    const out: TreemapRect[] = [];
+    treemapLayout(items, 0, 0, 100, 100, true, out);
+    expect(out).toHaveLength(items.length);
+    let area = 0;
+    for (const r of out) {
+      expect(r.x).toBeGreaterThanOrEqual(-0.001);
+      expect(r.y).toBeGreaterThanOrEqual(-0.001);
+      expect(r.x + r.w).toBeLessThanOrEqual(100.001);
+      expect(r.y + r.h).toBeLessThanOrEqual(100.001);
+      expect(Number.isFinite(r.w) && Number.isFinite(r.h)).toBe(true);
+      area += r.w * r.h;
+    }
+    expect(area).toBeCloseTo(100 * 100, 0);
+  });
+  it("handles a single item and an empty list", () => {
+    const one: TreemapRect[] = [];
+    treemapLayout([skuWith("a", 5)], 0, 0, 100, 50, true, one);
+    expect(one).toHaveLength(1);
+    expect(one[0].w).toBe(100);
+    const none: TreemapRect[] = [];
+    treemapLayout([], 0, 0, 100, 100, true, none);
+    expect(none).toHaveLength(0);
   });
 });
