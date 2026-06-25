@@ -18,6 +18,9 @@ jobs:
       contents: write
       issues: write
       pull-requests: write
+    env:
+      # Dev-shim render auth for the UX gate sweep (no Supabase backend in CI).
+      NEXT_PUBLIC_ENABLE_DEV_SHIM_AUTH: 'true'
     steps:
       - uses: actions/checkout@v4
         with:
@@ -41,6 +44,50 @@ jobs:
         with:
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
           prompt: '/portal-readiness'
+
+      # --- UX release gate (full-portal weekly sweep) -----------------------
+      # Agents + command are sourced from gt-factory-os-production-brain and
+      # assembled into an ephemeral runtime .claude (CI-only; SPEC §V11).
+      - name: Checkout production-brain (.claude source of truth)
+        uses: actions/checkout@v4
+        with:
+          repository: tomw200082-collab/gt-factory-os-production-brain
+          ref: claude/happy-ramanujan-sjuoia
+          path: PRODUCTION
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Assemble runtime .claude (UX agents + gate command)
+        run: |
+          set -euo pipefail
+          mkdir -p .claude/agents .claude/commands
+          for a in ux-flow-architect visual-system-designer interaction-design-specialist \
+                   ux-content-state-designer accessibility-usability-auditor \
+                   factory-os-governor; do
+            cp "PRODUCTION/.claude/agents/$a.md" ".claude/agents/$a.md"
+          done
+          cp PRODUCTION/.claude/commands/ux-release-gate.md .claude/commands/ux-release-gate.md
+
+      - name: Install Playwright (chromium)
+        run: npx playwright install --with-deps chromium
+
+      - name: Run UX release gate (full-portal sweep)
+        uses: anthropics/claude-code-action@v1
+        with:
+          claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
+          prompt: |
+            /ux-release-gate
+            Full-portal weekly sweep. Render representative routes with the ux-shot
+            harness (UX_SHOT_OUT=/tmp/ux-shots, dev-shim auth), score every finding
+            severity×effort, and write the single Top-N ranked report under
+            PRODUCTION/docs/phase8/dry-runs/.
+
+      - name: Upload UX screenshots
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ux-shots-weekly
+          path: /tmp/ux-shots
+          if-no-files-found: ignore
 
       - name: Open issue if drift or readiness regression
         run: |
