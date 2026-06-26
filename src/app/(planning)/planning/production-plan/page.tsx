@@ -1450,6 +1450,20 @@ export default function ProductionPlanPage() {
     return first && uoms.every((u) => u === first) ? first : "units";
   })();
 
+  // FLOW-014/015 (Tranche 113) — the planned-qty total may only be summed when
+  // every active plan shares a unit; summing liters + bottles + kg into one
+  // number is meaningless. When the week mixes units the KPI shows the honest
+  // run count instead. (dominantUom above stays the day-lane fallback.)
+  const activePlanCount = productionPlans.filter(
+    (p) => p.rendered_state !== "cancelled",
+  ).length;
+  const uniformUom = (() => {
+    const uoms = productionPlans
+      .filter((p) => p.rendered_state !== "cancelled")
+      .map((p) => p.uom);
+    return uoms.length > 0 && uoms.every((u) => u === uoms[0]) ? uoms[0] : null;
+  })();
+
   const completionPct =
     plannedCount + doneCount > 0
       ? Math.round((doneCount / (plannedCount + doneCount)) * 100)
@@ -1855,10 +1869,18 @@ export default function ProductionPlanPage() {
           </div>
           <div className="kpi-microcard" style={{ ["--kpi-accent" as string]: "var(--accent)" }}>
             <span className="text-[22px] font-semibold tabular-nums leading-none tracking-tightish text-fg-strong">
-              {totalQty % 1 === 0 ? totalQty.toFixed(0) : totalQty.toFixed(1)}
+              {uniformUom
+                ? totalQty % 1 === 0
+                  ? totalQty.toFixed(0)
+                  : totalQty.toFixed(1)
+                : activePlanCount}
             </span>
             <span className="text-3xs font-semibold uppercase tracking-sops leading-none text-fg-muted mt-0.5">
-              {dominantUom} total
+              {uniformUom
+                ? `${uniformUom} total`
+                : activePlanCount === 1
+                  ? "planned run"
+                  : "planned runs"}
             </span>
           </div>
           <div className="kpi-microcard" style={{ ["--kpi-accent" as string]: "var(--info)" }}>

@@ -123,6 +123,9 @@ export function RecipeOverridePanel({
   // INTER-006 / FLOW-012 — closing with unsaved edits used to discard them
   // silently. `confirmingClose` gates a two-button confirm before the discard.
   const [confirmingClose, setConfirmingClose] = useState(false);
+  // H1 (Tranche 113) — when the discard confirm opens, move focus into it
+  // (the safe "Keep editing" default, mirroring ConfirmDialog focusing Cancel).
+  const keepEditingRef = useRef<HTMLButtonElement | null>(null);
 
   // A11Y-005 / FLOW-011 — dialog a11y parity with the page's inline modals:
   // initial focus on the heading, focus return to the trigger on close,
@@ -151,6 +154,12 @@ export function RecipeOverridePanel({
       }
     };
   }, []);
+
+  useEffect(() => {
+    if (confirmingClose) {
+      queueMicrotask(() => keepEditingRef.current?.focus());
+    }
+  }, [confirmingClose]);
 
   useEffect(() => {
     if (recipe && working === null) {
@@ -355,7 +364,13 @@ export function RecipeOverridePanel({
       onKeyDown={(e) => {
         if (e.key === "Escape" && !saveMut.isPending) {
           e.stopPropagation();
-          requestClose();
+          // H2 (Tranche 113) — when the discard confirm is open, Escape
+          // dismisses the confirm (back to the form), not the whole panel.
+          if (confirmingClose) {
+            setConfirmingClose(false);
+          } else {
+            requestClose();
+          }
           return;
         }
         focusTrap.onKeyDown(e);
@@ -797,6 +812,7 @@ export function RecipeOverridePanel({
             </p>
             <div className="mt-3 flex items-center justify-end gap-2">
               <button
+                ref={keepEditingRef}
                 type="button"
                 className="btn btn-sm"
                 onClick={() => setConfirmingClose(false)}
