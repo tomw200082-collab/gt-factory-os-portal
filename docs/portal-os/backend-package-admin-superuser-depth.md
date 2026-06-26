@@ -1,5 +1,17 @@
 # Backend Package — Admin Superuser Depth
 
+> **STATUS UPDATE 2026-06-25 (Tranche A re-credit).** Deliverable **#3 (real
+> users/jobs/integrations) has SHIPPED** — `/admin/users` (list + role-change +
+> activate/deactivate), `/admin/jobs` (60s monitor), and `/admin/integrations`
+> (Shopify sync-status + exception-derived health) are live real-data surfaces;
+> `QuarantinedPage` no longer exists in `src/app`. Deliverables **#4 and #5 are
+> partially shipped** — the read surfaces ship; only the mutation halves (jobs
+> `run-now`, unified integrations resync / `GET /api/integrations/health`) remain.
+> **#1 (audit-log GET) and #2 (four-eyes approval queue) remain fully
+> backend-blocked.** `admin_superuser_depth` re-credited 5 → 7 accordingly. The
+> per-deliverable detail below is preserved for the still-open items; treat #3 as
+> done and #4/#5 as read-done / mutation-pending.
+
 **Purpose:** enumerate the exact backend (W1 API lane) + contract (W4) work needed to move `admin_superuser_depth` from 5/10 to ≥ 8/10. This is the only category still below 8 in the portal scorecard as of 2026-04-22 (84/100 total, 9 of 10 categories at ≥ 8).
 
 **Lane boundary reminder (from CLAUDE.md):** the portal lane (this repo) does NOT author backend contracts. W1 owns the Fastify API + queries/mutations; W4 owns the canonical contracts. This document describes what those lanes need to ship; once they land, portal-side completion is M-or-smaller per shell.

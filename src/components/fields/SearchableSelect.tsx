@@ -218,6 +218,16 @@ export function SearchableSelect({
               placeholder={searchPlaceholder}
               autoComplete="off"
               spellCheck={false}
+              // A11Y-008 — the search field is the active combobox controlling
+              // the listbox; aria-activedescendant points a screen reader at the
+              // highlighted option as ArrowUp/Down move `activeIndex`.
+              role="combobox"
+              aria-controls={listboxId}
+              aria-expanded
+              aria-autocomplete="list"
+              aria-activedescendant={
+                filtered.length > 0 ? `${listboxId}-opt-${activeIndex}` : undefined
+              }
               className="w-full pl-7 pr-7 h-7 text-xs bg-transparent outline-none placeholder:text-fg-faint"
               data-testid={testId ? `${testId}-search` : undefined}
             />
@@ -262,16 +272,21 @@ export function SearchableSelect({
                     const isActive = flatIdx === activeIndex;
                     const isSelected = opt.value === value;
                     return (
-                      <button
+                      // A11Y-008 — `role="option"` is not a valid role for a
+                      // <button> (aria-allowed-role). Options are non-focusable
+                      // div listbox items; keyboard handling stays on the search
+                      // input (handleKey + activeIndex / aria-activedescendant),
+                      // mouse selection via onClick — behaviour unchanged.
+                      <div
                         key={opt.value}
-                        type="button"
+                        id={`${listboxId}-opt-${flatIdx}`}
                         role="option"
                         aria-selected={isSelected}
                         data-search-idx={flatIdx}
                         onClick={() => handleSelect(opt)}
                         onMouseEnter={() => setActiveIndex(flatIdx)}
                         className={cn(
-                          "w-full px-3 py-1.5 text-left text-xs flex items-center justify-between gap-2 transition-colors",
+                          "w-full px-3 py-1.5 text-left text-xs flex items-center justify-between gap-2 transition-colors cursor-pointer",
                           isActive ? "bg-accent/10" : "bg-transparent",
                           isSelected && "font-semibold",
                         )}
@@ -290,7 +305,7 @@ export function SearchableSelect({
                             aria-hidden
                           />
                         )}
-                      </button>
+                      </div>
                     );
                   })}
                 </div>

@@ -16,6 +16,7 @@
 // ---------------------------------------------------------------------------
 
 import { Suspense, useEffect, useMemo, useState } from "react";
+import { fetchJson } from "@/lib/http/fetchJson";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -66,14 +67,6 @@ type ListEnvelope<T> = { rows: T[]; count: number };
 // ---------------------------------------------------------------------------
 // Data fetcher
 // ---------------------------------------------------------------------------
-
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) {
-    throw new Error(`Could not load data (HTTP ${res.status}). Check your connection and try refreshing.`);
-  }
-  return (await res.json()) as T;
-}
 
 // ---------------------------------------------------------------------------
 // Iter 18 — Status dot badge
@@ -643,7 +636,7 @@ function SuppliersPageInner(): JSX.Element {
                               e.stopPropagation();
                               handleToggleStatus(r);
                             }}
-                            disabled={statusMutation.isPending}
+                            disabled={statusMutation.isPending && statusMutation.variables?.supplier_id === r.supplier_id}
                           >
                             <Power className="h-3 w-3" strokeWidth={2} />
                             {r.status === "ACTIVE" ? "Deactivate" : "Activate"}
@@ -726,7 +719,7 @@ function SuppliersPageInner(): JSX.Element {
                         e.stopPropagation();
                         handleToggleStatus(r);
                       }}
-                      disabled={statusMutation.isPending}
+                      disabled={statusMutation.isPending && statusMutation.variables?.supplier_id === r.supplier_id}
                     >
                       <Power className="h-3 w-3" strokeWidth={2} />
                       {r.status === "ACTIVE" ? "Deactivate" : "Activate"}

@@ -34,6 +34,7 @@ import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react"
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { fetchJson } from "@/lib/http/fetchJson";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { UOMS, type Uom } from "@/lib/contracts/enums";
@@ -208,14 +209,6 @@ function newIdempotencyKey(): string {
 function toUom(raw: string | null | undefined): Uom {
   if (raw && (UOMS as readonly string[]).includes(raw)) return raw as Uom;
   return "UNIT";
-}
-
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) {
-    throw new Error(`Could not load data (HTTP ${res.status}). Check your connection and try refreshing.`);
-  }
-  return (await res.json()) as T;
 }
 
 interface LineDraft {
@@ -508,6 +501,11 @@ function Spinner({ className }: { className?: string }) {
 }
 
 export default function GoodsReceiptPage() {
+  // Idempotency key for the in-progress receipt. Generated once per submission
+  // attempt and REUSED across retries, so a retry after a lost response cannot
+  // post a second ledger event (the backend dedups on this key). Cleared on a
+  // successful post or an explicit reset, so the next receipt gets a fresh key.
+  const idemKeyRef = useRef<string | null>(null);
   // Cycle 16 — URL-driven prefill (W4 spec §3.4). When the operator arrives
   // here from the "Receive against this PO →" CTA on /purchase-orders/[po_id]
   // (cycle 14, commit 19c0025), the URL carries ?po_id=<uuid>. We read it
@@ -836,8 +834,9 @@ export default function GoodsReceiptPage() {
       });
     }
 
+    if (!idemKeyRef.current) idemKeyRef.current = newIdempotencyKey();
     const envelope: GoodsReceiptRequest = {
-      idempotency_key: newIdempotencyKey(),
+      idempotency_key: idemKeyRef.current,
       // Guard a cleared/invalid datetime-local (new Date("").toISOString()
       // throws) — fall back to now, which is what the field pre-fills.
       event_at: (Number.isNaN(new Date(eventAt).getTime())
@@ -934,6 +933,9 @@ export default function GoodsReceiptPage() {
         // Reset form for a fresh submission
         setLines([emptyLine()]);
         setNotes("");
+        // The receipt posted — the next submission is a NEW operation, so issue
+        // a fresh idempotency key (lazily, on the next submit).
+        idemKeyRef.current = null;
         // Tranche 086 — the express full-receive intent is consumed on a
         // successful post; clear it so the banner doesn't linger.
         setFullReceiveRequested(false);
@@ -1676,9 +1678,14 @@ export default function GoodsReceiptPage() {
                         onClick={() => void handleSubmit()}
                         data-testid="receipt-full-receive-submit"
                       >
-                        {phase === "submitting"
-                          ? "Posting…"
-                          : "Confirm & receive all"}
+                        {phase === "submitting" ? (
+                          <>
+                            <Spinner className="h-4 w-4" />
+                            Posting…
+                          </>
+                        ) : (
+                          "Confirm & receive all"
+                        )}
                       </button>
                       <button
                         type="button"
@@ -1761,9 +1768,19 @@ export default function GoodsReceiptPage() {
                     fetch remain here, so picker degradation is still
                     surfaced to the operator. */}
                 {poId && poDetailQuery.isError ? (
-                  <div className="sm:col-span-2 rounded-md border border-warning/40 bg-warning-softer px-3 py-2 text-xs text-warning-fg">
-                    Couldn&apos;t load PO lines — per-line match will fall
-                    back to unmatched. Try refreshing if this persists.
+                  <div className="sm:col-span-2 flex flex-wrap items-center gap-2 rounded-md border border-warning/40 bg-warning-softer px-3 py-2 text-xs text-warning-fg">
+                    <span>
+                      Couldn&apos;t load PO lines — per-line match will fall
+                      back to unmatched.
+                    </span>
+                    <button
+                      type="button"
+                      className="btn btn-ghost btn-sm"
+                      onClick={() => void poDetailQuery.refetch()}
+                      data-testid="receipt-po-lines-retry"
+                    >
+                      Retry
+                    </button>
                   </div>
                 ) : null}
                 {poId && !poDetailQuery.isLoading && !poDetailQuery.isError && poLines.length === 0 ? (
@@ -1944,7 +1961,10 @@ export default function GoodsReceiptPage() {
                             type="button"
                             aria-label="Decrease quantity"
                             className="flex h-12 w-12 shrink-0 items-center justify-center rounded border border-border text-lg font-bold leading-none text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors duration-150 disabled:opacity-40"
-                            disabled={phase === "submitting"}
+                            disabled={
+                              phase === "submitting" ||
+                              (Number(line.quantity) || 0) <= 1
+                            }
                             onClick={() => {
                               const cur = Number(line.quantity) || 0;
                               if (cur > 1) updateLine(idx, { quantity: String(cur - 1) });
@@ -2163,6 +2183,8 @@ export default function GoodsReceiptPage() {
                       setPoId("");
                       setManualConfirmed(false);
                       setDone(null);
+                      // Abandoning this receipt — next submit is a new op.
+                      idemKeyRef.current = null;
                     }}
                     disabled={phase === "submitting"}
                     data-testid="receipt-back-to-picker"
@@ -2182,6 +2204,8 @@ export default function GoodsReceiptPage() {
                     // URL-locked).
                     setManualConfirmed(false);
                     setDone(null);
+                    // Abandoning this receipt — next submit is a new op.
+                    idemKeyRef.current = null;
                   }}
                   disabled={phase === "submitting"}
                   data-testid="receipt-reset"

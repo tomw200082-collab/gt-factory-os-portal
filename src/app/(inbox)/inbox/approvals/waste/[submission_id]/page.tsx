@@ -478,6 +478,7 @@ export default function WasteReviewPage() {
               data-testid="waste-review-approve"
               className="btn btn-lg btn-primary"
               disabled={
+                !d ||
                 approveBusy ||
                 rejectBusy ||
                 (d?.submitted_by_user_id != null &&
@@ -512,6 +513,7 @@ export default function WasteReviewPage() {
             data-testid="waste-review-reject"
             className="btn btn-lg btn-danger"
             disabled={
+              !d ||
               rejectBusy ||
               approveBusy ||
               !rejectionReason.trim() ||

@@ -1,4 +1,4 @@
-# Tranche 091: decision-board UI amplify — premium decision-grade instrument
+# Tranche 114: decision-board UI amplify — premium decision-grade instrument
 
 status: in-progress
 created: 2026-06-26
@@ -74,7 +74,7 @@ manifest:
   - src/app/(economics)/admin/decision-board/page.tsx
   - tests/e2e/decision-board.spec.ts
   - docs/portal-os/registry.md
-  - docs/portal-os/tranches/091-decision-board-ui-amplify.md
+  - docs/portal-os/tranches/114-decision-board-ui-amplify.md
   - docs/portal-os/tranches/_active.txt
 
 ## Tests / verification

@@ -72,9 +72,12 @@ export function ProductionJobCard({
   // B4 (Tranche 050) — base-batch rows plan a BASE liquid batch across N
   // pack SKUs; item_id/item_name are null, so render the batch label
   // instead of an empty title.
+  // §1 (COPY-002) — never fall through to the raw item_id (an opaque code)
+  // in the operator-facing title. A name is expected for every item-linked
+  // plan; the placeholder only guards the defensive null case.
   const cardTitle = plan.is_base_batch
     ? `Base batch · ${plan.pack_manifest_count} SKU${plan.pack_manifest_count === 1 ? "" : "s"}`
-    : (plan.item_name ?? plan.item_id);
+    : (plan.item_name ?? "Unnamed item");
 
   const [impactOpen, setImpactOpen] = useState(false);
 
@@ -147,7 +150,7 @@ export function ProductionJobCard({
             actual output that was produced, not the original plan. */}
         {showActual && (
           <div
-            className="text-[9px] font-semibold uppercase tracking-sops text-success-fg/70 leading-none mb-1"
+            className="text-3xs font-semibold uppercase tracking-sops text-success-fg/70 leading-none mb-1"
             data-testid="plan-card-produced-label"
           >
             Produced
@@ -179,19 +182,22 @@ export function ProductionJobCard({
             </span>
           </div>
 
-          {/* Status icon (top-right corner) */}
+          {/* Status icon (top-right corner) — decorative; the state is carried
+              in text by the status chips and the hero color. aria-hidden so a
+              screen reader doesn't announce a bare unlabelled icon. */}
           <div className="pt-1 shrink-0">
             {isLive && !isDraft && (
-              <Clock className="h-3.5 w-3.5 text-warning/70" strokeWidth={2} />
+              <Clock className="h-3.5 w-3.5 text-warning/70" strokeWidth={2} aria-hidden />
             )}
             {isDone && (
               <CheckCircle2
                 className="h-3.5 w-3.5 text-success"
                 strokeWidth={2}
+                aria-hidden
               />
             )}
             {isCancelled && (
-              <Ban className="h-3.5 w-3.5 text-fg-faint" strokeWidth={2} />
+              <Ban className="h-3.5 w-3.5 text-fg-faint" strokeWidth={2} aria-hidden />
             )}
           </div>
         </div>
@@ -322,10 +328,10 @@ export function ProductionJobCard({
               data-testid="plan-row-report"
             >
               <Factory className="h-2.5 w-2.5" strokeWidth={2.5} />
-              Report
+              Report Production
             </Link>
           ) : (
-            <span className="text-[10px] text-fg-faint" title="Firm this plan before reporting production">
+            <span className="text-[10px] text-fg-faint" title="Confirm this plan before reporting production">
               Not reportable yet
             </span>
           )}
@@ -405,22 +411,34 @@ export function ProductionJobCard({
         </div>
       )}
 
-      {/* Done: link to submission */}
-      {isDone && completedActual && variance && (
+      {/* Done: link to submission. FLOW-007 — the audit link must survive even
+          when the variance can't be computed (variance null). It only needs the
+          submission_id; the variance line degrades to a plain "Reported" context
+          line rather than dropping the whole footer (and the link). */}
+      {isDone && completedActual && (
         <div className="px-3 pb-2.5 border-t border-border/20 pt-2 flex items-center justify-between gap-2">
-          <div className="text-[10px] text-fg-muted" title={VARIANCE_TOOLTIP}>
-            <span
-              className={
-                variance.isOnTarget ? "text-success-fg" : "text-warning-fg"
-              }
-            >
-              {variance.signLabel}
-            </span>
-            {" vs planned "}
-            <span className="tabular-nums font-mono">
-              {fmtQty(plan.planned_qty ?? "0", plan.uom ?? "")}
-            </span>
-          </div>
+          {variance ? (
+            <div className="text-[10px] text-fg-muted" title={VARIANCE_TOOLTIP}>
+              <span
+                className={
+                  variance.isOnTarget ? "text-success-fg" : "text-warning-fg"
+                }
+              >
+                {variance.signLabel}
+              </span>
+              {" vs planned "}
+              <span className="tabular-nums font-mono">
+                {fmtQty(plan.planned_qty ?? "0", plan.uom ?? "")}
+              </span>
+            </div>
+          ) : (
+            <div className="text-[10px] text-fg-muted">
+              {"Reported · planned "}
+              <span className="tabular-nums font-mono">
+                {fmtQty(plan.planned_qty ?? "0", plan.uom ?? "")}
+              </span>
+            </div>
+          )}
           <Link
             href={`/stock/production-actual?submission_id=${completedActual.submission_id}`}
             className="text-[10px] text-accent hover:underline shrink-0"

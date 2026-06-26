@@ -41,13 +41,29 @@ function NotchDot({ day }: { day: DayRailInfo }) {
       />
     );
   }
+  // A11Y-004 — the notch state was conveyed by colour alone. Meaningful states
+  // carry a text alternative (role="img" + aria-label) so a screen reader and a
+  // colour-blind reader both get the status; the neutral default stays
+  // decorative (no special state to announce).
   if (day.allDone) {
-    return <div className="h-[10px] w-[10px] rounded-full bg-success/60" />;
+    return (
+      <div
+        className="h-[10px] w-[10px] rounded-full bg-success/60"
+        role="img"
+        aria-label="All completed"
+      />
+    );
   }
   if (day.isOverdue) {
-    return <div className="h-[10px] w-[10px] rounded-full bg-warning/70" />;
+    return (
+      <div
+        className="h-[10px] w-[10px] rounded-full bg-warning/70"
+        role="img"
+        aria-label="Overdue"
+      />
+    );
   }
-  return <div className="h-[10px] w-[10px] rounded-full bg-border" />;
+  return <div className="h-[10px] w-[10px] rounded-full bg-border" aria-hidden />;
 }
 
 export function WeekTimelineRail({
@@ -109,7 +125,7 @@ export function WeekTimelineRail({
 
               <span
                 className={cn(
-                  "text-[10px] font-bold uppercase tracking-wider leading-none",
+                  "text-[10px] font-bold uppercase tracking-sops leading-none",
                   dayNameColor(day),
                 )}
               >

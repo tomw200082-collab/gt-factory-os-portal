@@ -1,4 +1,10 @@
-# Portal Readiness: 88/100 (delta: +44 total, +2 this session)
+# Portal Readiness: 91/100 (delta: +47 total, +3 this update)
+
+> **2026-06-25 truth correction (Tranche A / 092).** +3 is NOT new feature work —
+> two stale ratings were corrected against shipped reality. The `/portal-audit`
+> admin-surface auditor proved the three admin shells are live (see below);
+> `QuarantinedPage` no longer exists anywhere in `src/app`. Tranche 090 performed
+> the baseline-update ritual. All 10 categories are now ≥ 7; 9 of 10 are ≥ 8.
 
 Post-Tranche-036 (procurement-merge + suite-green session). Previous: 86/100 (post-017). The +2 this session: flow_continuity 9→10 and regression_resistance 9→10 (see "What this session delivered" below). Source audit (re-audit): [2026-04-22-all-reaudit.md](audit-reports/2026-04-22-all-reaudit.md). Backend package for the last category: [backend-package-admin-superuser-depth.md](backend-package-admin-superuser-depth.md).
 
@@ -6,8 +12,8 @@ Post-Tranche-036 (procurement-merge + suite-green session). Previous: 86/100 (po
 
 | Category | Score | Δ total | Gap to 10 |
 |---|---|---|---|
-| admin_superuser_depth | 5 | +2 | **Backend-blocked.** See [backend-package-admin-superuser-depth.md](backend-package-admin-superuser-depth.md) for the 5-deliverable package that moves this to 10. |
-| nav_integrity | 9 | +6 | Baseline freeze ritual. |
+| admin_superuser_depth | 7 | +4 | **Partly unblocked (re-credit 2026-06-25).** 3 of 5 deliverables shipped — /admin/users, /admin/jobs, /admin/integrations are live. Remaining: audit-log history (#1) + four-eyes queue (#2) + run-now/resync mutation halves. See [backend-package-admin-superuser-depth.md](backend-package-admin-superuser-depth.md). |
+| nav_integrity | 10 | +7 | Maintained. baseline-update ritual done (Tranche 090); manifest covers every page. |
 | flow_continuity | 10 | +8 | Maintained. Live prod-backend smoke of the focus loop (the @mocked e2e is the CI proof); recent-submissions + approval queue stay backend-blocked. |
 | role_gate_correctness | 10 | +4 | Maintained. Middleware scaffold activates as layer 3 when backend populates `app_metadata.role`. |
 | data_truthfulness | 8 | +3 | Real /admin/integrations health (backend-blocked); aggregate KPIs (backend-blocked). |
@@ -50,14 +56,18 @@ Honest open items: live production-backend smoke of the focus loop (needs a real
 - `data_truthfulness` 8/10 — no fabrications anywhere
 - `ops_surface` 8/10 — mobile-first, PO-aware, banner-deeplinked
 
-## Single category below 8: `admin_superuser_depth` (5)
+## Single category below 8: `admin_superuser_depth` (7)
 
-This is the genuine "needs backend lane" frontier. Three backend-blocked items:
-1. **Audit-trail GET** (`GET /api/audit-log?entity_type=&entity_id=`) → unblocks history tabs on Product 360 + 5 other detail pages (currently placeholder).
-2. **Approval-queue mutations** (`POST /api/admin/change-requests` + planner approve/reject) → enables four-eyes review on sensitive master-data fields.
-3. **Real users/jobs/integrations endpoints** (`GET /api/admin/users`, `POST /api/admin/users/[id]/role`, `GET /api/admin/jobs`, `POST /api/admin/jobs/[name]/run-now`, `GET /api/integrations/health`) → un-quarantines the three QuarantinedPage admin shells.
+Re-credited 5 → 7 on 2026-06-25: deliverable #3 (the three admin shells) shipped
+since the 2026-04-22 rating, but the scorecard lagged. **`/admin/users`,
+`/admin/jobs`, `/admin/integrations` are live real-data surfaces today**
+(`QuarantinedPage` no longer exists anywhere in `src/app`). Genuinely remaining:
 
-When these land, portal-side the work is M-or-smaller per shell.
+1. **Audit-trail GET** (`GET /api/audit-log?entity_type=&entity_id=`) → unblocks history tabs on Product 360 + 5 other detail pages (currently placeholder). _Backend-blocked._
+2. **Approval-queue mutations** (`POST /api/admin/change-requests` + planner approve/reject) → enables four-eyes review on sensitive master-data fields. _Backend-blocked._
+3. **Mutation halves of the live shells** — jobs `run-now` (`POST /api/admin/jobs/[name]/run-now`) and a unified integrations resync / `GET /api/integrations/health` feed. _Backend-blocked; the read surfaces already ship._
+
+When #1/#2 land, portal-side the work is M-or-smaller per shell.
 
 ## What "FULL PRODUCTION" needs from here (operator-prioritized)
 
@@ -84,4 +94,4 @@ When these land, portal-side the work is M-or-smaller per shell.
 - No critical drift in the most recent weekly cron report.
 - At least one tranche landed for every category that started below 6/10 — **all 4 met** (admin_superuser_depth +2, nav_integrity +5, flow_continuity +7, regression_resistance +6).
 
-last_reviewed: 2026-04-22
+last_reviewed: 2026-06-25
