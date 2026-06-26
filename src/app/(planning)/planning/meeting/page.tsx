@@ -718,19 +718,28 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
             </button>
           </>
         ) : (
-          <button
-            type="button"
-            disabled={batchCount === 0}
-            onClick={() => setConfirming(true)}
-            title={batchCount === 0 ? "Nothing to firm — generate drafts or pick a week with batches" : `Lock ${batchCount} batch${batchCount === 1 ? "" : "es"} for ${fmtWeekRange(weekStart)}`}
-            className={cn(
-              "inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-fg shadow-raised transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50",
-              focusRing,
+          <>
+            <button
+              type="button"
+              disabled={batchCount === 0}
+              onClick={() => setConfirming(true)}
+              title={batchCount === 0 ? "Nothing to firm — generate drafts or pick a week with batches" : `Lock ${batchCount} batch${batchCount === 1 ? "" : "es"} for ${fmtWeekRange(weekStart)}`}
+              className={cn(
+                "inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-fg shadow-raised transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50",
+                focusRing,
+              )}
+            >
+              <Lock className="h-4 w-4" aria-hidden="true" />
+              Firm week
+            </button>
+            {/* UX-flow audit (FLOW-D05): the disabled reason was only in a
+                title tooltip — invisible on touch. Surface it inline. */}
+            {batchCount === 0 && (
+              <span className="text-2xs text-fg-muted max-w-[28ch]">
+                Nothing to firm — generate drafts above, or pick a week with batches.
+              </span>
             )}
-          >
-            <Lock className="h-4 w-4" aria-hidden="true" />
-            Firm week
-          </button>
+          </>
         )}
       </div>
     </div>

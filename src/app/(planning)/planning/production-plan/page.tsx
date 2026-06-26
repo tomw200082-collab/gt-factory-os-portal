@@ -256,6 +256,20 @@ function ManualAddModal({
     };
   }, []);
 
+  // UX-flow audit (FLOW-E/B): on a submit (422) error, move focus to the first
+  // field flagged aria-invalid so keyboard / screen-reader users land on the
+  // problem instead of staying on the dialog title.
+  useEffect(() => {
+    if (!serverErrors || Object.keys(serverErrors.byField ?? {}).length === 0) {
+      return;
+    }
+    queueMicrotask(() => {
+      dialogRef.current
+        ?.querySelector<HTMLElement>('[aria-invalid="true"]')
+        ?.focus();
+    });
+  }, [serverErrors]);
+
   // INTER-004 — UoM is a select over the known UoM universe. If the
   // item-derived default (sales_uom) somehow isn't in the option list, keep
   // it selectable rather than silently dropping the value.
@@ -358,6 +372,7 @@ function ManualAddModal({
                   ? manualAddFieldErrorId("plan_date")
                   : undefined
               }
+              aria-invalid={serverErrors?.byField["plan_date"]?.length ? true : undefined}
             />
             <ManualAddFieldErrors field="plan_date" serverErrors={serverErrors} />
           </label>
@@ -378,6 +393,7 @@ function ManualAddModal({
                   ? manualAddFieldErrorId("item_id")
                   : undefined
               }
+              aria-invalid={serverErrors?.byField["item_id"]?.length ? true : undefined}
             >
               <option value="">— select a product —</option>
               <optgroup label="Manufactured">
@@ -425,7 +441,12 @@ function ManualAddModal({
                     .filter(Boolean)
                     .join(" ") || undefined
                 }
-                aria-invalid={qty && !(parseFloat(qty) > 0) ? true : undefined}
+                aria-invalid={
+                  (qty && !(parseFloat(qty) > 0)) ||
+                  serverErrors?.byField["planned_qty"]?.length
+                    ? true
+                    : undefined
+                }
                 required
                 aria-required="true"
               />
@@ -455,6 +476,7 @@ function ManualAddModal({
                     ? manualAddFieldErrorId("uom")
                     : undefined
                 }
+                aria-invalid={serverErrors?.byField["uom"]?.length ? true : undefined}
                 data-testid="manual-add-uom"
               >
                 <option value="">— select a unit —</option>
@@ -1992,6 +2014,19 @@ export default function ProductionPlanPage() {
         <span className="font-medium">Planned only.</span>{" "}
         Inventory updates only after actuals are reported in the production report.
       </div>
+
+      {/* UX-flow audit (FLOW-E/P): skeleton KPI strip during load so the real
+          strip doesn't pop in and shove the week nav + board down (CLS). */}
+      {plansQuery.isLoading && (
+        <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4" aria-hidden="true">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="kpi-microcard">
+              <span className="h-[22px] w-12 animate-pulse rounded bg-bg-subtle" />
+              <span className="mt-1 h-2 w-16 animate-pulse rounded bg-bg-subtle" />
+            </div>
+          ))}
+        </div>
+      )}
 
       {/* KPI strip — renders only when data has loaded */}
       {hasData && (
