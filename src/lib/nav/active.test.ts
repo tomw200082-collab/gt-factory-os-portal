@@ -43,6 +43,7 @@ describe("findActiveNavEntry", () => {
 
 describe("activeNavLabel", () => {
   it("returns the manifest label for owned pathnames", () => {
+    expect(activeNavLabel("/home")).toBe("Home");
     expect(activeNavLabel("/dashboard")).toBe("Dashboard");
     expect(activeNavLabel("/planning/procurement")).toBe("Procurement");
   });

@@ -41,7 +41,7 @@ export default function AuthCallbackPage() {
 
     void (async () => {
       const url = new URL(window.location.href);
-      const next = url.searchParams.get("next") ?? "/dashboard";
+      const next = url.searchParams.get("next") ?? "/home";
 
       const supabase = createSupabaseBrowserClient();
 

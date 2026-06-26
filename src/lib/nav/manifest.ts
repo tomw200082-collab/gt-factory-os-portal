@@ -30,6 +30,7 @@ import {
   Cog,
   Factory,
   GitBranch,
+  Home,
   Inbox,
   Layers,
   LayoutDashboard,
@@ -101,6 +102,15 @@ export const NAV_MANIFEST: NavGroup[] = [
   {
     title: "Overview",
     items: [
+      {
+        // Tranche 090 (Slice B) — the card-home landing + first top-bar tab.
+        href: "/home",
+        label: "Home",
+        icon: Home,
+        min_role: "viewer",
+        required_capability: "viewer:read",
+        placement: "top",
+      },
       {
         href: "/dashboard",
         label: "Dashboard",
