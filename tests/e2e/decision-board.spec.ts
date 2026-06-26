@@ -1,27 +1,23 @@
 // ---------------------------------------------------------------------------
-// Product Decision Board — deterministic e2e (Tranche 081).
+// Product Decision Board — deterministic e2e (Tranche 081 · fixture refreshed
+// in Tranche 091).
 //
-// Tagged @mocked: stubs /api/economics + /api/orders/by-item-and-period at the
-// browser (page.route) so the board renders WITHOUT a live backend — same
-// pattern as dashboard.spec.ts / procurement-focus.spec.ts.
+// Tagged @mocked: stubs /api/economics at the browser (page.route) so the board
+// renders WITHOUT a live backend — same pattern as dashboard.spec.ts.
+//
+// The economics fixture now carries the Shopify trailing-90-day sales the page
+// reads directly (qty_sold_90d / order_count_90d / units_prev_90d, migrations
+// 0261/0262). The board no longer calls /api/orders/by-item-and-period, so that
+// mock was removed.
 //
 // The fixture is a realistic GT Everyday catalogue spanning every decision
 // category (star / gem / workhorse / drag / loss / dormant / needs-data) so
-// the visual surfaces (verdict band, quadrant, segments, table) all populate.
+// the visual surfaces (verdict band, vitals, segments, quadrant, table) all
+// populate.
 // ---------------------------------------------------------------------------
 
 import { test, expect, type Page } from "@playwright/test";
 import { setFakeRole } from "./helpers";
-
-// Three trailing monthly buckets relative to today (the page asks for ~90d).
-const now = new Date();
-function bucket(monthsAgo: number): string {
-  const d = new Date(now.getFullYear(), now.getMonth() - monthsAgo, 1);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-01`;
-}
-const B0 = bucket(2);
-const B1 = bucket(1);
-const B2 = bucket(0);
 
 interface Prod {
   id: string;
@@ -30,7 +26,9 @@ interface Prod {
   cogs: number | null;
   complete: boolean;
   onHand: number;
-  // monthly units for the three buckets (omit ⇒ dormant / no sales)
+  // trailing units across three trend points (oldest→newest); used to derive
+  // the 90d total + a prior-90d figure that sets the quarter-over-quarter trend.
+  // Omit ⇒ dormant / no sales.
   units?: [number, number, number];
 }
 
@@ -58,6 +56,13 @@ function economicsBody() {
     const marginIls = p.price != null && p.cogs != null ? p.price - p.cogs : null;
     const marginPct =
       marginIls != null && p.price ? (marginIls / p.price) * 100 : null;
+    // 90d total + a prior-90d figure that preserves the within-series direction
+    // (growing series ⇒ prior < current ⇒ up-trend, and vice-versa).
+    const sold90 = p.units ? p.units[0] + p.units[1] + p.units[2] : 0;
+    const prev90 = p.units
+      ? Math.round(sold90 * (p.units[0] / Math.max(1, p.units[2])))
+      : 0;
+    const orders90 = sold90 > 0 ? Math.max(1, Math.round(sold90 / 12)) : 0;
     return {
       item_id: p.id,
       item_name: p.name,
@@ -73,27 +78,13 @@ function economicsBody() {
       fg_inventory_value_at_sale_price: p.price != null ? (p.price * p.onHand).toFixed(2) : null,
       embedded_material_margin_in_stock: null,
       reliability_flag: "ok",
+      // Shopify trailing-90-day sales (what the board reads for velocity).
+      qty_sold_90d: String(sold90),
+      order_count_90d: orders90,
+      units_prev_90d: String(prev90),
     };
   });
   return { rows, count: rows.length };
-}
-
-function velocityBody() {
-  const rows: unknown[] = [];
-  for (const p of PRODUCTS) {
-    if (!p.units) continue;
-    const buckets = [B0, B1, B2];
-    p.units.forEach((qty, i) => {
-      rows.push({
-        item_id: p.id,
-        period_bucket_key: buckets[i],
-        qty_total: String(qty),
-        order_count: Math.max(1, Math.round(qty / 12)),
-        sample_orders: [],
-      });
-    });
-  }
-  return { rows, bucket_cadence: "monthly" };
 }
 
 async function mockBoard(page: Page) {
@@ -102,9 +93,6 @@ async function mockBoard(page: Page) {
   );
   await page.route("**/api/economics**", (route) =>
     route.fulfill({ json: economicsBody() }),
-  );
-  await page.route("**/api/orders/by-item-and-period**", (route) =>
-    route.fulfill({ json: velocityBody() }),
   );
 }
 
