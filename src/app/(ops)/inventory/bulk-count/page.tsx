@@ -330,7 +330,10 @@ function CountRow({
             <>
               <button
                 type="button"
-                className="btn btn-danger btn-sm h-11 sm:h-10"
+                /* UX-flow audit (FLOW-005): a zero count is a legitimate
+                   operational entry, not a destructive action — drop the red
+                   danger tone that made operators hesitate on correct zeros. */
+                className="btn btn-primary btn-sm h-11 sm:h-10"
                 onClick={trySubmit}
                 disabled={saving}
                 aria-label={`Confirm zero count for ${row.name}`}
@@ -371,8 +374,8 @@ function CountRow({
 
       {confirmZero ? (
         <div
-          className="basis-full text-2xs text-danger-fg"
-          role="alert"
+          className="basis-full text-2xs text-warning-fg"
+          role="status"
           data-testid="bulk-count-zero-warning"
         >
           Zero means no stock on hand for this item. Confirm to save the zero count.
