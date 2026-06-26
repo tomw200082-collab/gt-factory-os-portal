@@ -145,7 +145,9 @@ export function AddLineForm({
 
       {selected && (
         <div className="text-3xs text-fg-faint font-mono">
-          <span className="uppercase tracking-sops">{selected.kind}</span>
+          <span className="tracking-sops">
+            {selected.kind === "component" ? "רכיב" : "פריט"}
+          </span>
           {" · "}
           {selected.meta}
         </div>
