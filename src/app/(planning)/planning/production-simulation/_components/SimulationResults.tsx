@@ -6,6 +6,7 @@ import {
   AlertTriangle,
   CalendarCheck,
   FileWarning,
+  RefreshCw,
   ShoppingCart,
 } from "lucide-react";
 import { SectionCard } from "@/components/workflow/SectionCard";
@@ -416,10 +417,19 @@ export function SimulationResults({
             aria-hidden
           />
           <p>
-            {dataQuery.error instanceof Error
-              ? dataQuery.error.message
-              : "Could not load recipe data for this product. Try again."}
+            Could not load recipe data for this product. Check your connection
+            and try again.
           </p>
+        </div>
+        <div className="mt-4">
+          <button
+            type="button"
+            onClick={() => void dataQuery.refetch()}
+            className="btn btn-sm btn-outline"
+          >
+            <RefreshCw className="h-3.5 w-3.5" strokeWidth={2} />
+            Try again
+          </button>
         </div>
       </SectionCard>
     );

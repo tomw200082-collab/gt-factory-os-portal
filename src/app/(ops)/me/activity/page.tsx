@@ -6,7 +6,7 @@ import { useSearchParams, useRouter } from "next/navigation";
 import { Loader2, RefreshCw } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
-import { EmptyState } from "@/components/feedback/states";
+import { EmptyState, ErrorAlert } from "@/components/feedback/states";
 import { cn } from "@/lib/cn";
 import { DayHeader, dayLabel } from "./_components/DayHeader";
 import { ActivityRow } from "./_components/ActivityRow";
@@ -132,19 +132,11 @@ export default function MyActivityPage() {
         <FilterBar value={filter} onChange={setFilter} />
 
         {query.isError ? (
-          <div
-            role="alert"
-            className="m-5 rounded-md border border-danger/40 bg-danger-softer px-4 py-3 text-sm text-danger-fg"
-          >
-            <div className="font-semibold">Could not load activity</div>
-            <div className="mt-0.5 text-xs">{query.error.message}</div>
-            <button
-              type="button"
-              onClick={() => void query.refetch()}
-              className="mt-2 rounded-sm border border-danger/40 px-2 py-0.5 text-xs font-medium text-danger-fg hover:bg-danger-soft"
-            >
-              Retry
-            </button>
+          <div className="m-5">
+            <ErrorAlert
+              label="Could not load activity"
+              onRetry={() => void query.refetch()}
+            />
           </div>
         ) : null}
 
