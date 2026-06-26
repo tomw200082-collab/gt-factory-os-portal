@@ -161,6 +161,9 @@ interface DoneState {
   hrefLabel?: string;
   /** Short snapshot id (first 8 chars) for audit-trail correlation. */
   snapshotIdShort?: string;
+  /** UX-flow audit (FLOW-006): item the count posted against, so the
+   *  "view ledger" link can filter to it instead of the unfiltered log. */
+  itemId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -531,6 +534,7 @@ export default function PhysicalCountPage() {
           itemSummary: `${itemLabel} · counted: ${qtyNum} ${unit} · adjustment: ${body.computed_delta ?? "?"}`,
           detail: `ref: ${body.submission_id}`,
           snapshotIdShort: snapshot?.snapshot_id?.slice(0, 8),
+          itemId: snapshot?.item_id,
         });
         resetFlow();
       } else if (body && body.status === "pending") {
@@ -739,7 +743,11 @@ export default function PhysicalCountPage() {
             <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-current/10 pt-4">
               {isSuccess && (
                 <Link
-                  href="/stock/movement-log"
+                  href={
+                    done.itemId
+                      ? `/stock/movement-log?item_id=${encodeURIComponent(done.itemId)}`
+                      : "/stock/movement-log"
+                  }
                   className="btn btn-primary btn-sm"
                   data-testid="physical-count-success-movement-log"
                 >

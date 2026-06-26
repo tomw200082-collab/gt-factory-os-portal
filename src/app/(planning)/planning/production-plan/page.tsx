@@ -1578,6 +1578,35 @@ export default function ProductionPlanPage() {
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const weekEnd = addDays(weekStart, 6);
 
+  // UX-flow audit (deep-linking + state-preservation): the visible week lives
+  // in the URL as ?week=YYYY-MM-DD, so it is shareable and survives navigating
+  // away and back. SSR renders the default (current) week — matching the first
+  // client paint, no hydration mismatch — then this mount effect honors a
+  // ?week= param if present. We read window.location directly (rather than
+  // useSearchParams) to keep the page SSR-/build-safe with no Suspense wrapper.
+  useEffect(() => {
+    const wk = new URLSearchParams(window.location.search).get("week");
+    if (wk && /^\d{4}-\d{2}-\d{2}$/.test(wk)) {
+      const d = new Date(`${wk}T00:00:00`);
+      if (!Number.isNaN(d.getTime())) setWeekStart(startOfWeek(d));
+    }
+  }, []);
+
+  // Change the visible week AND reflect it in the URL. replaceState (not push)
+  // keeps week-stepping out of the back stack while still leaving a shareable,
+  // back-restorable URL on the page.
+  const goToWeek = useCallback((d: Date) => {
+    const ws = startOfWeek(d);
+    setWeekStart(ws);
+    const params = new URLSearchParams(window.location.search);
+    params.set("week", toIsoDate(ws));
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}?${params.toString()}`,
+    );
+  }, []);
+
   // Modal state
   const [showManualAdd, setShowManualAdd] = useState<{ defaultDate: string } | null>(null);
   const [showAddFromRecs, setShowAddFromRecs] = useState<{ defaultDate: string } | null>(null);
@@ -2083,7 +2112,7 @@ export default function ProductionPlanPage() {
             <button
               type="button"
               className="btn btn-sm gap-1"
-              onClick={() => setWeekStart(addDays(weekStart, -7))}
+              onClick={() => goToWeek(addDays(weekStart, -7))}
               aria-label="Previous week"
             >
               <ChevronLeft className="h-3 w-3" strokeWidth={2} />
@@ -2092,7 +2121,7 @@ export default function ProductionPlanPage() {
             <button
               type="button"
               className="btn btn-sm gap-1"
-              onClick={() => setWeekStart(addDays(weekStart, 7))}
+              onClick={() => goToWeek(addDays(weekStart, 7))}
               aria-label="Next week"
             >
               <span className="hidden md:inline">Next</span>
@@ -2126,7 +2155,7 @@ export default function ProductionPlanPage() {
             <button
               type="button"
               className="btn btn-sm"
-              onClick={() => setWeekStart(startOfWeek(new Date()))}
+              onClick={() => goToWeek(new Date())}
             >
               This week
             </button>
