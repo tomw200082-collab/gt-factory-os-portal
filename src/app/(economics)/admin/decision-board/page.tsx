@@ -140,6 +140,15 @@ function toNum(v: string | null | undefined): number | null {
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
 }
+
+// The economics read model also carries non-sellables: production intermediates
+// (the "*-BASE-*" 23L base liquids — costed but never priced or sold) and a
+// non-stock placeholder row. They are not finished products, so they only
+// inflated the "needs data" bucket. Exclude them from this finished-product
+// decision board. (Authorized by Tom, 2026-06-26.)
+function isSellableProduct(itemId: string): boolean {
+  return itemId !== "EXCLUDED-NONSTOCK" && !itemId.includes("-BASE-");
+}
 function median(xs: number[]): number {
   if (xs.length === 0) return 0;
   const s = [...xs].sort((a, b) => a - b);
@@ -189,7 +198,7 @@ export default function DecisionBoardPage(): JSX.Element {
   }, [econQuery.data]);
 
   const items = useMemo<DecisionItem[]>(() => {
-    const rows = econQuery.data?.rows ?? [];
+    const rows = (econQuery.data?.rows ?? []).filter((r) => isSellableProduct(r.item_id));
     const selling: number[] = [];
     for (const r of rows) {
       const v = velocityByItem.get(r.item_id);
