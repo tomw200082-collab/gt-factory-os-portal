@@ -25,7 +25,7 @@ export function ProductionNoteCard({
         "rounded-lg border border-border/40 bg-bg-raised",
         "border-l-[3px] border-l-fg-subtle/40",
         "transition-all duration-150",
-        "hover:shadow-sm hover:border-border/60",
+        "hover:shadow-raised hover:border-border/60",
         isCancelled && "opacity-60 border-l-border/20",
       )}
       data-testid="production-note-card"
@@ -36,7 +36,7 @@ export function ProductionNoteCard({
         {/* Left: icon + label */}
         <div className="flex items-center gap-1.5">
           <StickyNote className="h-3 w-3 text-fg-muted shrink-0" strokeWidth={2} />
-          <span className="text-[10px] font-semibold uppercase tracking-[0.06em] text-fg-subtle">
+          <span className="text-3xs font-semibold uppercase tracking-ops text-fg-subtle">
             Note
           </span>
         </div>
@@ -104,7 +104,7 @@ export function ProductionNoteCard({
         </p>
 
         {isCancelled && plan.cancel_reason && (
-          <p className="text-[10px] text-fg-faint mt-1.5">
+          <p className="text-3xs text-fg-faint mt-1.5">
             Cancelled: {plan.cancel_reason}
           </p>
         )}

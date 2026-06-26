@@ -130,7 +130,7 @@ export function ProductionJobCard({
       className={cn(
         "group relative rounded-lg border-l-[3px] border border-border/40",
         "transition-all duration-150 cursor-default",
-        "hover:ring-1 hover:ring-accent/20 hover:shadow-sm",
+        "hover:ring-1 hover:ring-accent/20 hover:shadow-raised",
         isLive && !isCancelled && !isDraft && "border-l-warning bg-bg-raised border-warning/20",
         isDone && "border-l-success bg-bg-raised border-success/20",
         isCancelled && "border-l-border/40 bg-bg-subtle/60 opacity-70",
@@ -147,7 +147,7 @@ export function ProductionJobCard({
             actual output that was produced, not the original plan. */}
         {showActual && (
           <div
-            className="text-[9px] font-semibold uppercase tracking-sops text-success-fg/70 leading-none mb-1"
+            className="text-3xs font-semibold uppercase tracking-sops text-success-fg/70 leading-none mb-1"
             data-testid="plan-card-produced-label"
           >
             Produced
@@ -157,7 +157,7 @@ export function ProductionJobCard({
         <div className="flex items-start justify-between gap-2 mb-0.5">
           <div
             className={cn(
-              "text-[26px] font-bold tabular-nums leading-none tracking-tightish",
+              "text-3xl font-bold tabular-nums leading-none tracking-tightish",
               isLive && !isDraft && "text-warning-fg",
               isDraft && !isDone && !isCancelled && "text-fg-muted",
               isDone && "text-success-fg",
@@ -211,7 +211,7 @@ export function ProductionJobCard({
         <div className="flex flex-wrap items-center gap-1.5">
           {/* Sparkles chip only for rec-sourced plans; manual is baseline. */}
           {isRec && (
-            <span className="chip chip-accent gap-1 text-[10px]">
+            <span className="chip chip-accent gap-1 text-3xs">
               <Sparkles className="h-2.5 w-2.5" strokeWidth={2.5} />
               Recommended
             </span>
@@ -220,7 +220,7 @@ export function ProductionJobCard({
           {/* B4 — draft chip: not yet firmed, never reportable. */}
           {isDraft && !isDone && !isCancelled && (
             <span
-              className="chip gap-1 text-[10px] text-fg-muted"
+              className="chip gap-1 text-3xs text-fg-muted"
               data-testid="plan-card-draft-chip"
             >
               Draft — not yet confirmed
@@ -231,7 +231,7 @@ export function ProductionJobCard({
               in this session or once the impact panel fetched the recipe. */}
           {hasCustomRecipe === true && !isCancelled && (
             <span
-              className="chip chip-accent gap-1 text-[10px]"
+              className="chip chip-accent gap-1 text-3xs"
               title="This run uses an adjusted liquid recipe"
               data-testid="plan-card-custom-recipe-chip"
             >
@@ -243,7 +243,7 @@ export function ProductionJobCard({
           {/* B4 — in-production chip: firmed and currently running. */}
           {isInProduction && !isDone && !isCancelled && (
             <span
-              className="chip chip-info gap-1 text-[10px]"
+              className="chip chip-info gap-1 text-3xs"
               data-testid="plan-card-in-production-chip"
             >
               <Factory className="h-2.5 w-2.5" strokeWidth={2.5} />
@@ -253,7 +253,7 @@ export function ProductionJobCard({
 
           {/* Overdue clock — only on live (firmed) overdue plans */}
           {isLive && !isDraft && !isToday && (
-            <span className="chip chip-warning gap-1 text-[10px]">
+            <span className="chip chip-warning gap-1 text-3xs">
               <Clock className="h-2.5 w-2.5" strokeWidth={2.5} />
               Overdue
             </span>
@@ -264,7 +264,7 @@ export function ProductionJobCard({
             <button
               type="button"
               className={cn(
-                "chip gap-1 text-[10px] transition-colors",
+                "chip gap-1 text-3xs transition-colors",
                 impactOpen
                   ? "bg-info-softer/60 border-info/40 text-info-fg"
                   : "hover:bg-info-softer/40 hover:border-info/30 hover:text-info-fg",
@@ -296,7 +296,7 @@ export function ProductionJobCard({
           {/* Cancelled reason */}
           {isCancelled && plan.cancel_reason && (
             <span
-              className="text-[10px] text-fg-faint truncate max-w-[14ch]"
+              className="text-3xs text-fg-faint truncate max-w-[14ch]"
               title={plan.cancel_reason}
             >
               {plan.cancel_reason}
@@ -325,7 +325,7 @@ export function ProductionJobCard({
               Report
             </Link>
           ) : (
-            <span className="text-[10px] text-fg-faint" title="Firm this plan before reporting production">
+            <span className="text-3xs text-fg-faint" title="Firm this plan before reporting production">
               Not reportable yet
             </span>
           )}
@@ -408,7 +408,7 @@ export function ProductionJobCard({
       {/* Done: link to submission */}
       {isDone && completedActual && variance && (
         <div className="px-3 pb-2.5 border-t border-border/20 pt-2 flex items-center justify-between gap-2">
-          <div className="text-[10px] text-fg-muted" title={VARIANCE_TOOLTIP}>
+          <div className="text-3xs text-fg-muted" title={VARIANCE_TOOLTIP}>
             <span
               className={
                 variance.isOnTarget ? "text-success-fg" : "text-warning-fg"
@@ -423,7 +423,7 @@ export function ProductionJobCard({
           </div>
           <Link
             href={`/stock/production-actual?submission_id=${completedActual.submission_id}`}
-            className="text-[10px] text-accent hover:underline shrink-0"
+            className="text-3xs text-accent hover:underline shrink-0"
           >
             View report →
           </Link>
@@ -443,7 +443,7 @@ export function ProductionJobCard({
 
       {/* Notes */}
       {plan.notes && (
-        <div className="px-3 pb-3 text-[10px] text-fg-muted">
+        <div className="px-3 pb-3 text-3xs text-fg-muted">
           <span className="font-medium">Notes: </span>
           {plan.notes}
         </div>

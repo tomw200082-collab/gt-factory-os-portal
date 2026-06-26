@@ -22,7 +22,7 @@ function formatDayTotal(total: number, uom: string): string {
 }
 
 function laneSurface(isToday: boolean, isOverdue: boolean, isPast: boolean): string {
-  if (isToday) return "bg-bg-raised ring-1 ring-accent/30 border-accent/25 shadow-sm";
+  if (isToday) return "bg-bg-raised ring-1 ring-accent/30 border-accent/25 shadow-raised";
   if (isOverdue) return "bg-bg border-l-[3px] border-l-danger/60 border-border/40";
   if (isPast) return "bg-bg-subtle border-border/30 opacity-90";
   return "bg-bg border-border/40";
@@ -102,7 +102,7 @@ export function ProductionDayLane({
         <div className="flex flex-col gap-0.5">
           <span
             className={cn(
-              "text-[10px] font-bold uppercase tracking-wider leading-none",
+              "text-3xs font-bold uppercase tracking-ops leading-none",
               dayNameColor(isToday, isOverdue, isPast),
             )}
           >
@@ -120,22 +120,22 @@ export function ProductionDayLane({
 
         <div className="flex flex-col items-end gap-1 shrink-0">
           {isToday && (
-            <span className="text-[9px] font-bold uppercase tracking-wider text-accent leading-none">
+            <span className="text-3xs font-bold uppercase tracking-ops text-accent leading-none">
               Today
             </span>
           )}
           {isOverdue && liveCount > 0 && (
-            <span className="text-[9px] font-bold uppercase tracking-wider text-danger leading-none">
+            <span className="text-3xs font-bold uppercase tracking-ops text-danger leading-none">
               {liveCount} overdue
             </span>
           )}
           {doneCount > 0 && liveCount === 0 && (
-            <span className="text-[9px] font-semibold text-success-fg leading-none">
+            <span className="text-3xs font-semibold text-success-fg leading-none">
               ✓ Done
             </span>
           )}
           {dayTotal > 0 && (
-            <span className="text-[10px] tabular-nums text-fg-faint leading-none">
+            <span className="text-3xs tabular-nums text-fg-faint leading-none">
               {formatDayTotal(dayTotal, dominantUom)}
             </span>
           )}
@@ -152,7 +152,7 @@ export function ProductionDayLane({
                     "No production planned" — which states what's absent, not the
                     action. Keep the absence as context and make the button label
                     the action ("Add production"). */}
-                <span className="text-[10px] text-fg-faint">No production planned</span>
+                <span className="text-3xs text-fg-faint">No production planned</span>
                 <button
                   type="button"
                   className="flex flex-col items-center gap-2 group/add transition-opacity duration-150"
@@ -173,13 +173,13 @@ export function ProductionDayLane({
                       strokeWidth={2}
                     />
                   </div>
-                  <span className="text-[10px] font-medium text-fg-subtle group-hover/add:text-accent transition-colors duration-150">
+                  <span className="text-3xs font-medium text-fg-subtle group-hover/add:text-accent transition-colors duration-150">
                     Add production
                   </span>
                 </button>
                 <button
                   type="button"
-                  className="text-[10px] text-fg-faint hover:text-fg-subtle transition-colors duration-150 underline decoration-dotted underline-offset-2"
+                  className="text-3xs text-fg-faint hover:text-fg-subtle transition-colors duration-150 underline decoration-dotted underline-offset-2"
                   onClick={() => onAddNote(date)}
                   data-testid="day-lane-add-note-empty"
                   aria-label={`Add note for ${dayName} ${dateLabel}`}
@@ -192,7 +192,7 @@ export function ProductionDayLane({
                 <div className="h-8 w-8 rounded-full flex items-center justify-center bg-bg-muted border border-border/30">
                   <Plus className="h-3.5 w-3.5 text-fg-faint" strokeWidth={2} />
                 </div>
-                <span className="text-[10px] text-fg-faint">
+                <span className="text-3xs text-fg-faint">
                   No production planned
                 </span>
               </div>

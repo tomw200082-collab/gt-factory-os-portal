@@ -140,16 +140,16 @@ export function InventoryImpactPanel({
         <div className="text-xs text-fg-muted">No components in BOM.</div>
       ) : (
         <div>
-          <div className="text-[9px] font-semibold uppercase tracking-sops text-fg-faint mb-1">
+          <div className="text-3xs font-semibold uppercase tracking-sops text-fg-faint mb-1">
             Raw materials required
           </div>
           <table className="w-full">
             <thead>
               <tr>
-                <th scope="col" className="text-left text-[9px] uppercase tracking-sops text-fg-faint font-semibold pb-1">
+                <th scope="col" className="text-left text-3xs uppercase tracking-sops text-fg-faint font-semibold pb-1">
                   Material
                 </th>
-                <th scope="col" className="text-right text-[9px] uppercase tracking-sops text-fg-faint font-semibold pb-1">
+                <th scope="col" className="text-right text-3xs uppercase tracking-sops text-fg-faint font-semibold pb-1">
                   Required
                 </th>
               </tr>
@@ -171,7 +171,7 @@ export function InventoryImpactPanel({
           <div className="mt-1.5">
             <Link
               href="/planning/inventory-flow"
-              className="text-[10px] text-accent hover:underline"
+              className="text-3xs text-accent hover:underline"
             >
               Check stock levels in inventory flow →
             </Link>

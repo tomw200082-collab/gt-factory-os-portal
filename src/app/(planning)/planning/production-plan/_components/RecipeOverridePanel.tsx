@@ -73,7 +73,7 @@ function AvailabilityChip({
     line.available_qty !== null ? trimQtyText(line.available_qty) : null;
   return (
     <span
-      className={cn("chip gap-1 text-[10px] whitespace-nowrap", TIER_STYLE[tier])}
+      className={cn("chip gap-1 text-3xs whitespace-nowrap", TIER_STYLE[tier])}
       title={
         onHand !== null
           ? `${onHand} ${line.uom} on hand · ${total !== null ? `${fmtComputedQty(total)} ${line.uom} needed for this run` : "enter a quantity to compare"}`
@@ -321,7 +321,7 @@ export function RecipeOverridePanel({
         if (e.target === e.currentTarget) onClose();
       }}
     >
-      <div className="w-full max-w-2xl rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-2xl max-h-[90vh] flex flex-col">
+      <div className="w-full max-w-2xl rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-pop max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
@@ -329,7 +329,7 @@ export function RecipeOverridePanel({
               <FlaskConical className="h-4 w-4 text-accent" strokeWidth={2} />
               Recipe for this run
               {recipe?.customized ? (
-                <span className="chip chip-accent text-[10px]">Custom</span>
+                <span className="chip chip-accent text-3xs">Custom</span>
               ) : null}
             </h2>
             {recipe ? (
@@ -436,14 +436,14 @@ export function RecipeOverridePanel({
                             </div>
                             {diff === "changed" ? (
                               <span
-                                className="chip chip-warning mt-1 text-[10px]"
+                                className="chip chip-warning mt-1 text-3xs"
                                 data-testid="recipe-line-changed-chip"
                               >
                                 Changed (was {trimQtyText(l.standard_qty_per_unit)})
                               </span>
                             ) : diff === "added" ? (
                               <span
-                                className="chip chip-success mt-1 text-[10px]"
+                                className="chip chip-success mt-1 text-3xs"
                                 data-testid="recipe-line-added-chip"
                               >
                                 Added
