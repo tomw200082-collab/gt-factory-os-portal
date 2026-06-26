@@ -67,7 +67,7 @@ export function TopBar() {
 
         {/* Brand mark — doubles as the Home anchor ————————————————————————— */}
         <Link
-          href="/dashboard"
+          href="/home"
           className="flex items-center gap-3 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
           aria-label="Home"
         >

@@ -225,7 +225,7 @@ function DevShimLogin() {
         </p>
         <div className="mt-4">
           <Link
-            href="/dashboard"
+            href="/home"
             className="btn btn-primary w-full justify-center"
           >
             Continue with fake session
@@ -291,7 +291,7 @@ function MagicLinkLogin() {
   const params = useSearchParams();
   const urlError = params.get("error");
   const urlErrorDetail = params.get("detail");
-  const redirectTo = params.get("redirectTo") ?? "/dashboard";
+  const redirectTo = params.get("redirectTo") ?? "/home";
 
   const [mode, setMode] = useState<"magic" | "password">("magic");
   const [email, setEmail] = useState("");

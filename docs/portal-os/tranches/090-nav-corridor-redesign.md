@@ -45,10 +45,24 @@ non-core under collapsible disclosure. No backend, no route deletion, no access 
   in the manifest (like `Admin` already is), keeping `Overview`, `Inbox`, `Me` flat.
   SideNav already auto-expands the group containing the active path, so daily use stays
   one click. No items move between groups; no labels change → manifest tests stay green.
-- **Slice B (next commit) — card-home landing.** Additive `/home` page rendering
+- **Slice B (landed in #143) — card-home landing.** Additive `/home` page rendering
   role-aware static tiles (owner/operator/bookkeeper; bookkeeper RTL); add a `Home`
   nav item; point the post-login default and authenticated-root fallback at `/home`;
   keep `/dashboard` live and surface it as the "Overview" tile.
+- **Slice B / Phase 2 — role-tailored striking card-home (Tom-directed 2026-06-26).**
+  Supersedes the "phase 2 is separate / not here" deferral below: Tom directed the
+  visual+tailoring upgrade now, before merge. Builds "The Line" role cockpit bento on
+  `/home` — one large primary tile per role (size = frequency of use), grouped
+  supporting tiles, and the petrol-teal **spine-that-fills-on-hover** signature
+  (echoes the SideNav active-spine). Role-TAILORED not role-locked: each role lands on
+  a curated cockpit (admin sees every group → everything; everything else stays one
+  ⌘K / sidebar click away). The bookkeeper (viewer) cockpit is **Hebrew + RTL**
+  (Tom-authorized 2026-06-26 — added to the portal `CLAUDE.md` Hebrew-surface list).
+  Built entirely on existing design tokens + CSS-animation utilities (`.reveal`,
+  `animate-fade-in-up`, `motion-reduce:`) — no new dependency (the repo has no
+  `motion`/`framer-motion`; pure Tailwind/CSS is the house idiom). Components
+  hand-adapted from 21st.dev/Magic card patterns (the Magic MCP is not live this
+  session; same approach as the `shiny-button` precedent).
 
 ## Manifest (files that may be touched)
 manifest:
@@ -60,9 +74,14 @@ manifest:
   - src/components/layout/SideNav.tsx
   - src/components/layout/TopBar.tsx            # Slice A2 — top-bar pulse tabs + ⌘K
   - src/components/layout/CommandPalette.tsx    # Slice A2 — global ⌘K search (new)
-  - src/app/(shared)/home/page.tsx            # Slice B
+  - src/app/(shared)/home/page.tsx            # Slice B + Phase 2 (role cockpit)
   - src/app/(shared)/home/page.test.tsx       # Slice B
   - src/app/(auth)/login/page.tsx             # Slice B (default redirect target only)
+  # Slice B / Phase 2 — role-tailored striking card-home (Tom 2026-06-26)
+  - src/features/home/cockpit.ts              # tile catalog + per-role cockpit selector
+  - src/features/home/cockpit.test.ts         # unit tests for buildHomeCockpit
+  - src/app/(shared)/home/_components/HomeTile.tsx   # "The Line" tile (spine-fill signature)
+  - CLAUDE.md                                 # add /home to the Hebrew-authorized surface list
 
 ## Parked `?` (resolve during build; do not guess)
 - `?` "More" structure: flat list vs current grouped-collapsible (Slice A uses
