@@ -49,6 +49,7 @@ import {
   PieChart,
   Search,
   SlidersHorizontal,
+  X,
   ChevronsUpDown,
   ChevronUp,
   ChevronDown,
@@ -76,12 +77,38 @@ export interface ProfitRow {
   fg_inventory_value_at_sale_price: string | null;
   embedded_material_margin_in_stock: string | null;
   reliability_flag: string | null;
+  cogs_snapshot_at: string | null;
 }
 
 function num(value: string | number | null | undefined): number | null {
   if (value == null) return null;
   const n = typeof value === "number" ? value : Number(value);
   return Number.isFinite(n) ? n : null;
+}
+
+// Plain-English labels for the price-reliability flag (the API emits raw enum
+// values — never show those to an operator). Unknown values fall back to a
+// humanised form.
+const RELIABILITY_LABELS: Record<string, string> = {
+  MANUAL: "Manually set",
+  NONE: "No price set",
+};
+function reliabilityLabel(flag: string): string {
+  return RELIABILITY_LABELS[flag] ?? flag.toLowerCase().replace(/_/g, " ");
+}
+
+// Compact "how long ago" for the snapshot freshness line.
+function relativeAge(iso: string | null): string | null {
+  if (!iso) return null;
+  const then = new Date(iso).getTime();
+  if (!Number.isFinite(then)) return null;
+  const mins = Math.floor((Date.now() - then) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hrs = Math.floor(mins / 60);
+  if (hrs < 24) return `${hrs}h ago`;
+  const days = Math.floor(hrs / 24);
+  return `${days}d ago`;
 }
 
 function median(values: number[]): number {
@@ -450,7 +477,8 @@ function MarginRibbon({
               type="button"
               onClick={() => onToggle(b.key)}
               aria-pressed={active.has(b.key)}
-              title={`${b.label}: ${count} SKU${count === 1 ? "" : "s"} · ${formatIls(value)} margin in stock`}
+              aria-label={`${b.label} margin: ${count} product${count === 1 ? "" : "s"}, ${formatIls(value)} margin in stock`}
+              title={`${b.label}: ${count} product${count === 1 ? "" : "s"} · ${formatIls(value)} margin in stock`}
               style={{ flexGrow: count, flexBasis: 0, minWidth: 6 }}
               className={`${TONE_BG[b.tone]} h-full transition-opacity focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${dim(b.key) ? "opacity-30 hover:opacity-60" : "opacity-90 hover:opacity-100"}`}
             />
@@ -463,9 +491,10 @@ function MarginRibbon({
             key={b.key}
             type="button"
             onClick={() => onToggle(b.key)}
-            className={`inline-flex items-center gap-1.5 text-3xs transition-colors ${active.has(b.key) ? TONE_TEXT[b.tone] : "text-fg-subtle hover:text-fg"}`}
+            aria-pressed={active.has(b.key)}
+            className={`inline-flex items-center gap-1.5 py-1 text-3xs transition-colors ${active.has(b.key) ? TONE_TEXT[b.tone] : "text-fg-subtle hover:text-fg"}`}
           >
-            <span className={`h-2 w-2 rounded-sm ${TONE_BG[b.tone]} ${dim(b.key) ? "opacity-40" : ""}`} />
+            <span className={`h-2 w-2 rounded-sm ${TONE_BG[b.tone]} ${dim(b.key) ? "opacity-40" : ""}`} aria-hidden />
             {b.label}
             <span className="tabular-nums opacity-70">{count}</span>
           </button>
@@ -499,7 +528,7 @@ function FacetChip({
       aria-pressed={active}
       className={`inline-flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent ${
         active
-          ? `border-transparent ${TONE_BG[tone]} text-bg-raised`
+          ? `border-transparent ${TONE_BG[tone]} text-fg-inverted`
           : "border-border/70 bg-bg-subtle text-fg-muted hover:bg-bg-subtle/70"
       }`}
     >
@@ -545,7 +574,7 @@ function MarginHistogram({
   );
   const max = Math.max(1, ...counts);
   return (
-    <div className="flex items-end gap-2" style={{ height: 132 }}>
+    <div className="flex items-end gap-2 h-[132px]">
       {MARGIN_BANDS.map((b, i) => {
         const c = counts[i];
         const isActive = active.has(b.key);
@@ -556,7 +585,8 @@ function MarginHistogram({
             key={b.key}
             onClick={() => onToggleBand(b.key)}
             aria-pressed={isActive}
-            title={`${c} SKU${c === 1 ? "" : "s"} at ${b.label} margin — click to filter`}
+            aria-label={`${c} product${c === 1 ? "" : "s"} at ${b.label} margin — activate to filter`}
+            title={`${c} product${c === 1 ? "" : "s"} at ${b.label} margin — click to filter`}
             className="group flex flex-1 flex-col items-center justify-end gap-1 rounded focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent"
           >
             <span className="text-xs font-semibold tabular-nums text-fg-strong">
@@ -564,7 +594,7 @@ function MarginHistogram({
             </span>
             <span
               className={`w-full rounded-t transition-all ${TONE_BG[b.tone]} ${
-                isActive ? "opacity-100 ring-2 ring-fg-strong/40" : "opacity-70 group-hover:opacity-100"
+                isActive ? "opacity-100 ring-2 ring-accent/60" : "opacity-70 group-hover:opacity-100"
               }`}
               style={{ height: h }}
             />
@@ -678,18 +708,19 @@ function MarginTreemap({
             type="button"
             onClick={() => onSelect(sku.row.item_id)}
             title={`${sku.row.item_name}: ${formatIls(sku.embedded)} margin in stock · ${formatPct(sku.marginPct)} margin`}
+            aria-label={`${sku.row.item_name}: ${formatIls(sku.embedded)} margin in stock, ${formatPct(sku.marginPct)} margin. Activate to model.`}
             style={{ left: `${x}%`, top: `${y}%`, width: `${w}%`, height: `${h}%` }}
-            className={`group absolute flex flex-col justify-between overflow-hidden border border-bg-raised p-1.5 text-left transition-all hover:z-10 hover:brightness-110 focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-fg-strong ${TONE_BG[band.tone]}`}
+            className={`group absolute flex flex-col justify-between overflow-hidden border border-bg-raised p-1.5 text-left opacity-90 transition-opacity hover:z-10 hover:opacity-100 focus-visible:z-10 focus-visible:outline focus-visible:outline-2 focus-visible:outline-fg-strong ${TONE_BG[band.tone]}`}
           >
             {big ? (
               <>
                 <span
-                  className="truncate text-3xs font-semibold leading-tight text-bg-raised"
+                  className="truncate text-3xs font-semibold leading-tight text-fg-inverted"
                   dir="auto"
                 >
                   {sku.row.item_name}
                 </span>
-                <span className="text-3xs font-bold tabular-nums text-bg-raised">
+                <span className="text-3xs font-bold tabular-nums text-fg-inverted">
                   {formatIls(sku.embedded)}
                 </span>
               </>
@@ -872,15 +903,16 @@ function SegmentLegend({
         const m = SEGMENT_META[seg];
         const Icon = m.icon;
         return (
-          <div key={seg} className="rounded-lg border border-border/60 bg-bg-subtle/40 p-3" title={m.blurb}>
+          <div key={seg} className="rounded-lg border border-border/60 bg-bg-subtle/40 p-3">
             <div className="flex items-center gap-1.5">
-              <Icon className={`h-3.5 w-3.5 ${TONE_TEXT[m.tone]}`} strokeWidth={2.25} />
+              <Icon className={`h-3.5 w-3.5 ${TONE_TEXT[m.tone]}`} strokeWidth={2.25} aria-hidden />
               <span className={`text-xs font-semibold ${TONE_TEXT[m.tone]}`}>{m.label}</span>
             </div>
-            <div className="mt-1 text-lg font-semibold tabular-nums text-fg-strong">
-              {counts[seg]} <span className="text-3xs font-normal text-fg-subtle">SKUs</span>
+            <div className="mt-1 text-base font-semibold tabular-nums text-fg-strong">
+              {counts[seg]} <span className="text-3xs font-normal text-fg-subtle">products</span>
             </div>
             <div className="text-3xs tabular-nums text-fg-subtle">{formatIls(embedded[seg])} in stock</div>
+            <div className="mt-1.5 text-3xs leading-snug text-fg-subtle">{m.blurb}</div>
           </div>
         );
       })}
@@ -984,6 +1016,7 @@ function ResultsTable({
   sort,
   onSort,
   onSelect,
+  onSwitchToOverview,
 }: {
   skus: SkuEconomics[];
   targetMarginPct: number;
@@ -991,6 +1024,7 @@ function ResultsTable({
   sort: { col: SortCol; dir: "asc" | "desc" } | null;
   onSort: (s: { col: SortCol; dir: "asc" | "desc" } | null) => void;
   onSelect: (id: string) => void;
+  onSwitchToOverview?: () => void;
 }): JSX.Element {
   const sorted = useMemo(() => {
     const arr = [...skus];
@@ -1028,10 +1062,10 @@ function ResultsTable({
             <SortTh col="name" label="Product" sort={sort} onSort={onSort} />
             <SortTh col="price" label="Price" align="right" sort={sort} onSort={onSort} />
             <SortTh col="cogs" label="COGS" align="right" sort={sort} onSort={onSort} />
-            <SortTh col="margin" label="Margin/u" align="right" sort={sort} onSort={onSort} />
+            <SortTh col="margin" label="Margin / unit" align="right" sort={sort} onSort={onSort} />
             <SortTh col="margin_pct" label="Margin %" align="right" sort={sort} onSort={onSort} />
             <SortTh col="on_hand" label="On hand" align="right" sort={sort} onSort={onSort} />
-            <SortTh col="inv_cost" label="Inv @ cost" align="right" sort={sort} onSort={onSort} />
+            <SortTh col="inv_cost" label="Stock at cost" align="right" sort={sort} onSort={onSort} />
             <SortTh col="embedded" label="Margin in stock" align="right" sort={sort} onSort={onSort} />
             <th scope="col" className="sticky top-0 z-10 bg-bg-subtle/95 px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle backdrop-blur">Segment</th>
           </tr>
@@ -1043,14 +1077,15 @@ function ResultsTable({
             return (
               <tr
                 key={s.row.item_id}
+                role="button"
                 tabIndex={0}
+                aria-label={`${s.row.item_name} — open the price simulator`}
                 onClick={() => onSelect(s.row.item_id)}
-                onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); onSelect(s.row.item_id); } }}
-                className="cursor-pointer border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40 focus-visible:bg-bg-subtle/60 focus-visible:outline-none"
+                onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onSelect(s.row.item_id); } }}
+                className="cursor-pointer border-b border-border/40 last:border-b-0 hover:bg-bg-subtle/40 focus-visible:outline focus-visible:-outline-offset-2 focus-visible:outline-2 focus-visible:outline-accent"
               >
                 <td className="px-3 py-2">
                   <span className="block text-sm font-medium leading-snug text-fg-strong" dir="auto">{s.row.item_name}</span>
-                  <span className="block font-mono text-3xs text-fg-subtle">{s.row.item_id}</span>
                 </td>
                 <td className="px-3 py-2 text-right text-sm tabular-nums">{s.priced ? formatIls(s.price) : <span className="text-3xs text-warning-fg">no price</span>}</td>
                 <td className="px-3 py-2 text-right text-sm tabular-nums">{s.costed ? formatIls(s.cogs) : <span className="text-3xs text-warning-fg">incomplete</span>}</td>
@@ -1065,8 +1100,18 @@ function ResultsTable({
                       {(() => { const I = SEGMENT_META[seg].icon; return <I className="h-3 w-3" strokeWidth={2.25} />; })()}
                       {SEGMENT_META[seg].label}
                     </span>
+                  ) : !s.priced ? (
+                    <span className="text-3xs text-warning-fg">Set a price</span>
+                  ) : onSwitchToOverview ? (
+                    <button
+                      type="button"
+                      onClick={(e) => { e.stopPropagation(); onSwitchToOverview(); }}
+                      className="text-3xs font-medium text-accent hover:underline"
+                    >
+                      Cost data missing — fix on Overview →
+                    </button>
                   ) : (
-                    <span className="text-3xs text-fg-subtle">{!s.priced ? "Set price" : "COGS gap"}</span>
+                    <span className="text-3xs text-warning-fg">Cost data missing</span>
                   )}
                 </td>
               </tr>
@@ -1133,7 +1178,7 @@ function DeltaRow({
         <span className="text-sm font-semibold tabular-nums text-fg-strong">{format(next)}</span>
         {delta != null && (up || down) ? (
           <span className={`inline-flex items-center gap-0.5 text-3xs tabular-nums ${tone}`}>
-            {up ? <TrendingUp className="h-3 w-3" strokeWidth={2.5} /> : <TrendingDown className="h-3 w-3" strokeWidth={2.5} />}
+            {up ? <TrendingUp className="h-3 w-3" strokeWidth={2.5} aria-hidden /> : <TrendingDown className="h-3 w-3" strokeWidth={2.5} aria-hidden />}
             {format(Math.abs(delta))}
           </span>
         ) : null}
@@ -1167,25 +1212,34 @@ function WhatIfSimulator({
   const [applying, setApplying] = useState(false);
   const [applyMsg, setApplyMsg] = useState<string | null>(null);
   const [wasOpen, setWasOpen] = useState(false);
+  // Once a price is applied, the parent query takes a beat to refetch. Track
+  // the just-committed value locally so the drawer's "current" strip reflects
+  // it immediately instead of showing the stale baseline.
+  const [committedPrice, setCommittedPrice] = useState<number | null>(null);
 
   if (sku && keyId !== sku.row.item_id) {
     setKeyId(sku.row.item_id);
     setPrice(sku.price ?? 0);
     setCogsPct(0);
     setApplyMsg(null);
+    setCommittedPrice(null);
   }
   if (open !== wasOpen) {
     setWasOpen(open);
-    if (open) setApplyMsg(null);
+    if (open) {
+      setApplyMsg(null);
+      setCommittedPrice(null);
+    }
   }
 
+  const currentPrice = committedPrice ?? basePrice;
   const modelCogs = baseCogs * (1 + cogsPct / 100);
   const modelMarginUnit = price - modelCogs;
   const modelMarginPct = price > 0 ? (modelMarginUnit / price) * 100 : 0;
   const modelEmbedded = modelMarginUnit * baseQty;
   const breakEven = modelCogs;
   const priceForTarget = (t: number) => (modelCogs > 0 ? modelCogs / (1 - t / 100) : 0);
-  const dirty = sku != null && Math.abs(price - basePrice) > 0.001;
+  const dirty = sku != null && Math.abs(price - currentPrice) > 0.001;
 
   async function applyPrice(): Promise<void> {
     if (!sku || applying) return;
@@ -1208,6 +1262,7 @@ function WhatIfSimulator({
         throw new Error(body?.message ?? `The price could not be saved (HTTP ${res.status}).`);
       }
       setApplyMsg("Applied — the new sale price is now live.");
+      setCommittedPrice(Number(price.toFixed(2)));
       onApplied();
     } catch (err) {
       setApplyMsg(err instanceof Error ? err.message : "The price could not be saved.");
@@ -1221,15 +1276,22 @@ function WhatIfSimulator({
       {sku ? (
         <div className="space-y-5">
           <div className="grid grid-cols-3 gap-3 rounded-md border border-border/60 bg-bg-subtle/50 p-3 text-center">
-            <div><div className="text-3xs uppercase tracking-sops text-fg-subtle">Price</div><div className="mt-0.5 text-sm font-semibold tabular-nums text-fg-strong">{formatIls(basePrice)}</div></div>
+            <div><div className="text-3xs uppercase tracking-sops text-fg-subtle">Price</div><div className="mt-0.5 text-sm font-semibold tabular-nums text-fg-strong">{formatIls(currentPrice)}</div></div>
             <div><div className="text-3xs uppercase tracking-sops text-fg-subtle">COGS</div><div className="mt-0.5 text-sm font-semibold tabular-nums text-fg-strong">{formatIls(baseCogs)}</div></div>
             <div><div className="text-3xs uppercase tracking-sops text-fg-subtle">Margin</div><div className={`mt-0.5 text-sm font-semibold tabular-nums ${(sku.marginUnit ?? 0) < 0 ? "text-danger-fg" : "text-fg-strong"}`}>{formatPct(sku.marginPct)}</div></div>
           </div>
 
           <div className="space-y-4">
             <Slider label="Sale price" value={price} min={0} max={Math.max(basePrice * 2.5, baseCogs * 2.5, 10)} step={0.5} format={(v) => formatIls(v)} onChange={setPrice} />
-            <Slider label="COGS change" value={cogsPct} min={-50} max={50} step={1} format={(v) => `${v > 0 ? "+" : ""}${v}%`} onChange={setCogsPct} />
-            <button type="button" disabled={applying} onClick={() => { setPrice(basePrice); setCogsPct(0); }} className="inline-flex items-center gap-1.5 rounded text-3xs font-medium text-fg-subtle hover:text-accent disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
+            <div>
+              <Slider label="COGS change" value={cogsPct} min={-50} max={50} step={1} format={(v) => `${v > 0 ? "+" : ""}${v}%`} onChange={setCogsPct} />
+              {cogsPct !== 0 ? (
+                <div className="mt-1 text-3xs tabular-nums text-fg-subtle">
+                  COGS would be {formatIls(modelCogs)}
+                </div>
+              ) : null}
+            </div>
+            <button type="button" disabled={applying} onClick={() => { setPrice(currentPrice); setCogsPct(0); }} className="inline-flex items-center gap-1.5 rounded text-3xs font-medium text-fg-subtle hover:text-accent disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">
               <RotateCcw className="h-3 w-3" strokeWidth={2.5} /> Reset to current
             </button>
           </div>
@@ -1252,7 +1314,7 @@ function WhatIfSimulator({
             <div className="rounded-md border border-border/60 bg-bg-subtle/40 p-3">
               <div className="text-3xs uppercase tracking-sops text-fg-subtle">Price for {targetMargin}% margin</div>
               <div className="mt-0.5 text-sm font-semibold tabular-nums text-fg-strong">{formatIls(priceForTarget(targetMargin))}</div>
-              <button type="button" onClick={() => setPrice(Number(priceForTarget(targetMargin).toFixed(2)))} title={`Set the price slider to ${formatIls(priceForTarget(targetMargin))}`} className="mt-1 min-h-[1.75rem] rounded px-2 py-1 text-3xs font-medium text-accent hover:bg-accent-soft/60 hover:underline focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">Use this price</button>
+              <button type="button" disabled={applying} onClick={() => setPrice(Number(priceForTarget(targetMargin).toFixed(2)))} title={`Set the price slider to ${formatIls(priceForTarget(targetMargin))}`} className="mt-1 min-h-7 rounded px-2 py-1 text-3xs font-medium text-accent hover:bg-accent-soft/60 hover:underline disabled:opacity-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-accent">Use this price</button>
             </div>
           </div>
 
@@ -1267,7 +1329,7 @@ function WhatIfSimulator({
             <div className="text-3xs text-fg-subtle" aria-live="polite" aria-atomic="true">
               {applyMsg ? (
                 <span className={applyMsg.startsWith("Applied") ? "text-success-fg" : "text-danger-fg"}>{applyMsg}</span>
-              ) : !canEdit ? "Modelled values — applying a price needs planner or admin access." : dirty ? "Applies the modelled price to the live average sale price." : "Move the price slider to model a change."}
+              ) : !canEdit ? "Modelled values — applying a price needs planner or admin access." : !sku.priced ? "Setting a price also starts measuring this product's margin." : dirty ? "Applies the modelled price to the live average sale price." : "Move the price slider to model a change."}
             </div>
             {canEdit ? (
               <button type="button" onClick={() => void applyPrice()} disabled={!dirty || applying} title={!dirty ? "Move the price slider to model a change first" : applying ? "Applying…" : "Apply the modelled price to the live sale price"} className="btn-primary inline-flex shrink-0 items-center gap-1.5">
@@ -1326,6 +1388,7 @@ export function ProfitabilityTab({
   errorMessage,
   onRetry,
   onPriceApplied,
+  onSwitchToOverview,
 }: {
   rows: ProfitRow[];
   canEdit: boolean;
@@ -1334,6 +1397,7 @@ export function ProfitabilityTab({
   errorMessage?: string;
   onRetry: () => void;
   onPriceApplied: () => void;
+  onSwitchToOverview?: () => void;
 }): JSX.Element {
   const [targetMargin, setTargetMargin] = useState(40);
   const [xMetric, setXMetric] = useState<XMetric>("price");
@@ -1344,6 +1408,16 @@ export function ProfitabilityTab({
   const [mobileFilters, setMobileFilters] = useState(false);
   const [activePreset, setActivePreset] = useState<string | null>(null);
   const [sort, setSort] = useState<{ col: SortCol; dir: "asc" | "desc" } | null>({ col: "embedded", dir: "desc" });
+
+  // Newest COGS snapshot across the portfolio — the freshness of the numbers.
+  const snapshotAge = useMemo(() => {
+    let newest = 0;
+    for (const r of rows) {
+      const t = r.cogs_snapshot_at ? new Date(r.cogs_snapshot_at).getTime() : 0;
+      if (Number.isFinite(t) && t > newest) newest = t;
+    }
+    return newest > 0 ? relativeAge(new Date(newest).toISOString()) : null;
+  }, [rows]);
 
   const all = useMemo(() => rows.map(deriveSku), [rows]);
   const reliabilityValues = useMemo(() => {
@@ -1522,6 +1596,25 @@ export function ProfitabilityTab({
 
   const hasFilters = filtersActive(filters);
 
+  // Active-filter pills — one removable pill per active dimension value, shown
+  // in a single always-visible bar above the content so the operator can see
+  // (and undo) exactly what is driving the view, from any device.
+  const activePills: Array<{ key: string; label: string; onRemove: () => void }> = [];
+  if (filters.q.trim())
+    activePills.push({ key: "q", label: `“${filters.q.trim()}”`, onRemove: () => setFilters((f) => ({ ...f, q: "" })) });
+  for (const k of filters.margin)
+    activePills.push({ key: `m-${k}`, label: `Margin ${MARGIN_BANDS.find((x) => x.key === k)?.label ?? k}`, onRemove: () => toggleFacet("margin", k) });
+  for (const k of filters.price)
+    activePills.push({ key: `p-${k}`, label: PRICE_BANDS.find((x) => x.key === k)?.label ?? k, onRemove: () => toggleFacet("price", k) });
+  for (const k of filters.inventory)
+    activePills.push({ key: `inv-${k}`, label: k === "in_stock" ? "In stock" : "No stock", onRemove: () => toggleFacet("inventory", k) });
+  for (const k of filters.readiness)
+    activePills.push({ key: `rd-${k}`, label: k === "measured" ? "Measured" : k === "unpriced" ? "Needs price" : "Cost data missing", onRemove: () => toggleFacet("readiness", k) });
+  for (const k of filters.reliability)
+    activePills.push({ key: `rel-${k}`, label: reliabilityLabel(k), onRemove: () => toggleFacet("reliability", k) });
+  if (filters.minMarginPct > -100)
+    activePills.push({ key: "minm", label: `Min margin ${filters.minMarginPct}%`, onRemove: () => setFilters((f) => ({ ...f, minMarginPct: -100 })) });
+
   // Opportunity cards — built from the money-sized signals above. Only the
   // ones that actually have something at stake are shown.
   type Opp = {
@@ -1624,19 +1717,19 @@ export function ProfitabilityTab({
       <FacetGroup title="Data readiness">
         <FacetChip label="Measured" tone="success" count={facetCounts.measured} active={filters.readiness.has("measured")} onToggle={() => toggleFacet("readiness", "measured")} />
         <FacetChip label="Needs price" tone="warning" count={facetCounts.unpriced} active={filters.readiness.has("unpriced")} onToggle={() => toggleFacet("readiness", "unpriced")} />
-        <FacetChip label="COGS gap" tone="danger" count={facetCounts.cogsGap} active={filters.readiness.has("cogs_gap")} onToggle={() => toggleFacet("readiness", "cogs_gap")} />
+        <FacetChip label="Cost data missing" tone="danger" count={facetCounts.cogsGap} active={filters.readiness.has("cogs_gap")} onToggle={() => toggleFacet("readiness", "cogs_gap")} />
       </FacetGroup>
 
       {reliabilityValues.length > 0 ? (
         <FacetGroup title="Price reliability">
-          {reliabilityValues.map((r) => <FacetChip key={r} label={r.replace(/_/g, " ")} count={facetCounts.reliability[r] ?? 0} active={filters.reliability.has(r)} onToggle={() => toggleFacet("reliability", r)} />)}
+          {reliabilityValues.map((r) => <FacetChip key={r} label={reliabilityLabel(r)} count={facetCounts.reliability[r] ?? 0} active={filters.reliability.has(r)} onToggle={() => toggleFacet("reliability", r)} />)}
         </FacetGroup>
       ) : null}
 
       <div>
-        <button type="button" onClick={() => setShowAdvanced((v) => !v)} className="inline-flex items-center gap-1.5 text-3xs font-semibold uppercase tracking-sops text-fg-subtle hover:text-accent">
+        <button type="button" aria-expanded={showAdvanced} onClick={() => setShowAdvanced((v) => !v)} className="inline-flex items-center gap-1.5 text-3xs font-semibold uppercase tracking-sops text-fg-subtle hover:text-accent">
           <SlidersHorizontal className="h-3 w-3" strokeWidth={2.25} /> Advanced
-          {showAdvanced ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />}
+          {showAdvanced ? <ChevronUp className="h-3 w-3" aria-hidden /> : <ChevronDown className="h-3 w-3" aria-hidden />}
         </button>
         {showAdvanced ? (
           <div className="mt-2">
@@ -1650,7 +1743,7 @@ export function ProfitabilityTab({
       </div>
 
       <div className="flex items-center justify-between border-t border-border/60 pt-3 text-3xs">
-        <span className="tabular-nums text-fg-subtle">Showing <span className="font-semibold text-fg-strong">{agg.total}</span> of {agg.totalAll}</span>
+        <span className="tabular-nums text-fg-subtle" aria-live="polite">Showing <span className="font-semibold text-fg-strong">{agg.total}</span> of {agg.totalAll}</span>
         {hasFilters ? <button type="button" onClick={clearAll} className="font-medium uppercase tracking-sops text-fg-subtle hover:text-accent">Clear all</button> : null}
       </div>
     </div>
@@ -1660,9 +1753,9 @@ export function ProfitabilityTab({
     <div className="space-y-4">
       {/* mobile filter toggle */}
       <div className="lg:hidden">
-        <button type="button" onClick={() => setMobileFilters((v) => !v)} className="btn btn-ghost btn-sm inline-flex items-center gap-1.5">
-          <SlidersHorizontal className="h-3.5 w-3.5" strokeWidth={2.25} /> Filters{hasFilters ? ` · ${agg.total}` : ""}
-          {mobileFilters ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+        <button type="button" aria-expanded={mobileFilters} onClick={() => setMobileFilters((v) => !v)} className="btn btn-ghost btn-sm inline-flex items-center gap-1.5">
+          <SlidersHorizontal className="h-3.5 w-3.5" strokeWidth={2.25} /> Filters{activePills.length > 0 ? ` · ${activePills.length} active` : ""}
+          {mobileFilters ? <ChevronUp className="h-3.5 w-3.5" aria-hidden /> : <ChevronDown className="h-3.5 w-3.5" aria-hidden />}
         </button>
         {mobileFilters ? <div className="card mt-2 p-4">{filterRail}</div> : null}
       </div>
@@ -1674,6 +1767,33 @@ export function ProfitabilityTab({
         </aside>
 
         <div className="space-y-4">
+          {/* Active-filter summary — always visible, every dimension removable */}
+          {activePills.length > 0 ? (
+            <div className="flex flex-wrap items-center gap-1.5 rounded-lg border border-accent/30 bg-accent-soft/15 px-3 py-2">
+              <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                Filtered by
+              </span>
+              {activePills.map((p) => (
+                <button
+                  key={p.key}
+                  type="button"
+                  onClick={p.onRemove}
+                  className="inline-flex items-center gap-1 rounded-full border border-accent/40 bg-accent-soft/50 px-2 py-0.5 text-3xs font-medium text-accent transition-colors hover:bg-accent-soft focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-accent"
+                >
+                  {p.label}
+                  <X className="h-3 w-3" strokeWidth={2.5} aria-hidden />
+                  <span className="sr-only">Remove filter</span>
+                </button>
+              ))}
+              <button type="button" onClick={clearAll} className="ml-1 text-3xs font-medium uppercase tracking-sops text-fg-subtle hover:text-accent">
+                Clear all
+              </button>
+              <span className="ml-auto text-3xs tabular-nums text-fg-subtle">
+                {agg.total} of {agg.totalAll} products
+              </span>
+            </div>
+          ) : null}
+
           {/* Hero KPI band */}
           <div className="card overflow-hidden motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-1 motion-safe:duration-500">
             <div className="grid gap-px bg-border/50 lg:grid-cols-[1.5fr_1fr]">
@@ -1683,7 +1803,7 @@ export function ProfitabilityTab({
                   Margin in your stock
                 </div>
                 <div className="mt-2 flex flex-wrap items-end gap-x-3 gap-y-1">
-                  <span className={`text-4xl font-bold tabular-nums sm:text-5xl ${agg.embedded < 0 ? "text-danger-fg" : "text-fg-strong"}`}>
+                  <span className={`text-4xl font-bold tabular-nums ${agg.embedded < 0 ? "text-danger-fg" : "text-fg-strong"}`}>
                     {loading ? "…" : formatIls(agg.embedded)}
                   </span>
                   <span className="mb-1.5 text-sm text-fg-subtle">
@@ -1707,6 +1827,13 @@ export function ProfitabilityTab({
                     </>
                   )}
                 </p>
+                {!loading ? (
+                  <p className="mt-1.5 text-3xs text-fg-subtle">
+                    {snapshotAge
+                      ? `Costs from the latest snapshot · ${snapshotAge}`
+                      : "Snapshot age unavailable"}
+                  </p>
+                ) : null}
                 <div className="mt-5">
                   <div className="mb-2 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Margin composition
@@ -1730,9 +1857,13 @@ export function ProfitabilityTab({
           {loading ? (
             <SectionCard title="Loading…"><div className="h-72 animate-pulse rounded-lg bg-bg-subtle/50" /></SectionCard>
           ) : agg.measured === 0 ? (
-            <SectionCard eyebrow="Profitability" title="No measured SKUs in this view" description="Every SKU in view is missing a price or a complete COGS. Clear a filter, or use the Overview tab to fix the gaps.">
+            <SectionCard eyebrow="Profitability" title="No products with a full margin in this view" description="Every product in view is missing a sale price or its cost data. Clear a filter, or fix the gaps on the Overview tab.">
               <div className="rounded-lg border border-dashed border-border bg-bg-subtle/40 p-6 text-center text-xs text-fg-subtle">
-                {facetCounts.measured} of {all.length} products portfolio-wide have a computable margin. {hasFilters ? <button type="button" onClick={clearAll} className="ml-1 font-medium text-accent hover:underline">Clear filters</button> : null}
+                <div>{facetCounts.measured} of {all.length} products have enough data to calculate a margin.</div>
+                <div className="mt-2 flex items-center justify-center gap-3">
+                  {hasFilters ? <button type="button" onClick={clearAll} className="font-medium text-accent hover:underline">Clear filters</button> : null}
+                  {onSwitchToOverview ? <button type="button" onClick={onSwitchToOverview} className="font-medium text-accent hover:underline">Go to Overview tab →</button> : null}
+                </div>
               </div>
             </SectionCard>
           ) : (
@@ -1757,11 +1888,11 @@ export function ProfitabilityTab({
                           <span className={`absolute inset-y-0 left-0 w-1 ${TONE_BG[o.tone]}`} aria-hidden />
                           <div className="flex items-center justify-between gap-2 pl-1.5">
                             <Icon className={`h-4 w-4 ${TONE_TEXT[o.tone]}`} strokeWidth={2.25} />
-                            <span className="text-3xs font-medium text-accent opacity-0 transition-opacity group-hover:opacity-100">
+                            <span className="text-3xs font-medium text-accent opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100">
                               Filter →
                             </span>
                           </div>
-                          <div className={`mt-1.5 pl-1.5 text-2xl font-bold tabular-nums ${TONE_TEXT[o.tone]}`}>
+                          <div className={`mt-1.5 pl-1.5 text-xl font-semibold tabular-nums ${TONE_TEXT[o.tone]}`}>
                             {o.value}
                           </div>
                           <div className="mt-0.5 pl-1.5 text-xs font-semibold text-fg-strong">
@@ -1777,8 +1908,14 @@ export function ProfitabilityTab({
                 </SectionCard>
               ) : null}
 
+              {/* How to read this — one-line narrative for a first visit */}
+              <p className="px-1 text-xs text-fg-muted">
+                Pick a card or a filter to focus the view, scan the charts below
+                to find a product, then click it to model and apply a new price.
+              </p>
+
               {/* Margin distribution */}
-              <SectionCard eyebrow="Distribution" title="Margin shape" description="How many measured SKUs sit in each margin band. Click a bar to filter the whole page to it.">
+              <SectionCard eyebrow="Distribution" title="Margin shape" description="How many measured products sit in each margin band. Click a bar to filter the whole page to it.">
                 <MarginHistogram skus={filteredMeasured} active={filters.margin} onToggleBand={(k) => toggleFacet("margin", k)} />
               </SectionCard>
 
@@ -1786,11 +1923,11 @@ export function ProfitabilityTab({
               <SectionCard
                 eyebrow="Viability matrix"
                 title="Margin vs value at stake"
-                description="Up = healthier margin; right = more value; bubble = margin locked in stock. Drag the target line to re-segment. Click any bubble to model it."
+                description="Up = healthier margin; right = more value; bubble = margin locked in stock. Adjust the target below to re-segment. Click any bubble to model it."
                 actions={
-                  <div className="flex items-center gap-1 rounded-md border border-border/60 bg-bg-subtle/60 p-0.5">
+                  <div role="group" aria-label="Horizontal axis metric" className="flex items-center gap-1 rounded-md border border-border/60 bg-bg-subtle/60 p-0.5">
                     {(Object.keys(X_METRIC_META) as XMetric[]).map((m) => (
-                      <button key={m} type="button" onClick={() => setXMetric(m)} className={`rounded px-2 py-1 text-3xs font-medium transition-colors ${xMetric === m ? "bg-bg-raised text-fg-strong shadow-raised" : "text-fg-subtle hover:text-fg"}`}>{X_METRIC_META[m].label}</button>
+                      <button key={m} type="button" aria-pressed={xMetric === m} onClick={() => setXMetric(m)} className={`rounded px-2 py-1.5 text-3xs font-medium transition-colors ${xMetric === m ? "bg-bg-raised text-fg-strong shadow-raised" : "text-fg-subtle hover:text-fg"}`}>{X_METRIC_META[m].label}</button>
                     ))}
                   </div>
                 }
@@ -1822,7 +1959,7 @@ export function ProfitabilityTab({
 
               {/* Results table */}
               <SectionCard eyebrow="Products" title={`${agg.total} in view`} description="The filtered set. Sort any column; click a row to model it." contentClassName="p-0">
-                <ResultsTable skus={filtered} targetMarginPct={targetMargin} medianEmbedded={medianEmbedded} sort={sort} onSort={setSort} onSelect={setSelectedId} />
+                <ResultsTable skus={filtered} targetMarginPct={targetMargin} medianEmbedded={medianEmbedded} sort={sort} onSort={setSort} onSelect={setSelectedId} onSwitchToOverview={onSwitchToOverview} />
               </SectionCard>
             </>
           )}
