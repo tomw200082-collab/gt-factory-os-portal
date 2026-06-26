@@ -30,7 +30,7 @@
 // src/lib/contracts/goods-receipts.ts (mirror of API schemas.ts).
 // ---------------------------------------------------------------------------
 
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -299,6 +299,9 @@ function Combobox({ options, value, onChange, placeholder, disabled, inputRef, "
   const [highlightIdx, setHighlightIdx] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLUListElement>(null);
+  // UX-flow audit (FLOW-001): wire the WCAG combobox pattern so screen readers
+  // announce the popup + open/closed state.
+  const listboxId = useId();
 
   const selectedLabel = useMemo(
     () => options.find((o) => o.value === value)?.label ?? "",
@@ -385,10 +388,16 @@ function Combobox({ options, value, onChange, placeholder, disabled, inputRef, "
         required={required && !value}
         autoComplete="off"
         readOnly={disabled}
+        role="combobox"
+        aria-expanded={open && !disabled}
+        aria-haspopup="listbox"
+        aria-autocomplete="list"
+        aria-controls={listboxId}
       />
       {open && !disabled && (
         <ul
           ref={listRef}
+          id={listboxId}
           className="absolute z-50 mt-1 max-h-56 w-full overflow-y-auto rounded-md border border-border bg-bg-raised shadow-lg"
           role="listbox"
         >

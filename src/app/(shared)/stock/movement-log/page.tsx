@@ -119,6 +119,13 @@ const MOVEMENT_REGISTRY: Record<string, MvMeta> = {
   LIONWHEEL_UNPICK:       { label: "Shipment Pick Reversal", kind: "reversal", glyph: "↶" },
   FG_OUT_PICK:            { label: "Shipment Pick",          kind: "out",      glyph: "→" },
   FG_OUT_PICK_REVERSAL:   { label: "Shipment Pick Reversal", kind: "reversal", glyph: "↶" },
+  LIONWHEEL_PICK_ADJUSTMENT: { label: "Shipment Pick Adjustment", kind: "audit", glyph: "·" },
+  // DB emits UPPERCASE PRODUCTION_* — the lowercase keys never matched a real
+  // row and rendered as "?" pills. Keep both; the server /movement-types
+  // registry is the canonical source going forward (deepen 2026-06-25).
+  PRODUCTION_OUTPUT:      { label: "Production Output",      kind: "in",       glyph: "↑" },
+  PRODUCTION_CONSUMPTION: { label: "Production Consumption", kind: "out",      glyph: "↓" },
+  PRODUCTION_SCRAP:       { label: "Production Scrap",       kind: "audit",    glyph: "·" },
   production_output:      { label: "Production Output",      kind: "in",       glyph: "↑" },
   production_consumption: { label: "Production Consumption", kind: "out",      glyph: "↓" },
   production_scrap:       { label: "Production Scrap",       kind: "audit",    glyph: "·" },
@@ -156,19 +163,48 @@ function kindPillClass(kind: MvKind): string {
 
 const ITEM_TYPES = ["FG", "RM", "PKG"] as const;
 
-const MOVEMENT_KIND_FILTERS: { value: string; label: string; kind: MvKind }[] = [
-  { value: "GR_POSTED",         label: "Goods Receipt", kind: "in" },
-  { value: "WASTE_POSTED",      label: "Waste",         kind: "out" },
-  { value: "LIONWHEEL_PICK",    label: "Shipments",     kind: "out" },
-  { value: "production_output", label: "Production",    kind: "in" },
-  { value: "COUNT_ADJUST",      label: "Counts",        kind: "audit" },
-  { value: "GR_REVERSAL",       label: "Reversals",     kind: "reversal" },
+// Quick-filter chips now send `business_kind` (a coarse kind), NOT a raw
+// movement_type literal. The server (movement-types.ts) translates the kind to
+// the full set of underlying types, so "Shipments" matches FG_OUT_PICK and
+// "Production" matches OUTPUT+CONSUMPTION. Pre-deepen these were hardcoded to
+// LIONWHEEL_PICK / production_output and silently returned 0 rows after the
+// 2026-05-10 cutover. `glyph`/`kind` here are display-only for the chip.
+interface KindFilter { value: string; label: string; kind: MvKind; glyph: string }
+const FALLBACK_KIND_FILTERS: KindFilter[] = [
+  { value: "goods_receipt", label: "Goods Receipt", kind: "in",       glyph: "↓" },
+  { value: "waste",         label: "Waste",         kind: "out",      glyph: "✕" },
+  { value: "shipment",      label: "Shipments",     kind: "out",      glyph: "→" },
+  { value: "production",    label: "Production",     kind: "in",       glyph: "↑" },
+  { value: "count",         label: "Counts",        kind: "audit",    glyph: "=" },
+  { value: "reversal",      label: "Reversals",     kind: "reversal", glyph: "↶" },
 ];
+
+// Server movement-type registry (single source of truth). Fetched once and
+// cached (slow-moving enum). Drives the chip list; falls back to the static
+// list above if the endpoint is unavailable so the page never hard-fails.
+interface MovementTypesResponse {
+  rows?: { value: string; label: string; kind: string; direction: string }[];
+  kinds?: { kind: string; label: string }[];
+}
+const KIND_GLYPH: Record<string, string> = {
+  goods_receipt: "↓", waste: "✕", shipment: "→",
+  production: "↑", count: "=", reversal: "↶", adjustment: "·",
+};
+const KIND_TONE: Record<string, MvKind> = {
+  goods_receipt: "in", waste: "out", shipment: "out",
+  production: "in", count: "audit", reversal: "reversal", adjustment: "audit",
+};
+async function fetchMovementTypes(): Promise<MovementTypesResponse> {
+  const res = await fetch("/api/stock/ledger/movement-types");
+  if (!res.ok) throw new Error(`Movement-type filter request failed (HTTP ${res.status})`);
+  return (await res.json()) as MovementTypesResponse;
+}
 
 interface Filters {
   item_id: string;
   item_type: string;
   movement_type: string;
+  business_kind: string;
   from_date: string;
   to_date: string;
   search: string;
@@ -178,6 +214,7 @@ const EMPTY_FILTERS: Filters = {
   item_id: "",
   item_type: "",
   movement_type: "",
+  business_kind: "",
   from_date: "",
   to_date: "",
   search: "",
@@ -188,6 +225,7 @@ function buildQuery(filters: Filters, poId: string, offset: number): string {
   if (filters.item_id) params.set("item_id", filters.item_id);
   if (filters.item_type) params.set("item_type", filters.item_type);
   if (filters.movement_type) params.set("movement_type", filters.movement_type);
+  if (filters.business_kind) params.set("business_kind", filters.business_kind);
   if (filters.from_date) params.set("from", `${filters.from_date}T00:00:00Z`);
   if (filters.to_date) params.set("to", `${filters.to_date}T23:59:59Z`);
   if (poId) params.set("po_id", poId);
@@ -203,7 +241,7 @@ async function fetchLedger(
 ): Promise<LedgerResponse> {
   const qs = buildQuery(filters, poId, offset);
   const res = await fetch(`/api/stock/ledger?${qs}`);
-  if (!res.ok) throw new Error(`LEDGER_FETCH_${res.status}`);
+  if (!res.ok) throw new Error(`Movement log request failed (HTTP ${res.status})`);
   const data = await res.json();
   if (Array.isArray(data)) return { rows: data, total: data.length };
   return data as LedgerResponse;
@@ -1025,9 +1063,32 @@ export default function MovementLogPage() {
     return urlPoId;
   }, [urlPoId, poHeader]);
 
+  // Movement-type registry — single source of truth for the quick-filter chips.
+  // staleTime Infinity: this is a slow-moving enum, so fetch once per session
+  // (TanStack Query v5 defaults staleTime=0 and would otherwise refetch on
+  // every mount/focus). Falls back to the static list if the endpoint fails.
+  const movementTypesQuery = useQuery<MovementTypesResponse>({
+    queryKey: ["stock-ledger", "movement-types"],
+    queryFn: fetchMovementTypes,
+    staleTime: Infinity,
+    retry: 1,
+  });
+  const kindFilters = useMemo<KindFilter[]>(() => {
+    const serverKinds = movementTypesQuery.data?.kinds;
+    if (!serverKinds || serverKinds.length === 0) return FALLBACK_KIND_FILTERS;
+    return serverKinds.map((k) => ({
+      value: k.kind,
+      label: k.label,
+      kind: KIND_TONE[k.kind] ?? "unknown",
+      glyph: KIND_GLYPH[k.kind] ?? "•",
+    }));
+  }, [movementTypesQuery.data]);
+
   const effectiveFilters = useMemo<Filters>(() => {
     const f = { ...appliedFilters };
-    if (activeKind) f.movement_type = activeKind;
+    // activeKind is now a coarse business_kind, resolved server-side to the
+    // underlying movement_type set (fixes the dead LIONWHEEL_PICK chip).
+    if (activeKind) f.business_kind = activeKind;
     return f;
   }, [appliedFilters, activeKind]);
 
@@ -1337,9 +1398,8 @@ export default function MovementLogPage() {
           >
             All
           </button>
-          {MOVEMENT_KIND_FILTERS.map((m) => {
+          {kindFilters.map((m) => {
             const active = activeKind === m.value;
-            const meta = mvMeta(m.value);
             return (
               <button
                 key={m.value}
@@ -1354,7 +1414,7 @@ export default function MovementLogPage() {
                 )}
               >
                 <span aria-hidden className="font-mono">
-                  {meta.glyph}
+                  {m.glyph}
                 </span>
                 {m.label}
               </button>

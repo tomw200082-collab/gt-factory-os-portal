@@ -255,6 +255,9 @@ function SuppliersPageInner(): JSX.Element {
   const statusMutation = useMutation({
     mutationFn: async (args: {
       supplier_id: string;
+      // UX-flow audit (FLOW-A05): carry the display name so the banner shows
+      // a human label, not the raw supplier_id / enum value.
+      supplier_name: string;
       newStatus: string;
       updated_at: string;
     }) =>
@@ -266,7 +269,9 @@ function SuppliersPageInner(): JSX.Element {
     onSuccess: (_data, vars) => {
       setBanner({
         kind: "success",
-        message: `Status updated for ${vars.supplier_id} → ${vars.newStatus}.`,
+        message: `${vars.supplier_name} ${
+          vars.newStatus === "ACTIVE" ? "reactivated" : "deactivated"
+        }.`,
       });
       void queryClient.invalidateQueries({ queryKey: ["admin", "suppliers"] });
     },
@@ -277,7 +282,7 @@ function SuppliersPageInner(): JSX.Element {
           : err.message;
       setBanner({
         kind: "error",
-        message: `Status update failed on ${vars.supplier_id}: ${msg}`,
+        message: `Could not update ${vars.supplier_name}: ${msg}`,
       });
     },
   });
@@ -366,6 +371,7 @@ function SuppliersPageInner(): JSX.Element {
     setBanner(null);
     statusMutation.mutate({
       supplier_id: row.supplier_id,
+      supplier_name: row.supplier_name_official,
       newStatus: next,
       updated_at: row.updated_at,
     });

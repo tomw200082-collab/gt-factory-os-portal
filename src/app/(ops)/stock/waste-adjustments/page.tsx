@@ -150,6 +150,9 @@ interface DoneState {
   itemSummary?: string;
   href?: string;
   hrefLabel?: string;
+  /** UX-flow audit (FLOW-003): item the adjustment posted against, so the
+   *  "view ledger" link can filter to it instead of the unfiltered log. */
+  itemId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -327,6 +330,7 @@ export default function WasteAdjustmentPage() {
             : "Adjustment posted successfully.",
           itemSummary: summary,
           detail: `ref: ${result.submissionId}`,
+          itemId: row.id,
         });
         setQuantity("");
         setNotes("");
@@ -505,7 +509,11 @@ export default function WasteAdjustmentPage() {
             <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-current/10 pt-4">
               {done.kind === "success" ? (
                 <Link
-                  href="/stock/movement-log"
+                  href={
+                    done.itemId
+                      ? `/stock/movement-log?item_id=${encodeURIComponent(done.itemId)}`
+                      : "/stock/movement-log"
+                  }
                   className="btn btn-sm"
                   data-testid="waste-adjustment-success-movement-log"
                 >

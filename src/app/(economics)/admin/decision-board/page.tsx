@@ -10,15 +10,23 @@
 // that matters for a small factory — should we PROTECT it, PROMOTE it, FIX ITS
 // PRICE, or DROP it — framed around money at stake, and shown transparently.
 //
-// Zero backend change. Joins two EXISTING live read endpoints in the browser:
-//   GET /api/economics                      → COGS, margin, price, confidence,
-//                                              inventory value (v_fg_economics).
-//   GET /api/orders/by-item-and-period       → units sold per item per month
-//                                              (LionWheel mirror) = velocity.
+// Single live read endpoint in the browser:
+//   GET /api/economics  → COGS, margin, price, inventory value AND the
+//                         Shopify-sourced trailing-90-day sales
+//                         (qty_sold_90d, order_count_90d, units_prev_90d)
+//                         from private_core.v_fg_economics (migrations 0261/0262,
+//                         shipped by backend PRs #101 + #102).
+// Velocity is the Shopify 90-day sell-through — the factory's complete demand
+// signal across every channel. (It replaces /api/orders/by-item-and-period,
+// the LionWheel delivery mirror, which only counted units physically shipped
+// via LionWheel and so undercounted demand and missed whole product lines —
+// e.g. the margaritas — that don't go out through LionWheel.)
 // Derived in-browser:
+//   units 90d    = qty_sold_90d
 //   contribution = material_margin_ils × units_sold
 //   revenue      = avg_sale_price_ils  × units_sold
-//   annualised   = window value × (365 / window_days)
+//   trend        = last-90d vs prior-90d (units_prev_90d) — 2-point sparkline
+//   annualised   = window value × (365 / 90)
 // Products missing cost/price are "Needs data" and never plotted — we do not
 // ground a recommendation on a number we don't have.
 // ---------------------------------------------------------------------------
@@ -79,10 +87,11 @@ const DECISION: Record<DecisionKey, DecisionMeta> = {
 // Quadrant cards, in reading order.
 const SEGMENT_ORDER: DecisionKey[] = ["star", "gem", "workhorse", "drag", "loss", "dormant", "needs_data"];
 
+// Locked to 90d: velocity is sourced from the Shopify 90-day read model
+// (v_fg_economics). A 30/180 toggle would silently mislabel that fixed window,
+// so the board commits to one honest window.
 const WINDOWS = [
-  { days: 30, label: "30d" },
   { days: 90, label: "90d" },
-  { days: 180, label: "180d" },
 ] as const;
 
 // ---------------------------------------------------------------------------
@@ -98,10 +107,13 @@ interface EconomicsRow {
   avg_sale_price_ils: string | null;
   material_margin_ils: string | null;
   material_margin_pct: string | null;
+  // Shopify-sourced trailing-90-day sales (v_fg_economics, migrations
+  // 0261/0262). The view coalesces absent SKUs to 0, so these are non-null.
+  qty_sold_90d: string;
+  order_count_90d: number;
+  units_prev_90d: string;
 }
 interface EconomicsResponse { rows: EconomicsRow[]; count: number }
-interface VelocityRow { item_id: string; period_bucket_key: string; qty_total: string; order_count: number }
-interface VelocityResponse { rows: VelocityRow[]; bucket_cadence: string }
 
 type Trend = "up" | "down" | "flat" | "none";
 
@@ -116,7 +128,7 @@ interface DecisionItem {
   invAtCost: number | null;
   units: number;
   orders: number;
-  series: number[]; // monthly units, oldest→newest
+  series: number[]; // [prior-90d units, last-90d units] — oldest→newest
   contribution: number | null;
   revenue: number | null;
   trend: Trend;
@@ -127,6 +139,15 @@ function toNum(v: string | null | undefined): number | null {
   if (v == null || v === "") return null;
   const n = Number(v);
   return Number.isFinite(n) ? n : null;
+}
+
+// The economics read model also carries non-sellables: production intermediates
+// (the "*-BASE-*" 23L base liquids — costed but never priced or sold) and a
+// non-stock placeholder row. They are not finished products, so they only
+// inflated the "needs data" bucket. Exclude them from this finished-product
+// decision board. (Authorized by Tom, 2026-06-26.)
+function isSellableProduct(itemId: string): boolean {
+  return itemId !== "EXCLUDED-NONSTOCK" && !itemId.includes("-BASE-");
 }
 function median(xs: number[]): number {
   if (xs.length === 0) return 0;
@@ -144,14 +165,13 @@ async function fetchJson<T>(url: string): Promise<T> {
 // Page
 // ---------------------------------------------------------------------------
 export default function DecisionBoardPage(): JSX.Element {
+  // Window is fixed at 90d (the Shopify read window). Kept as state so the
+  // labels and the single-option toggle share one source of truth.
   const [windowDays, setWindowDays] = useState<number>(90);
+  // The Shopify window is a true trailing-90-day span, so annualisation is the
+  // honest 365/90 — no variable-span correction needed (unlike the old
+  // LionWheel mirror, which only had a few weeks of delivery history).
   const annualise = 365 / windowDays;
-
-  const { from, to } = useMemo(() => {
-    const now = new Date();
-    const f = new Date(now.getTime() - windowDays * 86_400_000);
-    return { from: f.toISOString().slice(0, 10), to: now.toISOString().slice(0, 10) };
-  }, [windowDays]);
 
   const econQuery = useQuery<EconomicsResponse>({
     queryKey: ["decision-board", "economics"],
@@ -159,28 +179,26 @@ export default function DecisionBoardPage(): JSX.Element {
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   });
-  const velQuery = useQuery<VelocityResponse>({
-    queryKey: ["decision-board", "velocity", from, to],
-    queryFn: () => fetchJson<VelocityResponse>(`/api/orders/by-item-and-period?from=${from}&to=${to}&cadence=monthly`),
-    staleTime: 60_000,
-    refetchOnWindowFocus: false,
-  });
 
+  // Velocity comes from the Economics read model (Shopify-sourced 90-day
+  // sales). buckets = [prior-90d, last-90d] drive a quarter-over-quarter trend
+  // plus the 2-point sparkline.
   const velocityByItem = useMemo(() => {
     const map = new Map<string, { units: number; orders: number; buckets: { key: string; qty: number }[] }>();
-    for (const r of velQuery.data?.rows ?? []) {
-      const qty = toNum(r.qty_total) ?? 0;
-      const cur = map.get(r.item_id) ?? { units: 0, orders: 0, buckets: [] };
-      cur.units += qty;
-      cur.orders += r.order_count ?? 0;
-      cur.buckets.push({ key: r.period_bucket_key, qty });
-      map.set(r.item_id, cur);
+    for (const r of econQuery.data?.rows ?? []) {
+      const units = toNum(r.qty_sold_90d) ?? 0;
+      const prev = toNum(r.units_prev_90d) ?? 0;
+      map.set(r.item_id, {
+        units,
+        orders: r.order_count_90d ?? 0,
+        buckets: [{ key: "1_prior", qty: prev }, { key: "2_current", qty: units }],
+      });
     }
     return map;
-  }, [velQuery.data]);
+  }, [econQuery.data]);
 
   const items = useMemo<DecisionItem[]>(() => {
-    const rows = econQuery.data?.rows ?? [];
+    const rows = (econQuery.data?.rows ?? []).filter((r) => isSellableProduct(r.item_id));
     const selling: number[] = [];
     for (const r of rows) {
       const v = velocityByItem.get(r.item_id);
@@ -281,8 +299,8 @@ export default function DecisionBoardPage(): JSX.Element {
   };
 
   const active = items.find((i) => i.id === activeId) ?? null;
-  const isLoading = econQuery.isLoading || velQuery.isLoading;
-  const velUnavailable = velQuery.isError;
+  const isLoading = econQuery.isLoading;
+  const velUnavailable = econQuery.isError;
   const verdict = buildVerdict(kpis, items.length);
 
   return (
@@ -309,6 +327,12 @@ export default function DecisionBoardPage(): JSX.Element {
             Margin and inventory figures remain accurate.
           </p>
         </SectionCard>
+      ) : !isLoading ? (
+        <p className="-mt-2 px-1 text-xs text-fg-subtle">
+          Velocity = units sold on Shopify in the last {windowDays} days — the same
+          sell-through the Economics page reports. Trend compares it with the prior
+          90 days; annual figures scale the window by 365 / {windowDays}.
+        </p>
       ) : null}
 
       {/* Decision segments — clickable filters with money attached */}
@@ -624,7 +648,7 @@ function Inspector({ item, windowDays, annualise }: { item: DecisionItem | null;
       <p className="text-xs text-fg-subtle">{d.blurb}</p>
       {item.series.length >= 2 ? (
         <div className="flex items-center justify-between rounded-lg border border-border/50 bg-bg-subtle/40 px-3 py-2">
-          <span className="text-2xs uppercase tracking-sops text-fg-subtle">Monthly units</span>
+          <span className="text-2xs uppercase tracking-sops text-fg-subtle">90d vs prior 90d</span>
           <Sparkline values={item.series} trend={item.trend} />
         </div>
       ) : null}
@@ -680,7 +704,7 @@ function RulesPopover({ velMedian, windowDays }: { velMedian: number; windowDays
             <li>• <b>Needs data</b>: cost or price missing → excluded from the quadrant.</li>
           </ul>
           <p className="mt-2 border-t border-border/40 pt-2 text-3xs text-fg-subtle">
-            Velocity from delivered orders (LionWheel). Revenue uses the manual average sale price until automated price snapshots land.
+            Velocity from Shopify sell-through (last 90 days vs the prior 90). Revenue uses the manual average sale price until automated price snapshots land.
           </p>
         </div>
       ) : null}

@@ -31,6 +31,7 @@ import { AlertTriangle, ArrowUpRight, Search } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
+import { QueryCountChip } from "@/components/feedback/QueryCountChip";
 import { fmtSupplyMethod } from "@/lib/display";
 import { fmtNumStr } from "@/lib/utils/format-quantity";
 
@@ -196,9 +197,16 @@ export default function AdminMastersBomsListPage(): JSX.Element {
         title="Bills of materials"
         description="Browse manufactured and repack BOMs. Click a row to review versions, component lines, and simulate production quantities."
         meta={
-          <Badge tone="neutral" dotted>
-            {headsQuery.data?.count ?? rows.length} heads
-          </Badge>
+          /* UX-flow audit (FLOW-A03): the raw chip showed "0 heads" while the
+             query was still loading (rows defaults to []). QueryCountChip shows
+             a skeleton during load and the real count only once data lands. */
+          <QueryCountChip
+            isLoading={headsQuery.isLoading}
+            isError={headsQuery.isError}
+            count={headsQuery.data?.count}
+            noun="heads"
+            tone="neutral"
+          />
         }
       />
 

@@ -17,7 +17,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { submitStockEvent } from "@/lib/stock/submit";
@@ -155,6 +155,9 @@ interface DoneState {
   hrefLabel?: string;
   /** Short snapshot id (first 8 chars) for audit-trail correlation. */
   snapshotIdShort?: string;
+  /** UX-flow audit (FLOW-006): item the count posted against, so the
+   *  "view ledger" link can filter to it instead of the unfiltered log. */
+  itemId?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -335,6 +338,8 @@ export default function PhysicalCountPage() {
   // is a stable target across phase transitions (no remount on input refocus).
   const comboAnchorRef = useRef<HTMLDivElement>(null);
   const [comboOpen, setComboOpen] = useState(false);
+  // UX-flow audit (FLOW-001): WCAG combobox pattern for the search input.
+  const comboListboxId = useId();
   // Viewport-relative coordinates for the portaled dropdown. Recomputed on
   // open / scroll (capture phase) / resize so the panel tracks the input as
   // the page shifts, even when an inner scroll container scrolls (mobile
@@ -523,6 +528,7 @@ export default function PhysicalCountPage() {
           itemSummary: `${itemLabel} · counted: ${qtyNum} ${unit} · adjustment: ${result.body.computed_delta ?? "?"}`,
           detail: `ref: ${result.submissionId}`,
           snapshotIdShort: snapshot?.snapshot_id?.slice(0, 8),
+          itemId: snapshot?.item_id,
         });
         resetFlow();
         break;
@@ -739,7 +745,11 @@ export default function PhysicalCountPage() {
             <div className="mt-4 flex flex-wrap items-center gap-2 border-t border-current/10 pt-4">
               {isSuccess && (
                 <Link
-                  href="/stock/movement-log"
+                  href={
+                    done.itemId
+                      ? `/stock/movement-log?item_id=${encodeURIComponent(done.itemId)}`
+                      : "/stock/movement-log"
+                  }
                   className="btn btn-primary btn-sm"
                   data-testid="physical-count-success-movement-log"
                 >
@@ -912,6 +922,11 @@ export default function PhysicalCountPage() {
                       autoComplete="off"
                       aria-label="Search items and components"
                       data-testid="physical-count-search"
+                      role="combobox"
+                      aria-expanded={comboOpen}
+                      aria-haspopup="listbox"
+                      aria-autocomplete="list"
+                      aria-controls={comboListboxId}
                     />
                     {searchQuery ? (
                       <button
@@ -959,6 +974,7 @@ export default function PhysicalCountPage() {
                             left: comboRect.left,
                             width: comboRect.width,
                           }}
+                          id={comboListboxId}
                           role="listbox"
                           aria-label="Items and components"
                         >

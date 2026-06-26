@@ -52,6 +52,13 @@ export function PlacementRow({
   const [customTerm, setCustomTerm] = useState<string>("");
   const [prices, setPrices] = useState<Record<string, string>>({});
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  // FLOW-003: supplier-confirmed arrival date (prefilled with the planner's
+  // planned date; the office manager confirms/overrides it with the supplier).
+  const [confirmedDate, setConfirmedDate] = useState<string>(
+    po.expected_receive_date ?? "",
+  );
+  const [copied, setCopied] = useState(false);
+  const todayIso = new Date().toISOString().slice(0, 10);
 
   const lines = (linesQuery.data?.rows ?? []).filter(
     (l) => l.line_status === "OPEN" || l.line_status === "PARTIAL",
@@ -101,9 +108,9 @@ export function PlacementRow({
     }
     const ok = await confirm({
       title: `לבצע את ההזמנה ${po.po_number}?`,
-      description: `ההזמנה תבוצע מול הספק ותהיה מוכנה לקבלת סחורה, עם תנאי תשלום "${termLabel}"${
+      description: `ההזמנה תבוצע מול הספק עם תנאי תשלום "${termLabel}"${
         totalPreview != null ? ` · ${formatIls(totalPreview)}` : ""
-      }.`,
+      }${confirmedDate ? ` · צפי הגעה ${confirmedDate}` : ""}. לאחר הביצוע ההזמנה תהיה פתוחה ומוכנה לקבלת סחורה — לא ניתן לבטל הזמנה שבוצעה דרך המערכת, ושינויים בכמויות יחייבו תיאום מול הספק.`,
       confirmLabel: "בצע הזמנה",
       cancelLabel: "ביטול",
     });
@@ -116,6 +123,7 @@ export function PlacementRow({
         payment_terms_eom: term?.eom ?? null,
         line_prices,
         confirm_price_update: true,
+        expected_receive_date: confirmedDate || null,
       },
       {
         // On success the queue refetch drops this PO (no longer
@@ -150,6 +158,18 @@ export function PlacementRow({
             <span className="font-mono tabular-nums text-fg">
               {formatIls(Number(po.total_net))}
             </span>
+            {po.order_by_date ? (
+              <span
+                className={
+                  po.order_by_date < todayIso
+                    ? "font-semibold text-danger-fg"
+                    : "font-medium text-fg"
+                }
+              >
+                · להזמין עד {po.order_by_date}
+                {po.order_by_date < todayIso ? " (באיחור)" : ""}
+              </span>
+            ) : null}
             {po.expected_receive_date ? (
               <span>· צפי הגעה {po.expected_receive_date}</span>
             ) : null}
@@ -176,13 +196,13 @@ export function PlacementRow({
           ) : linesQuery.isError ? (
             <div
               role="alert"
-              className="rounded-md border border-danger/40 bg-danger/5 px-3 py-2 text-sm text-danger-fg"
+              className="rounded-md border border-danger/40 bg-danger-softer px-3 py-2 text-sm text-danger-fg"
             >
               לא ניתן לטעון את שורות ההזמנה.{" "}
               <button
                 type="button"
                 onClick={() => void linesQuery.refetch()}
-                className="font-medium underline hover:no-underline"
+                className="inline-flex min-h-[44px] items-center rounded px-1 font-medium underline hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >
                 נסה שוב
               </button>
@@ -216,8 +236,9 @@ export function PlacementRow({
                       <input
                         type="number"
                         inputMode="decimal"
-                        min="0"
+                        min="0.01"
                         step="0.01"
+                        required
                         className="input w-28 text-left tabular-nums"
                         value={priceFor(l)}
                         onChange={(e) =>
@@ -234,6 +255,55 @@ export function PlacementRow({
                 ))}
               </ul>
 
+              {/* Paste-ready Hebrew order message (from the originating session PO) */}
+              {po.order_document_text ? (
+                <div className="rounded-md border border-border/60 bg-bg-subtle/40 p-2">
+                  <div className="mb-1 flex items-center justify-between">
+                    <span className="text-xs font-medium text-fg-muted">
+                      הודעת הזמנה לספק
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void navigator.clipboard
+                          ?.writeText(po.order_document_text ?? "")
+                          .then(() => {
+                            setCopied(true);
+                            setTimeout(() => setCopied(false), 1500);
+                          });
+                      }}
+                      className="inline-flex min-h-[44px] items-center gap-1 rounded px-2 text-xs font-medium underline hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                      data-testid={`placement-copy-doc-${po.po_id}`}
+                    >
+                      <span aria-live="polite">{copied ? "הועתק" : "העתק"}</span>
+                      {copied ? <span aria-hidden>✓</span> : null}
+                    </button>
+                  </div>
+                  <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-words text-xs text-fg">
+                    {po.order_document_text}
+                  </pre>
+                </div>
+              ) : null}
+
+              {/* FLOW-003: supplier-confirmed arrival date */}
+              <div className="flex flex-wrap items-center gap-2">
+                <label
+                  htmlFor={`placement-eta-${po.po_id}`}
+                  className="text-sm font-medium text-fg"
+                >
+                  תאריך אספקה מאושר
+                </label>
+                <input
+                  id={`placement-eta-${po.po_id}`}
+                  type="date"
+                  className="input w-44"
+                  value={confirmedDate}
+                  min={todayIso}
+                  onChange={(e) => setConfirmedDate(e.target.value)}
+                  data-testid={`placement-eta-${po.po_id}`}
+                />
+              </div>
+
               {/* Payment terms */}
               <div className="flex flex-wrap items-center gap-2">
                 <label
@@ -246,6 +316,7 @@ export function PlacementRow({
                   id={`placement-terms-${po.po_id}`}
                   className="input w-40"
                   value={termCode}
+                  required
                   onChange={(e) => setTermCode(e.target.value)}
                   data-testid={`placement-terms-${po.po_id}`}
                 >
@@ -278,16 +349,25 @@ export function PlacementRow({
                 ) : null}
               </div>
 
-              {errorMsg ? (
-                <div
-                  role="alert"
-                  className="flex items-start gap-2 rounded-md border border-danger/40 bg-danger/5 px-3 py-2 text-sm text-danger-fg"
-                  data-testid={`placement-error-${po.po_id}`}
-                >
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-                  <span>{errorMsg}</span>
-                </div>
-              ) : null}
+              {/* A11Y-010: always mounted so AT announces every error as a text
+                  mutation (not a node remount that some screen readers miss). */}
+              <div
+                role="alert"
+                aria-live="assertive"
+                className={
+                  errorMsg
+                    ? "flex items-start gap-2 rounded-md border border-danger/40 bg-danger-softer px-3 py-2 text-sm text-danger-fg"
+                    : "sr-only"
+                }
+                data-testid={`placement-error-${po.po_id}`}
+              >
+                {errorMsg ? (
+                  <>
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                    <span>{errorMsg}</span>
+                  </>
+                ) : null}
+              </div>
 
               <div className="flex items-center justify-end gap-2">
                 <button
@@ -298,7 +378,7 @@ export function PlacementRow({
                   data-testid={`placement-submit-${po.po_id}`}
                 >
                   {placeMut.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                    <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />
                   ) : (
                     <PackageCheck className="h-4 w-4" aria-hidden />
                   )}

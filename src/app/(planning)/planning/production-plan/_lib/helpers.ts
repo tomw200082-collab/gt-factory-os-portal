@@ -105,6 +105,41 @@ export const VARIANCE_SIGN_LABEL: Record<VarianceSign, string> = {
   under: "Under",
 };
 
+// Deep entry point for the variance-display decision. Callers used to import
+// computeVarianceSign + fmtVarianceQty + fmtVariancePct + VARIANCE_SIGN_LABEL
+// and hand-assemble them (sign, then qty, then pct, then label, then tone) at
+// every site that shows a variance. `describeVariance` hides that assembly —
+// and the formula + on-target band — behind one call returning everything a
+// display needs. The primitives above remain the internal building blocks;
+// this just stops the caller from having to know how they fit together.
+// (Tone/colour stays a UI concern: callers branch on `isOnTarget`.)
+export interface VarianceDescriptor {
+  sign: VarianceSign;
+  /** sign === "on_target" — for success-vs-warning tone selection at the call site. */
+  isOnTarget: boolean;
+  /** "On target" | "Over" | "Under". */
+  signLabel: string;
+  /** Signed quantity, e.g. "+135", "−2", "0". */
+  qtyText: string;
+  /** Signed percentage, e.g. "+67.5%", "−4.0%", "—" when unknown. */
+  pctText: string;
+}
+
+export function describeVariance(
+  varianceQtyStr: string,
+  variancePctStr: string | null,
+  plannedQtyStr: string,
+): VarianceDescriptor {
+  const sign = computeVarianceSign(varianceQtyStr, plannedQtyStr);
+  return {
+    sign,
+    isOnTarget: sign === "on_target",
+    signLabel: VARIANCE_SIGN_LABEL[sign],
+    qtyText: fmtVarianceQty(varianceQtyStr),
+    pctText: fmtVariancePct(variancePctStr),
+  };
+}
+
 export const VARIANCE_TOOLTIP =
   "Variance compares what was produced to what was planned. " +
   "Scrap is not counted as output. " +

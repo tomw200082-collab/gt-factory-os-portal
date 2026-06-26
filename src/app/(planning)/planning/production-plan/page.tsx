@@ -229,6 +229,20 @@ function ManualAddModal({
     closeDisabled: isSubmitting,
   });
 
+  // UX-flow audit (FLOW-E/B): on a submit (422) error, move focus to the first
+  // field flagged aria-invalid so keyboard / screen-reader users land on the
+  // problem instead of staying on the dialog title.
+  useEffect(() => {
+    if (!serverErrors || Object.keys(serverErrors.byField ?? {}).length === 0) {
+      return;
+    }
+    queueMicrotask(() => {
+      dialogRef.current
+        ?.querySelector<HTMLElement>('[aria-invalid="true"]')
+        ?.focus();
+    });
+  }, [serverErrors]);
+
   // INTER-004 — UoM is a select over the known UoM universe. If the
   // item-derived default (sales_uom) somehow isn't in the option list, keep
   // it selectable rather than silently dropping the value.
@@ -324,6 +338,7 @@ function ManualAddModal({
                   ? manualAddFieldErrorId("plan_date")
                   : undefined
               }
+              aria-invalid={serverErrors?.byField["plan_date"]?.length ? true : undefined}
             />
             <ManualAddFieldErrors field="plan_date" serverErrors={serverErrors} />
           </label>
@@ -344,6 +359,7 @@ function ManualAddModal({
                   ? manualAddFieldErrorId("item_id")
                   : undefined
               }
+              aria-invalid={serverErrors?.byField["item_id"]?.length ? true : undefined}
             >
               <option value="">— select a product —</option>
               <optgroup label="Manufactured">
@@ -391,7 +407,12 @@ function ManualAddModal({
                     .filter(Boolean)
                     .join(" ") || undefined
                 }
-                aria-invalid={qty && !(parseFloat(qty) > 0) ? true : undefined}
+                aria-invalid={
+                  (qty && !(parseFloat(qty) > 0)) ||
+                  serverErrors?.byField["planned_qty"]?.length
+                    ? true
+                    : undefined
+                }
                 required
                 aria-required="true"
               />
@@ -421,6 +442,7 @@ function ManualAddModal({
                     ? manualAddFieldErrorId("uom")
                     : undefined
                 }
+                aria-invalid={serverErrors?.byField["uom"]?.length ? true : undefined}
                 data-testid="manual-add-uom"
               >
                 <option value="">— select a unit —</option>
@@ -503,7 +525,14 @@ function ManualAddModal({
                 disabled={!canSubmit}
                 data-testid="manual-add-submit"
               >
-                <Plus className="h-3 w-3" strokeWidth={2.5} />
+                {/* UX-flow audit (FINDING-05/O): show a spinner, not just a
+                    label change, so the in-flight state reads without relying
+                    on text alone (matches the AddNote modal). */}
+                {isSubmitting ? (
+                  <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.5} aria-hidden />
+                ) : (
+                  <Plus className="h-3 w-3" strokeWidth={2.5} />
+                )}
                 {isSubmitting ? "Saving…" : "Add to plan"}
               </button>
             )}
@@ -792,6 +821,16 @@ function EditModal({
     [uom, uomOptions],
   );
 
+  // UX-flow audit (FINDING-07): the diff is computed on submit and an empty
+  // diff closes the modal silently. Disabling "Save changes" until something
+  // actually changed makes the no-op impossible and removes the "did it save?"
+  // ambiguity.
+  const isDirty =
+    planDate !== plan.plan_date ||
+    qty !== (plan.planned_qty ?? "") ||
+    uom !== (plan.uom ?? "") ||
+    notes !== (plan.notes ?? "");
+
   // Tranche 079 (A11Y-R02 / R10) — dialog treatment (matches ManualAddModal).
   const { dialogRef, titleRef, onKeyDown: onDialogKeyDown } = useDialogA11y({
     onClose,
@@ -931,7 +970,7 @@ function EditModal({
             <button
               type="submit"
               className="btn btn-primary btn-sm"
-              disabled={isSubmitting}
+              disabled={isSubmitting || !isDirty}
               data-testid="edit-submit"
             >
               {isSubmitting ? "Saving…" : "Save changes"}
@@ -1375,6 +1414,35 @@ export default function ProductionPlanPage() {
 
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
   const weekEnd = addDays(weekStart, 6);
+
+  // UX-flow audit (deep-linking + state-preservation): the visible week lives
+  // in the URL as ?week=YYYY-MM-DD, so it is shareable and survives navigating
+  // away and back. SSR renders the default (current) week — matching the first
+  // client paint, no hydration mismatch — then this mount effect honors a
+  // ?week= param if present. We read window.location directly (rather than
+  // useSearchParams) to keep the page SSR-/build-safe with no Suspense wrapper.
+  useEffect(() => {
+    const wk = new URLSearchParams(window.location.search).get("week");
+    if (wk && /^\d{4}-\d{2}-\d{2}$/.test(wk)) {
+      const d = new Date(`${wk}T00:00:00`);
+      if (!Number.isNaN(d.getTime())) setWeekStart(startOfWeek(d));
+    }
+  }, []);
+
+  // Change the visible week AND reflect it in the URL. replaceState (not push)
+  // keeps week-stepping out of the back stack while still leaving a shareable,
+  // back-restorable URL on the page.
+  const goToWeek = useCallback((d: Date) => {
+    const ws = startOfWeek(d);
+    setWeekStart(ws);
+    const params = new URLSearchParams(window.location.search);
+    params.set("week", toIsoDate(ws));
+    window.history.replaceState(
+      null,
+      "",
+      `${window.location.pathname}?${params.toString()}`,
+    );
+  }, []);
 
   // Modal state
   const [showManualAdd, setShowManualAdd] = useState<{ defaultDate: string } | null>(null);
@@ -1848,6 +1916,19 @@ export default function ProductionPlanPage() {
         Inventory updates only after actuals are reported in the production report.
       </div>
 
+      {/* UX-flow audit (FLOW-E/P): skeleton KPI strip during load so the real
+          strip doesn't pop in and shove the week nav + board down (CLS). */}
+      {plansQuery.isLoading && (
+        <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4" aria-hidden="true">
+          {[1, 2, 3, 4].map((i) => (
+            <div key={i} className="kpi-microcard">
+              <span className="h-[22px] w-12 animate-pulse rounded bg-bg-subtle" />
+              <span className="mt-1 h-2 w-16 animate-pulse rounded bg-bg-subtle" />
+            </div>
+          ))}
+        </div>
+      )}
+
       {/* KPI strip — renders only when data has loaded */}
       {hasData && (
         <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
@@ -1911,7 +1992,7 @@ export default function ProductionPlanPage() {
             <button
               type="button"
               className="btn btn-sm gap-1"
-              onClick={() => setWeekStart(addDays(weekStart, -7))}
+              onClick={() => goToWeek(addDays(weekStart, -7))}
               aria-label="Previous week"
             >
               <ChevronLeft className="h-3 w-3" strokeWidth={2} />
@@ -1920,7 +2001,7 @@ export default function ProductionPlanPage() {
             <button
               type="button"
               className="btn btn-sm gap-1"
-              onClick={() => setWeekStart(addDays(weekStart, 7))}
+              onClick={() => goToWeek(addDays(weekStart, 7))}
               aria-label="Next week"
             >
               <span className="hidden md:inline">Next</span>
@@ -1954,7 +2035,7 @@ export default function ProductionPlanPage() {
             <button
               type="button"
               className="btn btn-sm"
-              onClick={() => setWeekStart(startOfWeek(new Date()))}
+              onClick={() => goToWeek(new Date())}
             >
               This week
             </button>
@@ -2006,9 +2087,10 @@ export default function ProductionPlanPage() {
           progress + tomorrow preview + quick "Move to tomorrow" for each
           still-unreported today plan. Only rendered when today is inside
           the visible week (the query window). */}
-      {hasData &&
-      todayInWeek &&
-      (todaySummary.todayPlanned > 0 || todaySummary.tomorrowJobs > 0) ? (
+      {hasData && todayInWeek ? (
+        /* UX-flow audit (FINDING-06/F): the strip is the planner's "today"
+           anchor, so it must persist even on a day with nothing planned —
+           it used to vanish when today + tomorrow were both empty. */
         <div
           className="mb-4 rounded-lg border border-border/50 bg-bg-raised px-4 py-3 shadow-raised"
           data-testid="today-strip"
@@ -2017,6 +2099,11 @@ export default function ProductionPlanPage() {
             <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
               Today
             </span>
+            {todaySummary.todayPlanned === 0 ? (
+              <span className="text-fg-muted" data-testid="today-strip-counts">
+                Nothing planned for today yet.
+              </span>
+            ) : (
             <span data-testid="today-strip-counts">
               planned{" "}
               <span className="font-semibold tabular-nums text-fg-strong">
@@ -2040,6 +2127,7 @@ export default function ProductionPlanPage() {
                 {todaySummary.todayUnreported}
               </span>
             </span>
+            )}
             <span
               className="ml-auto text-fg-muted"
               data-testid="today-strip-tomorrow"

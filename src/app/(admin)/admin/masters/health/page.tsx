@@ -313,9 +313,25 @@ export default function AdminMasterDataHealthPage(): JSX.Element {
         </div>
       ) : null}
 
-      {/* On error, do not render the HealthSections — a failed load must
-          never show a green "no issues" all-clear. */}
-      {!isError && (
+      {/* While loading, show skeleton rows. The HealthSections must NOT render
+          with not-yet-loaded zero counts — that flashes a false green "no
+          issues" all-clear on a surface whose whole job is to gate planning
+          (UX-flow audit FLOW-A04). */}
+      {isLoading ? (
+        <div className="space-y-3" aria-busy="true" aria-live="polite">
+          {[1, 2, 3].map((i) => (
+            <div key={i} className="rounded-md border border-border/40 bg-bg-raised p-4">
+              <div className="h-4 w-2/5 animate-pulse rounded bg-bg-subtle" />
+              <div className="mt-2 h-3 w-3/5 animate-pulse rounded bg-bg-subtle" />
+            </div>
+          ))}
+          <span className="sr-only">Checking master data health…</span>
+        </div>
+      ) : null}
+
+      {/* On error OR while loading, do not render the HealthSections — a failed
+          or in-flight load must never show a green "no issues" all-clear. */}
+      {!isLoading && !isError && (
         <>
       {/* Check 1: Active components missing a primary supplier */}
       <HealthSection

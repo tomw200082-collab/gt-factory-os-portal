@@ -148,6 +148,11 @@ export function ProductionDayLane({
           <div className="flex flex-col items-center justify-center gap-2 flex-1 py-6 text-center">
             {canAct ? (
               <>
+                {/* UX-flow audit (FINDING-04/G): the empty-lane CTA used to read
+                    "No production planned" — which states what's absent, not the
+                    action. Keep the absence as context and make the button label
+                    the action ("Add production"). */}
+                <span className="text-[10px] text-fg-faint">No production planned</span>
                 <button
                   type="button"
                   className="flex flex-col items-center gap-2 group/add transition-opacity duration-150"
@@ -168,8 +173,8 @@ export function ProductionDayLane({
                       strokeWidth={2}
                     />
                   </div>
-                  <span className="text-[10px] text-fg-faint group-hover/add:text-fg-subtle transition-colors duration-150">
-                    No production planned
+                  <span className="text-[10px] font-medium text-fg-subtle group-hover/add:text-accent transition-colors duration-150">
+                    Add production
                   </span>
                 </button>
                 <button

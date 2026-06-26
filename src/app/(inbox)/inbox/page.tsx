@@ -59,6 +59,7 @@ import { NotesBox } from "@/components/fields/NotesBox";
 import { useSession } from "@/lib/auth/session-provider";
 import { cn } from "@/lib/cn";
 import { ScrollFade } from "@/components/ui/ScrollFade";
+import { useConfirm } from "@/components/overlays/ConfirmDialog";
 
 import {
   fetchExceptions,
@@ -483,9 +484,6 @@ function BulkActionBar({
   onSelectAllVisible,
   onClearSelection,
   onBulkResolve,
-  confirming,
-  onConfirmBulk,
-  onCancelBulkConfirm,
   busy,
 }: {
   selectedCount: number;
@@ -495,9 +493,6 @@ function BulkActionBar({
   onSelectAllVisible: () => void;
   onClearSelection: () => void;
   onBulkResolve: () => void;
-  confirming: boolean;
-  onConfirmBulk: () => void;
-  onCancelBulkConfirm: () => void;
   busy: boolean;
 }) {
   if (selectedCount === 0 && visibleSelectableCount === 0) return null;
@@ -547,47 +542,17 @@ function BulkActionBar({
             Clear
           </button>
         ) : null}
-        {confirming && selectedCount > 0 ? (
-          <>
-            <span
-              className="font-semibold text-accent"
-              data-testid="inbox-bulk-confirm-prompt"
-            >
-              Resolve {selectedCount}? This cannot be undone.
-            </span>
-            <button
-              type="button"
-              className="btn btn-sm max-md:min-h-[32px]"
-              data-testid="inbox-bulk-confirm-cancel"
-              onClick={onCancelBulkConfirm}
-              disabled={busy}
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              className="btn btn-sm btn-primary gap-1.5 max-md:min-h-[32px]"
-              data-testid="inbox-bulk-confirm-proceed"
-              onClick={onConfirmBulk}
-              disabled={busy}
-            >
-              <CheckCircle2 className="h-3 w-3" strokeWidth={2.25} />
-              {busy ? "Resolving…" : `Confirm — resolve ${selectedCount}`}
-            </button>
-          </>
-        ) : (
-          <button
-            type="button"
-            className="btn btn-sm btn-primary gap-1.5 max-md:min-h-[32px]"
-            data-testid="inbox-bulk-resolve"
-            onClick={onBulkResolve}
-            disabled={selectedCount === 0 || busy}
-            title="⌘⏎ to resolve all selected"
-          >
-            <CheckCircle2 className="h-3 w-3" strokeWidth={2.25} />
-            {busy ? "Resolving…" : `Resolve ${selectedCount}`}
-          </button>
-        )}
+        <button
+          type="button"
+          className="btn btn-sm btn-primary gap-1.5 max-md:min-h-[32px]"
+          data-testid="inbox-bulk-resolve"
+          onClick={onBulkResolve}
+          disabled={selectedCount === 0 || busy}
+          title="⌘⏎ to resolve all selected"
+        >
+          <CheckCircle2 className="h-3 w-3" strokeWidth={2.25} />
+          {busy ? "Resolving…" : `Resolve ${selectedCount}`}
+        </button>
       </div>
     </div>
   );
@@ -631,6 +596,11 @@ export default function InboxListPage() {
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  // UX-flow audit (FLOW-001): irreversible bulk resolve goes through the
+  // accessible ConfirmDialog (focus-trapped, Escape-cancels), not the native
+  // window.confirm (inaccessible, suppressed on mobile).
+  const { confirm, dialog: confirmDialog } = useConfirm();
+
   // Tom 2026-05-06 §94: recently-dismissed pill for one-tap undo.
   type RecentAction = {
     id: string;
@@ -643,12 +613,7 @@ export default function InboxListPage() {
 
   // Selection.
   const [selected, setSelected] = useState<Set<string>>(new Set());
-  // INTER-003: bulk-resolve confirmation is an inline two-step (arm → confirm)
-  // instead of window.confirm, which fails silently in some WebViews and can't
-  // be unit-tested. `bulkConfirming` is the armed state.
-  const [bulkConfirming, setBulkConfirming] = useState(false);
   const toggleSelected = useCallback((id: string, isOn: boolean) => {
-    setBulkConfirming(false);
     setSelected((prev) => {
       const next = new Set(prev);
       if (isOn) next.add(id);
@@ -656,10 +621,7 @@ export default function InboxListPage() {
       return next;
     });
   }, []);
-  const clearSelection = useCallback(() => {
-    setSelected(new Set());
-    setBulkConfirming(false);
-  }, []);
+  const clearSelection = useCallback(() => setSelected(new Set()), []);
 
   // Search box.
   const [searchInput, setSearchInput] = useState("");
@@ -1086,24 +1048,27 @@ export default function InboxListPage() {
     },
   });
 
-  // First step: arm the inline confirm (no window.confirm — see bulkConfirming).
-  const onBulkResolve = useCallback(() => {
+  const onBulkResolve = useCallback(async () => {
     if (selected.size === 0) return;
-    setBulkConfirming(true);
-  }, [selected]);
-
-  // Second step: the operator confirmed the armed bulk resolve.
-  const onConfirmBulk = useCallback(() => {
-    if (selected.size === 0) {
-      setBulkConfirming(false);
-      return;
-    }
     const ids = Array.from(selected);
+    const ok = await confirm({
+      title: `Resolve ${ids.length} exception${ids.length === 1 ? "" : "s"}?`,
+      description: (
+        <>
+          {selectionBreakdown ? (
+            <span className="block">{selectionBreakdown}</span>
+          ) : null}
+          <span className="block">This cannot be undone.</span>
+        </>
+      ),
+      confirmLabel: `Resolve ${ids.length}`,
+      tone: "danger",
+    });
+    if (!ok) return;
     setActionSuccess(null);
     setActionError(null);
-    setBulkConfirming(false);
     bulkResolveMutation.mutate({ ids });
-  }, [selected, bulkResolveMutation]);
+  }, [selected, selectionBreakdown, bulkResolveMutation, confirm]);
 
   // Shared row renderer — used by both the working inbox list and the
   // collapsed System & diagnostics section. `focusIdx` is the j/k keyboard
@@ -1114,7 +1079,6 @@ export default function InboxListPage() {
         key={row.id}
         row={row}
         now={now}
-        onActionComplete={invalidateExceptions}
         density={density}
         isFocused={focusIdx !== null && focusedIdx === focusIdx}
         onFocusRow={() => {
@@ -1152,7 +1116,6 @@ export default function InboxListPage() {
       toggleSelected,
       resolveMutation,
       ackMutation,
-      invalidateExceptions,
     ],
   );
 
@@ -1178,9 +1141,7 @@ export default function InboxListPage() {
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter" && !isEditing()) {
         if (selected.size === 0) return;
         e.preventDefault();
-        // First ⌘⏎ arms the inline confirm; a second ⌘⏎ confirms.
-        if (bulkConfirming) onConfirmBulk();
-        else onBulkResolve();
+        onBulkResolve();
         return;
       }
       if (isEditing()) return;
@@ -1218,12 +1179,7 @@ export default function InboxListPage() {
         return;
       }
       if (e.key === "a") {
-        if (
-          canAct &&
-          !ackMutation.isPending &&
-          !focused.type.startsWith("approval:") &&
-          focused.inline_actions.includes("acknowledge")
-        ) {
+        if (canAct && !focused.type.startsWith("approval:") && focused.inline_actions.includes("acknowledge")) {
           e.preventDefault();
           ackMutation.mutate(focused.id);
         }
@@ -1240,8 +1196,6 @@ export default function InboxListPage() {
     canAct,
     onSelectAllVisible,
     onBulkResolve,
-    onConfirmBulk,
-    bulkConfirming,
     toggleSelected,
     ackMutation,
     router,
@@ -1282,6 +1236,7 @@ export default function InboxListPage() {
 
   return (
     <>
+      {confirmDialog}
       <WorkflowHeader
         eyebrow="Inbox"
         title="Inbox"
@@ -1524,6 +1479,8 @@ export default function InboxListPage() {
           <div
             className="flex items-center gap-2 border-b border-success/30 bg-success-subtle/40 px-5 py-2 text-xs text-success-fg"
             data-testid="inbox-action-success"
+            role="status"
+            aria-live="polite"
           >
             <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
             <span>{actionSuccess}</span>
@@ -1541,6 +1498,8 @@ export default function InboxListPage() {
           <div
             className="flex items-center gap-2 border-b border-danger/30 bg-danger-softer px-5 py-2 text-xs text-danger-fg"
             data-testid="inbox-action-error"
+            role="alert"
+            aria-live="assertive"
           >
             <AlertCircle className="h-3.5 w-3.5 shrink-0" />
             <span>{actionError}</span>
@@ -1581,9 +1540,6 @@ export default function InboxListPage() {
           onSelectAllVisible={onSelectAllVisible}
           onClearSelection={clearSelection}
           onBulkResolve={onBulkResolve}
-          confirming={bulkConfirming}
-          onConfirmBulk={onConfirmBulk}
-          onCancelBulkConfirm={() => setBulkConfirming(false)}
           busy={bulkResolveMutation.isPending}
         />
 
@@ -1830,7 +1786,6 @@ function InboxRowCard({
   onAcknowledge,
   ackBusy,
   resolveBusy,
-  onActionComplete,
 }: {
   row: InboxRow;
   now: Date;
@@ -1847,7 +1802,6 @@ function InboxRowCard({
   onAcknowledge: (id: string) => void;
   ackBusy: boolean;
   resolveBusy: boolean;
-  onActionComplete: () => void;
 }): ReactNode {
   const sev = SEVERITY_CONFIG[row.severity];
   const Icon = sev.icon;
@@ -2051,11 +2005,7 @@ function InboxRowCard({
 
           {showWastePCInline ? (
             <div onClick={(e) => e.stopPropagation()}>
-              <ApprovalInlineCard
-                row={row}
-                now={now}
-                onActionComplete={onActionComplete}
-              />
+              <ApprovalInlineCard row={row} now={now} />
             </div>
           ) : null}
 

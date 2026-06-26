@@ -360,6 +360,9 @@ function ItemsPageInner(): JSX.Element {
   const statusMutation = useMutation({
     mutationFn: async (args: {
       item_id: string;
+      // UX-flow audit (FLOW-A05): carry the display name so the banner shows
+      // a human label, not the raw item_id / enum value.
+      item_name: string;
       newStatus: string;
       updated_at: string;
     }) =>
@@ -371,7 +374,9 @@ function ItemsPageInner(): JSX.Element {
     onSuccess: (_data, vars) => {
       setBanner({
         kind: "success",
-        message: `Status updated for ${vars.item_id} → ${vars.newStatus}.`,
+        message: `${vars.item_name} ${
+          vars.newStatus === "ACTIVE" ? "reactivated" : "deactivated"
+        }.`,
       });
       void queryClient.invalidateQueries({ queryKey: ["admin", "items"] });
     },
@@ -382,7 +387,7 @@ function ItemsPageInner(): JSX.Element {
           : err.message;
       setBanner({
         kind: "error",
-        message: `Status update failed on ${vars.item_id}: ${msg}`,
+        message: `Could not update ${vars.item_name}: ${msg}`,
       });
     },
   });
@@ -450,6 +455,7 @@ function ItemsPageInner(): JSX.Element {
     setBanner(null);
     statusMutation.mutate({
       item_id: row.item_id,
+      item_name: row.item_name,
       newStatus: next,
       updated_at: row.updated_at,
     });
