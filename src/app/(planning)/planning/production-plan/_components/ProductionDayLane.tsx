@@ -102,7 +102,7 @@ export function ProductionDayLane({
         <div className="flex flex-col gap-0.5">
           <span
             className={cn(
-              "text-[10px] font-bold uppercase tracking-wider leading-none",
+              "text-[10px] font-bold uppercase tracking-sops leading-none",
               dayNameColor(isToday, isOverdue, isPast),
             )}
           >
@@ -120,18 +120,18 @@ export function ProductionDayLane({
 
         <div className="flex flex-col items-end gap-1 shrink-0">
           {isToday && (
-            <span className="text-[9px] font-bold uppercase tracking-wider text-accent leading-none">
+            <span className="text-3xs font-bold uppercase tracking-sops text-accent leading-none">
               Today
             </span>
           )}
           {isOverdue && liveCount > 0 && (
-            <span className="text-[9px] font-bold uppercase tracking-wider text-danger leading-none">
+            <span className="text-3xs font-bold uppercase tracking-sops text-danger leading-none">
               {liveCount} overdue
             </span>
           )}
           {doneCount > 0 && liveCount === 0 && (
-            <span className="text-[9px] font-semibold text-success-fg leading-none">
-              ✓ Done
+            <span className="text-3xs font-semibold text-success-fg leading-none">
+              Completed
             </span>
           )}
           {dayTotal > 0 && (
@@ -230,20 +230,22 @@ export function ProductionDayLane({
         <div className="px-2 pb-2 flex gap-1">
           <button
             type="button"
-            className="btn btn-ghost btn-xs flex-1 gap-1 text-fg-faint hover:text-fg"
+            className="btn btn-ghost btn-xs flex-1 gap-1 min-h-[32px] text-fg-faint hover:text-fg"
             onClick={() => onAdd(date)}
+            aria-label={`Add production for ${dayName} ${dateLabel}`}
             data-testid="day-lane-add"
           >
-            <Plus className="h-3 w-3" strokeWidth={2.5} />
+            <Plus className="h-3 w-3" strokeWidth={2.5} aria-hidden />
             Production
           </button>
           <button
             type="button"
-            className="btn btn-ghost btn-xs flex-1 gap-1 text-fg-faint hover:text-fg"
+            className="btn btn-ghost btn-xs flex-1 gap-1 min-h-[32px] text-fg-faint hover:text-fg"
             onClick={() => onAddNote(date)}
+            aria-label={`Add note for ${dayName} ${dateLabel}`}
             data-testid="day-lane-add-note"
           >
-            <StickyNote className="h-3 w-3" strokeWidth={2} />
+            <StickyNote className="h-3 w-3" strokeWidth={2} aria-hidden />
             Note
           </button>
         </div>

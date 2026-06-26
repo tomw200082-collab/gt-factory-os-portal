@@ -395,9 +395,14 @@ function RejectPanel({
 export function ApprovalInlineCard({
   row,
   now,
+  onActionComplete,
 }: {
   row: InboxRow;
   now: Date;
+  /** Fired after a terminal approve/reject (or conflict) so the parent can
+   *  invalidate the inbox queue — otherwise the actioned row lingers until the
+   *  next staleTime refetch. */
+  onActionComplete?: () => void;
 }) {
   const kind: ApprovalKind | null =
     row.type === "approval:waste"
@@ -501,7 +506,21 @@ export function ApprovalInlineCard({
     >
       {/* Facts */}
       {detail == null && !loadError ? (
-        <div className="text-xs text-fg-muted animate-pulse">טוען פרטים…</div>
+        <div
+          className="space-y-2"
+          aria-busy="true"
+          aria-label="טוען פרטים"
+          data-testid="approval-inline-loading"
+        >
+          <div className="grid grid-cols-2 gap-2">
+            <div className="h-4 animate-pulse rounded bg-bg-subtle" />
+            <div className="h-4 animate-pulse rounded bg-bg-subtle" />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="h-4 animate-pulse rounded bg-bg-subtle" />
+            <div className="h-4 w-2/3 animate-pulse rounded bg-bg-subtle" />
+          </div>
+        </div>
       ) : loadError ? (
         <div
           className="rounded-md border border-warning/40 bg-warning-softer/60 p-3 text-sm text-warning-fg"
@@ -540,6 +559,7 @@ export function ApprovalInlineCard({
               setBusy(true);
               const result = await postApprove(kind, submissionId, null);
               setOutcome(result);
+              if (result.kind !== "error") onActionComplete?.();
               setBusy(false);
             }}
           >
@@ -566,6 +586,7 @@ export function ApprovalInlineCard({
             setBusy(true);
             const result = await postReject(kind, submissionId, reason);
             setOutcome(result);
+            if (result.kind !== "error") onActionComplete?.();
             setBusy(false);
           }}
         />

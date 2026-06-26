@@ -1,7 +1,8 @@
 "use client";
 
 // ---------------------------------------------------------------------------
-// Product Decision Board — Tranche 080 (created) · Tranche 081 (premium rebuild).
+// Product Decision Board — Tranche 080 (created) · 081 (premium rebuild) ·
+// 091 (UI amplify → signature "decision cockpit").
 //
 // Access: planner + admin (the (economics) route group gates on
 // planning:execute).
@@ -17,10 +18,7 @@
 //                         from private_core.v_fg_economics (migrations 0261/0262,
 //                         shipped by backend PRs #101 + #102).
 // Velocity is the Shopify 90-day sell-through — the factory's complete demand
-// signal across every channel. (It replaces /api/orders/by-item-and-period,
-// the LionWheel delivery mirror, which only counted units physically shipped
-// via LionWheel and so undercounted demand and missed whole product lines —
-// e.g. the margaritas — that don't go out through LionWheel.)
+// signal across every channel.
 // Derived in-browser:
 //   units 90d    = qty_sold_90d
 //   contribution = material_margin_ils × units_sold
@@ -29,9 +27,14 @@
 //   annualised   = window value × (365 / 90)
 // Products missing cost/price are "Needs data" and never plotted — we do not
 // ground a recommendation on a number we don't have.
+//
+// Tranche 091 is presentation-only: same data contract, same testids
+// (decision-board / verdict-band / segments / quadrant). The visual language is
+// the "Operational Precision" system taken to its peak — a control-tower
+// cockpit whose signature is the margin × velocity portfolio map.
 // ---------------------------------------------------------------------------
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Info,
@@ -49,6 +52,7 @@ import {
   AlertTriangle,
   Moon,
   HelpCircle,
+  Coins,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
@@ -62,6 +66,9 @@ import { formatIls, formatPct, formatQtyInt } from "@/lib/utils/format-money";
 const MARGIN_HEALTHY_PCT = 25; // ≥ this on price = healthy margin (quadrant Y split)
 const MARGIN_THIN_PCT = 10; // < this = thin
 
+// The Shopify read model is a fixed trailing-90-day window.
+const WINDOW_DAYS = 90;
+
 type DecisionKey = "star" | "gem" | "workhorse" | "drag" | "loss" | "dormant" | "needs_data";
 
 interface DecisionMeta {
@@ -69,30 +76,27 @@ interface DecisionMeta {
   label: string;
   action: string;
   tone: BadgeTone;
-  fill: string;
+  fill: string; // saturated edge color (legend, bubble stroke, accents)
+  light: string; // lighter center color, for the bubble's radial body
   icon: LucideIcon;
   blurb: string;
 }
 
+// Category palette — moss / petrol-slate / amber / oxide / oxidized-red / slate,
+// chosen to sit inside the warm-bone "Operational Precision" world rather than
+// generic chart primaries. `light` gives each bubble a lit, dimensional body.
 const DECISION: Record<DecisionKey, DecisionMeta> = {
-  star: { key: "star", label: "Star", action: "Protect", tone: "success", fill: "#16a34a", icon: ShieldCheck, blurb: "Healthy margin, sells well. Protect supply and shelf space." },
-  gem: { key: "gem", label: "Hidden gem", action: "Promote", tone: "info", fill: "#2563eb", icon: Rocket, blurb: "Healthy margin, low volume. Push marketing / distribution." },
-  workhorse: { key: "workhorse", label: "Workhorse", action: "Fix price", tone: "warning", fill: "#d97706", icon: Tag, blurb: "Sells well but margin is thin. Reprice or cut cost." },
-  drag: { key: "drag", label: "Drag", action: "Review for drop", tone: "warning", fill: "#b45309", icon: TrendingDown, blurb: "Thin margin and low volume. Candidate to drop or relaunch." },
-  loss: { key: "loss", label: "Losing money", action: "Act now", tone: "danger", fill: "#dc2626", icon: AlertTriangle, blurb: "Sells below cost. Reprice immediately or drop." },
-  dormant: { key: "dormant", label: "Not selling", action: "Review", tone: "muted", fill: "#94a3b8", icon: Moon, blurb: "No sales in the window. Review whether to keep listing." },
-  needs_data: { key: "needs_data", label: "Needs data", action: "Set cost & price", tone: "muted", fill: "#cbd5e1", icon: HelpCircle, blurb: "Cost or price missing — cannot judge yet. Complete the data." },
+  star: { key: "star", label: "Star", action: "Protect", tone: "success", fill: "#15803d", light: "#4ade80", icon: ShieldCheck, blurb: "Healthy margin, sells well. Protect supply and shelf space." },
+  gem: { key: "gem", label: "Hidden gem", action: "Promote", tone: "info", fill: "#1d4ed8", light: "#60a5fa", icon: Rocket, blurb: "Healthy margin, low volume. Push marketing / distribution." },
+  workhorse: { key: "workhorse", label: "Workhorse", action: "Fix price", tone: "warning", fill: "#c2620a", light: "#fbbf24", icon: Tag, blurb: "Sells well but margin is thin. Reprice or cut cost." },
+  drag: { key: "drag", label: "Drag", action: "Review for drop", tone: "warning", fill: "#9a4209", light: "#f59e0b", icon: TrendingDown, blurb: "Thin margin and low volume. Candidate to drop or relaunch." },
+  loss: { key: "loss", label: "Losing money", action: "Act now", tone: "danger", fill: "#c0241f", light: "#f87171", icon: AlertTriangle, blurb: "Sells below cost. Reprice immediately or drop." },
+  dormant: { key: "dormant", label: "Not selling", action: "Review", tone: "muted", fill: "#64748b", light: "#cbd5e1", icon: Moon, blurb: "No sales in the window. Review whether to keep listing." },
+  needs_data: { key: "needs_data", label: "Needs data", action: "Set cost & price", tone: "muted", fill: "#94a3b8", light: "#e2e8f0", icon: HelpCircle, blurb: "Cost or price missing — cannot judge yet. Complete the data." },
 };
 
 // Quadrant cards, in reading order.
 const SEGMENT_ORDER: DecisionKey[] = ["star", "gem", "workhorse", "drag", "loss", "dormant", "needs_data"];
-
-// Locked to 90d: velocity is sourced from the Shopify 90-day read model
-// (v_fg_economics). A 30/180 toggle would silently mislabel that fixed window,
-// so the board commits to one honest window.
-const WINDOWS = [
-  { days: 90, label: "90d" },
-] as const;
 
 // ---------------------------------------------------------------------------
 // Wire types
@@ -162,15 +166,61 @@ async function fetchJson<T>(url: string): Promise<T> {
 }
 
 // ---------------------------------------------------------------------------
+// Motion primitives — count-ups + skeletons, all reduced-motion safe.
+// ---------------------------------------------------------------------------
+function useReducedMotion(): boolean {
+  const [reduced, setReduced] = useState(false);
+  useEffect(() => {
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)");
+    setReduced(mq.matches);
+    const onChange = (e: MediaQueryListEvent) => setReduced(e.matches);
+    mq.addEventListener("change", onChange);
+    return () => mq.removeEventListener("change", onChange);
+  }, []);
+  return reduced;
+}
+
+function useCountUp(target: number, durationMs = 850): number {
+  const reduced = useReducedMotion();
+  const [val, setVal] = useState(0);
+  const fromRef = useRef(0);
+  useEffect(() => {
+    if (reduced) { setVal(target); return; }
+    const from = fromRef.current;
+    let raf = 0;
+    let startTs = 0;
+    const tick = (ts: number) => {
+      if (!startTs) startTs = ts;
+      const p = Math.min(1, (ts - startTs) / durationMs);
+      const eased = 1 - Math.pow(1 - p, 3); // easeOutCubic
+      setVal(from + (target - from) * eased);
+      if (p < 1) raf = requestAnimationFrame(tick);
+      else fromRef.current = target;
+    };
+    raf = requestAnimationFrame(tick);
+    return () => cancelAnimationFrame(raf);
+  }, [target, durationMs, reduced]);
+  return val;
+}
+
+function AnimatedNumber({
+  value, format, className,
+}: { value: number; format: (n: number) => string; className?: string }): JSX.Element {
+  const shown = useCountUp(value);
+  return <span className={className}>{format(shown)}</span>;
+}
+
+function Skeleton({ className }: { className?: string }): JSX.Element {
+  return <div className={`animate-pulse-soft rounded-md bg-bg-muted/70 ${className ?? ""}`} aria-hidden />;
+}
+
+// ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
 export default function DecisionBoardPage(): JSX.Element {
-  // Window is fixed at 90d (the Shopify read window). Kept as state so the
-  // labels and the single-option toggle share one source of truth.
-  const [windowDays, setWindowDays] = useState<number>(90);
+  const windowDays = WINDOW_DAYS;
   // The Shopify window is a true trailing-90-day span, so annualisation is the
-  // honest 365/90 — no variable-span correction needed (unlike the old
-  // LionWheel mirror, which only had a few weeks of delivery history).
+  // honest 365/90 — no variable-span correction needed.
   const annualise = 365 / windowDays;
 
   const econQuery = useQuery<EconomicsResponse>({
@@ -274,6 +324,11 @@ export default function DecisionBoardPage(): JSX.Element {
     return out;
   }, [items]);
 
+  const maxSegmentCount = useMemo(
+    () => Math.max(1, ...SEGMENT_ORDER.map((k) => segments.get(k)?.count ?? 0)),
+    [segments],
+  );
+
   // -- interaction + table state
   const [activeId, setActiveId] = useState<string | null>(null);
   const [filter, setFilter] = useState<DecisionKey | null>(null);
@@ -293,6 +348,11 @@ export default function DecisionBoardPage(): JSX.Element {
     });
   }, [items, filter, sortKey, sortDir]);
 
+  const maxRowContribution = useMemo(
+    () => Math.max(1, ...tableRows.map((i) => Math.abs(i.contribution ?? 0))),
+    [tableRows],
+  );
+
   const onSort = (k: SortKey) => {
     if (k === sortKey) setSortDir((d) => (d === "asc" ? "desc" : "asc"));
     else { setSortKey(k); setSortDir(k === "name" ? "asc" : "desc"); }
@@ -300,18 +360,53 @@ export default function DecisionBoardPage(): JSX.Element {
 
   const active = items.find((i) => i.id === activeId) ?? null;
   const isLoading = econQuery.isLoading;
-  const velUnavailable = econQuery.isError;
+  const isError = econQuery.isError;
   const verdict = buildVerdict(kpis, items.length);
+
+  // Full read failure: show one honest error state with a retry — never a
+  // zero-data "all products priced above cost" verdict that reads as success.
+  if (isError) {
+    return (
+      <div className="space-y-5" data-testid="decision-board">
+        <WorkflowHeader
+          eyebrow="Economics"
+          title="Product Decision Board"
+          description="Every finished product placed on margin × velocity — so the next move is obvious: protect, promote, reprice, or drop."
+          actions={<SourcePill />}
+        />
+        <SectionCard tone="danger" density="compact">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-danger/15">
+                <AlertTriangle className="h-5 w-5 text-danger-fg" />
+              </span>
+              <div>
+                <div className="text-base font-semibold text-fg-strong">We couldn&apos;t load the product portfolio</div>
+                <div className="mt-0.5 text-sm text-fg-muted">Try again in a moment. If it keeps failing, contact the system administrator.</div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => econQuery.refetch()}
+              className="shrink-0 self-start rounded-lg border border-fg/15 bg-bg px-3.5 py-2 text-sm font-semibold text-fg-strong shadow-sm transition-all hover:-translate-y-px hover:border-fg/25 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 sm:self-auto"
+            >
+              Try again
+            </button>
+          </div>
+        </SectionCard>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5" data-testid="decision-board">
       <WorkflowHeader
         eyebrow="Economics"
         title="Product Decision Board"
-        description="Protect · promote · reprice · drop — every product on margin × velocity."
+        description="Every finished product placed on margin × velocity — so the next move is obvious: protect, promote, reprice, or drop."
         actions={
           <div className="flex items-center gap-2">
-            <WindowToggle value={windowDays} onChange={setWindowDays} />
+            <SourcePill />
             <RulesPopover velMedian={velMedian} windowDays={windowDays} />
           </div>
         }
@@ -320,29 +415,18 @@ export default function DecisionBoardPage(): JSX.Element {
       {/* Verdict band — the single most important thing right now */}
       <VerdictBand verdict={verdict} loading={isLoading} onAct={() => verdict.filter && setFilter(verdict.filter)} />
 
-      {velUnavailable ? (
-        <SectionCard tone="warning" density="compact">
-          <p className="text-sm text-fg">
-            Sales velocity is temporarily unavailable, so products can&apos;t be ranked by what sells.
-            Margin and inventory figures remain accurate.
-          </p>
-        </SectionCard>
-      ) : !isLoading ? (
-        <p className="-mt-2 px-1 text-xs text-fg-subtle">
-          Velocity = units sold on Shopify in the last {windowDays} days — the same
-          sell-through the Economics page reports. Trend compares it with the prior
-          90 days; annual figures scale the window by 365 / {windowDays}.
-        </p>
-      ) : null}
+      {/* Vitals — the cockpit readout strip */}
+      <VitalsRow kpis={kpis} total={items.length} loading={isLoading} />
 
-      {/* Decision segments — clickable filters with money attached */}
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6" data-testid="segments">
-        {(["star", "gem", "workhorse", "drag", "loss", "dormant"] as DecisionKey[]).map((k) => (
+      {/* Decision segments — the portfolio strip: clickable filters with money attached */}
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 lg:grid-cols-7" data-testid="segments">
+        {(["star", "gem", "workhorse", "drag", "loss", "dormant", "needs_data"] as DecisionKey[]).map((k) => (
           <SegmentCard
             key={k}
             meta={DECISION[k]}
             count={segments.get(k)?.count ?? 0}
             contribution={segments.get(k)?.contribution ?? 0}
+            maxCount={maxSegmentCount}
             active={filter === k}
             onClick={() => setFilter((f) => (f === k ? null : k))}
             loading={isLoading}
@@ -350,20 +434,21 @@ export default function DecisionBoardPage(): JSX.Element {
         ))}
       </div>
 
-      {/* Quadrant + inspector */}
+      {/* Portfolio map + readout inspector */}
       <div className="grid gap-4 lg:grid-cols-[1.9fr_1fr]">
         <SectionCard
-          title="Decision quadrant"
-          description="Right = sells more · Up = higher margin · bubble = contribution. Hover to inspect."
+          eyebrow="The signature view"
+          title="Portfolio map"
+          description="Right = sells more · Up = higher margin · bubble = money it contributes. Select any product to read it."
         >
           {isLoading ? (
-            <div className="flex h-[520px] items-center justify-center text-sm text-fg-subtle">Loading…</div>
+            <QuadrantSkeleton />
           ) : (
             <Quadrant items={items} velMedian={velMedian} activeId={activeId} onHover={setActiveId} windowDays={windowDays} />
           )}
         </SectionCard>
-        <SectionCard title="Inspector" density="compact">
-          <Inspector item={active} windowDays={windowDays} annualise={annualise} />
+        <SectionCard eyebrow="Readout" title="Inspector" density="compact">
+          <Inspector item={active} windowDays={windowDays} annualise={annualise} velMedian={velMedian} />
         </SectionCard>
       </div>
 
@@ -391,38 +476,68 @@ export default function DecisionBoardPage(): JSX.Element {
               </tr>
             </thead>
             <tbody>
-              {tableRows.map((i) => {
-                const d = DECISION[i.decision];
-                return (
-                  <tr
-                    key={i.id}
-                    onMouseEnter={() => setActiveId(i.id)}
-                    className={`border-b border-border/30 transition-colors hover:bg-bg-subtle/50 ${activeId === i.id ? "bg-bg-subtle/60" : ""}`}
-                  >
-                    <td className="px-2 py-2 font-medium text-fg-strong">{i.name}</td>
-                    <td className="px-2 py-2"><Badge tone={d.tone}>{d.label}</Badge></td>
-                    <td className="px-2 py-2 text-right tabular-nums">
-                      {i.marginPct != null ? <span className={i.marginPct < 0 ? "text-danger-fg" : ""}>{formatPct(i.marginPct, 1)}</span> : <span className="text-fg-subtle">—</span>}
-                    </td>
-                    <td className="px-2 py-2 text-right tabular-nums">
-                      {i.contribution != null ? formatIls(i.contribution) : <span className="text-fg-subtle">—</span>}
-                    </td>
-                    <td className="px-2 py-2 text-right tabular-nums">
-                      {i.units > 0 ? formatQtyInt(i.units) : <span className="text-fg-subtle">0</span>}
-                    </td>
-                    <td className="px-1 py-2">
-                      <div className="flex items-center justify-center gap-1">
-                        <Sparkline values={i.series} trend={i.trend} />
-                        <TrendIcon trend={i.trend} />
-                      </div>
-                    </td>
-                    <td className="px-2 py-2 text-right tabular-nums text-fg-subtle">
-                      {i.invAtCost != null ? formatIls(i.invAtCost) : "—"}
-                    </td>
+              {isLoading ? (
+                Array.from({ length: 6 }).map((_, idx) => (
+                  <tr key={`sk-${idx}`} className="border-b border-border/30">
+                    <td className="px-2 py-2.5" colSpan={7}><Skeleton className="h-5 w-full" /></td>
                   </tr>
-                );
-              })}
-              {tableRows.length === 0 ? (
+                ))
+              ) : (
+                tableRows.map((i) => {
+                  const d = DECISION[i.decision];
+                  const isActive = activeId === i.id;
+                  const contribShare = i.contribution != null ? Math.abs(i.contribution) / maxRowContribution : 0;
+                  return (
+                    <tr
+                      key={i.id}
+                      tabIndex={0}
+                      aria-label={`Inspect ${i.name}`}
+                      onMouseEnter={() => setActiveId(i.id)}
+                      onClick={() => setActiveId(i.id)}
+                      onFocus={() => setActiveId(i.id)}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setActiveId(i.id); } }}
+                      className={`group cursor-pointer border-b border-border/30 transition-colors hover:bg-bg-subtle/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40 ${isActive ? "bg-bg-subtle/60" : ""}`}
+                    >
+                      <td className="px-2 py-2 font-medium text-fg-strong">
+                        <span className="flex items-center gap-2">
+                          <span className="h-2 w-2 shrink-0 rounded-full ring-2 ring-inset ring-bg" style={{ backgroundColor: d.fill }} aria-hidden />
+                          <span className="truncate">{i.name}</span>
+                        </span>
+                      </td>
+                      <td className="px-2 py-2"><Badge tone={d.tone}>{d.label}</Badge></td>
+                      <td className="px-2 py-2 text-right tabular-nums">
+                        {i.marginPct != null ? <span className={i.marginPct < 0 ? "font-semibold text-danger-fg" : ""}>{formatPct(i.marginPct, 1)}</span> : <span className="text-fg-subtle">—</span>}
+                      </td>
+                      <td className="px-2 py-2 text-right tabular-nums">
+                        {i.contribution != null ? (
+                          <span className="inline-flex flex-col items-end gap-1">
+                            <span className={i.contribution < 0 ? "text-danger-fg" : "text-fg-strong"}>{formatIls(i.contribution)}</span>
+                            <span className="h-1 w-16 overflow-hidden rounded-full bg-bg-muted/70" aria-hidden>
+                              <span
+                                className="block h-full rounded-full transition-[width] duration-500"
+                                style={{ width: `${Math.max(4, contribShare * 100)}%`, backgroundColor: i.contribution < 0 ? DECISION.loss.fill : d.fill, opacity: 0.85 }}
+                              />
+                            </span>
+                          </span>
+                        ) : <span className="text-fg-subtle">—</span>}
+                      </td>
+                      <td className="px-2 py-2 text-right tabular-nums">
+                        {i.units > 0 ? formatQtyInt(i.units) : <span className="text-fg-subtle">0</span>}
+                      </td>
+                      <td className="px-1 py-2">
+                        <div className="flex items-center justify-center gap-1">
+                          <Sparkline values={i.series} trend={i.trend} />
+                          <TrendIcon trend={i.trend} />
+                        </div>
+                      </td>
+                      <td className="px-2 py-2 text-right tabular-nums text-fg-subtle">
+                        {i.invAtCost != null ? formatIls(i.invAtCost) : "—"}
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
+              {!isLoading && tableRows.length === 0 ? (
                 <tr><td colSpan={7} className="px-2 py-8 text-center text-sm text-fg-subtle">No products match this filter.</td></tr>
               ) : null}
             </tbody>
@@ -445,6 +560,19 @@ function sortValue(i: DecisionItem, k: SortKey): number | string | null {
     case "units": return i.units;
     case "invAtCost": return i.invAtCost;
   }
+}
+
+// ---------------------------------------------------------------------------
+// Source pill — replaces the old single-option window toggle (a toggle with one
+// choice is a fake control). States the honest data window instead.
+// ---------------------------------------------------------------------------
+function SourcePill(): JSX.Element {
+  return (
+    <span className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 bg-bg-subtle/50 px-2.5 py-1.5 text-2xs font-medium text-fg-subtle">
+      <span className="dot bg-accent animate-pulse-soft" aria-hidden />
+      Last 90 days · Shopify sell-through
+    </span>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -489,30 +617,43 @@ function buildVerdict(
 
 function VerdictBand({ verdict, loading, onAct }: { verdict: Verdict; loading?: boolean; onAct: () => void }): JSX.Element {
   const toneRing: Record<Verdict["tone"], string> = {
-    danger: "border-danger/40 bg-danger/5",
-    warning: "border-warning/40 bg-warning/5",
-    success: "border-success/40 bg-success/5",
+    danger: "border-danger/40 bg-gradient-to-br from-danger/[0.07] to-transparent",
+    warning: "border-warning/40 bg-gradient-to-br from-warning/[0.07] to-transparent",
+    success: "border-success/40 bg-gradient-to-br from-success/[0.07] to-transparent",
   };
-  const dot: Record<Verdict["tone"], string> = { danger: "bg-danger", warning: "bg-warning", success: "bg-success" };
+  // Full literal classes (not runtime-concatenated) so the Tailwind JIT emits them.
+  const badgeBg: Record<Verdict["tone"], string> = { danger: "bg-danger/15", warning: "bg-warning/15", success: "bg-success/15" };
+  const badgePulse: Record<Verdict["tone"], string> = { danger: "bg-danger/25", warning: "bg-warning/25", success: "bg-success/25" };
+  const fg: Record<Verdict["tone"], string> = { danger: "text-danger-fg", warning: "text-warning-fg", success: "text-success-fg" };
   const Icon = verdict.tone === "danger" ? AlertTriangle : verdict.tone === "warning" ? HelpCircle : ShieldCheck;
   return (
-    <div data-testid="verdict-band" className={`flex flex-col gap-3 rounded-xl border p-4 sm:flex-row sm:items-center sm:justify-between ${toneRing[verdict.tone]}`}>
-      <div className="flex items-start gap-3">
-        <span className={`mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-full ${dot[verdict.tone]}/15`}>
-          <Icon className={`h-5 w-5 ${verdict.tone === "danger" ? "text-danger-fg" : verdict.tone === "warning" ? "text-warning-fg" : "text-success-fg"}`} />
+    <div
+      data-testid="verdict-band"
+      className={`reveal flex flex-col gap-3 rounded-xl border p-4 shadow-raised sm:flex-row sm:items-center sm:justify-between sm:p-5 ${toneRing[verdict.tone]}`}
+    >
+      <div className="flex items-start gap-3.5">
+        <span className={`relative mt-0.5 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${badgeBg[verdict.tone]}`}>
+          {!loading && verdict.tone === "danger" ? (
+            <span className={`absolute inset-0 rounded-xl ${badgePulse[verdict.tone]} animate-pulse-soft`} aria-hidden />
+          ) : null}
+          <Icon className={`relative h-5.5 w-5.5 ${fg[verdict.tone]}`} />
         </span>
-        <div>
-          <div className="text-base font-semibold text-fg-strong">{loading ? "Reading the numbers…" : verdict.headline}</div>
-          <div className="mt-0.5 text-sm text-fg-subtle">{loading ? " " : verdict.sub}</div>
+        <div className="min-w-0">
+          <div className="text-2xs font-semibold uppercase tracking-sops text-fg-subtle">The call right now</div>
+          <div className="mt-0.5 text-lg font-bold tracking-tight text-fg-strong">{loading ? "Reading the numbers…" : verdict.headline}</div>
+          <div className="mt-0.5 text-sm leading-relaxed text-fg-muted">{loading ? " " : verdict.sub}</div>
         </div>
       </div>
       {!loading && verdict.cta ? (
         <button
           type="button"
           onClick={onAct}
-          className="shrink-0 self-start rounded-lg border border-fg/15 bg-bg px-3 py-2 text-sm font-medium text-fg-strong shadow-sm transition-colors hover:bg-bg-subtle/70 sm:self-auto"
+          className="group shrink-0 self-start rounded-lg border border-fg/15 bg-bg px-3.5 py-2 text-sm font-semibold text-fg-strong shadow-sm transition-all hover:-translate-y-px hover:border-fg/25 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 sm:self-auto"
         >
-          {verdict.cta}
+          <span className="inline-flex items-center gap-1.5">
+            {verdict.cta}
+            <ArrowUpRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
+          </span>
         </button>
       ) : null}
     </div>
@@ -520,55 +661,129 @@ function VerdictBand({ verdict, loading, onAct }: { verdict: Verdict; loading?: 
 }
 
 // ---------------------------------------------------------------------------
-// Window toggle
+// Vitals — the cockpit readout strip (animated, meaning-bar backed)
 // ---------------------------------------------------------------------------
-function WindowToggle({ value, onChange }: { value: number; onChange: (d: number) => void }): JSX.Element {
+function VitalsRow({
+  kpis, total, loading,
+}: {
+  kpis: { profitPoolAnnual: number; riskAnnual: number; concentration: number | null; needsData: number; measurableCount: number; lossCount: number };
+  total: number; loading?: boolean;
+}): JSX.Element {
+  const coverage = total > 0 ? kpis.measurableCount / total : 0;
   return (
-    <div className="inline-flex items-center rounded-lg border border-border/60 p-0.5">
-      {WINDOWS.map((w) => (
-        <button
-          key={w.days}
-          type="button"
-          onClick={() => onChange(w.days)}
-          className={`rounded-md px-2.5 py-1 text-xs font-medium transition-colors ${value === w.days ? "bg-fg/10 text-fg-strong" : "text-fg-subtle hover:text-fg"}`}
-        >
-          {w.label}
-        </button>
-      ))}
+    <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
+      <VitalTile
+        icon={Coins}
+        tone="accent"
+        label="Annual profit pool"
+        loading={loading}
+        value={<AnimatedNumber value={kpis.profitPoolAnnual} format={(n) => formatIls(n)} />}
+        sub={kpis.concentration != null ? `Top 3 drive ${formatPct(kpis.concentration, 0)}` : "At the current 90-day pace"}
+        meter={kpis.concentration != null ? Math.min(1, kpis.concentration / 100) : null}
+      />
+      <VitalTile
+        icon={AlertTriangle}
+        tone={kpis.lossCount > 0 ? "danger" : "success"}
+        label="Profit at risk"
+        loading={loading}
+        value={kpis.lossCount > 0
+          ? <AnimatedNumber value={kpis.riskAnnual} format={(n) => formatIls(n)} />
+          : <span>None</span>}
+        sub={kpis.lossCount > 0 ? `${kpis.lossCount} sold below cost · per year` : "Nothing selling below cost"}
+        meter={null}
+      />
+      <VitalTile
+        icon={HelpCircle}
+        tone={kpis.needsData > 0 ? "warning" : "success"}
+        label="Data coverage"
+        loading={loading}
+        value={<span><AnimatedNumber value={kpis.measurableCount} format={(n) => formatQtyInt(Math.round(n))} /><span className="text-fg-subtle">/{total}</span></span>}
+        sub={kpis.needsData > 0 ? `${kpis.needsData} need cost or price` : "Every product can be judged"}
+        meter={coverage}
+      />
+    </div>
+  );
+}
+
+function VitalTile({
+  icon: Icon, tone, label, value, sub, meter, loading,
+}: {
+  icon: LucideIcon;
+  tone: "accent" | "danger" | "warning" | "success";
+  label: string;
+  value: JSX.Element;
+  sub: string;
+  meter: number | null;
+  loading?: boolean;
+}): JSX.Element {
+  const toneText: Record<string, string> = { accent: "text-accent", danger: "text-danger-fg", warning: "text-warning-fg", success: "text-success-fg" };
+  const toneBar: Record<string, string> = { accent: "bg-accent", danger: "bg-danger", warning: "bg-warning", success: "bg-success" };
+  const toneChip: Record<string, string> = {
+    accent: "bg-accent-soft text-accent", danger: "bg-danger-softer text-danger-fg",
+    warning: "bg-warning-softer text-warning-fg", success: "bg-success-softer text-success-fg",
+  };
+  return (
+    <div className="card flex flex-col gap-2.5 p-4">
+      <div className="flex items-center justify-between gap-2">
+        <span className="text-2xs font-semibold uppercase tracking-sops text-fg-subtle">{label}</span>
+        <span className={`inline-flex h-6 w-6 items-center justify-center rounded-md ${toneChip[tone]}`}>
+          <Icon className="h-3.5 w-3.5" />
+        </span>
+      </div>
+      {loading ? (
+        <Skeleton className="h-7 w-28" />
+      ) : (
+        <div className={`text-2xl font-bold tabular-nums tracking-tight ${toneText[tone]}`}>{value}</div>
+      )}
+      <div className="text-2xs text-fg-subtle">{loading ? " " : sub}</div>
+      {meter != null && !loading ? (
+        <div className="h-1 w-full overflow-hidden rounded-full bg-bg-muted/70" aria-hidden>
+          <div className={`h-full rounded-full ${toneBar[tone]} transition-[width] duration-700 ease-out-quart`} style={{ width: `${Math.max(3, meter * 100)}%`, opacity: 0.85 }} />
+        </div>
+      ) : null}
     </div>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Segment card
+// Segment card — the portfolio strip tile
 // ---------------------------------------------------------------------------
 function SegmentCard({
-  meta, count, contribution, active, onClick, loading,
+  meta, count, contribution, maxCount, active, onClick, loading,
 }: {
-  meta: DecisionMeta; count: number; contribution: number; active: boolean; onClick: () => void; loading?: boolean;
+  meta: DecisionMeta; count: number; contribution: number; maxCount: number; active: boolean; onClick: () => void; loading?: boolean;
 }): JSX.Element {
   const Icon = meta.icon;
+  const share = maxCount > 0 ? count / maxCount : 0;
+  const moneyLine = meta.key === "loss" || meta.key === "drag"
+    ? contribution < 0 ? `${formatIls(contribution)} drain` : meta.action
+    : count > 0 && contribution > 0 ? formatIls(contribution) : meta.action;
   return (
     <button
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       data-testid={`segment-${meta.key}`}
-      className={`group flex flex-col gap-1 rounded-xl border p-3 text-left transition-all ${
-        active ? "border-fg/40 bg-bg-subtle/70 shadow-sm" : "border-border/60 hover:border-fg/25 hover:bg-bg-subtle/40"
+      className={`group relative flex cursor-pointer flex-col gap-2 overflow-hidden rounded-xl border p-3 text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${
+        active
+          ? "border-fg/30 bg-bg-subtle/70 shadow-pop -translate-y-px"
+          : "border-border/60 hover:-translate-y-px hover:border-fg/20 hover:bg-bg-subtle/40 hover:shadow-raised"
       }`}
     >
+      {/* category accent edge */}
+      <span className="absolute inset-x-0 top-0 h-0.5" style={{ backgroundColor: meta.fill, opacity: active ? 0.9 : 0.5 }} aria-hidden />
       <div className="flex items-center gap-1.5">
-        <span className="inline-flex h-5 w-5 items-center justify-center rounded-md" style={{ backgroundColor: `${meta.fill}1a` }}>
+        <span className="inline-flex h-5 w-5 items-center justify-center rounded-md" style={{ backgroundColor: `${meta.fill}1f` }}>
           <Icon className="h-3.5 w-3.5" style={{ color: meta.fill }} />
         </span>
         <span className="text-2xs font-semibold uppercase tracking-sops text-fg-subtle">{meta.label}</span>
       </div>
-      <div className="text-2xl font-semibold tabular-nums text-fg-strong">{loading ? "·" : count}</div>
-      <div className="text-2xs text-fg-subtle">
-        {meta.key === "loss" || meta.key === "drag"
-          ? contribution < 0 ? `${formatIls(contribution)} drain` : meta.action
-          : count > 0 && contribution > 0 ? formatIls(contribution) : meta.action}
+      <div className="text-2xl font-bold tabular-nums tracking-tight text-fg-strong">{loading ? <span className="text-fg-faint">·</span> : count}</div>
+      {/* share-of-portfolio micro-bar */}
+      <div className="h-1 w-full overflow-hidden rounded-full bg-bg-muted/60" aria-hidden>
+        <div className="h-full rounded-full transition-[width] duration-500 ease-out-quart" style={{ width: loading ? "0%" : `${Math.max(count > 0 ? 8 : 0, share * 100)}%`, backgroundColor: meta.fill, opacity: 0.8 }} />
       </div>
+      <div className="text-2xs text-fg-subtle">{loading ? " " : moneyLine}</div>
     </button>
   );
 }
@@ -581,7 +796,7 @@ function Sparkline({ values, trend }: { values: number[]; trend: Trend }): JSX.E
   if (values.length < 2) return <span className="inline-block" style={{ width: w }} />;
   const max = Math.max(...values), min = Math.min(...values);
   const span = max - min || 1;
-  const stroke = trend === "up" ? "#16a34a" : trend === "down" ? "#dc2626" : "#94a3b8";
+  const stroke = trend === "up" ? DECISION.star.fill : trend === "down" ? DECISION.loss.fill : "#94a3b8";
   const pts = values.map((v, i) => {
     const x = pad + (i / (values.length - 1)) * (w - pad * 2);
     const y = pad + (1 - (v - min) / span) * (h - pad * 2);
@@ -611,7 +826,7 @@ function SortTh({
   const activeCol = sortKey === k;
   return (
     <th className={`px-2 py-2 font-semibold ${align === "right" ? "text-right" : "text-left"}`}>
-      <button type="button" onClick={() => onSort(k)} className={`inline-flex items-center gap-1 hover:text-fg ${align === "right" ? "flex-row-reverse" : ""}`}>
+      <button type="button" onClick={() => onSort(k)} className={`inline-flex items-center gap-1 hover:text-fg ${align === "right" ? "flex-row-reverse" : ""} ${activeCol ? "text-fg" : ""}`}>
         {label}
         {activeCol ? (dir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />) : <ChevronsUpDown className="h-3 w-3 opacity-40" />}
       </button>
@@ -620,14 +835,18 @@ function SortTh({
 }
 
 // ---------------------------------------------------------------------------
-// Inspector
+// Inspector — the readout panel
 // ---------------------------------------------------------------------------
-function Inspector({ item, windowDays, annualise }: { item: DecisionItem | null; windowDays: number; annualise: number }): JSX.Element {
+function Inspector({
+  item, windowDays, annualise, velMedian,
+}: { item: DecisionItem | null; windowDays: number; annualise: number; velMedian: number }): JSX.Element {
   if (!item) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 py-8 text-center">
-        <Scale className="h-7 w-7 text-fg-subtle/50" />
-        <p className="text-sm text-fg-subtle">Hover a bubble or row to inspect a product.</p>
+      <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-2 py-8 text-center">
+        <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-bg-subtle/70 ring-1 ring-border/60">
+          <Scale className="h-6 w-6 text-fg-subtle/60" />
+        </span>
+        <p className="max-w-[14rem] text-sm text-fg-subtle">Select a product — tap a bubble on the map or a row in the table — to read its full breakdown.</p>
       </div>
     );
   }
@@ -635,29 +854,54 @@ function Inspector({ item, windowDays, annualise }: { item: DecisionItem | null;
   const Icon = d.icon;
   const annualContribution = item.contribution != null ? item.contribution * annualise : null;
   return (
-    <div className="space-y-3">
+    <div className="space-y-3.5" data-testid="inspector">
       <div>
-        <div className="text-base font-semibold text-fg-strong">{item.name}</div>
-        <div className="mt-1.5 flex items-center gap-2">
-          <span className="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-semibold" style={{ backgroundColor: `${d.fill}1a`, color: d.fill }}>
+        <div className="text-base font-bold tracking-tight text-fg-strong">{item.name}</div>
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold" style={{ backgroundColor: `${d.fill}1f`, color: d.fill }}>
             <Icon className="h-3.5 w-3.5" /> {d.label}
           </span>
-          <span className="text-xs font-medium text-fg">→ {d.action}</span>
+          <span className="inline-flex items-center gap-1 text-xs font-semibold text-fg">
+            <ArrowUpRight className="h-3.5 w-3.5 text-fg-subtle" /> {d.action}
+          </span>
         </div>
       </div>
-      <p className="text-xs text-fg-subtle">{d.blurb}</p>
+      <p className="text-xs leading-relaxed text-fg-subtle">{d.blurb}</p>
+
+      {/* calibrated gauges */}
+      {item.marginPct != null ? (
+        <GaugeBar
+          label="Margin"
+          valueLabel={formatPct(item.marginPct, 1)}
+          fraction={clamp01((item.marginPct) / 50)}
+          markerFraction={clamp01(MARGIN_HEALTHY_PCT / 50)}
+          markerLabel="healthy"
+          color={item.marginPct < 0 ? DECISION.loss.fill : d.fill}
+          negative={item.marginPct < 0}
+        />
+      ) : null}
+      {item.units > 0 || velMedian > 0 ? (
+        <GaugeBar
+          label="Velocity"
+          valueLabel={`${formatQtyInt(item.units)} u`}
+          fraction={clamp01(velMedian > 0 ? item.units / (velMedian * 2) : 0)}
+          markerFraction={0.5}
+          markerLabel="median"
+          color={d.fill}
+        />
+      ) : null}
+
       {item.series.length >= 2 ? (
         <div className="flex items-center justify-between rounded-lg border border-border/50 bg-bg-subtle/40 px-3 py-2">
           <span className="text-2xs uppercase tracking-sops text-fg-subtle">90d vs prior 90d</span>
-          <Sparkline values={item.series} trend={item.trend} />
+          <span className="flex items-center gap-1.5"><Sparkline values={item.series} trend={item.trend} /><TrendIcon trend={item.trend} /></span>
         </div>
       ) : null}
-      <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-sm">
-        <Stat label="Margin" value={item.marginPct != null ? formatPct(item.marginPct, 1) : "—"} danger={item.marginPct != null && item.marginPct < 0} />
+
+      <dl className="grid grid-cols-2 gap-x-3 gap-y-2.5 border-t border-border/50 pt-3 text-sm">
         <Stat label="Margin / unit" value={item.marginIls != null ? formatIls(item.marginIls) : "—"} />
-        <Stat label={`Units ${windowDays}d`} value={item.units > 0 ? formatQtyInt(item.units) : "0"} />
         <Stat label={`Orders ${windowDays}d`} value={String(item.orders)} />
-        <Stat label={`Contribution ${windowDays}d`} value={item.contribution != null ? formatIls(item.contribution) : "—"} strong />
+        <Stat label={`Contribution ${windowDays}d`} value={item.contribution != null ? formatIls(item.contribution) : "—"} strong danger={item.contribution != null && item.contribution < 0} />
         <Stat label="Annualised" value={annualContribution != null ? formatIls(annualContribution) : "—"} strong danger={annualContribution != null && annualContribution < 0} />
         <Stat label="Sale price" value={item.price != null ? formatIls(item.price) : "—"} />
         <Stat label="Unit cost" value={item.cogs != null ? formatIls(item.cogs) : "—"} />
@@ -667,11 +911,35 @@ function Inspector({ item, windowDays, annualise }: { item: DecisionItem | null;
     </div>
   );
 }
+
+function clamp01(n: number): number { return Math.max(0, Math.min(1, n)); }
+
+function GaugeBar({
+  label, valueLabel, fraction, markerFraction, markerLabel, color, negative,
+}: {
+  label: string; valueLabel: string; fraction: number; markerFraction?: number; markerLabel?: string; color: string; negative?: boolean;
+}): JSX.Element {
+  return (
+    <div className="space-y-1">
+      <div className="flex items-center justify-between text-2xs">
+        <span className="font-semibold uppercase tracking-sops text-fg-subtle">{label}</span>
+        <span className={`tabular-nums font-semibold ${negative ? "text-danger-fg" : "text-fg"}`}>{valueLabel}</span>
+      </div>
+      <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-bg-muted/70">
+        <div className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-500 ease-out-quart" style={{ width: `${Math.max(2, fraction * 100)}%`, backgroundColor: color, opacity: 0.85 }} />
+        {markerFraction != null ? (
+          <div className="absolute inset-y-0 w-px bg-fg/40" style={{ left: `${markerFraction * 100}%` }} aria-label={markerLabel} />
+        ) : null}
+      </div>
+    </div>
+  );
+}
+
 function Stat({ label, value, strong, danger }: { label: string; value: string; strong?: boolean; danger?: boolean }): JSX.Element {
   return (
     <div>
       <dt className="text-3xs uppercase tracking-sops text-fg-subtle">{label}</dt>
-      <dd className={`tabular-nums ${danger ? "text-danger-fg" : strong ? "font-semibold text-fg-strong" : "text-fg"}`}>{value}</dd>
+      <dd className={`tabular-nums ${danger ? "font-semibold text-danger-fg" : strong ? "font-semibold text-fg-strong" : "text-fg"}`}>{value}</dd>
     </div>
   );
 }
@@ -681,17 +949,34 @@ function Stat({ label, value, strong, danger }: { label: string; value: string; 
 // ---------------------------------------------------------------------------
 function RulesPopover({ velMedian, windowDays }: { velMedian: number; windowDays: number }): JSX.Element {
   const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent | TouchEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("touchstart", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("touchstart", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
   return (
-    <div className="relative">
+    <div className="relative" ref={ref}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
-        className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 px-2.5 py-1.5 text-xs font-medium text-fg-subtle hover:bg-bg-subtle/60"
+        aria-expanded={open}
+        className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 px-2.5 py-1.5 text-xs font-medium text-fg-subtle transition-colors hover:bg-bg-subtle/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
       >
         <Info className="h-3.5 w-3.5" /> How it decides
       </button>
       {open ? (
-        <div className="absolute right-0 z-20 mt-2 w-80 rounded-xl border border-border/60 bg-bg p-3 text-xs shadow-lg">
+        <div className="absolute right-0 z-20 mt-2 w-80 rounded-xl border border-border/60 bg-bg-raised p-3 text-xs shadow-pop">
           <p className="mb-2 font-semibold text-fg-strong">Transparent rules</p>
           <ul className="space-y-1.5 text-fg-subtle">
             <li>• <b className="text-fg">Healthy</b> margin ≥ {MARGIN_HEALTHY_PCT}% · <b className="text-fg">thin</b> &lt; {MARGIN_THIN_PCT}%.</li>
@@ -713,7 +998,25 @@ function RulesPopover({ velMedian, windowDays }: { velMedian: number; windowDays
 }
 
 // ---------------------------------------------------------------------------
-// Quadrant — zero-dependency interactive SVG scatter (upgraded)
+// Quadrant skeleton
+// ---------------------------------------------------------------------------
+function QuadrantSkeleton(): JSX.Element {
+  return (
+    <div className="relative h-[520px] w-full overflow-hidden rounded-lg bg-bg-subtle/30">
+      <div className="absolute inset-0 grid grid-cols-2 grid-rows-2 gap-px opacity-60">
+        {Array.from({ length: 4 }).map((_, i) => <div key={i} className="bg-bg-muted/30" />)}
+      </div>
+      <div className="absolute left-1/2 top-1/2 flex -translate-x-1/2 -translate-y-1/2 items-center gap-2 text-sm text-fg-subtle">
+        <span className="dot bg-accent animate-pulse-soft" /> Plotting the portfolio…
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Quadrant — zero-dependency interactive SVG scatter, elevated into the
+// signature "portfolio map": radial-bodied bubbles, a calm halo on the
+// highest-value products, refined grid + reference chips, hover crosshair.
 // ---------------------------------------------------------------------------
 function Quadrant({
   items, velMedian, activeId, onHover, windowDays,
@@ -748,23 +1051,37 @@ function Quadrant({
   for (let m = minMargin; m <= maxMargin + 0.001; m += step) yTicks.push(m);
   const xTicks = [0, 0.25, 0.5, 0.75, 1].map((f) => f * maxUnits);
 
-  // top contributors get a name label
-  const labelled = new Set([...plotted].sort((a, b) => Math.abs(b.contribution ?? 0) - Math.abs(a.contribution ?? 0)).slice(0, 5).map((i) => i.id));
+  // top contributors get a name label + a calm halo
+  const ranked = [...plotted].sort((a, b) => Math.abs(b.contribution ?? 0) - Math.abs(a.contribution ?? 0));
+  const labelled = new Set(ranked.slice(0, 5).map((i) => i.id));
+  const haloed = new Set(ranked.slice(0, 3).map((i) => i.id));
   const active = plotted.find((i) => i.id === activeId) ?? null;
 
+  // unique gradient ids per decision key
+  const keys: DecisionKey[] = ["star", "gem", "workhorse", "drag", "loss", "dormant"];
+
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Margin versus velocity decision quadrant" data-testid="quadrant">
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="group" aria-label="Margin versus velocity portfolio map. Each product is a selectable point; the table below lists every product." data-testid="quadrant">
       <defs>
         <clipPath id="db-plot"><rect x={padL} y={padT} width={plotW} height={plotH} /></clipPath>
+        <filter id="db-glow" x="-60%" y="-60%" width="220%" height="220%">
+          <feGaussianBlur stdDeviation="7" />
+        </filter>
+        {keys.map((k) => (
+          <radialGradient key={k} id={`db-grad-${k}`} cx="35%" cy="30%" r="75%">
+            <stop offset="0%" stopColor={DECISION[k].light} stopOpacity={0.95} />
+            <stop offset="100%" stopColor={DECISION[k].fill} stopOpacity={0.92} />
+          </radialGradient>
+        ))}
       </defs>
 
       {/* quadrant tints */}
       <g clipPath="url(#db-plot)">
-        <rect x={xSplit} y={padT} width={padL + plotW - xSplit} height={ySplit - padT} fill="#16a34a" opacity={0.05} />
-        <rect x={padL} y={padT} width={xSplit - padL} height={ySplit - padT} fill="#2563eb" opacity={0.05} />
-        <rect x={xSplit} y={ySplit} width={padL + plotW - xSplit} height={padT + plotH - ySplit} fill="#d97706" opacity={0.06} />
-        <rect x={padL} y={ySplit} width={xSplit - padL} height={padT + plotH - ySplit} fill="#b45309" opacity={0.06} />
-        {minMargin < 0 ? <rect x={padL} y={yZero} width={plotW} height={padT + plotH - yZero} fill="#dc2626" opacity={0.06} /> : null}
+        <rect x={xSplit} y={padT} width={padL + plotW - xSplit} height={ySplit - padT} fill={DECISION.star.fill} opacity={0.05} />
+        <rect x={padL} y={padT} width={xSplit - padL} height={ySplit - padT} fill={DECISION.gem.fill} opacity={0.05} />
+        <rect x={xSplit} y={ySplit} width={padL + plotW - xSplit} height={padT + plotH - ySplit} fill={DECISION.workhorse.fill} opacity={0.06} />
+        <rect x={padL} y={ySplit} width={xSplit - padL} height={padT + plotH - ySplit} fill={DECISION.drag.fill} opacity={0.06} />
+        {minMargin < 0 ? <rect x={padL} y={yZero} width={plotW} height={padT + plotH - yZero} fill={DECISION.loss.fill} opacity={0.07} /> : null}
       </g>
 
       {/* y gridlines + labels */}
@@ -799,11 +1116,24 @@ function Quadrant({
       <text x={padL + plotW / 2} y={H - 8} textAnchor="middle" className="fill-current" fontSize="11" opacity={0.6}>Units sold (last {windowDays}d) →</text>
       <text x={16} y={padT + plotH / 2} textAnchor="middle" className="fill-current" fontSize="11" opacity={0.6} transform={`rotate(-90 16 ${padT + plotH / 2})`}>Margin % →</text>
 
+      {/* calm halos behind the highest-value products */}
+      <g clipPath="url(#db-plot)">
+        {plotted.filter((i) => haloed.has(i.id)).map((i) => (
+          <circle
+            key={`halo-${i.id}`}
+            cx={xOf(i.units)} cy={yOf(i.marginPct ?? 0)} r={mounted ? rOf(i.contribution) + 7 : 0}
+            fill={DECISION[i.decision].fill} opacity={activeId === i.id ? 0.3 : 0.16}
+            filter="url(#db-glow)"
+            style={{ transition: "r 700ms cubic-bezier(.22,1,.36,1), opacity 200ms" }}
+          />
+        ))}
+      </g>
+
       {/* hover crosshair */}
       {active ? (
         <g>
-          <line x1={xOf(active.units)} y1={padT} x2={xOf(active.units)} y2={padT + plotH} stroke={DECISION[active.decision].fill} strokeOpacity={0.35} strokeDasharray="3 3" />
-          <line x1={padL} y1={yOf(active.marginPct ?? 0)} x2={padL + plotW} y2={yOf(active.marginPct ?? 0)} stroke={DECISION[active.decision].fill} strokeOpacity={0.35} strokeDasharray="3 3" />
+          <line x1={xOf(active.units)} y1={padT} x2={xOf(active.units)} y2={padT + plotH} stroke={DECISION[active.decision].fill} strokeOpacity={0.4} strokeDasharray="3 3" />
+          <line x1={padL} y1={yOf(active.marginPct ?? 0)} x2={padL + plotW} y2={yOf(active.marginPct ?? 0)} stroke={DECISION[active.decision].fill} strokeOpacity={0.4} strokeDasharray="3 3" />
         </g>
       ) : null}
 
@@ -816,15 +1146,24 @@ function Quadrant({
           <g key={i.id}>
             <circle
               cx={cx} cy={cy} r={mounted ? r : 0}
-              fill={d.fill} fillOpacity={isActive ? 0.9 : 0.5}
-              stroke={d.fill} strokeWidth={isActive ? 2.5 : 1}
+              fill={`url(#db-grad-${i.decision})`} fillOpacity={isActive ? 1 : 0.82}
+              stroke={d.fill} strokeWidth={isActive ? 2.5 : 1} strokeOpacity={isActive ? 1 : 0.7}
               className="cursor-pointer"
-              style={{ transition: `r 600ms cubic-bezier(.22,1,.36,1) ${idx * 25}ms, fill-opacity 150ms, stroke-width 150ms` }}
+              tabIndex={0}
+              role="button"
+              aria-label={`${i.name}: ${d.label}, ${d.action}. Margin ${i.marginPct != null ? `${i.marginPct.toFixed(1)}%` : "unknown"}, ${formatQtyInt(i.units)} units, contribution ${i.contribution != null ? formatIls(i.contribution) : "unknown"}.`}
+              style={{ transition: `r 600ms cubic-bezier(.22,1,.36,1) ${idx * 25}ms, fill-opacity 150ms, stroke-width 150ms`, filter: isActive ? "drop-shadow(0 2px 6px rgba(0,0,0,0.18))" : "none" }}
               onMouseEnter={() => onHover(i.id)}
-              onMouseLeave={() => onHover(null)}
+              onClick={() => onHover(i.id)}
+              onFocus={() => onHover(i.id)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onHover(i.id); } }}
             >
               <title>{i.name} · margin {i.marginPct != null ? `${i.marginPct.toFixed(1)}%` : "—"} · {formatQtyInt(i.units)} units · contribution {i.contribution != null ? formatIls(i.contribution) : "—"}</title>
             </circle>
+            {/* lit highlight on active for extra dimension */}
+            {isActive && mounted ? (
+              <circle cx={cx - r * 0.3} cy={cy - r * 0.35} r={r * 0.28} fill="#fff" opacity={0.35} pointerEvents="none" />
+            ) : null}
             {(labelled.has(i.id) || isActive) && mounted ? (
               (() => {
                 const nearRight = cx > padL + plotW - 80;
