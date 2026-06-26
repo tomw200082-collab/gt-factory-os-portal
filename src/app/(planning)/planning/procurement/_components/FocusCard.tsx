@@ -179,6 +179,8 @@ export interface FocusCardProps {
   isOverdue: boolean;
   /** Called after a successful place or skip so the parent can auto-advance. */
   onResolve: (result: FocusResolveResult) => void;
+  /** Reports whether the card holds unsaved line-quantity edits (INTER-004). */
+  onDirtyChange?: (dirty: boolean) => void;
 }
 
 export function FocusCard({
@@ -186,6 +188,7 @@ export function FocusCard({
   whyNow,
   isOverdue,
   onResolve,
+  onDirtyChange,
 }: FocusCardProps): JSX.Element {
   const editMut = useEditPo();
   const approveMut = useApprovePo();
@@ -233,6 +236,22 @@ export function FocusCard({
     setDraftPrice({});
     setConfirmPriceUpdate(true);
   }, [po.session_po_id]);
+
+  // INTER-004: report unsaved line-quantity/drop edits so FocusMode can confirm
+  // before closing instead of silently discarding them.
+  const isDirty =
+    editing &&
+    po.lines.some((l) => {
+      const q = draftQty[l.session_po_line_id];
+      const dropped = draftDrop[l.session_po_line_id] ?? l.is_dropped;
+      return (
+        (q !== undefined && q !== String(l.final_qty)) ||
+        dropped !== l.is_dropped
+      );
+    });
+  useEffect(() => {
+    onDirtyChange?.(isDirty);
+  }, [isDirty, onDirtyChange]);
 
   function beginEdit(): void {
     const q: Record<string, string> = {};
