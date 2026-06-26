@@ -59,6 +59,7 @@ import { NotesBox } from "@/components/fields/NotesBox";
 import { useSession } from "@/lib/auth/session-provider";
 import { cn } from "@/lib/cn";
 import { ScrollFade } from "@/components/ui/ScrollFade";
+import { useConfirm } from "@/components/overlays/ConfirmDialog";
 
 import {
   fetchExceptions,
@@ -595,6 +596,11 @@ export default function InboxListPage() {
   const [actionSuccess, setActionSuccess] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
 
+  // UX-flow audit (FLOW-001): irreversible bulk resolve goes through the
+  // accessible ConfirmDialog (focus-trapped, Escape-cancels), not the native
+  // window.confirm (inaccessible, suppressed on mobile).
+  const { confirm, dialog: confirmDialog } = useConfirm();
+
   // Tom 2026-05-06 §94: recently-dismissed pill for one-tap undo.
   type RecentAction = {
     id: string;
@@ -1042,22 +1048,27 @@ export default function InboxListPage() {
     },
   });
 
-  const onBulkResolve = useCallback(() => {
+  const onBulkResolve = useCallback(async () => {
     if (selected.size === 0) return;
     const ids = Array.from(selected);
-    const breakdown = selectionBreakdown ? `\n\n${selectionBreakdown}` : "";
-    if (
-      typeof window !== "undefined" &&
-      !window.confirm(
-        `Resolve ${ids.length} exception${ids.length === 1 ? "" : "s"}?${breakdown}\n\nThis cannot be undone.`,
-      )
-    ) {
-      return;
-    }
+    const ok = await confirm({
+      title: `Resolve ${ids.length} exception${ids.length === 1 ? "" : "s"}?`,
+      description: (
+        <>
+          {selectionBreakdown ? (
+            <span className="block">{selectionBreakdown}</span>
+          ) : null}
+          <span className="block">This cannot be undone.</span>
+        </>
+      ),
+      confirmLabel: `Resolve ${ids.length}`,
+      tone: "danger",
+    });
+    if (!ok) return;
     setActionSuccess(null);
     setActionError(null);
     bulkResolveMutation.mutate({ ids });
-  }, [selected, selectionBreakdown, bulkResolveMutation]);
+  }, [selected, selectionBreakdown, bulkResolveMutation, confirm]);
 
   // Shared row renderer — used by both the working inbox list and the
   // collapsed System & diagnostics section. `focusIdx` is the j/k keyboard
@@ -1225,6 +1236,7 @@ export default function InboxListPage() {
 
   return (
     <>
+      {confirmDialog}
       <WorkflowHeader
         eyebrow="Inbox"
         title="Inbox"
@@ -1467,6 +1479,8 @@ export default function InboxListPage() {
           <div
             className="flex items-center gap-2 border-b border-success/30 bg-success-subtle/40 px-5 py-2 text-xs text-success-fg"
             data-testid="inbox-action-success"
+            role="status"
+            aria-live="polite"
           >
             <CheckCircle2 className="h-3.5 w-3.5 shrink-0" />
             <span>{actionSuccess}</span>
@@ -1484,6 +1498,8 @@ export default function InboxListPage() {
           <div
             className="flex items-center gap-2 border-b border-danger/30 bg-danger-softer px-5 py-2 text-xs text-danger-fg"
             data-testid="inbox-action-error"
+            role="alert"
+            aria-live="assertive"
           >
             <AlertCircle className="h-3.5 w-3.5 shrink-0" />
             <span>{actionError}</span>

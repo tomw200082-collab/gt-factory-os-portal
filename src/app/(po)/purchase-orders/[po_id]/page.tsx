@@ -1015,24 +1015,36 @@ export default function PurchaseOrderDetailPage({
                           </div>
                         )}
                         {isLineCancelConfirming && (
-                          <div className="flex items-center gap-1 justify-end">
-                            <span className="text-3xs text-fg-muted">Cancel line?</span>
-                            <button
-                              type="button"
-                              className="text-3xs text-danger-fg font-semibold hover:underline"
-                              onClick={() => lineCancelMut.mutate(line.po_line_id)}
-                              disabled={lineCancelMut.isPending}
-                            >
-                              {lineCancelMut.isPending ? "…" : "Yes"}
-                            </button>
-                            <button
-                              type="button"
-                              className="text-3xs text-fg-faint hover:text-fg"
-                              onClick={() => { setLineCancelConfirmId(null); setLineCancelError(null); }}
-                              disabled={lineCancelMut.isPending}
-                            >
-                              No
-                            </button>
+                          /* UX-flow audit (FLOW-002): a real alertdialog with a
+                             stated consequence + tappable buttons, replacing the
+                             bare "Yes / No" text links. */
+                          <div
+                            className="flex flex-col items-end gap-1.5"
+                            role="alertdialog"
+                            aria-label="Confirm cancel line"
+                          >
+                            <span className="text-3xs text-fg-muted text-right">
+                              Cancel this line? It closes permanently and won&apos;t
+                              appear in future goods-receipt sessions.
+                            </span>
+                            <div className="flex items-center gap-1.5">
+                              <button
+                                type="button"
+                                className="btn btn-danger btn-xs"
+                                onClick={() => lineCancelMut.mutate(line.po_line_id)}
+                                disabled={lineCancelMut.isPending}
+                              >
+                                {lineCancelMut.isPending ? "Cancelling…" : "Cancel line"}
+                              </button>
+                              <button
+                                type="button"
+                                className="btn btn-ghost btn-xs"
+                                onClick={() => { setLineCancelConfirmId(null); setLineCancelError(null); }}
+                                disabled={lineCancelMut.isPending}
+                              >
+                                Keep line
+                              </button>
+                            </div>
                           </div>
                         )}
                         {isLineEditing && (
@@ -1554,13 +1566,27 @@ export default function PurchaseOrderDetailPage({
       subHeader={
         <>
           {cancelSuccess && (
+            /* UX-flow audit (FLOW-006): state what happened to the lines and
+               give a forward path off this now-terminal page. */
             <div
-              className="rounded-md border border-success/40 bg-success/5 px-4 py-3 text-sm text-success-fg mb-4 flex items-center gap-2"
+              className="rounded-md border border-success/40 bg-success/5 px-4 py-3 text-sm text-success-fg mb-4"
               role="status"
               data-testid="po-cancel-success"
             >
-              <span className="font-semibold">PO cancelled.</span>
-              <span className="text-fg-muted">This purchase order has been cancelled.</span>
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-semibold">PO cancelled.</span>
+                <span className="text-fg-muted">
+                  All open lines on this purchase order have been closed.
+                </span>
+              </div>
+              <div className="mt-2 flex flex-wrap items-center gap-4">
+                <Link href="/purchase-orders" className="text-accent hover:underline">
+                  ← Back to purchase orders
+                </Link>
+                <Link href="/inbox" className="text-accent hover:underline">
+                  Check inbox →
+                </Link>
+              </div>
             </div>
           )}
           {manualBanner}
