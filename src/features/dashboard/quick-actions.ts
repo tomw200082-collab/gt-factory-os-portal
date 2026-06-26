@@ -25,7 +25,6 @@ import {
   GitBranch,
   Inbox as InboxIcon,
   LineChart,
-  ListChecks,
   MinusCircle,
   Package,
   PackageOpen,
@@ -107,16 +106,6 @@ export const QUICK_ACTIONS: readonly QuickAction[] = [
     label: "Procurement",
     blurb: "The weekly buying flow — review and place planned orders.",
     icon: ShoppingBasket,
-    required: "planning:read",
-    category: "planning",
-  },
-  {
-    // Tranche 045 — runs are diagnostic-only; ordering goes through
-    // /planning/procurement. Tranche 065 (FLOW-A3) sharpens the blurb.
-    href: "/planning/runs",
-    label: "Planning Runs",
-    blurb: "Diagnostic planning runs — not for ordering.",
-    icon: ListChecks,
     required: "planning:read",
     category: "planning",
   },

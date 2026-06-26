@@ -45,9 +45,7 @@ import {
   ScrollText,
   Settings2,
   Shapes,
-  ShieldCheck,
   ShoppingCart,
-  Tags,
   TrendingUp,
   Users,
 } from "lucide-react";
@@ -436,25 +434,12 @@ export const NAV_MANIFEST: NavGroup[] = [
         required_capability: "admin:execute",
       },
       {
-        href: "/admin/sku-health",
-        label: "SKU Health",
-        icon: ShieldCheck,
-        min_role: "admin",
-        required_capability: "admin:execute",
-      },
-      {
-        // Page currently lives at /admin/sku-aliases; plan §B.1 target URL
-        // is /admin/integrations/sku-aliases. Move is a later tranche; keep
-        // the current live URL to preserve zero-404.
-        href: "/admin/sku-aliases",
-        label: "SKU Aliases",
-        icon: Tags,
-        min_role: "admin",
-        required_capability: "admin:execute",
-      },
-      {
-        href: "/admin/sku-map",
-        label: "SKU Mappings",
+        // Tranche 090 (cleanup) — one "SKU" door. Collapses the former three
+        // entries (Mappings / Health / Aliases) into a single nav item → the
+        // /admin/sku hub, which routes to the three facets. The pages stay live
+        // at their existing URLs (deep-links preserved); nothing is removed.
+        href: "/admin/sku",
+        label: "SKU",
         icon: ArrowLeftRight,
         min_role: "admin",
         required_capability: "admin:execute",
