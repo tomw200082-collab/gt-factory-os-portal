@@ -26,6 +26,7 @@ function row(p: Partial<ProfitRow>): ProfitRow {
     fg_inventory_value_at_sale_price: null,
     embedded_material_margin_in_stock: null,
     reliability_flag: null,
+    cogs_snapshot_at: null,
     ...p,
   };
 }

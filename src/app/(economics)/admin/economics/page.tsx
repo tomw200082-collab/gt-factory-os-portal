@@ -2893,13 +2893,24 @@ export default function AdminEconomicsPage(): JSX.Element {
               : undefined
           }
           onRetry={() => void economicsQuery.refetch()}
+          onSwitchToOverview={() => setActiveTab("overview")}
           onPriceApplied={() => {
             setPriceSavedHint(true);
             void queryClient.invalidateQueries({
               queryKey: ["admin", "economics"],
             });
+            // Stale-hint hygiene: clear the saved confirmation after a few
+            // seconds rather than leaving it up for the whole session.
+            window.setTimeout(() => setPriceSavedHint(false), 4500);
           }}
         />
+      ) : null}
+
+      {activeTab === "profitability" && priceSavedHint ? (
+        <div className="text-xs text-fg-muted">
+          Average sale price saved — margins and inventory value have been
+          refreshed.
+        </div>
       ) : null}
 
       {activeTab === "component-costs" ? (
