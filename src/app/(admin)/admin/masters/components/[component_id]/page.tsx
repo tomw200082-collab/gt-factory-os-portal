@@ -444,8 +444,15 @@ export default function AdminComponentDetailPage({
         status: args.newStatus,
         ifMatchUpdatedAt: args.updated_at,
       }),
-    onSuccess: () => {
+    onSuccess: (_data, variables) => {
       setShowStatusDrawer(false);
+      setEditBanner({
+        kind: "success",
+        message:
+          variables.newStatus === "INACTIVE"
+            ? "Component deactivated."
+            : "Component reactivated.",
+      });
       void queryClient.invalidateQueries({
         queryKey: ["admin", "masters", "component", component_id],
       });
