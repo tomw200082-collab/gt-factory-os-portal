@@ -238,19 +238,22 @@ export function ProductionJobCard({
             </span>
           </div>
 
-          {/* Status icon (top-right corner) */}
+          {/* Status icon (top-right corner) — decorative; the state is carried
+              in text by the status chips and the hero color. aria-hidden so a
+              screen reader doesn't announce a bare unlabelled icon. */}
           <div className="pt-1 shrink-0">
             {isLive && !isDraft && (
-              <Clock className="h-3.5 w-3.5 text-warning/70" strokeWidth={2} />
+              <Clock className="h-3.5 w-3.5 text-warning/70" strokeWidth={2} aria-hidden />
             )}
             {isDone && (
               <CheckCircle2
                 className="h-3.5 w-3.5 text-success"
                 strokeWidth={2}
+                aria-hidden
               />
             )}
             {isCancelled && (
-              <Ban className="h-3.5 w-3.5 text-fg-faint" strokeWidth={2} />
+              <Ban className="h-3.5 w-3.5 text-fg-faint" strokeWidth={2} aria-hidden />
             )}
           </div>
         </div>

@@ -2386,8 +2386,14 @@ export default function ProductionPlanPage() {
           <div
             ref={boardRef}
             onScroll={updateTodayVisibility}
-            className="rounded-xl bg-bg-subtle p-3 overflow-x-auto"
+            className="rounded-xl bg-bg-subtle p-3 overflow-x-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent/50"
             data-testid="production-plan-week"
+            // A11Y-006 — a horizontally-scrolling region must be keyboard
+            // operable. tabindex makes it focusable so arrow keys scroll it;
+            // role+label give it an accessible name in the tab order.
+            tabIndex={0}
+            role="region"
+            aria-label="Weekly production board — scroll horizontally for all seven days"
           >
             <div
               className="flex gap-3"

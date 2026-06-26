@@ -225,20 +225,22 @@ export function ProductionDayLane({
         <div className="px-2 pb-2 flex gap-1">
           <button
             type="button"
-            className="btn btn-ghost btn-xs flex-1 gap-1 text-fg-faint hover:text-fg"
+            className="btn btn-ghost btn-xs flex-1 gap-1 min-h-[32px] text-fg-faint hover:text-fg"
             onClick={() => onAdd(date)}
+            aria-label={`Add production for ${dayName} ${dateLabel}`}
             data-testid="day-lane-add"
           >
-            <Plus className="h-3 w-3" strokeWidth={2.5} />
+            <Plus className="h-3 w-3" strokeWidth={2.5} aria-hidden />
             Production
           </button>
           <button
             type="button"
-            className="btn btn-ghost btn-xs flex-1 gap-1 text-fg-faint hover:text-fg"
+            className="btn btn-ghost btn-xs flex-1 gap-1 min-h-[32px] text-fg-faint hover:text-fg"
             onClick={() => onAddNote(date)}
+            aria-label={`Add note for ${dayName} ${dateLabel}`}
             data-testid="day-lane-add-note"
           >
-            <StickyNote className="h-3 w-3" strokeWidth={2} />
+            <StickyNote className="h-3 w-3" strokeWidth={2} aria-hidden />
             Note
           </button>
         </div>
