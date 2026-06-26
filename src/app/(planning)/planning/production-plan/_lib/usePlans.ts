@@ -164,7 +164,7 @@ export function useCreatePlan() {
           /* ignore */
         }
         throw new PlanMutationError(
-          mapStatusToHebrew(res.status),
+          mapStatusToMessage(res.status),
           res.status,
           validationErrors,
         );
@@ -203,7 +203,7 @@ export function usePatchPlan() {
       if (!res.ok) {
         // §1 (FLOW-019) — operator-facing message is the plain mapped status;
         // raw backend `detail` is never surfaced to the planner.
-        throw new Error(mapStatusToHebrew(res.status));
+        throw new Error(mapStatusToMessage(res.status));
       }
       return (await res.json()) as ProductionPlanRow;
     },
@@ -251,8 +251,8 @@ export function useDeletePlan() {
   });
 }
 
-function mapStatusToHebrew(status: number): string {
-  // Function name kept for now; copy is English-only per portal standard.
+function mapStatusToMessage(status: number): string {
+  // English-only operator copy per portal standard (§1).
   if (status === 401) return "You need to sign in again.";
   if (status === 403) return "You don't have permission for this action.";
   if (status === 404) return "Plan not found.";

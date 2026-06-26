@@ -131,7 +131,7 @@ export function ProductionDayLane({
           )}
           {doneCount > 0 && liveCount === 0 && (
             <span className="text-[9px] font-semibold text-success-fg leading-none">
-              ✓ Done
+              Completed
             </span>
           )}
           {dayTotal > 0 && (

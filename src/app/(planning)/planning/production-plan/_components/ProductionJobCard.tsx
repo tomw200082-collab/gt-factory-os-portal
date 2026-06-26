@@ -381,10 +381,10 @@ export function ProductionJobCard({
               data-testid="plan-row-report"
             >
               <Factory className="h-2.5 w-2.5" strokeWidth={2.5} />
-              Report
+              Report Production
             </Link>
           ) : (
-            <span className="text-[10px] text-fg-faint" title="Firm this plan before reporting production">
+            <span className="text-[10px] text-fg-faint" title="Confirm this plan before reporting production">
               Not reportable yet
             </span>
           )}

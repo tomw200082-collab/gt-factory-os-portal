@@ -1569,6 +1569,18 @@ export default function ProductionPlanPage() {
     window.setTimeout(() => setToast(null), 4500);
   }
 
+  // §1-safe short label for a plan in toasts / confirms — the item name or the
+  // base-batch descriptor, never the raw item_id. Returns null when there is no
+  // human label to show (the caller then keeps the generic message).
+  function planLabel(p: ProductionPlanRow): string | null {
+    if (p.item_name) return p.item_name;
+    if (p.is_base_batch) {
+      const n = p.pack_manifest_count;
+      return `base batch (${n} SKU${n === 1 ? "" : "s"})`;
+    }
+    return null;
+  }
+
   // Group plans by day
   const plansByDay = useMemo(() => {
     const out = new Map<string, ProductionPlanRow[]>();
@@ -1784,7 +1796,8 @@ export default function ProductionPlanPage() {
   // today-plan. Reuses the existing date-edit PATCH; usePatchPlan already
   // invalidates the production-plan queries on success.
   async function handleMoveToTomorrow(p: ProductionPlanRow) {
-    const label = `${p.item_name ?? p.item_id ?? "plan"} · ${fmtQty(p.planned_qty ?? "0", p.uom ?? "")}`;
+    const name = planLabel(p);
+    const label = `${name ?? "this plan"} · ${fmtQty(p.planned_qty ?? "0", p.uom ?? "")}`;
     const ok = await confirm({
       title: "Move plan to tomorrow?",
       description: `Moves "${label}" to tomorrow (${tomorrowIso}). Inventory is not affected.`,
@@ -1796,7 +1809,7 @@ export default function ProductionPlanPage() {
       { plan_id: p.plan_id, body: { plan_date: tomorrowIso } },
       {
         onSuccess: () => {
-          flashToast("success", "Plan moved to tomorrow.");
+          flashToast("success", name ? `${name} moved to tomorrow.` : "Plan moved to tomorrow.");
         },
         onError: (err) => { flashToast("error", err.message); },
         onSettled: () => {
@@ -1861,11 +1874,12 @@ export default function ProductionPlanPage() {
       setEditingPlan(null);
       return;
     }
+    const name = planLabel(editingPlan);
     patchMut.mutate(
       { plan_id: editingPlan.plan_id, body },
       {
         onSuccess: () => {
-          flashToast("success", "Plan updated.");
+          flashToast("success", name ? `Plan updated for ${name}.` : "Plan updated.");
           setEditingPlan(null);
         },
         onError: (err) => { flashToast("error", err.message); },
@@ -1875,11 +1889,17 @@ export default function ProductionPlanPage() {
 
   function handleCancel(reason: string) {
     if (!cancellingPlan) return;
+    const name = planLabel(cancellingPlan);
     patchMut.mutate(
       { plan_id: cancellingPlan.plan_id, body: { action: "cancel", cancel_reason: reason.trim() || null } },
       {
         onSuccess: () => {
-          flashToast("success", "Plan cancelled. Inventory has not changed.");
+          flashToast(
+            "success",
+            name
+              ? `Plan cancelled for ${name}. Inventory has not changed.`
+              : "Plan cancelled. Inventory has not changed.",
+          );
           setCancellingPlan(null);
         },
         onError: (err) => { flashToast("error", err.message); },
@@ -1889,11 +1909,12 @@ export default function ProductionPlanPage() {
 
   function handleDelete() {
     if (!deletingPlan) return;
+    const name = planLabel(deletingPlan);
     deleteMut.mutate(
       { plan_id: deletingPlan.plan_id },
       {
         onSuccess: () => {
-          flashToast("success", "Record deleted.");
+          flashToast("success", name ? `Record deleted for ${name}.` : "Record deleted.");
           setDeletingPlan(null);
         },
         onError: (err) => { flashToast("error", err.message); },

@@ -106,8 +106,6 @@ export const VARIANCE_SIGN_LABEL: Record<VarianceSign, string> = {
 };
 
 export const VARIANCE_TOOLTIP =
-  "Variance compares output to planned quantity. " +
-  "It does not include scrap (per the production reporting v1 model: " +
-  "system computes raw-material consumption from the BOM over output + " +
-  "scrap; scrap is loss, not output). " +
-  "Stock has already been updated by the production report.";
+  "Variance compares what was produced to what was planned. " +
+  "Scrap is not counted as output. " +
+  "Stock has already been updated from this production report.";
