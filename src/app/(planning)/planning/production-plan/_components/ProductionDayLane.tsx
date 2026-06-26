@@ -59,6 +59,7 @@ export function ProductionDayLane({
   onCancel,
   onDelete,
   onAdjustRecipe,
+  creating = false,
 }: {
   date: Date;
   isoDate: string;
@@ -77,6 +78,9 @@ export function ProductionDayLane({
   onCancel: (p: ProductionPlanRow) => void;
   onDelete: (p: ProductionPlanRow) => void;
   onAdjustRecipe: (p: ProductionPlanRow) => void;
+  // INTER-N01 — disable the lane's add buttons while a create is in flight,
+  // matching the header CTAs (tranche 090). Prevents duplicate creates.
+  creating?: boolean;
 }) {
   const liveCount = plans.filter((p) => p.rendered_state === "planned").length;
   const doneCount = plans.filter((p) => p.rendered_state === "done").length;
@@ -157,6 +161,7 @@ export function ProductionDayLane({
                   type="button"
                   className="flex flex-col items-center gap-2 group/add transition-opacity duration-150"
                   onClick={() => onAdd(date)}
+                  disabled={creating}
                   data-testid="day-lane-add-empty"
                   aria-label={`Add production for ${dayName} ${dateLabel}`}
                 >
@@ -181,6 +186,7 @@ export function ProductionDayLane({
                   type="button"
                   className="text-3xs text-fg-faint hover:text-fg-subtle transition-colors duration-150 underline decoration-dotted underline-offset-2"
                   onClick={() => onAddNote(date)}
+                  disabled={creating}
                   data-testid="day-lane-add-note-empty"
                   aria-label={`Add note for ${dayName} ${dateLabel}`}
                 >
@@ -232,6 +238,7 @@ export function ProductionDayLane({
             type="button"
             className="btn btn-ghost btn-xs flex-1 gap-1 text-fg-faint hover:text-fg"
             onClick={() => onAdd(date)}
+            disabled={creating}
             data-testid="day-lane-add"
           >
             <Plus className="h-3 w-3" strokeWidth={2.5} />
@@ -241,6 +248,7 @@ export function ProductionDayLane({
             type="button"
             className="btn btn-ghost btn-xs flex-1 gap-1 text-fg-faint hover:text-fg"
             onClick={() => onAddNote(date)}
+            disabled={creating}
             data-testid="day-lane-add-note"
           >
             <StickyNote className="h-3 w-3" strokeWidth={2} />

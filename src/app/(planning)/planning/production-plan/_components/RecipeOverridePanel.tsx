@@ -15,6 +15,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import {
   FlaskConical,
   History,
+  Loader2,
   Plus,
   RotateCcw,
   Trash2,
@@ -456,10 +457,18 @@ export function RecipeOverridePanel({
                               inputMode="decimal"
                               step="any"
                               min="0"
-                              className="input min-h-[40px] w-24 text-right font-mono tabular-nums"
+                              // INTER-N06 — highlight the offending row inline when its
+                              // qty is empty/≤0, instead of only the page-level save
+                              // error, so the planner sees which line to fix.
+                              className={cn(
+                                "input min-h-[40px] w-24 text-right font-mono tabular-nums",
+                                editable && !(parseFloat(l.qty) > 0) &&
+                                  "border-danger/60 focus:border-danger",
+                              )}
                               value={l.qty}
                               onChange={(e) => updateQty(l.component_id, e.target.value)}
                               disabled={!editable || saveMut.isPending}
+                              aria-invalid={editable && !(parseFloat(l.qty) > 0)}
                               aria-label={`Quantity per unit for ${l.component_name ?? l.component_id}`}
                               data-testid="recipe-line-qty"
                             />
@@ -716,7 +725,13 @@ export function RecipeOverridePanel({
                 title={saveDisabledReason ?? undefined}
                 data-testid="recipe-save"
               >
-                <FlaskConical className="h-3 w-3" strokeWidth={2.5} />
+                {/* INTER-N04 — spinner while saving, matching every other
+                    submit button on the parent surface. */}
+                {saveMut.isPending ? (
+                  <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.5} aria-hidden />
+                ) : (
+                  <FlaskConical className="h-3 w-3" strokeWidth={2.5} />
+                )}
                 {saveMut.isPending ? "Saving…" : "Save recipe for this run"}
               </button>
             </div>

@@ -893,6 +893,10 @@ function EditModal({
     uom !== (plan.uom ?? "") ||
     notes !== (plan.notes ?? "");
 
+  // INTER-N05 — block a cleared/zero/non-numeric quantity client-side so a NaN
+  // planned_qty never reaches the PATCH. Matches ManualAddModal's positive-qty gate.
+  const qtyValid = parseFloat(qty) > 0;
+
   // Tranche 079 (A11Y-R02 / R10) — dialog treatment (matches ManualAddModal).
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const titleRef = useRef<HTMLHeadingElement | null>(null);
@@ -991,7 +995,18 @@ function EditModal({
                 className="input"
                 value={qty}
                 onChange={(e) => setQty(e.target.value)}
+                aria-invalid={!qtyValid}
+                aria-describedby={!qtyValid ? "edit-qty-error" : undefined}
               />
+              {!qtyValid && (
+                <span
+                  id="edit-qty-error"
+                  className="mt-1 block text-3xs text-danger-fg"
+                  data-testid="edit-qty-error"
+                >
+                  Enter a quantity greater than 0.
+                </span>
+              )}
             </label>
             <label className="block">
               <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
@@ -1035,7 +1050,7 @@ function EditModal({
             <button
               type="submit"
               className="btn btn-primary btn-sm gap-1.5"
-              disabled={isSubmitting || !isDirty}
+              disabled={isSubmitting || !isDirty || !qtyValid}
               data-testid="edit-submit"
             >
               {/* INTER-004 — spinner during save, matching the other submit
@@ -1202,7 +1217,10 @@ function EditNoteModal({
   const [planDate, setPlanDate] = useState(plan.plan_date);
   const [notes, setNotes] = useState(plan.notes ?? "");
 
-  const canSubmit = notes.trim().length > 0 && !isSubmitting;
+  // INTER-N02 — gate Save on a real change, matching EditModal. Without this
+  // the button is enabled with no edits and a no-op PATCH reaches the handler.
+  const isDirty = planDate !== plan.plan_date || notes !== (plan.notes ?? "");
+  const canSubmit = notes.trim().length > 0 && isDirty && !isSubmitting;
 
   // Tranche 079 (A11Y-R02 / R10) — dialog treatment.
   const dialogRef = useRef<HTMLDivElement | null>(null);
@@ -1538,7 +1556,13 @@ function DeleteModal({
             onClick={onConfirm}
             data-testid="delete-submit"
           >
-            <Trash2 className="h-3 w-3" strokeWidth={2.5} />
+            {/* INTER-N03 — spinner during the in-flight delete, matching every
+                other submit button on this surface. */}
+            {isSubmitting ? (
+              <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.5} aria-hidden />
+            ) : (
+              <Trash2 className="h-3 w-3" strokeWidth={2.5} />
+            )}
             {isSubmitting ? "Deleting…" : "Delete"}
           </button>
         </div>
@@ -2499,6 +2523,7 @@ export default function ProductionPlanPage() {
                       onCancel={setCancellingPlan}
                       onDelete={setDeletingPlan}
                       onAdjustRecipe={(p) => setRecipePanelPlanId(p.plan_id)}
+                      creating={createMut.isPending}
                     />
                   </div>
                 );
