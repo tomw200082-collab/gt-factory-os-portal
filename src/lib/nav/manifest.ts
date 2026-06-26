@@ -138,6 +138,12 @@ export const NAV_MANIFEST: NavGroup[] = [
   },
   {
     title: "Stock",
+    // Tranche 090 — thin-sidebar progressive disclosure. Collapsed by default so
+    // the owner's sidebar stops being a flat ~30-item haystack; SideNav
+    // auto-expands this group when the active path is inside it, so daily stock
+    // use stays one click. Nothing removed — full access is one expand away.
+    collapsible: true,
+    defaultCollapsed: true,
     items: [
       {
         href: "/stock/receipts",
@@ -185,6 +191,11 @@ export const NAV_MANIFEST: NavGroup[] = [
   },
   {
     title: "Planning",
+    // Tranche 090 — collapsed by default (progressive disclosure). Auto-expands
+    // on active path. The heaviest group (9 items); the daily cadence is reached
+    // from the card-home, not by scanning this list.
+    collapsible: true,
+    defaultCollapsed: true,
     items: [
       {
         href: "/planning",
@@ -291,6 +302,10 @@ export const NAV_MANIFEST: NavGroup[] = [
   },
   {
     title: "Purchase Orders",
+    // Tranche 090 — collapsed by default (progressive disclosure). Auto-expands
+    // on active path.
+    collapsible: true,
+    defaultCollapsed: true,
     items: [
       {
         href: "/purchase-orders",
