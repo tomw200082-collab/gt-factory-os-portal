@@ -199,6 +199,9 @@ export function FocusCard({
   const [addingLine, setAddingLine] = useState(false);
   const [draftQty, setDraftQty] = useState<Record<string, string>>({});
   const [draftDrop, setDraftDrop] = useState<Record<string, boolean>>({});
+  // INTER-005: block save (instead of silently reverting) when a non-dropped
+  // line has an invalid quantity.
+  const [editError, setEditError] = useState<string | null>(null);
   const [placeDate, setPlaceDate] = useState<string>(
     po.earliest_need_date ?? "",
   );
@@ -266,18 +269,27 @@ export function FocusCard({
   }
 
   function saveEdit(): void {
+    let invalid = false;
     const lines = po.lines.map((l) => {
+      const dropped = draftDrop[l.session_po_line_id] ?? l.is_dropped;
       const raw = draftQty[l.session_po_line_id];
       const parsed =
         raw === undefined || raw.trim() === "" ? NaN : Number(raw);
-      const finalQty =
-        Number.isFinite(parsed) && parsed >= 0 ? parsed : l.final_qty;
+      const valid = Number.isFinite(parsed) && parsed >= 0;
+      // A dropped line's quantity is irrelevant; only validate kept lines.
+      if (!dropped && !valid) invalid = true;
       return {
         session_po_line_id: l.session_po_line_id,
-        final_qty: finalQty,
-        is_dropped: draftDrop[l.session_po_line_id] ?? l.is_dropped,
+        final_qty: valid ? parsed : l.final_qty,
+        is_dropped: dropped,
       };
     });
+    if (invalid) {
+      // Don't silently revert to the old quantity — block and tell the planner.
+      setEditError("יש כמות לא תקינה. הזן מספר אפס ומעלה, או סמן את השורה כהוסרה.");
+      return;
+    }
+    setEditError(null);
     editMut.mutate(
       { poId: po.session_po_id, lines },
       { onSuccess: () => setEditing(false) },
@@ -377,24 +389,38 @@ export function FocusCard({
           </span>
           {po.status !== "placed" &&
             (editing ? (
-              <div className="flex gap-2">
-                <button
-                  type="button"
-                  onClick={saveEdit}
-                  disabled={busy}
-                  className="btn btn-xs btn-accent"
-                  data-testid="focus-save-lines"
-                >
-                  {editMut.isPending ? "שומר…" : "שמור"}
-                </button>
-                <button
-                  type="button"
-                  onClick={() => setEditing(false)}
-                  disabled={busy}
-                  className="btn btn-xs btn-ghost"
-                >
-                  ביטול
-                </button>
+              <div className="flex flex-col items-end gap-1">
+                <div className="flex gap-2">
+                  <button
+                    type="button"
+                    onClick={saveEdit}
+                    disabled={busy}
+                    className="btn btn-xs btn-accent"
+                    data-testid="focus-save-lines"
+                  >
+                    {editMut.isPending ? "שומר…" : "שמור"}
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditing(false);
+                      setEditError(null);
+                    }}
+                    disabled={busy}
+                    className="btn btn-xs btn-ghost"
+                  >
+                    ביטול
+                  </button>
+                </div>
+                {editError && (
+                  <p
+                    className="text-3xs text-danger-fg"
+                    role="alert"
+                    data-testid="focus-edit-error"
+                  >
+                    {editError}
+                  </p>
+                )}
               </div>
             ) : (
               <div className="flex items-center gap-3">
@@ -469,12 +495,13 @@ export function FocusCard({
                         min={0}
                         step="any"
                         value={draftQty[l.session_po_line_id] ?? String(l.final_qty)}
-                        onChange={(e) =>
+                        onChange={(e) => {
+                          setEditError(null);
                           setDraftQty((p) => ({
                             ...p,
                             [l.session_po_line_id]: e.target.value,
-                          }))
-                        }
+                          }));
+                        }}
                         className="w-20 rounded border border-border/60 bg-bg px-1 py-0.5 text-xs"
                         aria-label={`כמות עבור ${l.line_label}`}
                       />
