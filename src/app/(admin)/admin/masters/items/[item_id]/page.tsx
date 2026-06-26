@@ -834,6 +834,8 @@ export default function AdminItemDetailPage({
                   ? itemFieldMutation.error.message
                   : "Save failed. Please try again."}
               </p>
+            ) : itemFieldMutation.isSuccess ? (
+              <p className="text-xs text-success-fg">Saved</p>
             ) : null}
           </div>
         </div>

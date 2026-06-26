@@ -413,8 +413,10 @@ function CostEditCell({
           ✕
         </button>
         {mutation.isError ? (
-          <span className="text-xs text-danger-fg" title={(mutation.error as Error).message}>
-            Error saving
+          <span className="text-xs text-danger-fg">
+            {mutation.error instanceof Error
+              ? mutation.error.message
+              : "Error saving — try again."}
           </span>
         ) : null}
       </span>
@@ -928,21 +930,29 @@ export default function AdminSupplierDetailPage({
           </details>
 
           {/* Iter 13 — mutation feedback with aria-live. */}
-          {supplierFieldMutation.isError || supplierFieldMutation.isPending ? (
+          {supplierFieldMutation.isError ||
+          supplierFieldMutation.isPending ||
+          supplierFieldMutation.isSuccess ? (
             <p
               role="status"
               aria-live="polite"
               aria-atomic
               className={cn(
                 "text-xs",
-                supplierFieldMutation.isPending ? "text-fg-muted" : "text-danger-fg",
+                supplierFieldMutation.isPending
+                  ? "text-fg-muted"
+                  : supplierFieldMutation.isError
+                    ? "text-danger-fg"
+                    : "text-success-fg",
               )}
             >
               {supplierFieldMutation.isPending
                 ? "Saving…"
-                : supplierFieldMutation.error instanceof AdminMutationError
-                  ? supplierFieldMutation.error.message
-                  : "Save failed. Please try again."}
+                : supplierFieldMutation.isError
+                  ? supplierFieldMutation.error instanceof AdminMutationError
+                    ? supplierFieldMutation.error.message
+                    : "Save failed. Please try again."
+                  : "Saved"}
             </p>
           ) : null}
         </div>
