@@ -131,6 +131,22 @@ test.describe("@mocked Product Decision Board", () => {
     await expect(page.getByTestId("segments")).toBeVisible();
     await expect(page.getByRole("cell", { name: "Mojito 330ml" })).toBeVisible();
 
+    // FLOW-007: the "Needs data" bucket has its own card in the filter strip.
+    await expect(page.getByTestId("segment-needs_data")).toBeVisible();
+
+    // FLOW-001: inspect via TAP (touch/click path — not hover) on a quadrant bubble.
+    await page.getByTestId("quadrant").locator("circle[role='button']").first().click();
+    await expect(page.getByTestId("inspector")).toBeVisible();
+
+    // FLOW-001: inspect via TAP on a table row.
+    await page.getByRole("row").filter({ hasText: "Classic Margarita 330ml" }).click();
+    await expect(page.getByTestId("inspector")).toContainText("Classic Margarita 330ml");
+
+    // FLOW-001: inspect via KEYBOARD — focus a row and press Enter.
+    await page.getByRole("row").filter({ hasText: "Cola Classic 330ml" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(page.getByTestId("inspector")).toContainText("Cola Classic 330ml");
+
     // Close-ups for visual review.
     await page.getByTestId("quadrant").screenshot({ path: "/tmp/db/quadrant.png" });
     // Hover a bubble to exercise the inspector + crosshair, then capture.
