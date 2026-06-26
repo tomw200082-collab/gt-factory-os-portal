@@ -20,6 +20,9 @@ const PO: QueuePo = {
   expected_receive_date: "2026-06-30",
   currency: "ILS",
   total_net: "0",
+  order_by_date: "2026-06-25",
+  tier: "must",
+  order_document_text: null,
 };
 
 const LINES = {
