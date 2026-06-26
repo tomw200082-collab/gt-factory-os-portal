@@ -58,6 +58,8 @@ manifest:
   - src/lib/nav/manifest.ts
   - src/lib/nav/active.test.ts
   - src/components/layout/SideNav.tsx
+  - src/components/layout/TopBar.tsx            # Slice A2 — top-bar pulse tabs + ⌘K
+  - src/components/layout/CommandPalette.tsx    # Slice A2 — global ⌘K search (new)
   - src/app/(shared)/home/page.tsx            # Slice B
   - src/app/(shared)/home/page.test.tsx       # Slice B
   - src/app/(auth)/login/page.tsx             # Slice B (default redirect target only)
