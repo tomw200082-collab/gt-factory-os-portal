@@ -1068,6 +1068,7 @@ export default function InboxListPage() {
         key={row.id}
         row={row}
         now={now}
+        onActionComplete={invalidateExceptions}
         density={density}
         isFocused={focusIdx !== null && focusedIdx === focusIdx}
         onFocusRow={() => {
@@ -1105,6 +1106,7 @@ export default function InboxListPage() {
       toggleSelected,
       resolveMutation,
       ackMutation,
+      invalidateExceptions,
     ],
   );
 
@@ -1168,7 +1170,12 @@ export default function InboxListPage() {
         return;
       }
       if (e.key === "a") {
-        if (canAct && !focused.type.startsWith("approval:") && focused.inline_actions.includes("acknowledge")) {
+        if (
+          canAct &&
+          !ackMutation.isPending &&
+          !focused.type.startsWith("approval:") &&
+          focused.inline_actions.includes("acknowledge")
+        ) {
           e.preventDefault();
           ackMutation.mutate(focused.id);
         }
@@ -1770,6 +1777,7 @@ function InboxRowCard({
   onAcknowledge,
   ackBusy,
   resolveBusy,
+  onActionComplete,
 }: {
   row: InboxRow;
   now: Date;
@@ -1786,6 +1794,7 @@ function InboxRowCard({
   onAcknowledge: (id: string) => void;
   ackBusy: boolean;
   resolveBusy: boolean;
+  onActionComplete: () => void;
 }): ReactNode {
   const sev = SEVERITY_CONFIG[row.severity];
   const Icon = sev.icon;
@@ -1989,7 +1998,11 @@ function InboxRowCard({
 
           {showWastePCInline ? (
             <div onClick={(e) => e.stopPropagation()}>
-              <ApprovalInlineCard row={row} now={now} />
+              <ApprovalInlineCard
+                row={row}
+                now={now}
+                onActionComplete={onActionComplete}
+              />
             </div>
           ) : null}
 

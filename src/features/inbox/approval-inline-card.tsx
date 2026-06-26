@@ -395,9 +395,14 @@ function RejectPanel({
 export function ApprovalInlineCard({
   row,
   now,
+  onActionComplete,
 }: {
   row: InboxRow;
   now: Date;
+  /** Fired after a terminal approve/reject (or conflict) so the parent can
+   *  invalidate the inbox queue — otherwise the actioned row lingers until the
+   *  next staleTime refetch. */
+  onActionComplete?: () => void;
 }) {
   const kind: ApprovalKind | null =
     row.type === "approval:waste"
@@ -540,6 +545,7 @@ export function ApprovalInlineCard({
               setBusy(true);
               const result = await postApprove(kind, submissionId, null);
               setOutcome(result);
+              if (result.kind !== "error") onActionComplete?.();
               setBusy(false);
             }}
           >
@@ -566,6 +572,7 @@ export function ApprovalInlineCard({
             setBusy(true);
             const result = await postReject(kind, submissionId, reason);
             setOutcome(result);
+            if (result.kind !== "error") onActionComplete?.();
             setBusy(false);
           }}
         />
