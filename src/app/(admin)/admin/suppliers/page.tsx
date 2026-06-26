@@ -630,7 +630,7 @@ function SuppliersPageInner(): JSX.Element {
                               e.stopPropagation();
                               handleToggleStatus(r);
                             }}
-                            disabled={statusMutation.isPending}
+                            disabled={statusMutation.isPending && statusMutation.variables?.supplier_id === r.supplier_id}
                           >
                             <Power className="h-3 w-3" strokeWidth={2} />
                             {r.status === "ACTIVE" ? "Deactivate" : "Activate"}
@@ -713,7 +713,7 @@ function SuppliersPageInner(): JSX.Element {
                         e.stopPropagation();
                         handleToggleStatus(r);
                       }}
-                      disabled={statusMutation.isPending}
+                      disabled={statusMutation.isPending && statusMutation.variables?.supplier_id === r.supplier_id}
                     >
                       <Power className="h-3 w-3" strokeWidth={2} />
                       {r.status === "ACTIVE" ? "Deactivate" : "Activate"}

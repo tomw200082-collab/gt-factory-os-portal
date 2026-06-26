@@ -877,7 +877,7 @@ function ComponentsPageInner(): JSX.Element {
                               e.stopPropagation();
                               handleToggleStatus(r);
                             }}
-                            disabled={statusMutation.isPending}
+                            disabled={statusMutation.isPending && statusMutation.variables?.component_id === r.component_id}
                           >
                             <Power className="h-3 w-3" strokeWidth={2} />
                             {r.status === "ACTIVE" ? "Deactivate" : "Activate"}
@@ -984,7 +984,7 @@ function ComponentsPageInner(): JSX.Element {
                         e.stopPropagation();
                         handleToggleStatus(r);
                       }}
-                      disabled={statusMutation.isPending}
+                      disabled={statusMutation.isPending && statusMutation.variables?.component_id === r.component_id}
                     >
                       <Power className="h-3 w-3" strokeWidth={2} />
                       {r.status === "ACTIVE" ? "Deactivate" : "Activate"}

@@ -830,7 +830,7 @@ function ItemsPageInner(): JSX.Element {
                             title={`Toggle status (currently ${r.status})`}
                             className="btn btn-ghost btn-sm inline-flex items-center gap-1"
                             onClick={() => handleToggleStatus(r)}
-                            disabled={statusMutation.isPending}
+                            disabled={statusMutation.isPending && statusMutation.variables?.item_id === r.item_id}
                           >
                             <Power className="h-3 w-3" strokeWidth={2} />
                             {r.status === "ACTIVE" ? "Deactivate" : "Activate"}
@@ -958,7 +958,7 @@ function ItemsPageInner(): JSX.Element {
                       type="button"
                       className="btn btn-sm inline-flex min-h-[44px] flex-1 items-center justify-center gap-1"
                       onClick={() => handleToggleStatus(r)}
-                      disabled={statusMutation.isPending}
+                      disabled={statusMutation.isPending && statusMutation.variables?.item_id === r.item_id}
                     >
                       <Power className="h-3 w-3" strokeWidth={2} />
                       {r.status === "ACTIVE" ? "Deactivate" : "Activate"}
