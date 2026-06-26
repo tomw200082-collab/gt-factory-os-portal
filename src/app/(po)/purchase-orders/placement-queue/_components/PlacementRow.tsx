@@ -110,7 +110,7 @@ export function PlacementRow({
       title: `לבצע את ההזמנה ${po.po_number}?`,
       description: `ההזמנה תבוצע מול הספק עם תנאי תשלום "${termLabel}"${
         totalPreview != null ? ` · ${formatIls(totalPreview)}` : ""
-      }${confirmedDate ? ` · צפי הגעה ${confirmedDate}` : ""}. לאחר הביצוע ההזמנה תהיה פתוחה ומוכנה לקבלת סחורה — שינויים בכמויות יחייבו תיאום מול הספק.`,
+      }${confirmedDate ? ` · צפי הגעה ${confirmedDate}` : ""}. לאחר הביצוע ההזמנה תהיה פתוחה ומוכנה לקבלת סחורה — לא ניתן לבטל הזמנה שבוצעה דרך המערכת, ושינויים בכמויות יחייבו תיאום מול הספק.`,
       confirmLabel: "בצע הזמנה",
       cancelLabel: "ביטול",
     });
@@ -196,13 +196,13 @@ export function PlacementRow({
           ) : linesQuery.isError ? (
             <div
               role="alert"
-              className="rounded-md border border-danger/40 bg-danger/5 px-3 py-2 text-sm text-danger-fg"
+              className="rounded-md border border-danger/40 bg-danger-softer px-3 py-2 text-sm text-danger-fg"
             >
               לא ניתן לטעון את שורות ההזמנה.{" "}
               <button
                 type="button"
                 onClick={() => void linesQuery.refetch()}
-                className="font-medium underline hover:no-underline"
+                className="inline-flex min-h-[44px] items-center rounded px-1 font-medium underline hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
               >
                 נסה שוב
               </button>
@@ -236,8 +236,9 @@ export function PlacementRow({
                       <input
                         type="number"
                         inputMode="decimal"
-                        min="0"
+                        min="0.01"
                         step="0.01"
+                        required
                         className="input w-28 text-left tabular-nums"
                         value={priceFor(l)}
                         onChange={(e) =>
@@ -271,10 +272,11 @@ export function PlacementRow({
                             setTimeout(() => setCopied(false), 1500);
                           });
                       }}
-                      className="text-xs font-medium underline hover:no-underline"
+                      className="inline-flex min-h-[44px] items-center gap-1 rounded px-2 text-xs font-medium underline hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
                       data-testid={`placement-copy-doc-${po.po_id}`}
                     >
-                      {copied ? "הועתק ✓" : "העתק"}
+                      <span aria-live="polite">{copied ? "הועתק" : "העתק"}</span>
+                      {copied ? <span aria-hidden>✓</span> : null}
                     </button>
                   </div>
                   <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-words text-xs text-fg">
@@ -314,6 +316,7 @@ export function PlacementRow({
                   id={`placement-terms-${po.po_id}`}
                   className="input w-40"
                   value={termCode}
+                  required
                   onChange={(e) => setTermCode(e.target.value)}
                   data-testid={`placement-terms-${po.po_id}`}
                 >
@@ -346,16 +349,25 @@ export function PlacementRow({
                 ) : null}
               </div>
 
-              {errorMsg ? (
-                <div
-                  role="alert"
-                  className="flex items-start gap-2 rounded-md border border-danger/40 bg-danger/5 px-3 py-2 text-sm text-danger-fg"
-                  data-testid={`placement-error-${po.po_id}`}
-                >
-                  <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-                  <span>{errorMsg}</span>
-                </div>
-              ) : null}
+              {/* A11Y-010: always mounted so AT announces every error as a text
+                  mutation (not a node remount that some screen readers miss). */}
+              <div
+                role="alert"
+                aria-live="assertive"
+                className={
+                  errorMsg
+                    ? "flex items-start gap-2 rounded-md border border-danger/40 bg-danger-softer px-3 py-2 text-sm text-danger-fg"
+                    : "sr-only"
+                }
+                data-testid={`placement-error-${po.po_id}`}
+              >
+                {errorMsg ? (
+                  <>
+                    <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                    <span>{errorMsg}</span>
+                  </>
+                ) : null}
+              </div>
 
               <div className="flex items-center justify-end gap-2">
                 <button
@@ -366,7 +378,7 @@ export function PlacementRow({
                   data-testid={`placement-submit-${po.po_id}`}
                 >
                   {placeMut.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                    <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />
                   ) : (
                     <PackageCheck className="h-4 w-4" aria-hidden />
                   )}

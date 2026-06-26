@@ -91,13 +91,16 @@ function QueueInner(): JSX.Element {
           data-testid="placement-queue-loading"
         >
           {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="card h-16 animate-pulse bg-bg-subtle/40" />
+            <div
+              key={i}
+              className="card h-16 animate-pulse bg-bg-subtle/40 motion-reduce:animate-none"
+            />
           ))}
         </div>
       ) : isError ? (
         <div
           role="alert"
-          className="flex items-start gap-2 rounded-md border border-danger/40 bg-danger/5 px-4 py-3 text-sm text-danger-fg"
+          className="flex items-start gap-2 rounded-md border border-danger/40 bg-danger-softer px-4 py-3 text-sm text-danger-fg"
           data-testid="placement-queue-error"
         >
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
@@ -107,7 +110,7 @@ function QueueInner(): JSX.Element {
           <button
             type="button"
             onClick={() => void refetch()}
-            className="inline-flex items-center gap-1 text-xs font-medium underline hover:no-underline"
+            className="inline-flex min-h-[44px] items-center gap-1 rounded px-1 text-xs font-medium underline hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
           >
             <RefreshCw className="h-3 w-3" aria-hidden />
             נסה שוב

@@ -79,7 +79,7 @@ async function jsonOrThrow(res: Response, fallback: string): Promise<unknown> {
   if (res.status === 401) throw new Error("ההתחברות פגה — יש להתחבר מחדש.");
   if (res.status === 403) throw new Error("אין לך הרשאה לבצע פעולה זו.");
   if (res.status === 503)
-    throw new Error("הכתיבה מושהית כעת (מצב break-glass). נסו שוב מאוחר יותר.");
+    throw new Error("הכתיבה מושהית כעת. נסו שוב מאוחר יותר; אם הבעיה נמשכת, פנו למנהל המערכת.");
   let body: unknown = null;
   try {
     body = await res.json();
@@ -90,9 +90,9 @@ async function jsonOrThrow(res: Response, fallback: string): Promise<unknown> {
     const b = body as
       | { reason_code?: string; detail?: string; error?: string }
       | null;
-    const msg = b?.reason_code
-      ? `${b.reason_code}${b.detail ? ` — ${b.detail}` : ""}`
-      : (b?.detail ?? b?.error ?? `${fallback} (${res.status})`);
+    // Operator-facing: never surface a raw reason_code enum or HTTP status.
+    // Prefer the backend's human detail, else the Hebrew fallback sentence.
+    const msg = b?.detail ?? b?.error ?? fallback;
     throw new Error(String(msg));
   }
   return body;
@@ -121,6 +121,9 @@ export function usePlacementQueue() {
     },
     staleTime: 30_000,
     retry: false,
+    // FLOW-001: don't silently refetch (and discard in-progress price/term/date
+    // edits in an expanded row) when the window regains focus.
+    refetchOnWindowFocus: false,
   });
 }
 
