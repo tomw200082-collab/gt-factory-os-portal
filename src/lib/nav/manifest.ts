@@ -81,6 +81,11 @@ export interface NavItem {
   // Optional count badge. The SideNav reads the cache key during render; if
   // the cache is cold or the count is 0, the label renders without a pill.
   badge?: NavItemBadge;
+  // Tranche 090 — placement. "top" renders the item in the TopBar primary nav
+  // (the universal pulse: Dashboard, Inbox) instead of the SideNav. The item
+  // STAYS in the manifest so active-path resolution + breadcrumb labels keep
+  // working; the SideNav simply skips "top" items. Default/absent = "side".
+  placement?: "top" | "side";
 }
 
 export interface NavGroup {
@@ -102,6 +107,7 @@ export const NAV_MANIFEST: NavGroup[] = [
         icon: LayoutDashboard,
         min_role: "viewer",
         required_capability: "viewer:read",
+        placement: "top", // Tranche 090 — pulse, lives in the TopBar
       },
     ],
   },
@@ -114,6 +120,7 @@ export const NAV_MANIFEST: NavGroup[] = [
         icon: Inbox,
         min_role: "viewer",
         required_capability: "viewer:read",
+        placement: "top", // Tranche 090 — attention queue, lives in the TopBar
         // Tranche B: the inbox page seeds an ["inbox", "all_rows"] cache with
         // the merged, unfiltered row set. SideNav reads that cache here and
         // renders a count pill when rows > 0. Cold cache (sidebar rendered
@@ -138,6 +145,12 @@ export const NAV_MANIFEST: NavGroup[] = [
   },
   {
     title: "Stock",
+    // Tranche 090 — thin-sidebar progressive disclosure. Collapsed by default so
+    // the owner's sidebar stops being a flat ~30-item haystack; SideNav
+    // auto-expands this group when the active path is inside it, so daily stock
+    // use stays one click. Nothing removed — full access is one expand away.
+    collapsible: true,
+    defaultCollapsed: true,
     items: [
       {
         href: "/stock/receipts",
@@ -185,6 +198,11 @@ export const NAV_MANIFEST: NavGroup[] = [
   },
   {
     title: "Planning",
+    // Tranche 090 — collapsed by default (progressive disclosure). Auto-expands
+    // on active path. The heaviest group (9 items); the daily cadence is reached
+    // from the card-home, not by scanning this list.
+    collapsible: true,
+    defaultCollapsed: true,
     items: [
       {
         href: "/planning",
@@ -291,6 +309,10 @@ export const NAV_MANIFEST: NavGroup[] = [
   },
   {
     title: "Purchase Orders",
+    // Tranche 090 — collapsed by default (progressive disclosure). Auto-expands
+    // on active path.
+    collapsible: true,
+    defaultCollapsed: true,
     items: [
       {
         href: "/purchase-orders",

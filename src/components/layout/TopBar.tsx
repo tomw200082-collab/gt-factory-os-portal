@@ -3,8 +3,11 @@
 import { ChevronDown, Eye, LogOut, Moon, Sun } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSession } from "@/lib/auth/session-provider";
 import { activeNavLabel } from "@/lib/nav/active";
+import { NAV_MANIFEST, type NavItem } from "@/lib/nav/manifest";
+import { CommandPalette } from "./CommandPalette";
 import { useReviewMode } from "@/lib/review-mode/store";
 import { useTheme } from "@/lib/theme";
 import type { Role } from "@/lib/contracts/enums";
@@ -62,8 +65,12 @@ export function TopBar() {
         {/* Mobile hamburger — renders <md only ———————————————————————————— */}
         <MobileNav />
 
-        {/* Brand mark ——————————————————————————————————————————————————— */}
-        <div className="flex items-center gap-3">
+        {/* Brand mark — doubles as the Home anchor ————————————————————————— */}
+        <Link
+          href="/dashboard"
+          className="flex items-center gap-3 rounded-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+          aria-label="Home"
+        >
           <BrandMark />
           <div className="hidden flex-col leading-none sm:flex">
             <div className="text-[0.8125rem] font-semibold tracking-tightish text-fg-strong">
@@ -73,7 +80,12 @@ export function TopBar() {
               Operations portal
             </div>
           </div>
-        </div>
+        </Link>
+
+        {/* Primary nav (Tranche 090) — the universal "pulse" tabs (Dashboard,
+            Inbox) live here, lifted out of the sidebar. Desktop only; phones
+            use MobileNav + the page-label below. */}
+        <TopNavTabs />
 
         {/* Current page label — phone widths only. The brand text block is
             hidden <sm, so this takes its place next to the logo. */}
@@ -103,6 +115,9 @@ export function TopBar() {
         ) : null}
 
         <div className="ml-auto flex items-center gap-2.5">
+          {/* Global search / command palette (⌘K) — Tranche 090 */}
+          <CommandPalette />
+
           {DEV_SHIM_ENABLED ? (
             <>
               {/* Review mode button — dev-shim only; never renders in production */}
@@ -335,5 +350,97 @@ function BrandMark() {
       height={40}
       className="h-10 w-10 object-contain invert dark:invert-0"
     />
+  );
+}
+
+// Tranche 090 — primary "pulse" tabs in the TopBar. Sourced from the manifest
+// items tagged placement:"top" (Dashboard, Inbox), role-filtered, with the same
+// live count badge the sidebar used for Inbox. Desktop only.
+const TOP_ROLE_ORDER: Record<Role, number> = {
+  viewer: 1,
+  operator: 2,
+  planner: 3,
+  admin: 4,
+};
+
+function readTopBadge(
+  queryClient: ReturnType<typeof useQueryClient>,
+  item: NavItem,
+): number {
+  if (!item.badge) return 0;
+  const data = queryClient.getQueryData<unknown>(
+    item.badge.queryKey as readonly unknown[],
+  );
+  if (item.badge.countSelector === "length") {
+    return Array.isArray(data) ? data.length : 0;
+  }
+  return 0;
+}
+
+function TopNavTabs() {
+  const pathname = usePathname();
+  const { session } = useSession();
+  const queryClient = useQueryClient();
+
+  const items = NAV_MANIFEST.flatMap((g) => g.items).filter(
+    (i) =>
+      i.placement === "top" &&
+      TOP_ROLE_ORDER[session.role] >= TOP_ROLE_ORDER[i.min_role],
+  );
+  if (items.length === 0) return null;
+
+  return (
+    <nav className="ml-1 hidden items-center gap-1 md:flex" aria-label="Primary">
+      {items.map((item) => {
+        const Icon = item.icon;
+        const active =
+          pathname === item.href ||
+          (pathname?.startsWith(item.href + "/") ?? false);
+        const count = readTopBadge(queryClient, item);
+        return (
+          <Link
+            key={item.href}
+            href={item.href}
+            aria-current={active ? "page" : undefined}
+            className={cn(
+              "relative flex items-center gap-2 rounded-lg px-3 py-1.5 text-[0.8125rem] font-medium transition-colors",
+              active
+                ? "bg-accent/12 text-fg-strong"
+                : "text-fg-muted hover:bg-bg-subtle hover:text-fg",
+            )}
+          >
+            <Icon
+              className={cn(
+                "h-4 w-4 shrink-0",
+                active ? "text-accent" : "text-fg-faint",
+              )}
+              strokeWidth={1.75}
+              aria-hidden
+            />
+            <span>{item.label}</span>
+            {count > 0 ? (
+              <span
+                className={cn(
+                  "inline-flex min-w-[1.25rem] items-center justify-center rounded-full px-1.5 py-0.5 text-3xs font-semibold tabular-nums",
+                  active
+                    ? "bg-accent text-accent-fg"
+                    : "bg-bg-subtle text-fg-strong ring-1 ring-border/70",
+                )}
+                data-testid={`topnav-badge-${item.href}`}
+                aria-label={`${count} pending in ${item.label}`}
+              >
+                {count > 99 ? "99+" : count}
+              </span>
+            ) : null}
+            {active ? (
+              <span
+                className="absolute inset-x-3 -bottom-px h-0.5 rounded-full bg-accent"
+                aria-hidden
+              />
+            ) : null}
+          </Link>
+        );
+      })}
+    </nav>
   );
 }

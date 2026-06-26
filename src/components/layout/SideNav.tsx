@@ -239,6 +239,11 @@ export function SideNav({ onNavigate, density = "compact" }: SideNavProps = {}) 
 
       {NAV_MANIFEST.map((group) => {
         const entries: SideNavEntry[] = group.items
+          // Tranche 090 — "top"-placed items (Dashboard, Inbox) live in the
+          // TopBar, not the sidebar. A group left empty by this filter is
+          // skipped below (entries.length === 0), so the Overview group
+          // disappears from the sidebar automatically.
+          .filter((i) => i.placement !== "top")
           .filter((i) => meetsMinRole(session.role, i.min_role))
           .filter((i) => searchLower === "" || i.label.toLowerCase().includes(searchLower))
           .map((i) => {
