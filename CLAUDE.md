@@ -23,6 +23,14 @@ The exception also covers the office-manager (bookkeeping) **placement queue**, 
 
 The goods-receipt surface (`/stock/receipts`) and all other operator surfaces remain English. This and the two lists above are the complete set of authorized Hebrew-operator-label surfaces.
 
+### Extension (2026-06-26, authorized by Tom — card-home bookkeeper cockpit)
+
+The exception also covers the **bookkeeper/office cockpit of the card-home** (tranche 090, Slice B / Phase 2), Hebrew + `dir="rtl"` by Tom's explicit UX target (Tom 2026-06-26: bookkeeper lands in Hebrew, owner + production operator stay English):
+
+- **`/home`** — only the **viewer-role (bookkeeper/office) view** of the role-tailored landing renders Hebrew operator labels + `dir="rtl"` (greeting, tile labels/blurbs, group headings — e.g. "מעקב זיכויים", "הזמנות רכש", "תיבה נכנסת", "לוח בקרה"). The owner/planner (admin + planner) and production-operator views of the same `/home` remain English-first. The Hebrew strings live in `src/features/home/cockpit.ts` (`he` field per tile).
+
+The owner/operator `/home` views and all other operator surfaces remain English. This and the lists above are the complete set of authorized Hebrew-operator-label surfaces.
+
 ## Read these, in order, at the start of any portal session
 1. `docs/portal-os/registry.md` — index of all OS artifacts (≤1 line per entry).
 2. `docs/portal-os/scorecard.md` — current readiness, last updated.
