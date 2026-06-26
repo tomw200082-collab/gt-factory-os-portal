@@ -362,7 +362,7 @@ export function RecipeOverridePanel({
       }}
       tabIndex={-1}
     >
-      <div className="w-full max-w-2xl rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-2xl max-h-[90vh] flex flex-col">
+      <div className="w-full max-w-2xl rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-pop max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
@@ -784,7 +784,7 @@ export function RecipeOverridePanel({
             if (e.target === e.currentTarget) setConfirmingClose(false);
           }}
         >
-          <div className="w-full max-w-sm rounded-lg border border-border bg-bg-raised p-4 shadow-2xl">
+          <div className="w-full max-w-sm rounded-lg border border-border bg-bg-raised p-4 shadow-pop">
             <h3
               id="recipe-discard-title"
               className="text-sm font-semibold text-fg-strong"

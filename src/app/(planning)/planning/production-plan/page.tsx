@@ -320,7 +320,7 @@ function ManualAddModal({
       }}
       tabIndex={-1}
     >
-      <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-2xl">
+      <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-pop">
         <h2
           id="manual-add-modal-title"
           ref={titleRef}
@@ -621,7 +621,7 @@ function AddFromRecommendationsModal({
     >
       {/* FLOW-017 (Tranche 054) — cap the sheet height so the footer
           buttons stay reachable on short phones. */}
-      <div className="w-full max-w-2xl rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-2xl max-h-[min(90vh,600px)] flex flex-col">
+      <div className="w-full max-w-2xl rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-pop max-h-[min(90vh,600px)] flex flex-col">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <h2
@@ -897,7 +897,7 @@ function EditModal({
         focusTrap.onKeyDown(e);
       }}
     >
-      <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-2xl">
+      <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-pop">
         <h2
           id="edit-modal-title"
           ref={titleRef}
@@ -1090,7 +1090,7 @@ function AddNoteModal({
         focusTrap.onKeyDown(e);
       }}
     >
-      <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-2xl">
+      <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-pop">
         <h2
           id="add-note-modal-title"
           ref={titleRef}
@@ -1226,7 +1226,7 @@ function EditNoteModal({
         focusTrap.onKeyDown(e);
       }}
     >
-      <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-2xl">
+      <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-pop">
         <h2
           id="edit-note-modal-title"
           ref={titleRef}
@@ -1348,7 +1348,7 @@ function CancelModal({
         focusTrap.onKeyDown(e);
       }}
     >
-      <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-2xl">
+      <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-pop">
         <h2
           id="cancel-modal-title"
           ref={titleRef}
@@ -1472,7 +1472,7 @@ function DeleteModal({
         focusTrap.onKeyDown(e);
       }}
     >
-      <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-2xl">
+      <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-pop">
         <h2
           id="delete-modal-title"
           ref={titleRef}
@@ -2031,7 +2031,7 @@ export default function ProductionPlanPage() {
             <span className="text-[22px] font-semibold tabular-nums leading-none tracking-tightish text-fg-strong">
               {plannedCount}
             </span>
-            <span className="text-[9px] font-semibold uppercase tracking-sops leading-none text-fg-muted mt-0.5">
+            <span className="text-3xs font-semibold uppercase tracking-sops leading-none text-fg-muted mt-0.5">
               Planned
             </span>
           </div>
@@ -2039,7 +2039,7 @@ export default function ProductionPlanPage() {
             <span className="text-[22px] font-semibold tabular-nums leading-none tracking-tightish text-success-fg">
               {doneCount}
             </span>
-            <span className="text-[9px] font-semibold uppercase tracking-sops leading-none text-fg-muted mt-0.5">
+            <span className="text-3xs font-semibold uppercase tracking-sops leading-none text-fg-muted mt-0.5">
               Completed
             </span>
           </div>
@@ -2047,7 +2047,7 @@ export default function ProductionPlanPage() {
             <span className="text-[22px] font-semibold tabular-nums leading-none tracking-tightish text-fg-strong">
               {totalQty % 1 === 0 ? totalQty.toFixed(0) : totalQty.toFixed(1)}
             </span>
-            <span className="text-[9px] font-semibold uppercase tracking-sops leading-none text-fg-muted mt-0.5">
+            <span className="text-3xs font-semibold uppercase tracking-sops leading-none text-fg-muted mt-0.5">
               {dominantUom} total
             </span>
           </div>
@@ -2055,7 +2055,7 @@ export default function ProductionPlanPage() {
             <span className="text-[22px] font-semibold tabular-nums leading-none tracking-tightish text-fg-strong">
               {completionPct}%
             </span>
-            <span className="text-[9px] font-semibold uppercase tracking-sops leading-none text-fg-muted mt-0.5">
+            <span className="text-3xs font-semibold uppercase tracking-sops leading-none text-fg-muted mt-0.5">
               Done
             </span>
           </div>
@@ -2182,7 +2182,7 @@ export default function ProductionPlanPage() {
           data-testid="today-strip"
         >
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-            <span className="text-[9px] font-semibold uppercase tracking-sops text-fg-subtle">
+            <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
               Today
             </span>
             <span data-testid="today-strip-counts">
@@ -2447,7 +2447,7 @@ export default function ProductionPlanPage() {
           <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-border/50 bg-bg-raised px-4 py-3 shadow-raised">
             <div className="flex flex-1 min-w-[160px] flex-col gap-1">
               <div className="flex items-baseline justify-between gap-2">
-                <span className="text-[9px] font-semibold uppercase tracking-sops text-fg-muted">
+                <span className="text-3xs font-semibold uppercase tracking-sops text-fg-muted">
                   Week completion
                 </span>
                 <span className="text-xs font-semibold tabular-nums text-fg-strong">
