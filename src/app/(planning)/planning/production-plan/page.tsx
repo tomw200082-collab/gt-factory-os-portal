@@ -29,7 +29,7 @@ import {
   Loader2,
   Trash2,
 } from "lucide-react";
-import { useFocusTrap } from "@/components/a11y/useFocusTrap";
+import { useDialogA11y } from "./_lib/useDialogA11y";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
@@ -224,37 +224,10 @@ function ManualAddModal({
   //     first field is a date input that the planner may not want to type
   //     into immediately).
   //   - Focus is returned to the element that opened the modal on close.
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-  const titleRef = useRef<HTMLHeadingElement | null>(null);
-  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
-  // Tranche 079 (A11Y-R03) — Tab / Shift+Tab cycle inside the dialog.
-  const focusTrap = useFocusTrap(dialogRef, true);
-
-  useEffect(() => {
-    // Capture the element that had focus when the modal mounted; restore on
-    // unmount. Works for every trigger (header CTA, day-card "+" action,
-    // etc.) without each trigger needing to thread a ref through.
-    previouslyFocusedRef.current =
-      (document.activeElement as HTMLElement | null) ?? null;
-    // Defer focus so the dialog has actually mounted into the DOM.
-    queueMicrotask(() => {
-      if (titleRef.current) {
-        titleRef.current.focus();
-      } else if (dialogRef.current) {
-        dialogRef.current.focus();
-      }
-    });
-    return () => {
-      const el = previouslyFocusedRef.current;
-      if (el && typeof el.focus === "function") {
-        try {
-          el.focus();
-        } catch {
-          /* trigger may have unmounted — ignore */
-        }
-      }
-    };
-  }, []);
+  const { dialogRef, titleRef, onKeyDown: onDialogKeyDown } = useDialogA11y({
+    onClose,
+    closeDisabled: isSubmitting,
+  });
 
   // INTER-004 — UoM is a select over the known UoM universe. If the
   // item-derived default (sales_uom) somehow isn't in the option list, keep
@@ -310,14 +283,7 @@ function ManualAddModal({
       aria-labelledby="manual-add-modal-title"
       data-testid="manual-add-modal"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      onKeyDown={(e) => {
-        if (e.key === "Escape" && !isSubmitting) {
-          e.stopPropagation();
-          onClose();
-          return;
-        }
-        focusTrap.onKeyDown(e);
-      }}
+      onKeyDown={onDialogKeyDown}
       tabIndex={-1}
     >
       <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-pop">
@@ -575,29 +541,10 @@ function AddFromRecommendationsModal({
   // Tranche 079 (A11Y-R02 / R10) — same dialog treatment as ManualAddModal:
   // initial focus on heading, focus return to trigger on close,
   // Escape-to-close, focus trap on Tab/Shift+Tab.
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-  const titleRef = useRef<HTMLHeadingElement | null>(null);
-  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
-  const focusTrap = useFocusTrap(dialogRef, true);
-
-  useEffect(() => {
-    previouslyFocusedRef.current =
-      (document.activeElement as HTMLElement | null) ?? null;
-    queueMicrotask(() => {
-      if (titleRef.current) titleRef.current.focus();
-      else if (dialogRef.current) dialogRef.current.focus();
-    });
-    return () => {
-      const el = previouslyFocusedRef.current;
-      if (el && typeof el.focus === "function") {
-        try {
-          el.focus();
-        } catch {
-          /* trigger may have unmounted — ignore */
-        }
-      }
-    };
-  }, []);
+  const { dialogRef, titleRef, onKeyDown: onDialogKeyDown } = useDialogA11y({
+    onClose,
+    closeDisabled: isSubmitting,
+  });
 
   return (
     <div
@@ -610,14 +557,7 @@ function AddFromRecommendationsModal({
       data-testid="add-from-recs-modal"
       tabIndex={-1}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      onKeyDown={(e) => {
-        if (e.key === "Escape" && !isSubmitting) {
-          e.stopPropagation();
-          onClose();
-          return;
-        }
-        focusTrap.onKeyDown(e);
-      }}
+      onKeyDown={onDialogKeyDown}
     >
       {/* FLOW-017 (Tranche 054) — cap the sheet height so the footer
           buttons stay reachable on short phones. */}
@@ -853,29 +793,10 @@ function EditModal({
   );
 
   // Tranche 079 (A11Y-R02 / R10) — dialog treatment (matches ManualAddModal).
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-  const titleRef = useRef<HTMLHeadingElement | null>(null);
-  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
-  const focusTrap = useFocusTrap(dialogRef, true);
-
-  useEffect(() => {
-    previouslyFocusedRef.current =
-      (document.activeElement as HTMLElement | null) ?? null;
-    queueMicrotask(() => {
-      if (titleRef.current) titleRef.current.focus();
-      else if (dialogRef.current) dialogRef.current.focus();
-    });
-    return () => {
-      const el = previouslyFocusedRef.current;
-      if (el && typeof el.focus === "function") {
-        try {
-          el.focus();
-        } catch {
-          /* trigger may have unmounted — ignore */
-        }
-      }
-    };
-  }, []);
+  const { dialogRef, titleRef, onKeyDown: onDialogKeyDown } = useDialogA11y({
+    onClose,
+    closeDisabled: isSubmitting,
+  });
 
   return (
     <div
@@ -888,14 +809,7 @@ function EditModal({
       data-testid="edit-modal"
       tabIndex={-1}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      onKeyDown={(e) => {
-        if (e.key === "Escape" && !isSubmitting) {
-          e.stopPropagation();
-          onClose();
-          return;
-        }
-        focusTrap.onKeyDown(e);
-      }}
+      onKeyDown={onDialogKeyDown}
     >
       <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-pop">
         <h2
@@ -1046,29 +960,10 @@ function AddNoteModal({
   const canSubmit = planDate && notes.trim().length > 0 && !isSubmitting;
 
   // Tranche 079 (A11Y-R02 / R10) — dialog treatment.
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-  const titleRef = useRef<HTMLHeadingElement | null>(null);
-  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
-  const focusTrap = useFocusTrap(dialogRef, true);
-
-  useEffect(() => {
-    previouslyFocusedRef.current =
-      (document.activeElement as HTMLElement | null) ?? null;
-    queueMicrotask(() => {
-      if (titleRef.current) titleRef.current.focus();
-      else if (dialogRef.current) dialogRef.current.focus();
-    });
-    return () => {
-      const el = previouslyFocusedRef.current;
-      if (el && typeof el.focus === "function") {
-        try {
-          el.focus();
-        } catch {
-          /* trigger may have unmounted — ignore */
-        }
-      }
-    };
-  }, []);
+  const { dialogRef, titleRef, onKeyDown: onDialogKeyDown } = useDialogA11y({
+    onClose,
+    closeDisabled: isSubmitting,
+  });
 
   return (
     <div
@@ -1081,14 +976,7 @@ function AddNoteModal({
       data-testid="add-note-modal"
       tabIndex={-1}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      onKeyDown={(e) => {
-        if (e.key === "Escape" && !isSubmitting) {
-          e.stopPropagation();
-          onClose();
-          return;
-        }
-        focusTrap.onKeyDown(e);
-      }}
+      onKeyDown={onDialogKeyDown}
     >
       <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-pop">
         <h2
@@ -1182,29 +1070,10 @@ function EditNoteModal({
   const canSubmit = notes.trim().length > 0 && !isSubmitting;
 
   // Tranche 079 (A11Y-R02 / R10) — dialog treatment.
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-  const titleRef = useRef<HTMLHeadingElement | null>(null);
-  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
-  const focusTrap = useFocusTrap(dialogRef, true);
-
-  useEffect(() => {
-    previouslyFocusedRef.current =
-      (document.activeElement as HTMLElement | null) ?? null;
-    queueMicrotask(() => {
-      if (titleRef.current) titleRef.current.focus();
-      else if (dialogRef.current) dialogRef.current.focus();
-    });
-    return () => {
-      const el = previouslyFocusedRef.current;
-      if (el && typeof el.focus === "function") {
-        try {
-          el.focus();
-        } catch {
-          /* trigger may have unmounted — ignore */
-        }
-      }
-    };
-  }, []);
+  const { dialogRef, titleRef, onKeyDown: onDialogKeyDown } = useDialogA11y({
+    onClose,
+    closeDisabled: isSubmitting,
+  });
 
   return (
     <div
@@ -1217,14 +1086,7 @@ function EditNoteModal({
       data-testid="edit-note-modal"
       tabIndex={-1}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      onKeyDown={(e) => {
-        if (e.key === "Escape" && !isSubmitting) {
-          e.stopPropagation();
-          onClose();
-          return;
-        }
-        focusTrap.onKeyDown(e);
-      }}
+      onKeyDown={onDialogKeyDown}
     >
       <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-pop">
         <h2
@@ -1304,29 +1166,10 @@ function CancelModal({
   const [reason, setReason] = useState("");
 
   // Tranche 079 (A11Y-R02 / R10) — dialog treatment.
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-  const titleRef = useRef<HTMLHeadingElement | null>(null);
-  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
-  const focusTrap = useFocusTrap(dialogRef, true);
-
-  useEffect(() => {
-    previouslyFocusedRef.current =
-      (document.activeElement as HTMLElement | null) ?? null;
-    queueMicrotask(() => {
-      if (titleRef.current) titleRef.current.focus();
-      else if (dialogRef.current) dialogRef.current.focus();
-    });
-    return () => {
-      const el = previouslyFocusedRef.current;
-      if (el && typeof el.focus === "function") {
-        try {
-          el.focus();
-        } catch {
-          /* trigger may have unmounted — ignore */
-        }
-      }
-    };
-  }, []);
+  const { dialogRef, titleRef, onKeyDown: onDialogKeyDown } = useDialogA11y({
+    onClose,
+    closeDisabled: isSubmitting,
+  });
 
   return (
     <div
@@ -1339,14 +1182,7 @@ function CancelModal({
       data-testid="cancel-modal"
       tabIndex={-1}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      onKeyDown={(e) => {
-        if (e.key === "Escape" && !isSubmitting) {
-          e.stopPropagation();
-          onClose();
-          return;
-        }
-        focusTrap.onKeyDown(e);
-      }}
+      onKeyDown={onDialogKeyDown}
     >
       <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-pop">
         <h2
@@ -1426,29 +1262,10 @@ function DeleteModal({
   isSubmitting: boolean;
 }) {
   // A11Y — same dialog treatment as CancelModal (focus trap + restore).
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-  const titleRef = useRef<HTMLHeadingElement | null>(null);
-  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
-  const focusTrap = useFocusTrap(dialogRef, true);
-
-  useEffect(() => {
-    previouslyFocusedRef.current =
-      (document.activeElement as HTMLElement | null) ?? null;
-    queueMicrotask(() => {
-      if (titleRef.current) titleRef.current.focus();
-      else if (dialogRef.current) dialogRef.current.focus();
-    });
-    return () => {
-      const el = previouslyFocusedRef.current;
-      if (el && typeof el.focus === "function") {
-        try {
-          el.focus();
-        } catch {
-          /* trigger may have unmounted — ignore */
-        }
-      }
-    };
-  }, []);
+  const { dialogRef, titleRef, onKeyDown: onDialogKeyDown } = useDialogA11y({
+    onClose,
+    closeDisabled: isSubmitting,
+  });
 
   const isCancelled = plan.rendered_state === "cancelled";
 
@@ -1463,14 +1280,7 @@ function DeleteModal({
       data-testid="delete-modal"
       tabIndex={-1}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      onKeyDown={(e) => {
-        if (e.key === "Escape" && !isSubmitting) {
-          e.stopPropagation();
-          onClose();
-          return;
-        }
-        focusTrap.onKeyDown(e);
-      }}
+      onKeyDown={onDialogKeyDown}
     >
       <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-pop">
         <h2
