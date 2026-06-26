@@ -133,6 +133,26 @@ function DetailRow({ label, value }: { label: string; value: ReactNode }) {
   );
 }
 
+// UX-flow audit (FLOW-004): show plain-English labels, not raw snake_case enum
+// values. REASON_LABELS mirrors the waste form's own map; unknown reason codes
+// and the exception_category fall back to a title-cased humanization (which is
+// still readable, not a technical token), so we never have to guess a label.
+const WASTE_REASON_LABELS: Record<string, string> = {
+  breakage: "Breakage",
+  spoilage: "Spoilage",
+  production_waste: "Production waste",
+  sampling: "Sampling",
+  theft_loss: "Theft / loss",
+  found_stock: "Found stock",
+  correction: "Correction",
+  other: "Other",
+};
+
+function humanizeCode(code: string): string {
+  const t = code.replace(/_/g, " ").trim();
+  return t.length ? t.charAt(0).toUpperCase() + t.slice(1) : t;
+}
+
 export default function WasteReviewPage() {
   const { session } = useSession();
   const queryClient = useQueryClient();
@@ -326,7 +346,10 @@ export default function WasteReviewPage() {
             }
           />
           <DetailRow label="Amount" value={`${d.quantity} ${d.unit}`} />
-          <DetailRow label="Reason" value={d.reason_code.replace(/_/g, " ")} />
+          <DetailRow
+            label="Reason"
+            value={WASTE_REASON_LABELS[d.reason_code] ?? humanizeCode(d.reason_code)}
+          />
           {d.notes ? <DetailRow label="Notes" value={d.notes} /> : null}
           <DetailRow
             label="Event time"
@@ -339,7 +362,7 @@ export default function WasteReviewPage() {
           {d.exception_category ? (
             <DetailRow
               label="Why approval needed"
-              value={d.exception_category.replace(/_/g, " ")}
+              value={humanizeCode(d.exception_category)}
             />
           ) : null}
           <DetailRow

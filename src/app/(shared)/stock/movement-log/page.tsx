@@ -196,7 +196,7 @@ const KIND_TONE: Record<string, MvKind> = {
 };
 async function fetchMovementTypes(): Promise<MovementTypesResponse> {
   const res = await fetch("/api/stock/ledger/movement-types");
-  if (!res.ok) throw new Error(`MOVEMENT_TYPES_${res.status}`);
+  if (!res.ok) throw new Error(`Movement-type filter request failed (HTTP ${res.status})`);
   return (await res.json()) as MovementTypesResponse;
 }
 
@@ -241,7 +241,7 @@ async function fetchLedger(
 ): Promise<LedgerResponse> {
   const qs = buildQuery(filters, poId, offset);
   const res = await fetch(`/api/stock/ledger?${qs}`);
-  if (!res.ok) throw new Error(`LEDGER_FETCH_${res.status}`);
+  if (!res.ok) throw new Error(`Movement log request failed (HTTP ${res.status})`);
   const data = await res.json();
   if (Array.isArray(data)) return { rows: data, total: data.length };
   return data as LedgerResponse;
