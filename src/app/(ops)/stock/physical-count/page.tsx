@@ -17,7 +17,7 @@
 
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 import { useQuery } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
@@ -335,6 +335,8 @@ export default function PhysicalCountPage() {
   // is a stable target across phase transitions (no remount on input refocus).
   const comboAnchorRef = useRef<HTMLDivElement>(null);
   const [comboOpen, setComboOpen] = useState(false);
+  // UX-flow audit (FLOW-001): WCAG combobox pattern for the search input.
+  const comboListboxId = useId();
   // Viewport-relative coordinates for the portaled dropdown. Recomputed on
   // open / scroll (capture phase) / resize so the panel tracks the input as
   // the page shifts, even when an inner scroll container scrolls (mobile
@@ -910,6 +912,11 @@ export default function PhysicalCountPage() {
                       autoComplete="off"
                       aria-label="Search items and components"
                       data-testid="physical-count-search"
+                      role="combobox"
+                      aria-expanded={comboOpen}
+                      aria-haspopup="listbox"
+                      aria-autocomplete="list"
+                      aria-controls={comboListboxId}
                     />
                     {searchQuery ? (
                       <button
@@ -957,6 +964,7 @@ export default function PhysicalCountPage() {
                             left: comboRect.left,
                             width: comboRect.width,
                           }}
+                          id={comboListboxId}
                           role="listbox"
                           aria-label="Items and components"
                         >
