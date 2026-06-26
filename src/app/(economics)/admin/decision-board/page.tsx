@@ -145,7 +145,6 @@ async function fetchJson<T>(url: string): Promise<T> {
 // ---------------------------------------------------------------------------
 export default function DecisionBoardPage(): JSX.Element {
   const [windowDays, setWindowDays] = useState<number>(90);
-  const annualise = 365 / windowDays;
 
   const { from, to } = useMemo(() => {
     const now = new Date();
@@ -161,10 +160,36 @@ export default function DecisionBoardPage(): JSX.Element {
   });
   const velQuery = useQuery<VelocityResponse>({
     queryKey: ["decision-board", "velocity", from, to],
-    queryFn: () => fetchJson<VelocityResponse>(`/api/orders/by-item-and-period?from=${from}&to=${to}&cadence=monthly`),
+    // basis=delivered: count actually-delivered orders (COMPLETED /
+    // ROUNDTRIP_DELIVERED), keyed on the delivery timestamp. The mirror does
+    // not populate pickup_at, so the default 'scheduled' basis returns nothing
+    // for completed orders — this is the units-sold signal the board needs.
+    queryFn: () => fetchJson<VelocityResponse>(`/api/orders/by-item-and-period?from=${from}&to=${to}&cadence=monthly&basis=delivered`),
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   });
+
+  // Annualise on the ACTUAL span of sales data inside the window, not the
+  // nominal window length. The mirror only has a few weeks of history, so
+  // dividing a 90/180-day window by 365/windowDays would understate the annual
+  // run-rate (and make it swing when the window toggles even though the
+  // underlying sales are identical). dataStartKey is the earliest period
+  // bucket returned; coveredDays clamps to the window.
+  const dataStartKey = useMemo(() => {
+    let min: string | null = null;
+    for (const r of velQuery.data?.rows ?? []) {
+      if (min == null || r.period_bucket_key < min) min = r.period_bucket_key;
+    }
+    return min;
+  }, [velQuery.data]);
+  const coveredDays = useMemo(() => {
+    if (!dataStartKey) return windowDays;
+    const start = new Date(`${dataStartKey}T00:00:00`).getTime();
+    if (!Number.isFinite(start)) return windowDays;
+    const days = Math.round((Date.now() - start) / 86_400_000) + 1;
+    return Math.max(1, Math.min(windowDays, days));
+  }, [dataStartKey, windowDays]);
+  const annualise = 365 / coveredDays;
 
   const velocityByItem = useMemo(() => {
     const map = new Map<string, { units: number; orders: number; buckets: { key: string; qty: number }[] }>();
@@ -309,6 +334,12 @@ export default function DecisionBoardPage(): JSX.Element {
             Margin and inventory figures remain accurate.
           </p>
         </SectionCard>
+      ) : !isLoading && dataStartKey ? (
+        <p className="-mt-2 px-1 text-xs text-fg-subtle">
+          Velocity counts delivered orders. Annual figures use the actual{" "}
+          {coveredDays}-day sales span (recorded since {dataStartKey}), not the{" "}
+          {windowDays}-day window — so they stay stable across the window toggle.
+        </p>
       ) : null}
 
       {/* Decision segments — clickable filters with money attached */}
