@@ -112,9 +112,12 @@ export function ProductionJobCard({
   // B4 (Tranche 050) — base-batch rows plan a BASE liquid batch across N
   // pack SKUs; item_id/item_name are null, so render the batch label
   // instead of an empty title.
+  // §1 (COPY-002) — never fall through to the raw item_id (an opaque code)
+  // in the operator-facing title. A name is expected for every item-linked
+  // plan; the placeholder only guards the defensive null case.
   const cardTitle = plan.is_base_batch
     ? `Base batch · ${plan.pack_manifest_count} SKU${plan.pack_manifest_count === 1 ? "" : "s"}`
-    : (plan.item_name ?? plan.item_id);
+    : (plan.item_name ?? "Unnamed item");
 
   const [impactOpen, setImpactOpen] = useState(false);
   const bomQuery = useBomImpact(
@@ -461,22 +464,34 @@ export function ProductionJobCard({
         </div>
       )}
 
-      {/* Done: link to submission */}
-      {isDone && completedActual && varianceSign && (
+      {/* Done: link to submission. FLOW-007 — the audit link must survive even
+          when the variance can't be computed (varianceSign null). It only needs
+          the submission_id; the variance line degrades to a plain "Reported"
+          context line rather than dropping the whole footer (and the link). */}
+      {isDone && completedActual && (
         <div className="px-3 pb-2.5 border-t border-border/20 pt-2 flex items-center justify-between gap-2">
-          <div className="text-[10px] text-fg-muted" title={VARIANCE_TOOLTIP}>
-            <span
-              className={
-                varianceSign === "on_target" ? "text-success-fg" : "text-warning-fg"
-              }
-            >
-              {VARIANCE_SIGN_LABEL[varianceSign]}
-            </span>
-            {" vs planned "}
-            <span className="tabular-nums font-mono">
-              {fmtQty(plan.planned_qty ?? "0", plan.uom ?? "")}
-            </span>
-          </div>
+          {varianceSign ? (
+            <div className="text-[10px] text-fg-muted" title={VARIANCE_TOOLTIP}>
+              <span
+                className={
+                  varianceSign === "on_target" ? "text-success-fg" : "text-warning-fg"
+                }
+              >
+                {VARIANCE_SIGN_LABEL[varianceSign]}
+              </span>
+              {" vs planned "}
+              <span className="tabular-nums font-mono">
+                {fmtQty(plan.planned_qty ?? "0", plan.uom ?? "")}
+              </span>
+            </div>
+          ) : (
+            <div className="text-[10px] text-fg-muted">
+              {"Reported · planned "}
+              <span className="tabular-nums font-mono">
+                {fmtQty(plan.planned_qty ?? "0", plan.uom ?? "")}
+              </span>
+            </div>
+          )}
           <Link
             href={`/stock/production-actual?submission_id=${completedActual.submission_id}`}
             className="text-[10px] text-accent hover:underline shrink-0"

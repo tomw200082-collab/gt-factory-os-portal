@@ -148,25 +148,23 @@ export function useCreatePlan() {
       });
       if (!res.ok) {
         const text = await res.text().catch(() => "");
-        let detail = "";
+        // §1 (FLOW-018) — the structured `validation_errors` are mapped to
+        // their fields by the form; the operator-facing message stays the
+        // plain mapped status. Raw backend `detail` (Zod paths / enums) is
+        // never appended to the toast.
         let validationErrors: Array<{ path?: unknown[]; message?: string }> = [];
         try {
           const parsed = JSON.parse(text) as {
-            detail?: string;
             validation_errors?: Array<{ path?: unknown[]; message?: string }>;
           };
           if (Array.isArray(parsed.validation_errors)) {
             validationErrors = parsed.validation_errors;
           }
-          detail =
-            parsed.detail ??
-            parsed.validation_errors?.map((e) => `[${(e.path ?? []).join(".")}] ${e.message ?? ""}`).join(" | ") ??
-            "";
         } catch {
           /* ignore */
         }
         throw new PlanMutationError(
-          mapStatusToHebrew(res.status) + (detail && res.status === 422 ? ` (${detail})` : ""),
+          mapStatusToHebrew(res.status),
           res.status,
           validationErrors,
         );
@@ -203,14 +201,9 @@ export function usePatchPlan() {
         },
       );
       if (!res.ok) {
-        const text = await res.text().catch(() => "");
-        let detail = "";
-        try {
-          detail = (JSON.parse(text) as { detail?: string }).detail ?? "";
-        } catch {
-          /* ignore */
-        }
-        throw new Error(mapStatusToHebrew(res.status) + (detail && res.status === 422 ? ` (${detail})` : ""));
+        // §1 (FLOW-019) — operator-facing message is the plain mapped status;
+        // raw backend `detail` is never surfaced to the planner.
+        throw new Error(mapStatusToHebrew(res.status));
       }
       return (await res.json()) as ProductionPlanRow;
     },
