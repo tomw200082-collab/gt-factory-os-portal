@@ -839,6 +839,10 @@ function EditModal({
   const [qty, setQty] = useState(plan.planned_qty ?? "");
   const [uom, setUom] = useState(plan.uom ?? "");
   const [notes, setNotes] = useState(plan.notes ?? "");
+  // INTER-003 — client-side qty validation. A blank/zero/non-numeric quantity
+  // previously submitted NaN and relied on a generic backend 422 toast; now it
+  // is caught inline under the field before the PATCH fires.
+  const [qtyError, setQtyError] = useState<string | null>(null);
 
   // Tranche 079 (INTER-002) — UoM is a select over the known universe;
   // if the plan's current UoM is not in the option list keep it selectable
@@ -902,7 +906,7 @@ function EditModal({
         >
           Edit plan
         </h2>
-        <p className="mt-1 text-3xs text-fg-muted">{plan.item_name ?? plan.item_id}</p>
+        <p className="mt-1 text-3xs text-fg-muted">{plan.item_name ?? "Unnamed item"}</p>
 
         <form
           className="mt-4 space-y-3"
@@ -915,7 +919,15 @@ function EditModal({
               notes?: string;
             } = {};
             if (planDate !== plan.plan_date) body.plan_date = planDate;
-            if (qty !== plan.planned_qty) body.planned_qty = parseFloat(qty);
+            const qtyChanged = qty !== plan.planned_qty;
+            if (qtyChanged) {
+              const n = parseFloat(qty);
+              if (!Number.isFinite(n) || n <= 0) {
+                setQtyError("Enter a planned quantity greater than zero.");
+                return;
+              }
+              body.planned_qty = n;
+            }
             if (uom !== plan.uom) body.uom = uom;
             if (notes !== (plan.notes ?? "")) body.notes = notes;
             onSubmit(body);
@@ -945,8 +957,23 @@ function EditModal({
                 min="0"
                 className="input"
                 value={qty}
-                onChange={(e) => setQty(e.target.value)}
+                onChange={(e) => {
+                  setQty(e.target.value);
+                  if (qtyError) setQtyError(null);
+                }}
+                aria-invalid={qtyError ? true : undefined}
+                aria-describedby={qtyError ? "edit-qty-error" : undefined}
               />
+              {qtyError ? (
+                <span
+                  id="edit-qty-error"
+                  role="alert"
+                  className="mt-1 block text-3xs text-danger-fg"
+                  data-testid="edit-qty-error"
+                >
+                  {qtyError}
+                </span>
+              ) : null}
             </label>
             <label className="block">
               <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">

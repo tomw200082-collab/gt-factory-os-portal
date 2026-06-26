@@ -247,6 +247,11 @@ export function useDeletePlan() {
       // (source_recommendation_id FK is ON DELETE SET NULL), and changes what
       // the planning overview summarises — mirror usePatchPlan.
       void qc.invalidateQueries({ queryKey: ["planning"] });
+      // FLOW-024 — the freed recommendation can reappear as actionable in the
+      // inbox / approval queue. useCreatePlan invalidates ["inbox"] when it
+      // CONSUMES a rec; the inverse (delete frees it) must mirror that, or the
+      // inbox lags behind the board by the staleTime.
+      void qc.invalidateQueries({ queryKey: ["inbox"] });
     },
   });
 }
