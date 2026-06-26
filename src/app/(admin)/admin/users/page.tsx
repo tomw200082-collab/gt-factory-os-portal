@@ -491,12 +491,23 @@ export default function AdminUsersPage() {
                               className="btn btn-ghost btn-sm text-danger-fg hover:bg-danger-softer"
                               disabled={rs.statusPending}
                               aria-label={`Deactivate ${u.display_name}`}
-                              onClick={() =>
+                              onClick={async () => {
+                                // UX-flow audit (FLOW-A01): deactivation revokes
+                                // access immediately — confirm first, matching
+                                // the role-change pattern above.
+                                const ok = await confirm({
+                                  title: `Deactivate ${u.display_name}?`,
+                                  description:
+                                    "This revokes their portal access immediately. You can reactivate them later.",
+                                  confirmLabel: "Deactivate",
+                                  tone: "danger",
+                                });
+                                if (!ok) return;
                                 statusMutation.mutate({
                                   user_id: u.user_id,
                                   status: "inactive",
-                                })
-                              }
+                                });
+                              }}
                             >
                               {rs.statusPending ? "…" : "Deactivate"}
                             </button>
@@ -506,12 +517,20 @@ export default function AdminUsersPage() {
                               className="btn btn-ghost btn-sm text-success-fg hover:bg-success-softer"
                               disabled={rs.statusPending}
                               aria-label={`Activate ${u.display_name}`}
-                              onClick={() =>
+                              onClick={async () => {
+                                // UX-flow audit (FLOW-A01): confirm to prevent an
+                                // accidental access re-grant.
+                                const ok = await confirm({
+                                  title: `Activate ${u.display_name}?`,
+                                  description: "This restores their portal access.",
+                                  confirmLabel: "Activate",
+                                });
+                                if (!ok) return;
                                 statusMutation.mutate({
                                   user_id: u.user_id,
                                   status: "active",
-                                })
-                              }
+                                });
+                              }}
                             >
                               {rs.statusPending ? "…" : "Activate"}
                             </button>
