@@ -360,8 +360,43 @@ export default function DecisionBoardPage(): JSX.Element {
 
   const active = items.find((i) => i.id === activeId) ?? null;
   const isLoading = econQuery.isLoading;
-  const velUnavailable = econQuery.isError;
+  const isError = econQuery.isError;
   const verdict = buildVerdict(kpis, items.length);
+
+  // Full read failure: show one honest error state with a retry — never a
+  // zero-data "all products priced above cost" verdict that reads as success.
+  if (isError) {
+    return (
+      <div className="space-y-5" data-testid="decision-board">
+        <WorkflowHeader
+          eyebrow="Economics"
+          title="Product Decision Board"
+          description="Every finished product placed on margin × velocity — so the next move is obvious: protect, promote, reprice, or drop."
+          actions={<SourcePill />}
+        />
+        <SectionCard tone="danger" density="compact">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+            <div className="flex items-start gap-3">
+              <span className="mt-0.5 inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-danger/15">
+                <AlertTriangle className="h-5 w-5 text-danger-fg" />
+              </span>
+              <div>
+                <div className="text-base font-semibold text-fg-strong">We couldn&apos;t load the product portfolio</div>
+                <div className="mt-0.5 text-sm text-fg-muted">Try again in a moment. If it keeps failing, contact the system administrator.</div>
+              </div>
+            </div>
+            <button
+              type="button"
+              onClick={() => econQuery.refetch()}
+              className="shrink-0 self-start rounded-lg border border-fg/15 bg-bg px-3.5 py-2 text-sm font-semibold text-fg-strong shadow-sm transition-all hover:-translate-y-px hover:border-fg/25 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 sm:self-auto"
+            >
+              Try again
+            </button>
+          </div>
+        </SectionCard>
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-5" data-testid="decision-board">
@@ -383,18 +418,9 @@ export default function DecisionBoardPage(): JSX.Element {
       {/* Vitals — the cockpit readout strip */}
       <VitalsRow kpis={kpis} total={items.length} loading={isLoading} />
 
-      {velUnavailable ? (
-        <SectionCard tone="warning" density="compact">
-          <p className="text-sm text-fg">
-            Sales velocity is temporarily unavailable, so products can&apos;t be ranked by what sells.
-            Margin and inventory figures remain accurate.
-          </p>
-        </SectionCard>
-      ) : null}
-
       {/* Decision segments — the portfolio strip: clickable filters with money attached */}
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-3 lg:grid-cols-6" data-testid="segments">
-        {(["star", "gem", "workhorse", "drag", "loss", "dormant"] as DecisionKey[]).map((k) => (
+      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 lg:grid-cols-7" data-testid="segments">
+        {(["star", "gem", "workhorse", "drag", "loss", "dormant", "needs_data"] as DecisionKey[]).map((k) => (
           <SegmentCard
             key={k}
             meta={DECISION[k]}
@@ -413,7 +439,7 @@ export default function DecisionBoardPage(): JSX.Element {
         <SectionCard
           eyebrow="The signature view"
           title="Portfolio map"
-          description="Right = sells more · Up = higher margin · bubble = money it contributes. Hover any product to read it."
+          description="Right = sells more · Up = higher margin · bubble = money it contributes. Select any product to read it."
         >
           {isLoading ? (
             <QuadrantSkeleton />
@@ -464,8 +490,13 @@ export default function DecisionBoardPage(): JSX.Element {
                   return (
                     <tr
                       key={i.id}
+                      tabIndex={0}
+                      aria-label={`Inspect ${i.name}`}
                       onMouseEnter={() => setActiveId(i.id)}
-                      className={`group border-b border-border/30 transition-colors hover:bg-bg-subtle/50 ${isActive ? "bg-bg-subtle/60" : ""}`}
+                      onClick={() => setActiveId(i.id)}
+                      onFocus={() => setActiveId(i.id)}
+                      onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setActiveId(i.id); } }}
+                      className={`group cursor-pointer border-b border-border/30 transition-colors hover:bg-bg-subtle/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40 ${isActive ? "bg-bg-subtle/60" : ""}`}
                     >
                       <td className="px-2 py-2 font-medium text-fg-strong">
                         <span className="flex items-center gap-2">
@@ -733,7 +764,7 @@ function SegmentCard({
       onClick={onClick}
       aria-pressed={active}
       data-testid={`segment-${meta.key}`}
-      className={`group relative flex flex-col gap-2 overflow-hidden rounded-xl border p-3 text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${
+      className={`group relative flex cursor-pointer flex-col gap-2 overflow-hidden rounded-xl border p-3 text-left transition-all duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${
         active
           ? "border-fg/30 bg-bg-subtle/70 shadow-pop -translate-y-px"
           : "border-border/60 hover:-translate-y-px hover:border-fg/20 hover:bg-bg-subtle/40 hover:shadow-raised"
@@ -815,7 +846,7 @@ function Inspector({
         <span className="inline-flex h-12 w-12 items-center justify-center rounded-2xl bg-bg-subtle/70 ring-1 ring-border/60">
           <Scale className="h-6 w-6 text-fg-subtle/60" />
         </span>
-        <p className="max-w-[14rem] text-sm text-fg-subtle">Hover a bubble on the map — or any row below — to read a product.</p>
+        <p className="max-w-[14rem] text-sm text-fg-subtle">Select a product — tap a bubble on the map or a row in the table — to read its full breakdown.</p>
       </div>
     );
   }
@@ -823,7 +854,7 @@ function Inspector({
   const Icon = d.icon;
   const annualContribution = item.contribution != null ? item.contribution * annualise : null;
   return (
-    <div className="space-y-3.5">
+    <div className="space-y-3.5" data-testid="inspector">
       <div>
         <div className="text-base font-bold tracking-tight text-fg-strong">{item.name}</div>
         <div className="mt-2 flex flex-wrap items-center gap-2">
@@ -918,8 +949,24 @@ function Stat({ label, value, strong, danger }: { label: string; value: string; 
 // ---------------------------------------------------------------------------
 function RulesPopover({ velMedian, windowDays }: { velMedian: number; windowDays: number }): JSX.Element {
   const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const onDown = (e: MouseEvent | TouchEvent) => {
+      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+    };
+    const onKey = (e: KeyboardEvent) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onDown);
+    document.addEventListener("touchstart", onDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("mousedown", onDown);
+      document.removeEventListener("touchstart", onDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
   return (
-    <div className="relative">
+    <div className="relative" ref={ref}>
       <button
         type="button"
         onClick={() => setOpen((o) => !o)}
@@ -1014,7 +1061,7 @@ function Quadrant({
   const keys: DecisionKey[] = ["star", "gem", "workhorse", "drag", "loss", "dormant"];
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="img" aria-label="Margin versus velocity portfolio map" data-testid="quadrant">
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="group" aria-label="Margin versus velocity portfolio map. Each product is a selectable point; the table below lists every product." data-testid="quadrant">
       <defs>
         <clipPath id="db-plot"><rect x={padL} y={padT} width={plotW} height={plotH} /></clipPath>
         <filter id="db-glow" x="-60%" y="-60%" width="220%" height="220%">
@@ -1102,9 +1149,14 @@ function Quadrant({
               fill={`url(#db-grad-${i.decision})`} fillOpacity={isActive ? 1 : 0.82}
               stroke={d.fill} strokeWidth={isActive ? 2.5 : 1} strokeOpacity={isActive ? 1 : 0.7}
               className="cursor-pointer"
+              tabIndex={0}
+              role="button"
+              aria-label={`${i.name}: ${d.label}, ${d.action}. Margin ${i.marginPct != null ? `${i.marginPct.toFixed(1)}%` : "unknown"}, ${formatQtyInt(i.units)} units, contribution ${i.contribution != null ? formatIls(i.contribution) : "unknown"}.`}
               style={{ transition: `r 600ms cubic-bezier(.22,1,.36,1) ${idx * 25}ms, fill-opacity 150ms, stroke-width 150ms`, filter: isActive ? "drop-shadow(0 2px 6px rgba(0,0,0,0.18))" : "none" }}
               onMouseEnter={() => onHover(i.id)}
-              onMouseLeave={() => onHover(null)}
+              onClick={() => onHover(i.id)}
+              onFocus={() => onHover(i.id)}
+              onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onHover(i.id); } }}
             >
               <title>{i.name} · margin {i.marginPct != null ? `${i.marginPct.toFixed(1)}%` : "—"} · {formatQtyInt(i.units)} units · contribution {i.contribution != null ? formatIls(i.contribution) : "—"}</title>
             </circle>
