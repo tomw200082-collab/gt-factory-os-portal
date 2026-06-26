@@ -97,7 +97,7 @@ export function QuickCreateSupplier({
     >
       {banner?.kind === "endpoint_pending" ? (
         <div className="mb-4 rounded-md border border-warning/40 bg-warning-softer p-3 text-xs text-warning-fg">
-          Server endpoint not yet available.
+          This feature is not yet available.
         </div>
       ) : null}
       {banner?.kind === "error" ? (

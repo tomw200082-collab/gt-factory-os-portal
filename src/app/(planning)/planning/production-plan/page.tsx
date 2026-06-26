@@ -526,7 +526,11 @@ function ManualAddModal({
                   title="Add to the plan, then review this run's recipe"
                   data-testid="manual-add-submit"
                 >
-                  <FlaskConical className="h-3 w-3" strokeWidth={2.5} />
+                  {isSubmitting ? (
+                    <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} aria-hidden />
+                  ) : (
+                    <FlaskConical className="h-3 w-3" strokeWidth={2.5} />
+                  )}
                   {isSubmitting ? "Saving…" : "Review recipe"}
                 </button>
               </>
@@ -537,7 +541,11 @@ function ManualAddModal({
                 disabled={!canSubmit}
                 data-testid="manual-add-submit"
               >
-                <Plus className="h-3 w-3" strokeWidth={2.5} />
+                {isSubmitting ? (
+                  <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} aria-hidden />
+                ) : (
+                  <Plus className="h-3 w-3" strokeWidth={2.5} />
+                )}
                 {isSubmitting ? "Saving…" : "Add to plan"}
               </button>
             )}
@@ -993,6 +1001,9 @@ function EditModal({
               disabled={isSubmitting}
               data-testid="edit-submit"
             >
+              {isSubmitting && (
+                <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} aria-hidden />
+              )}
               {isSubmitting ? "Saving…" : "Save changes"}
             </button>
           </div>
@@ -1254,6 +1265,9 @@ function EditNoteModal({
               disabled={!canSubmit}
               data-testid="edit-note-submit"
             >
+              {isSubmitting && (
+                <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} aria-hidden />
+              )}
               {isSubmitting ? "Saving…" : "Save changes"}
             </button>
           </div>
@@ -1377,7 +1391,11 @@ function CancelModal({
               disabled={isSubmitting}
               data-testid="cancel-submit"
             >
-              <Ban className="h-3 w-3" strokeWidth={2.5} />
+              {isSubmitting ? (
+                <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} aria-hidden />
+              ) : (
+                <Ban className="h-3 w-3" strokeWidth={2.5} />
+              )}
               {isSubmitting ? "Cancelling…" : "Cancel plan"}
             </button>
           </div>

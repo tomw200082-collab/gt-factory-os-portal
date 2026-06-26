@@ -159,7 +159,7 @@ export function BomLineRow({
         {editable ? (
           editing ? (
             <input
-              role="textbox"
+              aria-label={`Quantity for ${componentDisplay}`}
               defaultValue={line.final_component_qty}
               onBlur={(e) => patch.mutate(e.currentTarget.value)}
               autoFocus
@@ -169,7 +169,7 @@ export function BomLineRow({
           ) : (
             <button
               type="button"
-              aria-label={`qty-edit-${line.line_id}`}
+              aria-label={`Edit quantity for ${componentDisplay}`}
               onClick={() => setEditing(true)}
               className="group inline-flex items-center gap-1.5 rounded-sm border border-dashed border-accent/40 px-1.5 py-0.5 font-mono tabular-nums text-sm text-fg hover:border-accent hover:bg-accent-softer"
             >
@@ -242,7 +242,7 @@ export function BomLineRow({
               type="button"
               onClick={() => del.mutate()}
               disabled={del.isPending}
-              className="rounded-sm bg-danger px-2 py-0.5 text-3xs font-medium text-danger-soft hover:bg-danger/90 disabled:cursor-not-allowed disabled:opacity-60"
+              className="inline-flex min-h-[32px] items-center rounded-sm bg-danger px-2 py-0.5 text-3xs font-medium text-danger-soft hover:bg-danger/90 disabled:cursor-not-allowed disabled:opacity-60"
             >
               {del.isPending ? "Removing…" : "Delete"}
             </button>
@@ -250,7 +250,7 @@ export function BomLineRow({
               type="button"
               onClick={() => setConfirmDelete(false)}
               disabled={del.isPending}
-              className="rounded-sm border border-border bg-bg-raised px-2 py-0.5 text-3xs text-fg hover:bg-bg-subtle disabled:cursor-not-allowed disabled:opacity-40"
+              className="inline-flex min-h-[32px] items-center rounded-sm border border-border bg-bg-raised px-2 py-0.5 text-3xs text-fg hover:bg-bg-subtle disabled:cursor-not-allowed disabled:opacity-40"
             >
               Cancel
             </button>

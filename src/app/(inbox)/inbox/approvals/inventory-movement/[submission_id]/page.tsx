@@ -560,7 +560,7 @@ export default function InventoryMovementReviewPage() {
                 </span>
               </label>
               <label className="flex flex-col gap-1 w-24">
-                <span className="text-xs font-medium text-fg-muted">Qty</span>
+                <span className="text-xs font-medium text-fg-muted">Quantity</span>
                 <input
                   className={inputCls}
                   type="number"

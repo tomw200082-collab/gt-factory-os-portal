@@ -20,7 +20,7 @@ export function FormActionsBar({
 }: FormActionsBarProps) {
   return (
     <div className="sticky bottom-6 z-20 mt-6">
-      <div className="card-raised flex flex-wrap items-center justify-between gap-3 rounded-lg border-border/80 bg-bg-raised/95 px-4 py-3 backdrop-blur-md">
+      <div className="card-raised flex flex-wrap items-center justify-between gap-3 border-border/80 bg-bg-raised/95 px-4 py-3 backdrop-blur-md">
         <div className="flex min-w-0 items-center gap-3 text-xs text-fg-muted">
           {leading}
           {hint ? (

@@ -216,7 +216,7 @@ function DriftTable({ rows }: { rows: ParityDriftRow[] }) {
               <td className="px-3 py-2">
                 <Link
                   href={`/purchase-orders/${r.po_id}`}
-                  className="font-mono text-xs font-medium text-accent-fg underline-offset-2 hover:underline"
+                  className="font-mono text-xs font-medium text-accent underline-offset-2 hover:underline"
                 >
                   {r.po_number}
                 </Link>
@@ -286,7 +286,7 @@ function NoLinesTable({ rows }: { rows: ParityDriftRow[] }) {
               <td className="px-3 py-2">
                 <Link
                   href={`/purchase-orders/${r.po_id}`}
-                  className="font-mono text-xs font-medium text-accent-fg underline-offset-2 hover:underline"
+                  className="font-mono text-xs font-medium text-accent underline-offset-2 hover:underline"
                 >
                   {r.po_number}
                 </Link>

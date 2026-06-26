@@ -66,7 +66,7 @@ export function TopBar() {
         <div className="flex items-center gap-3">
           <BrandMark />
           <div className="hidden flex-col leading-none sm:flex">
-            <div className="text-[0.8125rem] font-semibold tracking-tightish text-fg-strong">
+            <div className="text-sm font-semibold tracking-tightish text-fg-strong">
               GT Factory OS
             </div>
             <div className="mt-0.5 text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
@@ -82,7 +82,7 @@ export function TopBar() {
             className="min-w-0 flex-1 sm:hidden"
             data-testid="topbar-mobile-page-label"
           >
-            <div className="truncate text-[0.8125rem] font-semibold text-fg-strong">
+            <div className="truncate text-sm font-semibold text-fg-strong">
               {mobileLabel}
             </div>
           </div>
@@ -210,7 +210,7 @@ function UserMenu({ compact = false }: UserMenuProps) {
             type="button"
             className={cn(
               "flex h-8 w-8 items-center justify-center rounded-md text-fg-muted transition-colors hover:bg-bg-subtle hover:text-fg",
-              "focus-visible:outline-none",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
             )}
             aria-label="Open user menu"
             title="User menu"
@@ -226,12 +226,12 @@ function UserMenu({ compact = false }: UserMenuProps) {
             type="button"
             className={cn(
               "flex items-center gap-2 rounded-md px-1.5 py-1 transition-colors",
-              "hover:bg-bg-subtle focus-visible:outline-none",
+              "hover:bg-bg-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
             )}
             aria-label="Open user menu"
           >
             <div className="hidden flex-col items-end leading-none sm:flex">
-              <span className="text-[0.75rem] font-medium text-fg-strong">
+              <span className="text-xs font-medium text-fg-strong">
                 {displayName}
               </span>
               <span className="mt-0.5 font-mono text-3xs uppercase tracking-sops text-fg-muted">
@@ -239,7 +239,7 @@ function UserMenu({ compact = false }: UserMenuProps) {
               </span>
             </div>
             <div
-              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/15 text-[0.6875rem] font-bold text-accent"
+              className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-accent/15 text-2xs font-bold text-accent"
               title={displayName}
             >
               {initials}

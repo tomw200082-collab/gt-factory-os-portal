@@ -288,7 +288,6 @@ export function QuickFixDrawer({
                           <label className="text-xs text-fg-muted">
                             New price
                             <input
-                              aria-label="new price"
                               value={newPrice}
                               onChange={(e) => setNewPrice(e.target.value)}
                               inputMode="decimal"

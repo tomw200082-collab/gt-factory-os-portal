@@ -109,7 +109,7 @@ export function WeekTimelineRail({
 
               <span
                 className={cn(
-                  "text-[10px] font-bold uppercase tracking-wider leading-none",
+                  "text-[10px] font-bold uppercase tracking-sopsr leading-none",
                   dayNameColor(day),
                 )}
               >

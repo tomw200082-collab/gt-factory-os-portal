@@ -1651,7 +1651,7 @@ export default function PlanningBomsPage(): JSX.Element {
               <CheckSquare className="h-3 w-3 shrink-0" strokeWidth={2} />
               Select
               {selectedBomIds.size > 0 && (
-                <span className="ml-0.5 bg-accent text-white rounded-full px-1 leading-none">
+                <span className="ml-0.5 bg-accent text-accent-fg rounded-full px-1 leading-none">
                   {selectedBomIds.size}
                 </span>
               )}
@@ -2203,7 +2203,7 @@ export default function PlanningBomsPage(): JSX.Element {
                   <button
                     type="button"
                     onClick={handleExportBom}
-                    className="inline-flex items-center gap-1 bg-accent text-white text-3xs rounded px-3 py-1 mt-2"
+                    className="inline-flex items-center gap-1 bg-accent text-accent-fg text-3xs rounded px-3 py-1 mt-2"
                   >
                     {copiedBomExport ? (
                       <>

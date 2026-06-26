@@ -590,7 +590,7 @@ export default function WasteAdjustmentPage() {
                   className={cn(
                     "flex h-12 w-12 shrink-0 items-center justify-center rounded-full transition-colors duration-150",
                     direction === "loss"
-                      ? "bg-danger text-white"
+                      ? "bg-danger text-fg-inverted"
                       : "bg-bg-subtle text-danger-fg",
                   )}
                 >
@@ -629,7 +629,7 @@ export default function WasteAdjustmentPage() {
                   className={cn(
                     "flex h-12 w-12 shrink-0 items-center justify-center rounded-full transition-colors duration-150",
                     direction === "positive"
-                      ? "bg-warning text-white"
+                      ? "bg-warning text-fg-inverted"
                       : "bg-bg-subtle text-warning-fg",
                   )}
                 >
@@ -813,7 +813,7 @@ export default function WasteAdjustmentPage() {
                       className={cn(
                         "cursor-pointer rounded-full border-2 px-4 py-2 text-sm font-semibold transition-all duration-150",
                         reasonCode === r
-                          ? "border-accent bg-accent text-white shadow-sm"
+                          ? "border-accent bg-accent text-accent-fg shadow-sm"
                           : "border-border bg-bg text-fg hover:border-fg-muted"
                       )}
                       onClick={() => setReasonCode(r)}

@@ -9,7 +9,7 @@
 // anything is selected.
 //
 // Visual language follows the inventory-flow FilterBar family chips
-// (rounded-sm bordered pills, text-[10px], hover lift) so group chips read
+// (rounded-sm bordered pills, text-3xs, hover lift) so group chips read
 // as the same control family across /inventory, the flow pages, and any
 // future group-aware surface. Tone colors come from the shared
 // BADGE_TONE_CLASSES lookup keyed by each group's color_token.
@@ -120,7 +120,7 @@ export function GroupFilterBar({
             aria-pressed={active}
             data-testid={`${testId}-chip-${chip.key}`}
             className={cn(
-              "inline-flex items-center gap-1 rounded-sm border px-2 py-1 text-[10px] font-medium transition-all duration-150",
+              "inline-flex items-center gap-1 rounded-sm border px-2 py-1 text-3xs font-medium transition-all duration-150",
               "max-sm:shrink-0 max-sm:whitespace-nowrap",
               "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
               active
@@ -142,7 +142,7 @@ export function GroupFilterBar({
           type="button"
           onClick={onClear}
           data-testid={`${testId}-clear`}
-          className="text-2xs font-medium text-accent-fg underline hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 max-sm:shrink-0"
+          className="text-2xs font-medium text-accent underline hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 max-sm:shrink-0"
         >
           Clear
         </button>

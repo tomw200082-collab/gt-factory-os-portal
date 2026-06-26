@@ -107,13 +107,13 @@ export function QuickCreateItem({
         if (!submitting) onClose();
       }}
       title="New item"
-      description="Minimum fields to create a new items row. Extended fields can be edited afterwards from /admin/items."
+      description="Minimum fields to create a new product. You can edit the rest later from the product detail page."
       width="md"
     >
       {banner?.kind === "endpoint_pending" ? (
         <div className="mb-4 rounded-md border border-warning/40 bg-warning-softer p-3 text-xs text-warning-fg">
-          Server endpoint not yet available. The form validates client-side
-          but the POST cannot land until the proxy route is wired.
+          This feature is not yet available. The form is ready, but saving
+          has not been enabled yet.
         </div>
       ) : null}
       {banner?.kind === "error" ? (
@@ -125,7 +125,7 @@ export function QuickCreateItem({
       <form className="space-y-4" onSubmit={onSubmit}>
         <label className="block">
           <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-            item_id
+            Product code
           </span>
           <input
             className="input"
@@ -141,7 +141,7 @@ export function QuickCreateItem({
 
         <label className="block">
           <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-            item_name
+            Display name
           </span>
           <input
             className="input"

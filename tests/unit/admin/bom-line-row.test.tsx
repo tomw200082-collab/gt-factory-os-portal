@@ -125,7 +125,9 @@ describe("BomLineRow", () => {
       />,
       { wrapper: wrap() },
     );
-    fireEvent.click(screen.getByRole("button", { name: "qty-edit-L1" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Edit quantity for Sugar" }),
+    );
     const input = screen.getByRole("textbox");
     fireEvent.change(input, { target: { value: "2.0" } });
     fireEvent.blur(input);
@@ -160,7 +162,9 @@ describe("BomLineRow", () => {
       />,
       { wrapper: wrap() },
     );
-    fireEvent.click(screen.getByRole("button", { name: "qty-edit-L1" }));
+    fireEvent.click(
+      screen.getByRole("button", { name: "Edit quantity for Sugar" }),
+    );
     const input = screen.getByRole("textbox");
     fireEvent.change(input, { target: { value: "2.0" } });
     fireEvent.blur(input);
@@ -198,7 +202,7 @@ describe("BomLineRow", () => {
       />,
       { wrapper: wrap() },
     );
-    expect(screen.queryByLabelText("qty-edit-L1")).toBeNull();
+    expect(screen.queryByLabelText("Edit quantity for Sugar")).toBeNull();
     expect(screen.queryByRole("button", { name: /Delete|🗑/ })).toBeNull();
   });
 });

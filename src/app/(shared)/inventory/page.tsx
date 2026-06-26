@@ -702,7 +702,7 @@ function ActiveFilterChips({
       <button
         type="button"
         onClick={onClearAll}
-        className="inline-flex items-center gap-1 text-2xs font-medium text-accent-fg underline hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+        className="inline-flex items-center gap-1 text-2xs font-medium text-accent underline hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
       >
         Clear all
       </button>
@@ -1396,7 +1396,7 @@ export default function InventoryPage() {
                     className={cn(
                       "rounded-full px-1.5 py-0 text-2xs tabular-nums ring-1",
                       isActive
-                        ? "bg-accent-softer text-accent-fg ring-accent/30"
+                        ? "bg-accent-soft text-accent ring-accent/30"
                         : "bg-bg-subtle text-fg-subtle ring-border",
                     )}
                   >
@@ -1880,7 +1880,7 @@ export default function InventoryPage() {
                                       <td className="py-2 pr-4">
                                         <Link
                                           href={rowDetailHref(row)}
-                                          className="inline-flex items-center gap-1.5 text-fg hover:text-accent-fg hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                                          className="inline-flex items-center gap-1.5 text-fg hover:text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
                                           title={row.display_name ?? row.item_id}
                                         >
                                           <span className="max-w-[28ch] truncate">

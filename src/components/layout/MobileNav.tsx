@@ -173,7 +173,7 @@ export function MobileNav() {
 
           {/* Brand + user */}
           <div className="min-w-0 flex-1">
-            <div className="text-[0.8125rem] font-semibold leading-none text-fg-strong">
+            <div className="text-sm font-semibold leading-none text-fg-strong">
               GT Factory OS
             </div>
             {displayName ? (
