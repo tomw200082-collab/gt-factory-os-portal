@@ -233,6 +233,14 @@ export function useSavePlanRecipe() {
     onSuccess: (data, vars) => {
       setPlanRecipeFlag(qc, vars.plan_id, data.action === "set");
       void qc.invalidateQueries({ queryKey: planRecipeKey(vars.plan_id) });
+      // FLOW-023 — a saved/cleared recipe changes the per-plan material
+      // breakdown the card's BOM-impact panel shows (keyed
+      // ["bom-impact", itemId, planId]). Without this it keeps rendering the
+      // pre-save consumption. Scoped to this plan so other cards don't refetch.
+      void qc.invalidateQueries({
+        predicate: (q) =>
+          q.queryKey[0] === "bom-impact" && q.queryKey[2] === vars.plan_id,
+      });
     },
   });
 }

@@ -13,6 +13,12 @@
       "kind": "pending-cleanup",
       "note": "line ~198 comment contains a forbidden string literal (X-Fake-Session) — historical note, scheduled for paraphrase; src/ is clean",
       "added_by": "tranche 046"
+    },
+    {
+      "path": "tests/e2e/ux-shot.spec.ts",
+      "kind": "pending-cleanup",
+      "note": "line ~13 comment contains forbidden string literals (X-Fake-Session / X-Test-Session) in a 'do NOT use this' doc comment — historical note, scheduled for paraphrase; src/ is clean, no live usage",
+      "added_by": "tranche 090"
     }
   ],
   "forbidden_strings": [

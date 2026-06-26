@@ -19,7 +19,9 @@ import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { submitStockEvent } from "@/lib/stock/submit";
+import { fetchJson } from "@/lib/http/fetchJson";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { UOMS, type Uom } from "@/lib/contracts/enums";
@@ -115,14 +117,6 @@ function newIdempotencyKey(): string {
 function toUom(raw: string | null | undefined): Uom {
   if (raw && (UOMS as readonly string[]).includes(raw)) return raw as Uom;
   return "UNIT";
-}
-
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) {
-    throw new Error(`Could not load data (HTTP ${res.status}). Check your connection and try refreshing.`);
-  }
-  return (await res.json()) as T;
 }
 
 /** Format a date string as relative time (e.g. "just now", "3 min ago"). */
@@ -269,6 +263,12 @@ function BlindCountBanner({ compact = false }: { compact?: boolean }) {
 }
 
 export default function PhysicalCountPage() {
+  const queryClient = useQueryClient();
+  // Idempotency key for the in-progress count submission. Generated once and
+  // REUSED across retries so a retry after a lost response cannot post a second
+  // ledger event (backend dedups on this key). Cleared in resetFlow() — i.e. on
+  // a successful post or a cancel — so the next count gets a fresh key.
+  const idemKeyRef = useRef<string | null>(null);
   const itemsQuery = useQuery<ListEnvelope<ItemRow>>({
     queryKey: ["master", "items", "ACTIVE"],
     queryFn: () => fetchJson("/api/items?status=ACTIVE&limit=1000"),
@@ -496,8 +496,9 @@ export default function PhysicalCountPage() {
       });
       return;
     }
+    if (!idemKeyRef.current) idemKeyRef.current = newIdempotencyKey();
     const envelope: PhysicalCountSubmit = {
-      idempotency_key: newIdempotencyKey(),
+      idempotency_key: idemKeyRef.current,
       snapshot_id: snapshot.snapshot_id,
       event_at: (Number.isNaN(new Date(eventAt).getTime()) ? new Date() : new Date(eventAt)).toISOString(),
       counted_quantity: qtyNum,
@@ -505,73 +506,71 @@ export default function PhysicalCountPage() {
       notes: notes ? notes : null,
     };
     setPhase("submitting");
-    try {
-      const res = await fetch("/api/physical-count", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(envelope),
-      });
-      const body = (await res.json().catch(() => null)) as
-        | {
-            status?: string;
-            submission_id?: string;
-            computed_delta?: string;
-            approval_reason?: string;
-            idempotent_replay?: boolean;
-          }
-        | null;
-      if (body && body.status === "posted") {
-        const itemLabel = snapshot
-          ? `${snapshot.item_display_name} (${snapshot.item_type} ${snapshot.item_id})`
-          : "?";
+    const itemLabel = snapshot
+      ? `${snapshot.item_display_name} (${snapshot.item_type} ${snapshot.item_id})`
+      : "?";
+    const result = await submitStockEvent<{
+      status?: string;
+      submission_id?: string;
+      computed_delta?: string;
+      approval_reason?: string;
+      idempotent_replay?: boolean;
+    }>("/api/physical-count", envelope);
+    switch (result.kind) {
+      case "posted":
         setDone({
           kind: "success",
-          message: body.idempotent_replay
+          message: result.idempotentReplay
             ? "Already posted earlier — no duplicate created."
             : "Count posted successfully.",
           itemName: snapshot?.item_display_name,
-          delta: body.computed_delta,
-          itemSummary: `${itemLabel} · counted: ${qtyNum} ${unit} · adjustment: ${body.computed_delta ?? "?"}`,
-          detail: `ref: ${body.submission_id}`,
+          delta: result.body.computed_delta,
+          itemSummary: `${itemLabel} · counted: ${qtyNum} ${unit} · adjustment: ${result.body.computed_delta ?? "?"}`,
+          detail: `ref: ${result.submissionId}`,
           snapshotIdShort: snapshot?.snapshot_id?.slice(0, 8),
           itemId: snapshot?.item_id,
         });
         resetFlow();
-      } else if (body && body.status === "pending") {
-        const sid = body.submission_id;
-        const itemLabel = snapshot
-          ? `${snapshot.item_display_name} (${snapshot.item_type} ${snapshot.item_id})`
-          : "?";
+        break;
+      case "pending":
+        // A new approval was created; refresh the inbox so its physical-count
+        // source and unread count reflect it immediately (not after staleTime).
+        void queryClient.invalidateQueries({ queryKey: ["inbox"] });
         setDone({
           kind: "pending",
           message:
             "Count variance exceeds threshold — held for planner approval.",
           itemName: snapshot?.item_display_name,
-          delta: body.computed_delta,
-          itemSummary: `${itemLabel} · counted: ${qtyNum} ${unit} · adjustment: ${body.computed_delta ?? "?"}`,
-          detail: `ref: ${sid}`,
-          href: sid
-            ? `/inbox/approvals/physical-count/${encodeURIComponent(sid)}`
+          delta: result.body.computed_delta,
+          itemSummary: `${itemLabel} · counted: ${qtyNum} ${unit} · adjustment: ${result.body.computed_delta ?? "?"}`,
+          detail: `ref: ${result.submissionId}`,
+          href: result.submissionId
+            ? `/inbox/approvals/physical-count/${encodeURIComponent(result.submissionId)}`
             : undefined,
           hrefLabel: "Open approval",
           snapshotIdShort: snapshot?.snapshot_id?.slice(0, 8),
         });
         resetFlow();
-      } else {
+        break;
+      case "rejected":
         setDone({
           kind: "error",
           message: "Could not submit the count.",
-          detail: friendlyCountError(body, res.status),
+          detail: friendlyCountError(result.body, result.status),
         });
         setPhase("counting");
-      }
-    } catch (err) {
-      setDone({
-        kind: "error",
-        message: "Network error submitting count.",
-        detail: err instanceof Error ? err.message : String(err),
-      });
-      setPhase("counting");
+        break;
+      case "network":
+        setDone({
+          kind: "error",
+          message: "Network error submitting count.",
+          detail:
+            result.error instanceof Error
+              ? result.error.message
+              : String(result.error),
+        });
+        setPhase("counting");
+        break;
     }
   }
 
@@ -585,6 +584,9 @@ export default function PhysicalCountPage() {
     setCancelConfirm(false);
     setSearchQuery("");
     setComboOpen(false);
+    // Flow reset (after a successful post or a cancel) — next count is a new
+    // operation; issue a fresh idempotency key on its next submit.
+    idemKeyRef.current = null;
   }
 
   async function handleCancel(): Promise<void> {
@@ -832,7 +834,7 @@ export default function PhysicalCountPage() {
                 void itemsQuery.refetch();
                 void componentsQuery.refetch();
               }}
-              className="mt-2 text-xs font-medium text-danger-fg underline hover:no-underline"
+              className="btn btn-sm mt-2"
             >
               Retry
             </button>
@@ -1412,7 +1414,17 @@ export default function PhysicalCountPage() {
                   disabled={phase === "submitting"}
                   data-testid="physical-count-cancel-proceed"
                 >
-                  Yes, cancel
+                  {phase === "submitting" ? (
+                    <>
+                      <svg className="mr-2 h-4 w-4 animate-spin" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+                        <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                        <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
+                      </svg>
+                      Cancelling…
+                    </>
+                  ) : (
+                    "Yes, cancel"
+                  )}
                 </button>
               </div>
             </div>

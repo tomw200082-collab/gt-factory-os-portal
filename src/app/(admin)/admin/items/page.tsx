@@ -19,6 +19,7 @@
 // ---------------------------------------------------------------------------
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { fetchJson } from "@/lib/http/fetchJson";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -85,14 +86,6 @@ const GROUP_FILTER_NONE = "__none__";
 // ---------------------------------------------------------------------------
 // Data fetcher
 // ---------------------------------------------------------------------------
-
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) {
-    throw new Error(`Could not load data (HTTP ${res.status}). Check your connection and try refreshing.`);
-  }
-  return (await res.json()) as T;
-}
 
 // ---------------------------------------------------------------------------
 // Groups v1 (Tranche 044) — per-row group assignment via the bulk-assign
@@ -843,7 +836,7 @@ function ItemsPageInner(): JSX.Element {
                             title={`Toggle status (currently ${r.status})`}
                             className="btn btn-ghost btn-sm inline-flex items-center gap-1"
                             onClick={() => handleToggleStatus(r)}
-                            disabled={statusMutation.isPending}
+                            disabled={statusMutation.isPending && statusMutation.variables?.item_id === r.item_id}
                           >
                             <Power className="h-3 w-3" strokeWidth={2} />
                             {r.status === "ACTIVE" ? "Deactivate" : "Activate"}
@@ -971,7 +964,7 @@ function ItemsPageInner(): JSX.Element {
                       type="button"
                       className="btn btn-sm inline-flex min-h-[44px] flex-1 items-center justify-center gap-1"
                       onClick={() => handleToggleStatus(r)}
-                      disabled={statusMutation.isPending}
+                      disabled={statusMutation.isPending && statusMutation.variables?.item_id === r.item_id}
                     >
                       <Power className="h-3 w-3" strokeWidth={2} />
                       {r.status === "ACTIVE" ? "Deactivate" : "Activate"}

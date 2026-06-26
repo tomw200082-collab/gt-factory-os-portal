@@ -11,7 +11,7 @@
 // Layout: bottom-sheet on mobile / centered modal on desktop, following the
 // page's established `items-end sm:items-center` modal pattern.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   FlaskConical,
   History,
@@ -22,6 +22,7 @@ import {
   XCircle,
 } from "lucide-react";
 import { cn } from "@/lib/cn";
+import { useFocusTrap } from "@/components/a11y/useFocusTrap";
 import { SearchableSelect } from "@/components/fields/SearchableSelect";
 import {
   availabilityTier,
@@ -119,6 +120,46 @@ export function RecipeOverridePanel({
   const [confirmingReset, setConfirmingReset] = useState(false);
   const [addValue, setAddValue] = useState("");
   const [saveError, setSaveError] = useState<string | null>(null);
+  // INTER-006 / FLOW-012 — closing with unsaved edits used to discard them
+  // silently. `confirmingClose` gates a two-button confirm before the discard.
+  const [confirmingClose, setConfirmingClose] = useState(false);
+  // H1 (Tranche 113) — when the discard confirm opens, move focus into it
+  // (the safe "Keep editing" default, mirroring ConfirmDialog focusing Cancel).
+  const keepEditingRef = useRef<HTMLButtonElement | null>(null);
+
+  // A11Y-005 / FLOW-011 — dialog a11y parity with the page's inline modals:
+  // initial focus on the heading, focus return to the trigger on close,
+  // Escape-to-close, and Tab/Shift+Tab focus trap. Mirrors the ManualAddModal
+  // pattern in page.tsx (Tranche 075 / 079).
+  const dialogRef = useRef<HTMLDivElement | null>(null);
+  const titleRef = useRef<HTMLHeadingElement | null>(null);
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+  const focusTrap = useFocusTrap(dialogRef, true);
+
+  useEffect(() => {
+    previouslyFocusedRef.current =
+      (document.activeElement as HTMLElement | null) ?? null;
+    queueMicrotask(() => {
+      if (titleRef.current) titleRef.current.focus();
+      else if (dialogRef.current) dialogRef.current.focus();
+    });
+    return () => {
+      const el = previouslyFocusedRef.current;
+      if (el && typeof el.focus === "function") {
+        try {
+          el.focus();
+        } catch {
+          /* trigger may have unmounted — ignore */
+        }
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (confirmingClose) {
+      queueMicrotask(() => keepEditingRef.current?.focus());
+    }
+  }, [confirmingClose]);
 
   useEffect(() => {
     if (recipe && working === null) {
@@ -264,6 +305,18 @@ export function RecipeOverridePanel({
     );
   }
 
+  // INTER-006 / FLOW-012 — every close path (×, Cancel, backdrop, Escape)
+  // routes through here. With unsaved edits it raises the discard confirm;
+  // otherwise it closes immediately (the common, non-dirty case is unchanged).
+  function requestClose() {
+    if (saveMut.isPending) return;
+    if (dirty) {
+      setConfirmingClose(true);
+      return;
+    }
+    onClose();
+  }
+
   // ---- save-button disabled reason (INTER-012 convention) ----------------
   const saveDisabledReason = saveMut.isPending
     ? "Saving the recipe…"
@@ -298,21 +351,42 @@ export function RecipeOverridePanel({
 
   return (
     <div
+      ref={dialogRef}
       dir="ltr"
       className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/40 px-2 sm:px-4"
       role="dialog"
       aria-modal="true"
-      aria-label="Adjust recipe for this run"
+      aria-labelledby="recipe-override-panel-title"
       data-testid="recipe-override-panel"
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target === e.currentTarget) requestClose();
       }}
+      onKeyDown={(e) => {
+        if (e.key === "Escape" && !saveMut.isPending) {
+          e.stopPropagation();
+          // H2 (Tranche 113) — when the discard confirm is open, Escape
+          // dismisses the confirm (back to the form), not the whole panel.
+          if (confirmingClose) {
+            setConfirmingClose(false);
+          } else {
+            requestClose();
+          }
+          return;
+        }
+        focusTrap.onKeyDown(e);
+      }}
+      tabIndex={-1}
     >
-      <div className="w-full max-w-2xl rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-2xl max-h-[90vh] flex flex-col">
+      <div className="w-full max-w-2xl rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-pop max-h-[90vh] flex flex-col">
         {/* Header */}
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
-            <h2 className="flex items-center gap-2 text-base font-semibold text-fg-strong">
+            <h2
+              id="recipe-override-panel-title"
+              ref={titleRef}
+              tabIndex={-1}
+              className="flex items-center gap-2 text-base font-semibold text-fg-strong outline-none"
+            >
               <FlaskConical className="h-4 w-4 text-accent" strokeWidth={2} />
               Recipe for this run
               {recipe?.customized ? (
@@ -335,7 +409,7 @@ export function RecipeOverridePanel({
           <button
             type="button"
             className="btn btn-sm shrink-0"
-            onClick={onClose}
+            onClick={requestClose}
             disabled={saveMut.isPending}
             title="Close"
             aria-label="Close"
@@ -690,7 +764,7 @@ export function RecipeOverridePanel({
               <button
                 type="button"
                 className="btn btn-sm"
-                onClick={onClose}
+                onClick={requestClose}
                 disabled={saveMut.isPending}
               >
                 Cancel
@@ -710,6 +784,57 @@ export function RecipeOverridePanel({
           </div>
         ) : null}
       </div>
+
+      {/* INTER-006 / FLOW-012 — discard confirm. Shown only when a close was
+          requested with unsaved edits; keeps the planner's work from vanishing
+          silently. "Keep editing" returns to the form; "Discard changes" closes. */}
+      {confirmingClose ? (
+        <div
+          className="absolute inset-0 z-10 flex items-center justify-center bg-black/30 px-4"
+          role="alertdialog"
+          aria-modal="true"
+          aria-labelledby="recipe-discard-title"
+          data-testid="recipe-close-confirm"
+          onClick={(e) => {
+            if (e.target === e.currentTarget) setConfirmingClose(false);
+          }}
+        >
+          <div className="w-full max-w-sm rounded-lg border border-border bg-bg-raised p-4 shadow-pop">
+            <h3
+              id="recipe-discard-title"
+              className="text-sm font-semibold text-fg-strong"
+            >
+              Discard your unsaved recipe edits?
+            </h3>
+            <p className="mt-1 text-3xs text-fg-muted">
+              Closing now drops the quantity changes you made on this run. The
+              saved recipe stays as it was.
+            </p>
+            <div className="mt-3 flex items-center justify-end gap-2">
+              <button
+                ref={keepEditingRef}
+                type="button"
+                className="btn btn-sm"
+                onClick={() => setConfirmingClose(false)}
+                data-testid="recipe-close-keep"
+              >
+                Keep editing
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm btn-danger"
+                onClick={() => {
+                  setConfirmingClose(false);
+                  onClose();
+                }}
+                data-testid="recipe-close-discard"
+              >
+                Discard changes
+              </button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

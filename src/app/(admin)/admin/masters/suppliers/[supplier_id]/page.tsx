@@ -29,6 +29,7 @@
 // ---------------------------------------------------------------------------
 
 import { use, useState, useCallback, useMemo, type ReactNode } from "react";
+import { fetchJson } from "@/lib/http/fetchJson";
 import * as Popover from "@radix-ui/react-popover";
 import Link from "next/link";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
@@ -153,14 +154,6 @@ interface ComponentsListResponse { rows: ComponentRow[]; count: number; }
 interface ItemsListResponse { rows: ItemRow[]; count: number; }
 
 // --- helpers -------------------------------------------------------------
-
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) {
-    throw new Error(`Could not load data (HTTP ${res.status}). Check your connection and try refreshing.`);
-  }
-  return (await res.json()) as T;
-}
 
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return "—";
@@ -420,8 +413,10 @@ function CostEditCell({
           ✕
         </button>
         {mutation.isError ? (
-          <span className="text-xs text-danger-fg" title={(mutation.error as Error).message}>
-            Error saving
+          <span className="text-xs text-danger-fg">
+            {mutation.error instanceof Error
+              ? mutation.error.message
+              : "Error saving — try again."}
           </span>
         ) : null}
       </span>
@@ -935,21 +930,29 @@ export default function AdminSupplierDetailPage({
           </details>
 
           {/* Iter 13 — mutation feedback with aria-live. */}
-          {supplierFieldMutation.isError || supplierFieldMutation.isPending ? (
+          {supplierFieldMutation.isError ||
+          supplierFieldMutation.isPending ||
+          supplierFieldMutation.isSuccess ? (
             <p
               role="status"
               aria-live="polite"
               aria-atomic
               className={cn(
                 "text-xs",
-                supplierFieldMutation.isPending ? "text-fg-muted" : "text-danger-fg",
+                supplierFieldMutation.isPending
+                  ? "text-fg-muted"
+                  : supplierFieldMutation.isError
+                    ? "text-danger-fg"
+                    : "text-success-fg",
               )}
             >
               {supplierFieldMutation.isPending
                 ? "Saving…"
-                : supplierFieldMutation.error instanceof AdminMutationError
-                  ? supplierFieldMutation.error.message
-                  : "Save failed. Please try again."}
+                : supplierFieldMutation.isError
+                  ? supplierFieldMutation.error instanceof AdminMutationError
+                    ? supplierFieldMutation.error.message
+                    : "Save failed. Please try again."
+                  : "Saved"}
             </p>
           ) : null}
         </div>

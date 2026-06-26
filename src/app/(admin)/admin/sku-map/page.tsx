@@ -18,6 +18,7 @@
 // ---------------------------------------------------------------------------
 
 import { useState, useMemo } from "react";
+import { fetchJson } from "@/lib/http/fetchJson";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
@@ -76,14 +77,6 @@ function relativeTime(isoStr: string): string {
 // ---------------------------------------------------------------------------
 // Fetch helper
 // ---------------------------------------------------------------------------
-
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) {
-    throw new Error(`Could not load data (HTTP ${res.status}). Check your connection and try refreshing.`);
-  }
-  return (await res.json()) as T;
-}
 
 // ---------------------------------------------------------------------------
 // iter 16: ApprovalBadge

@@ -19,6 +19,7 @@
 // ---------------------------------------------------------------------------
 
 import { Suspense, useEffect, useMemo, useState } from "react";
+import { fetchJson } from "@/lib/http/fetchJson";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -109,14 +110,6 @@ interface UsedInRow {
 // ---------------------------------------------------------------------------
 // Data fetcher
 // ---------------------------------------------------------------------------
-
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) {
-    throw new Error(`Could not load data (HTTP ${res.status}). Check your connection and try refreshing.`);
-  }
-  return (await res.json()) as T;
-}
 
 // ---------------------------------------------------------------------------
 // Iter 11 — Status dot badge
@@ -511,8 +504,19 @@ function ComponentsPageInner(): JSX.Element {
     },
   });
 
-  const handleSaveSupplier = () => {
+  const handleSaveSupplier = async () => {
     if (!selectedComponent || !pendingSupplier) return;
+    // Replacing the primary supplier rewrites planning-critical data (cost, lead
+    // time, MOQ) — confirm first, matching the component detail page's promote
+    // confirmation for the same action.
+    const ok = await confirm({
+      title: "Replace primary supplier?",
+      description:
+        "The existing primary (if any) will be demoted. This affects planning cost and lead time for this component.",
+      confirmLabel: "Replace primary",
+      tone: "danger",
+    });
+    if (!ok) return;
     supplierAssignMutation.mutate({
       componentId: selectedComponent.component_id,
       newSupplierId: pendingSupplier,
@@ -873,7 +877,7 @@ function ComponentsPageInner(): JSX.Element {
                               e.stopPropagation();
                               handleToggleStatus(r);
                             }}
-                            disabled={statusMutation.isPending}
+                            disabled={statusMutation.isPending && statusMutation.variables?.component_id === r.component_id}
                           >
                             <Power className="h-3 w-3" strokeWidth={2} />
                             {r.status === "ACTIVE" ? "Deactivate" : "Activate"}
@@ -980,7 +984,7 @@ function ComponentsPageInner(): JSX.Element {
                         e.stopPropagation();
                         handleToggleStatus(r);
                       }}
-                      disabled={statusMutation.isPending}
+                      disabled={statusMutation.isPending && statusMutation.variables?.component_id === r.component_id}
                     >
                       <Power className="h-3 w-3" strokeWidth={2} />
                       {r.status === "ACTIVE" ? "Deactivate" : "Activate"}

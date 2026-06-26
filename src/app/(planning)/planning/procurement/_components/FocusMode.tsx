@@ -71,6 +71,15 @@ export function FocusMode({
   const [currentId, setCurrentId] = useState<string | null>(firstId);
   const [done, setDone] = useState(queueIds.length === 0);
   const [flash, setFlash] = useState<FocusResolveResult | null>(null);
+  // INTER-004: guard against silently discarding unsaved line-quantity edits.
+  // FocusCard reports whether it holds unsaved draft edits; closing the overlay
+  // then confirms first instead of dropping them.
+  const [cardDirty, setCardDirty] = useState(false);
+  const [confirmingClose, setConfirmingClose] = useState(false);
+  const requestClose = useCallback(() => {
+    if (cardDirty) setConfirmingClose(true);
+    else onClose();
+  }, [cardDirty, onClose]);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
 
@@ -149,7 +158,7 @@ export function FocusMode({
     function onKey(e: KeyboardEvent): void {
       if (e.key === "Escape") {
         e.preventDefault();
-        onClose();
+        requestClose();
         return;
       }
       // Focus trap — keep Tab cycling within the overlay.
@@ -187,7 +196,13 @@ export function FocusMode({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [onClose, goNext, goPrev]);
+  }, [requestClose, goNext, goPrev]);
+
+  // Reset the close-confirm + dirty flags whenever the focused order changes.
+  useEffect(() => {
+    setConfirmingClose(false);
+    setCardDirty(false);
+  }, [currentId]);
 
   const current = currentId ? posById.get(currentId) ?? null : null;
   const position = positionOf(queueIds, currentId);
@@ -249,7 +264,7 @@ export function FocusMode({
         </div>
         <button
           type="button"
-          onClick={onClose}
+          onClick={requestClose}
           className="rounded-full p-1.5 text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors"
           aria-label="סגור מצב מיקוד"
           data-testid="focus-close"
@@ -291,6 +306,7 @@ export function FocusMode({
               whyNow={classifyPo(current, day).whyNow}
               isOverdue={classifyPo(current, day).isOverdue}
               onResolve={handleResolve}
+              onDirtyChange={setCardDirty}
             />
           )}
         </div>
@@ -319,6 +335,45 @@ export function FocusMode({
           >
             הבא ←
           </button>
+        </div>
+      )}
+
+      {/* INTER-004: unsaved-edit guard before closing the overlay. */}
+      {confirmingClose && (
+        <div
+          className="absolute inset-0 z-20 flex items-center justify-center bg-bg/80 p-4"
+          role="alertdialog"
+          aria-modal="true"
+          aria-label="שינויים שלא נשמרו"
+          data-testid="focus-close-confirm"
+        >
+          <div className="w-full max-w-sm rounded-lg border border-border bg-bg-raised p-5 text-center shadow-lg">
+            <p className="text-sm font-semibold text-fg">
+              יש לך שינויי כמות שלא נשמרו
+            </p>
+            <p className="mt-1 text-xs text-fg-muted">סגירה תבטל אותם.</p>
+            <div className="mt-4 flex items-center justify-center gap-2">
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => setConfirmingClose(false)}
+                data-testid="focus-close-keep"
+              >
+                המשך עריכה
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm btn-danger"
+                onClick={() => {
+                  setConfirmingClose(false);
+                  onClose();
+                }}
+                data-testid="focus-close-discard"
+              >
+                סגור בכל זאת
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

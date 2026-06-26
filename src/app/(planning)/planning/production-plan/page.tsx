@@ -29,7 +29,7 @@ import {
   Loader2,
   Trash2,
 } from "lucide-react";
-import { useFocusTrap } from "@/components/a11y/useFocusTrap";
+import { useDialogA11y } from "./_lib/useDialogA11y";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
@@ -224,37 +224,10 @@ function ManualAddModal({
   //     first field is a date input that the planner may not want to type
   //     into immediately).
   //   - Focus is returned to the element that opened the modal on close.
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-  const titleRef = useRef<HTMLHeadingElement | null>(null);
-  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
-  // Tranche 079 (A11Y-R03) — Tab / Shift+Tab cycle inside the dialog.
-  const focusTrap = useFocusTrap(dialogRef, true);
-
-  useEffect(() => {
-    // Capture the element that had focus when the modal mounted; restore on
-    // unmount. Works for every trigger (header CTA, day-card "+" action,
-    // etc.) without each trigger needing to thread a ref through.
-    previouslyFocusedRef.current =
-      (document.activeElement as HTMLElement | null) ?? null;
-    // Defer focus so the dialog has actually mounted into the DOM.
-    queueMicrotask(() => {
-      if (titleRef.current) {
-        titleRef.current.focus();
-      } else if (dialogRef.current) {
-        dialogRef.current.focus();
-      }
-    });
-    return () => {
-      const el = previouslyFocusedRef.current;
-      if (el && typeof el.focus === "function") {
-        try {
-          el.focus();
-        } catch {
-          /* trigger may have unmounted — ignore */
-        }
-      }
-    };
-  }, []);
+  const { dialogRef, titleRef, onKeyDown: onDialogKeyDown } = useDialogA11y({
+    onClose,
+    closeDisabled: isSubmitting,
+  });
 
   // UX-flow audit (FLOW-E/B): on a submit (422) error, move focus to the first
   // field flagged aria-invalid so keyboard / screen-reader users land on the
@@ -324,17 +297,10 @@ function ManualAddModal({
       aria-labelledby="manual-add-modal-title"
       data-testid="manual-add-modal"
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      onKeyDown={(e) => {
-        if (e.key === "Escape" && !isSubmitting) {
-          e.stopPropagation();
-          onClose();
-          return;
-        }
-        focusTrap.onKeyDown(e);
-      }}
+      onKeyDown={onDialogKeyDown}
       tabIndex={-1}
     >
-      <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-2xl">
+      <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-pop">
         <h2
           id="manual-add-modal-title"
           ref={titleRef}
@@ -604,29 +570,10 @@ function AddFromRecommendationsModal({
   // Tranche 079 (A11Y-R02 / R10) — same dialog treatment as ManualAddModal:
   // initial focus on heading, focus return to trigger on close,
   // Escape-to-close, focus trap on Tab/Shift+Tab.
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-  const titleRef = useRef<HTMLHeadingElement | null>(null);
-  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
-  const focusTrap = useFocusTrap(dialogRef, true);
-
-  useEffect(() => {
-    previouslyFocusedRef.current =
-      (document.activeElement as HTMLElement | null) ?? null;
-    queueMicrotask(() => {
-      if (titleRef.current) titleRef.current.focus();
-      else if (dialogRef.current) dialogRef.current.focus();
-    });
-    return () => {
-      const el = previouslyFocusedRef.current;
-      if (el && typeof el.focus === "function") {
-        try {
-          el.focus();
-        } catch {
-          /* trigger may have unmounted — ignore */
-        }
-      }
-    };
-  }, []);
+  const { dialogRef, titleRef, onKeyDown: onDialogKeyDown } = useDialogA11y({
+    onClose,
+    closeDisabled: isSubmitting,
+  });
 
   return (
     <div
@@ -639,18 +586,11 @@ function AddFromRecommendationsModal({
       data-testid="add-from-recs-modal"
       tabIndex={-1}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      onKeyDown={(e) => {
-        if (e.key === "Escape" && !isSubmitting) {
-          e.stopPropagation();
-          onClose();
-          return;
-        }
-        focusTrap.onKeyDown(e);
-      }}
+      onKeyDown={onDialogKeyDown}
     >
       {/* FLOW-017 (Tranche 054) — cap the sheet height so the footer
           buttons stay reachable on short phones. */}
-      <div className="w-full max-w-2xl rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-2xl max-h-[min(90vh,600px)] flex flex-col">
+      <div className="w-full max-w-2xl rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-pop max-h-[min(90vh,600px)] flex flex-col">
         <div className="flex items-start justify-between gap-3">
           <div className="min-w-0 flex-1">
             <h2
@@ -868,6 +808,10 @@ function EditModal({
   const [qty, setQty] = useState(plan.planned_qty ?? "");
   const [uom, setUom] = useState(plan.uom ?? "");
   const [notes, setNotes] = useState(plan.notes ?? "");
+  // INTER-003 — client-side qty validation. A blank/zero/non-numeric quantity
+  // previously submitted NaN and relied on a generic backend 422 toast; now it
+  // is caught inline under the field before the PATCH fires.
+  const [qtyError, setQtyError] = useState<string | null>(null);
 
   // Tranche 079 (INTER-002) — UoM is a select over the known universe;
   // if the plan's current UoM is not in the option list keep it selectable
@@ -888,29 +832,10 @@ function EditModal({
     notes !== (plan.notes ?? "");
 
   // Tranche 079 (A11Y-R02 / R10) — dialog treatment (matches ManualAddModal).
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-  const titleRef = useRef<HTMLHeadingElement | null>(null);
-  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
-  const focusTrap = useFocusTrap(dialogRef, true);
-
-  useEffect(() => {
-    previouslyFocusedRef.current =
-      (document.activeElement as HTMLElement | null) ?? null;
-    queueMicrotask(() => {
-      if (titleRef.current) titleRef.current.focus();
-      else if (dialogRef.current) dialogRef.current.focus();
-    });
-    return () => {
-      const el = previouslyFocusedRef.current;
-      if (el && typeof el.focus === "function") {
-        try {
-          el.focus();
-        } catch {
-          /* trigger may have unmounted — ignore */
-        }
-      }
-    };
-  }, []);
+  const { dialogRef, titleRef, onKeyDown: onDialogKeyDown } = useDialogA11y({
+    onClose,
+    closeDisabled: isSubmitting,
+  });
 
   return (
     <div
@@ -923,16 +848,9 @@ function EditModal({
       data-testid="edit-modal"
       tabIndex={-1}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      onKeyDown={(e) => {
-        if (e.key === "Escape" && !isSubmitting) {
-          e.stopPropagation();
-          onClose();
-          return;
-        }
-        focusTrap.onKeyDown(e);
-      }}
+      onKeyDown={onDialogKeyDown}
     >
-      <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-2xl">
+      <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-pop">
         <h2
           id="edit-modal-title"
           ref={titleRef}
@@ -941,7 +859,7 @@ function EditModal({
         >
           Edit plan
         </h2>
-        <p className="mt-1 text-3xs text-fg-muted">{plan.item_name ?? plan.item_id}</p>
+        <p className="mt-1 text-3xs text-fg-muted">{plan.item_name ?? "Unnamed item"}</p>
 
         <form
           className="mt-4 space-y-3"
@@ -954,7 +872,15 @@ function EditModal({
               notes?: string;
             } = {};
             if (planDate !== plan.plan_date) body.plan_date = planDate;
-            if (qty !== plan.planned_qty) body.planned_qty = parseFloat(qty);
+            const qtyChanged = qty !== plan.planned_qty;
+            if (qtyChanged) {
+              const n = parseFloat(qty);
+              if (!Number.isFinite(n) || n <= 0) {
+                setQtyError("Enter a planned quantity greater than zero.");
+                return;
+              }
+              body.planned_qty = n;
+            }
             if (uom !== plan.uom) body.uom = uom;
             if (notes !== (plan.notes ?? "")) body.notes = notes;
             onSubmit(body);
@@ -984,8 +910,23 @@ function EditModal({
                 min="0"
                 className="input"
                 value={qty}
-                onChange={(e) => setQty(e.target.value)}
+                onChange={(e) => {
+                  setQty(e.target.value);
+                  if (qtyError) setQtyError(null);
+                }}
+                aria-invalid={qtyError ? true : undefined}
+                aria-describedby={qtyError ? "edit-qty-error" : undefined}
               />
+              {qtyError ? (
+                <span
+                  id="edit-qty-error"
+                  role="alert"
+                  className="mt-1 block text-3xs text-danger-fg"
+                  data-testid="edit-qty-error"
+                >
+                  {qtyError}
+                </span>
+              ) : null}
             </label>
             <label className="block">
               <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
@@ -1058,29 +999,10 @@ function AddNoteModal({
   const canSubmit = planDate && notes.trim().length > 0 && !isSubmitting;
 
   // Tranche 079 (A11Y-R02 / R10) — dialog treatment.
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-  const titleRef = useRef<HTMLHeadingElement | null>(null);
-  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
-  const focusTrap = useFocusTrap(dialogRef, true);
-
-  useEffect(() => {
-    previouslyFocusedRef.current =
-      (document.activeElement as HTMLElement | null) ?? null;
-    queueMicrotask(() => {
-      if (titleRef.current) titleRef.current.focus();
-      else if (dialogRef.current) dialogRef.current.focus();
-    });
-    return () => {
-      const el = previouslyFocusedRef.current;
-      if (el && typeof el.focus === "function") {
-        try {
-          el.focus();
-        } catch {
-          /* trigger may have unmounted — ignore */
-        }
-      }
-    };
-  }, []);
+  const { dialogRef, titleRef, onKeyDown: onDialogKeyDown } = useDialogA11y({
+    onClose,
+    closeDisabled: isSubmitting,
+  });
 
   return (
     <div
@@ -1093,16 +1015,9 @@ function AddNoteModal({
       data-testid="add-note-modal"
       tabIndex={-1}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      onKeyDown={(e) => {
-        if (e.key === "Escape" && !isSubmitting) {
-          e.stopPropagation();
-          onClose();
-          return;
-        }
-        focusTrap.onKeyDown(e);
-      }}
+      onKeyDown={onDialogKeyDown}
     >
-      <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-2xl">
+      <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-pop">
         <h2
           id="add-note-modal-title"
           ref={titleRef}
@@ -1194,29 +1109,10 @@ function EditNoteModal({
   const canSubmit = notes.trim().length > 0 && !isSubmitting;
 
   // Tranche 079 (A11Y-R02 / R10) — dialog treatment.
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-  const titleRef = useRef<HTMLHeadingElement | null>(null);
-  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
-  const focusTrap = useFocusTrap(dialogRef, true);
-
-  useEffect(() => {
-    previouslyFocusedRef.current =
-      (document.activeElement as HTMLElement | null) ?? null;
-    queueMicrotask(() => {
-      if (titleRef.current) titleRef.current.focus();
-      else if (dialogRef.current) dialogRef.current.focus();
-    });
-    return () => {
-      const el = previouslyFocusedRef.current;
-      if (el && typeof el.focus === "function") {
-        try {
-          el.focus();
-        } catch {
-          /* trigger may have unmounted — ignore */
-        }
-      }
-    };
-  }, []);
+  const { dialogRef, titleRef, onKeyDown: onDialogKeyDown } = useDialogA11y({
+    onClose,
+    closeDisabled: isSubmitting,
+  });
 
   return (
     <div
@@ -1229,16 +1125,9 @@ function EditNoteModal({
       data-testid="edit-note-modal"
       tabIndex={-1}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      onKeyDown={(e) => {
-        if (e.key === "Escape" && !isSubmitting) {
-          e.stopPropagation();
-          onClose();
-          return;
-        }
-        focusTrap.onKeyDown(e);
-      }}
+      onKeyDown={onDialogKeyDown}
     >
-      <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-2xl">
+      <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-pop">
         <h2
           id="edit-note-modal-title"
           ref={titleRef}
@@ -1316,29 +1205,10 @@ function CancelModal({
   const [reason, setReason] = useState("");
 
   // Tranche 079 (A11Y-R02 / R10) — dialog treatment.
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-  const titleRef = useRef<HTMLHeadingElement | null>(null);
-  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
-  const focusTrap = useFocusTrap(dialogRef, true);
-
-  useEffect(() => {
-    previouslyFocusedRef.current =
-      (document.activeElement as HTMLElement | null) ?? null;
-    queueMicrotask(() => {
-      if (titleRef.current) titleRef.current.focus();
-      else if (dialogRef.current) dialogRef.current.focus();
-    });
-    return () => {
-      const el = previouslyFocusedRef.current;
-      if (el && typeof el.focus === "function") {
-        try {
-          el.focus();
-        } catch {
-          /* trigger may have unmounted — ignore */
-        }
-      }
-    };
-  }, []);
+  const { dialogRef, titleRef, onKeyDown: onDialogKeyDown } = useDialogA11y({
+    onClose,
+    closeDisabled: isSubmitting,
+  });
 
   return (
     <div
@@ -1351,16 +1221,9 @@ function CancelModal({
       data-testid="cancel-modal"
       tabIndex={-1}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      onKeyDown={(e) => {
-        if (e.key === "Escape" && !isSubmitting) {
-          e.stopPropagation();
-          onClose();
-          return;
-        }
-        focusTrap.onKeyDown(e);
-      }}
+      onKeyDown={onDialogKeyDown}
     >
-      <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-2xl">
+      <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-pop">
         <h2
           id="cancel-modal-title"
           ref={titleRef}
@@ -1438,29 +1301,10 @@ function DeleteModal({
   isSubmitting: boolean;
 }) {
   // A11Y — same dialog treatment as CancelModal (focus trap + restore).
-  const dialogRef = useRef<HTMLDivElement | null>(null);
-  const titleRef = useRef<HTMLHeadingElement | null>(null);
-  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
-  const focusTrap = useFocusTrap(dialogRef, true);
-
-  useEffect(() => {
-    previouslyFocusedRef.current =
-      (document.activeElement as HTMLElement | null) ?? null;
-    queueMicrotask(() => {
-      if (titleRef.current) titleRef.current.focus();
-      else if (dialogRef.current) dialogRef.current.focus();
-    });
-    return () => {
-      const el = previouslyFocusedRef.current;
-      if (el && typeof el.focus === "function") {
-        try {
-          el.focus();
-        } catch {
-          /* trigger may have unmounted — ignore */
-        }
-      }
-    };
-  }, []);
+  const { dialogRef, titleRef, onKeyDown: onDialogKeyDown } = useDialogA11y({
+    onClose,
+    closeDisabled: isSubmitting,
+  });
 
   const isCancelled = plan.rendered_state === "cancelled";
 
@@ -1475,16 +1319,9 @@ function DeleteModal({
       data-testid="delete-modal"
       tabIndex={-1}
       onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
-      onKeyDown={(e) => {
-        if (e.key === "Escape" && !isSubmitting) {
-          e.stopPropagation();
-          onClose();
-          return;
-        }
-        focusTrap.onKeyDown(e);
-      }}
+      onKeyDown={onDialogKeyDown}
     >
-      <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-2xl">
+      <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-pop">
         <h2
           id="delete-modal-title"
           ref={titleRef}
@@ -1637,6 +1474,18 @@ export default function ProductionPlanPage() {
     window.setTimeout(() => setToast(null), 4500);
   }
 
+  // §1-safe short label for a plan in toasts / confirms — the item name or the
+  // base-batch descriptor, never the raw item_id. Returns null when there is no
+  // human label to show (the caller then keeps the generic message).
+  function planLabel(p: ProductionPlanRow): string | null {
+    if (p.item_name) return p.item_name;
+    if (p.is_base_batch) {
+      const n = p.pack_manifest_count;
+      return `base batch (${n} SKU${n === 1 ? "" : "s"})`;
+    }
+    return null;
+  }
+
   // Group plans by day
   const plansByDay = useMemo(() => {
     const out = new Map<string, ProductionPlanRow[]>();
@@ -1667,6 +1516,20 @@ export default function ProductionPlanPage() {
       .map((p) => p.uom);
     const first = uoms[0];
     return first && uoms.every((u) => u === first) ? first : "units";
+  })();
+
+  // FLOW-014/015 (Tranche 113) — the planned-qty total may only be summed when
+  // every active plan shares a unit; summing liters + bottles + kg into one
+  // number is meaningless. When the week mixes units the KPI shows the honest
+  // run count instead. (dominantUom above stays the day-lane fallback.)
+  const activePlanCount = productionPlans.filter(
+    (p) => p.rendered_state !== "cancelled",
+  ).length;
+  const uniformUom = (() => {
+    const uoms = productionPlans
+      .filter((p) => p.rendered_state !== "cancelled")
+      .map((p) => p.uom);
+    return uoms.length > 0 && uoms.every((u) => u === uoms[0]) ? uoms[0] : null;
   })();
 
   const completionPct =
@@ -1852,7 +1715,8 @@ export default function ProductionPlanPage() {
   // today-plan. Reuses the existing date-edit PATCH; usePatchPlan already
   // invalidates the production-plan queries on success.
   async function handleMoveToTomorrow(p: ProductionPlanRow) {
-    const label = `${p.item_name ?? p.item_id ?? "plan"} · ${fmtQty(p.planned_qty ?? "0", p.uom ?? "")}`;
+    const name = planLabel(p);
+    const label = `${name ?? "this plan"} · ${fmtQty(p.planned_qty ?? "0", p.uom ?? "")}`;
     const ok = await confirm({
       title: "Move plan to tomorrow?",
       description: `Moves "${label}" to tomorrow (${tomorrowIso}). Inventory is not affected.`,
@@ -1864,7 +1728,7 @@ export default function ProductionPlanPage() {
       { plan_id: p.plan_id, body: { plan_date: tomorrowIso } },
       {
         onSuccess: () => {
-          flashToast("success", "Plan moved to tomorrow.");
+          flashToast("success", name ? `${name} moved to tomorrow.` : "Plan moved to tomorrow.");
         },
         onError: (err) => { flashToast("error", err.message); },
         onSettled: () => {
@@ -1929,11 +1793,12 @@ export default function ProductionPlanPage() {
       setEditingPlan(null);
       return;
     }
+    const name = planLabel(editingPlan);
     patchMut.mutate(
       { plan_id: editingPlan.plan_id, body },
       {
         onSuccess: () => {
-          flashToast("success", "Plan updated.");
+          flashToast("success", name ? `Plan updated for ${name}.` : "Plan updated.");
           setEditingPlan(null);
         },
         onError: (err) => { flashToast("error", err.message); },
@@ -1943,11 +1808,17 @@ export default function ProductionPlanPage() {
 
   function handleCancel(reason: string) {
     if (!cancellingPlan) return;
+    const name = planLabel(cancellingPlan);
     patchMut.mutate(
       { plan_id: cancellingPlan.plan_id, body: { action: "cancel", cancel_reason: reason.trim() || null } },
       {
         onSuccess: () => {
-          flashToast("success", "Plan cancelled. Inventory has not changed.");
+          flashToast(
+            "success",
+            name
+              ? `Plan cancelled for ${name}. Inventory has not changed.`
+              : "Plan cancelled. Inventory has not changed.",
+          );
           setCancellingPlan(null);
         },
         onError: (err) => { flashToast("error", err.message); },
@@ -1957,11 +1828,12 @@ export default function ProductionPlanPage() {
 
   function handleDelete() {
     if (!deletingPlan) return;
+    const name = planLabel(deletingPlan);
     deleteMut.mutate(
       { plan_id: deletingPlan.plan_id },
       {
         onSuccess: () => {
-          flashToast("success", "Record deleted.");
+          flashToast("success", name ? `Record deleted for ${name}.` : "Record deleted.");
           setDeletingPlan(null);
         },
         onError: (err) => { flashToast("error", err.message); },
@@ -2064,7 +1936,7 @@ export default function ProductionPlanPage() {
             <span className="text-[22px] font-semibold tabular-nums leading-none tracking-tightish text-fg-strong">
               {plannedCount}
             </span>
-            <span className="text-[9px] font-semibold uppercase tracking-sops leading-none text-fg-muted mt-0.5">
+            <span className="text-3xs font-semibold uppercase tracking-sops leading-none text-fg-muted mt-0.5">
               Planned
             </span>
           </div>
@@ -2072,23 +1944,31 @@ export default function ProductionPlanPage() {
             <span className="text-[22px] font-semibold tabular-nums leading-none tracking-tightish text-success-fg">
               {doneCount}
             </span>
-            <span className="text-[9px] font-semibold uppercase tracking-sops leading-none text-fg-muted mt-0.5">
+            <span className="text-3xs font-semibold uppercase tracking-sops leading-none text-fg-muted mt-0.5">
               Completed
             </span>
           </div>
           <div className="kpi-microcard" style={{ ["--kpi-accent" as string]: "var(--accent)" }}>
             <span className="text-[22px] font-semibold tabular-nums leading-none tracking-tightish text-fg-strong">
-              {totalQty % 1 === 0 ? totalQty.toFixed(0) : totalQty.toFixed(1)}
+              {uniformUom
+                ? totalQty % 1 === 0
+                  ? totalQty.toFixed(0)
+                  : totalQty.toFixed(1)
+                : activePlanCount}
             </span>
-            <span className="text-[9px] font-semibold uppercase tracking-sops leading-none text-fg-muted mt-0.5">
-              {dominantUom} total
+            <span className="text-3xs font-semibold uppercase tracking-sops leading-none text-fg-muted mt-0.5">
+              {uniformUom
+                ? `${uniformUom} total`
+                : activePlanCount === 1
+                  ? "planned run"
+                  : "planned runs"}
             </span>
           </div>
           <div className="kpi-microcard" style={{ ["--kpi-accent" as string]: "var(--info)" }}>
             <span className="text-[22px] font-semibold tabular-nums leading-none tracking-tightish text-fg-strong">
               {completionPct}%
             </span>
-            <span className="text-[9px] font-semibold uppercase tracking-sops leading-none text-fg-muted mt-0.5">
+            <span className="text-3xs font-semibold uppercase tracking-sops leading-none text-fg-muted mt-0.5">
               Done
             </span>
           </div>
@@ -2216,7 +2096,7 @@ export default function ProductionPlanPage() {
           data-testid="today-strip"
         >
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-            <span className="text-[9px] font-semibold uppercase tracking-sops text-fg-subtle">
+            <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
               Today
             </span>
             {todaySummary.todayPlanned === 0 ? (
@@ -2426,8 +2306,14 @@ export default function ProductionPlanPage() {
           <div
             ref={boardRef}
             onScroll={updateTodayVisibility}
-            className="rounded-xl bg-bg-subtle p-3 overflow-x-auto"
+            className="rounded-xl bg-bg-subtle p-3 overflow-x-auto focus-visible:outline focus-visible:outline-2 focus-visible:outline-accent/50"
             data-testid="production-plan-week"
+            // A11Y-006 — a horizontally-scrolling region must be keyboard
+            // operable. tabindex makes it focusable so arrow keys scroll it;
+            // role+label give it an accessible name in the tab order.
+            tabIndex={0}
+            role="region"
+            aria-label="Weekly production board — scroll horizontally for all seven days"
           >
             <div
               className="flex gap-3"
@@ -2481,7 +2367,7 @@ export default function ProductionPlanPage() {
           <div className="mt-4 flex flex-wrap items-center gap-3 rounded-lg border border-border/50 bg-bg-raised px-4 py-3 shadow-raised">
             <div className="flex flex-1 min-w-[160px] flex-col gap-1">
               <div className="flex items-baseline justify-between gap-2">
-                <span className="text-[9px] font-semibold uppercase tracking-sops text-fg-muted">
+                <span className="text-3xs font-semibold uppercase tracking-sops text-fg-muted">
                   Week completion
                 </span>
                 <span className="text-xs font-semibold tabular-nums text-fg-strong">
