@@ -54,6 +54,7 @@ non-core under collapsible disclosure. No backend, no route deletion, no access 
 manifest:
   - docs/portal-os/tranches/090-nav-corridor-redesign.md
   - docs/portal-os/tranches/_active.txt
+  - docs/portal-os/registry.md            # registry entry for this tranche (PR-guard presence check)
   - src/lib/nav/manifest.ts
   - src/lib/nav/active.test.ts
   - src/components/layout/SideNav.tsx
