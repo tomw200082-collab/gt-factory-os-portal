@@ -7,6 +7,7 @@
 // ---------------------------------------------------------------------------
 
 import { use, useState, useMemo } from "react";
+import { fetchJson } from "@/lib/http/fetchJson";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Plus, HelpCircle } from "lucide-react";
@@ -112,14 +113,6 @@ interface ExceptionsListResponse {
 }
 
 // --- helpers -------------------------------------------------------------
-
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) {
-    throw new Error(`Could not load data (HTTP ${res.status}). Check your connection and try refreshing.`);
-  }
-  return (await res.json()) as T;
-}
 
 function fmtDateTime(iso: string | null | undefined): string {
   if (!iso) return "—";

@@ -29,6 +29,7 @@
 // ---------------------------------------------------------------------------
 
 import { use, useState, useCallback, useMemo, type ReactNode } from "react";
+import { fetchJson } from "@/lib/http/fetchJson";
 import * as Popover from "@radix-ui/react-popover";
 import Link from "next/link";
 import { useQuery, useQueryClient, useMutation } from "@tanstack/react-query";
@@ -153,14 +154,6 @@ interface ComponentsListResponse { rows: ComponentRow[]; count: number; }
 interface ItemsListResponse { rows: ItemRow[]; count: number; }
 
 // --- helpers -------------------------------------------------------------
-
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) {
-    throw new Error(`Could not load data (HTTP ${res.status}). Check your connection and try refreshing.`);
-  }
-  return (await res.json()) as T;
-}
 
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return "—";

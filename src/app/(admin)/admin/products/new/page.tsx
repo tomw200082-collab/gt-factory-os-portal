@@ -38,6 +38,7 @@
 // ---------------------------------------------------------------------------
 
 import { useMemo, useState } from "react";
+import { fetchJson } from "@/lib/http/fetchJson";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -153,14 +154,6 @@ function randomIdempotencyKey(): string {
     return crypto.randomUUID();
   }
   return `${Date.now().toString(16)}-${Math.random().toString(16).slice(2, 10)}`;
-}
-
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) {
-    throw new Error(`Could not load data (HTTP ${res.status}). Check your connection and try refreshing.`);
-  }
-  return (await res.json()) as T;
 }
 
 async function postJson<T>(url: string, body: unknown): Promise<T> {

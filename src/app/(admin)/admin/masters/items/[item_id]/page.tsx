@@ -21,6 +21,7 @@
 // ---------------------------------------------------------------------------
 
 import { use, useState, useMemo, type ReactNode } from "react";
+import { fetchJson } from "@/lib/http/fetchJson";
 import * as Popover from "@radix-ui/react-popover";
 import { fmtSupplyMethod } from "@/lib/display";
 import Link from "next/link";
@@ -147,14 +148,6 @@ interface ExceptionsListResponse {
 }
 
 // --- fetch helper --------------------------------------------------------
-
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) {
-    throw new Error(`Could not load data (HTTP ${res.status}). Check your connection and try refreshing.`);
-  }
-  return (await res.json()) as T;
-}
 
 // --- formatting ----------------------------------------------------------
 

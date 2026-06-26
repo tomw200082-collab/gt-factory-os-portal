@@ -19,6 +19,7 @@
 // ---------------------------------------------------------------------------
 
 import { Suspense, useEffect, useMemo, useRef, useState } from "react";
+import { fetchJson } from "@/lib/http/fetchJson";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -85,14 +86,6 @@ const GROUP_FILTER_NONE = "__none__";
 // ---------------------------------------------------------------------------
 // Data fetcher
 // ---------------------------------------------------------------------------
-
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) {
-    throw new Error(`Could not load data (HTTP ${res.status}). Check your connection and try refreshing.`);
-  }
-  return (await res.json()) as T;
-}
 
 // ---------------------------------------------------------------------------
 // Groups v1 (Tranche 044) — per-row group assignment via the bulk-assign

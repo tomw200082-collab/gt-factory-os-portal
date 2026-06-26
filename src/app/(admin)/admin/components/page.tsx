@@ -19,6 +19,7 @@
 // ---------------------------------------------------------------------------
 
 import { Suspense, useEffect, useMemo, useState } from "react";
+import { fetchJson } from "@/lib/http/fetchJson";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -109,14 +110,6 @@ interface UsedInRow {
 // ---------------------------------------------------------------------------
 // Data fetcher
 // ---------------------------------------------------------------------------
-
-async function fetchJson<T>(url: string): Promise<T> {
-  const res = await fetch(url, { headers: { Accept: "application/json" } });
-  if (!res.ok) {
-    throw new Error(`Could not load data (HTTP ${res.status}). Check your connection and try refreshing.`);
-  }
-  return (await res.json()) as T;
-}
 
 // ---------------------------------------------------------------------------
 // Iter 11 — Status dot badge
