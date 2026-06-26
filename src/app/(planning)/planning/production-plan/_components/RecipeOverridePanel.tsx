@@ -11,7 +11,7 @@
 // Layout: bottom-sheet on mobile / centered modal on desktop, following the
 // page's established `items-end sm:items-center` modal pattern.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   FlaskConical,
   History,
@@ -119,6 +119,19 @@ export function RecipeOverridePanel({
   const [confirmingReset, setConfirmingReset] = useState(false);
   const [addValue, setAddValue] = useState("");
   const [saveError, setSaveError] = useState<string | null>(null);
+
+  // FLOW-017 — restore focus to the control that opened this panel (the card's
+  // "Adjust recipe" button) when it unmounts, matching every modal on the
+  // parent surface. Without this, keyboard users lose their place on close.
+  const previouslyFocusedRef = useRef<HTMLElement | null>(null);
+  useEffect(() => {
+    previouslyFocusedRef.current =
+      document.activeElement instanceof HTMLElement ? document.activeElement : null;
+    return () => {
+      const el = previouslyFocusedRef.current;
+      if (el && typeof el.focus === "function") el.focus();
+    };
+  }, []);
 
   useEffect(() => {
     if (recipe && working === null) {

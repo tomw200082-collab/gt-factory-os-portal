@@ -120,6 +120,18 @@ export function InventoryImpactPanel({
       ) : bomQuery.isError || !bomQuery.data ? (
         <div className="text-xs text-fg-muted">
           BOM data not available.{" "}
+          {/* INTER-011 — the fetch can fail transiently; give an in-place
+              retry so the planner need not close and reopen the panel. */}
+          <button
+            type="button"
+            onClick={() => void bomQuery.refetch()}
+            disabled={bomQuery.isFetching}
+            className="text-accent hover:underline disabled:opacity-50"
+            data-testid="impact-bom-retry"
+          >
+            {bomQuery.isFetching ? "Retrying…" : "Try again"}
+          </button>
+          {" · "}
           <Link href="/planning/inventory-flow" className="text-accent hover:underline">
             Check inventory flow →
           </Link>

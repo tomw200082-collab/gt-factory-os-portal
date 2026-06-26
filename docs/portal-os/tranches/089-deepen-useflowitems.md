@@ -1,6 +1,6 @@
 # Tranche 089: deepen — extract useFlowItems (kill flow-client duplication)
 
-status: in-progress
+status: done
 created: 2026-06-25
 scorecard_target_category: design / maintainability
 expected_delta: +1 (one hidden decision, change-amplification removed on a core surface)
@@ -38,4 +38,4 @@ manifest:
 
 ## Checklist
 - [x] hook + both call sites swapped; isAtRisk/FlowItem imports dropped from clients
-- [ ] green-after + Tom review
+- [x] green-after verified (landed in #126; full suite 789/789, tsc 0 on 2026-06-26)

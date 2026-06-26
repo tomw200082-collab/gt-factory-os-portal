@@ -836,7 +836,13 @@ function AddFromRecommendationsModal({
               onClick={() => { if (selectedRec) onConfirm(selectedRec); }}
               data-testid="add-from-recs-confirm"
             >
-              <Plus className="h-3 w-3" strokeWidth={2.5} />
+              {/* INTER-003 — spinner during the in-flight add, matching the
+                  ManualAdd submit pattern. */}
+              {isSubmitting ? (
+                <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.5} aria-hidden />
+              ) : (
+                <Plus className="h-3 w-3" strokeWidth={2.5} />
+              )}
               {isSubmitting ? "Adding…" : "Add to plan"}
             </button>
           </div>
@@ -1028,10 +1034,15 @@ function EditModal({
             </button>
             <button
               type="submit"
-              className="btn btn-primary btn-sm"
+              className="btn btn-primary btn-sm gap-1.5"
               disabled={isSubmitting || !isDirty}
               data-testid="edit-submit"
             >
+              {/* INTER-004 — spinner during save, matching the other submit
+                  buttons on this surface. */}
+              {isSubmitting && (
+                <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.5} aria-hidden />
+              )}
               {isSubmitting ? "Saving…" : "Save changes"}
             </button>
           </div>
@@ -1289,10 +1300,15 @@ function EditNoteModal({
             </button>
             <button
               type="submit"
-              className="btn btn-primary btn-sm"
+              className="btn btn-primary btn-sm gap-1.5"
               disabled={!canSubmit}
               data-testid="edit-note-submit"
             >
+              {/* INTER-004 — spinner during save, matching the other submit
+                  buttons on this surface. */}
+              {isSubmitting && (
+                <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.5} aria-hidden />
+              )}
               {isSubmitting ? "Saving…" : "Save changes"}
             </button>
           </div>
@@ -1416,7 +1432,13 @@ function CancelModal({
               disabled={isSubmitting}
               data-testid="cancel-submit"
             >
-              <Ban className="h-3 w-3" strokeWidth={2.5} />
+              {/* INTER-005 — spinner during the in-flight cancel, matching the
+                  ManualAdd submit pattern on this surface. */}
+              {isSubmitting ? (
+                <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.5} aria-hidden />
+              ) : (
+                <Ban className="h-3 w-3" strokeWidth={2.5} />
+              )}
               {isSubmitting ? "Cancelling…" : "Cancel plan"}
             </button>
           </div>
@@ -1926,6 +1948,9 @@ export default function ProductionPlanPage() {
   }) {
     if (!editingPlan) return;
     if (Object.keys(body).length === 0) {
+      // FLOW-013 — an empty diff is a no-op, but closing the modal in silence
+      // leaves the planner unsure whether the edit saved. Confirm explicitly.
+      flashToast("success", "No changes to save.");
       setEditingPlan(null);
       return;
     }
@@ -1987,6 +2012,7 @@ export default function ProductionPlanPage() {
                   onClick={() => setShowAddFromRecs({ defaultDate: toIsoDate(new Date()) })}
                   title="Pick from approved production recommendations"
                   data-testid="header-add-from-recs"
+                  disabled={createMut.isPending}
                 >
                   <Sparkles className="h-3 w-3" strokeWidth={2.5} />
                   Add from recommendations
@@ -1997,6 +2023,7 @@ export default function ProductionPlanPage() {
                   onClick={() => setShowAddNote({ defaultDate: toIsoDate(new Date()) })}
                   title="Add a note to the plan"
                   data-testid="header-add-note"
+                  disabled={createMut.isPending}
                 >
                   <StickyNote className="h-3 w-3" strokeWidth={2} />
                   Add note
@@ -2006,6 +2033,8 @@ export default function ProductionPlanPage() {
                   className="btn btn-primary btn-sm gap-1.5"
                   onClick={() => setShowManualAdd({ defaultDate: toIsoDate(new Date()) })}
                   data-testid="header-add-manual"
+                  disabled={createMut.isPending}
+                  title={createMut.isPending ? "Adding a plan…" : undefined}
                 >
                   <Plus className="h-3 w-3" strokeWidth={2.5} />
                   Add production
