@@ -537,7 +537,14 @@ function ManualAddModal({
                 disabled={!canSubmit}
                 data-testid="manual-add-submit"
               >
-                <Plus className="h-3 w-3" strokeWidth={2.5} />
+                {/* UX-flow audit (FINDING-05/O): show a spinner, not just a
+                    label change, so the in-flight state reads without relying
+                    on text alone (matches the AddNote modal). */}
+                {isSubmitting ? (
+                  <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.5} aria-hidden />
+                ) : (
+                  <Plus className="h-3 w-3" strokeWidth={2.5} />
+                )}
                 {isSubmitting ? "Saving…" : "Add to plan"}
               </button>
             )}
@@ -848,6 +855,16 @@ function EditModal({
     [uom, uomOptions],
   );
 
+  // UX-flow audit (FINDING-07): the diff is computed on submit and an empty
+  // diff closes the modal silently. Disabling "Save changes" until something
+  // actually changed makes the no-op impossible and removes the "did it save?"
+  // ambiguity.
+  const isDirty =
+    planDate !== plan.plan_date ||
+    qty !== (plan.planned_qty ?? "") ||
+    uom !== (plan.uom ?? "") ||
+    notes !== (plan.notes ?? "");
+
   // Tranche 079 (A11Y-R02 / R10) — dialog treatment (matches ManualAddModal).
   const dialogRef = useRef<HTMLDivElement | null>(null);
   const titleRef = useRef<HTMLHeadingElement | null>(null);
@@ -990,7 +1007,7 @@ function EditModal({
             <button
               type="submit"
               className="btn btn-primary btn-sm"
-              disabled={isSubmitting}
+              disabled={isSubmitting || !isDirty}
               data-testid="edit-submit"
             >
               {isSubmitting ? "Saving…" : "Save changes"}
@@ -2126,9 +2143,10 @@ export default function ProductionPlanPage() {
           progress + tomorrow preview + quick "Move to tomorrow" for each
           still-unreported today plan. Only rendered when today is inside
           the visible week (the query window). */}
-      {hasData &&
-      todayInWeek &&
-      (todaySummary.todayPlanned > 0 || todaySummary.tomorrowJobs > 0) ? (
+      {hasData && todayInWeek ? (
+        /* UX-flow audit (FINDING-06/F): the strip is the planner's "today"
+           anchor, so it must persist even on a day with nothing planned —
+           it used to vanish when today + tomorrow were both empty. */
         <div
           className="mb-4 rounded-lg border border-border/50 bg-bg-raised px-4 py-3 shadow-raised"
           data-testid="today-strip"
@@ -2137,6 +2155,11 @@ export default function ProductionPlanPage() {
             <span className="text-[9px] font-semibold uppercase tracking-sops text-fg-subtle">
               Today
             </span>
+            {todaySummary.todayPlanned === 0 ? (
+              <span className="text-fg-muted" data-testid="today-strip-counts">
+                Nothing planned for today yet.
+              </span>
+            ) : (
             <span data-testid="today-strip-counts">
               planned{" "}
               <span className="font-semibold tabular-nums text-fg-strong">
@@ -2160,6 +2183,7 @@ export default function ProductionPlanPage() {
                 {todaySummary.todayUnreported}
               </span>
             </span>
+            )}
             <span
               className="ml-auto text-fg-muted"
               data-testid="today-strip-tomorrow"

@@ -2544,7 +2544,8 @@ export default function ProductionActualPage() {
                 ? "border-warning/40 bg-warning-softer text-warning-fg"
                 : "border-danger/40 bg-danger-softer text-danger-fg",
           )}
-          role="status"
+          role={done.kind === "error" ? "alert" : "status"}
+          aria-live={done.kind === "error" ? "assertive" : "polite"}
         >
           <div className="font-medium">{done.message}</div>
 
@@ -2862,7 +2863,13 @@ export default function ProductionActualPage() {
               })() : null}
 
               <div className="font-mono text-3xs opacity-80">
-                ref: {done.committed.submission_id}
+                ref:{" "}
+                <Link
+                  href={`/stock/production-actual?submission_id=${encodeURIComponent(done.committed.submission_id)}`}
+                  className="underline hover:no-underline"
+                >
+                  {done.committed.submission_id}
+                </Link>
               </div>
             </div>
           ) : null}
@@ -2971,6 +2978,18 @@ export default function ProductionActualPage() {
           {/* Success-panel follow-up links */}
           {done.kind === "success" ? (
             <div className="mt-2 flex flex-wrap items-center gap-3">
+              {/* UX-flow audit (FINDING-02/E): one-click path to the audit
+                  detail of the report just posted — previously the operator had
+                  to go to the board and find the card to reach it. */}
+              {done.committed?.submission_id ? (
+                <Link
+                  href={`/stock/production-actual?submission_id=${encodeURIComponent(done.committed.submission_id)}`}
+                  className="btn btn-sm gap-1.5"
+                  data-testid="production-actual-success-view-report"
+                >
+                  View full report →
+                </Link>
+              ) : null}
               {done.committed?.linked_plan_id ? (
                 <Link
                   href="/planning/production-plan"
