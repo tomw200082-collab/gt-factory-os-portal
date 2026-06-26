@@ -504,8 +504,19 @@ function ComponentsPageInner(): JSX.Element {
     },
   });
 
-  const handleSaveSupplier = () => {
+  const handleSaveSupplier = async () => {
     if (!selectedComponent || !pendingSupplier) return;
+    // Replacing the primary supplier rewrites planning-critical data (cost, lead
+    // time, MOQ) — confirm first, matching the component detail page's promote
+    // confirmation for the same action.
+    const ok = await confirm({
+      title: "Replace primary supplier?",
+      description:
+        "The existing primary (if any) will be demoted. This affects planning cost and lead time for this component.",
+      confirmLabel: "Replace primary",
+      tone: "danger",
+    });
+    if (!ok) return;
     supplierAssignMutation.mutate({
       componentId: selectedComponent.component_id,
       newSupplierId: pendingSupplier,

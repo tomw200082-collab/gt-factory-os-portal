@@ -1010,6 +1010,7 @@ export default function AdminComponentDetailPage({
                 if (!ok) return;
                 promotePrimaryMutation.mutate({ supplier_item_id: id, updated_at });
               }}
+              isPromoting={promotePrimaryMutation.isPending}
             />
           )}
         </div>
@@ -1295,12 +1296,14 @@ function SupplierItemsTable({
   supplierNameOf,
   onFieldSave,
   onPromotePrimary,
+  isPromoting,
 }: {
   rows: SupplierItemRow[];
   isAdmin: boolean;
   supplierNameOf: (id: string) => string;
   onFieldSave: (id: string, field: "lead_time_days" | "moq" | "std_cost_per_inv_uom", value: string | number, updated_at: string) => Promise<void>;
   onPromotePrimary: (id: string, updated_at: string) => void;
+  isPromoting: boolean;
 }): JSX.Element {
   return (
     // iter 16: overflow-x-auto for mobile
@@ -1398,8 +1401,9 @@ function SupplierItemsTable({
                       type="button"
                       className="btn btn-ghost btn-sm"
                       onClick={() => onPromotePrimary(r.supplier_item_id, r.updated_at)}
+                      disabled={isPromoting}
                     >
-                      Promote
+                      {isPromoting ? "Promoting…" : "Promote"}
                     </button>
                   ) : (
                     <span className="text-fg-faint">—</span>
