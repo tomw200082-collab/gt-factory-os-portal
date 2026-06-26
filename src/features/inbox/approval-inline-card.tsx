@@ -506,7 +506,21 @@ export function ApprovalInlineCard({
     >
       {/* Facts */}
       {detail == null && !loadError ? (
-        <div className="text-xs text-fg-muted animate-pulse">טוען פרטים…</div>
+        <div
+          className="space-y-2"
+          aria-busy="true"
+          aria-label="טוען פרטים"
+          data-testid="approval-inline-loading"
+        >
+          <div className="grid grid-cols-2 gap-2">
+            <div className="h-4 animate-pulse rounded bg-bg-subtle" />
+            <div className="h-4 animate-pulse rounded bg-bg-subtle" />
+          </div>
+          <div className="grid grid-cols-2 gap-2">
+            <div className="h-4 animate-pulse rounded bg-bg-subtle" />
+            <div className="h-4 w-2/3 animate-pulse rounded bg-bg-subtle" />
+          </div>
+        </div>
       ) : loadError ? (
         <div
           className="rounded-md border border-warning/40 bg-warning-softer/60 p-3 text-sm text-warning-fg"
