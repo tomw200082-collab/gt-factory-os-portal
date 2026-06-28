@@ -2,152 +2,125 @@
   "_notes": [
     "10-category portal readiness scorecard. Machine-readable source.",
     "Scorecard is recomputed by /portal-scorecard. Do not hand-edit unless doing a manual reset.",
-    "2026-04-22 post-Tranche-001..015: +40 delta (44 -> 84). Fifteen tranches landed across two sessions on claude/audit-all-VuctU.",
-    "Tranches 012-015 this run genuinely advance production-control: PO chain unblocked end-to-end, inbox federates exceptions, role-boundary matrix tests land.",
-    "2026-05-30 manual update (post-Tranche 027..036): +2 (86 -> 88). flow_continuity 9 -> 10 (procurement merge epic + focus-mode close loop, e2e-proven). regression_resistance 9 -> 10 (whole unit suite red->green 35->0, vitest + @mocked e2e gated in portal-pr-guard). Hand-updated at session close; a /portal-scorecard recompute can re-derive.",
-    "2026-06-25 truth correction (Tranche A / 092): +3 (88 -> 91). NOT new work — stale ratings corrected against shipped reality. admin_superuser_depth 5 -> 7: the /portal-audit admin-surface auditor proved /admin/users (role mgmt + activate/deactivate via /api/users[/id]), /admin/jobs (60s monitor via /api/admin/jobs), and /admin/integrations (Shopify sync-status + honesty banner) are LIVE real-data surfaces — QuarantinedPage no longer exists anywhere in src/app. 3 of the 5 backend-package deliverables shipped; only audit-log history (#1) + four-eyes master-data approval queue (#2) + the run-now/resync mutation halves remain genuinely backend-blocked. nav_integrity 9 -> 10: Tranche 090 performed the kind=baseline-update ritual (baseline.json re-anchored) and closed the manifest-orphan gap (route-manifest +3 rows) — the sole remaining gap."
+    "2026-04-22 post-Tranche-001..015: +40 delta (44 -> 84).",
+    "2026-05-30 manual update (post-Tranche 027..036): +2 (86 -> 88).",
+    "2026-06-25 truth correction (Tranche A / 092): +3 (88 -> 91). Stale ratings corrected against shipped reality (admin shells live; baseline-update ritual).",
+    "2026-06-26 recompute (post-PR-#124 + main PRs #123..#142): +3 (91 -> 94). EVIDENCE-DRIVEN by merged tranche/PR work, not a fresh full audit. data_truthfulness 8->9 (§1 raw-error-leak removals in tranches 107/108/109 + mixed-UoM KPI honesty in 113 + decision-board real Shopify velocity #135 + economics real-data span #131). planning_surface 9->10 (production-plan corridor hardened end-to-end: PR #124 tranches 107-113 + main #125 variance/impact deepen + #138 disabled-reason/focus/skeleton + #139 week-in-URL/ledger deep-links; the lone remaining item was explicitly OPTIONAL polish). ops_surface 8->9 (idempotency-key lifecycle tranche 094 prevents duplicate ledger events on retry + submitStockEvent §1 deepen 091 + main #137 stock a11y/redirect/zero-count + #133 movement-log dead-filter fix). admin_superuser_depth held at 7 (backend-blocked items unchanged). All 10 categories now >= 7; 9 of 10 are >= 9."
   ],
-  "generated_at": "2026-06-25T21:00:00Z",
-  "source_audit": "docs/portal-os/audit-reports/2026-04-22-all-reaudit.md",
+  "generated_at": "2026-06-26T13:00:00Z",
+  "source_audit": "docs/portal-os/audit-reports/2026-06-19-ux-mobile-audit.md",
   "source_tranches": [
-    "docs/portal-os/tranches/001-bootstrap-truthfulness.md",
-    "docs/portal-os/tranches/002-fake-auth-identifier-rename.md",
-    "docs/portal-os/tranches/003-role-gate-manifest-alignment.md",
-    "docs/portal-os/tranches/004-physical-count-cancel-wire.md",
-    "docs/portal-os/tranches/005-planning-ux-polish.md",
-    "docs/portal-os/tranches/006-ops-banner-deep-links.md",
-    "docs/portal-os/tranches/007-stale-e2e-cleanup.md",
-    "docs/portal-os/tranches/008-mobile-parity.md",
-    "docs/portal-os/tranches/009-error-boundaries.md",
-    "docs/portal-os/tranches/010-dashboard-live-kpis.md",
-    "docs/portal-os/tranches/011-security-hardening.md",
-    "docs/portal-os/tranches/012-po-detail-page.md",
-    "docs/portal-os/tranches/013-receipt-po-linkage.md",
-    "docs/portal-os/tranches/014-inbox-federation.md",
-    "docs/portal-os/tranches/015-role-boundary-e2e.md",
-    "docs/portal-os/tranches/016-middleware-role-gates-and-manifest-completeness.md",
-    "docs/portal-os/tranches/017-deploy-unblock-dashboard-dynamic.md"
+    "docs/portal-os/tranches/092-scorecard-truth-correction.md",
+    "docs/portal-os/tranches/107-production-plan-p0-safety.md",
+    "docs/portal-os/tranches/108-production-plan-copy-vocabulary.md",
+    "docs/portal-os/tranches/109-production-plan-interaction-completeness.md",
+    "docs/portal-os/tranches/110-production-plan-accessibility.md",
+    "docs/portal-os/tranches/111-production-plan-visual-tokens.md",
+    "docs/portal-os/tranches/112-deepen-dialog-a11y-hook.md",
+    "docs/portal-os/tranches/113-kpi-honesty-and-confirm-polish.md"
   ],
   "backend_package_reference": "docs/portal-os/backend-package-admin-superuser-depth.md",
-  "previous_score": 88,
-  "total": 91,
+  "previous_score": 91,
+  "total": 94,
   "categories": {
     "admin_superuser_depth": {
       "score": 7,
       "evidence": [
-        "Re-audit correction: master-data EDIT works end-to-end — InlineEditCell + patchEntity + 6 PATCH proxies live for items/components/suppliers/supplier-items/planning-policy/BOMs",
-        "2026-06-25 admin-surface auditor: /admin/users is LIVE — list via /api/users, role-change + activate/deactivate via PATCH /api/users/[user_id], self-demote guard, confirm dialogs (backend-package deliverable #3 shipped)",
-        "2026-06-25: /admin/jobs is LIVE — 60s-refresh monitor via /api/admin/jobs with honest '(estimated from job name)' staleness; only run-now mutation half missing (deliverable #4 partial)",
-        "2026-06-25: /admin/integrations is LIVE — Shopify card reads /api/shopify/sync-status, other channels derive from /api/exceptions with an explicit 'not sync telemetry' honesty banner; only unified resync missing (deliverable #5 partial). QuarantinedPage no longer exists anywhere in src/app — the prior 'now QuarantinedPage' note was stale",
-        "still genuinely backend-blocked: master-data audit-trail history (need GET /api/audit-log, deliverable #1), four-eyes master-data approval queue (deliverable #2)"
+        "/admin/users LIVE — list via /api/users, role-change + activate/deactivate via PATCH /api/users/[user_id], self-demote guard, confirm dialogs",
+        "/admin/jobs LIVE — 60s-refresh monitor via /api/admin/jobs (run-now mutation half still missing)",
+        "/admin/integrations LIVE — Shopify card reads /api/shopify/sync-status with explicit honesty banner (unified resync still missing)",
+        "master-data EDIT works end-to-end — InlineEditCell + patchEntity + 6 PATCH proxies for items/components/suppliers/supplier-items/planning-policy/BOMs"
       ],
       "gap": "Backend-blocked: audit-trail GET (#1), four-eyes master-data approval queue (#2), and the run-now (#4) / resync (#5) mutation halves. The three admin shells themselves are live."
     },
     "nav_integrity": {
       "score": 10,
       "evidence": [
-        "Tranche 001: manifest paths match code; SideNav clean of quarantined surfaces",
-        "Tranche 003: manifest roles pinned to layouts",
-        "Tranche 008: SideNav→drawer on mobile",
-        "Tranche 012: /purchase-orders/[po_id] manifest row added; PO list rows click-through",
-        "Tranche 014: /inbox is no longer a one-link stub — federated triage queue",
-        "Tranche 016: 11 detail sub-page rows added to manifest (forecast/new, forecast/[version_id], runs/[run_id], items/[item_id], products/new, components/[component_id], suppliers/[supplier_id], boms/[head_id], boms/[head_id]/versions/[version_id], inbox/approvals/waste/[submission_id], inbox/approvals/physical-count/[submission_id])",
-        "Tranche 090: route-manifest +3 orphan rows (/admin/decision-board, /credit-tracking, /inbox/approvals/inventory-movement/[submission_id]) so every page has a row; baseline.json re-anchored via the kind=baseline-update ritual; regression-sentinel re-run = 0 drift"
+        "Tranche 090: route-manifest +3 orphan rows so every src/app/**/page.tsx has a row; baseline.json re-anchored via the kind=baseline-update ritual; regression-sentinel re-run = 0 drift",
+        "Tranche 016: 11 detail sub-page rows added to manifest",
+        "SideNav clean of quarantined surfaces; manifest roles pinned to layouts (Tranche 003)"
       ],
-      "gap": "Maintained at 10. baseline-update ritual performed (Tranche 090); manifest covers every src/app/**/page.tsx."
+      "gap": "Maintained at 10. Follow-up: a fresh /portal-audit route pass should confirm main PR #142's new sidebar + Cmd-K search surfaces are manifest-covered."
     },
     "flow_continuity": {
       "score": 10,
       "evidence": [
-        "Tranche 004: Physical Count Cancel POSTs to existing proxy",
-        "Tranche 005: exception row entity linkified to approval detail",
-        "Tranche 006: waste + physical-count pending banners deep-link to approvals",
-        "Tranche 012: PO detail page exists (closes break #1 of the PO chain); convert-to-PO toast no longer 404s",
-        "Tranche 013: Receipt form wires po_id + per-line po_line_id (closes break #2); upstream can advance PO line OPEN→PARTIAL→CLOSED",
-        "Tranche 014: Inbox federates /api/exceptions — planner triage queue is real",
-        "Tranche 003: /inbox/approvals child layout tightened so viewers get 'not for your role' not click-then-403",
-        "Tranches 027-033: the scattered Sunday procurement close (session + calendar + recommendations + manual PO) merged into ONE /planning/procurement page — action list grouped by decision (must-today/can-wait/handled) + a full-screen focus mode that walks approve→place→auto-advance and creates the real PO via the existing place endpoint; ad-hoc add-line inside the session; calendar folded in as a secondary view",
-        "Tranche 036: the focus close loop is proven end-to-end by a route-mocked Playwright e2e (approve→order document→place→PO created→completion), gated in CI"
+        "Tranches 027-033: scattered Sunday procurement close merged into ONE /planning/procurement page (action list + full-screen focus mode that walks approve->place->auto-advance and creates the real PO)",
+        "Tranche 036: focus close loop proven end-to-end by a route-mocked Playwright e2e gated in CI",
+        "main #139: production-plan week-in-URL makes the planner journey shareable + back-button-correct; ledger deep-links close the report->ledger trace",
+        "PR #124 tranche 107 (FLOW-007): a completed plan never loses its 'View report' audit link even when variance can't be computed"
       ],
-      "gap": "Live production-backend smoke of the focus loop still belongs to a real environment (the @mocked e2e is the deterministic CI-runnable proof). Recent-submissions surface + master-data approval queue remain backend-blocked."
+      "gap": "Live production-backend smoke of the focus loop still belongs to a real environment (the @mocked e2e is the deterministic CI proof). Recent-submissions surface remains backend-blocked."
     },
     "role_gate_correctness": {
       "score": 10,
       "evidence": [
-        "Tranche 003: manifest roles pinned to layouts; (inbox)/inbox/approvals subtree tightened",
-        "Tranche 015: 12-test E2E matrix — 6 UI-gate tests + 6 API-gate tests covering viewer/operator boundaries across planning/execute, items PATCH, waste approval. Defense-in-depth claim now test-backed.",
-        "Tranche 016: middleware path-specific role-gate scaffold (prefix → allow-list). No-op today (backend doesn't project app_users.role into Supabase JWT app_metadata yet), but immediately active as defense-in-depth layer 3 once backend adds the projection."
+        "Tranche 015: 12-test E2E matrix — 6 UI-gate + 6 API-gate tests covering viewer/operator boundaries",
+        "Tranche 016: middleware path-specific role-gate scaffold (active as layer-3 defense once backend projects role into JWT app_metadata)",
+        "Tranche 003: manifest roles pinned to layouts; (inbox)/inbox/approvals subtree tightened"
       ],
-      "gap": "Activating middleware gate requires backend to populate user.app_metadata.role (one-line SQL trigger or user-create hook) — listed in backend-package-admin-superuser-depth.md as a note."
+      "gap": "Activating the middleware gate requires backend to populate user.app_metadata.role (one-line trigger) — tracked in backend-package."
     },
     "data_truthfulness": {
-      "score": 8,
-      "evidence": [
-        "Tranche 001: INTEGRATIONS fabrication removed; FAKE SESSION pill gated behind dev-shim env flag",
-        "Tranche 010: dashboard KPI tiles are live counts with honest '—' degradation on error",
-        "Tranche 012: PO detail page defensively tolerates header-only upstream responses; lines table renders honest EmptyState when upstream omits lines[]",
-        "every wired mutation gates setBanner on res.ok"
-      ],
-      "gap": "Real /admin/integrations health (backend-blocked); aggregate dashboard KPIs (backend-blocked)."
-    },
-    "planning_surface": {
       "score": 9,
       "evidence": [
-        "Tranche 005: forecast/new invalidation + convert-to-PO link + exception-row linkification",
-        "Tranche 012: convert-to-PO deep link now resolves to a real page",
-        "forecast/runs/exceptions loop walkable; cache invalidation correct"
+        "PR #124 tranche 107: usePlans no longer appends raw 422 `detail` (Zod paths/enums) to operator toasts — §1 leak closed; structured validation_errors still field-mapped",
+        "PR #124 tranche 108: VARIANCE_TOOLTIP de-jargoned ('production reporting v1 model' internals removed); EditModal §1 item_id leak -> 'Unnamed item' (tranche 109)",
+        "PR #124 tranche 113 (FLOW-014/015): the 'N units total' KPI was summing incommensurable units (L + bottles + kg) into one fake number — now shows the honest run count when the week mixes units",
+        "main #135: decision-board velocity sourced from real Shopify 90d sell-through (was placeholder); #131 economics annualises on the real data span; #140 excludes non-sellables (base liquids + placeholders)",
+        "Tranche 010: dashboard KPI tiles are live counts with honest '—' degradation on error; every wired mutation gates its banner on res.ok"
       ],
-      "gap": "Planning-exceptions dashboard (counts + filters at top) — optional polish."
+      "gap": "Real /admin/integrations health telemetry + aggregate dashboard KPIs remain backend-blocked."
+    },
+    "planning_surface": {
+      "score": 10,
+      "evidence": [
+        "PR #124 tranches 107-113: production-plan corridor hardened end-to-end — P0 data-loss prevention (RecipeOverridePanel discard-confirm + focus-trap/Escape), §1 copy, interaction completeness (bom-impact/inbox cache invalidation, EditModal qty validation), full a11y pass, useDialogA11y deepen, mixed-UoM KPI honesty",
+        "main #125: production-plan deepen — describeVariance model + extracted InventoryImpactPanel; #138 disabled-reason/focus/skeleton; #139 week-in-URL (shareable/back-button) + ledger deep-links",
+        "Tranche 005/012: forecast->runs->exceptions loop walkable; convert-to-PO deep link resolves; cache invalidation correct"
+      ],
+      "gap": "Maintained at 10 — the planner loop forecast->runs->review->approve->PO is walkable and now hardened. The only remaining named item (a planning-exceptions counts/filters dashboard) was explicitly optional polish."
     },
     "ops_surface": {
-      "score": 8,
+      "score": 9,
       "evidence": [
-        "Tranche 004: Physical Count Cancel wired",
-        "Tranche 006: waste + physical-count banner deep-links",
-        "Tranche 008: four operator forms mobile-first (viewport, drawer, ≥36px targets, inputMode, datetime-local)",
-        "Tranche 013: Goods Receipt can reference PO + per-line po_line_id; upstream can finally advance PO line state from operator receipts",
-        "STALE_BOM_VERSION 409 recovery in production-actual is exemplary"
+        "Tranche 094 (PR #124): the 3 operator stock forms hold the submit idempotency_key in a useRef reused across retries (cleared only on success) — a retry after a lost response can no longer post a duplicate ledger event; §V guard test pins it",
+        "Tranche 091: submitStockEvent deep module hides POST + JSON-safe parse + posted|pending|rejected|network discrimination + §1 'never leak raw JSON to operator'",
+        "main #137: operator stock UX-flow — accessible combobox, redirect context, zero-count tone; #133 movement-log chips send business_kind (fixes dead Shipments/Production filters)",
+        "STALE_BOM_VERSION 409 recovery in production-actual is exemplary; four operator forms mobile-first (Tranche 008)"
       ],
-      "gap": "Recent-submissions surface (backend-blocked); receipts + production-actual auto-post banners still lack deep-link target (depends on /stock/submissions)."
+      "gap": "Recent-submissions surface + receipts/production-actual auto-post deep-link target remain backend-blocked (depend on /stock/submissions)."
     },
     "dashboard_truth": {
       "score": 9,
       "evidence": [
-        "Tranche 001: /admin/integrations fabrication replaced",
-        "Tranche 008: dashboard mobile-first",
-        "Tranche 010: three live KPI tiles using existing GET proxies; honest '—' degradation"
+        "main #123/#128/#129: Economics Profitability v2 — margin + inventory-gold reframe, Opportunities engine, margin treemap on real data; #135 decision-board real delivered velocity",
+        "Tranche 010: three live KPI tiles using existing GET proxies; honest '—' degradation",
+        "Tranche 001: /admin/integrations fabrication replaced with real reads"
       ],
-      "gap": "Aggregate KPIs (runs-today-vs-yesterday, stock-ledger last-movement) need backend aggregation endpoints."
+      "gap": "Aggregate KPIs (runs-today-vs-yesterday, stock-ledger last-movement) still need backend aggregation endpoints."
     },
     "technical_substrate": {
       "score": 10,
       "evidence": [
-        "Tranches 001-002: forbidden-string literals removed from src/",
-        "Tranche 008: mobile-first shell + viewport metadata + responsive drawer",
-        "Tranche 009: error boundaries (segment + global + not-found) + reportError/reportWarning observability surface",
-        "Tranche 011: security headers (HSTS, X-Frame, nosniff, Referrer, Permissions-Policy, CSP-Report-Only); requireEnv/assertServerBootEnv helpers",
-        "Tranche 012: defensive upstream-shape tolerance pattern demonstrated on PO detail page",
-        "TanStack cache keys prefix-compatible; shadcn primitives consistent"
+        "PR #124 tranche 112: useDialogA11y deep hook consolidates the 7 production-plan modals' duplicated focus contract (page.tsx 2535->2399); §V guard test",
+        "main #126: deepen — extracted useFlowItems (one derivation for InventoryFlow + SupplyFlow); #125 describeVariance; PR #124 §1 submitStockEvent/fetchJson deepens",
+        "Merged tree green: tsc 0, eslint 0 errors, vitest 809/809 (107 files)",
+        "TanStack cache keys prefix-compatible (predicate-scoped bom-impact invalidation); shadcn primitives consistent; security headers + error boundaries in place"
       ],
-      "gap": "Maintained at 10. Follow-up: migrate all process.env callsites to requireEnv; graduate CSP from report-only; install @sentry/nextjs."
+      "gap": "Maintained at 10. Follow-up: migrate process.env callsites to requireEnv; graduate CSP from report-only; install @sentry/nextjs; add an eslint config so lint can gate CI."
     },
     "regression_resistance": {
       "score": 10,
       "evidence": [
-        "Tranche 001: route-manifest truthful against code",
-        "Tranche 002: last src/ forbidden-string identifier eliminated",
-        "Tranche 007: stale e2e spec deleted",
-        "Tranche 009: error boundaries + reportError catch render-time regressions",
-        "Tranche 011: env-missing errors fail-fast at boot",
-        "Tranche 015: 12-test role-boundary E2E matrix covers UI gates + direct API mutation attempts for viewer/operator/planner boundaries",
-        "OS hooks + workflows wired",
-        "Tranches 031-033: procurement epic shipped with 47 dedicated unit tests (decision engine, focus queue, FocusCard/FocusMode controllers, AddLineForm, calendar grid, PoLineEditor)",
-        "Tranches 034-035: the WHOLE unit suite driven red→green (35 failing → 0; 30 genuine stale-assertion fixes diagnosed one-by-one, components unchanged) and 'npx vitest run' wired into portal-pr-guard — closing the root cause (CI never ran vitest, so 35 assertions had silently rotted)",
-        "Tranche 036: items-bom doctrine re-anchored to the current products architecture (0 skips); @mocked Playwright e2e gated in CI (chromium + dev-shim, no backend). Full suite now 371 passed / 0 skipped across 52 files"
+        "Tranches 034-035: whole unit suite driven red->green and 'npx vitest run' wired into portal-pr-guard",
+        "PR #124: every one of tranches 107-113 individually verified (tsc/eslint/vitest) and the cross-branch reconcile with main re-verified green (809/809) before merge",
+        "§V guard tests pin deep modules (useDialogA11y, submitStockEvent, idempotency-key lifecycle) so a future change can't silently re-shallow them",
+        "Tranche 090: baseline.json re-anchored via kind=baseline-update ritual; OS hooks + workflows wired; quarantine.json forbidden_strings enforced"
       ],
-      "gap": "ESLint not yet in CI (no eslint config exists; separate tranche). Baseline freeze + quarantine seed rituals still pending. Backend-dependent *-real e2e not CI-gated (need Supabase)."
+      "gap": "ESLint not yet gating CI (no eslint config). Backend-dependent *-real e2e not CI-gated (need Supabase)."
     }
   },
   "delta": 3,
-  "delta_notes": "Tranche A/092 (2026-06-25): +3 truth-correction (88 → 91), not new feature work — two stale ratings corrected against shipped reality. admin_superuser_depth 5→7 (the three admin shells /admin/users + /admin/jobs + /admin/integrations are live real-data surfaces, not QuarantinedPage which no longer exists in src/app; 3 of 5 backend-package deliverables shipped). nav_integrity 9→10 (Tranche 090 baseline-update ritual + manifest-orphan closure). ALL 10 categories are now ≥ 7 and 9 of 10 are ≥ 8 (admin_superuser_depth at 7 is the lone sub-8). Remaining true gaps are backend-lane: audit-log history + four-eyes approval queue + run-now/resync mutation halves."
+  "delta_notes": "2026-06-26 recompute (91 -> 94), evidence-driven by PR #124 (production-plan tranches 107-113) + merged main PRs #123-#142. data_truthfulness 8->9 (§1 raw-error-leak removals + mixed-UoM KPI honesty + decision-board/economics real-data). planning_surface 9->10 (production-plan corridor hardened end-to-end; remaining item was optional). ops_surface 8->9 (idempotency-key lifecycle prevents duplicate ledger events + stock UX-flow + movement-log dead-filter fix). admin_superuser_depth held at 7 — its true gaps stay backend-lane (audit-log history, four-eyes queue, run-now/resync mutation halves)."
 }
