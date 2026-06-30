@@ -11,7 +11,7 @@
 //   GET  /api/inventory-movements/:submission_id
 //   POST /api/inventory-movements/:submission_id/{approve,reject}
 
-import { useState } from "react";
+import { useState, useEffect, useRef } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
 import { AlertTriangle, ArrowLeft, Info, Plus, Trash2 } from "lucide-react";
@@ -151,6 +151,7 @@ export default function InventoryMovementReviewPage() {
   const submissionId = params.submission_id;
 
   const [lines, setLines] = useState<LineDraft[]>([emptyLine()]);
+  const prefilled = useRef(false);
   const [approvalNotes, setApprovalNotes] = useState("");
   const [rejectionReason, setRejectionReason] = useState("");
   const [outcome, setOutcome] = useState<Outcome | null>(null);
@@ -174,6 +175,26 @@ export default function InventoryMovementReviewPage() {
   });
 
   const d = detailQuery.data;
+
+  // Pre-populate form lines from the proposal's pre-filed inventory_movement_lines.
+  // FG-OUT and RM-GR proposals file structured lines at proposal time so the
+  // approver only needs to review + confirm, not re-enter from scratch.
+  // We seed once on first successful load; manual edits after that are preserved.
+  useEffect(() => {
+    if (prefilled.current) return;
+    if (!d || !d.lines || d.lines.length === 0) return;
+    prefilled.current = true;
+    setLines(
+      d.lines.map((l) => ({
+        direction: l.direction as LineDraft["direction"],
+        item_type: l.item_type as LineDraft["item_type"],
+        item_id: l.item_id,
+        quantity: l.quantity,
+        unit: l.unit,
+        reason_code: l.reason_code || (l.direction === "out" ? "goods_out" : "goods_pickup"),
+      })),
+    );
+  }, [d]);
 
   const invalidateInboxSources = () => {
     void queryClient.invalidateQueries({
@@ -517,7 +538,7 @@ export default function InventoryMovementReviewPage() {
       <SectionCard
         eyebrow="Approve"
         title="Confirm the stock move"
-        description="Enter the item(s), quantity, and direction that actually moved. Approving posts one stock-ledger row per line. Use two lines (out + in) for an exchange."
+        description="Review the pre-filled lines and adjust if needed, or add lines manually. Approving posts one stock-ledger row per line. Use two lines (out + in) for an exchange."
       >
         <div className="space-y-3">
           {lines.map((l, i) => (
