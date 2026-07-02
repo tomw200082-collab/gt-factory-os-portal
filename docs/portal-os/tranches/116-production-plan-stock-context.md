@@ -84,7 +84,7 @@ revive: []
 Revert the PR — two edited files regain their prior state, three files are new and deleted by the revert; no data-layer or shared-hook changes, so revert is clean.
 
 ## Operator approval
-- [ ] Tom approves this plan (comment `@claude /portal-tranche-fix 116` on the PR)
+- [x] Tom approves this plan (approved in session chat, 2026-07-02: "מאושר, תבצע" — proceeding via `/portal-tranche-fix 116` rather than a PR comment)
 
 ## Actual evidence (filled in by /portal-tranche-fix run)
 <pasted after execution>
