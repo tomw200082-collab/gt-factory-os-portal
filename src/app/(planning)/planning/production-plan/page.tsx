@@ -302,21 +302,21 @@ function ManualAddModal({
       onKeyDown={onDialogKeyDown}
       tabIndex={-1}
     >
-      <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-pop">
+      <div className="flex max-h-[min(90vh,620px)] w-full max-w-lg flex-col rounded-t-lg border border-border bg-bg-raised p-5 shadow-pop sm:rounded-lg">
         <h2
           id="manual-add-modal-title"
           ref={titleRef}
           tabIndex={-1}
-          className="text-base font-semibold text-fg-strong outline-none"
+          className="shrink-0 text-base font-semibold text-fg-strong outline-none"
         >
           Add production manually
         </h2>
-        <p className="mt-1 text-3xs text-fg-muted">
+        <p className="mt-1 shrink-0 text-3xs text-fg-muted">
           Planned only — inventory will not change until actual production is reported.
         </p>
 
         <form
-          className="mt-4 space-y-3"
+          className="mt-4 flex min-h-0 flex-1 flex-col"
           onSubmit={(e) => {
             e.preventDefault();
             // Tranche 052 — Enter / the primary button reviews the recipe
@@ -324,6 +324,12 @@ function ManualAddModal({
             doSubmit(canReviewRecipe);
           }}
         >
+          {/* Tranche 116 (FLOW-116-02) — the stock-context strip pushed this
+              modal's content past comfortable viewport height on short
+              screens; the field stack now scrolls internally while the
+              submit row stays pinned (same pattern as
+              AddFromRecommendationsModal below). */}
+          <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
           <label className="block">
             <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
               Production day *
@@ -500,8 +506,9 @@ function ManualAddModal({
               ))}
             </div>
           ) : null}
+          </div>
 
-          <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2 pt-2">
             <button type="button" className="btn btn-sm" onClick={onClose} disabled={isSubmitting}>
               Cancel
             </button>
