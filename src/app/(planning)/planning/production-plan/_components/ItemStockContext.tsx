@@ -100,7 +100,7 @@ export function ItemStockContext({
             <>
               <div className="flex items-center justify-between text-xs">
                 <span className="text-fg-muted">On hand now</span>
-                <span className="font-semibold tabular-nums text-fg-strong">
+                <span className="font-mono font-semibold tabular-nums text-fg-strong">
                   {fmtNumber(ctx.onHandNow)}
                 </span>
               </div>
@@ -108,7 +108,7 @@ export function ItemStockContext({
               <div className="flex items-start justify-between gap-2 text-xs">
                 <span className="text-fg-muted shrink-0">Runs out</span>
                 {ctx.hasStockoutInHorizon ? (
-                  <span className="text-right font-semibold tabular-nums text-warning-fg">
+                  <span className="font-mono text-right font-semibold tabular-nums text-warning-fg">
                     {fmtDate(ctx.stockoutDate)}
                     {ctx.produceBy && (
                       <span className="block font-normal text-3xs text-fg-muted">
@@ -123,7 +123,7 @@ export function ItemStockContext({
 
               <div className="flex items-center justify-between text-xs">
                 <span className="text-fg-muted">Daily demand</span>
-                <span className="tabular-nums text-fg">{fmtNumber(ctx.dailyRate)} / day</span>
+                <span className="font-mono tabular-nums text-fg">{fmtNumber(ctx.dailyRate)} / day</span>
               </div>
 
               <div className="flex items-start justify-between gap-2 text-xs">
@@ -135,11 +135,11 @@ export function ItemStockContext({
                     No demand in the next 14 days — this stock may sit unused
                   </span>
                 ) : (
-                  <span className="text-right font-semibold tabular-nums text-fg-strong">
+                  <span className="font-mono text-right font-semibold tabular-nums text-fg-strong">
                     {coverFmt.value}
                     {coverFmt.sub && <span className="ml-0.5 font-normal text-fg-muted">{coverFmt.sub}</span>}
                     {showBaselineHint && (
-                      <span className="block font-normal text-3xs text-fg-muted">
+                      <span className="block font-sans font-normal text-3xs text-fg-muted">
                         today&apos;s cover · no quantity entered yet
                       </span>
                     )}
