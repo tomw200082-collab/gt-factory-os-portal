@@ -71,4 +71,29 @@ Revert the PR — six edited files regain their prior state; no data-layer, hook
 - [x] Tom approves this plan (confirmed in session chat, 2026-07-02: "זה הכיוון שרציתי", after reviewing the grounded critique + proposed direction)
 
 ## Actual evidence (filled in by /portal-tranche-fix run)
-<pasted after execution>
+
+- Files touched (exactly the manifest, no scope creep): `page.tsx`, `WeekTimelineRail.tsx` (full rewrite), `ProductionDayLane.tsx`, `ProductionJobCard.tsx`, `ItemStockContext.tsx`, `InventoryImpactPanel.tsx`.
+- `npx tsc --noEmit`: 0 errors.
+- `npx eslint`: 0 errors, 1 pre-existing unrelated warning (page.tsx:246, predates this tranche).
+- `npx vitest run`: **849/849** passed — unchanged count, confirming this is genuinely presentation-only (no new test cases needed, matches tranche 111 precedent).
+- Real render (dev-shim + `/opt/pw-browsers/chromium`, populated-week fixture with mixed plan states): confirmed the chrome compression, the WeekTimelineRail today-anchor band, and font-mono numeric language all render as designed on desktop (1440×900) and mobile (390×844).
+
+### /ux-release-gate sweep (5 parallel audits, scoped to this tranche's 6 files) — zero P0s
+
+**Fixed (this tranche, before merge):**
+- **COPY-001 (P1)** — the compressed banner sentence had drifted from `portal_ux_standard.md` §5's canonical wording ("only" dropped, "actuals" not in the approved lexicon). Restored: "Inventory updates only after actual production is reported."
+- **A11Y-001 (P1) / INTER-117-01 (P1) / VISUAL-003 (P2)** — three audits converged on the same nav-links element from different angles: `text-fg-faint` measured ~2.10:1 contrast (WCAG 1.4.3 fail), no vertical padding gave sub-32px touch targets, and `ml-auto` collapsed to left-aligned when the div wrapped to its own row on mobile. One fix resolved all three: `text-fg-muted` (passes at ~5.75:1), `py-2` per link, and `w-full sm:w-auto justify-end sm:justify-start` on the container. Verified the computed `justify-content: flex-end` actually applies via a direct DOM inspection (not just visual read — at 390px the three links nearly fill the row width, so the alignment shift is real but visually subtle).
+- **FLOW-117-01 (P2)** — the three nav links used to live inside the `plansQuery.isLoading` ternary and were unreachable from the status bar for the ~1-2s initial load. Restructured so they're a permanent sibling, always rendered.
+- **COPY-003 (P2)** — "25% done" → "25% complete", matching the "Completed" status term used on individual plan chips elsewhere on this page.
+- **VISUAL-001 (P2)** — WeekTimelineRail baseline track `bg-border/25` measured ~4% contrast against the page background (functionally invisible at normal brightness) → `bg-border/40`.
+- **VISUAL-002 (P2)** — the overdue-day underline used `bg-danger/60` while the same state's dot and day-name use the warning-amber family; two color semantics on one state. → `bg-warning/60`.
+- **A11Y-002 (P2)** — WeekTimelineRail's non-today date labels at `text-fg-faint text-[10px]` measured ~2.10:1 (WCAG fail) → `text-fg-muted` (today's date label was already `text-fg-strong` and unaffected).
+- **A11Y-003 (P2)** — the status bar carries dynamic KPI counts that change on every week navigation with no live-region announcement → added `role="status"` (implicit `aria-live="polite"`).
+- **INTER-117-02 (P2)** — the vertical divider between the caveat and KPI stats was `hidden` below the `sm` breakpoint, leaving a ~490-639px band where the caveat sentence and first stat could visually run together → replaced with an always-visible `·` separator matching the idiom used between the stats themselves.
+- **INTER-117-03 (P2)** — the UOM label next to each card's hero quantity inherited `font-mono` from its parent (unintentional — the tranche's stated intent was numbers only, not labels), adding unnecessary width for longer UOMs on narrow lanes → added `font-sans` override.
+
+**Deliberately not implemented (documented, not silently dropped):** **VISUAL-004** — the visual audit flagged that "Planned only." reads with less visual weight than its old dedicated-banner treatment, and itself offered "or explicitly accept the de-emphasis as intentional" as a valid resolution. Restoring "only" via COPY-001 already strengthens the sentence's own force; adding a colored chip/dot prefix on top would partly undo the chrome-compression this tranche exists to deliver, and is a design-register decision better made explicitly by Tom in a follow-up than unilaterally added here.
+
+**Re-verified after fixes:** `tsc` 0 errors, `eslint` 0 errors (same 1 pre-existing warning), `vitest` 849/849. Re-rendered both viewports to confirm every fix visually as intended, including a direct computed-style DOM check (not just a screenshot read) for the nav-links alignment fix.
+
+**Verdict: SHIP.** Zero P0s before or after fixes; all four P1s resolved; all P2s fixed except one explicitly-reasoned deferral.

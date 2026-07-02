@@ -107,7 +107,7 @@ export function WeekTimelineRail({
               {/* Bar over its own baseline track — a zero-load day still
                   shows the track, so the row reads as one chart. */}
               <div
-                className="w-4/5 flex items-end rounded-t-sm bg-border/25"
+                className="w-4/5 flex items-end rounded-t-sm bg-border/40"
                 style={{ height: BAR_HEIGHT }}
                 aria-hidden
               >
@@ -135,14 +135,14 @@ export function WeekTimelineRail({
               <span
                 className={cn(
                   "font-mono text-[10px] tabular-nums leading-none",
-                  day.isToday ? "text-fg-strong font-semibold" : "text-fg-faint font-medium",
+                  day.isToday ? "text-fg-strong font-semibold" : "text-fg-muted font-medium",
                 )}
               >
                 {day.dateLabel}
               </span>
 
               {day.isOverdue && (
-                <div className="w-3/5 h-[2px] rounded-full bg-danger/60" aria-hidden />
+                <div className="w-3/5 h-[2px] rounded-full bg-warning/60" aria-hidden />
               )}
             </div>
           );

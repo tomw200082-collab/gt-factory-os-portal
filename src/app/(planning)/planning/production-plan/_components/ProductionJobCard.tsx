@@ -171,7 +171,7 @@ export function ProductionJobCard({
             {heroQtyStr}
             <span
               className={cn(
-                "ml-1.5 text-sm font-semibold align-baseline",
+                "ml-1.5 font-sans text-sm font-semibold align-baseline",
                 isLive && !isDraft && "text-warning-fg/80",
                 isDraft && !isDone && !isCancelled && "text-fg-muted",
                 isDone && "text-success-fg/80",

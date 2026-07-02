@@ -1917,64 +1917,68 @@ export default function ProductionPlanPage() {
           board below the fold. One dense status bar now carries all of it,
           in the same inline "N label · N label" idiom the week-summary
           footer already uses lower on this page — reused, not invented. */}
-      {plansQuery.isLoading ? (
-        <div className="mb-4 flex items-center gap-2 rounded-md border border-border/50 bg-bg-raised px-3 py-2" aria-hidden="true">
-          <span className="h-4 w-40 animate-pulse rounded bg-bg-subtle" />
-          <span className="ml-auto h-4 w-56 animate-pulse rounded bg-bg-subtle" />
+      <div
+        className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md border border-border/50 bg-bg-raised px-3 py-2 text-xs"
+        data-testid="planned-only-banner"
+        role="status"
+      >
+        {/* /ux-release-gate fix (2026-07-02): the nav links used to live
+            inside this loading/loaded ternary and vanished for ~1-2s on
+            every page load (FLOW-117-01) — they're now a permanent sibling
+            so they're reachable immediately. */}
+        {plansQuery.isLoading ? (
+          <span className="h-4 w-64 animate-pulse rounded bg-bg-subtle" aria-hidden="true" />
+        ) : (
+          <>
+            <span className="text-fg-muted">
+              <span className="font-medium text-fg-strong">Planned only.</span>{" "}
+              Inventory updates only after actual production is reported.
+            </span>
+            {hasData && (
+              <>
+                <span className="text-fg-faint" aria-hidden>·</span>
+                <span className="font-mono font-semibold tabular-nums text-fg-strong">{plannedCount}</span>
+                <span className="text-fg-muted">planned</span>
+                <span className="text-fg-faint" aria-hidden>·</span>
+                <span className="font-mono font-semibold tabular-nums text-success-fg">{doneCount}</span>
+                <span className="text-fg-muted">completed</span>
+                <span className="text-fg-faint" aria-hidden>·</span>
+                <span className="font-mono font-semibold tabular-nums text-fg-strong">
+                  {uniformUom
+                    ? totalQty % 1 === 0
+                      ? totalQty.toFixed(0)
+                      : totalQty.toFixed(1)
+                    : activePlanCount}
+                </span>
+                <span className="text-fg-muted">
+                  {uniformUom
+                    ? `${uniformUom} total`
+                    : activePlanCount === 1
+                      ? "planned run"
+                      : "planned runs"}
+                </span>
+                <span className="text-fg-faint" aria-hidden>·</span>
+                <span className="font-mono font-semibold tabular-nums text-fg-strong">{completionPct}%</span>
+                <span className="text-fg-muted">complete</span>
+              </>
+            )}
+          </>
+        )}
+        <div className="ml-auto flex w-full flex-wrap items-center justify-end gap-3 text-fg-muted sm:w-auto sm:justify-start">
+          <Link href="/planning/runs" className="flex items-center gap-1 py-2 hover:text-fg transition-colors">
+            <PlayCircle className="h-3 w-3" strokeWidth={2} />
+            Planning runs
+          </Link>
+          <Link href="/planning/inventory-flow" className="flex items-center gap-1 py-2 hover:text-fg transition-colors">
+            <Boxes className="h-3 w-3" strokeWidth={2} />
+            Inventory flow
+          </Link>
+          <Link href="/stock/production-actual" className="flex items-center gap-1 py-2 hover:text-fg transition-colors">
+            <Factory className="h-3 w-3" strokeWidth={2} />
+            Report production
+          </Link>
         </div>
-      ) : (
-        <div
-          className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md border border-border/50 bg-bg-raised px-3 py-2 text-xs"
-          data-testid="planned-only-banner"
-        >
-          <span className="text-fg-muted">
-            <span className="font-medium text-fg-strong">Planned only.</span>{" "}
-            Inventory updates after actuals are reported.
-          </span>
-          {hasData && (
-            <>
-              <span className="hidden h-4 w-px bg-border/60 sm:block" aria-hidden />
-              <span className="font-mono font-semibold tabular-nums text-fg-strong">{plannedCount}</span>
-              <span className="text-fg-muted">planned</span>
-              <span className="text-fg-faint" aria-hidden>·</span>
-              <span className="font-mono font-semibold tabular-nums text-success-fg">{doneCount}</span>
-              <span className="text-fg-muted">completed</span>
-              <span className="text-fg-faint" aria-hidden>·</span>
-              <span className="font-mono font-semibold tabular-nums text-fg-strong">
-                {uniformUom
-                  ? totalQty % 1 === 0
-                    ? totalQty.toFixed(0)
-                    : totalQty.toFixed(1)
-                  : activePlanCount}
-              </span>
-              <span className="text-fg-muted">
-                {uniformUom
-                  ? `${uniformUom} total`
-                  : activePlanCount === 1
-                    ? "planned run"
-                    : "planned runs"}
-              </span>
-              <span className="text-fg-faint" aria-hidden>·</span>
-              <span className="font-mono font-semibold tabular-nums text-fg-strong">{completionPct}%</span>
-              <span className="text-fg-muted">done</span>
-            </>
-          )}
-          <div className="ml-auto flex flex-wrap items-center gap-3 text-fg-faint">
-            <Link href="/planning/runs" className="flex items-center gap-1 hover:text-fg-muted transition-colors">
-              <PlayCircle className="h-3 w-3" strokeWidth={2} />
-              Planning runs
-            </Link>
-            <Link href="/planning/inventory-flow" className="flex items-center gap-1 hover:text-fg-muted transition-colors">
-              <Boxes className="h-3 w-3" strokeWidth={2} />
-              Inventory flow
-            </Link>
-            <Link href="/stock/production-actual" className="flex items-center gap-1 hover:text-fg-muted transition-colors">
-              <Factory className="h-3 w-3" strokeWidth={2} />
-              Report production
-            </Link>
-          </div>
-        </div>
-      )}
+      </div>
 
       {/* Week navigation — FLOW-006 (Tranche 054): below md the week-range
           label gets its own line above, Previous/Next/Refresh collapse to
