@@ -33,6 +33,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
+import { FgOutPauseControl } from "@/components/stock/FgOutPauseControl";
 import { useSession } from "@/lib/auth/session-provider";
 import { friendlyReverseError } from "@/lib/copy/physical-count-errors";
 import { cn } from "@/lib/cn";
@@ -1222,6 +1223,10 @@ export default function MovementLogPage() {
       >
         <TrustStrip totalRows={total} />
       </WorkflowHeader>
+
+      {/* Count-window pause: freeze delivery-driven FG stock changes during a
+          physical count (admin/planner toggle; paused banner for all roles). */}
+      <FgOutPauseControl />
 
       {urlPoId ? (
         <div
