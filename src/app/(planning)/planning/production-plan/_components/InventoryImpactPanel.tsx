@@ -113,7 +113,7 @@ export function InventoryImpactPanel({
       <div className="flex items-center gap-2 rounded border border-success/30 bg-success-softer/50 px-2 py-1.5">
         <Package className="h-3 w-3 text-success shrink-0" strokeWidth={2} />
         <span className="text-xs text-success-fg">
-          <span className="font-semibold tabular-nums">
+          <span className="font-mono font-semibold tabular-nums">
             +{fmtQty(heroQtyStr, heroUom ?? "")}
           </span>
           {" of "}
@@ -157,7 +157,7 @@ export function InventoryImpactPanel({
               {rmLines.map((line, idx) => (
                 <tr key={idx}>
                   <td className="text-xs text-fg py-1 pr-2">{line.name}</td>
-                  <td className="text-right text-xs tabular-nums text-fg-muted py-1">
+                  <td className="text-right font-mono text-xs tabular-nums text-fg-muted py-1">
                     {line.required % 1 === 0
                       ? line.required.toFixed(0)
                       : line.required.toFixed(2).replace(/\.?0+$/, "")}

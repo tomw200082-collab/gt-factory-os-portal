@@ -160,7 +160,7 @@ export function ProductionJobCard({
         <div className="flex items-start justify-between gap-2 mb-0.5">
           <div
             className={cn(
-              "text-[26px] font-bold tabular-nums leading-none tracking-tightish",
+              "font-mono text-[26px] font-bold tabular-nums leading-none tracking-tightish",
               isLive && !isDraft && "text-warning-fg",
               isDraft && !isDone && !isCancelled && "text-fg-muted",
               isDone && "text-success-fg",
@@ -294,6 +294,7 @@ export function ProductionJobCard({
             <Badge
               tone={variance.isOnTarget ? "success" : "warning"}
               variant="soft"
+              className="font-mono"
             >
               {variance.qtyText} ({variance.pctText})
             </Badge>

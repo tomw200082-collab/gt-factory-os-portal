@@ -1912,89 +1912,66 @@ export default function ProductionPlanPage() {
         }
       />
 
-      {/* Secondary nav pills */}
-      <div className="mb-4 flex flex-wrap items-center gap-3 text-xs text-fg-muted">
-        <Link href="/planning/runs" className="hover:text-fg transition-colors flex items-center gap-1">
-          <PlayCircle className="h-3 w-3" strokeWidth={2} />
-          Planning runs
-        </Link>
-        <span className="text-fg-faint" aria-hidden>·</span>
-        <Link href="/planning/inventory-flow" className="hover:text-fg transition-colors flex items-center gap-1">
-          <Boxes className="h-3 w-3" strokeWidth={2} />
-          Inventory flow
-        </Link>
-        <span className="text-fg-faint" aria-hidden>·</span>
-        <Link href="/stock/production-actual" className="hover:text-fg transition-colors flex items-center gap-1">
-          <Factory className="h-3 w-3" strokeWidth={2} />
-          Report production
-        </Link>
-      </div>
-
-      {/* Planned-only caveat banner */}
-      <div
-        className="mb-4 rounded-md border border-info/30 bg-info-softer/40 px-3 py-2 text-xs text-info-fg"
-        role="note"
-        data-testid="planned-only-banner"
-      >
-        <span className="font-medium">Planned only.</span>{" "}
-        Inventory updates only after actuals are reported in the production report.
-      </div>
-
-      {/* UX-flow audit (FLOW-E/P): skeleton KPI strip during load so the real
-          strip doesn't pop in and shove the week nav + board down (CLS). */}
-      {plansQuery.isLoading && (
-        <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4" aria-hidden="true">
-          {[1, 2, 3, 4].map((i) => (
-            <div key={i} className="kpi-microcard">
-              <span className="h-[22px] w-12 animate-pulse rounded bg-bg-subtle" />
-              <span className="mt-1 h-2 w-16 animate-pulse rounded bg-bg-subtle" />
-            </div>
-          ))}
+      {/* Tranche 117 (visual amplify) — the banner, 4 KPI microcards, and
+          secondary nav used to be four separate stacked boxes pushing the
+          board below the fold. One dense status bar now carries all of it,
+          in the same inline "N label · N label" idiom the week-summary
+          footer already uses lower on this page — reused, not invented. */}
+      {plansQuery.isLoading ? (
+        <div className="mb-4 flex items-center gap-2 rounded-md border border-border/50 bg-bg-raised px-3 py-2" aria-hidden="true">
+          <span className="h-4 w-40 animate-pulse rounded bg-bg-subtle" />
+          <span className="ml-auto h-4 w-56 animate-pulse rounded bg-bg-subtle" />
         </div>
-      )}
-
-      {/* KPI strip — renders only when data has loaded */}
-      {hasData && (
-        <div className="mb-4 grid grid-cols-2 gap-2 sm:grid-cols-4">
-          <div className="kpi-microcard" style={{ ["--kpi-accent" as string]: "var(--warning)" }}>
-            <span className="text-[22px] font-semibold tabular-nums leading-none tracking-tightish text-fg-strong">
-              {plannedCount}
-            </span>
-            <span className="text-3xs font-semibold uppercase tracking-sops leading-none text-fg-muted mt-0.5">
-              Planned
-            </span>
-          </div>
-          <div className="kpi-microcard" style={{ ["--kpi-accent" as string]: "var(--success)" }}>
-            <span className="text-[22px] font-semibold tabular-nums leading-none tracking-tightish text-success-fg">
-              {doneCount}
-            </span>
-            <span className="text-3xs font-semibold uppercase tracking-sops leading-none text-fg-muted mt-0.5">
-              Completed
-            </span>
-          </div>
-          <div className="kpi-microcard" style={{ ["--kpi-accent" as string]: "var(--accent)" }}>
-            <span className="text-[22px] font-semibold tabular-nums leading-none tracking-tightish text-fg-strong">
-              {uniformUom
-                ? totalQty % 1 === 0
-                  ? totalQty.toFixed(0)
-                  : totalQty.toFixed(1)
-                : activePlanCount}
-            </span>
-            <span className="text-3xs font-semibold uppercase tracking-sops leading-none text-fg-muted mt-0.5">
-              {uniformUom
-                ? `${uniformUom} total`
-                : activePlanCount === 1
-                  ? "planned run"
-                  : "planned runs"}
-            </span>
-          </div>
-          <div className="kpi-microcard" style={{ ["--kpi-accent" as string]: "var(--info)" }}>
-            <span className="text-[22px] font-semibold tabular-nums leading-none tracking-tightish text-fg-strong">
-              {completionPct}%
-            </span>
-            <span className="text-3xs font-semibold uppercase tracking-sops leading-none text-fg-muted mt-0.5">
-              Done
-            </span>
+      ) : (
+        <div
+          className="mb-4 flex flex-wrap items-center gap-x-3 gap-y-1.5 rounded-md border border-border/50 bg-bg-raised px-3 py-2 text-xs"
+          data-testid="planned-only-banner"
+        >
+          <span className="text-fg-muted">
+            <span className="font-medium text-fg-strong">Planned only.</span>{" "}
+            Inventory updates after actuals are reported.
+          </span>
+          {hasData && (
+            <>
+              <span className="hidden h-4 w-px bg-border/60 sm:block" aria-hidden />
+              <span className="font-mono font-semibold tabular-nums text-fg-strong">{plannedCount}</span>
+              <span className="text-fg-muted">planned</span>
+              <span className="text-fg-faint" aria-hidden>·</span>
+              <span className="font-mono font-semibold tabular-nums text-success-fg">{doneCount}</span>
+              <span className="text-fg-muted">completed</span>
+              <span className="text-fg-faint" aria-hidden>·</span>
+              <span className="font-mono font-semibold tabular-nums text-fg-strong">
+                {uniformUom
+                  ? totalQty % 1 === 0
+                    ? totalQty.toFixed(0)
+                    : totalQty.toFixed(1)
+                  : activePlanCount}
+              </span>
+              <span className="text-fg-muted">
+                {uniformUom
+                  ? `${uniformUom} total`
+                  : activePlanCount === 1
+                    ? "planned run"
+                    : "planned runs"}
+              </span>
+              <span className="text-fg-faint" aria-hidden>·</span>
+              <span className="font-mono font-semibold tabular-nums text-fg-strong">{completionPct}%</span>
+              <span className="text-fg-muted">done</span>
+            </>
+          )}
+          <div className="ml-auto flex flex-wrap items-center gap-3 text-fg-faint">
+            <Link href="/planning/runs" className="flex items-center gap-1 hover:text-fg-muted transition-colors">
+              <PlayCircle className="h-3 w-3" strokeWidth={2} />
+              Planning runs
+            </Link>
+            <Link href="/planning/inventory-flow" className="flex items-center gap-1 hover:text-fg-muted transition-colors">
+              <Boxes className="h-3 w-3" strokeWidth={2} />
+              Inventory flow
+            </Link>
+            <Link href="/stock/production-actual" className="flex items-center gap-1 hover:text-fg-muted transition-colors">
+              <Factory className="h-3 w-3" strokeWidth={2} />
+              Report production
+            </Link>
           </div>
         </div>
       )}
@@ -2006,7 +1983,7 @@ export default function ProductionPlanPage() {
       <div className="mb-4">
         {/* Mobile-only week-range line (md+ shows it inline in the row) */}
         <div
-          className="mb-2 text-center text-sm font-semibold text-fg-strong tabular-nums md:hidden"
+          className="mb-2 text-center font-mono text-sm font-semibold text-fg-strong tabular-nums md:hidden"
           data-testid="week-range-mobile"
         >
           {fmtWeekRange(weekStart, weekEnd)}
@@ -2052,7 +2029,7 @@ export default function ProductionPlanPage() {
               </button>
             ) : null}
           </div>
-          <div className="hidden md:block text-sm font-semibold text-fg-strong tabular-nums">
+          <div className="hidden md:block font-mono text-sm font-semibold text-fg-strong tabular-nums">
             {fmtWeekRange(weekStart, weekEnd)}
           </div>
           <div className="flex items-center gap-2">
@@ -2068,7 +2045,7 @@ export default function ProductionPlanPage() {
                 freshness stamp. */}
             {plansQuery.dataUpdatedAt > 0 ? (
               <span
-                className="hidden md:inline text-3xs text-fg-muted tabular-nums"
+                className="hidden md:inline font-mono text-3xs text-fg-muted tabular-nums"
                 data-testid="plans-updated-at"
               >
                 Updated {fmtUpdatedTime(plansQuery.dataUpdatedAt)}
@@ -2094,7 +2071,7 @@ export default function ProductionPlanPage() {
         {/* Mobile-only freshness caption */}
         {plansQuery.dataUpdatedAt > 0 ? (
           <div
-            className="mt-1 text-3xs text-fg-muted tabular-nums md:hidden"
+            className="mt-1 font-mono text-3xs text-fg-muted tabular-nums md:hidden"
             data-testid="plans-updated-at-mobile"
           >
             Updated {fmtUpdatedTime(plansQuery.dataUpdatedAt)}
@@ -2130,19 +2107,19 @@ export default function ProductionPlanPage() {
             ) : (
             <span data-testid="today-strip-counts">
               planned{" "}
-              <span className="font-semibold tabular-nums text-fg-strong">
+              <span className="font-mono font-semibold tabular-nums text-fg-strong">
                 {todaySummary.todayPlanned}
               </span>
               <span className="text-fg-faint"> · </span>
               reported{" "}
-              <span className="font-semibold tabular-nums text-success-fg">
+              <span className="font-mono font-semibold tabular-nums text-success-fg">
                 {todaySummary.todayReported}
               </span>
               <span className="text-fg-faint"> · </span>
               unreported{" "}
               <span
                 className={cn(
-                  "font-semibold tabular-nums",
+                  "font-mono font-semibold tabular-nums",
                   todaySummary.todayUnreported > 0
                     ? "text-warning-fg"
                     : "text-fg-strong",
@@ -2157,11 +2134,11 @@ export default function ProductionPlanPage() {
               data-testid="today-strip-tomorrow"
             >
               Tomorrow:{" "}
-              <span className="font-semibold tabular-nums text-fg-strong">
+              <span className="font-mono font-semibold tabular-nums text-fg-strong">
                 {todaySummary.tomorrowJobs}
               </span>{" "}
               {todaySummary.tomorrowJobs === 1 ? "job" : "jobs"},{" "}
-              <span className="font-semibold tabular-nums text-fg-strong">
+              <span className="font-mono font-semibold tabular-nums text-fg-strong">
                 {fmtQty(String(todaySummary.tomorrowUnits), todaySummary.tomorrowUom ?? "units")}
               </span>
             </span>
@@ -2394,7 +2371,7 @@ export default function ProductionPlanPage() {
                 <span className="text-3xs font-semibold uppercase tracking-sops text-fg-muted">
                   Week completion
                 </span>
-                <span className="text-xs font-semibold tabular-nums text-fg-strong">
+                <span className="font-mono text-xs font-semibold tabular-nums text-fg-strong">
                   {completionPct}%
                 </span>
               </div>
@@ -2412,19 +2389,19 @@ export default function ProductionPlanPage() {
             <div className="hidden sm:block h-8 w-px bg-border/50" aria-hidden />
             <div className="flex flex-wrap items-center gap-2 text-xs text-fg-muted">
               <span>
-                <span className="font-semibold text-fg-strong tabular-nums">{plannedCount}</span>{" "}
+                <span className="font-mono font-semibold text-fg-strong tabular-nums">{plannedCount}</span>{" "}
                 planned
               </span>
               <span className="text-fg-faint">·</span>
               <span>
-                <span className="font-semibold text-success-fg tabular-nums">{doneCount}</span>{" "}
+                <span className="font-mono font-semibold text-success-fg tabular-nums">{doneCount}</span>{" "}
                 completed
               </span>
               {cancelledCount > 0 && (
                 <>
                   <span className="text-fg-faint">·</span>
                   <span>
-                    <span className="font-semibold text-danger-fg tabular-nums">{cancelledCount}</span>{" "}
+                    <span className="font-mono font-semibold text-danger-fg tabular-nums">{cancelledCount}</span>{" "}
                     cancelled
                   </span>
                 </>
