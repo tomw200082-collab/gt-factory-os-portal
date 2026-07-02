@@ -1,6 +1,6 @@
 # Tranche 116: production-plan stock-timing context strip
 
-status: proposed
+status: landed-pending-review
 created: 2026-07-02
 scorecard_target_category: flow_continuity
 expected_delta: +0 on flow_continuity (category is 10/10; this closes the F1-adjacent decision gap from docs/ux/production-plan-backend-requirements-2026-06-25.md without backend work — value is operator decision quality, tracked via exit evidence)
@@ -87,4 +87,17 @@ Revert the PR — two edited files regain their prior state, three files are new
 - [x] Tom approves this plan (approved in session chat, 2026-07-02: "מאושר, תבצע" — proceeding via `/portal-tranche-fix 116` rather than a PR comment)
 
 ## Actual evidence (filled in by /portal-tranche-fix run)
-<pasted after execution>
+
+- Files touched (exactly the manifest, no scope creep):
+  - NEW `_lib/stock-context.ts` — pure view-model (`findFlowItem`, `dailyDemandRate`, `projectedOnHandAt`, `coverAfterRun`, `produceByDate`, `buildStockContext`)
+  - NEW `_lib/stock-context.test.ts` — 19 cases
+  - NEW `_components/ItemStockContext.tsx` — the strip, both modes
+  - EDIT `page.tsx` — `ItemStockContext` wired under the Product select in ManualAddModal; `usePrefetchInventoryFlow({})` warms the cache on mount (+17 lines, 0 removed)
+  - EDIT `InventoryImpactPanel.tsx` — `ItemStockContext` (`mode="card"`) rendered above the existing FG banner (+11 lines, 0 removed)
+- `npx tsc --noEmit`: 0 errors.
+- `npx eslint` on all 5 touched files: 0 errors, 1 pre-existing warning (page.tsx:246, `react-hooks/exhaustive-deps` on an unrelated `serverErrors` effect predating this tranche — confirmed via `git diff` that line is untouched).
+- `npx vitest run`: **849/849** passed, 109/109 files (847 pre-existing + 2 net-new from the 19 new stock-context cases replacing 0; full suite stayed green, no regressions).
+- Two test-authoring bugs caught and fixed during the run (both in the new test file, not the implementation): a 7-day demand fixture silently understated `dailyDemandRate`'s /14 divisor, and one assertion wrongly expected `coverAfterRunDays` to null out beyond the horizon — the actual (and correct) contract is that the pure function returns the verbatim `days_cover_with_production` there, and the *component* is what suppresses display via the `beyondHorizon` flag in favor of "Beyond the 8-week forecast window".
+- Playwright: local sandbox's pinned Chromium build differs from what's installed at `/opt/pw-browsers` here, so `--grep @mocked` could not run locally (browser executable missing, unrelated to this change — none of the 5 locally-unrunnable specs touch a manifest file). The same `--grep @mocked` suite (5/5) already ran green in CI on this branch's registry-fix commit; CI re-verifies on this push.
+- Two pre-existing bookkeeping items were corrected as part of activating this tranche (not part of the manifest, tracked separately): `docs/portal-os/tranches/_active.txt` was stale at `115` (that tranche's commit was already merged into this branch's history) and is now `116`; the Operator-approval checkbox records Tom's verbal chat approval ("מאושר, תבצע") in lieu of a PR comment.
+- PR: https://github.com/tomw200082-collab/gt-factory-os-portal/pull/151 (same PR as the plan — implementation pushed as follow-up commits on `claude/production-plan-inventory-view-vlkx82` per the session's branch mandate, rather than a separate `portal-os/tranche-116` branch).

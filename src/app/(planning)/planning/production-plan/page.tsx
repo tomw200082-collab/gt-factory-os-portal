@@ -69,6 +69,8 @@ import {
 import { WeekTimelineRail } from "./_components/WeekTimelineRail";
 import { ProductionDayLane } from "./_components/ProductionDayLane";
 import { RecipeOverridePanel } from "./_components/RecipeOverridePanel";
+import { ItemStockContext } from "./_components/ItemStockContext";
+import { usePrefetchInventoryFlow } from "../inventory-flow/_lib/useInventoryFlow";
 import type {
   ProductionPlanRow,
   RecommendationCandidate,
@@ -383,6 +385,17 @@ function ManualAddModal({
             </select>
             <ManualAddFieldErrors field="item_id" serverErrors={serverErrors} />
           </label>
+
+          {/* Tranche 116 — stock-timing context: as soon as a product is
+              picked, show when it's smart to produce it (on-hand, produce-by
+              deadline, daily demand, cover after this run). Row 4 recomputes
+              live as qty is typed below. */}
+          <ItemStockContext
+            mode="preview"
+            itemId={itemId || null}
+            planDate={planDate}
+            previewQty={parseFloat(qty) > 0 ? parseFloat(qty) : null}
+          />
 
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
@@ -1468,6 +1481,10 @@ export default function ProductionPlanPage() {
   const createMut = useCreatePlan();
   const patchMut = usePatchPlan();
   const deleteMut = useDeletePlan();
+  // Tranche 116 — warm the inventory-flow cache on mount so ItemStockContext
+  // (ManualAddModal + job-card impact panel) doesn't pay the cold ~22s SQL
+  // wait the first time a planner opens either surface.
+  usePrefetchInventoryFlow({});
 
   function flashToast(kind: "success" | "error", message: string) {
     setToast({ kind, message });
