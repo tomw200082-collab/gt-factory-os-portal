@@ -177,4 +177,4 @@ weren't individually enumerated in the manifest, even though the
 `pre_tool_use.sh` hook always-allows those path prefixes regardless) — fixed
 above by listing them explicitly, matching tranches 119/120's convention.
 
-**PR**: filled in after push (see follow-up commit).
+**PR**: https://github.com/tomw200082-collab/gt-factory-os-portal/pull/154
