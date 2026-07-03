@@ -185,7 +185,7 @@ export const NAV_MANIFEST: NavGroup[] = [
       },
       {
         href: "/stock/production-actual",
-        label: "Production Actual",
+        label: "Production Report",
         icon: Factory,
         min_role: "viewer",
         required_capability: "stock:execute",

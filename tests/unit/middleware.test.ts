@@ -91,4 +91,32 @@ describe("middleware — auth gating", () => {
     // happy path. NextResponse.next() carries status 200 by default.
     expect(res.status).toBe(200);
   });
+
+  // Tranche 119 (ux-release-gate FLOW-002): /admin/decision-board is a
+  // planning:execute surface (planner+admin), same as /admin/economics, but
+  // was missing its own carve-out before the /admin catch-all (admin-only).
+  // The /home cockpit surfaces this tile to planners; without the carve-out,
+  // a planner clicking it would be redirected to /dashboard?forbidden the
+  // day the backend starts projecting role into the Supabase JWT.
+  it("authenticated /admin/decision-board with planner role → passes through (not the /admin catch-all)", async () => {
+    const next = NextResponse.next();
+    mockUpdate.mockResolvedValue({
+      response: next,
+      user: { app_metadata: { role: "planner" } },
+    });
+    const res = await run("/admin/decision-board");
+    expect(res.status).toBe(200);
+  });
+
+  it("authenticated /admin/decision-board with operator role → 307 to /dashboard?forbidden", async () => {
+    mockUpdate.mockResolvedValue({
+      response: NextResponse.next(),
+      user: { app_metadata: { role: "operator" } },
+    });
+    const res = await run("/admin/decision-board");
+    expect(res.status).toBe(307);
+    const location = res.headers.get("location");
+    expect(location).toContain("/dashboard");
+    expect(location).toContain("forbidden=%2Fadmin%2Fdecision-board");
+  });
 });

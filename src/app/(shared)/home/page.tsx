@@ -17,15 +17,30 @@
 // exception, 2026-06-26).
 //
 // Visual: "The Line" — a petrol-teal spine that fills each tile on hover, built
-// on existing tokens + CSS-animation utilities (.reveal / motion-reduce). No
-// new dependency.
+// on existing tokens + Tailwind's animate-fade-in-up utility (already used
+// elsewhere in the portal) paired with motion-reduce:animate-none, so entrance
+// motion honors prefers-reduced-motion without any globals.css change. No new
+// dependency.
+//
+// Tranche 119 (UX-gate P1 pass, 2026-07-03): fixed the ux-release-gate CONDITIONAL_SHIP
+// items for this surface — Hebrew lang attribute, reduced-motion entrance, RTL-safe
+// keyboard-shortcut copy, mobile search-affordance honesty, contrast, and the
+// single-tile-group span-fill layout rule.
 
-import { useMemo } from "react";
+import { useMemo, type CSSProperties } from "react";
 
 import { useSession } from "@/lib/auth/session-provider";
 import { buildHomeCockpit, type Lang } from "@/features/home/cockpit";
 import { cn } from "@/lib/cn";
 import { HomeTile } from "./_components/HomeTile";
+
+// Entrance animation — Tailwind's built-in animate-fade-in-up (tailwind.config.ts)
+// + motion-reduce:animate-none so the OS reduced-motion preference is honored.
+// Delay mirrors the retired .reveal-delay-N steps (40ms per step, capped at 7).
+const REVEAL = "animate-fade-in-up motion-reduce:animate-none";
+function revealDelay(step: number): CSSProperties {
+  return { animationDelay: `${Math.min(step, 7) * 40}ms` };
+}
 
 function greeting(now: Date, lang: Lang, name?: string | null): string {
   const h = now.getHours();
@@ -55,43 +70,66 @@ export default function HomePage() {
   const now = new Date();
 
   const focusEyebrow = lang === "he" ? "המוקד שלך" : "Your focus";
-  const subcopy =
-    lang === "he"
-      ? "קפצו ישר למה שצריך. כל השאר במרחק חיפוש אחד (⌘K)."
-      : "Jump straight to what you need. Everything else is one search (⌘K) away.";
+
+  // The Ctrl+K hint is wrapped in <bdi dir="ltr"> so it never bidi-reverses to
+  // "K+lrtC" inside the RTL Hebrew sentence. Ctrl+K (not ⌘K) — the bookkeeper's
+  // office workstation is Windows. Below md the search-field trigger in TopBar
+  // is hidden (CommandPalette.tsx), so the promise there points at the menu
+  // instead, which is always present (MobileNav).
+  const shortcutHint = <bdi dir="ltr">Ctrl+K</bdi>;
 
   return (
     <div
       dir={dir}
+      lang={lang}
       className="mx-auto flex w-full max-w-[1120px] flex-col gap-8"
       data-testid="home-cockpit"
       data-role={role}
       data-lang={lang}
     >
       {/* Greeting — the page thesis. A short teal "line" seeds the spine motif. */}
-      <header className="reveal flex flex-col gap-1.5">
-        <p className="font-mono text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+      <header className={cn(REVEAL, "flex flex-col gap-1.5")}>
+        <p className="font-mono text-3xs font-semibold uppercase tracking-sops text-fg-muted">
           {dateLabel(now, lang)}
         </p>
         <h1 className="text-3xl font-semibold tracking-tightish text-fg-strong">
           {greeting(now, lang, session?.display_name)}
         </h1>
         <span aria-hidden className="mt-0.5 h-0.5 w-10 rounded-full bg-accent/70" />
-        <p className="mt-1 text-sm text-fg-muted">{subcopy}</p>
+        {lang === "he" ? (
+          <>
+            <p className="mt-1 hidden text-sm text-fg-muted md:block">
+              קפצו ישר למה שצריך. כל השאר במרחק חיפוש אחד ({shortcutHint}).
+            </p>
+            <p className="mt-1 text-sm text-fg-muted md:hidden">
+              קפצו ישר למה שצריך. כל השאר נמצא בתפריט.
+            </p>
+          </>
+        ) : (
+          <>
+            <p className="mt-1 hidden text-sm text-fg-muted md:block">
+              Jump straight to what you need. Everything else is one search ({shortcutHint}) away.
+            </p>
+            <p className="mt-1 text-sm text-fg-muted md:hidden">
+              Jump straight to what you need. Everything else is in the menu.
+            </p>
+          </>
+        )}
       </header>
 
       {/* Primary — the role's hero tile (full-width banner). */}
       {primary ? (
-        <div className="reveal reveal-delay-1">
+        <div className={REVEAL} style={revealDelay(1)}>
           <HomeTile tile={primary} lang={lang} rtl={rtl} variant="primary" eyebrow={focusEyebrow} />
         </div>
       ) : null}
 
-      {/* Supporting tiles — grouped bento, staggered reveal. */}
+      {/* Supporting tiles — grouped bento, staggered reveal. A lone tile in a
+          group spans the full row instead of leaving a 2/3-empty row. */}
       {groups.map((group) => (
         <section key={group.key} className="flex flex-col gap-3">
           <div className="flex items-center gap-2">
-            <h2 className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+            <h2 className="text-3xs font-semibold uppercase tracking-sops text-fg-muted">
               {lang === "he" ? group.label.he : group.label.en}
             </h2>
             <div className="h-px flex-1 bg-border/50" />
@@ -100,7 +138,8 @@ export default function HomePage() {
             {group.tiles.map((tile, i) => (
               <div
                 key={tile.href}
-                className={cn("reveal", `reveal-delay-${Math.min(i + 1, 7)}`)}
+                className={cn(REVEAL, group.tiles.length === 1 && "sm:col-span-2 lg:col-span-3")}
+                style={revealDelay(i + 1)}
               >
                 <HomeTile tile={tile} lang={lang} rtl={rtl} />
               </div>
@@ -112,9 +151,11 @@ export default function HomePage() {
       {/* Empty fallback — should not occur (every role has Inbox + Dashboard). */}
       {!primary && groups.length === 0 ? (
         <div className="card p-6 text-sm text-fg-muted">
-          {lang === "he"
-            ? "אין כרגע קיצורים זמינים. השתמשו בסרגל הצד או ב-⌘K לניווט."
-            : "No quick actions yet. Use the sidebar or ⌘K to navigate."}
+          {lang === "he" ? (
+            <>אין כרגע קיצורים זמינים. השתמשו בסרגל הצד או ב-{shortcutHint} לניווט.</>
+          ) : (
+            <>No quick actions yet. Use the sidebar or {shortcutHint} to navigate.</>
+          )}
         </div>
       ) : null}
     </div>

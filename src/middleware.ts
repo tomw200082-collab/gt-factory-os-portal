@@ -42,14 +42,17 @@ import { updateSupabaseSession } from "@/lib/supabase/middleware";
 //     out BEFORE the /stock prefix so all roles pass.
 //   - (planning) + (planner) layouts gate planning:read → all four roles
 //     (writes remain gated server-side on planning:execute).
-//   - /admin/economics lives in the (economics) group (planning:execute →
-//     planner+admin) — carved out BEFORE the /admin prefix.
+//   - /admin/economics and /admin/decision-board live in the (economics)
+//     group (planning:execute → planner+admin) — carved out BEFORE the
+//     /admin prefix.
 //   - (po) layout gates viewer:read → all four roles.
 const ROLE_GATES: Array<{ prefix: string; allow: string[] }> = [
   // More-specific first: /inbox/approvals/* must match before /inbox;
-  // /admin/economics before /admin; /stock/movement-log before /stock.
+  // /admin/economics + /admin/decision-board before /admin; /stock/movement-log
+  // before /stock.
   { prefix: "/inbox/approvals", allow: ["planner", "admin"] },
   { prefix: "/admin/economics", allow: ["planner", "admin"] },
+  { prefix: "/admin/decision-board", allow: ["planner", "admin"] },
   { prefix: "/admin", allow: ["admin"] },
   // /inventory/bulk-count writes stock events — it lives in the (ops) group
   // (stock:execute) and must match BEFORE any broader /inventory handling
