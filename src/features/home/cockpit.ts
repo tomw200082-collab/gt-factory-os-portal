@@ -240,8 +240,8 @@ export const HOME_TILES: readonly HomeTile[] = [
   // ——— Stock ————————————————————————————————————————————————————————
   {
     href: "/stock/production-actual",
-    label: "Production report",
-    blurb: "Report output and scrap; BOM-derived consumption.",
+    label: "Production Report",
+    blurb: "Report output and scrap; consumption is computed from the active recipe.",
     icon: Factory,
     group: "stock",
     minRole: "viewer",
@@ -268,7 +268,7 @@ export const HOME_TILES: readonly HomeTile[] = [
   {
     href: "/stock/physical-count",
     label: "Physical count",
-    blurb: "Blind count; freeze on submit; anchor on approval.",
+    blurb: "Blind count — you don't see current stock. Freeze on submit; stock truth updates on approval.",
     icon: ClipboardCheck,
     group: "stock",
     minRole: "viewer",

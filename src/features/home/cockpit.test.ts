@@ -128,3 +128,19 @@ describe("tileText — language resolution", () => {
     expect(tileText(forecast, "he").label).toBe(forecast.label);
   });
 });
+
+// Tranche 119 (ux-release-gate CONDITIONAL_SHIP, COPY-001/002/004): pins the
+// jargon fixes so a future edit can't silently reintroduce internal model
+// terms or drift from the destination page's own heading.
+describe("HOME_TILES — copy hygiene (ux-release-gate P1s)", () => {
+  it("Production Report tile matches the destination page's Title Case heading, not internal jargon", () => {
+    const tile = HOME_TILES.find((t) => t.href === "/stock/production-actual")!;
+    expect(tile.label).toBe("Production Report");
+    expect(tile.blurb).not.toMatch(/BOM-derived/i);
+  });
+
+  it("Physical count tile does not leak the internal balance_anchors term", () => {
+    const tile = HOME_TILES.find((t) => t.href === "/stock/physical-count")!;
+    expect(tile.blurb).not.toMatch(/\banchor\b/i);
+  });
+});
