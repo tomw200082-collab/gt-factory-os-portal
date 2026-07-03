@@ -19,11 +19,10 @@ export interface FgOutPickReversalStatus {
   reversed: boolean;
   reversed_at: string | null;
   reversed_by: string | null;
+  dual_role_cover_warning: boolean;
 }
 
-interface UndoResponse extends FgOutPickReversalStatus {
-  dual_role_cover_warning?: boolean;
-}
+type UndoResponse = FgOutPickReversalStatus;
 
 async function fetchReversalStatus(
   movementId: string,
@@ -35,6 +34,18 @@ async function fetchReversalStatus(
     throw new Error(`Reversal-status request failed (HTTP ${res.status})`);
   }
   return (await res.json()) as FgOutPickReversalStatus;
+}
+
+// Carries the backend's reason_code so the caller can special-case
+// ALREADY_REVERSED (a double-click / retried request landing after the
+// first attempt already succeeded) as a soft-success rather than an error.
+class UndoRequestError extends Error {
+  constructor(
+    message: string,
+    public reasonCode: string | null,
+  ) {
+    super(message);
+  }
 }
 
 async function postUndo(
@@ -51,10 +62,11 @@ async function postUndo(
   );
   if (!res.ok) {
     const body = (await res.json().catch(() => null)) as
-      | { detail?: string; error?: string }
+      | { detail?: string; error?: string; reason_code?: string }
       | null;
-    throw new Error(
+    throw new UndoRequestError(
       body?.detail ?? body?.error ?? `Undo failed (HTTP ${res.status})`,
+      body?.reason_code ?? null,
     );
   }
   return (await res.json()) as UndoResponse;
@@ -88,7 +100,7 @@ export function FgOutPickUndoControl({
   // Unlike the pause banner (visible to every role), nobody but admin/planner
   // ever sees UI from this component — so skip the fetch entirely for
   // everyone else rather than reading state nobody will act on.
-  const { data, isLoading } = useQuery<FgOutPickReversalStatus>({
+  const { data, isLoading, isError, refetch } = useQuery<FgOutPickReversalStatus>({
     queryKey: ["fg-out-pick-reversal-status", movementId],
     queryFn: () => fetchReversalStatus(movementId),
     enabled: isPickRow && canUndo,
@@ -97,21 +109,99 @@ export function FgOutPickUndoControl({
 
   const [open, setOpen] = useState(false);
   const [reason, setReason] = useState("");
-  const [dualRoleWarning, setDualRoleWarning] = useState(false);
+  // Set only on a successful undo THIS mount whose response carried the
+  // warning — lets the confirm branch skip straight to the warning render
+  // without waiting on the status refetch. data?.dual_role_cover_warning
+  // (below) is the durable source of truth across remounts.
+  const [justUndoneWithWarning, setJustUndoneWithWarning] = useState(false);
 
   const mutation = useMutation({
     mutationFn: () => postUndo(movementId, reason),
     onSuccess: (result) => {
       setOpen(false);
       setReason("");
-      setDualRoleWarning(result.dual_role_cover_warning === true);
       qc.invalidateQueries({ queryKey: ["fg-out-pick-reversal-status", movementId] });
-      onUndone();
+      if (result.dual_role_cover_warning) {
+        // Do NOT call onUndone() here — on this page that closes the whole
+        // drawer (DetailsDrawer's onReversed), and React 18 batches this
+        // setState with that unmount, so the warning below would never
+        // paint. Keep the drawer open; the warning's own Close button (in
+        // the render branch) calls onUndone() when the operator dismisses
+        // it, mirroring the existing COUNT_ADJUST undo-done pattern in this
+        // same file ("no silent close").
+        setJustUndoneWithWarning(true);
+      } else {
+        onUndone();
+      }
+    },
+    onError: (err, _vars, _ctx) => {
+      // A double-click / retried request can land after an earlier attempt
+      // already succeeded (no client idempotency token — the movement_id
+      // itself is the natural idempotency anchor server-side). The delivery
+      // genuinely IS undone by then; showing a scary error would be wrong.
+      // Close the form and let the status query (now invalidated) drive the
+      // correct end state — either the plain "already undone" note or the
+      // dual-role warning, both already handled by the render below.
+      if (err instanceof UndoRequestError && err.reasonCode === 'ALREADY_REVERSED') {
+        setOpen(false);
+        setReason("");
+        qc.invalidateQueries({ queryKey: ["fg-out-pick-reversal-status", movementId] });
+        mutation.reset();
+      }
     },
   });
 
   if (!isPickRow || !canUndo) return null;
   if (isLoading) return null;
+
+  // Honest unknown-state: a failed status read must never fall through to
+  // showing "Undo this delivery" as if the row were known-not-reversed —
+  // this is a safety control (mirrors FgOutPauseControl's load-error state).
+  if (isError && !data) {
+    return (
+      <p
+        className="text-2xs text-warning-fg"
+        role="alert"
+        data-testid="fg-out-pick-undo-load-error"
+      >
+        Couldn&apos;t check whether this delivery was already undone.{" "}
+        <button
+          type="button"
+          className="font-medium underline hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+          onClick={() => refetch()}
+          data-testid="fg-out-pick-undo-retry"
+        >
+          Retry
+        </button>
+      </p>
+    );
+  }
+
+  const showDualRoleWarning =
+    justUndoneWithWarning || (data?.reversed && data.dual_role_cover_warning);
+
+  if (showDualRoleWarning) {
+    return (
+      <div
+        className="space-y-1.5 rounded-md border border-warning/40 bg-warning-softer/40 p-3 text-2xs text-warning-fg"
+        role="status"
+        data-testid="fg-out-pick-undo-dual-role-warning"
+      >
+        <p>
+          Undone — but this item shares stock with a bulk raw-material
+          component that was NOT automatically adjusted. Check it manually.
+        </p>
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm"
+          onClick={onUndone}
+          data-testid="fg-out-pick-undo-dual-role-close"
+        >
+          Close
+        </button>
+      </div>
+    );
+  }
 
   if (data?.reversed) {
     return (
@@ -122,19 +212,6 @@ export function FgOutPickUndoControl({
         <span className="font-medium text-fg">This delivery was undone.</span>{" "}
         {data.reversed_by ? `By ${data.reversed_by}` : null}
         {data.reversed_at ? ` · ${formatWhen(data.reversed_at)}` : null}
-      </p>
-    );
-  }
-
-  if (dualRoleWarning) {
-    return (
-      <p
-        className="text-2xs text-warning-fg"
-        role="status"
-        data-testid="fg-out-pick-undo-dual-role-warning"
-      >
-        Undone — but this item shares stock with a bulk raw-material component
-        that was NOT automatically adjusted. Check it manually.
       </p>
     );
   }
