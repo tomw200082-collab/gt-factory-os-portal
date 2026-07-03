@@ -204,4 +204,127 @@ test.describe("@mocked procurement focus mode", () => {
     await expect(page.getByTestId("focus-mode")).not.toBeVisible();
     await expect(trigger).toBeFocused();
   });
+
+  test("DR-018 INTER-006: the supersede warning names how many orders would be lost", async ({
+    page,
+  }) => {
+    await setFakeRole(page, "planner");
+
+    const posArr = ["PO1", "PO2", "PO3"].map((id) => ({
+      session_po_id: id,
+      supplier_id: `sup_${id}`,
+      supplier_snapshot: `ספק ${id}`,
+      tier: "must",
+      status: "proposed",
+      order_by_date: "2026-06-05",
+      earliest_need_date: null,
+      covered_through_date: null,
+      currency: "ILS",
+      total_cost: 100,
+      order_document_text: null,
+      po_id: null,
+      blocking_issues: [],
+      lines: [],
+    }));
+    await page.route("**/api/purchase-session/current", (route) =>
+      route.fulfill({
+        json: {
+          session: {
+            session_id: "S1",
+            session_type: "weekly",
+            session_date: "2026-05-31",
+            status: "open",
+            horizon_days: 14,
+            consolidation_window_days: 7,
+            rebuild_verifier_drift: null,
+            warnings: [],
+            release_fence: null,
+            created_at: "2026-05-31T00:00:00Z",
+            completed_at: null,
+            totals: {
+              po_count: 3,
+              line_count: 0,
+              total_cost: 300,
+              by_tier: { urgent: 0, must: 3, recommended: 0 },
+              by_status: { proposed: 3, approved: 0, placed: 0, skipped: 0 },
+            },
+            pos: posArr,
+          },
+        },
+      }),
+    );
+
+    await page.goto("/planning/procurement");
+    await expect(page.getByTestId("procurement-row-PO1")).toBeVisible();
+
+    await page.getByTestId("procurement-start").click();
+    await expect(page.getByTestId("procurement-start-confirm-zone")).toBeVisible();
+    await expect(page.getByTestId("procurement-start-confirm-zone")).toContainText("3 הזמנות");
+  });
+
+  test("A11Y-006: the view-toggle roving tablist responds to arrow keys", async ({
+    page,
+  }) => {
+    await setFakeRole(page, "planner");
+
+    const po1 = {
+      session_po_id: "PO1",
+      supplier_id: "SUP1",
+      supplier_snapshot: "ספק בדיקה",
+      tier: "must",
+      status: "proposed",
+      order_by_date: "2026-06-05",
+      earliest_need_date: null,
+      covered_through_date: null,
+      currency: "ILS",
+      total_cost: 100,
+      order_document_text: null,
+      po_id: null,
+      blocking_issues: [],
+      lines: [],
+    };
+    await page.route("**/api/purchase-session/current", (route) =>
+      route.fulfill({
+        json: {
+          session: {
+            session_id: "S1",
+            session_type: "weekly",
+            session_date: "2026-05-31",
+            status: "open",
+            horizon_days: 14,
+            consolidation_window_days: 7,
+            rebuild_verifier_drift: null,
+            warnings: [],
+            release_fence: null,
+            created_at: "2026-05-31T00:00:00Z",
+            completed_at: null,
+            totals: {
+              po_count: 1,
+              line_count: 0,
+              total_cost: 100,
+              by_tier: { urgent: 0, must: 1, recommended: 0 },
+              by_status: { proposed: 1, approved: 0, placed: 0, skipped: 0 },
+            },
+            pos: [po1],
+          },
+        },
+      }),
+    );
+
+    await page.goto("/planning/procurement");
+    const listTab = page.getByTestId("procurement-view-list");
+    const calendarTab = page.getByTestId("procurement-view-calendar");
+    await expect(listTab).toHaveAttribute("aria-selected", "true");
+
+    await listTab.focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(calendarTab).toHaveAttribute("aria-selected", "true");
+    await expect(calendarTab).toBeFocused();
+    await expect(page.getByTestId("procurement-row-PO1")).not.toBeVisible();
+
+    await page.keyboard.press("ArrowLeft");
+    await expect(listTab).toHaveAttribute("aria-selected", "true");
+    await expect(listTab).toBeFocused();
+    await expect(page.getByTestId("procurement-row-PO1")).toBeVisible();
+  });
 });
