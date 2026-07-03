@@ -171,4 +171,4 @@ relative to the enumerated fix list (residual "firm"-as-verb prose exists,
 now explicitly called out in Out-of-scope above) — corrected wording, not a
 functional gap.
 
-**PR**: filled in after push.
+**PR**: https://github.com/tomw200082-collab/gt-factory-os-portal/pull/155 (based on `portal-os/tranche-121` / #154 — stacked)
