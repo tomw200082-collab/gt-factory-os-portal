@@ -163,4 +163,4 @@ already present in the tranche-122 base). One cosmetic evidence-prose note
 (mislabeled the second "Add from Recommendations" button as "KPI-strip"
 when it's the week-empty-state button) — fixed above, not a functional gap.
 
-**PR**: filled in after push.
+**PR**: https://github.com/tomw200082-collab/gt-factory-os-portal/pull/156 (based on `portal-os/tranche-122` / #155 — stacked)
