@@ -14,7 +14,7 @@
 //   • EXECUTE (daily): make today's batch and report the actual.
 
 import Link from "next/link";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import {
   CalendarCheck,
   ShoppingCart,
@@ -294,19 +294,25 @@ function CommitmentPanel({
   totalUnits,
   entries,
   pending,
+  footer,
 }: {
   title: string;
   note: string;
   totalUnits: number;
   entries: CommitmentEntry[];
   pending: boolean;
+  /** DR-018 VISUAL-002 (Tranche 122) — optional action strip rendered as
+   *  part of the same card, so the "what gets committed" facts and the CTA
+   *  that acts on them read as one unit instead of two visually detached
+   *  sections. */
+  footer?: ReactNode;
 }) {
   const TOP = 8;
   const [expanded, setExpanded] = useState(false);
   const shown = expanded ? entries : entries.slice(0, TOP);
   const more = entries.length - TOP;
   return (
-    <SectionCard title={title} description={note}>
+    <SectionCard title={title} description={note} footer={footer}>
       {pending ? (
         <div className="py-6 text-center text-sm text-fg-muted">Loading commitment…</div>
       ) : entries.length === 0 ? (
@@ -340,8 +346,14 @@ function CommitmentPanel({
                           : "hsl(var(--family-matcha))",
                     }}
                   />
+                  {/* DR-018 A11Y-009 (Tranche 122) — the track dot is a
+                      color-only signal; a screen reader announced nothing
+                      distinguishing a tea batch from a matcha one. */}
+                  <span className="sr-only">
+                    {e.track === "tea_tank" ? "Tea" : "Matcha"}
+                  </span>
                   <span className="truncate text-sm" dir="auto">
-                    {e.item_name ?? e.item_id}
+                    {e.item_name ?? "Unknown product"}
                   </span>
                 </span>
                 <span className="shrink-0 text-sm font-medium tabular-nums">
@@ -538,7 +550,21 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
       ) : gen.isError ? (
         <div role="alert" className="flex items-start gap-3 rounded-lg border border-danger-border bg-danger-softer p-3 text-sm">
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0 text-danger" aria-hidden="true" />
-          <span className="text-danger-fg">{(gen.error as Error).message}</span>
+          <span className="flex-1 text-danger-fg">{(gen.error as Error).message}</span>
+          {/* DR-018 INTER-004 (Tranche 122) — a transient 503 previously had
+              no recovery path short of the next manual click on the (now
+              two-step) trigger above. */}
+          <button
+            type="button"
+            onClick={() => gen.mutate()}
+            className={cn(
+              "shrink-0 rounded-md border border-danger-border bg-bg-raised px-2.5 py-1 text-xs font-medium text-danger-fg shadow-hairline transition-colors hover:bg-danger-softer",
+              focusRing,
+            )}
+            data-testid="meeting-gen-error-retry"
+          >
+            Try again
+          </button>
         </div>
       ) : null}
 
@@ -548,7 +574,7 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
           icon={Boxes}
           label="Draft batches"
           value={String(batchCount)}
-          meta={batchCount === 0 ? "Nothing to firm" : "Will be locked on firm"}
+          meta={batchCount === 0 ? "Nothing to lock" : "Will be locked"}
           tone={batchCount > 0 ? "accent" : "neutral"}
         />
         <StatTile
@@ -575,8 +601,8 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
           <div>
             <div className="text-sm font-semibold text-success-fg">
               {result.idempotent_replay || result.newly_firmed_count === 0
-                ? "Week already firmed"
-                : `Firmed ${result.newly_firmed_count} batch${result.newly_firmed_count === 1 ? "" : "es"}`}
+                ? "Week already locked"
+                : `${result.newly_firmed_count} batch${result.newly_firmed_count === 1 ? "" : "es"} locked`}
             </div>
             <div className="mt-0.5 text-xs text-fg-muted">
               {result.week_firmed_total} batch{result.week_firmed_total === 1 ? "" : "es"} now committed for {fmtWeekRange(result.week_start)}. The Sunday session will buy against this week. Reversible via the production plan.
@@ -695,96 +721,119 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
         </Link>
       </div>
 
-      {/* Production commitment — the firm → procure bridge */}
-      {batchCount > 0 && draftRollup.length > 0 ? (
-        <CommitmentPanel
-          title="If you firm this week"
-          note="These finished goods get committed to production when you firm — exactly what the Sunday procurement session buys components for."
-          totalUnits={draftRollup.reduce((a, r) => a + r.units, 0)}
-          entries={draftRollup.map((r) => ({
-            item_id: r.item_id,
-            item_name: r.item_name,
-            units: r.units,
-            track: r.track,
-          }))}
-          pending={false}
-        />
-      ) : batchCount === 0 && firmedCount > 0 ? (
-        <CommitmentPanel
-          title="Committed this week"
-          note="What this firmed week will produce — the demand Sunday procurement buys components against."
-          totalUnits={firmedDemand.data?.total_fg_units ?? 0}
-          entries={(firmedDemand.data?.rows ?? []).map((r) => ({
-            item_id: r.item_id,
-            item_name: r.item_name,
-            units: r.fg_units,
-            track: r.track,
-          }))}
-          pending={firmedDemand.isLoading}
-        />
-      ) : null}
-
-      {/* Firm action */}
-      <div className="flex items-center justify-end gap-3 border-t border-border-faint pt-4">
-        {!canAct ? (
-          <span className="text-xs text-fg-muted">Firming is restricted to planner / admin roles.</span>
-        ) : confirming ? (
-          <>
-            <span className="text-sm text-fg-muted">
-              Lock {batchCount} batch{batchCount === 1 ? "" : "es"} for {fmtWeekRange(weekStart)}?
-            </span>
-            <button
-              type="button"
-              onClick={() => setConfirming(false)}
-              className="rounded-md border border-border bg-bg-raised px-3.5 py-2 text-sm font-medium text-fg-muted shadow-hairline transition-colors hover:bg-bg-muted"
-            >
-              Cancel
-            </button>
-            <button
-              ref={confirmBtnRef}
-              type="button"
-              disabled={firm.isPending}
-              aria-busy={firm.isPending}
-              onClick={() => {
-                firm.mutate(
-                  { week_start: weekStart },
-                  { onSettled: () => setConfirming(false) },
-                );
-              }}
-              className={cn(
-                "inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-fg shadow-raised transition-colors hover:bg-accent-hover disabled:opacity-60",
-                focusRing,
-              )}
-            >
-              <Lock className="h-4 w-4" aria-hidden="true" />
-              {firm.isPending ? "Firming…" : "Confirm firm"}
-            </button>
-          </>
-        ) : (
-          <>
-            <button
-              type="button"
-              disabled={batchCount === 0}
-              onClick={() => setConfirming(true)}
-              title={batchCount === 0 ? "Nothing to firm — generate drafts or pick a week with batches" : `Lock ${batchCount} batch${batchCount === 1 ? "" : "es"} for ${fmtWeekRange(weekStart)}`}
-              className={cn(
-                "inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-fg shadow-raised transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50",
-                focusRing,
-              )}
-            >
-              <Lock className="h-4 w-4" aria-hidden="true" />
-              Firm week
-            </button>
-            {/* UX-flow audit (FLOW-D05): the disabled reason was only in a
-                title tooltip — invisible on touch. Surface it inline. */}
-            {batchCount === 0 && (
-              <span className="text-2xs text-fg-muted max-w-[28ch]">
-                Nothing to firm — generate drafts above, or pick a week with batches.
-              </span>
+      {/* DR-018 VISUAL-002 (Tranche 122) — the lock CTA now renders as the
+          commitment card's own footer (when a card is shown) instead of a
+          separately-bordered strip below it, so "what gets committed" and
+          "the action that commits it" read as one unit. */}
+      {(() => {
+        const lockActionRow = (
+          <div className="flex items-center justify-end gap-3">
+            {!canAct ? (
+              <span className="text-xs text-fg-muted">Locking is restricted to planner / admin roles.</span>
+            ) : confirming ? (
+              <>
+                <span className="text-sm text-fg-muted">
+                  Lock {batchCount} batch{batchCount === 1 ? "" : "es"} for {fmtWeekRange(weekStart)}?
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setConfirming(false)}
+                  className={cn(
+                    "rounded-md border border-border bg-bg-raised px-3.5 py-2 text-sm font-medium text-fg-muted shadow-hairline transition-colors hover:bg-bg-muted",
+                    focusRing,
+                  )}
+                >
+                  Cancel
+                </button>
+                <button
+                  ref={confirmBtnRef}
+                  type="button"
+                  disabled={firm.isPending}
+                  aria-busy={firm.isPending}
+                  onClick={() => {
+                    firm.mutate(
+                      { week_start: weekStart },
+                      { onSettled: () => setConfirming(false) },
+                    );
+                  }}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-fg shadow-raised transition-colors hover:bg-accent-hover disabled:opacity-60",
+                    focusRing,
+                  )}
+                >
+                  <Lock className="h-4 w-4" aria-hidden="true" />
+                  {firm.isPending ? "Locking…" : "Confirm lock"}
+                </button>
+              </>
+            ) : (
+              <>
+                <button
+                  type="button"
+                  disabled={batchCount === 0}
+                  onClick={() => setConfirming(true)}
+                  title={batchCount === 0 ? "Nothing to lock — generate drafts or pick a week with batches" : `Lock ${batchCount} batch${batchCount === 1 ? "" : "es"} for ${fmtWeekRange(weekStart)}`}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-md bg-accent px-4 py-2 text-sm font-semibold text-accent-fg shadow-raised transition-colors hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50",
+                    focusRing,
+                  )}
+                >
+                  <Lock className="h-4 w-4" aria-hidden="true" />
+                  Lock week
+                </button>
+                {/* UX-flow audit (FLOW-D05): the disabled reason was only in a
+                    title tooltip — invisible on touch. Surface it inline. */}
+                {batchCount === 0 && (
+                  <span className="text-2xs text-fg-muted max-w-[28ch]">
+                    Nothing to lock — generate drafts above, or pick a week with batches.
+                  </span>
+                )}
+              </>
             )}
-          </>
-        )}
-      </div>
+          </div>
+        );
+
+        if (batchCount > 0 && draftRollup.length > 0) {
+          return (
+            <CommitmentPanel
+              title="If you firm this week"
+              note="These finished goods get committed to production when you firm — exactly what the Sunday procurement session buys components for."
+              totalUnits={draftRollup.reduce((a, r) => a + r.units, 0)}
+              entries={draftRollup.map((r) => ({
+                item_id: r.item_id,
+                item_name: r.item_name,
+                units: r.units,
+                track: r.track,
+              }))}
+              pending={false}
+              footer={lockActionRow}
+            />
+          );
+        }
+        if (batchCount === 0 && firmedCount > 0) {
+          return (
+            <CommitmentPanel
+              title="Committed this week"
+              note="What this firmed week will produce — the demand Sunday procurement buys components against."
+              totalUnits={firmedDemand.data?.total_fg_units ?? 0}
+              entries={(firmedDemand.data?.rows ?? []).map((r) => ({
+                item_id: r.item_id,
+                item_name: r.item_name,
+                units: r.fg_units,
+                track: r.track,
+              }))}
+              pending={firmedDemand.isLoading}
+              footer={lockActionRow}
+            />
+          );
+        }
+        // No commitment card to attach to (nothing drafted, nothing firmed
+        // yet) — render the CTA standalone.
+        return (
+          <div className="rounded-lg border border-border-faint bg-bg-subtle/40 px-4 py-3">
+            {lockActionRow}
+          </div>
+        );
+      })()}
     </div>
   );
 }

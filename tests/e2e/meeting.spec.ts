@@ -1,5 +1,6 @@
 // ---------------------------------------------------------------------------
-// Weekly Meeting cockpit — DR-018 Tranche 121 (thursday-corridor-p0).
+// Weekly Meeting cockpit — DR-018 Tranche 121 (thursday-corridor-p0) +
+// Tranche 122 (meeting-lock-language).
 //
 // Tagged @mocked: stubs the cadence API at the browser (page.route) so the
 // generate-drafts confirmation gate is verified WITHOUT a live backend.
@@ -9,6 +10,10 @@
 //   - INTER-001: "Generate / refresh drafts" requires an explicit second
 //     click before it fires — the first click shows the confirm copy and
 //     posts nothing; only the confirm button posts.
+//   - COPY-001: "Firm week" lexicon renamed to "Lock week" throughout.
+//   - COPY-002/COPY-005/INTER-004: 403/503 map to operator copy (no
+//     "break-glass" jargon anywhere) and the error banner's "Try again"
+//     re-fires the mutation.
 // ---------------------------------------------------------------------------
 
 import { expect, test } from "@playwright/test";
@@ -130,5 +135,61 @@ test.describe("@mocked weekly meeting", () => {
     await page.getByTestId("meeting-gen-keep").click();
     await expect(page.getByTestId("meeting-gen-trigger")).toBeVisible();
     expect(postCount).toBe(0);
+  });
+
+  test("COPY-001: 'Lock week' lexicon replaces 'Firm week' throughout", async ({
+    page,
+  }) => {
+    await setFakeRole(page, "planner");
+    await page.route("**/api/planning/draft-week**", (route) =>
+      route.fulfill({ json: draftWeekResponse() }),
+    );
+    await page.route("**/api/planning/firmed-week-demand**", (route) =>
+      route.fulfill({ json: firmedWeekDemandResponse() }),
+    );
+
+    await page.goto("/planning/meeting");
+    await page.getByRole("button", { name: /Firm — Thursday/i }).click();
+
+    await expect(page.getByRole("button", { name: /^Lock week$/i })).toBeVisible();
+    await expect(page.getByText(/firm week/i)).toHaveCount(0);
+  });
+
+  test("COPY-002/COPY-005/INTER-004: 403 and 503 map to operator copy (no break-glass jargon); Try again re-fires", async ({
+    page,
+  }) => {
+    await setFakeRole(page, "planner");
+
+    let postCount = 0;
+    await page.route("**/api/planning/draft-week**", (route) =>
+      route.fulfill({ json: draftWeekResponse() }),
+    );
+    await page.route("**/api/planning/firmed-week-demand**", (route) =>
+      route.fulfill({ json: firmedWeekDemandResponse() }),
+    );
+    await page.route("**/api/planning/generate-drafts", (route) => {
+      postCount += 1;
+      // First call: 503 (system unavailable). Second call (via "Try
+      // again"): 403 (permission denied) — proves the retry actually
+      // re-fires the mutation rather than replaying a cached result.
+      return route.fulfill({
+        status: postCount === 1 ? 503 : 403,
+        json: { error: postCount === 1 ? "break_glass_active" : "forbidden" },
+      });
+    });
+
+    await page.goto("/planning/meeting");
+    await page.getByRole("button", { name: /Firm — Thursday/i }).click();
+    await page.getByTestId("meeting-gen-trigger").click();
+    await page.getByTestId("meeting-gen-confirm").click();
+
+    await expect(page.getByText(/temporarily unavailable/i)).toBeVisible();
+    await expect(page.getByText(/break-glass/i)).toHaveCount(0);
+    expect(postCount).toBe(1);
+
+    await page.getByTestId("meeting-gen-error-retry").click();
+    await expect.poll(() => postCount).toBe(2);
+    await expect(page.getByText(/don't have permission/i)).toBeVisible();
+    await expect(page.getByText(/break-glass/i)).toHaveCount(0);
   });
 });

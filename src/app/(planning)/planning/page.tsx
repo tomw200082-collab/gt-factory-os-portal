@@ -634,7 +634,7 @@ export default function PlanningOverviewPage() {
               </Link>
               <span className="text-fg-faint" aria-hidden>→</span>
               <Link href="/planning/meeting" className="text-accent hover:underline">
-                Firm week
+                Lock week
               </Link>
             </div>
             <div className="mt-1 text-2xs text-fg-muted">
