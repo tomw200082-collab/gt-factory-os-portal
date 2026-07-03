@@ -28,6 +28,7 @@ import {
   RefreshCw,
   Loader2,
   Trash2,
+  Info,
 } from "lucide-react";
 import { useDialogA11y } from "./_lib/useDialogA11y";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
@@ -851,9 +852,21 @@ function EditModal({
     uom !== (plan.uom ?? "") ||
     notes !== (plan.notes ?? "");
 
+  // DR-018 INTER-007 (Tranche 123) — Escape / backdrop-click / Cancel all
+  // used to close silently even with unsaved edits. Guard once, reuse
+  // everywhere a close can be triggered.
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
+  function requestClose() {
+    if (isDirty && !isSubmitting) {
+      setConfirmingDiscard(true);
+      return;
+    }
+    onClose();
+  }
+
   // Tranche 079 (A11Y-R02 / R10) — dialog treatment (matches ManualAddModal).
   const { dialogRef, titleRef, onKeyDown: onDialogKeyDown } = useDialogA11y({
-    onClose,
+    onClose: requestClose,
     closeDisabled: isSubmitting,
   });
 
@@ -867,7 +880,7 @@ function EditModal({
       aria-labelledby="edit-modal-title"
       data-testid="edit-modal"
       tabIndex={-1}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={(e) => { if (e.target === e.currentTarget) requestClose(); }}
       onKeyDown={onDialogKeyDown}
     >
       <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-pop">
@@ -983,19 +996,51 @@ function EditModal({
             />
           </label>
 
-          <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
-            <button type="button" className="btn btn-sm" onClick={onClose} disabled={isSubmitting}>
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="btn btn-primary btn-sm"
-              disabled={isSubmitting || !isDirty}
-              data-testid="edit-submit"
+          {confirmingDiscard ? (
+            <div
+              className="flex flex-wrap items-center justify-end gap-2 pt-2"
+              data-testid="edit-discard-confirm"
             >
-              {isSubmitting ? "Saving…" : "Save changes"}
-            </button>
-          </div>
+              <span className="mr-auto text-xs text-fg-muted">Discard unsaved changes?</span>
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => setConfirmingDiscard(false)}
+                data-testid="edit-discard-keep"
+              >
+                Keep editing
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm btn-danger"
+                onClick={onClose}
+                data-testid="edit-discard-confirm-yes"
+              >
+                Discard
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
+              <button type="button" className="btn btn-sm" onClick={requestClose} disabled={isSubmitting}>
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="btn btn-primary btn-sm gap-1.5"
+                disabled={isSubmitting || !isDirty}
+                data-testid="edit-submit"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                    Saving…
+                  </>
+                ) : (
+                  "Save changes"
+                )}
+              </button>
+            </div>
+          )}
         </form>
       </div>
     </div>
@@ -1127,10 +1172,21 @@ function EditNoteModal({
   const [notes, setNotes] = useState(plan.notes ?? "");
 
   const canSubmit = notes.trim().length > 0 && !isSubmitting;
+  const isDirty = planDate !== plan.plan_date || notes !== (plan.notes ?? "");
+
+  // DR-018 INTER-007 (Tranche 123) — same dirty-close guard as EditModal.
+  const [confirmingDiscard, setConfirmingDiscard] = useState(false);
+  function requestClose() {
+    if (isDirty && !isSubmitting) {
+      setConfirmingDiscard(true);
+      return;
+    }
+    onClose();
+  }
 
   // Tranche 079 (A11Y-R02 / R10) — dialog treatment.
   const { dialogRef, titleRef, onKeyDown: onDialogKeyDown } = useDialogA11y({
-    onClose,
+    onClose: requestClose,
     closeDisabled: isSubmitting,
   });
 
@@ -1144,7 +1200,7 @@ function EditNoteModal({
       aria-labelledby="edit-note-modal-title"
       data-testid="edit-note-modal"
       tabIndex={-1}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={(e) => { if (e.target === e.currentTarget) requestClose(); }}
       onKeyDown={onDialogKeyDown}
     >
       <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-pop">
@@ -1192,19 +1248,51 @@ function EditNoteModal({
             />
           </label>
 
-          <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
-            <button type="button" className="btn btn-sm" onClick={onClose} disabled={isSubmitting}>
-              Cancel
-            </button>
-            <button
-              type="submit"
-              className="btn btn-primary btn-sm"
-              disabled={!canSubmit}
-              data-testid="edit-note-submit"
+          {confirmingDiscard ? (
+            <div
+              className="flex flex-wrap items-center justify-end gap-2 pt-2"
+              data-testid="edit-note-discard-confirm"
             >
-              {isSubmitting ? "Saving…" : "Save changes"}
-            </button>
-          </div>
+              <span className="mr-auto text-xs text-fg-muted">Discard unsaved changes?</span>
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => setConfirmingDiscard(false)}
+                data-testid="edit-note-discard-keep"
+              >
+                Keep editing
+              </button>
+              <button
+                type="button"
+                className="btn btn-sm btn-danger"
+                onClick={onClose}
+                data-testid="edit-note-discard-confirm-yes"
+              >
+                Discard
+              </button>
+            </div>
+          ) : (
+            <div className="flex flex-wrap items-center justify-end gap-2 pt-2">
+              <button type="button" className="btn btn-sm" onClick={requestClose} disabled={isSubmitting}>
+                Cancel
+              </button>
+              <button
+                type="submit"
+                className="btn btn-primary btn-sm gap-1.5"
+                disabled={!canSubmit}
+                data-testid="edit-note-submit"
+              >
+                {isSubmitting ? (
+                  <>
+                    <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" aria-hidden="true" />
+                    Saving…
+                  </>
+                ) : (
+                  "Save changes"
+                )}
+              </button>
+            </div>
+          )}
         </form>
       </div>
     </div>
@@ -1255,7 +1343,7 @@ function CancelModal({
         <p className="mt-1 text-3xs text-fg-muted">
           {plan.plan_type === "note"
             ? "Note"
-            : `${plan.item_name ?? plan.item_id} · ${fmtQty(plan.planned_qty ?? "0", plan.uom ?? "")}`}
+            : `${plan.item_name ?? "this item"} · ${fmtQty(plan.planned_qty ?? "0", plan.uom ?? "")}`}
         </p>
 
         <div className="mt-3 rounded border border-warning/30 bg-warning-softer/30 p-3 text-xs text-warning-fg">
@@ -1353,7 +1441,7 @@ function DeleteModal({
         <p className="mt-1 text-3xs text-fg-muted">
           {plan.plan_type === "note"
             ? "Note"
-            : `${plan.item_name ?? plan.item_id} · ${fmtQty(plan.planned_qty ?? "0", plan.uom ?? "")}`}
+            : `${plan.item_name ?? "this item"} · ${fmtQty(plan.planned_qty ?? "0", plan.uom ?? "")}`}
           {isCancelled ? " · cancelled" : ""}
         </p>
 
@@ -1418,7 +1506,7 @@ function Toast({
         <button
           type="button"
           onClick={onClose}
-          className="text-3xs underline hover:no-underline"
+          className="text-3xs underline hover:no-underline focus-visible:ring-2 focus-visible:ring-accent focus-visible:outline-none"
         >
           Close
         </button>
@@ -1529,6 +1617,9 @@ export default function ProductionPlanPage() {
   const plannedCount = productionPlans.filter((p) => p.rendered_state === "planned").length;
   const doneCount = productionPlans.filter((p) => p.rendered_state === "done").length;
   const cancelledCount = productionPlans.filter((p) => p.rendered_state === "cancelled").length;
+  // DR-018 FLOW-007 (Tranche 123) — drafts can otherwise sit indefinitely
+  // with no portal affordance pointing at the "done editing" handshake.
+  const draftCount = productionPlans.filter((p) => p.status === "draft").length;
 
   const totalQty = productionPlans
     .filter((p) => p.rendered_state !== "cancelled")
@@ -1885,7 +1976,7 @@ export default function ProductionPlanPage() {
                   data-testid="header-add-from-recs"
                 >
                   <Sparkles className="h-3 w-3" strokeWidth={2.5} />
-                  Add from recommendations
+                  Add from Recommendations
                 </button>
                 <button
                   type="button"
@@ -1911,6 +2002,33 @@ export default function ProductionPlanPage() {
           </div>
         }
       />
+
+      {/* DR-018 FLOW-007 (Tranche 123) — drafts had no portal affordance
+          pointing at the "done editing" handshake and could sit
+          indefinitely. Non-dismissible (no close button) — it should
+          disappear because the drafts got resolved, not because it was
+          dismissed. */}
+      {draftCount > 0 && (
+        <div
+          className="mb-4 flex flex-wrap items-start gap-2 rounded-md border border-info/30 bg-info-softer/40 px-3 py-2 text-xs text-info-fg"
+          data-testid="draft-review-banner"
+          role="status"
+        >
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden="true" />
+          <span className="min-w-0 flex-1">
+            Engine drafts below are waiting for your review. When you&apos;re
+            done, return to the planning chat — or open Weekly Meeting to
+            lock the week.
+          </span>
+          <Link
+            href="/planning/meeting"
+            className="shrink-0 whitespace-nowrap font-medium underline underline-offset-2 hover:no-underline"
+            data-testid="draft-review-banner-link"
+          >
+            Open Weekly Meeting →
+          </Link>
+        </div>
+      )}
 
       {/* Tranche 117 (visual amplify) — the banner, 4 KPI microcards, and
           secondary nav used to be four separate stacked boxes pushing the
@@ -2297,7 +2415,7 @@ export default function ProductionPlanPage() {
                   data-testid="empty-state-add-from-recs"
                 >
                   <Sparkles className="h-3 w-3" strokeWidth={2.5} />
-                  Add from recommendations
+                  Add from Recommendations
                 </button>
               </>
             ) : undefined

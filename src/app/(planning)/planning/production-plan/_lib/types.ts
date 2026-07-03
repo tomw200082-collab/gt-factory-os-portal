@@ -32,6 +32,12 @@ export interface ProductionPlanRow {
   is_base_batch: boolean;
   pack_manifest_count: number; // jsonb_array_length(pack_manifest)
 
+  // DR-018 INTER-002 (Tranche 123). Backend companion:
+  // gt-factory-os PR (production-plan is_user_modified reads). Optional
+  // because the badge that reads it must degrade gracefully if this portal
+  // deploys before that backend PR does.
+  is_user_modified?: boolean;
+
   source_recommendation_id: string | null;
   source_run_id: string | null;
   source_run_status: string | null;
