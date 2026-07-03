@@ -1,0 +1,129 @@
+# Tranche 116: production-plan stock-timing context strip
+
+status: landed-pending-review
+created: 2026-07-02
+scorecard_target_category: flow_continuity
+expected_delta: +0 on flow_continuity (category is 10/10; this closes the F1-adjacent decision gap from docs/ux/production-plan-backend-requirements-2026-06-25.md without backend work — value is operator decision quality, tracked via exit evidence)
+sizing: M  (6 files)
+
+## Why this tranche
+
+The planner picks WHAT and WHEN to produce on `/planning/production-plan` blind:
+the ManualAdd modal shows a bare product `<select>` and the job card shows only
+the planned quantity. The two failure modes Tom named are stockout (produced too
+late) and overproduction (produced too much / double-planned). Every variable
+needed to answer both already ships in the `/api/inventory/flow` response —
+this tranche surfaces five of them at the exact moment of decision. No backend
+changes, no new endpoints, no raw-materials scope.
+
+## The five locked variables (per selected item)
+
+| # | Label (English — surface is NOT in the Hebrew exception list) | Source field | Answers |
+|---|---|---|---|
+| 1 | `On hand now` | `FlowItem.current_on_hand` | starting point |
+| 2 | `Runs out` + derived `Produce by` (= stockout − 1 day) | `FlowItem.stockout_at_day_with_production` (fallback `earliest_stockout_date` when the optional field is absent) | the real deadline — already includes existing planned runs; the −1 day matches the server's +1-day production-inflow lag (`FlowDay.inflow_from_production`) |
+| 3 | `Daily demand` | `demandSum14(item) / 14` (helper already exported from `inventory-flow/_lib/production-lens.ts`) | converts qty ↔ days |
+| 4 | `Cover after this run` | modal (preview, live while qty is typed): `(projectedOnHandAt(item, plan_date) + qty) / dailyRate`. Card (plan already saved → projection already includes it): `FlowItem.days_cover_with_production` verbatim | the overproduction brake |
+| 5 | `Already covered by planned production` chip | `coveredByPlan(item)` (already exported from `production-lens.ts`) | the double-planning trap |
+
+`projectedOnHandAt(item, isoDate)` = `days.find(d => d.day === isoDate)?.projected_on_hand_eod_with_production ?? null` (56-day horizon; null ⇒ date beyond window).
+
+## Scope
+
+- **New pure lib** `src/app/(planning)/planning/production-plan/_lib/stock-context.ts` — no React/DOM/fetch (repo convention, mirrors `production-lens.ts`):
+  - `findFlowItem(flow: FlowResponse | undefined, itemId: string | null): FlowItem | null`
+  - `dailyDemandRate(item: FlowItem): number` — `demandSum14(item) / 14`
+  - `projectedOnHandAt(item: FlowItem, isoDate: string): number | null`
+  - `coverAfterRun(onHandAtDate: number, qty: number, dailyRate: number): number | null` — returns `null` when `dailyRate <= 0` (render as "No demand recorded in the next 14 days" — itself an overproduction signal)
+  - `produceByDate(stockoutIso: string): string` — stockout minus 1 calendar day (reuse `addDays` from `../_lib/helpers`)
+  - `buildStockContext(item, planDate, previewQty | null)` → one view-model object consumed by the component; re-export/wrap `coveredByPlan` from `../../inventory-flow/_lib/production-lens` (relative import within the `(planning)` route group — types from `../../inventory-flow/_lib/types`)
+- **New component** `src/app/(planning)/planning/production-plan/_components/ItemStockContext.tsx`:
+  - Props: `{ itemId: string | null; planDate: string; previewQty: number | null; mode: "preview" | "card" }`
+  - Data: `useInventoryFlow({})` from `../../inventory-flow/_lib/useInventoryFlow` — **same queryKey `["inventory-flow", {}]` as the inventory-flow page** ⇒ warm-cache + localStorage-seed reuse, 60s background refetch, zero new endpoints. Do NOT pass params (a different params object is a different cache entry and forfeits the shared cache).
+  - Renders one compact strip (styling register of `InventoryImpactPanel`: `text-xs`, `tabular-nums`, `chip`, existing tone tokens; `fmtQty` from `../_lib/helpers` for numbers). Rows: variables 1–4 + chip 5 + a `Stock details →` link to `/planning/inventory-flow`.
+  - States (all required): `itemId == null` → render nothing · flow loading → 2 skeleton rows (`animate-pulse`, matches InventoryImpactPanel) · flow error or item not found in response → single muted line `No stock projection available for this item.` (no retry button — the shared query self-refetches) · `projectedOnHandAt` null (date beyond 56-day horizon) → show rows 1–3 + `Beyond the 8-week forecast window` in place of row 4 · no stockout in horizon (`stockout_at_day_with_production` null AND `days_cover_with_production` = 56 sentinel) → row 2 reads `No stockout in the next 8 weeks`.
+  - `data-testid="item-stock-context"`.
+- **Wire into ManualAddModal** (`page.tsx`): render `<ItemStockContext mode="preview" itemId={itemId || null} planDate={planDate} previewQty={parseFloat(qty) > 0 ? parseFloat(qty) : null} />` directly under the Product `<select>` label block. Row 4 updates live as the planner types the quantity.
+- **Wire into the job card** via `InventoryImpactPanel.tsx` (NOT a new always-visible card element — the panel is the card's existing inventory home and is already lazily gated on `open`): render `<ItemStockContext mode="card" itemId={plan.item_id} planDate={plan.plan_date} previewQty={null} />` above the existing "+X to finished goods" banner. Base-batch plans (`item_id === null`) naturally render nothing.
+- **Warm the cache**: call the existing `usePrefetchInventoryFlow({})` once in `ProductionPlanPage` (`page.tsx`) — the hook was built for exactly this (cold upstream SQL ≈ 22s; prefetch hides it before the planner opens the modal).
+
+## Manifest (files that may be touched)
+manifest:
+  - src/app/(planning)/planning/production-plan/_lib/stock-context.ts
+  - src/app/(planning)/planning/production-plan/_lib/stock-context.test.ts
+  - src/app/(planning)/planning/production-plan/_components/ItemStockContext.tsx
+  - src/app/(planning)/planning/production-plan/page.tsx
+  - src/app/(planning)/planning/production-plan/_components/InventoryImpactPanel.tsx
+  - docs/portal-os/tranches/116-production-plan-stock-context.md
+
+## Revive directives (if any)
+revive: []
+
+## Out-of-scope
+- Raw-material availability vs on-hand (Tom-excluded explicitly, 2026-07-02).
+- Daily capacity anchor + recommendation rationale (backend-blocked F3/F4 — docs/ux/production-plan-backend-requirements-2026-06-25.md).
+- Any over-cover / target-cover threshold coloring on row 4 — displaying the number is honest; a threshold is policy Tom has not set. Plain number only.
+- Always-visible risk chip on the card face (stays inside the impact disclosure).
+- New API routes, changes under `src/app/api/**`, changes to `inventory-flow/**` (read-only imports from its `_lib` only).
+- Hebrew labels — surface is English-first per portal CLAUDE.md (not in the exception list).
+
+## Tests / verification
+- typecheck clean (`npx tsc --noEmit`)
+- vitest: src/app/(planning)/planning/production-plan/_lib/stock-context.test.ts — cover: item found/missing; dailyRate 0 → coverAfterRun null; projectedOnHandAt hit / date-out-of-horizon null; produceByDate = stockout − 1d; 56-day no-stockout sentinel; coveredByPlan passthrough true/false
+- vitest: full existing suite stays green (notably `_lib/*.test.ts`, `_components/card-*.test.tsx` in production-plan)
+- playwright: no existing production-plan spec (verified — closest is production-actual-real.spec.ts); no new e2e in this tranche; `inventory-flow-smoke.spec.ts` must stay green (shared hook untouched, import-only)
+- regression-sentinel: no baseline regressions
+
+## Exit evidence
+- Screenshot: ManualAddModal with an item selected — strip visible, row 4 changing with typed qty
+- Screenshot: job card impact panel open with the context strip above the FG banner
+- vitest N/N pass counts pasted
+- PR link
+
+## Rollback
+Revert the PR — two edited files regain their prior state, three files are new and deleted by the revert; no data-layer or shared-hook changes, so revert is clean.
+
+## Operator approval
+- [x] Tom approves this plan (approved in session chat, 2026-07-02: "מאושר, תבצע" — proceeding via `/portal-tranche-fix 116` rather than a PR comment)
+
+## Actual evidence (filled in by /portal-tranche-fix run)
+
+- Files touched (exactly the manifest, no scope creep):
+  - NEW `_lib/stock-context.ts` — pure view-model (`findFlowItem`, `dailyDemandRate`, `projectedOnHandAt`, `coverAfterRun`, `produceByDate`, `buildStockContext`)
+  - NEW `_lib/stock-context.test.ts` — 19 cases
+  - NEW `_components/ItemStockContext.tsx` — the strip, both modes
+  - EDIT `page.tsx` — `ItemStockContext` wired under the Product select in ManualAddModal; `usePrefetchInventoryFlow({})` warms the cache on mount (+17 lines, 0 removed)
+  - EDIT `InventoryImpactPanel.tsx` — `ItemStockContext` (`mode="card"`) rendered above the existing FG banner (+11 lines, 0 removed)
+- `npx tsc --noEmit`: 0 errors.
+- `npx eslint` on all 5 touched files: 0 errors, 1 pre-existing warning (page.tsx:246, `react-hooks/exhaustive-deps` on an unrelated `serverErrors` effect predating this tranche — confirmed via `git diff` that line is untouched).
+- `npx vitest run`: **849/849** passed, 109/109 files (847 pre-existing + 2 net-new from the 19 new stock-context cases replacing 0; full suite stayed green, no regressions).
+- Two test-authoring bugs caught and fixed during the run (both in the new test file, not the implementation): a 7-day demand fixture silently understated `dailyDemandRate`'s /14 divisor, and one assertion wrongly expected `coverAfterRunDays` to null out beyond the horizon — the actual (and correct) contract is that the pure function returns the verbatim `days_cover_with_production` there, and the *component* is what suppresses display via the `beyondHorizon` flag in favor of "Beyond the 8-week forecast window".
+- Playwright: local sandbox's pinned Chromium build differs from what's installed at `/opt/pw-browsers` here, so `--grep @mocked` could not run locally (browser executable missing, unrelated to this change — none of the 5 locally-unrunnable specs touch a manifest file). The same `--grep @mocked` suite (5/5) already ran green in CI on this branch's registry-fix commit; CI re-verifies on this push.
+- Two pre-existing bookkeeping items were corrected as part of activating this tranche (not part of the manifest, tracked separately): `docs/portal-os/tranches/_active.txt` was stale at `115` (that tranche's commit was already merged into this branch's history) and is now `116`; the Operator-approval checkbox records Tom's verbal chat approval ("מאושר, תבצע") in lieu of a PR comment.
+- PR: https://github.com/tomw200082-collab/gt-factory-os-portal/pull/151 (same PR as the plan — implementation pushed as follow-up commits on `claude/production-plan-inventory-view-vlkx82` per the session's branch mandate, rather than a separate `portal-os/tranche-116` branch).
+
+### /ux-release-gate sweep (2026-07-02, scoped to this tranche's 2 surfaces)
+
+Six audits dispatched in parallel (5 UX dimensions + one independent data-flow correctness review), scoped strictly to the tranche's files — not a full-portal audit. **Zero P0 findings.** Fixed all P1s plus the highest-convergence P2s before merge; documented the rest as backlog.
+
+**Fixed (this commit):**
+- **FLOW-116-01 (P1)** — the strip's "Stock details →" link, opened inside `ManualAddModal`, triggered full client-side navigation and silently discarded the planner's typed qty/notes with no warning. Fixed by removing the link entirely (both modes) — the 5 inline variables already answer the question; the page's own secondary nav and (in card mode) `InventoryImpactPanel`'s pre-existing "Check stock levels" link still reach `/planning/inventory-flow`. This same fix also resolved FLOW-116-05 (duplicate link to the same destination in card mode) and INTER-T116-001 (link's touch target was under the 32px minimum) for free.
+- **FLOW-116-02 (P1)** — `ManualAddModal` had no scroll containment; the strip's added height risked pushing the submit buttons off-screen on short viewports. Fixed with the same `max-h-[min(90vh,620px)] flex flex-col` + internal `overflow-y-auto` pattern already used by `AddFromRecommendationsModal` in the same file. **Verified by real render**, not just code review: at 375×568px (iPhone SE-class), the submit button's measured bounding box (`y:519, height:28`) sits fully inside the 568px viewport.
+- **COPY-001 / COPY-002 (P1)** — reworded "current, before this run" → "today's cover · no quantity entered yet" (removes the "planning run" ambiguity) and "No demand recorded in the next 14 days" → "No demand in the next 14 days — this stock may sit unused" (delivers the overproduction-risk implication the tranche intends instead of a neutral fact requiring inference).
+- **VISUAL-001 (P2)** — `chip-warning` (amber, reserved in this corridor for negative/action-required states like "Overdue") → `chip-info` on the "Already covered by planned production" chip, an informational/reassuring fact, not a warning.
+- **VISUAL-002 (P2)** — removed the strip's own `mt-2`; as the first child of a `space-y-2`/`space-y-3` parent it was adding a redundant extra top-gap (parent-owned spacing already handles it in both call sites) — this is the exact risk flagged during implementation and now confirmed by an independent audit.
+- **VISUAL-004 (P2)** — `items-center` → `items-start` on the two rows that can carry a 2-line value (produce-by / baseline-hint sub-lines), so the label stays anchored to the primary data line instead of vertically centering against the taller block.
+- **A11Y-001 (P2)** — loading/error/loaded are now children of one stable wrapper carrying `aria-live="polite"` (previously each branch was a separate element with no live region, so the loading→loaded transition was silently invisible to screen readers).
+- **COPY-004 / INTER-T116-003 (P2, converged)** — split the flat "No stock projection available for this item." into a distinct `isError` branch (with a "Try again" button calling `flowQuery.refetch()`, since the query's `retry: false` means a transient failure would otherwise never self-heal until the next 60s background cycle) and a distinct item-not-tracked branch.
+
+**Evaluated and deliberately rejected (would have introduced inaccuracies):** COPY-003 ("produce by" → "ready by") and COPY-005 ("Beyond the 8-week forecast window" → "More than 8 weeks of cover") were proposed by the copy audit but both assert something the underlying data doesn't actually guarantee — "ready by" shifts by one day against the server's documented +1-day production-inflow lag, and "more than 8 weeks of cover" mischaracterizes `beyondHorizon` (a horizon-window limit on the *requested plan date*, not a claim about the item's actual stock level). Kept the original, accurate wording for both.
+
+**Documented, not implemented (design-decision-level, correctly deferred to a future tranche rather than unilaterally restyled):** VISUAL-003 — a "system rule" recommendation to swap the `ManualAddModal` strip's four-sided info box for a left-rule inset pattern, to reduce register-break against the modal's otherwise-unboxed fields. FLOW-116-03 — the "Already covered by planned production" chip's wording could still read as "this run is redundant" in card mode even after the tone fix; a mode-aware copy variant wasn't independently validated by the copy-content audit, so left as-is pending a real design call.
+
+**Data-flow correctness review (independent, adversarial):** one confirmed finding — the code comment (now removed) and this doc's earlier draft overclaimed that `ItemStockContext`'s `useInventoryFlow({})` shares a TanStack Query cache entry with `/planning/inventory-flow`'s own page. It does NOT (that page's own query includes `at_risk_only`/other filter params, producing a different cache key) — but it DOES correctly share a cache entry with this tranche's own `usePrefetchInventoryFlow({})` call on page mount, which is the actual mechanism that avoids a cold ~22s wait for the feature this tranche ships. No functional bug — data displayed is always correct — just a corrected claim. All other correctness checks (stockout-field null/undefined resolution, preview-vs-card branching, planDate format matching, null-safety) passed with no bugs found.
+
+**Verified by direct render** (bypassing the sandbox's Playwright version mismatch via `/opt/pw-browsers/chromium` + a standalone fixture-stubbed script, deleted after use): ManualAddModal with an item selected shows all 5 variables correctly; typing a quantity live-recomputes "Cover after this run" (6d → 2w cover at qty=500) and the baseline hint correctly disappears; the short-viewport scroll fix keeps the submit button on-screen (measured, not assumed).
+
+**Re-verified after fixes:** `tsc` 0 errors, `eslint` 0 errors (same 1 pre-existing unrelated warning), `vitest` 849/849.
+
+**Verdict: SHIP.** Zero P0s before or after fixes; all P1s resolved; remaining P2s are either fixed, or explicitly deferred with reasoning (not silently dropped).

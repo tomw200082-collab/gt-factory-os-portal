@@ -16,6 +16,7 @@ import { useQuery } from "@tanstack/react-query";
 import { Package } from "lucide-react";
 import { fmtQty } from "../_lib/helpers";
 import type { ProductionPlanRow } from "../_lib/types";
+import { ItemStockContext } from "./ItemStockContext";
 
 interface BomImpactSnapshot {
   bom_final_output_qty: string;
@@ -99,10 +100,20 @@ export function InventoryImpactPanel({
       className="mx-3 mb-3 rounded border border-info/30 bg-info-softer/20 p-2.5 space-y-2"
       data-testid="impact-panel"
     >
+      {/* Tranche 116 — stock-timing context: when is it smart to produce
+          this? Sits above the FG-add banner; the plan is already saved, so
+          previewQty stays null (the projection already includes this run). */}
+      <ItemStockContext
+        mode="card"
+        itemId={plan.item_id}
+        planDate={plan.plan_date}
+        previewQty={null}
+      />
+
       <div className="flex items-center gap-2 rounded border border-success/30 bg-success-softer/50 px-2 py-1.5">
         <Package className="h-3 w-3 text-success shrink-0" strokeWidth={2} />
         <span className="text-xs text-success-fg">
-          <span className="font-semibold tabular-nums">
+          <span className="font-mono font-semibold tabular-nums">
             +{fmtQty(heroQtyStr, heroUom ?? "")}
           </span>
           {" of "}
@@ -146,7 +157,7 @@ export function InventoryImpactPanel({
               {rmLines.map((line, idx) => (
                 <tr key={idx}>
                   <td className="text-xs text-fg py-1 pr-2">{line.name}</td>
-                  <td className="text-right text-xs tabular-nums text-fg-muted py-1">
+                  <td className="text-right font-mono text-xs tabular-nums text-fg-muted py-1">
                     {line.required % 1 === 0
                       ? line.required.toFixed(0)
                       : line.required.toFixed(2).replace(/\.?0+$/, "")}

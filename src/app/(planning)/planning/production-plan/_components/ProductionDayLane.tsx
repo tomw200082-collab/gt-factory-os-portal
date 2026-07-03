@@ -110,7 +110,7 @@ export function ProductionDayLane({
           </span>
           <span
             className={cn(
-              "text-sm tabular-nums leading-none",
+              "font-mono text-sm tabular-nums leading-none",
               isToday ? "text-fg-strong font-semibold" : "text-fg font-medium",
             )}
           >
@@ -135,7 +135,7 @@ export function ProductionDayLane({
             </span>
           )}
           {dayTotal > 0 && (
-            <span className="text-[10px] tabular-nums text-fg-faint leading-none">
+            <span className="font-mono text-[10px] tabular-nums text-fg-faint leading-none">
               {formatDayTotal(dayTotal, dominantUom)}
             </span>
           )}

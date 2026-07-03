@@ -1,8 +1,9 @@
-# Tranche 116: Movement Log — pause + undo LionWheel FG-out inventory decrements (count window)
+# Tranche 118: Movement Log — pause + undo LionWheel FG-out inventory decrements (count window)
 
 status: in-progress
 created: 2026-07-02
-updated: 2026-07-03 (added per-delivery undo, grilled scope with Tom)
+updated: 2026-07-03 (added per-delivery undo, grilled scope with Tom; renumbered 116→118 — 116 was
+claimed concurrently by production-plan-stock-context, PR #151, which merged to main first)
 scorecard_target_category: stock_surface / operator-control
 expected_delta: +2 operator-control (pause freezes FUTURE delivery-driven decrements during
 the count; undo reverses a decrement that ALREADY posted — e.g. a delivery confirmed just
@@ -66,7 +67,7 @@ manifest:
   - tests/unit/stock/fg-out-pause-control.test.tsx
   - tests/unit/stock/fg-out-pick-undo-control.test.tsx
   - docs/portal-os/registry.md
-  - docs/portal-os/tranches/116-movement-log-fg-out-pause.md
+  - docs/portal-os/tranches/118-movement-log-fg-out-pause.md
   - docs/portal-os/tranches/_active.txt
 
 ## Out of scope
