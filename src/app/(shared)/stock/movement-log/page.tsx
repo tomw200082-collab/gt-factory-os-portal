@@ -34,6 +34,7 @@ import { useQuery } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { FgOutPauseControl } from "@/components/stock/FgOutPauseControl";
+import { FgOutPickUndoControl } from "@/components/stock/FgOutPickUndoControl";
 import { useSession } from "@/lib/auth/session-provider";
 import { friendlyReverseError } from "@/lib/copy/physical-count-errors";
 import { cn } from "@/lib/cn";
@@ -667,6 +668,19 @@ function DetailsDrawer({
               <div className="whitespace-pre-wrap rounded border border-border/70 bg-bg-subtle/40 px-3 py-2 text-xs text-fg-muted">
                 {row.notes}
               </div>
+            </section>
+          ) : null}
+
+          {/* Delivery undo (Tom 2026-07-03) — reverses a FG_OUT_PICK decrement
+              that already posted (companion to the FG-out pause toggle, which
+              only stops FUTURE decrements). admin/planner only. */}
+          {row.movement_type === "FG_OUT_PICK" ? (
+            <section data-testid="movement-log-fg-out-pick-undo">
+              <FgOutPickUndoControl
+                movementId={row.movement_id}
+                movementType={row.movement_type}
+                onUndone={onReversed}
+              />
             </section>
           ) : null}
 
