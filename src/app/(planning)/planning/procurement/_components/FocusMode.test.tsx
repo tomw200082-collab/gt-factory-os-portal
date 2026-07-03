@@ -10,6 +10,7 @@
 //   M5 — ArrowLeft advances (RTL next); Escape closes
 // ---------------------------------------------------------------------------
 
+import { useState } from "react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -114,6 +115,42 @@ describe("FocusMode", () => {
     expect(screen.getByTestId("focus-card-b")).toBeTruthy();
     await user.keyboard("{Escape}");
     expect(onClose).toHaveBeenCalled();
+  });
+
+  it("M7 focuses the overlay on open and restores the trigger's focus on close (DR-018 A11Y-001)", async () => {
+    // Mirrors real usage: a trigger button stays mounted in the parent while
+    // FocusMode itself mounts/unmounts on top of it.
+    function Harness() {
+      const [open, setOpen] = useState(false);
+      return (
+        <div>
+          <button data-testid="trigger" onClick={() => setOpen(true)}>
+            open focus mode
+          </button>
+          {open && (
+            <FocusMode
+              pos={POS}
+              today={TODAY}
+              onClose={() => setOpen(false)}
+            />
+          )}
+        </div>
+      );
+    }
+    const user = userEvent.setup();
+    render(<Harness />);
+
+    const trigger = screen.getByTestId("trigger");
+    await user.click(trigger);
+
+    // The click focuses the trigger, then FocusMode mounts and moves focus
+    // into the overlay on the next microtask — by the time user.click()
+    // resolves both have happened.
+    expect(document.activeElement).toBe(screen.getByTestId("focus-mode"));
+
+    await user.keyboard("{Escape}");
+    expect(screen.queryByTestId("focus-mode")).toBeNull();
+    expect(document.activeElement).toBe(trigger);
   });
 
   it("M6 completion with work left offers 'continue to remaining'", async () => {

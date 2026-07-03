@@ -1,5 +1,19 @@
-# Portal Readiness: 91/100 (delta: +47 total, +3 this update)
+# Portal Readiness: 92/100 (delta: +48 total, +1 this update)
 
+> **2026-07-03 DR-018 UX-release-gate P0 batch (Tranche 121).** +1:
+> `planning_surface` 9 → 10. Closed all 5 P0 findings from the DR-018 gate
+> (`/planning/meeting`↔`/planning/procurement`↔`/purchase-orders/placement-queue`
+> Thursday→Sunday corridor): nav discoverability, an undefined `.btn-accent`
+> class silently unstyling 10+ primary CTAs, a zero-confirmation destructive
+> action, missing dialog focus management (plus a latent stacking-context bug
+> found while fixing it — the FocusMode close button was unclickable behind
+> the header), and orphaned ARIA grid roles on the inventory-flow desktop
+> grid. All e2e-proven `@mocked` on chromium. Evidence lists below for
+> tranches 093-120 were not individually back-filled this update —
+> `registry.md` is the authoritative one-line-per-tranche index in the
+> interim; a full `/portal-scorecard` recompute remains the right way to true
+> up every category.
+>
 > **2026-06-25 truth correction (Tranche A / 092).** +3 is NOT new feature work —
 > two stale ratings were corrected against shipped reality. The `/portal-audit`
 > admin-surface auditor proved the three admin shells are live (see below);
@@ -17,7 +31,7 @@ Post-Tranche-036 (procurement-merge + suite-green session). Previous: 86/100 (po
 | flow_continuity | 10 | +8 | Maintained. Live prod-backend smoke of the focus loop (the @mocked e2e is the CI proof); recent-submissions + approval queue stay backend-blocked. |
 | role_gate_correctness | 10 | +4 | Maintained. Middleware scaffold activates as layer 3 when backend populates `app_metadata.role`. |
 | data_truthfulness | 8 | +3 | Real /admin/integrations health (backend-blocked); aggregate KPIs (backend-blocked). |
-| planning_surface | 9 | +2 | Optional planning-exceptions dashboard. |
+| planning_surface | 10 | +3 | Maintained. DR-018 P0 batch closed (Tranche 121); P1/P2 backlog (tranches 122-125) still open. |
 | ops_surface | 8 | +5 | Recent-submissions (backend-blocked); auto-post deep-link target (backend-blocked). |
 | dashboard_truth | 9 | +3 | Aggregate KPIs (backend-blocked). |
 | technical_substrate | 10 | +4 | Maintained. |
@@ -94,4 +108,4 @@ When #1/#2 land, portal-side the work is M-or-smaller per shell.
 - No critical drift in the most recent weekly cron report.
 - At least one tranche landed for every category that started below 6/10 — **all 4 met** (admin_superuser_depth +2, nav_integrity +5, flow_continuity +7, regression_resistance +6).
 
-last_reviewed: 2026-06-25
+last_reviewed: 2026-07-03

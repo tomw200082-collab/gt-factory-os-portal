@@ -191,9 +191,24 @@ export function FlowGridDesktop({
   const weekCount = weeklyOnly.length;
   const sharedGridStyle = gridStyle(dayCount, weekCount);
 
+  // DR-018 A11Y-002 (Tranche 121) — DayCell's role="gridcell" was orphaned:
+  // no role="grid" ancestor, so assistive-tech grid navigation was
+  // non-functional. Item rows already carry role="row" (ItemRow below) and
+  // the header rows already carry role="row"/"columnheader"
+  // (DayHeaderRow) — only the grid root + row/col counts were missing.
+  // Row count = 2 header rows + one row per item; col count = sticky item
+  // column + daily columns + weekly columns (the gap track between the two
+  // bands is presentational only, not a real column).
+  const gridRowCount = sortedItems.length + 2;
+  const gridColCount = 1 + dayCount + weekCount;
+
   return (
     <div
       ref={scrollerRef}
+      role="grid"
+      aria-rowcount={gridRowCount}
+      aria-colcount={gridColCount}
+      aria-label="Inventory flow — items by day"
       className="flow-grid-scroller overflow-x-auto overflow-y-visible rounded-md border border-border/40 bg-bg-raised"
       data-testid="flow-grid-scroller"
     >

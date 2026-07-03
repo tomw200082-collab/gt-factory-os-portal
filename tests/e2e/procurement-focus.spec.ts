@@ -101,9 +101,15 @@ test.describe("@mocked procurement focus mode", () => {
     await expect(page.getByTestId("procurement-row-PO1")).toBeVisible();
 
     // Enter focus mode.
-    await page.getByTestId("procurement-start-focus").click();
+    const trigger = page.getByTestId("procurement-start-focus");
+    await trigger.click();
     await expect(page.getByTestId("focus-mode")).toBeVisible();
     await expect(page.getByTestId("focus-card-PO1")).toBeVisible();
+
+    // DR-018 A11Y-001 (Tranche 121) — opening the overlay moves focus inside
+    // it (the container itself, since the card's primary CTA isn't
+    // autofocused by this component).
+    await expect(page.getByTestId("focus-mode")).toBeFocused();
 
     // Approve → the order document + the place control appear.
     await page.getByTestId("focus-approve").click();
@@ -115,5 +121,87 @@ test.describe("@mocked procurement focus mode", () => {
     await page.getByTestId("focus-place").click();
     await expect(page.getByTestId("focus-done")).toBeVisible();
     await expect(page.getByTestId("focus-done-close")).toBeVisible();
+
+    await page.getByTestId("focus-done-close").click();
+    await expect(page.getByTestId("focus-mode")).not.toBeVisible();
+  });
+
+  test("DR-018 A11Y-001: closing the overlay restores focus to the trigger", async ({
+    page,
+  }) => {
+    await setFakeRole(page, "planner");
+
+    const po = () => ({
+      session_po_id: "PO1",
+      supplier_id: "SUP1",
+      supplier_snapshot: "ספק בדיקה",
+      tier: "must",
+      status: "proposed",
+      order_by_date: "2026-05-20",
+      earliest_need_date: "2026-06-01",
+      covered_through_date: null,
+      currency: "ILS",
+      total_cost: 100,
+      order_document_text: null,
+      po_id: null,
+      blocking_issues: [],
+      lines: [
+        {
+          session_po_line_id: "L1",
+          component_id: "C1",
+          item_id: null,
+          line_label: "רכיב בדיקה",
+          recommended_qty: 10,
+          final_qty: 10,
+          uom: "UNIT",
+          unit_cost: 10,
+          line_cost: 100,
+          earliest_need_date: null,
+          coverage_trace: null,
+          is_user_added: false,
+          is_dropped: false,
+        },
+      ],
+    });
+    const session = () => ({
+      session: {
+        session_id: "S1",
+        session_type: "weekly",
+        session_date: "2026-05-31",
+        status: "open",
+        horizon_days: 14,
+        consolidation_window_days: 7,
+        rebuild_verifier_drift: null,
+        warnings: [],
+        release_fence: null,
+        created_at: "2026-05-31T00:00:00Z",
+        completed_at: null,
+        totals: {
+          po_count: 1,
+          line_count: 1,
+          total_cost: 100,
+          by_tier: { urgent: 0, must: 1, recommended: 0 },
+          by_status: { proposed: 1, approved: 0, placed: 0, skipped: 0 },
+        },
+        pos: [po()],
+      },
+    });
+    await page.route("**/api/purchase-session/current", (route) =>
+      route.fulfill({ json: session() }),
+    );
+
+    await page.goto("/planning/procurement");
+    await expect(page.getByTestId("procurement-row-PO1")).toBeVisible();
+
+    const trigger = page.getByTestId("procurement-start-focus");
+    await trigger.click();
+    await expect(page.getByTestId("focus-mode")).toBeVisible();
+    await expect(page.getByTestId("focus-mode")).toBeFocused();
+
+    // Close without resolving anything — the trigger is still on the page
+    // (nothing was placed/skipped), so focus must land back on it.
+    await page.getByTestId("focus-close").click();
+    await expect(page.getByTestId("focus-mode")).not.toBeVisible();
+    await expect(trigger).toBeFocused();
   });
 });

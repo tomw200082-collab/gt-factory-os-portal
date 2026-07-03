@@ -18,6 +18,7 @@
 // ---------------------------------------------------------------------------
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import Link from "next/link";
 import { CheckCircle2, ListChecks, X } from "lucide-react";
 import { cn } from "@/lib/cn";
@@ -46,8 +47,22 @@ export function FocusMode({
   startId,
   today,
   onClose,
-}: FocusModeProps): JSX.Element {
+}: FocusModeProps): JSX.Element | null {
   const day = today ?? todayISO();
+
+  // DR-018 A11Y-001 (Tranche 121) — portal-mount guard, mirroring MobileNav.
+  // createPortal needs a real DOM target, so defer until mount (SSR safety).
+  // Portaling to document.body escapes AppShellChrome's `isolate` root: this
+  // overlay's `position: fixed` + z-50 was being trapped BELOW TopBar's
+  // explicit z-40 (TopBar is a direct positioned child of the isolate
+  // context; FocusMode was nested several non-positioned ancestors deep, so
+  // its whole subtree painted in the isolate context's non-positioned layer
+  // — below TopBar regardless of its own z-50). That silently made the
+  // top-left close button unclickable behind the header.
+  const [mounted, setMounted] = useState(false);
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   // Stable walk order, snapshotted when focus opens. Live status comes from
   // `pos` (which refetches after every mutation); the *order* must not reshuffle
@@ -82,6 +97,18 @@ export function FocusMode({
   }, [cardDirty, onClose]);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  // DR-018 A11Y-001 (Tranche 121) — keyboard/AT users lost their position
+  // every time the overlay opened (no focus-in) or closed (no focus-restore).
+  // Captured at render time (not in an effect): FocusCard autofocuses its
+  // own primary CTA in a child effect, and child effects run before parent
+  // effects, so capturing this in a useEffect here would race and often
+  // capture the CTA instead of the real trigger that had focus before this
+  // overlay mounted.
+  const previouslyFocusedRef = useRef<HTMLElement | null>(
+    typeof document !== "undefined"
+      ? (document.activeElement as HTMLElement | null)
+      : null,
+  );
 
   const goTo = useCallback(
     (id: string | null) => {
@@ -151,6 +178,30 @@ export function FocusMode({
     };
   }, []);
 
+  // DR-018 A11Y-001 (Tranche 121) — move focus into the overlay on open,
+  // and restore it to the trigger (captured above, at render time) on
+  // close/unmount. Gated on `mounted`: before the portal-mount guard flips
+  // true, this component renders null, so containerRef.current is still
+  // null on the very first effect pass — running this effect a second time
+  // once `mounted` becomes true (and the portaled DOM node actually exists)
+  // is what makes the focus-in reliable.
+  useEffect(() => {
+    if (!mounted) return;
+    const trigger = previouslyFocusedRef.current;
+    queueMicrotask(() => {
+      containerRef.current?.focus();
+    });
+    return () => {
+      if (trigger && typeof trigger.focus === "function") {
+        try {
+          trigger.focus();
+        } catch {
+          /* trigger may have unmounted — ignore */
+        }
+      }
+    };
+  }, [mounted]);
+
   // Keyboard: Esc closes; RTL arrows (← next, → previous). Arrow navigation is
   // suppressed while a field is focused so typing a quantity/date isn't
   // hijacked into changing orders.
@@ -217,10 +268,13 @@ export function FocusMode({
   ).length;
   const remaining = remainingCount(queueIds, statusById);
 
-  return (
+  if (!mounted) return null;
+
+  return createPortal(
     <div
       ref={containerRef}
-      className="fixed inset-0 z-50 flex flex-col bg-bg/95 backdrop-blur-sm"
+      tabIndex={-1}
+      className="fixed inset-0 z-50 flex flex-col bg-bg/95 backdrop-blur-sm outline-none"
       role="dialog"
       aria-modal="true"
       aria-label="מצב מיקוד — רכש"
@@ -376,7 +430,8 @@ export function FocusMode({
           </div>
         </div>
       )}
-    </div>
+    </div>,
+    document.body,
   );
 }
 
