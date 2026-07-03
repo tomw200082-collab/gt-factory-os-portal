@@ -33,6 +33,8 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
+import { FgOutPauseControl } from "@/components/stock/FgOutPauseControl";
+import { FgOutPickUndoControl } from "@/components/stock/FgOutPickUndoControl";
 import { useSession } from "@/lib/auth/session-provider";
 import { friendlyReverseError } from "@/lib/copy/physical-count-errors";
 import { cn } from "@/lib/cn";
@@ -669,6 +671,19 @@ function DetailsDrawer({
             </section>
           ) : null}
 
+          {/* Delivery undo (Tom 2026-07-03) — reverses a FG_OUT_PICK decrement
+              that already posted (companion to the FG-out pause toggle, which
+              only stops FUTURE decrements). admin/planner only. */}
+          {row.movement_type === "FG_OUT_PICK" ? (
+            <section data-testid="movement-log-fg-out-pick-undo">
+              <FgOutPickUndoControl
+                movementId={row.movement_id}
+                movementType={row.movement_type}
+                onUndone={onReversed}
+              />
+            </section>
+          ) : null}
+
           {/* Count undo (0240 / Phase B) — restores the stock value this
               count set, identical to the API the count form rides on. */}
           {undoDone ? (
@@ -1222,6 +1237,10 @@ export default function MovementLogPage() {
       >
         <TrustStrip totalRows={total} />
       </WorkflowHeader>
+
+      {/* Count-window pause: freeze delivery-driven FG stock changes during a
+          physical count (admin/planner toggle; paused banner for all roles). */}
+      <FgOutPauseControl />
 
       {urlPoId ? (
         <div
