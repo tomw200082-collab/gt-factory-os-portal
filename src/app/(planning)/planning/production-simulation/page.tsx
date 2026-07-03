@@ -42,11 +42,14 @@ export default function ProductionSimulationPage() {
       >
         <Info className="h-4 w-4 shrink-0 text-fg-faint" strokeWidth={2} aria-hidden />
         <span>
+          {/* DR-018 COPY-004 (Tranche 125) — the original "does not change
+              inventory / not the source of truth" framing was accurate but
+              entirely negative, deterring legitimate use of the tool. */}
           <span className="font-semibold text-fg-strong">
             What-if preview.
           </span>{" "}
-          This does not change inventory and is not the production planning
-          source of truth.
+          Use this to check material needs before committing. Changes here
+          don&apos;t affect the production plan or inventory.
         </span>
       </div>
 

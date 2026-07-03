@@ -132,6 +132,40 @@ export function weekCellClassNameProduction(
   return DAY_CELL_BG_WITH_PRODUCTION.healthy;
 }
 
+// DR-018 A11Y-007 (Tranche 125) — DayCell's aria-label interpolated the raw
+// enum value (e.g. "tier critical_stockout") straight into the announced
+// string; a screen-reader user heard a snake_case identifier, not English.
+export const CELL_TIER_LABEL: Record<CellTierWithProduction, string> = {
+  critical_stockout: "Stockout",
+  at_risk: "At Risk",
+  low: "Low stock",
+  medium: "Medium stock",
+  healthy: "Healthy",
+  non_working: "Non-working day",
+};
+
+// `DayCell` falls back to the coarser `DayCellTier` (`day.tier`) when the
+// server hasn't shipped `cell_tier_with_production` yet (deploy-ordering
+// safety net, same rationale as `dayCellClassNameProduction` above) — that
+// enum has 3 keys (`watch`/`critical`/`stockout`) not in `CELL_TIER_LABEL`.
+// This resolver covers both so the aria-label is never "undefined".
+const DAY_CELL_TIER_LABEL: Record<DayCellTier, string> = {
+  healthy: "Healthy",
+  watch: "Watch",
+  critical: "Critical",
+  stockout: "Stockout",
+  non_working: "Non-working day",
+};
+
+export function cellTierLabel(
+  tier: CellTierWithProduction | DayCellTier,
+): string {
+  return (
+    CELL_TIER_LABEL[tier as CellTierWithProduction] ??
+    DAY_CELL_TIER_LABEL[tier as DayCellTier]
+  );
+}
+
 /** Inline stripe pattern for non-working day cells. */
 export const NON_WORKING_STRIPE_STYLE: React.CSSProperties = {
   backgroundImage:

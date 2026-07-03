@@ -132,9 +132,11 @@ export function InventoryFlowClient() {
       title="Inventory Flow"
       // Tranche 057 (FLOW-M07): size="section" + one-line description so the
       // header stops eating the phone's above-the-fold space — the first item
-      // card must be visible without scrolling on a 667px-tall viewport.
+      // card must be visible without scrolling on a 667px-tall viewport. The
+      // DR-018 FLOW-009 (Tranche 125) addition below stays a single short
+      // clause to respect that budget.
       size="section"
-      description="14-day daily finished-goods projection, then weekly to 8 weeks. Stockouts first."
+      description="14-day daily finished-goods projection, then weekly to 8 weeks. Stockouts first. Run this before locking a week to check coverage gaps, or after receiving goods to confirm the week is covered."
       meta={
         <>
           {flowQuery.isLoading ? (

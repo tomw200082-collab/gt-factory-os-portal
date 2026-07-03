@@ -675,13 +675,25 @@ export default function PlanningOverviewPage() {
       </SectionCard>
 
       {/* ===================================================================
-          The planning pipeline — Demand → Run → Recommendations → Blockers
+          DR-018 FLOW-003 (Tranche 125) — this block was titled "The
+          planning pipeline" and implied it WAS the ordering path (Demand →
+          Run → Recommendations → Blockers). The real corridor is
+          Forecast → Thursday Meeting → Lock → Sunday Procurement (the
+          cadence block below, untouched). Retitled + a one-line
+          disclaimer so this reads as an engine-health monitor, not a
+          second navigable path to "order."
           =================================================================== */}
-      <section aria-label="Planning pipeline" className="space-y-3">
-        <h2 className="flex items-center gap-2 text-2xs font-semibold uppercase tracking-sops text-fg-muted">
-          <Activity className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
-          The planning pipeline
-        </h2>
+      <section aria-label="Engine diagnostic" className="space-y-3">
+        <div>
+          <h2 className="flex items-center gap-2 text-2xs font-semibold uppercase tracking-sops text-fg-muted">
+            <Activity className="h-3.5 w-3.5" strokeWidth={2} aria-hidden />
+            Engine diagnostic
+          </h2>
+          <p className="mt-1 text-2xs text-fg-faint">
+            This monitors the engine&apos;s outputs, not the order path. To
+            order: Thursday meeting → Lock → Sunday procurement.
+          </p>
+        </div>
         <div className="flex flex-col gap-3 lg:flex-row lg:items-stretch lg:gap-0">
           {/* Stage 1 — Demand */}
           <PipelineStage
