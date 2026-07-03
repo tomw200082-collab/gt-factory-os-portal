@@ -167,4 +167,4 @@ the FLOW-005 skip claim independently confirmed against the actual
 `PurchaseSession` type (no week-lock or batch-count field exists), no
 baseline regressions.
 
-**PR**: filled in after push.
+**PR**: https://github.com/tomw200082-collab/gt-factory-os-portal/pull/157 (based on `portal-os/tranche-123` / #156 — stacked)
