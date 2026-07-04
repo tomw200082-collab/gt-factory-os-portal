@@ -281,7 +281,7 @@ function SupplierComponentTable({
           // only appears in the by-product view.
           const driverNames = [...c.sources]
             .sort((a, b) => parseFloat(b.qty) - parseFloat(a.qty))
-            .map((s) => s.item_name ?? s.item_id ?? "Unknown product");
+            .map((s) => s.item_name ?? "Unknown product");
           return (
             <tr
               key={c.component_id}

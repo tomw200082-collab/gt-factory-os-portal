@@ -35,4 +35,25 @@ test.describe("/planning/procurement — unified procurement page", () => {
     await expect(page.getByText("Access restricted")).toBeVisible();
     await expect(page.getByTestId("procurement-start")).toHaveCount(0);
   });
+
+  test("DR-018 ux-release-gate FLOW-016: a reason_code-carrying start-session failure never leaks the raw English enum", async ({
+    page,
+  }) => {
+    await setFakeRole(page, "planner");
+    await page.route("**/api/purchase-session/current**", (route) =>
+      route.fulfill({ json: { session: null } }),
+    );
+    await page.route("**/api/purchase-session/start", (route) =>
+      route.fulfill({
+        status: 409,
+        json: { reason_code: "SESSION_LOCKED", detail: "קיים מושב פתוח כבר." },
+      }),
+    );
+
+    await page.goto("/planning/procurement");
+    await page.getByTestId("procurement-start").click();
+
+    await expect(page.getByText("קיים מושב פתוח כבר.")).toBeVisible();
+    await expect(page.getByText(/SESSION_LOCKED/)).toHaveCount(0);
+  });
 });

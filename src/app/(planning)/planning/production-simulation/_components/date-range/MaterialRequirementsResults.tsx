@@ -283,7 +283,7 @@ export function MaterialRequirementsResults({ from, to }: Props) {
               >
                 <div className="flex flex-wrap items-baseline gap-x-2 gap-y-0.5">
                   <span className="text-sm font-semibold text-fg-strong">
-                    <bdi>{p.item_name ?? p.item_id ?? "Unknown item"}</bdi>
+                    <bdi>{p.item_name ?? "Unknown item"}</bdi>
                   </span>
                   <span className="text-2xs text-fg-faint">
                     {formatPlanDateLong(p.plan_date)}

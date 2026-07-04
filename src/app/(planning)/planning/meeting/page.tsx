@@ -212,7 +212,7 @@ function BatchChip({ row }: { row: DraftWeekRow }) {
     : `${row.planned_qty} ${row.uom}`;
   const packs = isTea ? row.packs : [];
   const packBreakdown = isTea
-    ? row.packs.map((p) => `${p.item_name ?? p.item_id}: ${p.qty}`).join("\n")
+    ? row.packs.map((p) => `${p.item_name ?? "Unknown product"}: ${p.qty}`).join("\n")
     : (row.notes ?? undefined);
   const [open, setOpen] = useState(false);
   const ariaLabel = `${title} — ${sub}${packBreakdown ? `. ${packBreakdown.replace(/\n/g, ", ")}` : ""}`;
@@ -237,7 +237,7 @@ function BatchChip({ row }: { row: DraftWeekRow }) {
         <ul className="mt-2 space-y-0.5 border-t border-border-faint pt-2">
           {packs.map((p) => (
             <li key={p.item_id} className="flex items-center justify-between gap-2 text-2xs">
-              <span className="truncate text-fg-muted" dir="auto">{p.item_name ?? p.item_id}</span>
+              <span className="truncate text-fg-muted" dir="auto">{p.item_name ?? "Unknown product"}</span>
               <span className="shrink-0 tabular-nums text-fg">{p.qty}</span>
             </li>
           ))}

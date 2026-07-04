@@ -288,7 +288,7 @@ function ComponentDetail({
             >
               <div className="min-w-0">
                 <div className="truncate text-sm font-semibold text-fg-strong">
-                  <bdi>{s.item_name ?? s.item_id ?? "Unknown product"}</bdi>
+                  <bdi>{s.item_name ?? "Unknown product"}</bdi>
                 </div>
                 <div className="text-2xs text-fg-faint">
                   {formatPlanDateLong(s.plan_date)}
