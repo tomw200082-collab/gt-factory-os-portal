@@ -181,7 +181,7 @@ async function loadSimulatableProducts(): Promise<SimulatableProduct[]> {
       baseHead,
       item,
       displayName:
-        item?.item_name ?? packHead.parent_name ?? packHead.bom_head_id,
+        item?.item_name ?? packHead.parent_name ?? "Unknown product",
       packSize: item?.pack_size ?? null,
       supplyMethod: item?.supply_method ?? packHead.bom_kind,
     });

@@ -34,9 +34,9 @@ async function jsonOrThrow(res: Response): Promise<unknown> {
   }
   if (!res.ok) {
     const b = body as { reason_code?: string; detail?: string; error?: string } | null;
-    const msg = b?.reason_code
-      ? `${b.reason_code}${b.detail ? ` — ${b.detail}` : ""}`
-      : (b?.error ?? `הבקשה נכשלה (${res.status})`);
+    // DR-018 ux-release-gate FLOW-016 — the reason_code enum is an internal
+    // English token; never show it, only the Hebrew detail/error/fallback.
+    const msg = b?.detail ?? b?.error ?? `הבקשה נכשלה (${res.status})`;
     throw new Error(String(msg));
   }
   return body;

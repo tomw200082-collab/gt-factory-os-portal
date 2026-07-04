@@ -733,7 +733,7 @@ function AddFromRecommendationsModal({
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
                         <div className="text-sm font-semibold text-fg-strong truncate">
-                          {rec.item_display_name ?? rec.item_id}
+                          {rec.item_display_name ?? "Unnamed product"}
                         </div>
                         <div className="mt-0.5 flex flex-wrap items-center gap-2 text-3xs text-fg-muted">
                           <span className="tabular-nums">{fmtRecQty(rec.suggested_qty, rec.uom)}</span>
@@ -774,7 +774,7 @@ function AddFromRecommendationsModal({
         <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
           {selectedRec && (
             <div className="text-3xs text-fg-muted min-w-0 flex-1 truncate">
-              Selected: <span className="font-medium text-fg">{selectedRec.item_display_name ?? selectedRec.item_id}</span>{" "}
+              Selected: <span className="font-medium text-fg">{selectedRec.item_display_name ?? "Unnamed product"}</span>{" "}
               · {fmtRecQty(selectedRec.suggested_qty, selectedRec.uom)} for {selectedRec.suggested_for_date}
             </div>
           )}
