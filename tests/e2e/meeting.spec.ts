@@ -87,7 +87,7 @@ test.describe("@mocked weekly meeting", () => {
     await page.goto("/planning/meeting");
 
     // 2026-07-03 is a Friday — the cockpit opens on Execute; switch to Firm.
-    await page.getByRole("button", { name: /Firm — Thursday/i }).click();
+    await page.getByRole("button", { name: /Lock — Thursday/i }).click();
 
     await expect(page.getByTestId("meeting-gen-trigger")).toBeVisible();
     await page.getByTestId("meeting-gen-trigger").click();
@@ -128,7 +128,7 @@ test.describe("@mocked weekly meeting", () => {
     });
 
     await page.goto("/planning/meeting");
-    await page.getByRole("button", { name: /Firm — Thursday/i }).click();
+    await page.getByRole("button", { name: /Lock — Thursday/i }).click();
     await page.getByTestId("meeting-gen-trigger").click();
     await expect(page.getByTestId("meeting-gen-confirm-copy")).toBeVisible();
 
@@ -149,7 +149,7 @@ test.describe("@mocked weekly meeting", () => {
     );
 
     await page.goto("/planning/meeting");
-    await page.getByRole("button", { name: /Firm — Thursday/i }).click();
+    await page.getByRole("button", { name: /Lock — Thursday/i }).click();
 
     await expect(page.getByRole("button", { name: /^Lock week$/i })).toBeVisible();
     await expect(page.getByText(/firm week/i)).toHaveCount(0);
@@ -179,7 +179,7 @@ test.describe("@mocked weekly meeting", () => {
     });
 
     await page.goto("/planning/meeting");
-    await page.getByRole("button", { name: /Firm — Thursday/i }).click();
+    await page.getByRole("button", { name: /Lock — Thursday/i }).click();
     await page.getByTestId("meeting-gen-trigger").click();
     await page.getByTestId("meeting-gen-confirm").click();
 

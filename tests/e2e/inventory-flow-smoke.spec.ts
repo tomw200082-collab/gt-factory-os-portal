@@ -240,6 +240,39 @@ test.describe("Inventory Flow page", () => {
       expect(label).not.toMatch(/critical_stockout|at_risk|non_working/);
     }
   });
+
+  test("T09 day-cell popover opens on Enter (DR-018 ux-release-gate A11Y-001)", async ({
+    page,
+  }) => {
+    await resetIdb(page);
+    await setFakeRole(page, "planner");
+
+    await page.goto("/planning/inventory-flow");
+
+    await expect(
+      page.getByRole("heading", { name: /Inventory Flow/i }).first(),
+    ).toBeVisible({ timeout: 15_000 });
+
+    // A working-day cell has tabIndex=0; a non-working one has -1 and no
+    // popover behind it (A11Y-008) — pick the first focusable one.
+    const cell = page.locator('[data-testid="day-cell"][tabindex="0"]').first();
+    const hasCell = await cell.isVisible().catch(() => false);
+    if (!hasCell) {
+      test.info().annotations.push({
+        type: "data-dependent",
+        description: "No focusable day cell present (empty/error/mobile).",
+      });
+      return;
+    }
+
+    // Regression guard: Radix Popover.Trigger asChild only merges onClick
+    // onto this div, so Enter/Space previously did nothing — keyboard users
+    // could Tab to a cell but never open its day-detail popover. Radix marks
+    // the trigger's data-state "open" once the popover is showing.
+    await cell.focus();
+    await page.keyboard.press("Enter");
+    await expect(cell).toHaveAttribute("data-state", "open", { timeout: 3_000 });
+  });
 });
 
 test.describe("Planning overview — DR-018 FLOW-003", () => {

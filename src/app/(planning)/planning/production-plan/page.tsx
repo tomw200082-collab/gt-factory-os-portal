@@ -1612,7 +1612,7 @@ export default function ProductionPlanPage() {
   }, [plansQuery.data, weekStart]);
 
   const hasData = plansQuery.data !== undefined && !plansQuery.isError;
-  const allPlans = hasData ? plansQuery.data!.rows : [];
+  const allPlans = plansQuery.data?.rows ?? [];
   const productionPlans = allPlans.filter((p) => p.plan_type === "production");
   const plannedCount = productionPlans.filter((p) => p.rendered_state === "planned").length;
   const doneCount = productionPlans.filter((p) => p.rendered_state === "done").length;
@@ -2016,9 +2016,15 @@ export default function ProductionPlanPage() {
         >
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden="true" />
           <span className="min-w-0 flex-1">
-            Engine drafts below are waiting for your review. When you&apos;re
-            done, return to the planning chat — or open Weekly Meeting to
-            lock the week.
+            Engine drafts below are waiting for your review. When
+            you&apos;re done, go to{" "}
+            <Link
+              href="/planning"
+              className="font-medium underline underline-offset-2 hover:no-underline"
+            >
+              Planning Overview
+            </Link>{" "}
+            — or open Weekly Meeting to lock the week.
           </span>
           <Link
             href="/planning/meeting"
@@ -2275,7 +2281,7 @@ export default function ProductionPlanPage() {
                   data-plan-id={p.plan_id}
                 >
                   <span className="min-w-0 truncate text-fg">
-                    {p.item_name ?? p.item_id}{" "}
+                    {p.item_name ?? "Unnamed product"}{" "}
                     <span className="font-mono tabular-nums text-fg-muted">
                       {fmtQty(p.planned_qty ?? "0", p.uom ?? "")}
                     </span>

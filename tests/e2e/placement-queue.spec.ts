@@ -123,4 +123,26 @@ test.describe("@mocked placement queue", () => {
     await expect(banner).toContainText("2 הזמנות ממתינות");
     await expect(banner).toContainText("1 באיחור");
   });
+
+  test("DR-018 ux-release-gate: a malformed 200 response (no rows field) never shows raw JS error text", async ({
+    page,
+  }) => {
+    await setFakeRole(page, "planner");
+
+    // Regression guard for a real bug the release gate found: `data.rows.sort()`
+    // had no null guard, so a malformed 200 threw "Cannot read properties of
+    // undefined (reading 'sort')" — and that raw English message rendered
+    // verbatim on this Hebrew-only bookkeeper surface. The guarded queryFn now
+    // treats a missing `rows` field as an empty list, so the page degrades to
+    // its normal empty state instead of crashing.
+    await page.route("**/api/purchase-orders?status=APPROVED_TO_ORDER**", (route) =>
+      route.fulfill({ json: {} }),
+    );
+
+    await page.goto("/purchase-orders/placement-queue");
+    await expect(page.getByTestId("placement-queue-empty")).toBeVisible();
+    await expect(
+      page.getByText(/Cannot read properties of undefined/i),
+    ).toHaveCount(0);
+  });
 });
