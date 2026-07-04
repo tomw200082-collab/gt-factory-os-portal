@@ -12,7 +12,7 @@
 // ---------------------------------------------------------------------------
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { DraftWeekResponse, DraftWeekRow } from "@/app/(planning)/planning/meeting/_lib/cadence";
 
 vi.mock("next/navigation", () => ({
@@ -56,7 +56,14 @@ vi.mock("@/app/(planning)/planning/production-plan/_lib/usePlans", () => ({
 }));
 
 import PlanningMeetingPage from "@/app/(planning)/planning/meeting/page";
-import { defaultFirmWeekStart, workingDaysOf } from "@/app/(planning)/planning/meeting/_lib/cadence";
+import {
+  defaultFirmWeekStart,
+  workingDaysOf,
+  addDays,
+  toIsoDate,
+  parseIsoDate,
+  fmtWeekRange,
+} from "@/app/(planning)/planning/meeting/_lib/cadence";
 
 // Anchor the fixture to the real working days of the current target week so the
 // chip lands in the rendered board (the board only maps the active week's days).
@@ -219,5 +226,29 @@ describe("weekly-meeting cockpit — batch chip tap-to-expand", () => {
     expect(chip.getAttribute("aria-expanded")).toBe("true");
     // the inline breakdown list now shows the pack rows
     expect(chip.querySelectorAll("ul li").length).toBe(9);
+  });
+});
+
+// FLOW-NEW-01 (ux-flow-architect re-audit, 2026-07-04) — the ?week= half of a
+// cross-page ?step=firm&week= deep-link was silently dropped: FirmPanel's
+// weekStart useState initializer ran before the parent's useEffect had parsed
+// window.location.search, so the prop update that followed never took. Only
+// ?step= worked. Locks in the fix: FirmPanel now applies initialWeekStart via
+// its own effect the first time it arrives.
+describe("weekly-meeting cockpit — deep-link ?week= param (FLOW-NEW-01)", () => {
+  afterEach(() => {
+    window.history.pushState({}, "", "/planning/meeting");
+  });
+
+  it("opens the Firm panel on the week named by ?week=, not the default week", async () => {
+    const otherWeek = toIsoDate(addDays(parseIsoDate(WEEK), -7));
+    window.history.pushState({}, "", `/planning/meeting?step=firm&week=${otherWeek}`);
+
+    render(<PlanningMeetingPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText(fmtWeekRange(otherWeek))).toBeTruthy();
+    });
+    expect(screen.queryByText(fmtWeekRange(WEEK))).toBeNull();
   });
 });

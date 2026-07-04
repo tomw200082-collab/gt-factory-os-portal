@@ -28,6 +28,8 @@ import {
   fmtQty,
   describeVariance,
   VARIANCE_TOOLTIP,
+  toIsoDate,
+  startOfWeek,
 } from "../_lib/helpers";
 import type { ProductionPlanRow } from "../_lib/types";
 import { InventoryImpactPanel } from "./InventoryImpactPanel";
@@ -260,10 +262,10 @@ export function ProductionJobCard({
                 className="chip chip-info gap-1 text-[10px]"
                 data-testid="plan-card-draft-chip"
               >
-                Draft — not yet confirmed
+                Draft — not yet locked
               </span>
               <Link
-                href="/planning/meeting"
+                href={`/planning/meeting?step=firm&week=${toIsoDate(startOfWeek(new Date(`${plan.plan_date}T00:00:00`)))}`}
                 className="text-[10px] text-accent hover:underline"
                 data-testid="plan-card-draft-confirm-link"
               >

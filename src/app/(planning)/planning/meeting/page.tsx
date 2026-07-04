@@ -337,6 +337,8 @@ function CommitmentPanel({
   totalUnits,
   entries,
   pending,
+  isError,
+  onRetry,
   footer,
 }: {
   title: string;
@@ -344,6 +346,11 @@ function CommitmentPanel({
   totalUnits: number;
   entries: CommitmentEntry[];
   pending: boolean;
+  /** FLOW-NEW-04 (ux-flow-architect re-audit) — a failed commitment fetch
+   *  previously fell through to "No finished goods committed", which reads
+   *  as a real zero-commitment week instead of an unknown one. */
+  isError?: boolean;
+  onRetry?: () => void;
   /** DR-018 VISUAL-002 (Tranche 122) — optional action strip rendered as
    *  part of the same card, so the "what gets committed" facts and the CTA
    *  that acts on them read as one unit instead of two visually detached
@@ -358,6 +365,20 @@ function CommitmentPanel({
     <SectionCard title={title} description={note} footer={footer}>
       {pending ? (
         <div className="py-6 text-center text-sm text-fg-muted">Loading commitment…</div>
+      ) : isError ? (
+        <div className="flex flex-col items-center gap-2 py-4 text-center text-sm">
+          <span className="text-danger-fg">We couldn't load the commitment for this week.</span>
+          <span className="text-fg-muted">Try refreshing. If the problem continues, contact the system administrator.</span>
+          {onRetry ? (
+            <button
+              type="button"
+              onClick={onRetry}
+              className={cn("mt-1 inline-flex items-center gap-1 rounded text-xs font-medium text-accent hover:underline", focusRing)}
+            >
+              Try again
+            </button>
+          ) : null}
+        </div>
       ) : entries.length === 0 ? (
         <div className="py-4 text-center text-sm text-fg-muted">No finished goods committed.</div>
       ) : (
@@ -427,6 +448,18 @@ function CommitmentPanel({
 // ---------------------------------------------------------------------------
 function FirmPanel({ canAct, initialWeekStart }: { canAct: boolean; initialWeekStart?: string }) {
   const [weekStart, setWeekStart] = useState<string>(() => initialWeekStart ?? defaultFirmWeekStart());
+  // FLOW-NEW-01 (ux-flow-architect re-audit) — initialWeekStart arrives one
+  // tick after mount (the parent page reads ?week= from window.location.search
+  // inside its own useEffect), so the useState initializer above always saw
+  // undefined and a cross-page ?week= deep-link was silently dropped. Apply it
+  // once, the first time it's defined.
+  const appliedInitialWeekRef = useRef(false);
+  useEffect(() => {
+    if (!appliedInitialWeekRef.current && initialWeekStart) {
+      appliedInitialWeekRef.current = true;
+      setWeekStart(initialWeekStart);
+    }
+  }, [initialWeekStart]);
   const [confirming, setConfirming] = useState(false);
   const confirmBtnRef = useRef<HTMLButtonElement>(null);
   // A11Y-01 (DR-019) — the trigger button that opened the inline confirm,
@@ -481,6 +514,19 @@ function FirmPanel({ canAct, initialWeekStart }: { canAct: boolean; initialWeekS
       wasConfirmingUnlockRef.current = false;
     }
   }, [confirmingUnlock]);
+  // FLOW-NEW-05 (ux-flow-architect re-audit) — the unlock success message
+  // used to live only inside the "week is locked" block, gated on
+  // firmedCount > 0. The same onSuccess that shows it also invalidates the
+  // draft-week query, and once that refetch resolves firmedCount drops to 0
+  // and the whole block (message included) stops rendering — the operator
+  // saw it for a few hundred ms, then landed on a bare empty-week state.
+  // Collapse the confirm form on success so it doesn't linger stale during
+  // that window; the persisted result banner below (driven directly off
+  // cancelWeek.isSuccess/data, same pattern as the firm result banner) is
+  // what actually survives the refetch.
+  useEffect(() => {
+    if (cancelWeek.isSuccess) setConfirmingUnlock(false);
+  }, [cancelWeek.isSuccess]);
 
   const rows = draft.data?.rows ?? [];
   const firmedCount = draft.data?.firmed_count ?? 0;
@@ -830,6 +876,8 @@ function FirmPanel({ canAct, initialWeekStart }: { canAct: boolean; initialWeekS
                 track: r.track,
               }))}
               pending={firmedDemand.isLoading}
+              isError={firmedDemand.isError}
+              onRetry={() => firmedDemand.refetch()}
               footer={lockActionRow}
             />
           );
@@ -898,6 +946,45 @@ function FirmPanel({ canAct, initialWeekStart }: { canAct: boolean; initialWeekS
         </div>
       ) : null}
 
+      {/* Unlock result — FLOW-NEW-05 (ux-flow-architect re-audit): driven
+          directly off cancelWeek.isSuccess/data (same pattern as the firm
+          result banner above), so it survives the draft-week refetch that
+          the mutation's own onSuccess triggers, instead of disappearing the
+          moment firmedCount drops to 0. */}
+      {cancelWeek.isSuccess ? (
+        <div role="status" aria-live="polite" className="flex items-start gap-3 rounded-lg border border-accent-border bg-accent-softer p-3 text-sm">
+          <Lock className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden="true" />
+          <div className="flex-1 text-fg">
+            <div>
+              {cancelWeek.data.cancelled_count} batch{cancelWeek.data.cancelled_count === 1 ? "" : "es"} unlocked (cancelled) for {fmtWeekRange(cancelWeek.data.week_start)}.
+              {cancelWeek.data.skipped_already_done_or_cancelled > 0
+                ? ` ${cancelWeek.data.skipped_already_done_or_cancelled} left alone — already reported or cancelled.`
+                : ""}
+            </div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <button
+                type="button"
+                onClick={() => {
+                  cancelWeek.reset();
+                  setConfirmingGen(true);
+                }}
+                className={cn("inline-flex items-center gap-1 rounded text-xs font-semibold text-accent hover:underline", focusRing)}
+              >
+                <RefreshCw className="h-3 w-3" aria-hidden="true" />
+                Generate new drafts
+              </button>
+              <Link
+                href="/planning/production-plan"
+                onClick={() => cancelWeek.reset()}
+                className={cn("inline-flex items-center gap-1 text-xs font-medium text-fg-muted hover:text-fg hover:underline", focusRing)}
+              >
+                View production plan <ArrowRight className="h-3 w-3" aria-hidden="true" />
+              </Link>
+            </div>
+          </div>
+        </div>
+      ) : null}
+
       {/* Week board */}
       <SectionCard
         title="Production week"
@@ -932,15 +1019,7 @@ function FirmPanel({ canAct, initialWeekStart }: { canAct: boolean; initialWeekS
                   used to claim existed with no affordance behind it. */}
               {canAct ? (
                 <div className="mt-3 border-t border-success-border/50 pt-3">
-                  {cancelWeek.isSuccess ? (
-                    <div role="status" className="text-xs text-fg-muted">
-                      {cancelWeek.data.cancelled_count} batch{cancelWeek.data.cancelled_count === 1 ? "" : "es"} unlocked
-                      (cancelled).
-                      {cancelWeek.data.skipped_already_done_or_cancelled > 0
-                        ? ` ${cancelWeek.data.skipped_already_done_or_cancelled} left alone — already reported or cancelled.`
-                        : ""}
-                    </div>
-                  ) : confirmingUnlock ? (
+                  {confirmingUnlock ? (
                     <div className="space-y-2">
                       <label className="block text-xs text-fg-muted" htmlFor="unlock-week-reason">
                         Reason for unlocking (required — kept with the cancelled batches)
@@ -1130,6 +1209,8 @@ function ProcurePanel() {
         totalUnits={demand.data?.total_fg_units ?? 0}
         entries={entries}
         pending={demand.isLoading}
+        isError={demand.isError}
+        onRetry={() => demand.refetch()}
       />
 
       {/* Tranche 045 — purchase-session + purchase-calendar are superseded by
@@ -1225,7 +1306,7 @@ function ExecutePanel({ onGoToFirm, pendingDraftCount }: { onGoToFirm: () => voi
           )}
           data-testid="execute-pending-drafts-banner"
         >
-          <PackageCheck className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <Lock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           <span className="flex-1">
             {pendingDraftCount} draft batch{pendingDraftCount === 1 ? "" : "es"} still waiting to be locked, within
             the next 4 weeks.
@@ -1311,7 +1392,9 @@ export default function PlanningMeetingPage() {
     useMemo(() => toIsoDate(new Date()), []),
     useMemo(() => toIsoDate(addDays(new Date(), 28)), []),
   );
-  const pendingDraftCount = (horizon.data?.rows ?? []).filter((r) => r.status === "draft").length;
+  const pendingDraftCount = (horizon.data?.rows ?? []).filter(
+    (r) => r.plan_type === "production" && r.status === "draft",
+  ).length;
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6">
