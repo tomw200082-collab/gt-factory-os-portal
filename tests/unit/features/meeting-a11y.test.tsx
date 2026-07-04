@@ -55,6 +55,13 @@ vi.mock("@/app/(planning)/planning/meeting/_lib/cadence", async (importOriginal)
   };
 });
 
+// FLOW-G01 (DR-019) — Execute panel + Firm panel now read the production-plan
+// list too (horizon-wide draft counts, engine/manual overlap check); mock it
+// like the cadence hooks above so this suite stays QueryClient-free.
+vi.mock("@/app/(planning)/planning/production-plan/_lib/usePlans", () => ({
+  usePlans: () => ({ data: undefined, isLoading: false, isError: false }),
+}));
+
 import PlanningMeetingPage from "@/app/(planning)/planning/meeting/page";
 
 // The cockpit opens on TODAY's cadence step, which is only "firm" on Thursdays.

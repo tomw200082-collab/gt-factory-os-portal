@@ -56,6 +56,10 @@ import {
   type CadenceStep,
   type DraftWeekRow,
 } from "./_lib/cadence";
+// FLOW-G01 (DR-019) — the horizon-wide "are there drafts waiting anywhere"
+// count reuses the production-plan list read (already date-range-filtered
+// server-side) instead of adding a new backend contract.
+import { usePlans } from "@/app/(planning)/planning/production-plan/_lib/usePlans";
 
 // Single source of truth for the keyboard focus ring. Applied to every
 // interactive control on this surface (buttons + nav links) so focus is always
@@ -428,11 +432,36 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
   const draftRollup = useMemo(() => rollupDraftFgUnits(rows), [rows]);
   const firmedDemand = useFirmedWeekDemand(weekStart, batchCount === 0 && firmedCount > 0);
 
+  // FLOW-G02 (DR-019, portal half) — the engine that proposes these drafts is
+  // blind to manually-added item-level plans when it computes tank capacity,
+  // so a fresh base-batch draft can land on a day that already carries a
+  // manual plan the engine never saw (confirmed live, 2026-07-04). The
+  // backend capacity fix is a separate, Tom-approved change to
+  // fn_plan_tea_production; this is the portal-visible guard until then —
+  // cross-check this week's full plan list (drafts + manual + firmed)
+  // against the draft rows, and flag any day where they collide.
+  const weekPlans = usePlans(weekStart, toIsoDate(addDays(parseIsoDate(weekStart), 6)));
+  const engineOverlapDays = useMemo(() => {
+    const draftPlanIds = new Set(rows.map((r) => r.plan_id));
+    const baseBatchDays = new Set(rows.filter((r) => r.track === "tea_tank").map((r) => r.plan_date));
+    const days = new Set<string>();
+    for (const p of weekPlans.data?.rows ?? []) {
+      if (!p.is_base_batch && !draftPlanIds.has(p.plan_id) && baseBatchDays.has(p.plan_date)) {
+        days.add(p.plan_date);
+      }
+    }
+    return days;
+  }, [rows, weekPlans.data]);
+
   // Two-touch Thursday: the firm panel above targets W2 (the new week entering
   // the plan); this is the near week W1 — already firmed last Thursday, here for
   // a final review/tweak before it produces.
   const nearWeek = useMemo(() => weekStartInWeeks(1), []);
   const nearDemand = useFirmedWeekDemand(nearWeek, true);
+  // FLOW-G01 (DR-019) — this week is supposed to already be fully locked;
+  // any batch still sitting in draft here is an orphan (e.g. a stray
+  // engine regenerate) that will silently miss production unless caught.
+  const nearDraft = useDraftWeek(nearWeek);
 
   const shiftWeek = (deltaWeeks: number) =>
     setWeekStart((w) => toIsoDate(addDays(parseIsoDate(w), deltaWeeks * 7)));
@@ -556,7 +585,10 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
               two-step) trigger above. */}
           <button
             type="button"
-            onClick={() => gen.mutate()}
+            onClick={() => {
+              gen.reset();
+              setConfirmingGen(true);
+            }}
             className={cn(
               "shrink-0 rounded-md border border-danger-border bg-bg-raised px-2.5 py-1 text-xs font-medium text-danger-fg shadow-hairline transition-colors hover:bg-danger-softer",
               focusRing,
@@ -594,137 +626,11 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
         </Link>
       </div>
 
-      {/* Firm result banner */}
-      {result ? (
-        <div role="status" aria-live="polite" className="flex items-start gap-3 rounded-lg border border-success-border bg-success-softer p-4">
-          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success" aria-hidden="true" />
-          <div>
-            <div className="text-sm font-semibold text-success-fg">
-              {result.idempotent_replay || result.newly_firmed_count === 0
-                ? "Week already locked"
-                : `${result.newly_firmed_count} batch${result.newly_firmed_count === 1 ? "" : "es"} locked`}
-            </div>
-            <div className="mt-0.5 text-xs text-fg-muted">
-              {result.week_firmed_total} batch{result.week_firmed_total === 1 ? "" : "es"} now committed for {fmtWeekRange(result.week_start)}. The Sunday session will buy against this week. Reversible via the production plan.
-            </div>
-            {/* Tranche 065 (FLOW-A5) — bridge straight into the next chain
-                step instead of leaving the planner to find procurement. */}
-            <Link
-              href="/planning/procurement"
-              className={cn(
-                "mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-success-fg underline underline-offset-2 hover:no-underline",
-                focusRing,
-              )}
-              data-testid="meeting-firm-success-go-procurement"
-            >
-              <ShoppingCart className="h-3.5 w-3.5" aria-hidden="true" />
-              Open Sunday procurement →
-            </Link>
-          </div>
-        </div>
-      ) : null}
-
-      {firm.isError ? (
-        <div role="alert" className="flex items-start gap-3 rounded-lg border border-danger-border bg-danger-softer p-4">
-          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-danger" aria-hidden="true" />
-          <div className="text-sm text-danger-fg">{(firm.error as Error).message}</div>
-        </div>
-      ) : null}
-
-      {/* Week board */}
-      <SectionCard
-        title="Production week"
-        description="The draft batches the engine proposes for each working day. Review, then firm to lock the week."
-      >
-        {draft.isLoading ? (
-          <div className="py-10 text-center text-sm text-fg-muted">Loading the draft week…</div>
-        ) : draft.isError ? (
-          <ErrorState
-            title="Could not load the draft week"
-            description={(draft.error as Error).message}
-          />
-        ) : batchCount === 0 && firmedCount > 0 ? (
-          <div className="flex items-start gap-3 rounded-lg border border-success-border bg-success-softer p-5">
-            <Lock className="mt-0.5 h-5 w-5 shrink-0 text-success" />
-            <div>
-              <div className="text-sm font-semibold text-success-fg">
-                This week is firmed — {firmedCount} batch{firmedCount === 1 ? "" : "es"} locked
-              </div>
-              <div className="mt-1 text-xs text-fg-muted">
-                The committed plan now lives in the production plan, where it can be adjusted or
-                cancelled if something changes. Re-running Generate will not touch firmed batches.
-              </div>
-              <Link
-                href="/planning/production-plan"
-                className={cn("mt-2 inline-flex items-center gap-1.5 rounded text-xs font-medium text-accent hover:underline", focusRing)}
-              >
-                Open production plan to adjust <ArrowRight className="h-3.5 w-3.5" />
-              </Link>
-            </div>
-          </div>
-        ) : batchCount === 0 ? (
-          <EmptyState
-            title="No draft batches for this week"
-            description={
-              canAct
-                ? "The engine hasn't proposed production for this week yet. Click “Generate / refresh drafts” above, or use the week arrows to check adjacent weeks."
-                : "The engine hasn't proposed production for this week yet. Use the week arrows to check adjacent weeks."
-            }
-          />
-        ) : (
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
-            {days.map((d) => {
-              const { dayName, dateLabel } = fmtDayHeader(parseIsoDate(d));
-              const dayRows = byDay.get(d) ?? [];
-              return (
-                <div
-                  key={d}
-                  role="group"
-                  aria-label={`${dayName} ${dateLabel} — ${dayRows.length === 0 ? "no batches" : `${dayRows.length} batch${dayRows.length === 1 ? "" : "es"}`}`}
-                  className="rounded-lg border border-border-faint bg-bg-subtle/40 p-2"
-                >
-                  <div className="mb-2 flex items-baseline justify-between px-1">
-                    <span className="text-xs font-semibold uppercase tracking-ops text-fg-muted">{dayName}</span>
-                    <span className="text-2xs text-fg-subtle">{dateLabel}</span>
-                  </div>
-                  <div className="space-y-2">
-                    {dayRows.length === 0 ? (
-                      <div className="rounded-md border border-dashed border-border-faint py-4 text-center text-2xs text-fg-faint" aria-hidden="true">
-                        —
-                      </div>
-                    ) : (
-                      dayRows.map((r) => <BatchChip key={r.plan_id} row={r} />)
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
-      </SectionCard>
-
-      {/* Near week (W1) — final-tune the incoming, already-firmed week */}
-      <div className="flex items-center justify-between gap-3 rounded-lg border border-border-faint bg-bg-subtle/40 px-4 py-3">
-        <div className="min-w-0 text-sm">
-          <span className="font-medium">Incoming week · {fmtWeekRange(nearWeek)}</span>
-          <span className="text-fg-muted">
-            {" — "}
-            {(nearDemand.data?.total_fg_units ?? 0).toLocaleString()} units committed. Last tweaks
-            before it produces.
-          </span>
-        </div>
-        <Link
-          href="/planning/production-plan"
-          className={cn("shrink-0 rounded text-xs font-medium text-accent hover:underline", focusRing)}
-        >
-          Fine-tune →
-        </Link>
-      </div>
-
-      {/* DR-018 VISUAL-002 (Tranche 122) — the lock CTA now renders as the
-          commitment card's own footer (when a card is shown) instead of a
-          separately-bordered strip below it, so "what gets committed" and
-          "the action that commits it" read as one unit. */}
+      {/* VIS-01 (DR-019, 2026-07-04) — the lock CTA used to render after the
+          full day-by-day board, off-screen on a normal viewport. It now
+          leads the panel, right after the KPIs, since committing the week
+          is the one decision this panel exists for. Footer-vs-standalone
+          rendering choice is unchanged from DR-018 VISUAL-002. */}
       {(() => {
         const lockActionRow = (
           <div className="flex items-center justify-end gap-3">
@@ -834,6 +740,172 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
           </div>
         );
       })()}
+
+      {/* Firm result banner */}
+      {result ? (
+        <div role="status" aria-live="polite" className="flex items-start gap-3 rounded-lg border border-success-border bg-success-softer p-4">
+          <CheckCircle2 className="mt-0.5 h-5 w-5 shrink-0 text-success" aria-hidden="true" />
+          <div>
+            <div className="text-sm font-semibold text-success-fg">
+              {result.idempotent_replay || result.newly_firmed_count === 0
+                ? "Week already locked"
+                : `${result.newly_firmed_count} batch${result.newly_firmed_count === 1 ? "" : "es"} locked`}
+            </div>
+            <div className="mt-0.5 text-xs text-fg-muted">
+              {result.week_firmed_total} batch{result.week_firmed_total === 1 ? "" : "es"} now committed for {fmtWeekRange(result.week_start)}. The Sunday session will buy against this week. Reversible via the production plan.
+            </div>
+            {/* Tranche 065 (FLOW-A5) — bridge straight into the next chain
+                step instead of leaving the planner to find procurement. */}
+            <Link
+              href="/planning/procurement"
+              className={cn(
+                "mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-success-fg underline underline-offset-2 hover:no-underline",
+                focusRing,
+              )}
+              data-testid="meeting-firm-success-go-procurement"
+            >
+              <ShoppingCart className="h-3.5 w-3.5" aria-hidden="true" />
+              Open Sunday procurement →
+            </Link>
+          </div>
+        </div>
+      ) : null}
+
+      {firm.isError ? (
+        <div role="alert" className="flex items-start gap-3 rounded-lg border border-danger-border bg-danger-softer p-4">
+          <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-danger" aria-hidden="true" />
+          <div className="text-sm text-danger-fg">{(firm.error as Error).message}</div>
+        </div>
+      ) : null}
+
+      {/* Week board */}
+      <SectionCard
+        title="Production week"
+        description="The draft batches the engine proposes for each working day. Review, then firm to lock the week."
+      >
+        {draft.isLoading ? (
+          <div className="py-10 text-center text-sm text-fg-muted">Loading the draft week…</div>
+        ) : draft.isError ? (
+          <ErrorState
+            title="Could not load the draft week"
+            description={(draft.error as Error).message}
+          />
+        ) : batchCount === 0 && firmedCount > 0 ? (
+          <div className="flex items-start gap-3 rounded-lg border border-success-border bg-success-softer p-5">
+            <Lock className="mt-0.5 h-5 w-5 shrink-0 text-success" />
+            <div>
+              <div className="text-sm font-semibold text-success-fg">
+                This week is firmed — {firmedCount} batch{firmedCount === 1 ? "" : "es"} locked
+              </div>
+              <div className="mt-1 text-xs text-fg-muted">
+                The committed plan now lives in the production plan, where it can be adjusted or
+                cancelled if something changes. Re-running Generate will not touch firmed batches.
+              </div>
+              <Link
+                href="/planning/production-plan"
+                className={cn("mt-2 inline-flex items-center gap-1.5 rounded text-xs font-medium text-accent hover:underline", focusRing)}
+              >
+                Open production plan to adjust <ArrowRight className="h-3.5 w-3.5" />
+              </Link>
+            </div>
+          </div>
+        ) : batchCount === 0 ? (
+          <EmptyState
+            title="No draft batches for this week"
+            description={
+              canAct
+                ? "The engine hasn't proposed production for this week yet. Click “Generate / refresh drafts” above, or use the week arrows to check adjacent weeks."
+                : "The engine hasn't proposed production for this week yet. Use the week arrows to check adjacent weeks."
+            }
+          />
+        ) : (
+          <>
+            {engineOverlapDays.size > 0 && (
+              <div
+                className="mb-3 flex items-start gap-2 rounded-lg border border-warning-border bg-warning-softer px-3 py-2 text-xs text-warning-fg"
+                role="alert"
+                data-testid="meeting-engine-overlap-warning"
+              >
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                <span>
+                  The engine can&apos;t see manually-added plans when it proposes batches.{" "}
+                  {engineOverlapDays.size} day{engineOverlapDays.size === 1 ? "" : "s"} below (marked)
+                  already {engineOverlapDays.size === 1 ? "has" : "have"} a manual plan alongside the
+                  new draft — check for double-booked capacity before locking.
+                </span>
+              </div>
+            )}
+            <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+              {days.map((d) => {
+                const { dayName, dateLabel } = fmtDayHeader(parseIsoDate(d));
+                const dayRows = byDay.get(d) ?? [];
+                const hasOverlap = engineOverlapDays.has(d);
+                return (
+                  <div
+                    key={d}
+                    role="group"
+                    aria-label={`${dayName} ${dateLabel} — ${dayRows.length === 0 ? "no batches" : `${dayRows.length} batch${dayRows.length === 1 ? "" : "es"}`}${hasOverlap ? " — also has a manual plan the engine didn't account for" : ""}`}
+                    className={cn(
+                      "rounded-lg border p-2",
+                      hasOverlap
+                        ? "border-warning-border bg-warning-softer/40"
+                        : "border-border-faint bg-bg-subtle/40",
+                    )}
+                  >
+                    <div className="mb-2 flex items-baseline justify-between px-1">
+                      <span className="text-xs font-semibold uppercase tracking-ops text-fg-muted">{dayName}</span>
+                      <span className="text-2xs text-fg-subtle">{dateLabel}</span>
+                    </div>
+                    {hasOverlap && (
+                      <div className="mb-2 flex items-center gap-1 px-1 text-2xs font-medium text-warning-fg">
+                        <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden="true" />
+                        Also has a manual plan
+                      </div>
+                    )}
+                    <div className="space-y-2">
+                      {dayRows.length === 0 ? (
+                        <div className="rounded-md border border-dashed border-border-faint py-4 text-center text-2xs text-fg-faint" aria-hidden="true">
+                          —
+                        </div>
+                      ) : (
+                        dayRows.map((r) => <BatchChip key={r.plan_id} row={r} />)
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
+      </SectionCard>
+
+      {/* Near week (W1) — final-tune the incoming, already-firmed week */}
+      <div className="flex items-center justify-between gap-3 rounded-lg border border-border-faint bg-bg-subtle/40 px-4 py-3">
+        <div className="min-w-0 text-sm">
+          <span className="font-medium">Incoming week · {fmtWeekRange(nearWeek)}</span>
+          <span className="text-fg-muted">
+            {" — "}
+            {(nearDemand.data?.total_fg_units ?? 0).toLocaleString()} units committed. Last tweaks
+            before it produces.
+          </span>
+          {(nearDraft.data?.batch_count ?? 0) > 0 && (
+            <div
+              className="mt-1 flex items-center gap-1.5 text-xs font-medium text-warning-fg"
+              data-testid="near-week-orphan-drafts"
+            >
+              <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+              {nearDraft.data!.batch_count} draft batch{nearDraft.data!.batch_count === 1 ? "" : "es"} here{" "}
+              {nearDraft.data!.batch_count === 1 ? "was" : "were"} never locked — won&apos;t produce unless firmed.
+            </div>
+          )}
+        </div>
+        <Link
+          href={`/planning/production-plan?week=${nearWeek}`}
+          className={cn("shrink-0 rounded text-xs font-medium text-accent hover:underline", focusRing)}
+        >
+          Fine-tune →
+        </Link>
+      </div>
     </div>
   );
 }
@@ -941,12 +1013,39 @@ function ProcurePanel() {
 // ---------------------------------------------------------------------------
 // EXECUTE panel — the daily glance (no meeting).
 // ---------------------------------------------------------------------------
-function ExecutePanel() {
+function ExecutePanel({ onGoToFirm }: { onGoToFirm: () => void }) {
+  // FLOW-G01 (DR-019) — most days land here, where the Lock step (and any
+  // drafts waiting on it) was previously out of view entirely. A
+  // horizon-wide, week-independent count closes that dead zone.
+  const horizon = usePlans(
+    useMemo(() => toIsoDate(new Date()), []),
+    useMemo(() => toIsoDate(addDays(new Date(), 28)), []),
+  );
+  const pendingDraftCount = (horizon.data?.rows ?? []).filter((r) => r.status === "draft").length;
+
   return (
     <SectionCard
       title="Daily — execute"
       description="Make today's batch from the firmed plan and report the actual when it's done. Reporting the actual is what moves stock."
     >
+      {pendingDraftCount > 0 && (
+        <button
+          type="button"
+          onClick={onGoToFirm}
+          className={cn(
+            "mb-3 flex w-full items-center gap-2 rounded-lg border border-info-border bg-info-softer px-3 py-2 text-left text-xs text-info-fg transition-colors hover:bg-info-soft",
+            focusRing,
+          )}
+          data-testid="execute-pending-drafts-banner"
+        >
+          <PackageCheck className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <span className="flex-1">
+            {pendingDraftCount} draft batch{pendingDraftCount === 1 ? "" : "es"} still waiting to be locked, within
+            the next 4 weeks.
+          </span>
+          <ArrowRight className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+        </button>
+      )}
       <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         <Link
           href="/planning/production-plan"
@@ -1021,7 +1120,7 @@ export default function PlanningMeetingPage() {
       ) : step === "procure" ? (
         <ProcurePanel />
       ) : (
-        <ExecutePanel />
+        <ExecutePanel onGoToFirm={() => setStep("firm")} />
       )}
     </div>
   );
