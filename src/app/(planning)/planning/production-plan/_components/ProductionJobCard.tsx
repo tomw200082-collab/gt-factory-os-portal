@@ -36,6 +36,7 @@ export function ProductionJobCard({
   plan,
   canAct,
   isToday,
+  isPast,
   onEdit,
   onCancel,
   onDelete,
@@ -44,6 +45,7 @@ export function ProductionJobCard({
   plan: ProductionPlanRow;
   canAct: boolean;
   isToday: boolean;
+  isPast: boolean;
   onEdit: (p: ProductionPlanRow) => void;
   onCancel: (p: ProductionPlanRow) => void;
   onDelete: (p: ProductionPlanRow) => void;
@@ -283,8 +285,9 @@ export function ProductionJobCard({
             </span>
           )}
 
-          {/* Overdue clock — only on live (firmed) overdue plans */}
-          {isLive && !isDraft && !isToday && (
+          {/* Overdue clock — only on live (firmed) plans whose date has actually passed.
+              isPast already excludes today, so no separate !isToday check is needed. */}
+          {isLive && !isDraft && isPast && (
             <span className="chip chip-warning gap-1 text-[10px]">
               <Clock className="h-2.5 w-2.5" strokeWidth={2.5} />
               Overdue

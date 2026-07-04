@@ -76,6 +76,7 @@ function renderCard(plan: ProductionPlanRow) {
         plan={plan}
         canAct
         isToday
+        isPast={false}
         onEdit={() => {}}
         onCancel={() => {}}
         onDelete={() => {}}

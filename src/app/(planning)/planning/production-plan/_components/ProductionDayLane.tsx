@@ -215,6 +215,7 @@ export function ProductionDayLane({
                 plan={p}
                 canAct={canAct}
                 isToday={isToday}
+                isPast={isPast}
                 onEdit={onEdit}
                 onCancel={onCancel}
                 onDelete={onDelete}

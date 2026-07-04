@@ -67,6 +67,7 @@ describe("ProductionJobCard delete affordance", () => {
         plan={plan}
         canAct
         isToday
+        isPast={false}
         onEdit={noop}
         onCancel={noop}
         onDelete={onDelete}
@@ -87,6 +88,7 @@ describe("ProductionJobCard delete affordance", () => {
         plan={plan}
         canAct
         isToday={false}
+        isPast={false}
         onEdit={noop}
         onCancel={noop}
         onDelete={onDelete}
@@ -103,6 +105,7 @@ describe("ProductionJobCard delete affordance", () => {
         plan={row({ rendered_state: "done", completed_submission_id: "s-1" })}
         canAct
         isToday={false}
+        isPast={false}
         onEdit={noop}
         onCancel={noop}
         onDelete={noop}
@@ -118,6 +121,7 @@ describe("ProductionJobCard delete affordance", () => {
         plan={row({ rendered_state: "planned", status: "in_production" })}
         canAct
         isToday
+        isPast={false}
         onEdit={noop}
         onCancel={noop}
         onDelete={noop}
@@ -133,6 +137,7 @@ describe("ProductionJobCard delete affordance", () => {
         plan={row({ rendered_state: "planned", status: "completed", is_base_batch: true, item_id: null, item_name: null, planned_qty: null, uom: null, base_bom_head_id: "BOM-BASE-X", pack_manifest_count: 2 })}
         canAct
         isToday
+        isPast={false}
         onEdit={noop}
         onCancel={noop}
         onDelete={noop}
@@ -148,6 +153,7 @@ describe("ProductionJobCard delete affordance", () => {
         plan={row({ rendered_state: "planned" })}
         canAct={false}
         isToday
+        isPast={false}
         onEdit={noop}
         onCancel={noop}
         onDelete={noop}
