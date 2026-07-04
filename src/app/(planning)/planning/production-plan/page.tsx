@@ -1621,6 +1621,19 @@ export default function ProductionPlanPage() {
   // with no portal affordance pointing at the "done editing" handshake.
   const draftCount = productionPlans.filter((p) => p.status === "draft").length;
 
+  // FLOW-G01 (DR-019) — draftCount above only proves what's happening in
+  // THIS week; the engine's drafts commonly land ~2 weeks out, so a planner
+  // parked on the current (empty) week saw no drafts and no signal that any
+  // existed elsewhere. A horizon-wide, week-independent read closes that
+  // dead zone. Reuses this same read endpoint (already date-filtered
+  // server-side) rather than adding a new backend contract.
+  const horizonFrom = useMemo(() => toIsoDate(new Date()), []);
+  const horizonTo = useMemo(() => toIsoDate(addDays(new Date(), 28)), []);
+  const horizonQuery = usePlans(horizonFrom, horizonTo);
+  const horizonDraftCount = (horizonQuery.data?.rows ?? []).filter(
+    (p) => p.plan_type === "production" && p.status === "draft",
+  ).length;
+
   const totalQty = productionPlans
     .filter((p) => p.rendered_state !== "cancelled")
     .reduce((s, p) => s + (parseFloat(p.planned_qty ?? "0") || 0), 0);
@@ -1787,7 +1800,7 @@ export default function ProductionPlanPage() {
   }, [updateTodayVisibility]);
 
   // Handlers
-  function handleManualAdd(
+  async function handleManualAdd(
     req: {
       plan_date: string;
       item_id: string;
@@ -1797,6 +1810,24 @@ export default function ProductionPlanPage() {
     },
     reviewRecipe: boolean,
   ) {
+    // FLOW-G03 (DR-019) — adding an item-level plan on a day that already
+    // holds a base batch silently doubles production intent for that day's
+    // tank capacity (this happened live on 2026-07-12, undetected). Warn
+    // and require confirmation instead of accepting it silently.
+    const sameDayBase = productionPlans.find(
+      (p) => p.plan_date === req.plan_date && p.is_base_batch && p.rendered_state !== "cancelled",
+    );
+    if (sameDayBase) {
+      const label = planLabel(sameDayBase) ?? "A base batch";
+      const ok = await confirm({
+        title: "This day already has a base batch",
+        description: `${label} is already planned for ${req.plan_date}. Adding this on top of it may double up production intent for that day. Add anyway?`,
+        confirmLabel: "Add anyway",
+        cancelLabel: "Go back",
+      });
+      if (!ok) return;
+    }
+
     setManualAddErrors(null);
     createMut.mutate({ plan_type: "production", ...req }, {
       onSuccess: (resp) => {
@@ -2008,7 +2039,7 @@ export default function ProductionPlanPage() {
           indefinitely. Non-dismissible (no close button) — it should
           disappear because the drafts got resolved, not because it was
           dismissed. */}
-      {draftCount > 0 && (
+      {draftCount > 0 ? (
         <div
           className="mb-4 flex flex-wrap items-start gap-2 rounded-md border border-info/30 bg-info-softer/40 px-3 py-2 text-xs text-info-fg"
           data-testid="draft-review-banner"
@@ -2034,7 +2065,31 @@ export default function ProductionPlanPage() {
             Open Weekly Meeting →
           </Link>
         </div>
-      )}
+      ) : horizonDraftCount > 0 ? (
+        // FLOW-G01 (DR-019) — none of this week's rows are drafts, but the
+        // engine's drafts are commonly sitting in a different week; say so
+        // explicitly instead of going quiet, so "no drafts here" never reads
+        // as "no drafts anywhere".
+        <div
+          className="mb-4 flex flex-wrap items-start gap-2 rounded-md border border-info/30 bg-info-softer/40 px-3 py-2 text-xs text-info-fg"
+          data-testid="draft-horizon-banner"
+          role="status"
+        >
+          <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden="true" />
+          <span className="min-w-0 flex-1">
+            {horizonDraftCount} draft batch{horizonDraftCount === 1 ? "" : "es"}{" "}
+            {horizonDraftCount === 1 ? "is" : "are"} waiting in an upcoming week — not shown in the{" "}
+            {fmtWeekRange(weekStart, weekEnd)} board below.
+          </span>
+          <Link
+            href="/planning/meeting"
+            className="shrink-0 whitespace-nowrap font-medium underline underline-offset-2 hover:no-underline"
+            data-testid="draft-horizon-banner-link"
+          >
+            Open Weekly Meeting →
+          </Link>
+        </div>
+      ) : null}
 
       {/* Tranche 117 (visual amplify) — the banner, 4 KPI microcards, and
           secondary nav used to be four separate stacked boxes pushing the
