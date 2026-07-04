@@ -367,7 +367,7 @@ function CommitmentPanel({
         <div className="py-6 text-center text-sm text-fg-muted">Loading commitment…</div>
       ) : isError ? (
         <div className="flex flex-col items-center gap-2 py-4 text-center text-sm">
-          <span className="text-danger-fg">We couldn't load the commitment for this week.</span>
+          <span className="text-danger-fg">We couldn&apos;t load the commitment for this week.</span>
           <span className="text-fg-muted">Try refreshing. If the problem continues, contact the system administrator.</span>
           {onRetry ? (
             <button
