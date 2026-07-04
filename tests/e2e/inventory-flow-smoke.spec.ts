@@ -182,4 +182,32 @@ test.describe("Inventory Flow page", () => {
     const nameText = (await rowheader.innerText()).trim();
     expect(nameText.length).toBeGreaterThan(0);
   });
+
+  test("T07 desktop grid exposes an ARIA grid with rows (DR-018 A11Y-002)", async ({
+    page,
+  }) => {
+    await resetIdb(page);
+    await setFakeRole(page, "planner");
+
+    await page.goto("/planning/inventory-flow");
+
+    await expect(
+      page.getByRole("heading", { name: /Inventory Flow/i }).first(),
+    ).toBeVisible({ timeout: 15_000 });
+
+    const grid = page.getByRole("grid");
+    const hasGrid = await grid.isVisible().catch(() => false);
+    if (!hasGrid) {
+      // Desktop grid only renders with data on a wide viewport — same
+      // data-dependent soft-pass as T06.
+      test.info().annotations.push({
+        type: "data-dependent",
+        description: "No desktop flow grid present (empty/error/mobile).",
+      });
+      return;
+    }
+
+    await expect(grid).toBeVisible();
+    expect(await page.getByRole("row").count()).toBeGreaterThan(0);
+  });
 });

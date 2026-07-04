@@ -379,6 +379,14 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
   useEffect(() => {
     if (confirming) confirmBtnRef.current?.focus();
   }, [confirming]);
+  // DR-018 INTER-001 (Tranche 121) — Generate/refresh drafts wipes every
+  // TEAEDD:%-generated draft, including hand-edits, with zero warning.
+  // Same two-step inline confirm pattern as Firm week above.
+  const [confirmingGen, setConfirmingGen] = useState(false);
+  const confirmGenBtnRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (confirmingGen) confirmGenBtnRef.current?.focus();
+  }, [confirmingGen]);
   const draft = useDraftWeek(weekStart);
   const firm = useFirmWeek();
   const gen = useGenerateDrafts();
@@ -463,21 +471,56 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
           </button>
         </div>
         {canAct ? (
-          <div className="mt-3 flex justify-end">
-            <button
-              type="button"
-              disabled={gen.isPending}
-              aria-busy={gen.isPending}
-              onClick={() => gen.mutate()}
-              className={cn(
-                "inline-flex items-center gap-2 rounded-md border border-border bg-bg-raised px-3 py-2 text-sm font-medium text-fg shadow-hairline transition-colors hover:bg-bg-muted disabled:opacity-60",
-                focusRing,
-              )}
-              title="Run the tea + matcha draft engines to (re)generate the draft horizon"
-            >
-              <RefreshCw className={cn("h-4 w-4", gen.isPending && "animate-spin motion-reduce:animate-none")} aria-hidden="true" />
-              {gen.isPending ? "Generating…" : "Generate / refresh drafts"}
-            </button>
+          <div className="mt-3 flex flex-wrap items-center justify-end gap-3">
+            {confirmingGen ? (
+              <>
+                <span className="max-w-[42ch] text-xs text-fg-muted" data-testid="meeting-gen-confirm-copy">
+                  Re-generating drafts will overwrite the current engine proposals, including any edits you&apos;ve made to draft batches. Manually added plans are not affected.
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setConfirmingGen(false)}
+                  className={cn(
+                    "rounded-md border border-border bg-bg-raised px-3.5 py-2 text-sm font-medium text-fg-muted shadow-hairline transition-colors hover:bg-bg-muted",
+                    focusRing,
+                  )}
+                  data-testid="meeting-gen-keep"
+                >
+                  Keep current drafts
+                </button>
+                <button
+                  ref={confirmGenBtnRef}
+                  type="button"
+                  disabled={gen.isPending}
+                  aria-busy={gen.isPending}
+                  onClick={() => {
+                    gen.mutate(undefined, { onSettled: () => setConfirmingGen(false) });
+                  }}
+                  className={cn(
+                    "inline-flex items-center gap-2 rounded-md border border-border bg-bg-raised px-3 py-2 text-sm font-medium text-fg shadow-hairline transition-colors hover:bg-bg-muted disabled:opacity-60",
+                    focusRing,
+                  )}
+                  data-testid="meeting-gen-confirm"
+                >
+                  <RefreshCw className={cn("h-4 w-4", gen.isPending && "animate-spin motion-reduce:animate-none")} aria-hidden="true" />
+                  {gen.isPending ? "Generating…" : "Regenerate drafts"}
+                </button>
+              </>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setConfirmingGen(true)}
+                className={cn(
+                  "inline-flex items-center gap-2 rounded-md border border-border bg-bg-raised px-3 py-2 text-sm font-medium text-fg shadow-hairline transition-colors hover:bg-bg-muted disabled:opacity-60",
+                  focusRing,
+                )}
+                title="Run the tea + matcha draft engines to (re)generate the draft horizon"
+                data-testid="meeting-gen-trigger"
+              >
+                <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                Generate / refresh drafts
+              </button>
+            )}
           </div>
         ) : null}
       </div>

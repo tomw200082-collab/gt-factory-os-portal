@@ -183,9 +183,13 @@ describe("weekly-meeting cockpit — firm panel a11y", () => {
   });
 
   it("exposes aria-busy on the generate button while pending", () => {
+    // DR-018 INTER-001 (Tranche 121) — generate now requires an explicit
+    // confirm click before it fires; the pending/aria-busy state renders on
+    // the confirm button, reachable after the trigger is clicked once.
     genState.current = { mutate: vi.fn(), isPending: true, isSuccess: false, isError: false };
     render(<PlanningMeetingPage />);
     openFirmPanel();
+    fireEvent.click(screen.getByRole("button", { name: /Generate \/ refresh drafts/i }));
     const gen = screen.getByRole("button", { name: /Generating/i });
     expect(gen.getAttribute("aria-busy")).toBe("true");
   });

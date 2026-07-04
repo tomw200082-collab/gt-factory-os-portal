@@ -23,6 +23,7 @@ import {
   Archive,
   ArrowLeftRight,
   Building2,
+  CalendarCheck,
   CalendarDays,
   CircleDollarSign,
   ClipboardCheck,
@@ -236,6 +237,18 @@ export const NAV_MANIFEST: NavGroup[] = [
         label: "Daily Production Plan",
         icon: Factory,
         min_role: "viewer",
+        required_capability: "planning:read",
+      },
+      {
+        // DR-018 FLOW-001 (Tranche 121, 2026-07-03) — the Thursday "firm the
+        // week" cockpit had no nav entry at all; it was only reachable via
+        // deep link. route-manifest.json already lists /planning/meeting as
+        // live for operator/planner/admin/viewer and middleware already
+        // allows it — this is a nav-only addition.
+        href: "/planning/meeting",
+        label: "Weekly Meeting",
+        icon: CalendarCheck,
+        min_role: "planner",
         required_capability: "planning:read",
       },
       {
