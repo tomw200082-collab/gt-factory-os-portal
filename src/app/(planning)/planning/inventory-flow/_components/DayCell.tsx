@@ -38,6 +38,7 @@ import { ArrowDown, TrendingUp } from "lucide-react";
 import { cn } from "@/lib/cn";
 import { fmtQty, formatCompact } from "../_lib/format";
 import {
+  cellTierLabel,
   dayCellClassNameProduction,
   hasIncomingPo,
   isDemandSpike,
@@ -105,7 +106,11 @@ function DayCellInner({
   const cellInner = (
     <div
       role="gridcell"
-      tabIndex={0}
+      // DR-018 A11Y-008 (Tranche 125) — non-working cells were still real
+      // Tab stops with nothing actionable behind them (no popover opens —
+      // see the `isNonWorking` early-return below); a keyboard user hit a
+      // dead stop on every Friday/Saturday/holiday column.
+      tabIndex={isNonWorking ? -1 : 0}
       data-day={day.day}
       data-today={isToday ? "true" : undefined}
       data-testid="day-cell"
@@ -113,8 +118,8 @@ function DayCellInner({
         isNonWorking
           ? day.holiday_name_he ?? "Non-working day"
           : cellShortfall > 0
-            ? `${item.item_name} on ${day.day}: 0 units on hand, short ${formatCompact(cellShortfall)} units, tier ${day.cell_tier_with_production ?? day.tier}`
-            : `${item.item_name} on ${day.day}: ${formatCompact(cellEod)} units, tier ${day.cell_tier_with_production ?? day.tier}`
+            ? `${item.item_name} on ${day.day}: 0 units on hand, short ${formatCompact(cellShortfall)} units, tier ${cellTierLabel(day.cell_tier_with_production ?? day.tier)}`
+            : `${item.item_name} on ${day.day}: ${formatCompact(cellEod)} units, tier ${cellTierLabel(day.cell_tier_with_production ?? day.tier)}`
       }
       className={cn(
         "group relative flex h-full w-full cursor-pointer flex-col items-stretch",

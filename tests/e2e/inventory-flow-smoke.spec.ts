@@ -210,4 +210,65 @@ test.describe("Inventory Flow page", () => {
     await expect(grid).toBeVisible();
     expect(await page.getByRole("row").count()).toBeGreaterThan(0);
   });
+
+  test("T08 day-cell aria-labels never leak a raw tier enum (DR-018 A11Y-007)", async ({
+    page,
+  }) => {
+    await resetIdb(page);
+    await setFakeRole(page, "planner");
+
+    await page.goto("/planning/inventory-flow");
+
+    await expect(
+      page.getByRole("heading", { name: /Inventory Flow/i }).first(),
+    ).toBeVisible({ timeout: 15_000 });
+
+    const cells = page.locator('[data-testid="day-cell"]');
+    const count = await cells.count();
+    if (count === 0) {
+      test.info().annotations.push({
+        type: "data-dependent",
+        description: "No day cells present (empty/error/mobile).",
+      });
+      return;
+    }
+
+    const labels = await cells.evaluateAll((els) =>
+      els.map((el) => el.getAttribute("aria-label") ?? ""),
+    );
+    for (const label of labels) {
+      expect(label).not.toMatch(/critical_stockout|at_risk|non_working/);
+    }
+  });
+});
+
+test.describe("Planning overview — DR-018 FLOW-003", () => {
+  test("pipeline block is retitled 'Engine diagnostic' with a corridor disclaimer", async ({
+    page,
+  }) => {
+    await resetIdb(page);
+    await setFakeRole(page, "planner");
+
+    await page.goto("/planning");
+
+    await expect(page.getByText("Engine diagnostic")).toBeVisible({
+      timeout: 15_000,
+    });
+    await expect(
+      page.getByText(/not the order path/i),
+    ).toBeVisible();
+  });
+});
+
+test.describe("Production simulation — DR-018 COPY-004", () => {
+  test("containment banner uses positive framing", async ({ page }) => {
+    await resetIdb(page);
+    await setFakeRole(page, "planner");
+
+    await page.goto("/planning/production-simulation");
+
+    await expect(
+      page.getByText(/Use this to check material needs before committing/i),
+    ).toBeVisible({ timeout: 15_000 });
+  });
 });

@@ -12,7 +12,7 @@ import { InventoryFlowClient } from "./InventoryFlowClient";
 export const metadata: Metadata = {
   title: "Inventory Flow",
   description:
-    "Daily finished-goods stock projection — at-risk products, projected stockouts, incoming POs.",
+    "Daily finished-goods stock projection — at-risk products, projected stockouts, incoming POs. Run this before locking a week to check coverage gaps, or after receiving goods to confirm the week is covered.",
 };
 
 export default function InventoryFlowPage() {
