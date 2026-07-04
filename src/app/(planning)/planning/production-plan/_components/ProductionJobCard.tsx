@@ -215,6 +215,27 @@ export function ProductionJobCard({
           {cardTitle}
         </div>
 
+        {/* Base-batch pack breakdown: which products the batch is split
+            into, not just a SKU count — Tom 2026-07-04. */}
+        {plan.is_base_batch && plan.pack_manifest && plan.pack_manifest.length > 0 && (
+          <ul className="mb-2 space-y-0.5" data-testid="plan-card-pack-breakdown">
+            {plan.pack_manifest.map((line) => (
+              <li
+                key={line.item_id}
+                className={cn(
+                  "flex items-baseline justify-between gap-2 text-xs leading-tight",
+                  isCancelled ? "text-fg-faint" : "text-fg-muted",
+                )}
+              >
+                <span className="truncate">{line.item_name ?? line.item_id}</span>
+                <span className="font-mono tabular-nums shrink-0">
+                  {fmtQty(line.qty, null)}
+                </span>
+              </li>
+            ))}
+          </ul>
+        )}
+
         {/* Metadata foot row */}
         <div className="flex flex-wrap items-center gap-1.5">
           {/* Sparkles chip only for rec-sourced plans; manual is baseline. */}
