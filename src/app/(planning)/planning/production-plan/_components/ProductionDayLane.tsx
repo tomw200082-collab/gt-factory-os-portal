@@ -23,7 +23,10 @@ function formatDayTotal(total: number, uom: string): string {
 
 function laneSurface(isToday: boolean, isOverdue: boolean, isPast: boolean): string {
   if (isToday) return "bg-bg-raised ring-1 ring-accent/30 border-accent/25 shadow-sm";
-  if (isOverdue) return "bg-bg border-l-[3px] border-l-danger/60 border-border/40";
+  // VIS-05 (DR-019) — the 3px left border alone read the same as the plain
+  // "future" surface at a glance; a faint tint on top keeps the "NOT flooded
+  // red" restraint while actually being distinguishable.
+  if (isOverdue) return "bg-danger-softer/30 border-l-[3px] border-l-danger/60 border-border/40";
   if (isPast) return "bg-bg-subtle border-border/30 opacity-90";
   return "bg-bg border-border/40";
 }
@@ -81,9 +84,18 @@ export function ProductionDayLane({
   const liveCount = plans.filter((p) => p.rendered_state === "planned").length;
   const doneCount = plans.filter((p) => p.rendered_state === "done").length;
 
+  // A11Y-02 (DR-019) — the lane had no group semantics or label; a screen
+  // reader user landing inside it had no way to know which day, or how
+  // many batches, they were in.
+  const laneLabel = `${dayName} ${dateLabel}${isToday ? " — today" : ""}${isOverdue ? " — overdue" : ""} — ${
+    plans.length === 0 ? "no production planned" : `${plans.length} item${plans.length === 1 ? "" : "s"}`
+  }`;
+
   return (
     <div
       dir="ltr"
+      role="group"
+      aria-label={laneLabel}
       className={cn(
         "relative flex flex-col rounded-lg border transition-shadow duration-150",
         "min-h-[180px]",

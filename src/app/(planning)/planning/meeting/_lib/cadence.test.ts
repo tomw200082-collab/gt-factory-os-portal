@@ -21,7 +21,7 @@ function teaRow(plan_id: string, packs: { item_id: string; item_name: string | n
     plan_id, plan_date: "2026-01-18", track: "tea_tank",
     base_bom_head_id: "B1", base_name: "Base", base_family: "calm",
     batch_size_l: 500, packs, item_id: null, item_name: null,
-    planned_qty: 500, uom: "L", notes: null,
+    planned_qty: 500, uom: "L", notes: null, is_user_modified: false,
   };
 }
 function matchaRow(plan_id: string, item_id: string, item_name: string, qty: number): DraftWeekRow {
@@ -29,7 +29,7 @@ function matchaRow(plan_id: string, item_id: string, item_name: string, qty: num
     plan_id, plan_date: "2026-01-19", track: "matcha_repack",
     base_bom_head_id: null, base_name: null, base_family: null,
     batch_size_l: null, packs: [], item_id, item_name,
-    planned_qty: qty, uom: "UNIT", notes: null,
+    planned_qty: qty, uom: "UNIT", notes: null, is_user_modified: false,
   };
 }
 

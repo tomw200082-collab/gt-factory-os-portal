@@ -21,6 +21,7 @@ Use these terms verbatim where applicable; do not rename them per surface.
 | Quantity actually produced | `Produced quantity` | output_qty, actual qty |
 | The day a plan applies to | `Production day` | plan_date, plan day |
 | A plan that has not run yet | `Planned` | open, pending |
+| The weekly-cadence action that promotes drafts to Planned for a week | `Lock` / `Locked` (COPY-01, DR-019, 2026-07-04) | firm, fire, commit |
 | A plan whose actual report has been filed | `Completed` | done, finished, closed |
 | A plan that was not executed | `Cancelled` | dismissed, rejected |
 | A plan blocked by a missing input | `Blocked` | error, fail |

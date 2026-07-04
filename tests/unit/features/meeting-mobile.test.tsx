@@ -34,6 +34,7 @@ const draftState: { current: { data?: DraftWeekResponse; isLoading: boolean; isE
 };
 const genState = { current: { mutate: vi.fn(), isPending: false, isSuccess: false, isError: false } as Record<string, unknown> };
 const firmState = { current: { mutate: vi.fn(), data: undefined, isPending: false, isError: false } as Record<string, unknown> };
+const cancelWeekState = { current: { mutate: vi.fn(), reset: vi.fn(), data: undefined, isPending: false, isSuccess: false, isError: false } as Record<string, unknown> };
 
 vi.mock("@/app/(planning)/planning/meeting/_lib/cadence", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/app/(planning)/planning/meeting/_lib/cadence")>();
@@ -42,6 +43,7 @@ vi.mock("@/app/(planning)/planning/meeting/_lib/cadence", async (importOriginal)
     useDraftWeek: () => draftState.current,
     useGenerateDrafts: () => genState.current,
     useFirmWeek: () => firmState.current,
+    useCancelFirmedWeek: () => cancelWeekState.current,
     useFirmedWeekDemand: () => ({ data: undefined, isLoading: false }),
   };
 });
@@ -108,6 +110,7 @@ afterEach(() => {
   draftState.current = { data: undefined, isLoading: false, isError: false };
   genState.current = { mutate: vi.fn(), isPending: false, isSuccess: false, isError: false };
   firmState.current = { mutate: vi.fn(), data: undefined, isPending: false, isError: false };
+  cancelWeekState.current = { mutate: vi.fn(), reset: vi.fn(), data: undefined, isPending: false, isSuccess: false, isError: false };
 });
 
 describe("weekly-meeting cockpit — cadence rail mobile", () => {
@@ -182,7 +185,7 @@ describe("weekly-meeting cockpit — firm week selector fits 390px (FLOW-007, T0
   it("drops the 14rem floor: min-w-0 wrapper + truncating week label", () => {
     render(<PlanningMeetingPage />);
     openFirmPanel();
-    const eyebrow = screen.getByText(/Target week to firm/i);
+    const eyebrow = screen.getByText(/Target week to lock/i);
     const labelWrap = eyebrow.parentElement!;
     const cls = labelWrap.getAttribute("class") ?? "";
     expect(cls.includes("min-w-0")).toBe(true);
