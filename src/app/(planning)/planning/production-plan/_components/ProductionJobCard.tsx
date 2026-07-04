@@ -223,14 +223,40 @@ export function ProductionJobCard({
             </span>
           )}
 
-          {/* B4 — draft chip: not yet firmed, never reportable. */}
+          {/* B4 — draft chip: not yet firmed, never reportable.
+              DR-018 VISUAL-006 (Tranche 123) — neutral/info variant (was
+              plain/unstyled) so the draft state carries a visible signal
+              alongside the opacity-80 card treatment, not opacity alone.
+              FLOW-007 — links straight to the confirm step instead of
+              leaving the operator to find Weekly Meeting on their own. */}
           {isDraft && !isDone && !isCancelled && (
-            <span
-              className="chip gap-1 text-[10px] text-fg-muted"
-              data-testid="plan-card-draft-chip"
-            >
-              Draft — not yet confirmed
-            </span>
+            <>
+              <span
+                className="chip chip-info gap-1 text-[10px]"
+                data-testid="plan-card-draft-chip"
+              >
+                Draft — not yet confirmed
+              </span>
+              <Link
+                href="/planning/meeting"
+                className="text-[10px] text-accent hover:underline"
+                data-testid="plan-card-draft-confirm-link"
+              >
+                Confirm via Weekly Meeting → Lock
+              </Link>
+              {/* DR-018 INTER-002 — the plan was hand-edited after the
+                  engine drafted it; is_user_modified is optional so this
+                  degrades gracefully until the backend PR deploys. */}
+              {plan.is_user_modified === true && (
+                <span
+                  className="chip gap-1 text-[10px] text-fg-muted"
+                  title="This draft has been edited since the engine generated it"
+                  data-testid="plan-card-edited-badge"
+                >
+                  Edited
+                </span>
+              )}
+            </>
           )}
 
           {/* Tranche 052 — custom-recipe badge. Known lazily: after a save
@@ -289,6 +315,16 @@ export function ProductionJobCard({
             </button>
           )}
 
+          {/* DR-018 COPY-007 (Tranche 123) — the done state was signalled by
+              border color + hero-number color + a decorative (aria-hidden)
+              icon only; nothing announced "done" in text. */}
+          {isDone && (
+            <span className="chip chip-success gap-1 text-[10px]" data-testid="plan-card-completed-chip">
+              <CheckCircle2 className="h-2.5 w-2.5" strokeWidth={2.5} aria-hidden="true" />
+              Completed
+            </span>
+          )}
+
           {/* Done variance badge */}
           {isDone && completedActual && variance && (
             <Badge
@@ -329,7 +365,7 @@ export function ProductionJobCard({
               data-testid="plan-row-report"
             >
               <Factory className="h-2.5 w-2.5" strokeWidth={2.5} />
-              Report Production
+              Open Production Report
             </Link>
           ) : (
             <span className="text-[10px] text-fg-faint" title="Confirm this plan before reporting production">
