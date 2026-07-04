@@ -3,6 +3,14 @@
 
 export type RenderedState = "planned" | "done" | "cancelled";
 
+// One entry of a base-batch's pack_manifest, resolved to a display name.
+export interface PackManifestLine {
+  item_id: string;
+  item_name: string | null;
+  qty: string;
+  uom: string | null;
+}
+
 // B4 (Phase-6 production reporting): the REAL DB status, passed through
 // additively by the API so the portal can distinguish draft and
 // in-production rows. rendered_state remains the derived compat field.
@@ -31,6 +39,10 @@ export interface ProductionPlanRow {
   base_bom_head_id: string | null;
   is_base_batch: boolean;
   pack_manifest_count: number; // jsonb_array_length(pack_manifest)
+  // Per-SKU breakdown of a base-batch row (item name + qty). Empty array
+  // for non-base-batch rows. Optional because older API deploys may not
+  // send it yet — the card falls back to the "N SKUs" summary.
+  pack_manifest?: PackManifestLine[];
 
   // DR-018 INTER-002 (Tranche 123). Backend companion:
   // gt-factory-os PR (production-plan is_user_modified reads). Optional
