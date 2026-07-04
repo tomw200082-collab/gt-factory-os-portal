@@ -111,6 +111,20 @@ function DayCellInner({
       // see the `isNonWorking` early-return below); a keyboard user hit a
       // dead stop on every Friday/Saturday/holiday column.
       tabIndex={isNonWorking ? -1 : 0}
+      // DR-018 ux-release-gate A11Y-001 — Radix Popover.Trigger asChild only
+      // merges onClick onto this div; a div (unlike button/a) does not fire
+      // a synthetic click on Enter/Space, so keyboard users could Tab here
+      // but never open the popover. Fire the click manually on either key.
+      onKeyDown={
+        isNonWorking
+          ? undefined
+          : (e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                e.currentTarget.click();
+              }
+            }
+      }
       data-day={day.day}
       data-today={isToday ? "true" : undefined}
       data-testid="day-cell"

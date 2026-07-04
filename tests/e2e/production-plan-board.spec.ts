@@ -155,4 +155,28 @@ test.describe("@mocked production plan board", () => {
     await page.getByTestId("edit-discard-confirm-yes").click();
     await expect(page.getByTestId("edit-modal")).toHaveCount(0);
   });
+
+  test("DR-018 ux-release-gate: a malformed 200 response (no rows field) doesn't crash the board", async ({
+    page,
+  }) => {
+    await setFakeRole(page, "planner");
+
+    // Regression guard for a real bug the release gate found: the board used
+    // `plansQuery.data!.rows` (non-null assertion) which threw
+    // "Cannot read properties of undefined (reading 'filter')" and hit the
+    // error boundary whenever the API returned a 200 without a `rows` array.
+    await page.route("**/api/production-plan?**", (route) =>
+      route.fulfill({ json: {} }),
+    );
+
+    await page.goto("/planning/production-plan");
+    await expect(
+      page.getByRole("heading", { name: /Production Plan/i }).first(),
+    ).toBeVisible({ timeout: 15_000 });
+
+    // Never the raw JS error boundary.
+    await expect(
+      page.getByText(/Cannot read properties of undefined/i),
+    ).toHaveCount(0);
+  });
 });

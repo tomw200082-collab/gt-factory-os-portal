@@ -67,7 +67,7 @@ const focusRing =
 // Cadence rail — the three-step rhythm, with today highlighted.
 // ---------------------------------------------------------------------------
 const STEPS: { key: CadenceStep; label: string; sub: string; icon: typeof Lock }[] = [
-  { key: "firm", label: "Firm", sub: "Thursday", icon: CalendarCheck },
+  { key: "firm", label: "Lock", sub: "Thursday", icon: CalendarCheck },
   { key: "procure", label: "Procure", sub: "Sunday", icon: ShoppingCart },
   { key: "execute", label: "Execute", sub: "Daily", icon: Factory },
 ];

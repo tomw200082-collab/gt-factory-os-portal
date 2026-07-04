@@ -68,6 +68,12 @@ export interface PlaceArgs {
 
 const QUEUE_KEY = ["po-placement-queue"] as const;
 
+// Marks an error whose .message is operator-safe (Hebrew, or backend-provided
+// detail) — thrown only by jsonOrThrow below. Any other error (network
+// failure, an unguarded runtime TypeError) must never have its raw .message
+// shown on this Hebrew-only surface — see DR-018 ux-release-gate INTER-002.
+export class ApiError extends Error {}
+
 function newIdempotencyKey(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID();
@@ -76,10 +82,10 @@ function newIdempotencyKey(): string {
 }
 
 async function jsonOrThrow(res: Response, fallback: string): Promise<unknown> {
-  if (res.status === 401) throw new Error("ההתחברות פגה — יש להתחבר מחדש.");
-  if (res.status === 403) throw new Error("אין לך הרשאה לבצע פעולה זו.");
+  if (res.status === 401) throw new ApiError("ההתחברות פגה — יש להתחבר מחדש.");
+  if (res.status === 403) throw new ApiError("אין לך הרשאה לבצע פעולה זו.");
   if (res.status === 503)
-    throw new Error("הכתיבה מושהית כעת. נסו שוב מאוחר יותר; אם הבעיה נמשכת, פנו למנהל המערכת.");
+    throw new ApiError("הכתיבה מושהית כעת. נסו שוב מאוחר יותר; אם הבעיה נמשכת, פנו למנהל המערכת.");
   let body: unknown = null;
   try {
     body = await res.json();
@@ -93,7 +99,7 @@ async function jsonOrThrow(res: Response, fallback: string): Promise<unknown> {
     // Operator-facing: never surface a raw reason_code enum or HTTP status.
     // Prefer the backend's human detail, else the Hebrew fallback sentence.
     const msg = b?.detail ?? b?.error ?? fallback;
-    throw new Error(String(msg));
+    throw new ApiError(String(msg));
   }
   return body;
 }
@@ -110,14 +116,17 @@ export function usePlacementQueue() {
         res,
         "לא ניתן לטעון את תור ההזמנות.",
       )) as QueueResponse;
+      // Defensive: a 200 response with a malformed/missing rows field must
+      // never crash the page — see DR-018 ux-release-gate FLOW-011.
+      const rows = data.rows ?? [];
       // FLOW-005: most-urgent-first. Sort by order-by date asc (nulls last —
       // manual POs without a session origin), then po_number for stability.
-      data.rows.sort((a, b) => {
+      rows.sort((a, b) => {
         const ax = a.order_by_date ?? "9999-12-31";
         const bx = b.order_by_date ?? "9999-12-31";
         return ax < bx ? -1 : ax > bx ? 1 : a.po_number.localeCompare(b.po_number);
       });
-      return data;
+      return { ...data, rows };
     },
     staleTime: 30_000,
     retry: false,

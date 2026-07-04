@@ -93,7 +93,7 @@ function draftResponse(rows: DraftWeekRow[]): DraftWeekResponse {
 }
 
 function openFirmPanel() {
-  fireEvent.click(screen.getByRole("button", { name: /Firm — Thursday/i }));
+  fireEvent.click(screen.getByRole("button", { name: /Lock — Thursday/i }));
 }
 
 afterEach(() => {

@@ -23,7 +23,7 @@ import {
 } from "lucide-react";
 import { RoleGate } from "@/lib/auth/role-gate";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
-import { usePlacementQueue } from "./_lib/api";
+import { ApiError, usePlacementQueue } from "./_lib/api";
 import { PlacementRow } from "./_components/PlacementRow";
 
 function QueueInner(): JSX.Element {
@@ -109,7 +109,9 @@ function QueueInner(): JSX.Element {
         >
           <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
           <div className="flex-1">
-            {(error as Error)?.message ?? "לא ניתן לטעון את תור ההזמנות."}
+            {error instanceof ApiError
+              ? error.message
+              : "לא ניתן לטעון את תור ההזמנות."}
           </div>
           <button
             type="button"

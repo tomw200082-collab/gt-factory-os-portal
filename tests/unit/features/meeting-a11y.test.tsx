@@ -61,7 +61,7 @@ import PlanningMeetingPage from "@/app/(planning)/planning/meeting/page";
 // For the firm-panel assertions, explicitly navigate to the Firm step first so
 // the suite is deterministic regardless of the day it runs.
 function openFirmPanel() {
-  fireEvent.click(screen.getByRole("button", { name: /Firm — Thursday/i }));
+  fireEvent.click(screen.getByRole("button", { name: /Lock — Thursday/i }));
 }
 
 function teaRow(over: Partial<DraftWeekRow> = {}): DraftWeekRow {
