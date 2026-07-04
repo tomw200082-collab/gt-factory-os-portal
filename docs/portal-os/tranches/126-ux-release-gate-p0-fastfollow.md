@@ -204,6 +204,13 @@ instead since the fixes are cross-component/route-level behavior).
 - `tests/e2e/inventory-flow-smoke.spec.ts`: 11/11 passed (10 pre-existing + 1 new).
 - **Total: 25/25 passed** (21 pre-existing + 4 new).
 
-**portal-tranche-verifier**: see verdict below.
+**portal-tranche-verifier**: **PASS** on the second pass. First pass caught
+one gap — `docs/portal-os/registry.md` was listed in the manifest as
+touchable but had no tranche-126 entry — everything else (tsc, eslint,
+vitest 877/877, playwright 25/25, all 6 fix spot-checks against the diff,
+test-rename correctness, no regression against 121-125, no scope creep, no
+quarantine reintroduction, no protected-file touch) passed on the first
+attempt. Registry entry added; second pass confirmed PASS with no other
+changes.
 
-**PR**: filled in after push.
+**PR**: https://github.com/tomw200082-collab/gt-factory-os-portal/pull/159
