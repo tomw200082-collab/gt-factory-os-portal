@@ -12,8 +12,10 @@
 //     posts nothing; only the confirm button posts.
 //   - COPY-001: "Firm week" lexicon renamed to "Lock week" throughout.
 //   - COPY-002/COPY-005/INTER-004: 403/503 map to operator copy (no
-//     "break-glass" jargon anywhere) and the error banner's "Try again"
-//     re-fires the mutation.
+//     "break-glass" jargon anywhere).
+//   - INT-01 (DR-019): the error banner's "Try again" re-enters the
+//     destructive-action confirm rather than re-firing the mutation
+//     directly; the mutation only re-fires once re-confirmed.
 // ---------------------------------------------------------------------------
 
 import { expect, test } from "@playwright/test";
@@ -155,7 +157,7 @@ test.describe("@mocked weekly meeting", () => {
     await expect(page.getByText(/firm week/i)).toHaveCount(0);
   });
 
-  test("COPY-002/COPY-005/INTER-004: 403 and 503 map to operator copy (no break-glass jargon); Try again re-fires", async ({
+  test("COPY-002/COPY-005/INTER-004/INT-01: 403 and 503 map to operator copy (no break-glass jargon); Try again re-enters the confirm instead of re-firing directly", async ({
     page,
   }) => {
     await setFakeRole(page, "planner");
@@ -170,8 +172,9 @@ test.describe("@mocked weekly meeting", () => {
     await page.route("**/api/planning/generate-drafts", (route) => {
       postCount += 1;
       // First call: 503 (system unavailable). Second call (via "Try
-      // again"): 403 (permission denied) — proves the retry actually
-      // re-fires the mutation rather than replaying a cached result.
+      // again" → re-confirm): 403 (permission denied) — proves the retry
+      // actually re-fires the mutation rather than replaying a cached
+      // result.
       return route.fulfill({
         status: postCount === 1 ? 503 : 403,
         json: { error: postCount === 1 ? "break_glass_active" : "forbidden" },
@@ -187,7 +190,15 @@ test.describe("@mocked weekly meeting", () => {
     await expect(page.getByText(/break-glass/i)).toHaveCount(0);
     expect(postCount).toBe(1);
 
+    // INT-01 (DR-019) — "Try again" no longer bypasses the destructive-action
+    // confirm (that used to let a transient error silently wipe hand-edited
+    // drafts on the next click). It re-enters the confirm step; the mutation
+    // only re-fires once the operator confirms again.
     await page.getByTestId("meeting-gen-error-retry").click();
+    await expect(page.getByTestId("meeting-gen-confirm-copy")).toBeVisible();
+    expect(postCount).toBe(1);
+
+    await page.getByTestId("meeting-gen-confirm").click();
     await expect.poll(() => postCount).toBe(2);
     await expect(page.getByText(/don't have permission/i)).toBeVisible();
     await expect(page.getByText(/break-glass/i)).toHaveCount(0);
