@@ -289,6 +289,22 @@ export function useFirmedWeekDemand(weekStart: string, enabled = true) {
   });
 }
 
+// DR-018 COPY-002 (Tranche 122) — shared operator-facing error copy for the
+// cadence mutations. Was "break-glass" (internal ops jargon meaningless to a
+// planner) with no path forward; now names what happened and what to do.
+function mapCadenceMutationErrorMessage(
+  status: number,
+  fallback: string,
+): string {
+  if (status === 403) {
+    return "You don't have permission for this action — contact the administrator.";
+  }
+  if (status === 503) {
+    return "The system is temporarily unavailable. Try again in a few minutes, or contact the system administrator.";
+  }
+  return fallback;
+}
+
 function genIdempotencyKey(): string {
   try {
     return (
@@ -321,11 +337,10 @@ export function useFirmWeek() {
           /* ignore */
         }
         throw new Error(
-          res.status === 403
-            ? "You don't have permission to firm a week (planner/admin only)."
-            : res.status === 503
-              ? "The system is locked right now (break-glass). Try again later."
-              : `Could not firm the week (HTTP ${res.status})${detail ? ` — ${detail}` : ""}.`,
+          mapCadenceMutationErrorMessage(
+            res.status,
+            `Could not firm the week (HTTP ${res.status})${detail ? ` — ${detail}` : ""}.`,
+          ),
         );
       }
       return (await res.json()) as FirmWeekResponse;
@@ -357,11 +372,10 @@ export function useGenerateDrafts() {
       });
       if (!res.ok) {
         throw new Error(
-          res.status === 403
-            ? "You don't have permission to generate drafts (planner/admin only)."
-            : res.status === 503
-              ? "The system is locked right now (break-glass). Try again later."
-              : `Could not generate drafts (HTTP ${res.status}).`,
+          mapCadenceMutationErrorMessage(
+            res.status,
+            `Could not generate drafts (HTTP ${res.status}).`,
+          ),
         );
       }
       return (await res.json()) as GenerateDraftsResponse;

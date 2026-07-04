@@ -4,7 +4,7 @@
 //
 // These are the regression anchors for the a11y pass: the cadence rail's step
 // semantics, the live-region announcements, aria-busy on async actions, the
-// labelled day groups, the disabled-reason on "Firm week", and focus moving to
+// labelled day groups, the disabled-reason on "Lock week", and focus moving to
 // the confirm button. The cadence hooks are mocked (no network); the pure date
 // helpers from _lib/cadence stay real so the rendered labels are authentic.
 //
@@ -144,13 +144,15 @@ describe("weekly-meeting cockpit — firm panel a11y", () => {
     expect(groups.some((g) => /batch/i.test(g.getAttribute("aria-label") ?? ""))).toBe(true);
   });
 
-  it("disables 'Firm week' with an explanatory title when there is nothing to firm", () => {
+  it("disables 'Lock week' with an explanatory title when there is nothing to lock", () => {
+    // DR-018 COPY-001 (Tranche 122) — "Firm week" renamed to "Lock week"
+    // (lexicon-absent jargon; the overview cadence block already said "lock").
     draftState.current = { data: draftResponse([], { batch_count: 0 }), isLoading: false, isError: false };
     render(<PlanningMeetingPage />);
     openFirmPanel();
-    const firmBtn = screen.getByRole("button", { name: /^Firm week$/i }) as HTMLButtonElement;
+    const firmBtn = screen.getByRole("button", { name: /^Lock week$/i }) as HTMLButtonElement;
     expect(firmBtn.disabled).toBe(true);
-    expect(firmBtn.getAttribute("title")).toMatch(/nothing to firm/i);
+    expect(firmBtn.getAttribute("title")).toMatch(/nothing to lock/i);
   });
 
   it("announces a generate success via role=status", () => {
@@ -194,12 +196,12 @@ describe("weekly-meeting cockpit — firm panel a11y", () => {
     expect(gen.getAttribute("aria-busy")).toBe("true");
   });
 
-  it("moves focus to the confirm button when the inline firm-confirm opens", async () => {
+  it("moves focus to the confirm button when the inline lock-confirm opens", async () => {
     draftState.current = { data: draftResponse([teaRow()]), isLoading: false, isError: false };
     render(<PlanningMeetingPage />);
     openFirmPanel();
-    fireEvent.click(screen.getByRole("button", { name: /^Firm week$/i }));
-    const confirm = screen.getByRole("button", { name: /Confirm firm/i });
+    fireEvent.click(screen.getByRole("button", { name: /^Lock week$/i }));
+    const confirm = screen.getByRole("button", { name: /Confirm lock/i });
     await waitFor(() => expect(document.activeElement).toBe(confirm));
   });
 });
