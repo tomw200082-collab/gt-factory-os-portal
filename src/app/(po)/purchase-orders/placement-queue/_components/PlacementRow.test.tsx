@@ -57,7 +57,7 @@ function renderRow() {
 }
 
 describe("PlacementRow", () => {
-  it("loads lines on expand and blocks placing without a payment term", async () => {
+  it("blocks placing without a payment term — submit stays disabled with an explanatory title (DR-018 INTER-003)", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockImplementation(async (input: RequestInfo | URL) => {
@@ -76,20 +76,53 @@ describe("PlacementRow", () => {
     const priceInput = await screen.findByTestId("placement-price-l1");
     expect(priceInput).toBeTruthy();
 
-    // Enter a price but choose NO term, then try to place → guarded.
+    // Before a price is entered, the submit button is already disabled.
+    const submitBtn = screen.getByTestId(
+      "placement-submit-po1",
+    ) as HTMLButtonElement;
+    expect(submitBtn.disabled).toBe(true);
+
+    // Enter a price but choose NO term — still disabled, with a Hebrew
+    // tooltip explaining why (INTER-003: this used to be clickable and only
+    // validated post-click).
     await userEvent.type(priceInput, "12.5");
-    await userEvent.click(screen.getByTestId("placement-submit-po1"));
+    expect(submitBtn.disabled).toBe(true);
+    expect(submitBtn.getAttribute("title")).toContain("מחיר");
+    expect(submitBtn.getAttribute("title")).toContain("תנאי תשלום");
 
-    await waitFor(() =>
-      expect(screen.getByTestId("placement-error-po1").textContent).toContain(
-        "תנאי תשלום",
-      ),
-    );
-
-    // The place mutation endpoint was never called.
+    // A disabled button does not fire clicks — the place mutation endpoint
+    // must never be reached from this state.
+    await userEvent.click(submitBtn);
     const placeCalls = fetchMock.mock.calls.filter((c) =>
       String(c[0]).includes("/place"),
     );
     expect(placeCalls.length).toBe(0);
+  });
+
+  it("enables the submit button once every line has a price and a term is chosen", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/api/purchase-order-lines")) {
+          return new Response(JSON.stringify(LINES), { status: 200 });
+        }
+        return new Response(JSON.stringify({ row: {} }), { status: 200 });
+      },
+    );
+
+    renderRow();
+    await userEvent.click(screen.getByTestId("placement-row-toggle-po1"));
+    const priceInput = await screen.findByTestId("placement-price-l1");
+    await userEvent.type(priceInput, "12.5");
+
+    const termSelect = screen.getByTestId(
+      "placement-terms-po1",
+    ) as HTMLSelectElement;
+    await userEvent.selectOptions(termSelect, termSelect.options[1].value);
+
+    const submitBtn = screen.getByTestId(
+      "placement-submit-po1",
+    ) as HTMLButtonElement;
+    await waitFor(() => expect(submitBtn.disabled).toBe(false));
   });
 });

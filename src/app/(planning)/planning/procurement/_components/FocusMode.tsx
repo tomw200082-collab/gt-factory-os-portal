@@ -376,10 +376,10 @@ export function FocusMode({
             className="btn btn-sm btn-ghost disabled:opacity-40"
             data-testid="focus-prev"
           >
-            → הקודם
+            <span aria-hidden="true">→</span> הקודם
           </button>
           <span className="hidden text-3xs text-fg-faint sm:inline">
-            Esc לסגירה · ←/→ למעבר
+            Esc לסגירה · <span aria-hidden="true">←/→</span> למעבר
           </span>
           <button
             type="button"
@@ -387,7 +387,7 @@ export function FocusMode({
             className="btn btn-sm btn-ghost"
             data-testid="focus-next"
           >
-            הבא ←
+            הבא <span aria-hidden="true">←</span>
           </button>
         </div>
       )}
@@ -514,7 +514,7 @@ function DoneSummary({
           className="text-xs font-medium text-fg-muted underline-offset-2 hover:text-fg hover:underline"
           data-testid="focus-done-view-orders"
         >
-          ההזמנות שנוצרו ממתינות לביצוע מול הספק ←
+          ההזמנות שנוצרו ממתינות לביצוע מול הספק <span aria-hidden="true">←</span>
         </Link>
       )}
     </div>

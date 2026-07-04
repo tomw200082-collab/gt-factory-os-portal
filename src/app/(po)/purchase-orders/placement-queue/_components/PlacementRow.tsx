@@ -72,6 +72,14 @@ export function PlacementRow({
   const term = termCode === "custom" ? null : paymentTermByCode(termCode);
   const termLabel = termCode === "custom" ? customTerm.trim() : term?.label ?? "";
 
+  // DR-018 INTER-003 (Tranche 124) — "בצע הזמנה" was clickable with missing
+  // prices/terms; validation only fired post-click (handlePlace below stays
+  // as a backstop for any state this misses).
+  const canPlace =
+    lines.length > 0 &&
+    !!termLabel &&
+    lines.every((l) => Number(priceFor(l)) > 0);
+
   const totalPreview = useMemo(() => {
     let sum = 0;
     let any = false;
@@ -106,13 +114,21 @@ export function PlacementRow({
       }
       line_prices.push({ po_line_id: l.po_line_id, unit_price_net: p });
     }
+    // DR-018 INTER-005 (Tranche 124) — a blank confirmedDate was silently
+    // omitted from the confirm dialog, reopening the no-ETA double-order
+    // trap at the human step. Surface it explicitly instead.
     const ok = await confirm({
       title: `לבצע את ההזמנה ${po.po_number}?`,
       description: `ההזמנה תבוצע מול הספק עם תנאי תשלום "${termLabel}"${
         totalPreview != null ? ` · ${formatIls(totalPreview)}` : ""
-      }${confirmedDate ? ` · צפי הגעה ${confirmedDate}` : ""}. לאחר הביצוע ההזמנה תהיה פתוחה ומוכנה לקבלת סחורה — לא ניתן לבטל הזמנה שבוצעה דרך המערכת, ושינויים בכמויות יחייבו תיאום מול הספק.`,
+      }${confirmedDate ? ` · צפי הגעה ${confirmedDate}` : ""}. לאחר הביצוע ההזמנה תהיה פתוחה ומוכנה לקבלת סחורה — לא ניתן לבטל הזמנה שבוצעה דרך המערכת, ושינויים בכמויות יחייבו תיאום מול הספק.${
+        !confirmedDate
+          ? " לא הוזן תאריך אספקה — ההזמנה תיפתח ללא צפי הגעה, ויש להוסיף אותו ידנית אחר כך."
+          : ""
+      }`,
       confirmLabel: "בצע הזמנה",
       cancelLabel: "ביטול",
+      srFallbackDescription: "אשר/י פעולה זו.",
     });
     if (!ok) return;
     placeMut.mutate(
@@ -373,7 +389,8 @@ export function PlacementRow({
                 <button
                   type="button"
                   onClick={() => void handlePlace()}
-                  disabled={placeMut.isPending}
+                  disabled={!canPlace || placeMut.isPending}
+                  title={!canPlace ? "יש להזין מחיר לכל השורות ולבחור תנאי תשלום" : undefined}
                   className="btn btn-primary"
                   data-testid={`placement-submit-${po.po_id}`}
                 >

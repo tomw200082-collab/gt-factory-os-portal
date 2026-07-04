@@ -39,6 +39,15 @@ export interface ConfirmOptions {
   cancelLabel?: string;
   /** "danger" renders the confirm button as destructive (btn-danger). */
   tone?: "default" | "danger";
+  /**
+   * DR-018 (Tranche 124) — Radix requires a Description for its a11y
+   * contract; when the caller doesn't pass one this component renders a
+   * visually-hidden English fallback ("Please confirm this action."). That
+   * leaks English into an otherwise fully-Hebrew/RTL surface (e.g. the
+   * placement queue). Callers on such a surface should pass their own
+   * localized fallback here.
+   */
+  srFallbackDescription?: string;
 }
 
 type Pending = ConfirmOptions & { resolve: (ok: boolean) => void };
@@ -126,7 +135,7 @@ function ConfirmDialogView({
           ) : (
             // Radix warns without a Description; emit a visually-hidden one.
             <Dialog.Description className="sr-only">
-              Please confirm this action.
+              {pending?.srFallbackDescription ?? "Please confirm this action."}
             </Dialog.Description>
           )}
           <div className="mt-5 flex justify-end gap-2">

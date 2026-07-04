@@ -19,7 +19,7 @@
 // page and operators are blocked there — no extra gate needed here.
 // ---------------------------------------------------------------------------
 
-import { useState } from "react";
+import { useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -44,6 +44,8 @@ import { CalendarView } from "./_components/CalendarView";
 import { RecommendationsToConvert } from "./_components/RecommendationsToConvert";
 import { FocusMode } from "./_components/FocusMode";
 import { buildFocusQueue } from "./_lib/focus-queue";
+import { fmtDateHe } from "./_lib/decision";
+import { useRovingTabList } from "@/components/a11y/useRovingTabList";
 
 export default function ProcurementPage(): JSX.Element {
   const { data, isLoading, isError, error, refetch } = useCurrentSession();
@@ -120,8 +122,10 @@ export default function ProcurementPage(): JSX.Element {
                 aria-hidden
               />
               <span className="text-xs text-warning-fg">
-                קיים מושב רכש פתוח. מושב חדש יחליף אותו, ואישורים שלא נשמרו
-                יאבדו.
+                {/* DR-018 INTER-006 (Tranche 124) — the warning didn't say
+                    HOW MUCH would be lost; add the concrete count. */}
+                קיים מושב רכש פתוח עם {session?.pos.length ?? 0} הזמנות. מושב
+                חדש יחליף אותו, ואישורים שלא נשמרו יאבדו.
               </span>
               <div className="flex items-center gap-1.5">
                 <button
@@ -182,7 +186,7 @@ export default function ProcurementPage(): JSX.Element {
           <span className="min-w-0 flex-1">
             מושב רכש נפתח לתאריך{" "}
             <span className="font-semibold">
-              {startedSession.session_date}
+              {fmtDateHe(startedSession.session_date)}
             </span>{" "}
             — {buildFocusQueue(startedSession.pos).length} הזמנות ממתינות
             לסקירה.
@@ -274,6 +278,15 @@ function SessionView({
   onOpenById: (id: string) => void;
 }): JSX.Element {
   const [view, setView] = useState<"list" | "calendar">(initialView);
+  // DR-018 A11Y-006 (Tranche 124) — the view toggle was a hand-rolled
+  // role="tab" pair with no keyboard arrow support; replaced with the
+  // shared roving-tabindex hook (same pattern as InventoryFlowTabs).
+  const roving = useRovingTabList<"list" | "calendar">({
+    keys: ["list", "calendar"] as const,
+    activeKey: view,
+    onChange: setView,
+    orientation: "horizontal",
+  });
   const actionableCount = buildFocusQueue(pos).length;
   // Tranche 086 (FLOW-004) — POs placed in this session now wait in the
   // office-manager placement queue (APPROVED_TO_ORDER). Surface a bridge so the
@@ -354,13 +367,14 @@ function SessionView({
 
       {/* View toggle — action list (default) vs calendar */}
       <div
+        {...roving.tabListProps}
         className="inline-flex rounded-lg border border-border/60 bg-bg-subtle/40 p-0.5"
-        role="tablist"
         aria-label="תצוגת רכש"
       >
         <ViewTab
           active={view === "list"}
           onClick={() => setView("list")}
+          tabProps={roving.getTabProps("list")}
           icon={<ListChecks className="h-4 w-4" aria-hidden />}
           label="רשימת פעולה"
           testId="procurement-view-list"
@@ -368,6 +382,7 @@ function SessionView({
         <ViewTab
           active={view === "calendar"}
           onClick={() => setView("calendar")}
+          tabProps={roving.getTabProps("calendar")}
           icon={<CalendarDays className="h-4 w-4" aria-hidden />}
           label="לוח"
           testId="procurement-view-calendar"
@@ -390,12 +405,20 @@ function SessionView({
 function ViewTab({
   active,
   onClick,
+  tabProps,
   icon,
   label,
   testId,
 }: {
   active: boolean;
   onClick: () => void;
+  tabProps: {
+    role: "tab";
+    tabIndex: 0 | -1;
+    "aria-selected": boolean;
+    ref: (el: HTMLElement | null) => void;
+    onKeyDown: (e: ReactKeyboardEvent<HTMLElement>) => void;
+  };
   icon: JSX.Element;
   label: string;
   testId: string;
@@ -403,8 +426,11 @@ function ViewTab({
   return (
     <button
       type="button"
-      role="tab"
-      aria-selected={active}
+      role={tabProps.role}
+      tabIndex={tabProps.tabIndex}
+      aria-selected={tabProps["aria-selected"]}
+      ref={tabProps.ref}
+      onKeyDown={tabProps.onKeyDown}
       onClick={onClick}
       data-testid={testId}
       className={cn(

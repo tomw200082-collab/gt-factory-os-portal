@@ -29,6 +29,10 @@ import { PlacementRow } from "./_components/PlacementRow";
 function QueueInner(): JSX.Element {
   const { data, isLoading, isError, error, refetch } = usePlacementQueue();
   const rows = data?.rows ?? [];
+  const todayIso = new Date().toISOString().slice(0, 10);
+  const overdueCount = rows.filter(
+    (po) => !!po.order_by_date && po.order_by_date < todayIso,
+  ).length;
   // Durable success confirmation: a placed PO's row unmounts (it leaves the
   // queue), so the page owns the "order placed" banner.
   const [placed, setPlaced] = useState<{
@@ -127,19 +131,44 @@ function QueueInner(): JSX.Element {
             כשתאושר הזמנת רכש היא תופיע כאן, ותוכלי להזין מחיר ותנאי תשלום ולבצע
             אותה מול הספק.
           </div>
+          {/* DR-018 FLOW-004 (Tranche 124) — this empty state was
+              indistinguishable from an upstream-bug state (it masked the
+              live trigger bug on 2026-07-03 until someone thought to ask).
+              Give the office manager an explicit "this might be a bug, not
+              a real empty queue" escape hatch. */}
+          <div className="max-w-md text-xs text-fg-faint">
+            אם ידוע לך שאושרו הזמנות ואינן מופיעות כאן, פנו למנהל התכנון.
+          </div>
         </div>
       ) : (
-        <ul className="space-y-3" data-testid="placement-queue-list">
-          {rows.map((po) => (
-            <PlacementRow
-              key={po.po_id}
-              po={po}
-              onPlaced={(p) =>
-                setPlaced({ po_id: p.po_id, po_number: p.po_number })
-              }
-            />
-          ))}
-        </ul>
+        <>
+          {/* DR-018 FLOW-006 (Tranche 124) — no aging/overdue signal at the
+              page level; an office manager had to open every row to notice
+              a missed order_by_date. */}
+          {overdueCount > 0 && (
+            <div
+              role="status"
+              className="flex items-center gap-2 rounded-md border border-danger/40 bg-danger-softer px-4 py-3 text-sm text-danger-fg"
+              data-testid="placement-queue-overdue-banner"
+            >
+              <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
+              <span>
+                {rows.length} הזמנות ממתינות — {overdueCount} באיחור
+              </span>
+            </div>
+          )}
+          <ul className="space-y-3" data-testid="placement-queue-list">
+            {rows.map((po) => (
+              <PlacementRow
+                key={po.po_id}
+                po={po}
+                onPlaced={(p) =>
+                  setPlaced({ po_id: p.po_id, po_number: p.po_number })
+                }
+              />
+            ))}
+          </ul>
+        </>
       )}
     </div>
   );
