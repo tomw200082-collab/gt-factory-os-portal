@@ -12,7 +12,7 @@
 // ---------------------------------------------------------------------------
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import type { DraftWeekResponse, DraftWeekRow } from "@/app/(planning)/planning/meeting/_lib/cadence";
 
 vi.mock("next/navigation", () => ({
@@ -34,6 +34,7 @@ const draftState: { current: { data?: DraftWeekResponse; isLoading: boolean; isE
 };
 const genState = { current: { mutate: vi.fn(), isPending: false, isSuccess: false, isError: false } as Record<string, unknown> };
 const firmState = { current: { mutate: vi.fn(), data: undefined, isPending: false, isError: false } as Record<string, unknown> };
+const cancelWeekState = { current: { mutate: vi.fn(), reset: vi.fn(), data: undefined, isPending: false, isSuccess: false, isError: false } as Record<string, unknown> };
 
 vi.mock("@/app/(planning)/planning/meeting/_lib/cadence", async (importOriginal) => {
   const actual = await importOriginal<typeof import("@/app/(planning)/planning/meeting/_lib/cadence")>();
@@ -42,6 +43,7 @@ vi.mock("@/app/(planning)/planning/meeting/_lib/cadence", async (importOriginal)
     useDraftWeek: () => draftState.current,
     useGenerateDrafts: () => genState.current,
     useFirmWeek: () => firmState.current,
+    useCancelFirmedWeek: () => cancelWeekState.current,
     useFirmedWeekDemand: () => ({ data: undefined, isLoading: false }),
   };
 });
@@ -54,7 +56,14 @@ vi.mock("@/app/(planning)/planning/production-plan/_lib/usePlans", () => ({
 }));
 
 import PlanningMeetingPage from "@/app/(planning)/planning/meeting/page";
-import { defaultFirmWeekStart, workingDaysOf } from "@/app/(planning)/planning/meeting/_lib/cadence";
+import {
+  defaultFirmWeekStart,
+  workingDaysOf,
+  addDays,
+  toIsoDate,
+  parseIsoDate,
+  fmtWeekRange,
+} from "@/app/(planning)/planning/meeting/_lib/cadence";
 
 // Anchor the fixture to the real working days of the current target week so the
 // chip lands in the rendered board (the board only maps the active week's days).
@@ -108,6 +117,7 @@ afterEach(() => {
   draftState.current = { data: undefined, isLoading: false, isError: false };
   genState.current = { mutate: vi.fn(), isPending: false, isSuccess: false, isError: false };
   firmState.current = { mutate: vi.fn(), data: undefined, isPending: false, isError: false };
+  cancelWeekState.current = { mutate: vi.fn(), reset: vi.fn(), data: undefined, isPending: false, isSuccess: false, isError: false };
 });
 
 describe("weekly-meeting cockpit — cadence rail mobile", () => {
@@ -182,7 +192,7 @@ describe("weekly-meeting cockpit — firm week selector fits 390px (FLOW-007, T0
   it("drops the 14rem floor: min-w-0 wrapper + truncating week label", () => {
     render(<PlanningMeetingPage />);
     openFirmPanel();
-    const eyebrow = screen.getByText(/Target week to firm/i);
+    const eyebrow = screen.getByText(/Target week to lock/i);
     const labelWrap = eyebrow.parentElement!;
     const cls = labelWrap.getAttribute("class") ?? "";
     expect(cls.includes("min-w-0")).toBe(true);
@@ -216,5 +226,29 @@ describe("weekly-meeting cockpit — batch chip tap-to-expand", () => {
     expect(chip.getAttribute("aria-expanded")).toBe("true");
     // the inline breakdown list now shows the pack rows
     expect(chip.querySelectorAll("ul li").length).toBe(9);
+  });
+});
+
+// FLOW-NEW-01 (ux-flow-architect re-audit, 2026-07-04) — the ?week= half of a
+// cross-page ?step=firm&week= deep-link was silently dropped: FirmPanel's
+// weekStart useState initializer ran before the parent's useEffect had parsed
+// window.location.search, so the prop update that followed never took. Only
+// ?step= worked. Locks in the fix: FirmPanel now applies initialWeekStart via
+// its own effect the first time it arrives.
+describe("weekly-meeting cockpit — deep-link ?week= param (FLOW-NEW-01)", () => {
+  afterEach(() => {
+    window.history.pushState({}, "", "/planning/meeting");
+  });
+
+  it("opens the Firm panel on the week named by ?week=, not the default week", async () => {
+    const otherWeek = toIsoDate(addDays(parseIsoDate(WEEK), -7));
+    window.history.pushState({}, "", `/planning/meeting?step=firm&week=${otherWeek}`);
+
+    render(<PlanningMeetingPage />);
+
+    await waitFor(() => {
+      expect(screen.getByText(fmtWeekRange(otherWeek))).toBeTruthy();
+    });
+    expect(screen.queryByText(fmtWeekRange(WEEK))).toBeNull();
   });
 });

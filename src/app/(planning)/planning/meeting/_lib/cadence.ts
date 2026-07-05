@@ -38,6 +38,9 @@ export interface DraftWeekRow {
   planned_qty: number;
   uom: string;
   notes: string | null;
+  // FLOW-G04 (DR-019): true when this row was hand-edited after the engine
+  // proposed it — badges edited drafts before a regenerate would overwrite them.
+  is_user_modified: boolean;
 }
 
 export interface DraftWeekResponse {
@@ -61,6 +64,12 @@ export interface GenerateDraftsResponse {
   tea_proposal_id: string | null;
   matcha_proposal_id: string | null;
   draft_total_upcoming: number;
+  // FLOW-G05 (DR-019): week_start (Sunday) of the earliest upcoming draft —
+  // null when draft_total_upcoming is 0.
+  earliest_draft_week_start: string | null;
+  // FLOW-G07 (DR-019): draft rows dated before today — orphans a regenerate
+  // would silently drop before they were ever reviewed.
+  orphaned_past_dated_draft_count: number;
   generated_at: string;
   idempotent_replay: boolean;
 }
@@ -356,6 +365,57 @@ export function useFirmWeek() {
       });
       // Tranche 065 (FLOW-A7) — the planning hub overview cards read
       // ["planning","overview",…]; a firmed week changes coverage/jobs.
+      void qc.invalidateQueries({ queryKey: ["planning", "overview"] });
+    },
+  });
+}
+
+export interface CancelFirmedWeekResponse {
+  week_start: string;
+  week_end: string;
+  cancelled_count: number;
+  skipped_already_done_or_cancelled: number;
+  idempotent_replay: boolean;
+}
+
+// INT-06 (DR-019) — the bulk "undo Lock" the Firm panel's success banner
+// used to claim existed ("Reversible via the production plan") without any
+// actual bulk affordance behind it. Same invalidation set as useFirmWeek —
+// a bulk un-cancel changes exactly the same read surfaces a firm does.
+export function useCancelFirmedWeek() {
+  const qc = useQueryClient();
+  return useMutation<CancelFirmedWeekResponse, Error, { week_start: string; reason: string }>({
+    mutationFn: async ({ week_start, reason }) => {
+      const res = await fetch("/api/planning/cancel-firmed-week", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          idempotency_key: genIdempotencyKey(),
+          week_start,
+          reason,
+        }),
+      });
+      if (!res.ok) {
+        let detail = "";
+        try {
+          const j = (await res.json()) as { detail?: string; error?: string };
+          detail = j.detail ?? j.error ?? "";
+        } catch {
+          /* ignore */
+        }
+        throw new Error(
+          mapCadenceMutationErrorMessage(
+            res.status,
+            `Could not unlock the week (HTTP ${res.status})${detail ? ` — ${detail}` : ""}.`,
+          ),
+        );
+      }
+      return (await res.json()) as CancelFirmedWeekResponse;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ["cadence", "draft-week"] });
+      void qc.invalidateQueries({ queryKey: ["production-plan"] });
+      void qc.invalidateQueries({ queryKey: ["cadence", "firmed-week-demand"] });
       void qc.invalidateQueries({ queryKey: ["planning", "overview"] });
     },
   });

@@ -28,6 +28,8 @@ import {
   fmtQty,
   describeVariance,
   VARIANCE_TOOLTIP,
+  toIsoDate,
+  startOfWeek,
 } from "../_lib/helpers";
 import type { ProductionPlanRow } from "../_lib/types";
 import { InventoryImpactPanel } from "./InventoryImpactPanel";
@@ -77,8 +79,10 @@ export function ProductionJobCard({
   // §1 (COPY-002) — never fall through to the raw item_id (an opaque code)
   // in the operator-facing title. A name is expected for every item-linked
   // plan; the placeholder only guards the defensive null case.
+  // COPY-03 (DR-019) — "SKU" is internal jargon; the portal standard calls
+  // for the operator-facing term "product".
   const cardTitle = plan.is_base_batch
-    ? `Base batch · ${plan.pack_manifest_count} SKU${plan.pack_manifest_count === 1 ? "" : "s"}`
+    ? `Base batch · ${plan.pack_manifest_count} product${plan.pack_manifest_count === 1 ? "" : "s"}`
     : (plan.item_name ?? "Unnamed item");
 
   const [impactOpen, setImpactOpen] = useState(false);
@@ -258,14 +262,14 @@ export function ProductionJobCard({
                 className="chip chip-info gap-1 text-[10px]"
                 data-testid="plan-card-draft-chip"
               >
-                Draft — not yet confirmed
+                Draft — not yet locked
               </span>
               <Link
-                href="/planning/meeting"
+                href={`/planning/meeting?step=firm&week=${toIsoDate(startOfWeek(new Date(`${plan.plan_date}T00:00:00`)))}`}
                 className="text-[10px] text-accent hover:underline"
                 data-testid="plan-card-draft-confirm-link"
               >
-                Confirm via Weekly Meeting → Lock
+                Lock it in Weekly Meeting →
               </Link>
               {/* DR-018 INTER-002 — the plan was hand-edited after the
                   engine drafted it; is_user_modified is optional so this
@@ -295,10 +299,13 @@ export function ProductionJobCard({
             </span>
           )}
 
-          {/* B4 — in-production chip: firmed and currently running. */}
+          {/* B4 — in-production chip: firmed and currently running.
+              VIS-02 (DR-019) — was chip-info, same tone as the Draft chip
+              above; distinct tone so the two lifecycle states read apart
+              at a glance. */}
           {isInProduction && !isDone && !isCancelled && (
             <span
-              className="chip chip-info gap-1 text-[10px]"
+              className="chip chip-accent gap-1 text-[10px]"
               data-testid="plan-card-in-production-chip"
             >
               <Factory className="h-2.5 w-2.5" strokeWidth={2.5} />
@@ -358,6 +365,17 @@ export function ProductionJobCard({
             >
               {variance.qtyText} ({variance.pctText})
             </Badge>
+          )}
+
+          {/* VIS-03 (DR-019) — a cancelled card carried no chip at all,
+              relying solely on the Ban icon + strike-through title + a
+              73% opacity card, none of which the day-lane summary counts
+              register as text. */}
+          {isCancelled && (
+            <span className="chip chip-ghost gap-1 text-[10px]" data-testid="plan-card-cancelled-chip">
+              <Ban className="h-2.5 w-2.5" strokeWidth={2.5} aria-hidden="true" />
+              Cancelled
+            </span>
           )}
 
           {/* Cancelled reason */}

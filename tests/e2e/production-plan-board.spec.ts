@@ -97,7 +97,7 @@ test.describe("@mocked production plan board", () => {
     await expect(page.getByTestId("draft-review-banner")).toBeVisible({ timeout: 15_000 });
     await expect(page.getByTestId("draft-review-banner-link")).toHaveAttribute(
       "href",
-      "/planning/meeting",
+      /^\/planning\/meeting\?step=firm&week=\d{4}-\d{2}-\d{2}$/,
     );
 
     await expect(page.getByTestId("plan-card-edited-badge")).toBeVisible();

@@ -40,6 +40,7 @@ import { cn } from "@/lib/cn";
 import {
   useDraftWeek,
   useFirmWeek,
+  useCancelFirmedWeek,
   useGenerateDrafts,
   useFirmedWeekDemand,
   rollupDraftFgUnits,
@@ -80,10 +81,15 @@ function CadenceRail({
   active,
   today,
   onSelect,
+  pendingCount,
 }: {
   active: CadenceStep;
   today: CadenceStep;
   onSelect: (s: CadenceStep) => void;
+  // INT-04 (DR-019) — unfirmed drafts were invisible on the Lock step for
+  // days at a stretch outside Thursday; a count on the step itself closes
+  // that gap without requiring a visit to Execute's banner first.
+  pendingCount?: number;
 }) {
   return (
     <nav
@@ -94,6 +100,7 @@ function CadenceRail({
         const isActive = s.key === active;
         const isToday = s.key === today;
         const Icon = s.icon;
+        const showPending = s.key === "firm" && (pendingCount ?? 0) > 0;
         return (
           <div key={s.key} className="flex flex-1 items-center">
             <button
@@ -101,7 +108,7 @@ function CadenceRail({
               onClick={() => onSelect(s.key)}
               aria-pressed={isActive}
               aria-current={isToday ? "step" : undefined}
-              aria-label={`${s.label} — ${s.sub}${isToday ? " (today)" : ""}`}
+              aria-label={`${s.label} — ${s.sub}${isToday ? " (today)" : ""}${showPending ? ` — ${pendingCount} draft batch${pendingCount === 1 ? "" : "es"} waiting to be locked` : ""}`}
               className={cn(
                 // FLOW-008 (Tranche 053): <sm stacks icon above label so all
                 // three steps fit one row at 390px; sm+ is the original row.
@@ -125,7 +132,21 @@ function CadenceRail({
                   aria-hidden="true"
                 />
               ) : null}
-              <Icon className={cn("h-5 w-5 shrink-0", isActive ? "opacity-100" : "opacity-70")} />
+              {/* VIS-04 (DR-019) — the rail read as three unordered tiles
+                  with no sense of sequence; a numbered badge makes the
+                  Thursday-Sunday-daily order legible at a glance. */}
+              <span className="relative shrink-0">
+                <Icon className={cn("h-5 w-5", isActive ? "opacity-100" : "opacity-70")} />
+                <span
+                  className={cn(
+                    "absolute -bottom-1 -right-1.5 flex h-3.5 w-3.5 items-center justify-center rounded-full text-[8px] font-bold leading-none",
+                    isActive ? "bg-accent-fg text-accent" : "bg-bg-raised text-fg-subtle shadow-hairline",
+                  )}
+                  aria-hidden="true"
+                >
+                  {i + 1}
+                </span>
+              </span>
               <span className="min-w-0">
                 <span className="flex items-center justify-center gap-2 sm:justify-start">
                   <span className="text-xs font-semibold tracking-tightish sm:text-sm">{s.label}</span>
@@ -133,6 +154,13 @@ function CadenceRail({
                     <span className="hidden sm:inline-flex">
                       <Badge tone={isActive ? "neutral" : "accent"} variant="soft" size="xs">
                         Today
+                      </Badge>
+                    </span>
+                  ) : null}
+                  {showPending ? (
+                    <span data-testid="cadence-firm-pending-badge">
+                      <Badge tone={isActive ? "neutral" : "warning"} variant="soft" size="xs">
+                        {pendingCount}
                       </Badge>
                     </span>
                   ) : null}
@@ -219,7 +247,11 @@ function BatchChip({ row }: { row: DraftWeekRow }) {
     ? row.packs.map((p) => `${p.item_name ?? "Unknown product"}: ${p.qty}`).join("\n")
     : (row.notes ?? undefined);
   const [open, setOpen] = useState(false);
-  const ariaLabel = `${title} — ${sub}${packBreakdown ? `. ${packBreakdown.replace(/\n/g, ", ")}` : ""}`;
+  // FLOW-G04 (DR-019): badge a hand-edited draft so a regenerate's "wipes
+  // hand edits" warning has a concrete target on the board, not just a
+  // generic confirm sentence.
+  const editedLabel = row.is_user_modified ? "Edited" : null;
+  const ariaLabel = `${title}${editedLabel ? ` (${editedLabel})` : ""} — ${sub}${packBreakdown ? `. ${packBreakdown.replace(/\n/g, ", ")}` : ""}`;
 
   // Tea batches carry a pack breakdown that desktop reveals on hover (title) and
   // SR users get via aria-label — but a touch user can see neither. Make those
@@ -228,7 +260,14 @@ function BatchChip({ row }: { row: DraftWeekRow }) {
   const body = (
     <>
       <div className="flex items-center justify-between gap-1.5">
-        <span className="truncate text-sm font-medium" dir="auto">{title}</span>
+        <span className="flex min-w-0 items-center gap-1.5">
+          <span className="truncate text-sm font-medium" dir="auto">{title}</span>
+          {editedLabel ? (
+            <Badge tone="accent" variant="soft" size="xs">
+              {editedLabel}
+            </Badge>
+          ) : null}
+        </span>
         {expandable ? (
           <ChevronDown
             className={cn("h-3.5 w-3.5 shrink-0 text-fg-faint transition-transform", open && "rotate-180")}
@@ -298,6 +337,8 @@ function CommitmentPanel({
   totalUnits,
   entries,
   pending,
+  isError,
+  onRetry,
   footer,
 }: {
   title: string;
@@ -305,6 +346,11 @@ function CommitmentPanel({
   totalUnits: number;
   entries: CommitmentEntry[];
   pending: boolean;
+  /** FLOW-NEW-04 (ux-flow-architect re-audit) — a failed commitment fetch
+   *  previously fell through to "No finished goods committed", which reads
+   *  as a real zero-commitment week instead of an unknown one. */
+  isError?: boolean;
+  onRetry?: () => void;
   /** DR-018 VISUAL-002 (Tranche 122) — optional action strip rendered as
    *  part of the same card, so the "what gets committed" facts and the CTA
    *  that acts on them read as one unit instead of two visually detached
@@ -319,6 +365,20 @@ function CommitmentPanel({
     <SectionCard title={title} description={note} footer={footer}>
       {pending ? (
         <div className="py-6 text-center text-sm text-fg-muted">Loading commitment…</div>
+      ) : isError ? (
+        <div className="flex flex-col items-center gap-2 py-4 text-center text-sm">
+          <span className="text-danger-fg">We couldn&apos;t load the commitment for this week.</span>
+          <span className="text-fg-muted">Try refreshing. If the problem continues, contact the system administrator.</span>
+          {onRetry ? (
+            <button
+              type="button"
+              onClick={onRetry}
+              className={cn("mt-1 inline-flex items-center gap-1 rounded text-xs font-medium text-accent hover:underline", focusRing)}
+            >
+              Try again
+            </button>
+          ) : null}
+        </div>
       ) : entries.length === 0 ? (
         <div className="py-4 text-center text-sm text-fg-muted">No finished goods committed.</div>
       ) : (
@@ -386,26 +446,87 @@ function CommitmentPanel({
 // ---------------------------------------------------------------------------
 // FIRM panel
 // ---------------------------------------------------------------------------
-function FirmPanel({ canAct }: { canAct: boolean }) {
-  const [weekStart, setWeekStart] = useState<string>(() => defaultFirmWeekStart());
+function FirmPanel({ canAct, initialWeekStart }: { canAct: boolean; initialWeekStart?: string }) {
+  const [weekStart, setWeekStart] = useState<string>(() => initialWeekStart ?? defaultFirmWeekStart());
+  // FLOW-NEW-01 (ux-flow-architect re-audit) — initialWeekStart arrives one
+  // tick after mount (the parent page reads ?week= from window.location.search
+  // inside its own useEffect), so the useState initializer above always saw
+  // undefined and a cross-page ?week= deep-link was silently dropped. Apply it
+  // once, the first time it's defined.
+  const appliedInitialWeekRef = useRef(false);
+  useEffect(() => {
+    if (!appliedInitialWeekRef.current && initialWeekStart) {
+      appliedInitialWeekRef.current = true;
+      setWeekStart(initialWeekStart);
+    }
+  }, [initialWeekStart]);
   const [confirming, setConfirming] = useState(false);
   const confirmBtnRef = useRef<HTMLButtonElement>(null);
-  // When the inline confirm appears, move focus to the primary action so
-  // keyboard users land on it instead of hunting for the new control.
+  // A11Y-01 (DR-019) — the trigger button that opened the inline confirm,
+  // so focus can return to it when the confirm collapses (Cancel or the
+  // mutation settling) instead of dropping to document.body. wasOpenRef
+  // guards against stealing focus on first mount, when confirming starts
+  // (and stays) false.
+  const lockTriggerRef = useRef<HTMLButtonElement>(null);
+  const wasConfirmingRef = useRef(false);
   useEffect(() => {
-    if (confirming) confirmBtnRef.current?.focus();
+    if (confirming) {
+      confirmBtnRef.current?.focus();
+      wasConfirmingRef.current = true;
+    } else if (wasConfirmingRef.current) {
+      lockTriggerRef.current?.focus();
+      wasConfirmingRef.current = false;
+    }
   }, [confirming]);
   // DR-018 INTER-001 (Tranche 121) — Generate/refresh drafts wipes every
   // TEAEDD:%-generated draft, including hand-edits, with zero warning.
   // Same two-step inline confirm pattern as Firm week above.
   const [confirmingGen, setConfirmingGen] = useState(false);
   const confirmGenBtnRef = useRef<HTMLButtonElement>(null);
+  const genTriggerRef = useRef<HTMLButtonElement>(null);
+  const wasConfirmingGenRef = useRef(false);
   useEffect(() => {
-    if (confirmingGen) confirmGenBtnRef.current?.focus();
+    if (confirmingGen) {
+      confirmGenBtnRef.current?.focus();
+      wasConfirmingGenRef.current = true;
+    } else if (wasConfirmingGenRef.current) {
+      genTriggerRef.current?.focus();
+      wasConfirmingGenRef.current = false;
+    }
   }, [confirmingGen]);
   const draft = useDraftWeek(weekStart);
   const firm = useFirmWeek();
   const gen = useGenerateDrafts();
+  // INT-06 (DR-019) — the bulk "undo Lock" the success banner claimed
+  // existed without any actual affordance behind it.
+  const cancelWeek = useCancelFirmedWeek();
+  const [confirmingUnlock, setConfirmingUnlock] = useState(false);
+  const [unlockReason, setUnlockReason] = useState("");
+  const unlockTriggerRef = useRef<HTMLButtonElement>(null);
+  const unlockReasonRef = useRef<HTMLInputElement>(null);
+  const wasConfirmingUnlockRef = useRef(false);
+  useEffect(() => {
+    if (confirmingUnlock) {
+      unlockReasonRef.current?.focus();
+      wasConfirmingUnlockRef.current = true;
+    } else if (wasConfirmingUnlockRef.current) {
+      unlockTriggerRef.current?.focus();
+      wasConfirmingUnlockRef.current = false;
+    }
+  }, [confirmingUnlock]);
+  // FLOW-NEW-05 (ux-flow-architect re-audit) — the unlock success message
+  // used to live only inside the "week is locked" block, gated on
+  // firmedCount > 0. The same onSuccess that shows it also invalidates the
+  // draft-week query, and once that refetch resolves firmedCount drops to 0
+  // and the whole block (message included) stops rendering — the operator
+  // saw it for a few hundred ms, then landed on a bare empty-week state.
+  // Collapse the confirm form on success so it doesn't linger stale during
+  // that window; the persisted result banner below (driven directly off
+  // cancelWeek.isSuccess/data, same pattern as the firm result banner) is
+  // what actually survives the refetch.
+  useEffect(() => {
+    if (cancelWeek.isSuccess) setConfirmingUnlock(false);
+  }, [cancelWeek.isSuccess]);
 
   const rows = draft.data?.rows ?? [];
   const firmedCount = draft.data?.firmed_count ?? 0;
@@ -489,7 +610,7 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
             </button>
             <div className="min-w-0 text-center">
               <div className="truncate text-lg font-semibold tracking-tight">{fmtWeekRange(weekStart)}</div>
-              <div className="text-2xs uppercase tracking-ops text-fg-subtle">Target week to firm</div>
+              <div className="text-2xs uppercase tracking-ops text-fg-subtle">Target week to lock</div>
             </div>
             <button
               type="button"
@@ -515,8 +636,8 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
           <div className="mt-3 flex flex-wrap items-center justify-end gap-3">
             {confirmingGen ? (
               <>
-                <span className="max-w-[42ch] text-xs text-fg-muted" data-testid="meeting-gen-confirm-copy">
-                  Re-generating drafts will overwrite the current engine proposals, including any edits you&apos;ve made to draft batches. Manually added plans are not affected.
+                <span className="max-w-[46ch] text-xs text-fg-muted" data-testid="meeting-gen-confirm-copy">
+                  Re-generating replaces the engine&apos;s drafts across the whole horizon — including the {batchCount} batch{batchCount === 1 ? "" : "es"} shown here for {fmtWeekRange(weekStart)} — and any edits you&apos;ve made to them. Manually added plans are not affected.
                 </span>
                 <button
                   type="button"
@@ -549,13 +670,14 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
               </>
             ) : (
               <button
+                ref={genTriggerRef}
                 type="button"
                 onClick={() => setConfirmingGen(true)}
                 className={cn(
                   "inline-flex items-center gap-2 rounded-md border border-border bg-bg-raised px-3 py-2 text-sm font-medium text-fg shadow-hairline transition-colors hover:bg-bg-muted disabled:opacity-60",
                   focusRing,
                 )}
-                title="Run the tea + matcha draft engines to (re)generate the draft horizon"
+                title="Runs the tea + matcha draft engines. If drafts already exist, this replaces them — hand edits included."
                 data-testid="meeting-gen-trigger"
               >
                 <RefreshCw className="h-4 w-4" aria-hidden="true" />
@@ -570,11 +692,25 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
       {gen.isSuccess ? (
         <div role="status" aria-live="polite" className="flex items-start gap-3 rounded-lg border border-accent-border bg-accent-softer p-3 text-sm">
           <RefreshCw className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden="true" />
-          <span className="text-fg">
-            {gen.data.idempotent_replay
-              ? "Drafts already up to date."
-              : `Generated drafts — ${gen.data.draft_total_upcoming} draft batch${gen.data.draft_total_upcoming === 1 ? "" : "es"} now waiting across the horizon.`}
-          </span>
+          <div className="flex-1 text-fg">
+            <div>
+              {gen.data.idempotent_replay
+                ? "Drafts already up to date."
+                : `Generated drafts — ${gen.data.draft_total_upcoming} draft batch${gen.data.draft_total_upcoming === 1 ? "" : "es"} now waiting across the horizon.`}
+            </div>
+            {/* FLOW-G05 (DR-019) — a count with no destination left the
+                operator to hunt for which week the new drafts actually
+                landed in; bridge straight there when it's not this one. */}
+            {gen.data.earliest_draft_week_start && gen.data.earliest_draft_week_start !== weekStart ? (
+              <button
+                type="button"
+                onClick={() => setWeekStart(gen.data!.earliest_draft_week_start!)}
+                className={cn("mt-1 inline-flex items-center gap-1 rounded text-xs font-semibold text-accent hover:underline", focusRing)}
+              >
+                Jump to {fmtWeekRange(gen.data.earliest_draft_week_start)} <ArrowRight className="h-3 w-3" aria-hidden="true" />
+              </button>
+            ) : null}
+          </div>
         </div>
       ) : gen.isError ? (
         <div role="alert" className="flex items-start gap-3 rounded-lg border border-danger-border bg-danger-softer p-3 text-sm">
@@ -606,8 +742,19 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
           icon={Boxes}
           label="Draft batches"
           value={String(batchCount)}
-          meta={batchCount === 0 ? "Nothing to lock" : "Will be locked"}
-          tone={batchCount > 0 ? "accent" : "neutral"}
+          meta={
+            // FLOW-G07 (DR-019): orphaned past-dated drafts never got
+            // reviewed in their own window and the next regenerate silently
+            // drops them — surface them here instead of letting that happen
+            // unseen. Only known right after a Generate call (the field
+            // isn't in a standing query).
+            gen.data && gen.data.orphaned_past_dated_draft_count > 0
+              ? `${gen.data.orphaned_past_dated_draft_count} from past dates — will be dropped`
+              : batchCount === 0
+                ? "Nothing to lock"
+                : "Will be locked"
+          }
+          tone={gen.data && gen.data.orphaned_past_dated_draft_count > 0 ? "warning" : batchCount > 0 ? "accent" : "neutral"}
         />
         <StatTile
           icon={Droplet}
@@ -674,6 +821,7 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
             ) : (
               <>
                 <button
+                  ref={lockTriggerRef}
                   type="button"
                   disabled={batchCount === 0}
                   onClick={() => setConfirming(true)}
@@ -701,8 +849,8 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
         if (batchCount > 0 && draftRollup.length > 0) {
           return (
             <CommitmentPanel
-              title="If you firm this week"
-              note="These finished goods get committed to production when you firm — exactly what the Sunday procurement session buys components for."
+              title="If you lock this week"
+              note="These finished goods get committed to production when you lock — exactly what the Sunday procurement session buys components for."
               totalUnits={draftRollup.reduce((a, r) => a + r.units, 0)}
               entries={draftRollup.map((r) => ({
                 item_id: r.item_id,
@@ -728,6 +876,8 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
                 track: r.track,
               }))}
               pending={firmedDemand.isLoading}
+              isError={firmedDemand.isError}
+              onRetry={() => firmedDemand.refetch()}
               footer={lockActionRow}
             />
           );
@@ -752,7 +902,7 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
                 : `${result.newly_firmed_count} batch${result.newly_firmed_count === 1 ? "" : "es"} locked`}
             </div>
             <div className="mt-0.5 text-xs text-fg-muted">
-              {result.week_firmed_total} batch{result.week_firmed_total === 1 ? "" : "es"} now committed for {fmtWeekRange(result.week_start)}. The Sunday session will buy against this week. Reversible via the production plan.
+              {result.week_firmed_total} batch{result.week_firmed_total === 1 ? "" : "es"} now committed for {fmtWeekRange(result.week_start)}. The Sunday session will buy against this week. To undo, cancel batches one at a time from the production plan, or unlock the whole week below.
             </div>
             {/* Tranche 065 (FLOW-A5) — bridge straight into the next chain
                 step instead of leaving the planner to find procurement. */}
@@ -774,14 +924,71 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
       {firm.isError ? (
         <div role="alert" className="flex items-start gap-3 rounded-lg border border-danger-border bg-danger-softer p-4">
           <AlertTriangle className="mt-0.5 h-5 w-5 shrink-0 text-danger" aria-hidden="true" />
-          <div className="text-sm text-danger-fg">{(firm.error as Error).message}</div>
+          <div className="flex-1 text-sm text-danger-fg">{(firm.error as Error).message}</div>
+          {/* COPY-06 (DR-019) — the gen-error banner already had a retry;
+              this one had none, leaving the operator to re-click the
+              (now two-step) trigger above on their own. Same INT-01
+              pattern: re-enter the confirm, never re-fire directly. */}
+          <button
+            type="button"
+            onClick={() => {
+              firm.reset();
+              setConfirming(true);
+            }}
+            className={cn(
+              "shrink-0 rounded-md border border-danger-border bg-bg-raised px-2.5 py-1 text-xs font-medium text-danger-fg shadow-hairline transition-colors hover:bg-danger-softer",
+              focusRing,
+            )}
+            data-testid="meeting-firm-error-retry"
+          >
+            Try again
+          </button>
+        </div>
+      ) : null}
+
+      {/* Unlock result — FLOW-NEW-05 (ux-flow-architect re-audit): driven
+          directly off cancelWeek.isSuccess/data (same pattern as the firm
+          result banner above), so it survives the draft-week refetch that
+          the mutation's own onSuccess triggers, instead of disappearing the
+          moment firmedCount drops to 0. */}
+      {cancelWeek.isSuccess ? (
+        <div role="status" aria-live="polite" className="flex items-start gap-3 rounded-lg border border-accent-border bg-accent-softer p-3 text-sm">
+          <Lock className="mt-0.5 h-4 w-4 shrink-0 text-accent" aria-hidden="true" />
+          <div className="flex-1 text-fg">
+            <div>
+              {cancelWeek.data.cancelled_count} batch{cancelWeek.data.cancelled_count === 1 ? "" : "es"} unlocked (cancelled) for {fmtWeekRange(cancelWeek.data.week_start)}.
+              {cancelWeek.data.skipped_already_done_or_cancelled > 0
+                ? ` ${cancelWeek.data.skipped_already_done_or_cancelled} left alone — already reported or cancelled.`
+                : ""}
+            </div>
+            <div className="mt-1.5 flex flex-wrap items-center gap-x-3 gap-y-1">
+              <button
+                type="button"
+                onClick={() => {
+                  cancelWeek.reset();
+                  setConfirmingGen(true);
+                }}
+                className={cn("inline-flex items-center gap-1 rounded text-xs font-semibold text-accent hover:underline", focusRing)}
+              >
+                <RefreshCw className="h-3 w-3" aria-hidden="true" />
+                Generate new drafts
+              </button>
+              <Link
+                href="/planning/production-plan"
+                onClick={() => cancelWeek.reset()}
+                className={cn("inline-flex items-center gap-1 text-xs font-medium text-fg-muted hover:text-fg hover:underline", focusRing)}
+              >
+                View production plan <ArrowRight className="h-3 w-3" aria-hidden="true" />
+              </Link>
+            </div>
+          </div>
         </div>
       ) : null}
 
       {/* Week board */}
       <SectionCard
         title="Production week"
-        description="The draft batches the engine proposes for each working day. Review, then firm to lock the week."
+        description="The draft batches the engine proposes for each working day. Review, then lock the week."
       >
         {draft.isLoading ? (
           <div className="py-10 text-center text-sm text-fg-muted">Loading the draft week…</div>
@@ -793,13 +1000,14 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
         ) : batchCount === 0 && firmedCount > 0 ? (
           <div className="flex items-start gap-3 rounded-lg border border-success-border bg-success-softer p-5">
             <Lock className="mt-0.5 h-5 w-5 shrink-0 text-success" />
-            <div>
+            <div className="min-w-0 flex-1">
               <div className="text-sm font-semibold text-success-fg">
-                This week is firmed — {firmedCount} batch{firmedCount === 1 ? "" : "es"} locked
+                This week is locked — {firmedCount} batch{firmedCount === 1 ? "" : "es"} committed
               </div>
               <div className="mt-1 text-xs text-fg-muted">
                 The committed plan now lives in the production plan, where it can be adjusted or
-                cancelled if something changes. Re-running Generate will not touch firmed batches.
+                cancelled one at a time if something changes. Re-running Generate will not touch
+                locked batches.
               </div>
               <Link
                 href="/planning/production-plan"
@@ -807,6 +1015,73 @@ function FirmPanel({ canAct }: { canAct: boolean }) {
               >
                 Open production plan to adjust <ArrowRight className="h-3.5 w-3.5" />
               </Link>
+              {/* INT-06 (DR-019) — the bulk "undo Lock" the success banner
+                  used to claim existed with no affordance behind it. */}
+              {canAct ? (
+                <div className="mt-3 border-t border-success-border/50 pt-3">
+                  {confirmingUnlock ? (
+                    <div className="space-y-2">
+                      <label className="block text-xs text-fg-muted" htmlFor="unlock-week-reason">
+                        Reason for unlocking (required — kept with the cancelled batches)
+                      </label>
+                      <input
+                        ref={unlockReasonRef}
+                        id="unlock-week-reason"
+                        type="text"
+                        value={unlockReason}
+                        onChange={(e) => setUnlockReason(e.target.value)}
+                        placeholder="e.g. demand dropped, wrong week firmed"
+                        className={cn(
+                          "w-full rounded-md border border-border bg-bg-raised px-2.5 py-1.5 text-xs shadow-hairline",
+                          focusRing,
+                        )}
+                      />
+                      {cancelWeek.isError ? (
+                        <div role="alert" className="text-xs text-danger-fg">{(cancelWeek.error as Error).message}</div>
+                      ) : null}
+                      <div className="flex items-center gap-2">
+                        <button
+                          type="button"
+                          onClick={() => setConfirmingUnlock(false)}
+                          className={cn(
+                            "rounded-md border border-border bg-bg-raised px-2.5 py-1.5 text-xs font-medium text-fg-muted shadow-hairline transition-colors hover:bg-bg-muted",
+                            focusRing,
+                          )}
+                        >
+                          Keep it locked
+                        </button>
+                        <button
+                          type="button"
+                          disabled={unlockReason.trim().length === 0 || cancelWeek.isPending}
+                          aria-busy={cancelWeek.isPending}
+                          onClick={() => {
+                            cancelWeek.mutate({ week_start: weekStart, reason: unlockReason.trim() });
+                          }}
+                          className={cn(
+                            "inline-flex items-center gap-1.5 rounded-md border border-danger-border bg-bg-raised px-2.5 py-1.5 text-xs font-semibold text-danger-fg shadow-hairline transition-colors hover:bg-danger-softer disabled:cursor-not-allowed disabled:opacity-50",
+                            focusRing,
+                          )}
+                        >
+                          {cancelWeek.isPending ? "Unlocking…" : `Unlock ${firmedCount} batch${firmedCount === 1 ? "" : "es"}`}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <button
+                      ref={unlockTriggerRef}
+                      type="button"
+                      onClick={() => {
+                        cancelWeek.reset();
+                        setUnlockReason("");
+                        setConfirmingUnlock(true);
+                      }}
+                      className={cn("text-xs font-medium text-fg-muted hover:text-danger-fg hover:underline", focusRing)}
+                    >
+                      Unlock this week (cancels every batch it locked)
+                    </button>
+                  )}
+                </div>
+              ) : null}
             </div>
           </div>
         ) : batchCount === 0 ? (
@@ -934,6 +1209,8 @@ function ProcurePanel() {
         totalUnits={demand.data?.total_fg_units ?? 0}
         entries={entries}
         pending={demand.isLoading}
+        isError={demand.isError}
+        onRetry={() => demand.refetch()}
       />
 
       {/* Tranche 045 — purchase-session + purchase-calendar are superseded by
@@ -1013,16 +1290,7 @@ function ProcurePanel() {
 // ---------------------------------------------------------------------------
 // EXECUTE panel — the daily glance (no meeting).
 // ---------------------------------------------------------------------------
-function ExecutePanel({ onGoToFirm }: { onGoToFirm: () => void }) {
-  // FLOW-G01 (DR-019) — most days land here, where the Lock step (and any
-  // drafts waiting on it) was previously out of view entirely. A
-  // horizon-wide, week-independent count closes that dead zone.
-  const horizon = usePlans(
-    useMemo(() => toIsoDate(new Date()), []),
-    useMemo(() => toIsoDate(addDays(new Date(), 28)), []),
-  );
-  const pendingDraftCount = (horizon.data?.rows ?? []).filter((r) => r.status === "draft").length;
-
+function ExecutePanel({ onGoToFirm, pendingDraftCount }: { onGoToFirm: () => void; pendingDraftCount: number }) {
   return (
     <SectionCard
       title="Daily — execute"
@@ -1038,7 +1306,7 @@ function ExecutePanel({ onGoToFirm }: { onGoToFirm: () => void }) {
           )}
           data-testid="execute-pending-drafts-banner"
         >
-          <PackageCheck className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <Lock className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
           <span className="flex-1">
             {pendingDraftCount} draft batch{pendingDraftCount === 1 ? "" : "es"} still waiting to be locked, within
             the next 4 weeks.
@@ -1068,7 +1336,7 @@ function ExecutePanel({ onGoToFirm }: { onGoToFirm: () => void }) {
             <Boxes className="h-5 w-5 text-fg-subtle" />
             <span>
               <span className="block text-sm font-semibold">Inventory flow</span>
-              <span className="block text-xs text-fg-muted">Projected stock &amp; at-risk SKUs</span>
+              <span className="block text-xs text-fg-muted">Projected stock &amp; at-risk products</span>
             </span>
           </span>
           <ArrowRight className="h-4 w-4 text-fg-faint transition-transform group-hover:translate-x-0.5" />
@@ -1081,12 +1349,32 @@ function ExecutePanel({ onGoToFirm }: { onGoToFirm: () => void }) {
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
+const VALID_STEPS: readonly CadenceStep[] = ["firm", "procure", "execute"];
+
 export default function PlanningMeetingPage() {
   const { session } = useSession();
   const canAct = session.role === "planner" || session.role === "admin";
 
   const today = stepForToday();
   const [step, setStep] = useState<CadenceStep>(today);
+  // FLOW-G08 (DR-019) — a cross-page link (e.g. from production-plan's
+  // draft banner) previously always landed on today's default step and the
+  // Firm panel's default week, discarding exactly the context the link was
+  // trying to hand off. Honored once on mount, same SSR-safe pattern as
+  // production-plan's ?week= (window.location.search directly — no
+  // useSearchParams/Suspense wrapper needed).
+  const [initialWeekStart, setInitialWeekStart] = useState<string | undefined>(undefined);
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    const stepParam = params.get("step");
+    if (stepParam && (VALID_STEPS as string[]).includes(stepParam)) {
+      setStep(stepParam as CadenceStep);
+    }
+    const weekParam = params.get("week");
+    if (weekParam && /^\d{4}-\d{2}-\d{2}$/.test(weekParam)) {
+      setInitialWeekStart(weekParam);
+    }
+  }, []);
 
   const todayLabel = useMemo(() => {
     const now = new Date();
@@ -1097,12 +1385,23 @@ export default function PlanningMeetingPage() {
   const stepBadgeTone =
     today === "firm" ? "accent" : today === "procure" ? "success" : "info";
 
+  // FLOW-G01 / INT-04 (DR-019) — horizon-wide, week-independent pending-draft
+  // count shared by the Execute banner and the Lock step's badge, so both
+  // read the same number from one query instead of two independent fetches.
+  const horizon = usePlans(
+    useMemo(() => toIsoDate(new Date()), []),
+    useMemo(() => toIsoDate(addDays(new Date(), 28)), []),
+  );
+  const pendingDraftCount = (horizon.data?.rows ?? []).filter(
+    (r) => r.plan_type === "production" && r.status === "draft",
+  ).length;
+
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6">
       <WorkflowHeader
         eyebrow="Weekly cadence"
         title="Weekly meeting"
-        description="The factory rhythm in one place: firm next week's production on Thursday, buy for it on Sunday, build it daily."
+        description="The factory rhythm in one place: lock next week's production on Thursday, buy for it on Sunday, build it daily."
         meta={
           <>
             <Badge tone="neutral" variant="outline" size="sm">{todayLabel}</Badge>
@@ -1113,14 +1412,14 @@ export default function PlanningMeetingPage() {
         }
       />
 
-      <CadenceRail active={step} today={today} onSelect={setStep} />
+      <CadenceRail active={step} today={today} onSelect={setStep} pendingCount={pendingDraftCount} />
 
       {step === "firm" ? (
-        <FirmPanel canAct={canAct} />
+        <FirmPanel canAct={canAct} initialWeekStart={initialWeekStart} />
       ) : step === "procure" ? (
         <ProcurePanel />
       ) : (
-        <ExecutePanel onGoToFirm={() => setStep("firm")} />
+        <ExecutePanel onGoToFirm={() => setStep("firm")} pendingDraftCount={pendingDraftCount} />
       )}
     </div>
   );

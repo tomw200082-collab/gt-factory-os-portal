@@ -29,6 +29,7 @@ import {
   Loader2,
   Trash2,
   Info,
+  AlertTriangle,
 } from "lucide-react";
 import { useDialogA11y } from "./_lib/useDialogA11y";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
@@ -550,7 +551,7 @@ function ManualAddModal({
                     label change, so the in-flight state reads without relying
                     on text alone (matches the AddNote modal). */}
                 {isSubmitting ? (
-                  <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2.5} aria-hidden />
+                  <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" strokeWidth={2.5} aria-hidden />
                 ) : (
                   <Plus className="h-3 w-3" strokeWidth={2.5} />
                 )}
@@ -666,7 +667,7 @@ function AddFromRecommendationsModal({
           {candidatesQuery.isLoading ? (
             <div className="space-y-2 p-3" aria-busy="true" aria-live="polite" data-testid="add-from-recs-loading">
               {Array.from({ length: 4 }).map((_, i) => (
-                <div key={i} className="h-16 w-full animate-pulse rounded-md bg-bg-subtle" />
+                <div key={i} className="h-16 w-full animate-pulse rounded-md bg-bg-subtle motion-reduce:animate-none" />
               ))}
             </div>
           ) : candidatesQuery.isError ? (
@@ -719,6 +720,10 @@ function AddFromRecommendationsModal({
                     )}
                     onClick={() => setSelectedRecId(isSelected ? null : rec.recommendation_id)}
                     disabled={isBlocked}
+                    // A11Y-04 (DR-019) — a single-select picker with no
+                    // aria-pressed left a screen reader user unable to tell
+                    // which row (if any) was actually selected.
+                    aria-pressed={isSelected}
                     // INTER-012 — disabled rows say why they can't be added.
                     // Rows already on the plan are filtered out server-side,
                     // so the only block reasons here are feasibility ones.
@@ -773,7 +778,7 @@ function AddFromRecommendationsModal({
 
         <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
           {selectedRec && (
-            <div className="text-3xs text-fg-muted min-w-0 flex-1 truncate">
+            <div aria-live="polite" className="text-3xs text-fg-muted min-w-0 flex-1 truncate">
               Selected: <span className="font-medium text-fg">{selectedRec.item_display_name ?? "Unnamed product"}</span>{" "}
               · {fmtRecQty(selectedRec.suggested_qty, selectedRec.uom)} for {selectedRec.suggested_for_date}
             </div>
@@ -893,6 +898,23 @@ function EditModal({
           Edit plan
         </h2>
         <p className="mt-1 text-3xs text-fg-muted">{plan.item_name ?? "Unnamed item"}</p>
+
+        {/* INT-05 (DR-019) — a draft looks identical to a firmed plan here;
+            an edit made right before the next Generate would silently
+            vanish with no warning that this row wasn't locked yet. */}
+        {plan.status === "draft" && (
+          <div
+            role="status"
+            className="mt-3 flex items-start gap-2 rounded-md border border-warning-border bg-warning-softer px-3 py-2 text-xs text-warning-fg"
+            data-testid="edit-modal-draft-notice"
+          >
+            <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <span>
+              This is still a draft — the next Generate in Weekly Meeting can overwrite this edit
+              unless the week is locked first.
+            </span>
+          </div>
+        )}
 
         <form
           className="mt-4 space-y-3"
@@ -1144,7 +1166,7 @@ function AddNoteModal({
               {/* INTER-001 (Tranche 079) — spinner alongside "Saving…" while
                   pending, matching ManualAdd / AddFromRecs. */}
               {isSubmitting ? (
-                <Loader2 className="h-3 w-3 animate-spin" strokeWidth={2} aria-hidden />
+                <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" strokeWidth={2} aria-hidden />
               ) : (
                 <StickyNote className="h-3 w-3" strokeWidth={2} />
               )}
@@ -1593,7 +1615,7 @@ export default function ProductionPlanPage() {
     if (p.item_name) return p.item_name;
     if (p.is_base_batch) {
       const n = p.pack_manifest_count;
-      return `base batch (${n} SKU${n === 1 ? "" : "s"})`;
+      return `base batch (${n} product${n === 1 ? "" : "s"})`;
     }
     return null;
   }
@@ -1630,9 +1652,16 @@ export default function ProductionPlanPage() {
   const horizonFrom = useMemo(() => toIsoDate(new Date()), []);
   const horizonTo = useMemo(() => toIsoDate(addDays(new Date(), 28)), []);
   const horizonQuery = usePlans(horizonFrom, horizonTo);
-  const horizonDraftCount = (horizonQuery.data?.rows ?? []).filter(
+  const horizonDrafts = (horizonQuery.data?.rows ?? []).filter(
     (p) => p.plan_type === "production" && p.status === "draft",
-  ).length;
+  );
+  const horizonDraftCount = horizonDrafts.length;
+  // FLOW-G08 (DR-019) — deep-link the "open Weekly Meeting" banner straight
+  // at the week the off-screen drafts actually live in, not just today's
+  // default step/week.
+  const horizonDraftWeekStart = horizonDrafts.length
+    ? toIsoDate(startOfWeek(new Date(`${horizonDrafts.map((p) => p.plan_date).sort()[0]}T00:00:00`)))
+    : null;
 
   const totalQty = productionPlans
     .filter((p) => p.rendered_state !== "cancelled")
@@ -2058,7 +2087,7 @@ export default function ProductionPlanPage() {
             — or open Weekly Meeting to lock the week.
           </span>
           <Link
-            href="/planning/meeting"
+            href={`/planning/meeting?step=firm&week=${toIsoDate(weekStart)}`}
             className="shrink-0 whitespace-nowrap font-medium underline underline-offset-2 hover:no-underline"
             data-testid="draft-review-banner-link"
           >
@@ -2082,7 +2111,7 @@ export default function ProductionPlanPage() {
             {fmtWeekRange(weekStart, weekEnd)} board below.
           </span>
           <Link
-            href="/planning/meeting"
+            href={`/planning/meeting?step=firm${horizonDraftWeekStart ? `&week=${horizonDraftWeekStart}` : ""}`}
             className="shrink-0 whitespace-nowrap font-medium underline underline-offset-2 hover:no-underline"
             data-testid="draft-horizon-banner-link"
           >
@@ -2106,7 +2135,7 @@ export default function ProductionPlanPage() {
             every page load (FLOW-117-01) — they're now a permanent sibling
             so they're reachable immediately. */}
         {plansQuery.isLoading ? (
-          <span className="h-4 w-64 animate-pulse rounded bg-bg-subtle" aria-hidden="true" />
+          <span className="h-4 w-64 animate-pulse rounded bg-bg-subtle motion-reduce:animate-none" aria-hidden="true" />
         ) : (
           <>
             <span className="text-fg-muted">
@@ -2244,7 +2273,7 @@ export default function ProductionPlanPage() {
               data-testid="plans-refresh"
             >
               <RefreshCw
-                className={cn("h-3 w-3", plansQuery.isFetching && "animate-spin")}
+                className={cn("h-3 w-3", plansQuery.isFetching && "animate-spin motion-reduce:animate-none")}
                 strokeWidth={2}
               />
               <span className="hidden md:inline">Refresh</span>
@@ -2378,7 +2407,7 @@ export default function ProductionPlanPage() {
           aria-live="polite"
         >
           {Array.from({ length: 7 }).map((_, i) => (
-            <div key={i} className="h-[180px] w-full animate-pulse rounded-lg bg-bg-subtle" />
+            <div key={i} className="h-[180px] w-full animate-pulse rounded-lg bg-bg-subtle motion-reduce:animate-none" />
           ))}
         </div>
       ) : plansQuery.isError ? (

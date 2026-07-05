@@ -42,6 +42,9 @@ const genState: { current: Record<string, unknown> } = {
 const firmState: { current: Record<string, unknown> } = {
   current: { mutate: vi.fn(), data: undefined, isPending: false, isError: false },
 };
+const cancelWeekState: { current: Record<string, unknown> } = {
+  current: { mutate: vi.fn(), reset: vi.fn(), data: undefined, isPending: false, isSuccess: false, isError: false },
+};
 
 // Keep the pure helpers real; override only the hooks.
 vi.mock("@/app/(planning)/planning/meeting/_lib/cadence", async (importOriginal) => {
@@ -51,6 +54,7 @@ vi.mock("@/app/(planning)/planning/meeting/_lib/cadence", async (importOriginal)
     useDraftWeek: () => draftState.current,
     useGenerateDrafts: () => genState.current,
     useFirmWeek: () => firmState.current,
+    useCancelFirmedWeek: () => cancelWeekState.current,
     useFirmedWeekDemand: () => ({ data: undefined, isLoading: false }),
   };
 });
@@ -109,6 +113,7 @@ function reset() {
   draftState.current = { data: undefined, isLoading: false, isError: false };
   genState.current = { mutate: vi.fn(), isPending: false, isSuccess: false, isError: false };
   firmState.current = { mutate: vi.fn(), data: undefined, isPending: false, isError: false };
+  cancelWeekState.current = { mutate: vi.fn(), reset: vi.fn(), data: undefined, isPending: false, isSuccess: false, isError: false };
 }
 
 afterEach(() => {
