@@ -94,6 +94,7 @@ describe("PlacementRow", () => {
     await userEvent.type(priceInput, "12.5");
     expect(submitBtn.disabled).toBe(true);
     expect(submitBtn.getAttribute("title")).toContain("מחיר");
+    expect(submitBtn.getAttribute("title")).toContain("כמות");
     expect(submitBtn.getAttribute("title")).toContain("תנאי תשלום");
 
     // A disabled button does not fire clicks — the place mutation endpoint
@@ -173,6 +174,11 @@ describe("PlacementRow", () => {
     await waitFor(() => expect(submitBtn.disabled).toBe(false));
     await userEvent.click(submitBtn);
     const dialog = await screen.findByRole("alertdialog");
+    // DR-019 INTER-001 — the confirm dialog must disclose the changed
+    // quantity (name + old → new) before the irreversible place action.
+    expect(dialog.textContent).toContain("רכיב א");
+    expect(dialog.textContent).toContain("5");
+    expect(dialog.textContent).toContain("8");
     await userEvent.click(
       within(dialog).getByRole("button", { name: "בצע הזמנה" }),
     );
@@ -185,6 +191,35 @@ describe("PlacementRow", () => {
         }
       ).line_qty_overrides,
     ).toEqual([{ po_line_id: "l1", ordered_qty: 8 }]);
+  });
+
+  it("does NOT mention a quantity change in the confirm dialog when the quantity was left unchanged", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/api/purchase-order-lines")) {
+          return new Response(JSON.stringify(LINES), { status: 200 });
+        }
+        return new Response(JSON.stringify({ row: {} }), { status: 200 });
+      },
+    );
+
+    renderRow();
+    await userEvent.click(screen.getByTestId("placement-row-toggle-po1"));
+    const priceInput = await screen.findByTestId("placement-price-l1");
+    await userEvent.type(priceInput, "12.5");
+    const termSelect = screen.getByTestId(
+      "placement-terms-po1",
+    ) as HTMLSelectElement;
+    await userEvent.selectOptions(termSelect, termSelect.options[1].value);
+
+    const submitBtn = screen.getByTestId(
+      "placement-submit-po1",
+    ) as HTMLButtonElement;
+    await waitFor(() => expect(submitBtn.disabled).toBe(false));
+    await userEvent.click(submitBtn);
+    const dialog = await screen.findByRole("alertdialog");
+    expect(dialog.textContent).not.toContain("עודכנה");
   });
 
   it("blocks placing when the quantity is cleared to zero/invalid", async () => {

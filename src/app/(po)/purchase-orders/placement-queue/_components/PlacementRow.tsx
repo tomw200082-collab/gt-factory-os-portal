@@ -115,6 +115,10 @@ export function PlacementRow({
     const line_prices: { po_line_id: string; unit_price_net: number }[] = [];
     const line_qty_overrides: { po_line_id: string; ordered_qty: number }[] =
       [];
+    // DR-019 INTER-001 — the confirm dialog must name what actually changed
+    // before an irreversible place; a blanket warning is not enough for a
+    // quantity edited away from the planner's approved value.
+    const qtyChanges: string[] = [];
     for (const l of lines) {
       const p = Number(priceFor(l));
       if (!Number.isFinite(p) || p <= 0) {
@@ -128,8 +132,12 @@ export function PlacementRow({
         setErrorMsg(`יש להזין כמות חיובית לכל השורות (חסר: ${lineName(l)}).`);
         return;
       }
-      if (q !== Number(l.ordered_qty)) {
+      const originalQty = Number(l.ordered_qty);
+      if (q !== originalQty) {
         line_qty_overrides.push({ po_line_id: l.po_line_id, ordered_qty: q });
+        qtyChanges.push(
+          `${lineName(l)} ${fmtNumStr(originalQty)} ← ${fmtNumStr(q)}`,
+        );
       }
     }
     // DR-018 INTER-005 (Tranche 124) — a blank confirmedDate was silently
@@ -139,7 +147,11 @@ export function PlacementRow({
       title: `לבצע את ההזמנה ${po.po_number}?`,
       description: `ההזמנה תבוצע מול הספק עם תנאי תשלום "${termLabel}"${
         totalPreview != null ? ` · ${formatIls(totalPreview)}` : ""
-      }${confirmedDate ? ` · צפי הגעה ${confirmedDate}` : ""}. לאחר הביצוע ההזמנה תהיה פתוחה ומוכנה לקבלת סחורה — לא ניתן לבטל הזמנה שבוצעה דרך המערכת, ושינויים בכמויות יחייבו תיאום מול הספק.${
+      }${confirmedDate ? ` · צפי הגעה ${confirmedDate}` : ""}. לאחר הביצוע ההזמנה תהיה פתוחה ומוכנה לקבלת סחורה — לא ניתן לבטל הזמנה שבוצעה דרך המערכת.${
+        qtyChanges.length > 0
+          ? ` כמות עודכנה לעומת האישור המקורי: ${qtyChanges.join("; ")}. שינויים בכמויות יחייבו תיאום מול הספק.`
+          : ""
+      }${
         !confirmedDate
           ? " לא הוזן תאריך אספקה — ההזמנה תיפתח ללא צפי הגעה, ויש להוסיף אותו ידנית אחר כך."
           : ""
@@ -426,7 +438,11 @@ export function PlacementRow({
                   type="button"
                   onClick={() => void handlePlace()}
                   disabled={!canPlace || placeMut.isPending}
-                  title={!canPlace ? "יש להזין מחיר לכל השורות ולבחור תנאי תשלום" : undefined}
+                  title={
+                    !canPlace
+                      ? "יש להזין מחיר וכמות חיוביים לכל השורות ולבחור תנאי תשלום"
+                      : undefined
+                  }
                   className="btn btn-primary"
                   data-testid={`placement-submit-${po.po_id}`}
                 >
