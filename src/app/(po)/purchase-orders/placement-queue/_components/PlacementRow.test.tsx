@@ -5,7 +5,13 @@
 // place-contract tests; this pins the client-side guard + line rendering.)
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { PlacementRow } from "./PlacementRow";
@@ -124,5 +130,93 @@ describe("PlacementRow", () => {
       "placement-submit-po1",
     ) as HTMLButtonElement;
     await waitFor(() => expect(submitBtn.disabled).toBe(false));
+  });
+
+  it("loads the quantity field pre-filled with ordered_qty and sends an edited value as a line_qty_override", async () => {
+    let placeBody: unknown = null;
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input: RequestInfo | URL, init?: RequestInit) => {
+        const url = String(input);
+        if (url.includes("/api/purchase-order-lines")) {
+          return new Response(JSON.stringify(LINES), { status: 200 });
+        }
+        if (url.includes("/place")) {
+          placeBody = init?.body ? JSON.parse(String(init.body)) : null;
+          return new Response(JSON.stringify({ row: {} }), { status: 200 });
+        }
+        return new Response(JSON.stringify({ row: {} }), { status: 200 });
+      },
+    );
+
+    renderRow();
+    await userEvent.click(screen.getByTestId("placement-row-toggle-po1"));
+
+    const qtyInput = (await screen.findByTestId(
+      "placement-qty-l1",
+    )) as HTMLInputElement;
+    // Pre-loaded for editing with the line's ordered_qty (was static text).
+    expect(qtyInput.value).toBe("5");
+
+    await userEvent.clear(qtyInput);
+    await userEvent.type(qtyInput, "8");
+
+    const priceInput = await screen.findByTestId("placement-price-l1");
+    await userEvent.type(priceInput, "12.5");
+    const termSelect = screen.getByTestId(
+      "placement-terms-po1",
+    ) as HTMLSelectElement;
+    await userEvent.selectOptions(termSelect, termSelect.options[1].value);
+
+    const submitBtn = screen.getByTestId(
+      "placement-submit-po1",
+    ) as HTMLButtonElement;
+    await waitFor(() => expect(submitBtn.disabled).toBe(false));
+    await userEvent.click(submitBtn);
+    const dialog = await screen.findByRole("alertdialog");
+    await userEvent.click(
+      within(dialog).getByRole("button", { name: "בצע הזמנה" }),
+    );
+
+    await waitFor(() => expect(placeBody).not.toBeNull());
+    expect(
+      (
+        placeBody as {
+          line_qty_overrides?: { po_line_id: string; ordered_qty: number }[];
+        }
+      ).line_qty_overrides,
+    ).toEqual([{ po_line_id: "l1", ordered_qty: 8 }]);
+  });
+
+  it("blocks placing when the quantity is cleared to zero/invalid", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(
+      async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/api/purchase-order-lines")) {
+          return new Response(JSON.stringify(LINES), { status: 200 });
+        }
+        return new Response(JSON.stringify({ row: {} }), { status: 200 });
+      },
+    );
+
+    renderRow();
+    await userEvent.click(screen.getByTestId("placement-row-toggle-po1"));
+
+    const qtyInput = (await screen.findByTestId(
+      "placement-qty-l1",
+    )) as HTMLInputElement;
+    await userEvent.clear(qtyInput);
+    await userEvent.type(qtyInput, "0");
+
+    const priceInput = await screen.findByTestId("placement-price-l1");
+    await userEvent.type(priceInput, "12.5");
+    const termSelect = screen.getByTestId(
+      "placement-terms-po1",
+    ) as HTMLSelectElement;
+    await userEvent.selectOptions(termSelect, termSelect.options[1].value);
+
+    const submitBtn = screen.getByTestId(
+      "placement-submit-po1",
+    ) as HTMLButtonElement;
+    expect(submitBtn.disabled).toBe(true);
   });
 });
