@@ -19,11 +19,26 @@
 import { expect, test } from "@playwright/test";
 import { setFakeRole } from "./helpers";
 
+// The board renders only the week containing today (startOfWeek → Sunday);
+// rows outside that window are bucketed out client-side. A hardcoded
+// plan_date silently expires when the calendar week rolls over (this broke
+// CI on 2026-07-05), so compute a date inside the current visible week.
+function currentWeekIso(): string {
+  const d = new Date();
+  d.setDate(d.getDate() - d.getDay()); // Sunday-first, matches helpers.ts
+  d.setHours(12, 0, 0, 0);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+const PLAN_DATE = currentWeekIso();
+
 function baseRow(overrides: Record<string, unknown> = {}) {
   return {
     plan_id: "plan_1",
     plan_type: "production",
-    plan_date: "2026-07-01",
+    plan_date: PLAN_DATE,
     item_id: "ITEM-1",
     item_name: "CALM 1L",
     item_supply_method: "MANUFACTURED",
@@ -78,7 +93,7 @@ test.describe("@mocked production plan board", () => {
         completed_submission_id: "sub_1",
         completed_actual: {
           submission_id: "sub_1",
-          event_at: "2026-07-01T10:00:00Z",
+          event_at: `${PLAN_DATE}T10:00:00Z`,
           output_qty: "500",
           scrap_qty: "0",
           output_uom: "L",

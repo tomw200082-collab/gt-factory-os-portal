@@ -25,3 +25,6 @@ playwright-report/
 # are local tooling, not portal source — don't ship them.
 .claude/skills/
 design-system/
+
+# /graphify knowledge-graph analysis output — local tooling, not portal source.
+graphify-out/

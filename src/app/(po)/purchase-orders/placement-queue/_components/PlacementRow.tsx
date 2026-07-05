@@ -3,8 +3,9 @@
 // ---------------------------------------------------------------------------
 // PlacementRow — tranche 086 Part A. One APPROVED_TO_ORDER purchase order in
 // the office-manager queue. Collapsed: supplier · PO# · total · expected date.
-// Expanded: the PO's open lines with an editable unit price each, a payment-
-// terms picker, and the terminal "בצע הזמנה" action (place → OPEN).
+// Expanded: the PO's open lines with an editable quantity + unit price each,
+// a payment-terms picker, and the terminal "בצע הזמנה" action (place → OPEN).
+// A changed quantity is sent as a line_qty_override at place time.
 //
 // Hebrew + RTL operator surface (authorized in CLAUDE.md for this route).
 // ---------------------------------------------------------------------------
@@ -51,6 +52,7 @@ export function PlacementRow({
   const [termCode, setTermCode] = useState<string>("");
   const [customTerm, setCustomTerm] = useState<string>("");
   const [prices, setPrices] = useState<Record<string, string>>({});
+  const [qtys, setQtys] = useState<Record<string, string>>({});
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   // FLOW-003: supplier-confirmed arrival date (prefilled with the planner's
   // planned date; the office manager confirms/overrides it with the supplier).
@@ -69,6 +71,11 @@ export function PlacementRow({
     return l.unit_price_net != null ? fmtNumStr(l.unit_price_net) : "";
   }
 
+  function qtyFor(l: QueuePoLine): string {
+    if (l.po_line_id in qtys) return qtys[l.po_line_id];
+    return fmtNumStr(l.ordered_qty);
+  }
+
   const term = termCode === "custom" ? null : paymentTermByCode(termCode);
   const termLabel = termCode === "custom" ? customTerm.trim() : term?.label ?? "";
 
@@ -78,22 +85,22 @@ export function PlacementRow({
   const canPlace =
     lines.length > 0 &&
     !!termLabel &&
-    lines.every((l) => Number(priceFor(l)) > 0);
+    lines.every((l) => Number(priceFor(l)) > 0 && Number(qtyFor(l)) > 0);
 
   const totalPreview = useMemo(() => {
     let sum = 0;
     let any = false;
     for (const l of lines) {
       const p = Number(priceFor(l));
-      const q = Number(l.ordered_qty);
-      if (Number.isFinite(p) && p > 0 && Number.isFinite(q)) {
+      const q = Number(qtyFor(l));
+      if (Number.isFinite(p) && p > 0 && Number.isFinite(q) && q > 0) {
         sum += p * q;
         any = true;
       }
     }
     return any ? sum : null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lines, prices]);
+  }, [lines, prices, qtys]);
 
   async function handlePlace(): Promise<void> {
     setErrorMsg(null);
@@ -106,6 +113,12 @@ export function PlacementRow({
       return;
     }
     const line_prices: { po_line_id: string; unit_price_net: number }[] = [];
+    const line_qty_overrides: { po_line_id: string; ordered_qty: number }[] =
+      [];
+    // DR-019 INTER-001 — the confirm dialog must name what actually changed
+    // before an irreversible place; a blanket warning is not enough for a
+    // quantity edited away from the planner's approved value.
+    const qtyChanges: string[] = [];
     for (const l of lines) {
       const p = Number(priceFor(l));
       if (!Number.isFinite(p) || p <= 0) {
@@ -113,6 +126,19 @@ export function PlacementRow({
         return;
       }
       line_prices.push({ po_line_id: l.po_line_id, unit_price_net: p });
+
+      const q = Number(qtyFor(l));
+      if (!Number.isFinite(q) || q <= 0) {
+        setErrorMsg(`יש להזין כמות חיובית לכל השורות (חסר: ${lineName(l)}).`);
+        return;
+      }
+      const originalQty = Number(l.ordered_qty);
+      if (q !== originalQty) {
+        line_qty_overrides.push({ po_line_id: l.po_line_id, ordered_qty: q });
+        qtyChanges.push(
+          `${lineName(l)} ${fmtNumStr(originalQty)} ← ${fmtNumStr(q)}`,
+        );
+      }
     }
     // DR-018 INTER-005 (Tranche 124) — a blank confirmedDate was silently
     // omitted from the confirm dialog, reopening the no-ETA double-order
@@ -121,7 +147,11 @@ export function PlacementRow({
       title: `לבצע את ההזמנה ${po.po_number}?`,
       description: `ההזמנה תבוצע מול הספק עם תנאי תשלום "${termLabel}"${
         totalPreview != null ? ` · ${formatIls(totalPreview)}` : ""
-      }${confirmedDate ? ` · צפי הגעה ${confirmedDate}` : ""}. לאחר הביצוע ההזמנה תהיה פתוחה ומוכנה לקבלת סחורה — לא ניתן לבטל הזמנה שבוצעה דרך המערכת, ושינויים בכמויות יחייבו תיאום מול הספק.${
+      }${confirmedDate ? ` · צפי הגעה ${confirmedDate}` : ""}. לאחר הביצוע ההזמנה תהיה פתוחה ומוכנה לקבלת סחורה — לא ניתן לבטל הזמנה שבוצעה דרך המערכת.${
+        qtyChanges.length > 0
+          ? ` כמות עודכנה לעומת האישור המקורי: ${qtyChanges.join("; ")}. שינויים בכמויות יחייבו תיאום מול הספק.`
+          : ""
+      }${
         !confirmedDate
           ? " לא הוזן תאריך אספקה — ההזמנה תיפתח ללא צפי הגעה, ויש להוסיף אותו ידנית אחר כך."
           : ""
@@ -140,6 +170,8 @@ export function PlacementRow({
         line_prices,
         confirm_price_update: true,
         expected_receive_date: confirmedDate || null,
+        line_qty_overrides:
+          line_qty_overrides.length > 0 ? line_qty_overrides : undefined,
       },
       {
         // On success the queue refetch drops this PO (no longer
@@ -240,13 +272,29 @@ export function PlacementRow({
                       <div className="truncate text-sm text-fg-strong">
                         {lineName(l)}
                       </div>
-                      <div className="text-xs text-fg-muted">
-                        כמות:{" "}
-                        <span className="font-mono tabular-nums">
-                          {fmtNumStr(l.ordered_qty)} {l.uom}
-                        </span>
-                      </div>
                     </div>
+                    <label className="flex items-center gap-1.5">
+                      <span className="text-xs text-fg-muted">כמות</span>
+                      <input
+                        type="number"
+                        inputMode="decimal"
+                        min="0.0001"
+                        step="any"
+                        required
+                        className="input w-20 text-left tabular-nums"
+                        value={qtyFor(l)}
+                        onChange={(e) => {
+                          setErrorMsg(null);
+                          setQtys((prev) => ({
+                            ...prev,
+                            [l.po_line_id]: e.target.value,
+                          }));
+                        }}
+                        data-testid={`placement-qty-${l.po_line_id}`}
+                        aria-label={`כמות עבור ${lineName(l)}`}
+                      />
+                      <span className="text-xs text-fg-muted">{l.uom}</span>
+                    </label>
                     <label className="flex items-center gap-1.5">
                       <span className="text-xs text-fg-muted">מחיר ליח׳ ₪</span>
                       <input
@@ -390,7 +438,11 @@ export function PlacementRow({
                   type="button"
                   onClick={() => void handlePlace()}
                   disabled={!canPlace || placeMut.isPending}
-                  title={!canPlace ? "יש להזין מחיר לכל השורות ולבחור תנאי תשלום" : undefined}
+                  title={
+                    !canPlace
+                      ? "יש להזין מחיר וכמות חיוביים לכל השורות ולבחור תנאי תשלום"
+                      : undefined
+                  }
                   className="btn btn-primary"
                   data-testid={`placement-submit-${po.po_id}`}
                 >
