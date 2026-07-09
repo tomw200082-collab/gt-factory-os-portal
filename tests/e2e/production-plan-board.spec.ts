@@ -19,11 +19,24 @@
 import { expect, test } from "@playwright/test";
 import { setFakeRole } from "./helpers";
 
+// The board defaults to the real current week (startOfWeek(new Date())..+6,
+// see page.tsx) and only renders a row's production-job-card into the day
+// lane matching its plan_date. A hardcoded plan_date ages out of that window
+// and the card silently stops rendering — mirror the app's own toIsoDate()
+// (local Y-M-D) so fixture rows always land in today's lane.
+function todayIso(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 function baseRow(overrides: Record<string, unknown> = {}) {
   return {
     plan_id: "plan_1",
     plan_type: "production",
-    plan_date: "2026-07-01",
+    plan_date: todayIso(),
     item_id: "ITEM-1",
     item_name: "CALM 1L",
     item_supply_method: "MANUFACTURED",
