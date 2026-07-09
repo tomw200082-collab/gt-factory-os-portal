@@ -171,6 +171,14 @@ interface ProductionActualCommitted {
   // otherwise. On idempotent replay this reflects the link state at first
   // commit (back-looked-up; not re-resolved from the request body).
   linked_plan_id: string | null;
+  // Components whose required qty exceeded on-hand at submit time. The
+  // report still posted — these components' balances went negative.
+  shortfalls: Array<{
+    component_id: string;
+    component_name: string | null;
+    required_qty: string;
+    available_qty: string;
+  }>;
 }
 
 interface ItemRow {
@@ -1784,8 +1792,10 @@ export default function ProductionActualPage() {
     });
   }, [snapshot, outputQty, scrapQty]);
 
-  // C10 — rows that would go negative. Submit is disabled while any exist;
-  // the server-side shortage gate remains authoritative.
+  // C10 — rows that would go negative. Tom-directed 2026-07-09: no longer
+  // blocks submit — the report posts and short components' balances go
+  // negative. Kept as a non-blocking heads-up so the operator knows which
+  // components now need a stock fix.
   const shortageRows = useMemo(
     () => previewRows.filter((r) => r.availability?.short),
     [previewRows],
@@ -1816,25 +1826,6 @@ export default function ProductionActualPage() {
         setDone({
           kind: "error",
           message: "Scrap quantity must be a non-negative number.",
-        });
-        return;
-      }
-      // C10 (Tranche 050) — client-side shortage gate. The server gate is
-      // authoritative; this only saves the operator a doomed round-trip.
-      // Also covers the Cmd/Ctrl+Enter shortcut, which bypasses the
-      // disabled submit button.
-      if (shortageRows.length > 0) {
-        setDone({
-          kind: "error",
-          message: shortageRows
-            .map((r) =>
-              fmtShortfallMessage(
-                r.component_name,
-                r.availability!.after,
-                r.component_uom,
-              ),
-            )
-            .join("; "),
         });
         return;
       }
@@ -1959,59 +1950,6 @@ export default function ProductionActualPage() {
           setVarianceNote("");
           setVarianceReasonSkipped(false);
           setVarianceReasonError(null);
-          return;
-        }
-        // 409 INSUFFICIENT_STOCK — generic shape (legacy, not in the new
-        // ProductionActualConflictReason enum but still possible from the
-        // BOM-explosion path).
-        if (
-          res.status === 409 &&
-          body &&
-          typeof body === "object" &&
-          (body as { error?: unknown }).error === "INSUFFICIENT_STOCK"
-        ) {
-          const insuffBody = body as {
-            error: string;
-            message?: string;
-            shortfalls?: Array<{
-              component_id: string;
-              // C10 (Tranche 050): the backend now denormalizes the
-              // component name onto each shortfall row.
-              component_name?: string | null;
-              required_qty: string | number;
-              available_qty: string | number;
-            }>;
-          };
-          // Tranche 041 — never surface raw component_id UUIDs to the
-          // operator. Tranche 050 (C10): prefer the response's own
-          // component_name; fall back to the in-state BOM snapshot; if any
-          // shortfall still can't be resolved, fall back to the API's
-          // message string, then to a generic plain-English line.
-          const nameByComponentId = new Map<string, string>();
-          for (const bl of snapshot.bom_lines) {
-            nameByComponentId.set(bl.component_id, bl.component_name);
-          }
-          const shortfalls = insuffBody.shortfalls ?? [];
-          const resolvedLines = shortfalls.map((s) => {
-            const name =
-              (s.component_name && s.component_name.trim()) ||
-              nameByComponentId.get(s.component_id);
-            return name
-              ? `${name}: need ${fmtNumStr(s.required_qty)}, have ${fmtNumStr(s.available_qty)}`
-              : null;
-          });
-          const allResolved =
-            resolvedLines.length > 0 &&
-            resolvedLines.every((l): l is string => l !== null);
-          const insuffMessage = allResolved
-            ? `Insufficient stock: ${resolvedLines.join("; ")}`
-            : insuffBody.message ||
-              "One or more components are short — check component stock before posting.";
-          setDone({
-            kind: "error",
-            message: insuffMessage,
-          });
-          setPhase("entering");
           return;
         }
         // 409 conflicts (other reason_codes)
@@ -2139,8 +2077,7 @@ export default function ProductionActualPage() {
       // Tranche 048 (C7) — keep the captured committedPlan in sync with the
       // plan row visible at submit time.
       linkedPlan,
-      // Tranche 050 — C10 shortage gate + C8 variance reason.
-      shortageRows,
+      // Tranche 050 — C8 variance reason.
       varianceReasonApplicable,
       varianceReasonCode,
       varianceNote,
@@ -2576,6 +2513,30 @@ export default function ProductionActualPage() {
                   </div>
                 ) : null}
               </div>
+
+              {/* Posted despite a component shortfall (Tom-directed
+                  2026-07-09) — the short components below now sit negative
+                  and need a stock fix. */}
+              {done.committed.shortfalls && done.committed.shortfalls.length > 0 ? (
+                <div
+                  className="rounded-md border border-warning/40 bg-warning-softer px-3 py-2 text-warning-fg"
+                  role="status"
+                >
+                  <div className="font-medium">
+                    Posted with a component shortfall — these now show
+                    negative stock:
+                  </div>
+                  <ul className="mt-1 list-inside list-disc space-y-0.5">
+                    {done.committed.shortfalls.map((s) => (
+                      <li key={s.component_id}>
+                        {s.component_name ?? s.component_id}: needed{" "}
+                        {fmtNumStr(s.required_qty)}, had{" "}
+                        {fmtNumStr(s.available_qty)}
+                      </li>
+                    ))}
+                  </ul>
+                </div>
+              ) : null}
 
               {/* Consumption breakdown table — resolves component_id back
                   to component_name + source (pack/base) using the snapshot's
@@ -3288,16 +3249,20 @@ export default function ProductionActualPage() {
               <button
                 type="button"
                 className="btn btn-lg btn-primary mt-3 w-full sm:w-auto"
-                disabled={phase === "submitting" || shortageRows.length > 0}
+                disabled={phase === "submitting"}
                 onClick={() => void submitProductionActual(fromPlanId)}
                 data-testid="production-actual-one-tap-confirm"
                 title={
                   shortageRows.length > 0
-                    ? fmtShortfallMessage(
-                        shortageRows[0].component_name,
-                        shortageRows[0].availability!.after,
-                        shortageRows[0].component_uom,
-                      )
+                    ? shortageRows
+                        .map((r) =>
+                          fmtShortfallMessage(
+                            r.component_name,
+                            r.availability!.after,
+                            r.component_uom,
+                          ),
+                        )
+                        .join("; ")
                     : undefined
                 }
               >
@@ -3305,15 +3270,19 @@ export default function ProductionActualPage() {
                   ? "Submitting…"
                   : `Confirm — produced ${fmtNumStr(linkedPlan.planned_qty)} ${linkedPlan.uom}`}
               </button>
-              {/* C10 — the fast path is blocked by the same shortage gate
-                  as the full form below. */}
+              {/* C10 — heads-up only; does not block the fast path. */}
               {shortageRows.length > 0 ? (
                 <div className="mt-2 text-xs text-danger-fg" role="alert">
-                  {fmtShortfallMessage(
-                    shortageRows[0].component_name,
-                    shortageRows[0].availability!.after,
-                    shortageRows[0].component_uom,
-                  )}
+                  Posting anyway will leave{" "}
+                  {shortageRows
+                    .map((r) =>
+                      fmtShortfallMessage(
+                        r.component_name,
+                        r.availability!.after,
+                        r.component_uom,
+                      ),
+                    )
+                    .join("; ")}
                 </div>
               ) : null}
             </div>
@@ -3894,16 +3863,17 @@ export default function ProductionActualPage() {
               ) : null}
             </SectionCard>
 
-            {/* Tranche 050 (C10) — plain-English shortage explanation while
-                the submit button is disabled. */}
+            {/* C10 — non-blocking heads-up: reporting proceeds and short
+                components' balances go negative (Tom-directed 2026-07-09). */}
             {shortageRows.length > 0 ? (
               <div
-                className="rounded-md border border-danger/40 bg-danger-softer px-4 py-3 text-sm text-danger-fg"
-                role="alert"
+                className="rounded-md border border-warning/40 bg-warning-softer px-4 py-3 text-sm text-warning-fg"
+                role="status"
                 data-testid="production-actual-shortage-warning"
               >
                 <div className="font-medium">
-                  Not enough component stock for this quantity.
+                  Not enough component stock for this quantity — you can still
+                  submit; the short components below will go negative.
                 </div>
                 <ul className="mt-1 list-inside list-disc space-y-0.5 text-xs">
                   {shortageRows.map((r) => (
@@ -3946,22 +3916,24 @@ export default function ProductionActualPage() {
                 type="submit"
                 className={cn(
                   "btn btn-lg btn-primary gap-1.5 focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:outline-none",
-                  (!canSubmit || phase === "submitting" || shortageRows.length > 0) &&
+                  (!canSubmit || phase === "submitting") &&
                     "cursor-not-allowed opacity-60",
                 )}
-                disabled={
-                  phase === "submitting" || !canSubmit || shortageRows.length > 0
-                }
+                disabled={phase === "submitting" || !canSubmit}
                 data-testid="production-actual-submit"
                 title={
                   !canSubmit
                     ? "Operator or admin role required to submit"
                     : shortageRows.length > 0
-                      ? fmtShortfallMessage(
-                          shortageRows[0].component_name,
-                          shortageRows[0].availability!.after,
-                          shortageRows[0].component_uom,
-                        )
+                      ? shortageRows
+                          .map((r) =>
+                            fmtShortfallMessage(
+                              r.component_name,
+                              r.availability!.after,
+                              r.component_uom,
+                            ),
+                          )
+                          .join("; ")
                       : phase === "submitting"
                         ? "Submitting…"
                         : "Submit (⌘+Enter)"
