@@ -43,6 +43,7 @@
     ]
   },
   "permissions": {
+    "defaultMode": "bypassPermissions",
     "allow": [
       "Read(**)",
       "Glob(**)",
@@ -92,7 +93,19 @@
       "Bash(npm run build*)",
       "Bash(npx playwright show-report*)",
       "Bash(npx tsc --noEmit*)",
-      "Bash(npx vitest *)"
+      "Bash(npx vitest *)",
+      "Bash(git push*)",
+      "Bash(git merge*)",
+      "Bash(git rebase*)",
+      "Bash(git reset *)",
+      "Bash(npm install*)",
+      "Bash(npm uninstall*)",
+      "Bash(pnpm install*)",
+      "Bash(pnpm add*)",
+      "Bash(pnpm remove*)",
+      "Bash(gh pr *)",
+      "Bash(gh issue *)",
+      "Bash(gh release *)"
     ],
     "deny": [
       "Read(**/.env)",
@@ -133,18 +146,6 @@
       "Bash(npm uninstall -g *)"
     ],
     "ask": [
-      "Bash(git push*)",
-      "Bash(git merge*)",
-      "Bash(git rebase*)",
-      "Bash(git reset *)",
-      "Bash(npm install*)",
-      "Bash(npm uninstall*)",
-      "Bash(pnpm install*)",
-      "Bash(pnpm add*)",
-      "Bash(pnpm remove*)",
-      "Bash(gh pr *)",
-      "Bash(gh issue *)",
-      "Bash(gh release *)",
       "Write(docs/portal-os/baseline.json)",
       "Write(docs/portal-os/quarantine.json)"
     ]
