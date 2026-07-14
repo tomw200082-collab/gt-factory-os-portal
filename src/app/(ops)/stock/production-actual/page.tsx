@@ -50,7 +50,7 @@
 
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
-import { FlaskConical } from "lucide-react";
+import { AlertTriangle, FlaskConical } from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
@@ -1646,19 +1646,20 @@ export default function ProductionActualPage() {
   const itemsLoadErr = itemsQuery.error;
 
   // Keyboard shortcut: Cmd+Enter / Ctrl+Enter triggers submit in step 2.
+  // Keep the (stable) keyboard-shortcut handler calling the CURRENT submit
+  // callback. submitProductionActual is recreated when its deps change (e.g.
+  // shortageAck toggles); routing the shortcut through a ref avoids a stale
+  // closure that would otherwise ignore a just-ticked acknowledgement on
+  // Cmd/Ctrl+Enter. The sync effect lives just after submitProductionActual.
+  const submitRef = useRef<(id: string | null) => void>(() => {});
   const handleKeyDown = useCallback(
     (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key === "Enter") {
-        if (
-          (phase === "entering" || phase === "submitting") &&
-          canSubmit &&
-          phase !== "submitting"
-        ) {
-          void submitProductionActual(fromPlanId);
+        if (phase === "entering" && canSubmit) {
+          void submitRef.current(fromPlanId);
         }
       }
     },
-    // eslint-disable-next-line react-hooks/exhaustive-deps
     [phase, canSubmit, fromPlanId],
   );
 
@@ -1816,6 +1817,22 @@ export default function ProductionActualPage() {
     [previewRows],
   );
 
+  // Partial-materials reporting: an acknowledgement is granted for a SPECIFIC
+  // shortage profile. If the operator changes the quantity so the set of short
+  // components — or any short component's shortfall amount — changes, invalidate
+  // the acknowledgement so they must re-confirm the new profile before posting.
+  const shortageSignature = useMemo(
+    () =>
+      shortageRows
+        .map((r) => `${r.component_id}:${r.availability?.shortBy ?? ""}`)
+        .sort()
+        .join("|"),
+    [shortageRows],
+  );
+  useEffect(() => {
+    setShortageAck(false);
+  }, [shortageSignature]);
+
   // C8 — does this submit need a variance reason prompt? Only when linked
   // to a live plan and the output is outside the ±2% band.
   const varianceReasonApplicable =
@@ -1853,7 +1870,8 @@ export default function ProductionActualPage() {
       if (shortageRows.length > 0 && !shortageAck) {
         setDone({
           kind: "error",
-          message: `Some components are short. Tick “${SHORTAGE_ACK_LABEL}” below to post the report and deduct them to 0.`,
+          message:
+            "Some components are short — tick the acknowledgement below before submitting.",
         });
         return;
       }
@@ -2170,6 +2188,12 @@ export default function ProductionActualPage() {
       varianceReasonSkipped,
     ],
   );
+
+  // Keep submitRef (used by the Cmd/Ctrl+Enter handler above) pointed at the
+  // latest submit callback so the shortcut never fires a stale closure.
+  useEffect(() => {
+    submitRef.current = submitProductionActual;
+  }, [submitProductionActual]);
 
   async function handleSubmit(e: React.FormEvent): Promise<void> {
     e.preventDefault();
@@ -2611,13 +2635,13 @@ export default function ProductionActualPage() {
               {done.committed.shortfalls &&
               done.committed.shortfalls.length > 0 ? (
                 <div
-                  className="rounded border border-warning/30 bg-warning-softer/40 px-3 py-2.5 text-warning-fg"
+                  className="border-l-2 border-warning-border pl-3"
                   data-testid="production-actual-success-shortfalls"
                 >
-                  <div className="text-3xs font-semibold uppercase tracking-wide opacity-80">
-                    Deducted to 0 — short on{" "}
+                  <div className="text-3xs font-semibold uppercase tracking-wide text-warning-fg">
                     {done.committed.shortfalls.length} component
-                    {done.committed.shortfalls.length !== 1 ? "s" : ""}
+                    {done.committed.shortfalls.length !== 1 ? "s" : ""} short —
+                    deducted to 0
                   </div>
                   <ul className="mt-1 space-y-0.5">
                     {done.committed.shortfalls.map((s) => (
@@ -2628,15 +2652,15 @@ export default function ProductionActualPage() {
                         <span className="font-medium">
                           {s.component_name ?? s.component_id}
                         </span>
-                        <span className="font-mono tabular-nums opacity-90">
+                        <span className="font-mono tabular-nums text-fg-muted">
                           deducted {fmtNumStr(s.consumed_qty)} of{" "}
-                          {fmtNumStr(s.required_qty)} · short{" "}
+                          {fmtNumStr(s.required_qty)} · shortfall{" "}
                           {fmtNumStr(s.shortfall_qty)}
                         </span>
                       </li>
                     ))}
                   </ul>
-                  <div className="mt-1 text-3xs opacity-75">
+                  <div className="mt-1 text-3xs text-fg-muted">
                     The shortfall was recorded on this report but not counted as
                     consumed.
                   </div>
@@ -3353,20 +3377,30 @@ export default function ProductionActualPage() {
               </p>
               <button
                 type="button"
-                className="btn btn-lg btn-primary mt-3 w-full sm:w-auto"
-                disabled={
-                  phase === "submitting" ||
-                  (shortageRows.length > 0 && !shortageAck)
+                className={cn(
+                  "btn btn-lg btn-primary mt-3 w-full sm:w-auto",
+                  shortageRows.length > 0 &&
+                    !shortageAck &&
+                    "cursor-not-allowed opacity-60",
+                )}
+                disabled={phase === "submitting"}
+                aria-disabled={
+                  shortageRows.length > 0 && !shortageAck ? true : undefined
+                }
+                aria-describedby={
+                  shortageRows.length > 0 && !shortageAck
+                    ? "production-actual-shortage-warning"
+                    : undefined
                 }
                 onClick={() => void submitProductionActual(fromPlanId)}
                 data-testid="production-actual-one-tap-confirm"
                 title={
                   shortageRows.length > 0 && !shortageAck
-                    ? fmtShortfallMessage(
+                    ? `${fmtShortfallMessage(
                         shortageRows[0].component_name,
                         shortageRows[0].availability!.shortBy,
                         shortageRows[0].component_uom,
-                      )
+                      )} — tick the acknowledgement below to post.`
                     : undefined
                 }
               >
@@ -3378,14 +3412,16 @@ export default function ProductionActualPage() {
                   a shortage — it defers to the acknowledgement in the full form
                   below (short components will be deducted to 0). */}
               {shortageRows.length > 0 ? (
-                <div className="mt-2 text-xs text-warning-fg" role="status">
-                  {fmtShortfallMessage(
-                    shortageRows[0].component_name,
-                    shortageRows[0].availability!.shortBy,
-                    shortageRows[0].component_uom,
-                  )}
+                <div className="mt-2 text-xs text-warning-fg">
+                  {shortageRows.length === 1
+                    ? fmtShortfallMessage(
+                        shortageRows[0].component_name,
+                        shortageRows[0].availability!.shortBy,
+                        shortageRows[0].component_uom,
+                      )
+                    : `${shortageRows.length} components are short — they'll be deducted to 0.`}
                   {!shortageAck ? (
-                    <> — tick the acknowledgement below to post.</>
+                    <> Tick the acknowledgement below to post.</>
                   ) : null}
                 </div>
               ) : null}
@@ -3826,7 +3862,7 @@ export default function ProductionActualPage() {
                                     className={cn(
                                       "border-b border-border/40 last:border-b-0",
                                       r.availability?.short
-                                        ? "bg-warning-softer/40"
+                                        ? "bg-warning-soft"
                                         : "even:bg-bg-subtle/30",
                                     )}
                                     data-short={r.availability?.short || undefined}
@@ -3864,7 +3900,7 @@ export default function ProductionActualPage() {
                                           title={`Recipe needs ${fmtNumStr(String(r.availability.required))}, only ${fmtNumStr(String(r.availability.available))} on hand — deducts to 0, short ${fmtNumStr(String(r.availability.shortBy))}`}
                                         >
                                           0
-                                          <span className="ml-1 text-3xs font-normal text-warning-fg/80">
+                                          <span className="ml-1 text-xs font-normal text-warning-fg">
                                             (−{fmtNumStr(String(r.availability.shortBy))} short)
                                           </span>
                                         </span>
@@ -3923,7 +3959,7 @@ export default function ProductionActualPage() {
                                     className={cn(
                                       "border-b border-border/40 last:border-b-0",
                                       r.availability?.short
-                                        ? "bg-warning-softer/40"
+                                        ? "bg-warning-soft"
                                         : "even:bg-bg-subtle/30",
                                     )}
                                     data-short={r.availability?.short || undefined}
@@ -3961,7 +3997,7 @@ export default function ProductionActualPage() {
                                           title={`Recipe needs ${fmtNumStr(String(r.availability.required))}, only ${fmtNumStr(String(r.availability.available))} on hand — deducts to 0, short ${fmtNumStr(String(r.availability.shortBy))}`}
                                         >
                                           0
-                                          <span className="ml-1 text-3xs font-normal text-warning-fg/80">
+                                          <span className="ml-1 text-xs font-normal text-warning-fg">
                                             (−{fmtNumStr(String(r.availability.shortBy))} short)
                                           </span>
                                         </span>
@@ -3994,18 +4030,27 @@ export default function ProductionActualPage() {
                 asks the operator to acknowledge before posting. */}
             {shortageRows.length > 0 ? (
               <div
-                className="rounded-md border border-warning/40 bg-warning-softer px-4 py-3 text-sm text-warning-fg"
+                id="production-actual-shortage-warning"
+                className="rounded-md border border-warning-border bg-warning-softer px-4 py-3 text-sm text-warning-fg"
                 role="status"
                 data-testid="production-actual-shortage-warning"
               >
-                <div className="font-medium">
-                  Some components are short — they&apos;ll be deducted to 0.
+                <div className="flex items-start gap-2">
+                  <AlertTriangle
+                    className="mt-0.5 h-4 w-4 shrink-0"
+                    aria-hidden="true"
+                  />
+                  <div>
+                    <div className="font-medium">
+                      Some components are short — they&apos;ll be deducted to 0.
+                    </div>
+                    <p className="mt-1 text-xs">
+                      Stock will drop by what&apos;s on hand; the shortfall below
+                      is recorded but not counted as consumed. You can still
+                      submit the report.
+                    </p>
+                  </div>
                 </div>
-                <p className="mt-1 text-xs">
-                  Stock will drop by what&apos;s on hand; the shortfall below is
-                  recorded but not counted as consumed. You can still post the
-                  report.
-                </p>
                 <ul className="mt-1.5 list-inside list-disc space-y-0.5 text-xs">
                   {shortageRows.map((r) => (
                     <li key={r.component_id}>
@@ -4020,7 +4065,7 @@ export default function ProductionActualPage() {
                 <label className="mt-2.5 flex cursor-pointer items-start gap-2 text-xs font-medium">
                   <input
                     type="checkbox"
-                    className="mt-0.5 h-4 w-4 shrink-0 accent-warning"
+                    className="mt-0.5 h-5 w-5 shrink-0 accent-warning"
                     checked={shortageAck}
                     onChange={(e) => setShortageAck(e.target.checked)}
                     data-testid="production-actual-shortage-ack"
@@ -4035,7 +4080,9 @@ export default function ProductionActualPage() {
                 surfaces the Cmd/Ctrl+Enter shortcut without forcing the
                 user to hover for the tooltip. */}
             <div className="sticky bottom-0 z-10 -mx-4 flex flex-wrap items-center justify-end gap-2 border-t border-border bg-bg-raised/90 px-4 py-3 backdrop-blur-sm sm:-mx-6 sm:px-6">
-              {canSubmit && phase !== "submitting" ? (
+              {canSubmit &&
+              phase !== "submitting" &&
+              (shortageRows.length === 0 || shortageAck) ? (
                 <span
                   className="mr-auto hidden text-3xs text-fg-subtle [@media(pointer:fine)]:inline-flex items-center gap-1"
                   aria-hidden="true"
@@ -4062,17 +4109,21 @@ export default function ProductionActualPage() {
                     (shortageRows.length > 0 && !shortageAck)) &&
                     "cursor-not-allowed opacity-60",
                 )}
-                disabled={
-                  phase === "submitting" ||
-                  !canSubmit ||
-                  (shortageRows.length > 0 && !shortageAck)
+                disabled={phase === "submitting" || !canSubmit}
+                aria-disabled={
+                  shortageRows.length > 0 && !shortageAck ? true : undefined
+                }
+                aria-describedby={
+                  shortageRows.length > 0 && !shortageAck
+                    ? "production-actual-shortage-warning"
+                    : undefined
                 }
                 data-testid="production-actual-submit"
                 title={
                   !canSubmit
                     ? "Operator or admin role required to submit"
                     : shortageRows.length > 0 && !shortageAck
-                      ? `Some components are short — tick “${SHORTAGE_ACK_LABEL}” to post the report and deduct them to 0.`
+                      ? "Some components are short — tick the acknowledgement above to submit and deduct them to 0."
                       : phase === "submitting"
                         ? "Submitting…"
                         : "Submit (⌘+Enter)"
@@ -4089,7 +4140,7 @@ export default function ProductionActualPage() {
                     Read-only — operator role required
                   </>
                 ) : shortageRows.length > 0 ? (
-                  "Post report — deduct short to 0"
+                  "Submit report — deduct short components to 0"
                 ) : (
                   "Submit production report"
                 )}
