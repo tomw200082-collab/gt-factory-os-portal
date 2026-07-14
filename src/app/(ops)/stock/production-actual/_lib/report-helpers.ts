@@ -69,15 +69,31 @@ export function exceedsVarianceBand(
 // available_qty arrives as text (qty_8dp) from the open response;
 // required arrives as the client-side preview string (may be "?" when the
 // BOM math could not be computed). Returns null when either side cannot be
-// parsed — the row then renders "—" and never blocks submit (the
-// submit-time shortage gate on the server remains authoritative).
-// Quantities are rounded to 4dp to kill float dust before the sign check.
+// parsed — the row then renders "—".
+//
+// Partial-materials reporting (2026-07-14): a shortage no longer blocks the
+// report. When a component is short, the server consumes what is on hand and
+// FLOORS the balance at 0 (never negative). This helper now also exposes:
+//   - consumed:      what will actually be deducted = min(required, max(avail,0))
+//   - flooredAfter:  the balance after, floored at 0 = max(available-required,0)
+//   - shortBy:       the un-deductable remainder = max(required-max(avail,0),0)
+// `after` (raw, may be negative) and `short` are retained for callers that
+// still need the pre-floor delta. Quantities are rounded to 4dp to kill float
+// dust before the sign check.
 // ---------------------------------------------------------------------------
 export interface AfterBalance {
   available: number;
   required: number;
+  /** Raw available − required (may be negative). */
   after: number;
+  /** True when the recipe needs more than is on hand. */
   short: boolean;
+  /** What will actually be deducted: min(required, max(available, 0)). */
+  consumed: number;
+  /** Balance after the report, floored at 0: max(available − required, 0). */
+  flooredAfter: number;
+  /** The remainder that cannot be deducted: max(required − max(available,0), 0). */
+  shortBy: number;
 }
 
 function round4(n: number): number {
@@ -94,18 +110,24 @@ export function computeAfterBalance(
   const available = Number(availableQtyStr);
   const required = Number(requiredQtyStr);
   if (!Number.isFinite(available) || !Number.isFinite(required)) return null;
+  const availFloored = Math.max(available, 0);
   const after = round4(available - required);
   return {
     available: round4(available),
     required: round4(required),
     after,
     short: after < 0,
+    consumed: round4(Math.min(required, availFloored)),
+    flooredAfter: round4(Math.max(available - required, 0)),
+    shortBy: round4(Math.max(required - availFloored, 0)),
   };
 }
 
 // ---------------------------------------------------------------------------
-// C10 — plain-English shortfall line for the disabled submit button.
-// "Short 4.5 KG of Sencha Tea — receive stock or reduce quantity"
+// Plain-English shortfall line. Partial-materials reporting: the shortfall is
+// deducted to 0 rather than blocking, so the copy reflects that outcome.
+// "Short 4.5 KG of Sencha Tea — will be deducted to 0"
+// Accepts either a positive shortfall or a negative after-delta (abs is taken).
 // ---------------------------------------------------------------------------
 function fmtQtyNum(n: number): string {
   const abs = Math.abs(n);
@@ -121,5 +143,5 @@ export function fmtShortfallMessage(
 ): string {
   const qty = fmtQtyNum(shortBy);
   const unit = uom ? ` ${uom}` : "";
-  return `Short ${qty}${unit} of ${componentName} — receive stock or reduce quantity`;
+  return `Short ${qty}${unit} of ${componentName} — will be deducted to 0`;
 }
