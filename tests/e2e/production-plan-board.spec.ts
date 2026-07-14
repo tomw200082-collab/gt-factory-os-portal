@@ -19,11 +19,24 @@
 import { expect, test } from "@playwright/test";
 import { setFakeRole } from "./helpers";
 
+// Dates MUST stay relative to "today". The board renders the week containing
+// new Date() (weekStart..weekEnd via startOfWeek) and only shows a plan card
+// whose plan_date falls inside that week. Hardcoded dates silently drift out of
+// the window as real time advances — this file previously pinned 2026-07-01 and
+// went stale (the 3 card-dependent tests began failing ~2 weeks later). Compute
+// the current local date (matching the board's local toIsoDate) so the mock
+// rows always land in today's lane.
+function isoDate(d: Date): string {
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+}
+const TODAY = isoDate(new Date());
+
 function baseRow(overrides: Record<string, unknown> = {}) {
   return {
     plan_id: "plan_1",
     plan_type: "production",
-    plan_date: "2026-07-01",
+    plan_date: TODAY,
     item_id: "ITEM-1",
     item_name: "CALM 1L",
     item_supply_method: "MANUFACTURED",
@@ -78,7 +91,7 @@ test.describe("@mocked production plan board", () => {
         completed_submission_id: "sub_1",
         completed_actual: {
           submission_id: "sub_1",
-          event_at: "2026-07-01T10:00:00Z",
+          event_at: `${TODAY}T10:00:00Z`,
           output_qty: "500",
           scrap_qty: "0",
           output_uom: "L",
@@ -89,7 +102,7 @@ test.describe("@mocked production plan board", () => {
     ];
 
     await page.route("**/api/production-plan?**", (route) =>
-      route.fulfill({ json: { rows, count: rows.length, as_of: "2026-07-03T00:00:00Z" } }),
+      route.fulfill({ json: { rows, count: rows.length, as_of: `${TODAY}T00:00:00Z` } }),
     );
 
     await page.goto("/planning/production-plan");
@@ -110,7 +123,7 @@ test.describe("@mocked production plan board", () => {
     const rows = [baseRow({ plan_id: "plan_live", status: "planned", rendered_state: "planned" })];
 
     await page.route("**/api/production-plan?**", (route) =>
-      route.fulfill({ json: { rows, count: rows.length, as_of: "2026-07-03T00:00:00Z" } }),
+      route.fulfill({ json: { rows, count: rows.length, as_of: `${TODAY}T00:00:00Z` } }),
     );
 
     await page.goto("/planning/production-plan");
@@ -126,7 +139,7 @@ test.describe("@mocked production plan board", () => {
     const rows = [baseRow({ plan_id: "plan_edit_me", status: "planned", rendered_state: "planned" })];
 
     await page.route("**/api/production-plan?**", (route) =>
-      route.fulfill({ json: { rows, count: rows.length, as_of: "2026-07-03T00:00:00Z" } }),
+      route.fulfill({ json: { rows, count: rows.length, as_of: `${TODAY}T00:00:00Z` } }),
     );
 
     await page.goto("/planning/production-plan");
