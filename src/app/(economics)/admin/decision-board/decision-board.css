@@ -1,0 +1,74 @@
+/* ---------------------------------------------------------------------------
+ * Decision Board — page-scoped beauty layer (Tranche 129).
+ *
+ * Everything here is presentation-only: an orchestrated load reveal, the
+ * drawer entrance, the table's decision-color accent bar, and the saved-chip
+ * pop. No global token or globals.css change — this file ships with the page.
+ *
+ * C5 (ux-release-gate): every animation/transition owned by this page is
+ * fully disabled under prefers-reduced-motion.
+ * ------------------------------------------------------------------------- */
+
+/* Orchestrated page-load reveal — each section rises in sequence via
+   --db-delay set inline (verdict → vitals → segments → map → table). */
+@keyframes db-rise {
+  from { opacity: 0; transform: translateY(10px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+.db-reveal {
+  opacity: 0;
+  animation: db-rise 520ms cubic-bezier(0.22, 1, 0.36, 1) forwards;
+  animation-delay: var(--db-delay, 0ms);
+}
+
+/* Operating-costs drawer entrance — slides from its screen edge (spatial
+   cause-effect: the panel comes from where it lives). Exit stays instant;
+   exits should be faster than entrances. */
+@keyframes db-slide-in {
+  from { transform: translateX(28px); opacity: 0; }
+  to   { transform: translateX(0);    opacity: 1; }
+}
+@keyframes db-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+.db-drawer-panel   { animation: db-slide-in 260ms cubic-bezier(0.22, 1, 0.36, 1); }
+.db-drawer-backdrop{ animation: db-fade-in 200ms ease-out; }
+
+/* Table rows — a decision-colored accent bar breathes in on hover/selection.
+   Color arrives per-row via --db-row-accent (the row's decision fill). */
+.db-row { position: relative; }
+.db-row::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 18%;
+  bottom: 18%;
+  width: 3px;
+  border-radius: 999px;
+  background: var(--db-row-accent, transparent);
+  opacity: 0;
+  transition: opacity 180ms ease-out;
+}
+.db-row:hover::before,
+.db-row[data-active="true"]::before { opacity: 0.9; }
+
+/* "Costs saved" confirmation chip (gate condition C1). */
+@keyframes db-pop {
+  from { opacity: 0; transform: scale(0.92); }
+  to   { opacity: 1; transform: scale(1); }
+}
+.db-chip-pop { animation: db-pop 180ms ease-out; }
+
+/* C5 — reduced motion: everything above renders instantly, nothing moves. */
+@media (prefers-reduced-motion: reduce) {
+  .db-reveal,
+  .db-drawer-panel,
+  .db-drawer-backdrop,
+  .db-chip-pop {
+    animation: none !important;
+    opacity: 1 !important;
+    transform: none !important;
+  }
+  .db-row::before { transition: none; }
+}

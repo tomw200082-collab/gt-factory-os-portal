@@ -27,7 +27,7 @@
 // segment-<key> / quadrant / inspector.
 // ---------------------------------------------------------------------------
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -57,6 +57,17 @@ import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { formatIls, formatPct, formatQtyInt } from "@/lib/utils/format-money";
 import { OperatingCostsDrawer, type CostModelRow } from "./OperatingCostsDrawer";
+import "./decision-board.css";
+
+// Tranche 129 — staggered page-load reveal (disabled under reduced motion via
+// decision-board.css). Pure presentation.
+function Reveal({ delay, children }: { delay: number; children: ReactNode }): JSX.Element {
+  return (
+    <div className="db-reveal" style={{ "--db-delay": `${delay}ms` } as CSSProperties}>
+      {children}
+    </div>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Decision meta — presentation only. The classification itself is computed
@@ -233,6 +244,15 @@ function Skeleton({ className }: { className?: string }): JSX.Element {
 export default function DecisionBoardPage(): JSX.Element {
   const queryClient = useQueryClient();
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [savedFlash, setSavedFlash] = useState(false);
+  const inspectorRef = useRef<HTMLDivElement>(null);
+
+  // C1 — transient save confirmation; auto-dismisses (toast rule: 3-5s).
+  useEffect(() => {
+    if (!savedFlash) return;
+    const t = setTimeout(() => setSavedFlash(false), 4500);
+    return () => clearTimeout(t);
+  }, [savedFlash]);
 
   const ueQuery = useQuery<UEResponse>({
     queryKey: ["decision-board", "unit-economics"],
@@ -329,8 +349,22 @@ export default function DecisionBoardPage(): JSX.Element {
   const isRecalculating = ueQuery.isFetching && !ueQuery.isLoading;
   const verdict = totals ? buildVerdict(totals) : null;
 
+  // C2 — on narrow viewports the Inspector sits below the map; bring it into
+  // view when a product is selected so the drill-down loop doesn't dead-end.
+  useEffect(() => {
+    if (!activeId || typeof window === "undefined") return;
+    if (window.matchMedia("(min-width: 1024px)").matches) return;
+    const reduced = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    inspectorRef.current?.scrollIntoView({ behavior: reduced ? "auto" : "smooth", block: "nearest" });
+  }, [activeId]);
+
   const headerActions = (
     <div className="flex items-center gap-2">
+      {savedFlash && !isRecalculating ? (
+        <span role="status" className="db-chip-pop inline-flex items-center gap-1.5 rounded-lg border border-success/40 bg-success-softer/60 px-2.5 py-1.5 text-2xs font-semibold text-success-fg">
+          <Check className="h-3.5 w-3.5" /> Costs saved
+        </span>
+      ) : null}
       {isRecalculating ? (
         <span role="status" className="inline-flex items-center gap-1.5 rounded-lg border border-accent/40 bg-accent-soft/50 px-2.5 py-1.5 text-2xs font-medium text-accent">
           <span className="dot bg-accent animate-pulse-soft" aria-hidden /> Recalculating…
@@ -400,29 +434,35 @@ export default function DecisionBoardPage(): JSX.Element {
       ) : null}
 
       {/* Verdict band */}
-      <VerdictBand verdict={verdict} loading={isLoading} onAct={(f) => setFilter(f)} />
+      <Reveal delay={0}>
+        <VerdictBand verdict={verdict} loading={isLoading} onAct={(f) => setFilter(f)} />
+      </Reveal>
 
       {/* Vitals */}
-      <VitalsRow totals={totals} loading={isLoading} />
+      <Reveal delay={70}>
+        <VitalsRow totals={totals} loading={isLoading} />
+      </Reveal>
 
       {/* Decision segments */}
-      <div className="grid grid-cols-2 gap-2.5 max-sm:[&>*:last-child:nth-child(odd)]:col-span-2 sm:grid-cols-4 lg:grid-cols-7" data-testid="segments">
-        {SEGMENT_ORDER.map((k) => (
-          <SegmentCard
-            key={k}
-            meta={DECISION[k]}
-            count={segments.get(k)?.count ?? 0}
-            contribution={segments.get(k)?.contribution ?? 0}
-            maxCount={maxSegmentCount}
-            active={filter === k}
-            onClick={() => setFilter((f) => (f === k ? null : k))}
-            loading={isLoading}
-          />
-        ))}
-      </div>
+      <Reveal delay={140}>
+        <div className="grid grid-cols-2 gap-2.5 max-sm:[&>*:last-child:nth-child(odd)]:col-span-2 sm:grid-cols-4 lg:grid-cols-7" data-testid="segments">
+          {SEGMENT_ORDER.map((k) => (
+            <SegmentCard
+              key={k}
+              meta={DECISION[k]}
+              count={segments.get(k)?.count ?? 0}
+              contribution={segments.get(k)?.contribution ?? 0}
+              maxCount={maxSegmentCount}
+              active={filter === k}
+              onClick={() => setFilter((f) => (f === k ? null : k))}
+              loading={isLoading}
+            />
+          ))}
+        </div>
+      </Reveal>
 
       {/* Portfolio map + inspector */}
-      <div className="grid gap-4 lg:grid-cols-[1.9fr_1fr]">
+      <div className="db-reveal grid gap-4 lg:grid-cols-[1.9fr_1fr]" style={{ "--db-delay": "210ms" } as CSSProperties}>
         <SectionCard
           eyebrow="The signature view"
           title="Portfolio map"
@@ -434,12 +474,15 @@ export default function DecisionBoardPage(): JSX.Element {
             <Quadrant items={items} velMedian={velMedian} targetPct={targetPct} activeId={activeId} onHover={setActiveId} windowDays={windowDays} />
           )}
         </SectionCard>
-        <SectionCard eyebrow="Readout" title="Inspector" density="compact">
-          <Inspector item={active} windowDays={windowDays} />
-        </SectionCard>
+        <div ref={inspectorRef}>
+          <SectionCard eyebrow="Readout" title="Inspector" density="compact">
+            <Inspector item={active} windowDays={windowDays} />
+          </SectionCard>
+        </div>
       </div>
 
       {/* Table */}
+      <Reveal delay={280}>
       <SectionCard
         title="All products"
         description={filter ? `Filtered: ${DECISION[filter].label}. Click the chip again to clear.` : "Sorted by contribution. Click a segment above to filter."}
@@ -480,11 +523,13 @@ export default function DecisionBoardPage(): JSX.Element {
                       key={i.id}
                       tabIndex={0}
                       aria-label={`Inspect ${i.name}`}
+                      data-active={isActive || undefined}
+                      style={{ "--db-row-accent": d.fill } as CSSProperties}
                       onMouseEnter={() => setActiveId(i.id)}
                       onClick={() => setActiveId(i.id)}
                       onFocus={() => setActiveId(i.id)}
                       onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); setActiveId(i.id); } }}
-                      className={`group cursor-pointer border-b border-border/30 transition-colors hover:bg-bg-subtle/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40 ${isActive ? "bg-bg-subtle/60" : ""}`}
+                      className={`db-row group cursor-pointer border-b border-border/30 transition-colors hover:bg-bg-subtle/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/40 ${isActive ? "bg-bg-subtle/60" : ""}`}
                     >
                       <td className="px-2 py-2 font-medium text-fg-strong">
                         <span className="flex items-center gap-2">
@@ -545,6 +590,7 @@ export default function DecisionBoardPage(): JSX.Element {
           </table>
         </div>
       </SectionCard>
+      </Reveal>
 
       {anyAnomaly ? (
         <p className="text-2xs text-fg-subtle">
@@ -557,7 +603,10 @@ export default function DecisionBoardPage(): JSX.Element {
         open={drawerOpen}
         onClose={() => setDrawerOpen(false)}
         costModel={costModel}
-        onSaved={() => queryClient.invalidateQueries({ queryKey: ["decision-board", "unit-economics"] })}
+        onSaved={() => {
+          void queryClient.invalidateQueries({ queryKey: ["decision-board", "unit-economics"] });
+          setSavedFlash(true);
+        }}
       />
     </div>
   );
@@ -741,9 +790,9 @@ function VitalTile({
         </span>
       </div>
       {loading ? (
-        <Skeleton className="h-7 w-28" />
+        <Skeleton className="h-8 w-28" />
       ) : (
-        <div className={`text-2xl font-bold tabular-nums tracking-tight ${toneText[tone]}`}>{value}</div>
+        <div className={`text-[1.75rem] font-bold leading-none tabular-nums tracking-tight ${toneText[tone]}`}>{value}</div>
       )}
       <div className="text-2xs text-fg-subtle">{loading ? " " : sub}</div>
       {meter != null && !loading ? (
@@ -916,17 +965,18 @@ function Inspector({ item, windowDays }: { item: ViewItem | null; windowDays: nu
         <p className="text-xs leading-relaxed text-fg-subtle">{d.blurb}</p>
       )}
 
-      {/* CM2 waterfall — the server's decomposition, rendered as-is */}
+      {/* CM2 waterfall — the server's decomposition, rendered as-is. Bars are
+          each line's share of the served unit price (display scaling only). */}
       {r.unit_price_ils != null ? (
-        <div className="space-y-1 rounded-lg border border-border/50 bg-bg-subtle/30 px-3 py-2.5">
+        <div className="space-y-1.5 rounded-lg border border-border/50 bg-bg-subtle/30 px-3 py-2.5">
           <div className="mb-1 text-2xs font-semibold uppercase tracking-sops text-fg-subtle">Unit waterfall</div>
-          <WaterfallLine label="Unit price" value={r.unit_price_ils} strong />
-          <WaterfallLine label={`Channel fees (${formatPct(toNum(r.fees_pct_total) ?? 0, 1)})`} value={r.fees_per_unit_ils} negative />
-          <WaterfallLine label="Materials" value={r.materials_cogs_ils} negative />
-          <WaterfallLine label="Margin after materials" value={r.cm1_ils} strong divider />
-          <WaterfallLine label="Operating cost / unit" value={r.opex_per_unit_ils} negative />
-          <WaterfallLine label="Shipping / order share" value={r.per_order_alloc_ils} negative />
-          <WaterfallLine label="True margin" value={r.cm2_ils} strong divider danger={(toNum(r.cm2_ils) ?? 0) < 0} />
+          <WaterfallLine label="Unit price" value={r.unit_price_ils} strong base={r.unit_price_ils} barColor={d.fill} />
+          <WaterfallLine label={`Channel fees (${formatPct(toNum(r.fees_pct_total) ?? 0, 1)})`} value={r.fees_per_unit_ils} negative base={r.unit_price_ils} />
+          <WaterfallLine label="Materials" value={r.materials_cogs_ils} negative base={r.unit_price_ils} />
+          <WaterfallLine label="Margin after materials" value={r.cm1_ils} strong divider base={r.unit_price_ils} barColor={d.fill} />
+          <WaterfallLine label="Operating cost / unit" value={r.opex_per_unit_ils} negative base={r.unit_price_ils} />
+          <WaterfallLine label="Shipping / order share" value={r.per_order_alloc_ils} negative base={r.unit_price_ils} />
+          <WaterfallLine label="True margin" value={r.cm2_ils} strong divider danger={(toNum(r.cm2_ils) ?? 0) < 0} base={r.unit_price_ils} barColor={(toNum(r.cm2_ils) ?? 0) < 0 ? DECISION.loss.fill : d.fill} />
         </div>
       ) : null}
 
@@ -958,15 +1008,32 @@ function Inspector({ item, windowDays }: { item: ViewItem | null; windowDays: nu
 }
 
 function WaterfallLine({
-  label, value, negative, strong, divider, danger,
-}: { label: string; value: string | null; negative?: boolean; strong?: boolean; divider?: boolean; danger?: boolean }): JSX.Element {
+  label, value, negative, strong, divider, danger, base, barColor,
+}: {
+  label: string; value: string | null; negative?: boolean; strong?: boolean; divider?: boolean; danger?: boolean;
+  /** Served unit price — bar width is |value|/base, display scaling only. */
+  base?: string | null;
+  barColor?: string;
+}): JSX.Element {
   const n = toNum(value);
+  const b = toNum(base ?? null);
+  const share = n != null && b != null && b > 0 ? Math.min(1, Math.abs(n) / b) : null;
   return (
-    <div className={`flex items-center justify-between gap-2 text-xs ${divider ? "border-t border-border/50 pt-1" : ""}`}>
-      <span className={strong ? "font-semibold text-fg" : "text-fg-subtle"}>{label}</span>
-      <span className={`tabular-nums ${danger ? "font-bold text-danger-fg" : strong ? "font-semibold text-fg-strong" : "text-fg"}`}>
-        {n == null ? "—" : `${negative && n > 0 ? "−" : ""}${formatIls(negative ? Math.abs(n) : n)}`}
-      </span>
+    <div className={divider ? "border-t border-border/50 pt-1.5" : ""}>
+      <div className="flex items-center justify-between gap-2 text-xs">
+        <span className={strong ? "font-semibold text-fg" : "text-fg-subtle"}>{label}</span>
+        <span className={`tabular-nums ${danger ? "font-bold text-danger-fg" : strong ? "font-semibold text-fg-strong" : "text-fg"}`}>
+          {n == null ? "—" : `${negative && n > 0 ? "−" : ""}${formatIls(negative ? Math.abs(n) : n)}`}
+        </span>
+      </div>
+      {share != null ? (
+        <div className="mt-0.5 h-[3px] w-full overflow-hidden rounded-full bg-bg-muted/50" aria-hidden>
+          <div
+            className="h-full rounded-full transition-[width] duration-500 ease-out-quart"
+            style={{ width: `${Math.max(share * 100, n === 0 ? 0 : 2)}%`, backgroundColor: barColor ?? "currentColor", opacity: barColor ? 0.75 : 0.25 }}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -1096,6 +1163,12 @@ function Quadrant({
         <filter id="db-glow" x="-60%" y="-60%" width="220%" height="220%">
           <feGaussianBlur stdDeviation="7" />
         </filter>
+        {/* Factory-floor hazard striping for the below-zero region — the
+            factory's own language for "dangerous territory". */}
+        <pattern id="db-hazard" width="10" height="10" patternTransform="rotate(45)" patternUnits="userSpaceOnUse">
+          <rect width="10" height="10" fill="transparent" />
+          <rect width="5" height="10" fill={DECISION.loss.fill} />
+        </pattern>
         {keys.map((k) => (
           <radialGradient key={k} id={`db-grad-${k}`} cx="35%" cy="30%" r="75%">
             <stop offset="0%" stopColor={DECISION[k].light} stopOpacity={0.95} />
@@ -1110,7 +1183,17 @@ function Quadrant({
         <rect x={padL} y={padT} width={xSplit - padL} height={ySplit - padT} fill={DECISION.gem.fill} opacity={0.05} />
         <rect x={xSplit} y={ySplit} width={padL + plotW - xSplit} height={padT + plotH - ySplit} fill={DECISION.workhorse.fill} opacity={0.06} />
         <rect x={padL} y={ySplit} width={xSplit - padL} height={padT + plotH - ySplit} fill={DECISION.drag.fill} opacity={0.06} />
-        {minMargin < 0 ? <rect x={padL} y={yZero} width={plotW} height={padT + plotH - yZero} fill={DECISION.loss.fill} opacity={0.07} /> : null}
+        {minMargin < 0 ? (
+          <>
+            <rect x={padL} y={yZero} width={plotW} height={padT + plotH - yZero} fill={DECISION.loss.fill} opacity={0.05} />
+            <rect x={padL} y={yZero} width={plotW} height={padT + plotH - yZero} fill="url(#db-hazard)" opacity={0.07} />
+            {padT + plotH - yZero > 26 ? (
+              <text x={padL + plotW - 8} y={yZero + 16} textAnchor="end" fontSize="9" fontWeight={700} fill={DECISION.loss.fill} opacity={0.55} letterSpacing="0.08em">
+                LOSS ZONE
+              </text>
+            ) : null}
+          </>
+        ) : null}
       </g>
 
       {/* y gridlines + labels */}
@@ -1197,8 +1280,12 @@ function Quadrant({
                 const nearRight = cx > padL + plotW - 80;
                 const nearLeft = cx < padL + 80;
                 const anchor = nearRight ? "end" : nearLeft ? "start" : "middle";
+                // Keep bubble labels out of the quadrant-caption band at the
+                // top of the plot — drop below the bubble when they'd collide.
+                const above = cy - r - 4;
+                const labelY = above < padT + 26 ? cy + r + 12 : above;
                 return (
-                  <text x={cx} y={cy - r - 4} textAnchor={anchor} className="pointer-events-none fill-current" fontSize="10" fontWeight={isActive ? 700 : 500} opacity={isActive ? 0.95 : 0.65}>
+                  <text x={cx} y={labelY} textAnchor={anchor} className="pointer-events-none fill-current" fontSize="10" fontWeight={isActive ? 700 : 500} opacity={isActive ? 0.95 : 0.65}>
                     {i.name.replace(/\s\d+ml$/, "")}
                   </text>
                 );
