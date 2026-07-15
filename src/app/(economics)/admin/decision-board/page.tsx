@@ -593,7 +593,9 @@ function buildVerdict(t: UETotals): Verdict {
   if (t.loss_count > 0) {
     return {
       tone: "danger",
-      headline: `${t.loss_count} product${t.loss_count > 1 ? "s" : ""} lose money after operating costs`,
+      headline: t.loss_count > 1
+        ? `${t.loss_count} products lose money after operating costs`
+        : "1 product loses money after operating costs",
       sub: `Leaking about ${formatIls(t.risk_annual)}/yr at the current pace. Reprice toward the target price or drop them first.`,
       cta: "Show losing products", filter: "loss",
     };
