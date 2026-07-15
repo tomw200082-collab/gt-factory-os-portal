@@ -489,7 +489,7 @@ export default function DecisionBoardPage(): JSX.Element {
                       <td className="px-2 py-2 font-medium text-fg-strong">
                         <span className="flex items-center gap-2">
                           <span className="h-2 w-2 shrink-0 rounded-full ring-2 ring-inset ring-bg" style={{ backgroundColor: d.fill }} aria-hidden />
-                          <span className="truncate">{i.name}</span>
+                          <span className="max-w-[7.5rem] truncate sm:max-w-[14rem] md:max-w-none" title={i.name}>{i.name}</span>
                           {i.row.price_anomaly ? (
                             <span className="inline-flex" aria-describedby={`anom-${i.id}`}>
                               <AlertTriangle className="h-3 w-3 shrink-0 text-warning-fg" aria-label="Price anomaly" />
