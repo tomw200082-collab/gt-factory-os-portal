@@ -1,6 +1,6 @@
 # Tranche 129 — Decision Board beauty pass (visual elevation + gate conditions C1/C2/C5)
 
-**Status:** BUILT — awaiting Tom's visual sign-off before merge (design = client's call)
+**Status:** LANDED (2026-07-15) — Tom approved ("ואז תמזג הכל")
 **Authorized by:** Tom, 2026-07-15 ("תעשה את הדף הזה יפייפה!" — /frontend-design + /ui-ux-pro-max + /deepen)
 **Follows:** tranche 128 (CM2 rebuild, merged in PR #169). Corridor SPEC invariants still bind — V1 (no money math in browser), V7 (locked testids).
 
