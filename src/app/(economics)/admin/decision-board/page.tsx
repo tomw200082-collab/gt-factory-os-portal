@@ -2,40 +2,33 @@
 
 // ---------------------------------------------------------------------------
 // Product Decision Board — Tranche 080 (created) · 081 (premium rebuild) ·
-// 091 (UI amplify → signature "decision cockpit").
+// 091 (UI amplify) · 128 (true gross margin).
 //
 // Access: planner + admin (the (economics) route group gates on
 // planning:execute).
 //
-// Mission: one screen that answers, per finished product, the only question
-// that matters for a small factory — should we PROTECT it, PROMOTE it, FIX ITS
-// PRICE, or DROP it — framed around money at stake, and shown transparently.
+// Tranche 128 — the page moves from material-only margin computed in the
+// browser to the server's CM2 unit-economics read model:
 //
-// Single live read endpoint in the browser:
-//   GET /api/economics  → COGS, margin, price, inventory value AND the
-//                         Shopify-sourced trailing-90-day sales
-//                         (qty_sold_90d, order_count_90d, units_prev_90d)
-//                         from private_core.v_fg_economics (migrations 0261/0262,
-//                         shipped by backend PRs #101 + #102).
-// Velocity is the Shopify 90-day sell-through — the factory's complete demand
-// signal across every channel.
-// Derived in-browser:
-//   units 90d    = qty_sold_90d
-//   contribution = material_margin_ils × units_sold
-//   revenue      = avg_sale_price_ils  × units_sold
-//   trend        = last-90d vs prior-90d (units_prev_90d) — 2-point sparkline
-//   annualised   = window value × (365 / 90)
-// Products missing cost/price are "Needs data" and never plotted — we do not
-// ground a recommendation on a number we don't have.
+//   GET /api/unit-economics  → one row per product with the FULL waterfall
+//     (realized-first unit price → channel fees → CM1 → per-unit opex →
+//     per-order allocation → CM2), plus target price, decision classification,
+//     contribution, totals, and the operating-cost model rows.
+//   PATCH /api/economics/operating-costs ← the in-page Operating-costs drawer.
 //
-// Tranche 091 is presentation-only: same data contract, same testids
-// (decision-board / verdict-band / segments / quadrant). The visual language is
-// the "Operational Precision" system taken to its peak — a control-tower
-// cockpit whose signature is the margin × velocity portfolio map.
+// Corridor SPEC §V.1 (gt-factory-os/SPEC.md): NO money semantic is computed
+// here. Every ₪/% on this screen is a named field of the GET response. The
+// only client-side work: sorting, filtering, formatting, and Σ/max of
+// server-provided columns for display grouping. The old in-browser derivation
+// block (velocity map, contribution/revenue formulas, decision thresholds)
+// is deleted — the server owns the meaning of a shekel.
+//
+// Testids are locked (SPEC §V.7): decision-board / verdict-band / segments /
+// segment-<key> / quadrant / inspector.
 // ---------------------------------------------------------------------------
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Info,
   ChevronsUpDown,
@@ -53,22 +46,21 @@ import {
   Moon,
   HelpCircle,
   Coins,
+  SlidersHorizontal,
+  Clock,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { formatIls, formatPct, formatQtyInt } from "@/lib/utils/format-money";
+import { OperatingCostsDrawer, type CostModelRow } from "./OperatingCostsDrawer";
 
 // ---------------------------------------------------------------------------
-// Decision rules — transparent + tunable. Surfaced in the rules popover.
+// Decision meta — presentation only. The classification itself is computed
+// SERVER-SIDE (decision field on each row; healthy threshold = target_pct,
+// velocity split = server median — both echoed in meta).
 // ---------------------------------------------------------------------------
-const MARGIN_HEALTHY_PCT = 25; // ≥ this on price = healthy margin (quadrant Y split)
-const MARGIN_THIN_PCT = 10; // < this = thin
-
-// The Shopify read model is a fixed trailing-90-day window.
-const WINDOW_DAYS = 90;
-
 type DecisionKey = "star" | "gem" | "workhorse" | "drag" | "loss" | "dormant" | "needs_data";
 
 interface DecisionMeta {
@@ -76,67 +68,100 @@ interface DecisionMeta {
   label: string;
   action: string;
   tone: BadgeTone;
-  fill: string; // saturated edge color (legend, bubble stroke, accents)
-  light: string; // lighter center color, for the bubble's radial body
+  fill: string;
+  light: string;
   icon: LucideIcon;
   blurb: string;
 }
 
-// Category palette — moss / petrol-slate / amber / oxide / oxidized-red / slate,
-// chosen to sit inside the warm-bone "Operational Precision" world rather than
-// generic chart primaries. `light` gives each bubble a lit, dimensional body.
 const DECISION: Record<DecisionKey, DecisionMeta> = {
-  star: { key: "star", label: "Star", action: "Protect", tone: "success", fill: "#15803d", light: "#4ade80", icon: ShieldCheck, blurb: "Healthy margin, sells well. Protect supply and shelf space." },
-  gem: { key: "gem", label: "Hidden gem", action: "Promote", tone: "info", fill: "#1d4ed8", light: "#60a5fa", icon: Rocket, blurb: "Healthy margin, low volume. Push marketing / distribution." },
-  workhorse: { key: "workhorse", label: "Workhorse", action: "Fix price", tone: "warning", fill: "#c2620a", light: "#fbbf24", icon: Tag, blurb: "Sells well but margin is thin. Reprice or cut cost." },
-  drag: { key: "drag", label: "Drag", action: "Review for drop", tone: "warning", fill: "#9a4209", light: "#f59e0b", icon: TrendingDown, blurb: "Thin margin and low volume. Candidate to drop or relaunch." },
-  loss: { key: "loss", label: "Losing money", action: "Act now", tone: "danger", fill: "#c0241f", light: "#f87171", icon: AlertTriangle, blurb: "Sells below cost. Reprice immediately or drop." },
+  star: { key: "star", label: "Star", action: "Protect", tone: "success", fill: "#15803d", light: "#4ade80", icon: ShieldCheck, blurb: "True margin at target, sells well. Protect supply and shelf space." },
+  gem: { key: "gem", label: "Hidden gem", action: "Promote", tone: "info", fill: "#1d4ed8", light: "#60a5fa", icon: Rocket, blurb: "True margin at target, low volume. Push marketing / distribution." },
+  workhorse: { key: "workhorse", label: "Workhorse", action: "Fix price", tone: "warning", fill: "#c2620a", light: "#fbbf24", icon: Tag, blurb: "Sells well but true margin is under target. Move toward the target price or cut cost." },
+  drag: { key: "drag", label: "Drag", action: "Review for drop", tone: "warning", fill: "#9a4209", light: "#f59e0b", icon: TrendingDown, blurb: "Under-target margin and low volume. Candidate to drop or relaunch." },
+  loss: { key: "loss", label: "Losing money", action: "Act now", tone: "danger", fill: "#c0241f", light: "#f87171", icon: AlertTriangle, blurb: "Negative true margin — every sale loses money after operating costs. Reprice immediately or drop." },
   dormant: { key: "dormant", label: "Not selling", action: "Review", tone: "muted", fill: "#64748b", light: "#cbd5e1", icon: Moon, blurb: "No sales in the window. Review whether to keep listing." },
-  needs_data: { key: "needs_data", label: "Needs data", action: "Set cost & price", tone: "muted", fill: "#94a3b8", light: "#e2e8f0", icon: HelpCircle, blurb: "Cost or price missing — cannot judge yet. Complete the data." },
+  needs_data: { key: "needs_data", label: "Needs data", action: "Complete data", tone: "muted", fill: "#94a3b8", light: "#e2e8f0", icon: HelpCircle, blurb: "The server cannot judge this product yet — see the reason on the row." },
 };
 
-// Quadrant cards, in reading order.
 const SEGMENT_ORDER: DecisionKey[] = ["star", "gem", "workhorse", "drag", "loss", "dormant", "needs_data"];
 
+const REASON_COPY: Record<string, string> = {
+  NO_COGS: "No cost snapshot yet — run a COGS recalculation.",
+  COGS_INCOMPLETE: "Cost is missing components — complete component costs.",
+  NO_PRICE_BASIS: "No realized revenue and no manual price — set a sale price.",
+};
+
 // ---------------------------------------------------------------------------
-// Wire types
+// Wire types — mirror api/src/economics/unit_economics_route.ts
 // ---------------------------------------------------------------------------
-interface EconomicsRow {
+interface UERow {
   item_id: string;
   item_name: string;
-  cogs_per_unit_ils: string | null;
-  cogs_complete: boolean;
-  qty_on_hand: string;
-  fg_inventory_value_at_cost: string | null;
-  avg_sale_price_ils: string | null;
-  material_margin_ils: string | null;
-  material_margin_pct: string | null;
-  // Shopify-sourced trailing-90-day sales (v_fg_economics, migrations
-  // 0261/0262). The view coalesces absent SKUs to 0, so these are non-null.
+  price_basis: "REALIZED_90D" | "MANUAL" | "NONE";
+  price_anomaly: boolean;
+  unit_price_ils: string | null;
   qty_sold_90d: string;
   order_count_90d: number;
   units_prev_90d: string;
+  revenue_90d_ils: string | null;
+  sales_synced_at: string | null;
+  stale: boolean;
+  materials_cogs_ils: string | null;
+  cogs_complete: boolean;
+  missing_cost_components: unknown[];
+  opex_per_unit_ils: string;
+  fees_pct_total: string;
+  per_order_alloc_ils: string;
+  fees_per_unit_ils: string | null;
+  cm1_ils: string | null;
+  cm1_pct: string | null;
+  cm2_ils: string | null;
+  cm2_pct: string | null;
+  judgeable: boolean;
+  judge_block_reason: "NO_COGS" | "NO_PRICE_BASIS" | "COGS_INCOMPLETE" | null;
+  qty_on_hand: string;
+  fg_inventory_value_at_cost: string | null;
+  cost_breakdown: unknown;
+  target_price_ils: string | null;
+  contribution_90d_ils: string | null;
+  decision: DecisionKey;
 }
-interface EconomicsResponse { rows: EconomicsRow[]; count: number }
+
+interface UETotals {
+  profit_pool_90d: number;
+  profit_pool_annual: number;
+  loss_count: number;
+  risk_annual: number;
+  needs_data: number;
+  concentration_top3_pct: number | null;
+  measurable_count: number;
+  total_count: number;
+}
+
+interface UEResponse {
+  rows: UERow[];
+  totals: UETotals;
+  meta: { target_pct: number; velocity_median: number; window_days: number };
+  cost_model: CostModelRow[];
+  count: number;
+}
 
 type Trend = "up" | "down" | "flat" | "none";
 
-interface DecisionItem {
+// View model: server numbers parsed for plotting/sorting — no new meanings.
+interface ViewItem {
   id: string;
   name: string;
-  cogs: number | null;
-  price: number | null;
-  marginIls: number | null;
-  marginPct: number | null;
-  qtyOnHand: number;
-  invAtCost: number | null;
-  units: number;
-  orders: number;
-  series: number[]; // [prior-90d units, last-90d units] — oldest→newest
-  contribution: number | null;
-  revenue: number | null;
-  trend: Trend;
   decision: DecisionKey;
+  row: UERow;
+  cm2Pct: number | null;
+  units: number;
+  contribution: number | null;
+  targetPrice: number | null;
+  invAtCost: number | null;
+  series: number[];
+  trend: Trend;
 }
 
 function toNum(v: string | null | undefined): number | null {
@@ -145,20 +170,6 @@ function toNum(v: string | null | undefined): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-// The economics read model also carries non-sellables: production intermediates
-// (the "*-BASE-*" 23L base liquids — costed but never priced or sold) and a
-// non-stock placeholder row. They are not finished products, so they only
-// inflated the "needs data" bucket. Exclude them from this finished-product
-// decision board. (Authorized by Tom, 2026-06-26.)
-function isSellableProduct(itemId: string): boolean {
-  return itemId !== "EXCLUDED-NONSTOCK" && !itemId.includes("-BASE-");
-}
-function median(xs: number[]): number {
-  if (xs.length === 0) return 0;
-  const s = [...xs].sort((a, b) => a - b);
-  const m = Math.floor(s.length / 2);
-  return s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2;
-}
 async function fetchJson<T>(url: string): Promise<T> {
   const res = await fetch(url, { headers: { Accept: "application/json" } });
   if (!res.ok) throw new Error(`Could not load data (HTTP ${res.status}). Try refreshing.`);
@@ -166,7 +177,7 @@ async function fetchJson<T>(url: string): Promise<T> {
 }
 
 // ---------------------------------------------------------------------------
-// Motion primitives — count-ups + skeletons, all reduced-motion safe.
+// Motion primitives — unchanged from tranche 091 (reduced-motion safe).
 // ---------------------------------------------------------------------------
 function useReducedMotion(): boolean {
   const [reduced, setReduced] = useState(false);
@@ -192,7 +203,7 @@ function useCountUp(target: number, durationMs = 850): number {
     const tick = (ts: number) => {
       if (!startTs) startTs = ts;
       const p = Math.min(1, (ts - startTs) / durationMs);
-      const eased = 1 - Math.pow(1 - p, 3); // easeOutCubic
+      const eased = 1 - Math.pow(1 - p, 3);
       setVal(from + (target - from) * eased);
       if (p < 1) raf = requestAnimationFrame(tick);
       else fromRef.current = target;
@@ -218,101 +229,53 @@ function Skeleton({ className }: { className?: string }): JSX.Element {
 // Page
 // ---------------------------------------------------------------------------
 export default function DecisionBoardPage(): JSX.Element {
-  const windowDays = WINDOW_DAYS;
-  // The Shopify window is a true trailing-90-day span, so annualisation is the
-  // honest 365/90 — no variable-span correction needed.
-  const annualise = 365 / windowDays;
+  const queryClient = useQueryClient();
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const econQuery = useQuery<EconomicsResponse>({
-    queryKey: ["decision-board", "economics"],
-    queryFn: () => fetchJson<EconomicsResponse>("/api/economics"),
+  const ueQuery = useQuery<UEResponse>({
+    queryKey: ["decision-board", "unit-economics"],
+    queryFn: () => fetchJson<UEResponse>("/api/unit-economics"),
     staleTime: 60_000,
     refetchOnWindowFocus: false,
   });
 
-  // Velocity comes from the Economics read model (Shopify-sourced 90-day
-  // sales). buckets = [prior-90d, last-90d] drive a quarter-over-quarter trend
-  // plus the 2-point sparkline.
-  const velocityByItem = useMemo(() => {
-    const map = new Map<string, { units: number; orders: number; buckets: { key: string; qty: number }[] }>();
-    for (const r of econQuery.data?.rows ?? []) {
-      const units = toNum(r.qty_sold_90d) ?? 0;
+  const windowDays = ueQuery.data?.meta.window_days ?? 90;
+  const targetPct = ueQuery.data?.meta.target_pct ?? 25;
+  const velMedian = ueQuery.data?.meta.velocity_median ?? 0;
+  const totals = ueQuery.data?.totals ?? null;
+  const costModel = ueQuery.data?.cost_model ?? [];
+
+  // Parse server rows for plotting/sorting. Trend compares the two
+  // server-provided unit counts — quantity presentation, not money math.
+  const items = useMemo<ViewItem[]>(() => {
+    return (ueQuery.data?.rows ?? []).map((r) => {
       const prev = toNum(r.units_prev_90d) ?? 0;
-      map.set(r.item_id, {
-        units,
-        orders: r.order_count_90d ?? 0,
-        buckets: [{ key: "1_prior", qty: prev }, { key: "2_current", qty: units }],
-      });
-    }
-    return map;
-  }, [econQuery.data]);
-
-  const items = useMemo<DecisionItem[]>(() => {
-    const rows = (econQuery.data?.rows ?? []).filter((r) => isSellableProduct(r.item_id));
-    const selling: number[] = [];
-    for (const r of rows) {
-      const v = velocityByItem.get(r.item_id);
-      if (v && v.units > 0) selling.push(v.units);
-    }
-    const velMedian = median(selling);
-
-    return rows.map((r) => {
-      const cogs = toNum(r.cogs_per_unit_ils);
-      const price = toNum(r.avg_sale_price_ils);
-      const marginIls = toNum(r.material_margin_ils);
-      const marginPct = toNum(r.material_margin_pct);
-      const v = velocityByItem.get(r.item_id);
-      const units = v?.units ?? 0;
-      const orders = v?.orders ?? 0;
-      const series = v ? [...v.buckets].sort((a, b) => a.key.localeCompare(b.key)).map((b) => b.qty) : [];
-
-      const needsData = !r.cogs_complete || cogs == null || price == null || marginPct == null;
-      const contribution = marginIls != null ? marginIls * units : null;
-      const revenue = price != null ? price * units : null;
-
+      const units = toNum(r.qty_sold_90d) ?? 0;
       let trend: Trend = "none";
-      if (series.length >= 2) {
-        const last = series[series.length - 1];
-        const prev = series[series.length - 2];
-        trend = last > prev * 1.1 ? "up" : last < prev * 0.9 ? "down" : "flat";
+      if (prev > 0 || units > 0) {
+        trend = units > prev * 1.1 ? "up" : units < prev * 0.9 ? "down" : "flat";
       }
-
-      let decision: DecisionKey;
-      if (needsData) decision = "needs_data";
-      else if (marginPct! < 0) decision = "loss";
-      else if (units === 0) decision = "dormant";
-      else {
-        const hiM = marginPct! >= MARGIN_HEALTHY_PCT;
-        const hiV = units >= velMedian;
-        decision = hiM ? (hiV ? "star" : "gem") : hiV ? "workhorse" : "drag";
-      }
-
       return {
-        id: r.item_id, name: r.item_name, cogs, price, marginIls, marginPct,
-        qtyOnHand: toNum(r.qty_on_hand) ?? 0, invAtCost: toNum(r.fg_inventory_value_at_cost),
-        units, orders, series, contribution, revenue, trend, decision,
+        id: r.item_id,
+        name: r.item_name,
+        decision: r.decision,
+        row: r,
+        cm2Pct: toNum(r.cm2_pct),
+        units,
+        contribution: toNum(r.contribution_90d_ils),
+        targetPrice: toNum(r.target_price_ils),
+        invAtCost: toNum(r.fg_inventory_value_at_cost),
+        series: [prev, units],
+        trend,
       };
     });
-  }, [econQuery.data, velocityByItem]);
+  }, [ueQuery.data]);
 
-  const velMedian = useMemo(() => median(items.filter((i) => i.units > 0).map((i) => i.units)), [items]);
+  const anyStale = useMemo(() => items.some((i) => i.row.stale), [items]);
+  const anyAnomaly = useMemo(() => items.some((i) => i.row.price_anomaly), [items]);
 
-  const kpis = useMemo(() => {
-    const measurable = items.filter((i) => i.contribution != null);
-    const profitPool = measurable.reduce((s, i) => s + (i.contribution ?? 0), 0);
-    const lossItems = items.filter((i) => i.marginPct != null && i.marginPct < 0 && i.units > 0);
-    const riskPerWindow = lossItems.reduce((s, i) => s + Math.abs(i.contribution ?? 0), 0);
-    const needsData = items.filter((i) => i.decision === "needs_data").length;
-    const contribDesc = measurable.map((i) => i.contribution ?? 0).filter((c) => c > 0).sort((a, b) => b - a);
-    const top3 = contribDesc.slice(0, 3).reduce((s, c) => s + c, 0);
-    const concentration = profitPool > 0 ? (top3 / profitPool) * 100 : null;
-    return {
-      profitPool, profitPoolAnnual: profitPool * annualise,
-      lossCount: lossItems.length, riskAnnual: riskPerWindow * annualise,
-      needsData, concentration, measurableCount: measurable.length,
-    };
-  }, [items, annualise]);
-
+  // Segment cards: count + Σ of the server contribution column per decision
+  // (display grouping of a served column — allowed by SPEC §V.1).
   const segments = useMemo(() => {
     const out = new Map<DecisionKey, { count: number; contribution: number }>();
     SEGMENT_ORDER.forEach((k) => out.set(k, { count: 0, contribution: 0 }));
@@ -359,20 +322,33 @@ export default function DecisionBoardPage(): JSX.Element {
   };
 
   const active = items.find((i) => i.id === activeId) ?? null;
-  const isLoading = econQuery.isLoading;
-  const isError = econQuery.isError;
-  const verdict = buildVerdict(kpis, items.length);
+  const isLoading = ueQuery.isLoading;
+  const isError = ueQuery.isError;
+  const verdict = totals ? buildVerdict(totals) : null;
 
-  // Full read failure: show one honest error state with a retry — never a
-  // zero-data "all products priced above cost" verdict that reads as success.
+  const headerActions = (
+    <div className="flex items-center gap-2">
+      <SourcePill stale={anyStale} />
+      <button
+        type="button"
+        onClick={() => setDrawerOpen(true)}
+        data-testid="operating-costs-open"
+        className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 px-2.5 py-1.5 text-xs font-medium text-fg-subtle transition-colors hover:bg-bg-subtle/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+      >
+        <SlidersHorizontal className="h-3.5 w-3.5" /> Operating costs
+      </button>
+      <RulesPopover velMedian={velMedian} windowDays={windowDays} targetPct={targetPct} />
+    </div>
+  );
+
   if (isError) {
     return (
       <div className="space-y-5" data-testid="decision-board">
         <WorkflowHeader
           eyebrow="Economics"
           title="Product Decision Board"
-          description="Every finished product placed on margin × velocity — so the next move is obvious: protect, promote, reprice, or drop."
-          actions={<SourcePill />}
+          description="Every finished product on true margin × velocity — so the next move is obvious: protect, promote, reprice, or drop."
+          actions={<SourcePill stale={false} />}
         />
         <SectionCard tone="danger" density="compact">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -387,7 +363,7 @@ export default function DecisionBoardPage(): JSX.Element {
             </div>
             <button
               type="button"
-              onClick={() => econQuery.refetch()}
+              onClick={() => ueQuery.refetch()}
               className="shrink-0 self-start rounded-lg border border-fg/15 bg-bg px-3.5 py-2 text-sm font-semibold text-fg-strong shadow-sm transition-all hover:-translate-y-px hover:border-fg/25 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 sm:self-auto"
             >
               Try again
@@ -403,24 +379,27 @@ export default function DecisionBoardPage(): JSX.Element {
       <WorkflowHeader
         eyebrow="Economics"
         title="Product Decision Board"
-        description="Every finished product placed on margin × velocity — so the next move is obvious: protect, promote, reprice, or drop."
-        actions={
-          <div className="flex items-center gap-2">
-            <SourcePill />
-            <RulesPopover velMedian={velMedian} windowDays={windowDays} />
-          </div>
-        }
+        description="Every finished product on true margin × velocity — realized revenue minus materials, labor, overhead, fees and shipping — so the next move is obvious."
+        actions={headerActions}
       />
 
-      {/* Verdict band — the single most important thing right now */}
-      <VerdictBand verdict={verdict} loading={isLoading} onAct={() => verdict.filter && setFilter(verdict.filter)} />
+      {/* Freshness / anomaly notices — server flags, rendered only */}
+      {anyStale ? (
+        <div className="flex items-center gap-2 rounded-lg border border-warning/40 bg-warning-softer/50 px-3 py-2 text-xs text-warning-fg" role="status">
+          <Clock className="h-3.5 w-3.5 shrink-0" />
+          Shopify sales sync is older than 7 days — realized prices may be out of date.
+        </div>
+      ) : null}
 
-      {/* Vitals — the cockpit readout strip */}
-      <VitalsRow kpis={kpis} total={items.length} loading={isLoading} />
+      {/* Verdict band */}
+      <VerdictBand verdict={verdict} loading={isLoading} onAct={(f) => setFilter(f)} />
 
-      {/* Decision segments — the portfolio strip: clickable filters with money attached */}
+      {/* Vitals */}
+      <VitalsRow totals={totals} loading={isLoading} />
+
+      {/* Decision segments */}
       <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 lg:grid-cols-7" data-testid="segments">
-        {(["star", "gem", "workhorse", "drag", "loss", "dormant", "needs_data"] as DecisionKey[]).map((k) => (
+        {SEGMENT_ORDER.map((k) => (
           <SegmentCard
             key={k}
             meta={DECISION[k]}
@@ -434,21 +413,21 @@ export default function DecisionBoardPage(): JSX.Element {
         ))}
       </div>
 
-      {/* Portfolio map + readout inspector */}
+      {/* Portfolio map + inspector */}
       <div className="grid gap-4 lg:grid-cols-[1.9fr_1fr]">
         <SectionCard
           eyebrow="The signature view"
           title="Portfolio map"
-          description="Right = sells more · Up = higher margin · bubble = money it contributes. Select any product to read it."
+          description={`Right = sells more · Up = higher true margin (CM2) · bubble = money it contributes. The ${targetPct}% line is the margin target.`}
         >
           {isLoading ? (
             <QuadrantSkeleton />
           ) : (
-            <Quadrant items={items} velMedian={velMedian} activeId={activeId} onHover={setActiveId} windowDays={windowDays} />
+            <Quadrant items={items} velMedian={velMedian} targetPct={targetPct} activeId={activeId} onHover={setActiveId} windowDays={windowDays} />
           )}
         </SectionCard>
         <SectionCard eyebrow="Readout" title="Inspector" density="compact">
-          <Inspector item={active} windowDays={windowDays} annualise={annualise} velMedian={velMedian} />
+          <Inspector item={active} windowDays={windowDays} />
         </SectionCard>
       </div>
 
@@ -468,10 +447,11 @@ export default function DecisionBoardPage(): JSX.Element {
               <tr className="border-b border-border/60 text-left text-3xs uppercase tracking-sops text-fg-subtle">
                 <SortTh label="Product" k="name" sortKey={sortKey} dir={sortDir} onSort={onSort} />
                 <th className="px-2 py-2 font-semibold">Decision</th>
-                <SortTh label="Margin %" k="marginPct" sortKey={sortKey} dir={sortDir} onSort={onSort} align="right" />
+                <SortTh label="True margin %" k="cm2Pct" sortKey={sortKey} dir={sortDir} onSort={onSort} align="right" />
                 <SortTh label={`Contribution ${windowDays}d`} k="contribution" sortKey={sortKey} dir={sortDir} onSort={onSort} align="right" />
                 <SortTh label={`Units ${windowDays}d`} k="units" sortKey={sortKey} dir={sortDir} onSort={onSort} align="right" />
                 <th className="px-2 py-2 text-center font-semibold">Trend</th>
+                <SortTh label="Target price" k="targetPrice" sortKey={sortKey} dir={sortDir} onSort={onSort} align="right" />
                 <SortTh label="Stock @ cost" k="invAtCost" sortKey={sortKey} dir={sortDir} onSort={onSort} align="right" />
               </tr>
             </thead>
@@ -479,7 +459,7 @@ export default function DecisionBoardPage(): JSX.Element {
               {isLoading ? (
                 Array.from({ length: 6 }).map((_, idx) => (
                   <tr key={`sk-${idx}`} className="border-b border-border/30">
-                    <td className="px-2 py-2.5" colSpan={7}><Skeleton className="h-5 w-full" /></td>
+                    <td className="px-2 py-2.5" colSpan={8}><Skeleton className="h-5 w-full" /></td>
                   </tr>
                 ))
               ) : (
@@ -502,11 +482,16 @@ export default function DecisionBoardPage(): JSX.Element {
                         <span className="flex items-center gap-2">
                           <span className="h-2 w-2 shrink-0 rounded-full ring-2 ring-inset ring-bg" style={{ backgroundColor: d.fill }} aria-hidden />
                           <span className="truncate">{i.name}</span>
+                          {i.row.price_anomaly ? (
+                            <span title="Units sold with no revenue in the window (comped/replacement orders) — price falls back to the manual value.">
+                              <AlertTriangle className="h-3 w-3 shrink-0 text-warning-fg" aria-label="price anomaly" />
+                            </span>
+                          ) : null}
                         </span>
                       </td>
                       <td className="px-2 py-2"><Badge tone={d.tone}>{d.label}</Badge></td>
                       <td className="px-2 py-2 text-right tabular-nums">
-                        {i.marginPct != null ? <span className={i.marginPct < 0 ? "font-semibold text-danger-fg" : ""}>{formatPct(i.marginPct, 1)}</span> : <span className="text-fg-subtle">—</span>}
+                        {i.cm2Pct != null ? <span className={i.cm2Pct < 0 ? "font-semibold text-danger-fg" : ""}>{formatPct(i.cm2Pct, 1)}</span> : <span className="text-fg-subtle">—</span>}
                       </td>
                       <td className="px-2 py-2 text-right tabular-nums">
                         {i.contribution != null ? (
@@ -530,6 +515,11 @@ export default function DecisionBoardPage(): JSX.Element {
                           <TrendIcon trend={i.trend} />
                         </div>
                       </td>
+                      <td className="px-2 py-2 text-right tabular-nums">
+                        {i.targetPrice != null
+                          ? <span className={i.decision === "workhorse" || i.decision === "loss" ? "font-semibold text-fg-strong" : "text-fg-subtle"}>{formatIls(i.targetPrice)}</span>
+                          : <span className="text-fg-subtle">—</span>}
+                      </td>
                       <td className="px-2 py-2 text-right tabular-nums text-fg-subtle">
                         {i.invAtCost != null ? formatIls(i.invAtCost) : "—"}
                       </td>
@@ -538,12 +528,26 @@ export default function DecisionBoardPage(): JSX.Element {
                 })
               )}
               {!isLoading && tableRows.length === 0 ? (
-                <tr><td colSpan={7} className="px-2 py-8 text-center text-sm text-fg-subtle">No products match this filter.</td></tr>
+                <tr><td colSpan={8} className="px-2 py-8 text-center text-sm text-fg-subtle">No products match this filter.</td></tr>
               ) : null}
             </tbody>
           </table>
         </div>
       </SectionCard>
+
+      {anyAnomaly ? (
+        <p className="text-2xs text-fg-subtle">
+          <AlertTriangle className="mr-1 inline h-3 w-3 text-warning-fg" aria-hidden />
+          Products marked with a warning sold units without revenue in the window (replacements / comps). Their price uses the manual value so they are never misread as selling below cost.
+        </p>
+      ) : null}
+
+      <OperatingCostsDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        costModel={costModel}
+        onSaved={() => queryClient.invalidateQueries({ queryKey: ["decision-board", "unit-economics"] })}
+      />
     </div>
   );
 }
@@ -551,32 +555,32 @@ export default function DecisionBoardPage(): JSX.Element {
 // ---------------------------------------------------------------------------
 // Sorting
 // ---------------------------------------------------------------------------
-type SortKey = "name" | "marginPct" | "contribution" | "units" | "invAtCost";
-function sortValue(i: DecisionItem, k: SortKey): number | string | null {
+type SortKey = "name" | "cm2Pct" | "contribution" | "units" | "targetPrice" | "invAtCost";
+function sortValue(i: ViewItem, k: SortKey): number | string | null {
   switch (k) {
     case "name": return i.name;
-    case "marginPct": return i.marginPct;
+    case "cm2Pct": return i.cm2Pct;
     case "contribution": return i.contribution;
     case "units": return i.units;
+    case "targetPrice": return i.targetPrice;
     case "invAtCost": return i.invAtCost;
   }
 }
 
 // ---------------------------------------------------------------------------
-// Source pill — replaces the old single-option window toggle (a toggle with one
-// choice is a fake control). States the honest data window instead.
+// Source pill — states the price basis honestly; flags a stale sync.
 // ---------------------------------------------------------------------------
-function SourcePill(): JSX.Element {
+function SourcePill({ stale }: { stale: boolean }): JSX.Element {
   return (
-    <span className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 bg-bg-subtle/50 px-2.5 py-1.5 text-2xs font-medium text-fg-subtle">
-      <span className="dot bg-accent animate-pulse-soft" aria-hidden />
-      Last 90 days · Shopify sell-through
+    <span className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-2xs font-medium ${stale ? "border-warning/50 bg-warning-softer/40 text-warning-fg" : "border-border/60 bg-bg-subtle/50 text-fg-subtle"}`}>
+      <span className={`dot ${stale ? "bg-warning" : "bg-accent"} animate-pulse-soft`} aria-hidden />
+      {stale ? "Sales sync stale" : "Realized Shopify revenue · last 90 days"}
     </span>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Verdict band
+// Verdict band — rendered from server totals only.
 // ---------------------------------------------------------------------------
 interface Verdict {
   tone: "danger" | "warning" | "success";
@@ -585,73 +589,70 @@ interface Verdict {
   cta: string | null;
   filter: DecisionKey | null;
 }
-function buildVerdict(
-  k: { lossCount: number; riskAnnual: number; needsData: number; concentration: number | null; profitPoolAnnual: number },
-  total: number,
-): Verdict {
-  if (k.lossCount > 0) {
+function buildVerdict(t: UETotals): Verdict {
+  if (t.loss_count > 0) {
     return {
       tone: "danger",
-      headline: `${k.lossCount} product${k.lossCount > 1 ? "s" : ""} sell below cost`,
-      sub: `Leaking about ${formatIls(k.riskAnnual)}/yr at the current pace. Reprice or drop them first.`,
+      headline: `${t.loss_count} product${t.loss_count > 1 ? "s" : ""} lose money after operating costs`,
+      sub: `Leaking about ${formatIls(t.risk_annual)}/yr at the current pace. Reprice toward the target price or drop them first.`,
       cta: "Show losing products", filter: "loss",
     };
   }
-  if (k.needsData > 0) {
+  if (t.needs_data > 0) {
     return {
       tone: "warning",
-      headline: `${k.needsData} product${k.needsData > 1 ? "s" : ""} can't be judged yet`,
-      sub: "Set a cost and a sale price so they enter the decision quadrant.",
+      headline: `${t.needs_data} product${t.needs_data > 1 ? "s" : ""} can't be judged yet`,
+      sub: "Each row's reason says what's missing — cost snapshot, component costs, or a price.",
       cta: "Show what's missing", filter: "needs_data",
     };
   }
   return {
     tone: "success",
-    headline: `All ${total} products are priced above cost`,
-    sub: k.concentration != null
-      ? `Annual profit pool ≈ ${formatIls(k.profitPoolAnnual)}. Top 3 products drive ${formatPct(k.concentration, 0)} of it — protect them.`
-      : `Annual profit pool ≈ ${formatIls(k.profitPoolAnnual)}.`,
+    headline: `All ${t.total_count} products earn a positive true margin`,
+    sub: t.concentration_top3_pct != null
+      ? `Annual profit pool ≈ ${formatIls(t.profit_pool_annual)}. Top 3 products drive ${formatPct(t.concentration_top3_pct, 0)} of it — protect them.`
+      : `Annual profit pool ≈ ${formatIls(t.profit_pool_annual)}.`,
     cta: null, filter: null,
   };
 }
 
-function VerdictBand({ verdict, loading, onAct }: { verdict: Verdict; loading?: boolean; onAct: () => void }): JSX.Element {
+function VerdictBand({ verdict, loading, onAct }: { verdict: Verdict | null; loading?: boolean; onAct: (f: DecisionKey) => void }): JSX.Element {
+  const v: Verdict = verdict ?? { tone: "success", headline: "", sub: "", cta: null, filter: null };
   const toneRing: Record<Verdict["tone"], string> = {
     danger: "border-danger/40 bg-gradient-to-br from-danger/[0.07] to-transparent",
     warning: "border-warning/40 bg-gradient-to-br from-warning/[0.07] to-transparent",
     success: "border-success/40 bg-gradient-to-br from-success/[0.07] to-transparent",
   };
-  // Full literal classes (not runtime-concatenated) so the Tailwind JIT emits them.
   const badgeBg: Record<Verdict["tone"], string> = { danger: "bg-danger/15", warning: "bg-warning/15", success: "bg-success/15" };
   const badgePulse: Record<Verdict["tone"], string> = { danger: "bg-danger/25", warning: "bg-warning/25", success: "bg-success/25" };
   const fg: Record<Verdict["tone"], string> = { danger: "text-danger-fg", warning: "text-warning-fg", success: "text-success-fg" };
-  const Icon = verdict.tone === "danger" ? AlertTriangle : verdict.tone === "warning" ? HelpCircle : ShieldCheck;
+  const Icon = v.tone === "danger" ? AlertTriangle : v.tone === "warning" ? HelpCircle : ShieldCheck;
   return (
     <div
       data-testid="verdict-band"
-      className={`reveal flex flex-col gap-3 rounded-xl border p-4 shadow-raised sm:flex-row sm:items-center sm:justify-between sm:p-5 ${toneRing[verdict.tone]}`}
+      className={`reveal flex flex-col gap-3 rounded-xl border p-4 shadow-raised sm:flex-row sm:items-center sm:justify-between sm:p-5 ${toneRing[v.tone]}`}
     >
       <div className="flex items-start gap-3.5">
-        <span className={`relative mt-0.5 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${badgeBg[verdict.tone]}`}>
-          {!loading && verdict.tone === "danger" ? (
-            <span className={`absolute inset-0 rounded-xl ${badgePulse[verdict.tone]} animate-pulse-soft`} aria-hidden />
+        <span className={`relative mt-0.5 inline-flex h-11 w-11 shrink-0 items-center justify-center rounded-xl ${badgeBg[v.tone]}`}>
+          {!loading && v.tone === "danger" ? (
+            <span className={`absolute inset-0 rounded-xl ${badgePulse[v.tone]} animate-pulse-soft`} aria-hidden />
           ) : null}
-          <Icon className={`relative h-5.5 w-5.5 ${fg[verdict.tone]}`} />
+          <Icon className={`relative h-5.5 w-5.5 ${fg[v.tone]}`} />
         </span>
         <div className="min-w-0">
           <div className="text-2xs font-semibold uppercase tracking-sops text-fg-subtle">The call right now</div>
-          <div className="mt-0.5 text-lg font-bold tracking-tight text-fg-strong">{loading ? "Reading the numbers…" : verdict.headline}</div>
-          <div className="mt-0.5 text-sm leading-relaxed text-fg-muted">{loading ? " " : verdict.sub}</div>
+          <div className="mt-0.5 text-lg font-bold tracking-tight text-fg-strong">{loading || !verdict ? "Reading the numbers…" : v.headline}</div>
+          <div className="mt-0.5 text-sm leading-relaxed text-fg-muted">{loading || !verdict ? " " : v.sub}</div>
         </div>
       </div>
-      {!loading && verdict.cta ? (
+      {!loading && verdict && v.cta && v.filter ? (
         <button
           type="button"
-          onClick={onAct}
+          onClick={() => onAct(v.filter!)}
           className="group shrink-0 self-start rounded-lg border border-fg/15 bg-bg px-3.5 py-2 text-sm font-semibold text-fg-strong shadow-sm transition-all hover:-translate-y-px hover:border-fg/25 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 sm:self-auto"
         >
           <span className="inline-flex items-center gap-1.5">
-            {verdict.cta}
+            {v.cta}
             <ArrowUpRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5 group-hover:-translate-y-0.5" />
           </span>
         </button>
@@ -661,44 +662,39 @@ function VerdictBand({ verdict, loading, onAct }: { verdict: Verdict; loading?: 
 }
 
 // ---------------------------------------------------------------------------
-// Vitals — the cockpit readout strip (animated, meaning-bar backed)
+// Vitals — rendered from server totals only.
 // ---------------------------------------------------------------------------
-function VitalsRow({
-  kpis, total, loading,
-}: {
-  kpis: { profitPoolAnnual: number; riskAnnual: number; concentration: number | null; needsData: number; measurableCount: number; lossCount: number };
-  total: number; loading?: boolean;
-}): JSX.Element {
-  const coverage = total > 0 ? kpis.measurableCount / total : 0;
+function VitalsRow({ totals, loading }: { totals: UETotals | null; loading?: boolean }): JSX.Element {
+  const coverage = totals && totals.total_count > 0 ? totals.measurable_count / totals.total_count : 0;
   return (
     <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-3">
       <VitalTile
         icon={Coins}
         tone="accent"
-        label="Annual profit pool"
+        label="Annual profit pool (true margin)"
         loading={loading}
-        value={<AnimatedNumber value={kpis.profitPoolAnnual} format={(n) => formatIls(n)} />}
-        sub={kpis.concentration != null ? `Top 3 drive ${formatPct(kpis.concentration, 0)}` : "At the current 90-day pace"}
-        meter={kpis.concentration != null ? Math.min(1, kpis.concentration / 100) : null}
+        value={<AnimatedNumber value={totals?.profit_pool_annual ?? 0} format={(n) => formatIls(n)} />}
+        sub={totals?.concentration_top3_pct != null ? `Top 3 drive ${formatPct(totals.concentration_top3_pct, 0)}` : "At the current 90-day pace"}
+        meter={totals?.concentration_top3_pct != null ? Math.min(1, totals.concentration_top3_pct / 100) : null}
       />
       <VitalTile
         icon={AlertTriangle}
-        tone={kpis.lossCount > 0 ? "danger" : "success"}
+        tone={totals && totals.loss_count > 0 ? "danger" : "success"}
         label="Profit at risk"
         loading={loading}
-        value={kpis.lossCount > 0
-          ? <AnimatedNumber value={kpis.riskAnnual} format={(n) => formatIls(n)} />
+        value={totals && totals.loss_count > 0
+          ? <AnimatedNumber value={totals.risk_annual} format={(n) => formatIls(n)} />
           : <span>None</span>}
-        sub={kpis.lossCount > 0 ? `${kpis.lossCount} sold below cost · per year` : "Nothing selling below cost"}
+        sub={totals && totals.loss_count > 0 ? `${totals.loss_count} below water after costs · per year` : "Nothing loses money after costs"}
         meter={null}
       />
       <VitalTile
         icon={HelpCircle}
-        tone={kpis.needsData > 0 ? "warning" : "success"}
+        tone={totals && totals.needs_data > 0 ? "warning" : "success"}
         label="Data coverage"
         loading={loading}
-        value={<span><AnimatedNumber value={kpis.measurableCount} format={(n) => formatQtyInt(Math.round(n))} /><span className="text-fg-subtle">/{total}</span></span>}
-        sub={kpis.needsData > 0 ? `${kpis.needsData} need cost or price` : "Every product can be judged"}
+        value={<span><AnimatedNumber value={totals?.measurable_count ?? 0} format={(n) => formatQtyInt(Math.round(n))} /><span className="text-fg-subtle">/{totals?.total_count ?? 0}</span></span>}
+        sub={totals && totals.needs_data > 0 ? `${totals.needs_data} blocked — see row reasons` : "Every product can be judged"}
         meter={coverage}
       />
     </div>
@@ -735,7 +731,7 @@ function VitalTile({
       ) : (
         <div className={`text-2xl font-bold tabular-nums tracking-tight ${toneText[tone]}`}>{value}</div>
       )}
-      <div className="text-2xs text-fg-subtle">{loading ? " " : sub}</div>
+      <div className="text-2xs text-fg-subtle">{loading ? " " : sub}</div>
       {meter != null && !loading ? (
         <div className="h-1 w-full overflow-hidden rounded-full bg-bg-muted/70" aria-hidden>
           <div className={`h-full rounded-full ${toneBar[tone]} transition-[width] duration-700 ease-out-quart`} style={{ width: `${Math.max(3, meter * 100)}%`, opacity: 0.85 }} />
@@ -746,7 +742,7 @@ function VitalTile({
 }
 
 // ---------------------------------------------------------------------------
-// Segment card — the portfolio strip tile
+// Segment card
 // ---------------------------------------------------------------------------
 function SegmentCard({
   meta, count, contribution, maxCount, active, onClick, loading,
@@ -770,7 +766,6 @@ function SegmentCard({
           : "border-border/60 hover:-translate-y-px hover:border-fg/20 hover:bg-bg-subtle/40 hover:shadow-raised"
       }`}
     >
-      {/* category accent edge */}
       <span className="absolute inset-x-0 top-0 h-0.5" style={{ backgroundColor: meta.fill, opacity: active ? 0.9 : 0.5 }} aria-hidden />
       <div className="flex items-center gap-1.5">
         <span className="inline-flex h-5 w-5 items-center justify-center rounded-md" style={{ backgroundColor: `${meta.fill}1f` }}>
@@ -779,17 +774,16 @@ function SegmentCard({
         <span className="text-2xs font-semibold uppercase tracking-sops text-fg-subtle">{meta.label}</span>
       </div>
       <div className="text-2xl font-bold tabular-nums tracking-tight text-fg-strong">{loading ? <span className="text-fg-faint">·</span> : count}</div>
-      {/* share-of-portfolio micro-bar */}
       <div className="h-1 w-full overflow-hidden rounded-full bg-bg-muted/60" aria-hidden>
         <div className="h-full rounded-full transition-[width] duration-500 ease-out-quart" style={{ width: loading ? "0%" : `${Math.max(count > 0 ? 8 : 0, share * 100)}%`, backgroundColor: meta.fill, opacity: 0.8 }} />
       </div>
-      <div className="text-2xs text-fg-subtle">{loading ? " " : moneyLine}</div>
+      <div className="text-2xs text-fg-subtle">{loading ? " " : moneyLine}</div>
     </button>
   );
 }
 
 // ---------------------------------------------------------------------------
-// Sparkline (zero-dependency)
+// Sparkline + trend icon (presentational)
 // ---------------------------------------------------------------------------
 function Sparkline({ values, trend }: { values: number[]; trend: Trend }): JSX.Element {
   const w = 52, h = 18, pad = 2;
@@ -835,11 +829,10 @@ function SortTh({
 }
 
 // ---------------------------------------------------------------------------
-// Inspector — the readout panel
+// Inspector — the readout panel. Every number is a served field; the
+// waterfall lists the server's own decomposition of CM2.
 // ---------------------------------------------------------------------------
-function Inspector({
-  item, windowDays, annualise, velMedian,
-}: { item: DecisionItem | null; windowDays: number; annualise: number; velMedian: number }): JSX.Element {
+function Inspector({ item, windowDays }: { item: ViewItem | null; windowDays: number }): JSX.Element {
   if (!item) {
     return (
       <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-2 py-8 text-center">
@@ -852,7 +845,8 @@ function Inspector({
   }
   const d = DECISION[item.decision];
   const Icon = d.icon;
-  const annualContribution = item.contribution != null ? item.contribution * annualise : null;
+  const r = item.row;
+  const basisLabel = r.price_basis === "REALIZED_90D" ? "Realized (Shopify 90d)" : r.price_basis === "MANUAL" ? "Manual price" : "No price";
   return (
     <div className="space-y-3.5" data-testid="inspector">
       <div>
@@ -865,72 +859,72 @@ function Inspector({
             <ArrowUpRight className="h-3.5 w-3.5 text-fg-subtle" /> {d.action}
           </span>
         </div>
+        <div className="mt-2 flex flex-wrap items-center gap-1.5 text-2xs">
+          <span className="rounded-full border border-border/60 bg-bg-subtle/50 px-2 py-0.5 text-fg-subtle">{basisLabel}</span>
+          {r.price_anomaly ? <span className="rounded-full border border-warning/50 bg-warning-softer/50 px-2 py-0.5 text-warning-fg">Units sold, no revenue — manual price used</span> : null}
+          {r.stale ? <span className="rounded-full border border-warning/50 bg-warning-softer/50 px-2 py-0.5 text-warning-fg">Sales sync stale</span> : null}
+        </div>
       </div>
-      <p className="text-xs leading-relaxed text-fg-subtle">{d.blurb}</p>
 
-      {/* calibrated gauges */}
-      {item.marginPct != null ? (
-        <GaugeBar
-          label="Margin"
-          valueLabel={formatPct(item.marginPct, 1)}
-          fraction={clamp01((item.marginPct) / 50)}
-          markerFraction={clamp01(MARGIN_HEALTHY_PCT / 50)}
-          markerLabel="healthy"
-          color={item.marginPct < 0 ? DECISION.loss.fill : d.fill}
-          negative={item.marginPct < 0}
-        />
+      {item.decision === "needs_data" && r.judge_block_reason ? (
+        <p className="rounded-lg border border-border/50 bg-bg-subtle/40 px-3 py-2 text-xs leading-relaxed text-fg-muted">
+          {REASON_COPY[r.judge_block_reason] ?? d.blurb}
+        </p>
+      ) : (
+        <p className="text-xs leading-relaxed text-fg-subtle">{d.blurb}</p>
+      )}
+
+      {/* CM2 waterfall — the server's decomposition, rendered as-is */}
+      {r.unit_price_ils != null ? (
+        <div className="space-y-1 rounded-lg border border-border/50 bg-bg-subtle/30 px-3 py-2.5">
+          <div className="mb-1 text-2xs font-semibold uppercase tracking-sops text-fg-subtle">Unit waterfall</div>
+          <WaterfallLine label="Unit price" value={r.unit_price_ils} strong />
+          <WaterfallLine label={`Channel fees (${formatPct(toNum(r.fees_pct_total) ?? 0, 1)})`} value={r.fees_per_unit_ils} negative />
+          <WaterfallLine label="Materials" value={r.materials_cogs_ils} negative />
+          <WaterfallLine label="Margin after materials (CM1)" value={r.cm1_ils} strong divider />
+          <WaterfallLine label="Operating cost / unit" value={r.opex_per_unit_ils} negative />
+          <WaterfallLine label="Shipping / order share" value={r.per_order_alloc_ils} negative />
+          <WaterfallLine label="True margin (CM2)" value={r.cm2_ils} strong divider danger={(toNum(r.cm2_ils) ?? 0) < 0} />
+        </div>
       ) : null}
-      {item.units > 0 || velMedian > 0 ? (
-        <GaugeBar
-          label="Velocity"
-          valueLabel={`${formatQtyInt(item.units)} u`}
-          fraction={clamp01(velMedian > 0 ? item.units / (velMedian * 2) : 0)}
-          markerFraction={0.5}
-          markerLabel="median"
-          color={d.fill}
-        />
+
+      {/* Target price callout */}
+      {item.targetPrice != null ? (
+        <div className="flex items-center justify-between rounded-lg border border-accent/30 bg-accent-soft/40 px-3 py-2">
+          <span className="text-xs font-medium text-fg">Target price for a healthy margin</span>
+          <span className="text-sm font-bold tabular-nums text-fg-strong">{formatIls(item.targetPrice)}</span>
+        </div>
       ) : null}
 
       {item.series.length >= 2 ? (
         <div className="flex items-center justify-between rounded-lg border border-border/50 bg-bg-subtle/40 px-3 py-2">
-          <span className="text-2xs uppercase tracking-sops text-fg-subtle">90d vs prior 90d</span>
+          <span className="text-2xs uppercase tracking-sops text-fg-subtle">{windowDays}d vs prior {windowDays}d</span>
           <span className="flex items-center gap-1.5"><Sparkline values={item.series} trend={item.trend} /><TrendIcon trend={item.trend} /></span>
         </div>
       ) : null}
 
       <dl className="grid grid-cols-2 gap-x-3 gap-y-2.5 border-t border-border/50 pt-3 text-sm">
-        <Stat label="Margin / unit" value={item.marginIls != null ? formatIls(item.marginIls) : "—"} />
-        <Stat label={`Orders ${windowDays}d`} value={String(item.orders)} />
+        <Stat label="True margin %" value={item.cm2Pct != null ? formatPct(item.cm2Pct, 1) : "—"} strong danger={item.cm2Pct != null && item.cm2Pct < 0} />
+        <Stat label={`Orders ${windowDays}d`} value={String(r.order_count_90d)} />
         <Stat label={`Contribution ${windowDays}d`} value={item.contribution != null ? formatIls(item.contribution) : "—"} strong danger={item.contribution != null && item.contribution < 0} />
-        <Stat label="Annualised" value={annualContribution != null ? formatIls(annualContribution) : "—"} strong danger={annualContribution != null && annualContribution < 0} />
-        <Stat label="Sale price" value={item.price != null ? formatIls(item.price) : "—"} />
-        <Stat label="Unit cost" value={item.cogs != null ? formatIls(item.cogs) : "—"} />
-        <Stat label="On hand" value={formatQtyInt(item.qtyOnHand)} />
+        <Stat label={`Units ${windowDays}d`} value={formatQtyInt(item.units)} />
+        <Stat label="On hand" value={formatQtyInt(toNum(r.qty_on_hand) ?? 0)} />
         <Stat label="Stock @ cost" value={item.invAtCost != null ? formatIls(item.invAtCost) : "—"} />
       </dl>
     </div>
   );
 }
 
-function clamp01(n: number): number { return Math.max(0, Math.min(1, n)); }
-
-function GaugeBar({
-  label, valueLabel, fraction, markerFraction, markerLabel, color, negative,
-}: {
-  label: string; valueLabel: string; fraction: number; markerFraction?: number; markerLabel?: string; color: string; negative?: boolean;
-}): JSX.Element {
+function WaterfallLine({
+  label, value, negative, strong, divider, danger,
+}: { label: string; value: string | null; negative?: boolean; strong?: boolean; divider?: boolean; danger?: boolean }): JSX.Element {
+  const n = toNum(value);
   return (
-    <div className="space-y-1">
-      <div className="flex items-center justify-between text-2xs">
-        <span className="font-semibold uppercase tracking-sops text-fg-subtle">{label}</span>
-        <span className={`tabular-nums font-semibold ${negative ? "text-danger-fg" : "text-fg"}`}>{valueLabel}</span>
-      </div>
-      <div className="relative h-1.5 w-full overflow-hidden rounded-full bg-bg-muted/70">
-        <div className="absolute inset-y-0 left-0 rounded-full transition-[width] duration-500 ease-out-quart" style={{ width: `${Math.max(2, fraction * 100)}%`, backgroundColor: color, opacity: 0.85 }} />
-        {markerFraction != null ? (
-          <div className="absolute inset-y-0 w-px bg-fg/40" style={{ left: `${markerFraction * 100}%` }} aria-label={markerLabel} />
-        ) : null}
-      </div>
+    <div className={`flex items-center justify-between gap-2 text-xs ${divider ? "border-t border-border/50 pt-1" : ""}`}>
+      <span className={strong ? "font-semibold text-fg" : "text-fg-subtle"}>{label}</span>
+      <span className={`tabular-nums ${danger ? "font-bold text-danger-fg" : strong ? "font-semibold text-fg-strong" : "text-fg"}`}>
+        {n == null ? "—" : `${negative && n > 0 ? "−" : ""}${formatIls(negative ? Math.abs(n) : n)}`}
+      </span>
     </div>
   );
 }
@@ -945,9 +939,9 @@ function Stat({ label, value, strong, danger }: { label: string; value: string; 
 }
 
 // ---------------------------------------------------------------------------
-// Rules popover
+// Rules popover — thresholds come from the server meta (one knob).
 // ---------------------------------------------------------------------------
-function RulesPopover({ velMedian, windowDays }: { velMedian: number; windowDays: number }): JSX.Element {
+function RulesPopover({ velMedian, windowDays, targetPct }: { velMedian: number; windowDays: number; targetPct: number }): JSX.Element {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -977,19 +971,17 @@ function RulesPopover({ velMedian, windowDays }: { velMedian: number; windowDays
       </button>
       {open ? (
         <div className="absolute right-0 z-20 mt-2 w-80 rounded-xl border border-border/60 bg-bg-raised p-3 text-xs shadow-pop">
-          <p className="mb-2 font-semibold text-fg-strong">Transparent rules</p>
+          <p className="mb-2 font-semibold text-fg-strong">Transparent rules — computed on the server</p>
           <ul className="space-y-1.5 text-fg-subtle">
-            <li>• <b className="text-fg">Healthy</b> margin ≥ {MARGIN_HEALTHY_PCT}% · <b className="text-fg">thin</b> &lt; {MARGIN_THIN_PCT}%.</li>
-            <li>• <b className="text-fg">High velocity</b> = units sold ≥ this factory&apos;s median of selling products ({formatQtyInt(velMedian)} in {windowDays}d).</li>
-            <li>• <b className="text-success-fg">Star</b>: healthy + high velocity → protect.</li>
-            <li>• <b className="text-info-fg">Hidden gem</b>: healthy + low velocity → promote.</li>
-            <li>• <b className="text-warning-fg">Workhorse</b>: thin + high velocity → reprice.</li>
-            <li>• <b className="text-warning-fg">Drag</b>: thin + low velocity → review for drop.</li>
-            <li>• <b className="text-danger-fg">Losing money</b>: sells below cost → act now.</li>
-            <li>• <b>Needs data</b>: cost or price missing → excluded from the quadrant.</li>
+            <li>• <b className="text-fg">True margin (CM2)</b> = realized price − materials − labor/overhead − shipping share − channel fees. All ex-VAT.</li>
+            <li>• Price = actual Shopify revenue ÷ units ({windowDays}d). Manual price only when there are no sales — always labeled.</li>
+            <li>• <b className="text-fg">Healthy</b> = CM2 ≥ {targetPct}% (the same target that prices the Target-price column).</li>
+            <li>• <b className="text-fg">High velocity</b> = units ≥ this factory&apos;s median of selling products ({formatQtyInt(velMedian)} in {windowDays}d).</li>
+            <li>• <b className="text-success-fg">Star</b> protect · <b className="text-info-fg">Gem</b> promote · <b className="text-warning-fg">Workhorse</b> reprice · <b className="text-warning-fg">Drag</b> review · <b className="text-danger-fg">Losing money</b> act now.</li>
+            <li>• <b>Needs data</b>: the row says exactly what&apos;s missing.</li>
           </ul>
           <p className="mt-2 border-t border-border/40 pt-2 text-3xs text-fg-subtle">
-            Velocity from Shopify sell-through (last 90 days vs the prior 90). Revenue uses the manual average sale price until automated price snapshots land.
+            Operating costs are yours to set — the &quot;Operating costs&quot; button on this page. Every change is audit-logged and recalculates the whole board.
           </p>
         </div>
       ) : null}
@@ -1014,27 +1006,25 @@ function QuadrantSkeleton(): JSX.Element {
 }
 
 // ---------------------------------------------------------------------------
-// Quadrant — zero-dependency interactive SVG scatter, elevated into the
-// signature "portfolio map": radial-bodied bubbles, a calm halo on the
-// highest-value products, refined grid + reference chips, hover crosshair.
+// Quadrant — zero-dependency interactive SVG scatter. Y is now TRUE margin
+// (cm2_pct); the healthy split is the server's target_pct.
 // ---------------------------------------------------------------------------
 function Quadrant({
-  items, velMedian, activeId, onHover, windowDays,
+  items, velMedian, targetPct, activeId, onHover, windowDays,
 }: {
-  items: DecisionItem[]; velMedian: number; activeId: string | null; onHover: (id: string | null) => void; windowDays: number;
+  items: ViewItem[]; velMedian: number; targetPct: number; activeId: string | null; onHover: (id: string | null) => void; windowDays: number;
 }): JSX.Element {
   const [mounted, setMounted] = useState(false);
   useEffect(() => { const t = setTimeout(() => setMounted(true), 30); return () => clearTimeout(t); }, []);
 
-  const plotted = items.filter((i) => i.decision !== "needs_data" && i.marginPct != null);
+  const plotted = items.filter((i) => i.decision !== "needs_data" && i.cm2Pct != null);
 
   const W = 880, H = 520, padL = 60, padR = 24, padT = 28, padB = 52;
   const plotW = W - padL - padR, plotH = H - padT - padB;
 
   const peakUnits = Math.max(0, ...plotted.map((i) => i.units));
-  // Headroom so the largest bubble (and its label) sits inside the frame.
   const maxUnits = Math.max(velMedian * 2, peakUnits * 1.12, 10);
-  const margins = plotted.map((i) => i.marginPct ?? 0);
+  const margins = plotted.map((i) => i.cm2Pct ?? 0);
   const maxMargin = Math.max(40, Math.ceil((Math.max(0, ...margins) + 5) / 10) * 10);
   const minMargin = Math.min(0, Math.floor((Math.min(0, ...margins) - 5) / 10) * 10);
 
@@ -1043,25 +1033,22 @@ function Quadrant({
   const maxContrib = Math.max(1, ...plotted.map((i) => Math.abs(i.contribution ?? 0)));
   const rOf = (c: number | null) => 6 + Math.sqrt(Math.abs(c ?? 0) / maxContrib) * 24;
 
-  const xSplit = xOf(velMedian), ySplit = yOf(MARGIN_HEALTHY_PCT), yZero = yOf(0);
+  const xSplit = xOf(velMedian), ySplit = yOf(targetPct), yZero = yOf(0);
 
-  // y gridline ticks every 10/20% depending on range
   const step = maxMargin - minMargin > 80 ? 20 : 10;
   const yTicks: number[] = [];
   for (let m = minMargin; m <= maxMargin + 0.001; m += step) yTicks.push(m);
   const xTicks = [0, 0.25, 0.5, 0.75, 1].map((f) => f * maxUnits);
 
-  // top contributors get a name label + a calm halo
   const ranked = [...plotted].sort((a, b) => Math.abs(b.contribution ?? 0) - Math.abs(a.contribution ?? 0));
   const labelled = new Set(ranked.slice(0, 5).map((i) => i.id));
   const haloed = new Set(ranked.slice(0, 3).map((i) => i.id));
   const active = plotted.find((i) => i.id === activeId) ?? null;
 
-  // unique gradient ids per decision key
   const keys: DecisionKey[] = ["star", "gem", "workhorse", "drag", "loss", "dormant"];
 
   return (
-    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="group" aria-label="Margin versus velocity portfolio map. Each product is a selectable point; the table below lists every product." data-testid="quadrant">
+    <svg viewBox={`0 0 ${W} ${H}`} className="w-full" role="group" aria-label="True margin versus velocity portfolio map. Each product is a selectable point; the table below lists every product." data-testid="quadrant">
       <defs>
         <clipPath id="db-plot"><rect x={padL} y={padT} width={plotW} height={plotH} /></clipPath>
         <filter id="db-glow" x="-60%" y="-60%" width="220%" height="220%">
@@ -1104,7 +1091,7 @@ function Quadrant({
       <line x1={xSplit} y1={padT} x2={xSplit} y2={padT + plotH} stroke="currentColor" strokeOpacity={0.28} strokeDasharray="4 4" />
       <line x1={padL} y1={ySplit} x2={padL + plotW} y2={ySplit} stroke="currentColor" strokeOpacity={0.28} strokeDasharray="4 4" />
       <text x={xSplit + 4} y={padT + plotH - 4} className="fill-current" fontSize="9" opacity={0.45}>median {formatQtyInt(velMedian)}</text>
-      <text x={padL + 4} y={ySplit - 4} className="fill-current" fontSize="9" opacity={0.45}>{MARGIN_HEALTHY_PCT}% margin</text>
+      <text x={padL + 4} y={ySplit - 4} className="fill-current" fontSize="9" opacity={0.45}>{targetPct}% target</text>
 
       {/* quadrant captions */}
       <text x={padL + plotW - 6} y={padT + 15} textAnchor="end" className="fill-current" fontSize="11" fontWeight={600} opacity={0.5}>★ Stars · protect</text>
@@ -1114,14 +1101,14 @@ function Quadrant({
 
       {/* axis titles */}
       <text x={padL + plotW / 2} y={H - 8} textAnchor="middle" className="fill-current" fontSize="11" opacity={0.6}>Units sold (last {windowDays}d) →</text>
-      <text x={16} y={padT + plotH / 2} textAnchor="middle" className="fill-current" fontSize="11" opacity={0.6} transform={`rotate(-90 16 ${padT + plotH / 2})`}>Margin % →</text>
+      <text x={16} y={padT + plotH / 2} textAnchor="middle" className="fill-current" fontSize="11" opacity={0.6} transform={`rotate(-90 16 ${padT + plotH / 2})`}>True margin % →</text>
 
-      {/* calm halos behind the highest-value products */}
+      {/* halos */}
       <g clipPath="url(#db-plot)">
         {plotted.filter((i) => haloed.has(i.id)).map((i) => (
           <circle
             key={`halo-${i.id}`}
-            cx={xOf(i.units)} cy={yOf(i.marginPct ?? 0)} r={mounted ? rOf(i.contribution) + 7 : 0}
+            cx={xOf(i.units)} cy={yOf(i.cm2Pct ?? 0)} r={mounted ? rOf(i.contribution) + 7 : 0}
             fill={DECISION[i.decision].fill} opacity={activeId === i.id ? 0.3 : 0.16}
             filter="url(#db-glow)"
             style={{ transition: "r 700ms cubic-bezier(.22,1,.36,1), opacity 200ms" }}
@@ -1133,13 +1120,13 @@ function Quadrant({
       {active ? (
         <g>
           <line x1={xOf(active.units)} y1={padT} x2={xOf(active.units)} y2={padT + plotH} stroke={DECISION[active.decision].fill} strokeOpacity={0.4} strokeDasharray="3 3" />
-          <line x1={padL} y1={yOf(active.marginPct ?? 0)} x2={padL + plotW} y2={yOf(active.marginPct ?? 0)} stroke={DECISION[active.decision].fill} strokeOpacity={0.4} strokeDasharray="3 3" />
+          <line x1={padL} y1={yOf(active.cm2Pct ?? 0)} x2={padL + plotW} y2={yOf(active.cm2Pct ?? 0)} stroke={DECISION[active.decision].fill} strokeOpacity={0.4} strokeDasharray="3 3" />
         </g>
       ) : null}
 
       {/* bubbles */}
       {plotted.map((i, idx) => {
-        const cx = xOf(i.units), cy = yOf(i.marginPct ?? 0), r = rOf(i.contribution);
+        const cx = xOf(i.units), cy = yOf(i.cm2Pct ?? 0), r = rOf(i.contribution);
         const isActive = activeId === i.id;
         const d = DECISION[i.decision];
         return (
@@ -1151,16 +1138,15 @@ function Quadrant({
               className="cursor-pointer"
               tabIndex={0}
               role="button"
-              aria-label={`${i.name}: ${d.label}, ${d.action}. Margin ${i.marginPct != null ? `${i.marginPct.toFixed(1)}%` : "unknown"}, ${formatQtyInt(i.units)} units, contribution ${i.contribution != null ? formatIls(i.contribution) : "unknown"}.`}
+              aria-label={`${i.name}: ${d.label}, ${d.action}. True margin ${i.cm2Pct != null ? `${i.cm2Pct.toFixed(1)}%` : "unknown"}, ${formatQtyInt(i.units)} units, contribution ${i.contribution != null ? formatIls(i.contribution) : "unknown"}.`}
               style={{ transition: `r 600ms cubic-bezier(.22,1,.36,1) ${idx * 25}ms, fill-opacity 150ms, stroke-width 150ms`, filter: isActive ? "drop-shadow(0 2px 6px rgba(0,0,0,0.18))" : "none" }}
               onMouseEnter={() => onHover(i.id)}
               onClick={() => onHover(i.id)}
               onFocus={() => onHover(i.id)}
               onKeyDown={(e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onHover(i.id); } }}
             >
-              <title>{i.name} · margin {i.marginPct != null ? `${i.marginPct.toFixed(1)}%` : "—"} · {formatQtyInt(i.units)} units · contribution {i.contribution != null ? formatIls(i.contribution) : "—"}</title>
+              <title>{i.name} · true margin {i.cm2Pct != null ? `${i.cm2Pct.toFixed(1)}%` : "—"} · {formatQtyInt(i.units)} units · contribution {i.contribution != null ? formatIls(i.contribution) : "—"}</title>
             </circle>
-            {/* lit highlight on active for extra dimension */}
             {isActive && mounted ? (
               <circle cx={cx - r * 0.3} cy={cy - r * 0.35} r={r * 0.28} fill="#fff" opacity={0.35} pointerEvents="none" />
             ) : null}
