@@ -1,14 +1,15 @@
 // ---------------------------------------------------------------------------
 // Product Decision Board — deterministic e2e (Tranche 081 · fixture refreshed
-// in Tranche 091).
+// in Tranche 091 · moved to the unit-economics contract in Tranche 128).
 //
-// Tagged @mocked: stubs /api/economics at the browser (page.route) so the board
-// renders WITHOUT a live backend — same pattern as dashboard.spec.ts.
+// Tagged @mocked: stubs /api/unit-economics at the browser (page.route) so the
+// board renders WITHOUT a live backend — same pattern as dashboard.spec.ts.
 //
-// The economics fixture now carries the Shopify trailing-90-day sales the page
-// reads directly (qty_sold_90d / order_count_90d / units_prev_90d, migrations
-// 0261/0262). The board no longer calls /api/orders/by-item-and-period, so that
-// mock was removed.
+// Tranche 128: the page consumes the server CM2 read model only (corridor
+// SPEC §V.1 — no money math in the browser), so this fixture emulates the
+// SERVER contract: waterfall fields, decision, contribution, totals, meta and
+// cost_model rows. The math below lives in the fixture precisely because the
+// page no longer computes it.
 //
 // The fixture is a realistic GT Everyday catalogue spanning every decision
 // category (star / gem / workhorse / drag / loss / dormant / needs-data) so
@@ -51,48 +52,133 @@ const PRODUCTS: Prod[] = [
   { id: "FG-WAT", name: "Watermelon Cooler 330ml", price: 12, cogs: 7.8, complete: true, onHand: 260 }, // DORMANT (no sales)
 ];
 
-function economicsBody() {
-  const rows = PRODUCTS.map((p) => {
-    const marginIls = p.price != null && p.cogs != null ? p.price - p.cogs : null;
-    const marginPct =
-      marginIls != null && p.price ? (marginIls / p.price) * 100 : null;
-    // 90d total + a prior-90d figure that preserves the within-series direction
-    // (growing series ⇒ prior < current ⇒ up-trend, and vice-versa).
+// Fixture-side emulation of the server's unit-economics computation
+// (v_fg_unit_economics + route): cost model = labor 1.5 ₪/unit + 5% fees +
+// 3 ₪/order shipping; target margin 25%.
+const LABOR = 1.5;
+const FEES_PCT = 5;
+const SHIP_PER_ORDER = 3;
+const TARGET_PCT = 25;
+
+function unitEconomicsBody() {
+  type Row = Record<string, unknown> & { decision: string };
+  const pre = PRODUCTS.map((p) => {
     const sold90 = p.units ? p.units[0] + p.units[1] + p.units[2] : 0;
     const prev90 = p.units
       ? Math.round(sold90 * (p.units[0] / Math.max(1, p.units[2])))
       : 0;
     const orders90 = sold90 > 0 ? Math.max(1, Math.round(sold90 / 12)) : 0;
+
+    // price-basis ladder (SPEC §V.2/§V.13): realized when sold with revenue;
+    // manual price when not; NONE + anomaly when sold but price unknowable.
+    const realized = sold90 > 0 && p.price != null;
+    const basis = realized ? "REALIZED_90D" : p.price != null ? "MANUAL" : "NONE";
+    const anomaly = sold90 > 0 && p.price == null;
+    const unitPrice = p.price;
+    const revenue = realized ? (p.price! * sold90) : null;
+
+    const materials = p.cogs;
+    const judgeable = materials != null && p.complete && basis !== "NONE";
+    const reason = materials == null
+      ? (p.complete ? "NO_COGS" : "COGS_INCOMPLETE")
+      : basis === "NONE" ? "NO_PRICE_BASIS" : null;
+
+    const alloc = sold90 > 0 ? (SHIP_PER_ORDER * orders90) / sold90 : 0;
+    const fees = unitPrice != null ? (unitPrice * FEES_PCT) / 100 : null;
+    const cm1 = unitPrice != null && materials != null ? unitPrice - materials : null;
+    const cm2 = cm1 != null && fees != null ? cm1 - LABOR - alloc - fees : null;
+    const cm2Pct = cm2 != null && unitPrice ? (cm2 / unitPrice) * 100 : null;
+    const target = materials != null
+      ? (materials + LABOR + alloc) / (1 - FEES_PCT / 100 - TARGET_PCT / 100)
+      : null;
+    const contribution = judgeable && cm2 != null ? cm2 * sold90 : null;
+
+    return { p, sold90, prev90, orders90, basis, anomaly, unitPrice, revenue, materials, judgeable, reason, alloc, fees, cm1, cm2, cm2Pct, target, contribution };
+  });
+
+  const selling = pre.filter((x) => x.judgeable && x.sold90 > 0).map((x) => x.sold90).sort((a, b) => a - b);
+  const median = selling.length
+    ? selling.length % 2
+      ? selling[Math.floor(selling.length / 2)]
+      : (selling[selling.length / 2 - 1] + selling[selling.length / 2]) / 2
+    : 0;
+
+  const rows: Row[] = pre.map((x) => {
+    let decision: string;
+    if (!x.judgeable || x.cm2Pct == null) decision = "needs_data";
+    else if (x.cm2Pct < 0) decision = "loss";
+    else if (x.sold90 === 0) decision = "dormant";
+    else decision = x.cm2Pct >= TARGET_PCT ? (x.sold90 >= median ? "star" : "gem") : x.sold90 >= median ? "workhorse" : "drag";
     return {
-      item_id: p.id,
-      item_name: p.name,
-      cogs_per_unit_ils: p.cogs != null ? p.cogs.toFixed(4) : null,
-      cogs_complete: p.complete,
-      missing_cost_components: p.complete ? [] : [{ component_id: null, reason: "no cost" }],
-      cogs_snapshot_at: new Date().toISOString(),
-      qty_on_hand: String(p.onHand),
-      fg_inventory_value_at_cost: p.cogs != null ? (p.cogs * p.onHand).toFixed(2) : null,
-      avg_sale_price_ils: p.price != null ? p.price.toFixed(2) : null,
-      material_margin_ils: marginIls != null ? marginIls.toFixed(4) : null,
-      material_margin_pct: marginPct != null ? marginPct.toFixed(2) : null,
-      fg_inventory_value_at_sale_price: p.price != null ? (p.price * p.onHand).toFixed(2) : null,
-      embedded_material_margin_in_stock: null,
-      reliability_flag: "ok",
-      // Shopify trailing-90-day sales (what the board reads for velocity).
-      qty_sold_90d: String(sold90),
-      order_count_90d: orders90,
-      units_prev_90d: String(prev90),
+      item_id: x.p.id,
+      item_name: x.p.name,
+      price_basis: x.basis,
+      price_anomaly: x.anomaly,
+      unit_price_ils: x.unitPrice != null ? x.unitPrice.toFixed(4) : null,
+      qty_sold_90d: String(x.sold90),
+      order_count_90d: x.orders90,
+      units_prev_90d: String(x.prev90),
+      revenue_90d_ils: x.revenue != null ? x.revenue.toFixed(4) : null,
+      sales_synced_at: x.sold90 > 0 ? new Date().toISOString() : null,
+      stale: false,
+      materials_cogs_ils: x.materials != null ? x.materials.toFixed(4) : null,
+      cogs_complete: x.p.complete,
+      missing_cost_components: x.p.complete ? [] : [{ component_id: null, reason: "no cost" }],
+      opex_per_unit_ils: LABOR.toFixed(4),
+      fees_pct_total: FEES_PCT.toFixed(2),
+      per_order_alloc_ils: x.alloc.toFixed(4),
+      fees_per_unit_ils: x.fees != null ? x.fees.toFixed(4) : null,
+      cm1_ils: x.cm1 != null ? x.cm1.toFixed(4) : null,
+      cm1_pct: x.cm1 != null && x.unitPrice ? ((x.cm1 / x.unitPrice) * 100).toFixed(2) : null,
+      cm2_ils: x.cm2 != null ? x.cm2.toFixed(4) : null,
+      cm2_pct: x.cm2Pct != null ? x.cm2Pct.toFixed(2) : null,
+      judgeable: x.judgeable,
+      judge_block_reason: x.reason,
+      qty_on_hand: String(x.p.onHand),
+      fg_inventory_value_at_cost: x.materials != null ? (x.materials * x.p.onHand).toFixed(2) : null,
+      cost_breakdown: {},
+      target_price_ils: x.target != null ? x.target.toFixed(2) : null,
+      contribution_90d_ils: x.contribution != null ? x.contribution.toFixed(4) : null,
+      decision,
     };
   });
-  return { rows, count: rows.length };
+
+  const measurable = rows.filter((r) => r.contribution_90d_ils != null);
+  const pool = measurable.reduce((s, r) => s + Number(r.contribution_90d_ils), 0);
+  const lossRows = rows.filter((r) => r.decision === "loss");
+  const risk90 = lossRows.reduce((s, r) => s + Math.abs(Number(r.contribution_90d_ils ?? 0)), 0);
+  const positives = measurable.map((r) => Number(r.contribution_90d_ils)).filter((c) => c > 0).sort((a, b) => b - a);
+  const top3 = positives.slice(0, 3).reduce((s, c) => s + c, 0);
+
+  return {
+    rows,
+    totals: {
+      profit_pool_90d: pool,
+      profit_pool_annual: pool * (365 / 90),
+      loss_count: lossRows.length,
+      risk_annual: risk90 * (365 / 90),
+      needs_data: rows.filter((r) => r.decision === "needs_data").length,
+      concentration_top3_pct: pool > 0 ? (top3 / pool) * 100 : null,
+      measurable_count: measurable.length,
+      total_count: rows.length,
+    },
+    meta: { target_pct: TARGET_PCT, velocity_median: median, window_days: 90 },
+    cost_model: [
+      { cost_key: "LABOR", scope: "GLOBAL", basis: "per_unit_ils", value: String(LABOR), label_en: "Direct labor", active: true, updated_at: new Date().toISOString() },
+      { cost_key: "OVERHEAD", scope: "GLOBAL", basis: "per_unit_ils", value: "0", label_en: "Factory overhead", active: false, updated_at: new Date().toISOString() },
+      { cost_key: "CHANNEL_FEES", scope: "GLOBAL", basis: "pct_of_revenue", value: String(FEES_PCT), label_en: "Channel & payment fees", active: true, updated_at: new Date().toISOString() },
+      { cost_key: "SHIPPING", scope: "GLOBAL", basis: "per_order_ils", value: String(SHIP_PER_ORDER), label_en: "Shipping & dispatch", active: true, updated_at: new Date().toISOString() },
+    ],
+    count: rows.length,
+  };
 }
 
 async function mockBoard(page: Page) {
   await page.route("**/api/**", (route) =>
     route.fulfill({ status: 200, contentType: "application/json", body: "{}" }),
   );
-  await page.route("**/api/economics**", (route) =>
-    route.fulfill({ json: economicsBody() }),
+  await page.route("**/api/unit-economics**", (route) =>
+    route.fulfill({ json: unitEconomicsBody() }),
   );
 }
 
