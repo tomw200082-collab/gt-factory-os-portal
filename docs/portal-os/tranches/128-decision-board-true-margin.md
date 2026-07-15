@@ -1,6 +1,6 @@
 # Tranche 128 — Decision Board: true gross margin (CM2) + in-page operating costs
 
-**Status:** ACTIVE
+**Status:** LANDED (2026-07-15)
 **Corridor spec:** `gt-factory-os/SPEC.md` (Decision Board true-gross-profit corridor; §T4 is this tranche)
 **Backend contract:** `GET /api/v1/queries/unit-economics` + `PATCH /api/v1/mutations/economics/operating-costs` (gt-factory-os PR #166 — migrations 0282/0283, unit_economics_route)
 **Authorized by:** Tom, 2026-07-15 (this session: "נלך עם ההמלצה שלך… שבדף עצמו תהיה אופצייה להוסיף את כל עלויות התפעול הנדרשות")
@@ -53,6 +53,10 @@ server-provided columns for display grouping (segment cards, bar scaling).
 - Trend arrow compares the two server-provided unit counts (prev vs current
   90d) — quantity presentation, not money math.
 
-## Evidence
+## Evidence (closed 2026-07-15)
 
-- (fill at close) typecheck/vitest outputs, commit SHAs, screenshots.
+- tsc 0 · eslint 0 · vitest 886/886 · decision-board e2e 1/1 (tap + keyboard) · portal `ci` check green (run 29396449053).
+- Commits: `4728f20` (rebuild) · `f45cf55` (e2e fixture → new contract) · `62529e0` (grammar) · `e0cdee4` (ux-release-gate fastfollow: 3 P0 + 9 P1/P2) · `7a8652c` (mobile truncation).
+- /ux-release-gate: first pass HOLD (3 P0) → fastfollow → **CONDITIONAL_SHIP**, 5 named P1 conditions. Record: `gt-factory-os-production-brain/docs/phase8/dry-runs/2026-07-15-ux-release-gate-decision-board-tranche128.md`.
+- Backend applied to prod (0282/0283 via Supabase MCP, Tom's explicit go) with a live verification battery: V9 parity 0/73 mismatches, factor inheritance 0 mismatches, basis split 65 realized / 9 manual / 2 none.
+- Render evidence: /tmp/ux-shots*, /tmp/db/*.png (session container).
