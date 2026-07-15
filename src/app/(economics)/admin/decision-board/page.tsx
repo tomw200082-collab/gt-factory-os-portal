@@ -28,6 +28,7 @@
 // ---------------------------------------------------------------------------
 
 import { useEffect, useMemo, useRef, useState } from "react";
+import Link from "next/link";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Info,
@@ -47,7 +48,8 @@ import {
   HelpCircle,
   Coins,
   SlidersHorizontal,
-  Clock,
+  Copy,
+  Check,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
@@ -87,9 +89,9 @@ const DECISION: Record<DecisionKey, DecisionMeta> = {
 const SEGMENT_ORDER: DecisionKey[] = ["star", "gem", "workhorse", "drag", "loss", "dormant", "needs_data"];
 
 const REASON_COPY: Record<string, string> = {
-  NO_COGS: "No cost snapshot yet — run a COGS recalculation.",
-  COGS_INCOMPLETE: "Cost is missing components — complete component costs.",
-  NO_PRICE_BASIS: "No realized revenue and no manual price — set a sale price.",
+  NO_COGS: "No material cost on record yet — complete this product's ingredient costs to enable analysis.",
+  COGS_INCOMPLETE: "Some ingredient costs are missing — complete them to enable analysis.",
+  NO_PRICE_BASIS: "No sales revenue and no manual price — set a sale price to enable analysis.",
 };
 
 // ---------------------------------------------------------------------------
@@ -324,11 +326,17 @@ export default function DecisionBoardPage(): JSX.Element {
   const active = items.find((i) => i.id === activeId) ?? null;
   const isLoading = ueQuery.isLoading;
   const isError = ueQuery.isError;
+  const isRecalculating = ueQuery.isFetching && !ueQuery.isLoading;
   const verdict = totals ? buildVerdict(totals) : null;
 
   const headerActions = (
     <div className="flex items-center gap-2">
-      <SourcePill stale={anyStale} />
+      {isRecalculating ? (
+        <span role="status" className="inline-flex items-center gap-1.5 rounded-lg border border-accent/40 bg-accent-soft/50 px-2.5 py-1.5 text-2xs font-medium text-accent">
+          <span className="dot bg-accent animate-pulse-soft" aria-hidden /> Recalculating…
+        </span>
+      ) : null}
+      <SourcePill />
       <button
         type="button"
         onClick={() => setDrawerOpen(true)}
@@ -348,7 +356,7 @@ export default function DecisionBoardPage(): JSX.Element {
           eyebrow="Economics"
           title="Product Decision Board"
           description="Every finished product on true margin × velocity — so the next move is obvious: protect, promote, reprice, or drop."
-          actions={<SourcePill stale={false} />}
+          actions={<SourcePill />}
         />
         <SectionCard tone="danger" density="compact">
           <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
@@ -385,8 +393,8 @@ export default function DecisionBoardPage(): JSX.Element {
 
       {/* Freshness / anomaly notices — server flags, rendered only */}
       {anyStale ? (
-        <div className="flex items-center gap-2 rounded-lg border border-warning/40 bg-warning-softer/50 px-3 py-2 text-xs text-warning-fg" role="status">
-          <Clock className="h-3.5 w-3.5 shrink-0" />
+        <div className="flex items-center gap-2 rounded-lg border border-warning/30 bg-warning-softer/50 px-3 py-2 text-xs text-warning-fg" role="status">
+          <AlertTriangle className="h-3.5 w-3.5 shrink-0" />
           Shopify sales sync is older than 7 days — realized prices may be out of date.
         </div>
       ) : null}
@@ -398,7 +406,7 @@ export default function DecisionBoardPage(): JSX.Element {
       <VitalsRow totals={totals} loading={isLoading} />
 
       {/* Decision segments */}
-      <div className="grid grid-cols-2 gap-2.5 sm:grid-cols-4 lg:grid-cols-7" data-testid="segments">
+      <div className="grid grid-cols-2 gap-2.5 max-sm:[&>*:last-child:nth-child(odd)]:col-span-2 sm:grid-cols-4 lg:grid-cols-7" data-testid="segments">
         {SEGMENT_ORDER.map((k) => (
           <SegmentCard
             key={k}
@@ -418,7 +426,7 @@ export default function DecisionBoardPage(): JSX.Element {
         <SectionCard
           eyebrow="The signature view"
           title="Portfolio map"
-          description={`Right = sells more · Up = higher true margin (CM2) · bubble = money it contributes. The ${targetPct}% line is the margin target.`}
+          description={`Right = sells more · Up = higher true margin · bubble = money it contributes. The ${targetPct}% line is the margin target.`}
         >
           {isLoading ? (
             <QuadrantSkeleton />
@@ -448,11 +456,11 @@ export default function DecisionBoardPage(): JSX.Element {
                 <SortTh label="Product" k="name" sortKey={sortKey} dir={sortDir} onSort={onSort} />
                 <th className="px-2 py-2 font-semibold">Decision</th>
                 <SortTh label="True margin %" k="cm2Pct" sortKey={sortKey} dir={sortDir} onSort={onSort} align="right" />
-                <SortTh label={`Contribution ${windowDays}d`} k="contribution" sortKey={sortKey} dir={sortDir} onSort={onSort} align="right" />
-                <SortTh label={`Units ${windowDays}d`} k="units" sortKey={sortKey} dir={sortDir} onSort={onSort} align="right" />
-                <th className="px-2 py-2 text-center font-semibold">Trend</th>
+                <SortTh label={`Contribution ${windowDays}d`} k="contribution" sortKey={sortKey} dir={sortDir} onSort={onSort} align="right" className="hidden md:table-cell" />
+                <SortTh label={`Units ${windowDays}d`} k="units" sortKey={sortKey} dir={sortDir} onSort={onSort} align="right" className="hidden md:table-cell" />
+                <th className="hidden px-2 py-2 text-center font-semibold md:table-cell">Trend</th>
                 <SortTh label="Target price" k="targetPrice" sortKey={sortKey} dir={sortDir} onSort={onSort} align="right" />
-                <SortTh label="Stock @ cost" k="invAtCost" sortKey={sortKey} dir={sortDir} onSort={onSort} align="right" />
+                <SortTh label="Stock @ cost" k="invAtCost" sortKey={sortKey} dir={sortDir} onSort={onSort} align="right" className="hidden md:table-cell" />
               </tr>
             </thead>
             <tbody>
@@ -483,8 +491,11 @@ export default function DecisionBoardPage(): JSX.Element {
                           <span className="h-2 w-2 shrink-0 rounded-full ring-2 ring-inset ring-bg" style={{ backgroundColor: d.fill }} aria-hidden />
                           <span className="truncate">{i.name}</span>
                           {i.row.price_anomaly ? (
-                            <span title="Units sold with no revenue in the window (comped/replacement orders) — price falls back to the manual value.">
-                              <AlertTriangle className="h-3 w-3 shrink-0 text-warning-fg" aria-label="price anomaly" />
+                            <span className="inline-flex" aria-describedby={`anom-${i.id}`}>
+                              <AlertTriangle className="h-3 w-3 shrink-0 text-warning-fg" aria-label="Price anomaly" />
+                              <span id={`anom-${i.id}`} className="sr-only">
+                                Sold units with no revenue in the window (replacements or comps) — the manual price is used instead.
+                              </span>
                             </span>
                           ) : null}
                         </span>
@@ -493,7 +504,7 @@ export default function DecisionBoardPage(): JSX.Element {
                       <td className="px-2 py-2 text-right tabular-nums">
                         {i.cm2Pct != null ? <span className={i.cm2Pct < 0 ? "font-semibold text-danger-fg" : ""}>{formatPct(i.cm2Pct, 1)}</span> : <span className="text-fg-subtle">—</span>}
                       </td>
-                      <td className="px-2 py-2 text-right tabular-nums">
+                      <td className="hidden px-2 py-2 text-right tabular-nums md:table-cell">
                         {i.contribution != null ? (
                           <span className="inline-flex flex-col items-end gap-1">
                             <span className={i.contribution < 0 ? "text-danger-fg" : "text-fg-strong"}>{formatIls(i.contribution)}</span>
@@ -506,10 +517,10 @@ export default function DecisionBoardPage(): JSX.Element {
                           </span>
                         ) : <span className="text-fg-subtle">—</span>}
                       </td>
-                      <td className="px-2 py-2 text-right tabular-nums">
+                      <td className="hidden px-2 py-2 text-right tabular-nums md:table-cell">
                         {i.units > 0 ? formatQtyInt(i.units) : <span className="text-fg-subtle">0</span>}
                       </td>
-                      <td className="px-1 py-2">
+                      <td className="hidden px-1 py-2 md:table-cell">
                         <div className="flex items-center justify-center gap-1">
                           <Sparkline values={i.series} trend={i.trend} />
                           <TrendIcon trend={i.trend} />
@@ -520,7 +531,7 @@ export default function DecisionBoardPage(): JSX.Element {
                           ? <span className={i.decision === "workhorse" || i.decision === "loss" ? "font-semibold text-fg-strong" : "text-fg-subtle"}>{formatIls(i.targetPrice)}</span>
                           : <span className="text-fg-subtle">—</span>}
                       </td>
-                      <td className="px-2 py-2 text-right tabular-nums text-fg-subtle">
+                      <td className="hidden px-2 py-2 text-right tabular-nums text-fg-subtle md:table-cell">
                         {i.invAtCost != null ? formatIls(i.invAtCost) : "—"}
                       </td>
                     </tr>
@@ -568,13 +579,14 @@ function sortValue(i: ViewItem, k: SortKey): number | string | null {
 }
 
 // ---------------------------------------------------------------------------
-// Source pill — states the price basis honestly; flags a stale sync.
+// Source pill — states the price basis honestly. Staleness is announced once,
+// by the inline banner (a second header-level warning added noise).
 // ---------------------------------------------------------------------------
-function SourcePill({ stale }: { stale: boolean }): JSX.Element {
+function SourcePill(): JSX.Element {
   return (
-    <span className={`inline-flex items-center gap-1.5 rounded-lg border px-2.5 py-1.5 text-2xs font-medium ${stale ? "border-warning/50 bg-warning-softer/40 text-warning-fg" : "border-border/60 bg-bg-subtle/50 text-fg-subtle"}`}>
-      <span className={`dot ${stale ? "bg-warning" : "bg-accent"} animate-pulse-soft`} aria-hidden />
-      {stale ? "Sales sync stale" : "Realized Shopify revenue · last 90 days"}
+    <span className="inline-flex items-center gap-1.5 rounded-lg border border-border/60 bg-bg-subtle/50 px-2.5 py-1.5 text-2xs font-medium text-fg-subtle">
+      <span className="dot bg-accent animate-pulse-soft" aria-hidden />
+      Realized Shopify revenue · last 90 days
     </span>
   );
 }
@@ -687,7 +699,7 @@ function VitalsRow({ totals, loading }: { totals: UETotals | null; loading?: boo
         value={totals && totals.loss_count > 0
           ? <AnimatedNumber value={totals.risk_annual} format={(n) => formatIls(n)} />
           : <span>None</span>}
-        sub={totals && totals.loss_count > 0 ? `${totals.loss_count} below water after costs · per year` : "Nothing loses money after costs"}
+        sub={totals && totals.loss_count > 0 ? `${totals.loss_count} product${totals.loss_count > 1 ? "s" : ""} losing money · annualized` : "Nothing loses money after costs"}
         meter={null}
       />
       <VitalTile
@@ -815,13 +827,16 @@ function TrendIcon({ trend }: { trend: Trend }): JSX.Element {
 }
 
 function SortTh({
-  label, k, sortKey, dir, onSort, align = "left",
+  label, k, sortKey, dir, onSort, align = "left", className = "",
 }: {
-  label: string; k: SortKey; sortKey: SortKey; dir: "asc" | "desc"; onSort: (k: SortKey) => void; align?: "left" | "right";
+  label: string; k: SortKey; sortKey: SortKey; dir: "asc" | "desc"; onSort: (k: SortKey) => void; align?: "left" | "right"; className?: string;
 }): JSX.Element {
   const activeCol = sortKey === k;
   return (
-    <th className={`px-2 py-2 font-semibold ${align === "right" ? "text-right" : "text-left"}`}>
+    <th
+      aria-sort={activeCol ? (dir === "asc" ? "ascending" : "descending") : "none"}
+      className={`px-2 py-2 font-semibold ${align === "right" ? "text-right" : "text-left"} ${className}`}
+    >
       <button type="button" onClick={() => onSort(k)} className={`inline-flex items-center gap-1 hover:text-fg ${align === "right" ? "flex-row-reverse" : ""} ${activeCol ? "text-fg" : ""}`}>
         {label}
         {activeCol ? (dir === "asc" ? <ChevronUp className="h-3 w-3" /> : <ChevronDown className="h-3 w-3" />) : <ChevronsUpDown className="h-3 w-3 opacity-40" />}
@@ -835,6 +850,8 @@ function SortTh({
 // waterfall lists the server's own decomposition of CM2.
 // ---------------------------------------------------------------------------
 function Inspector({ item, windowDays }: { item: ViewItem | null; windowDays: number }): JSX.Element {
+  const [copied, setCopied] = useState(false);
+  useEffect(() => { setCopied(false); }, [item?.id]);
   if (!item) {
     return (
       <div className="flex h-full min-h-[280px] flex-col items-center justify-center gap-2 py-8 text-center">
@@ -849,17 +866,40 @@ function Inspector({ item, windowDays }: { item: ViewItem | null; windowDays: nu
   const Icon = d.icon;
   const r = item.row;
   const basisLabel = r.price_basis === "REALIZED_90D" ? "Realized (Shopify 90d)" : r.price_basis === "MANUAL" ? "Manual price" : "No price";
+  const showCopyTarget =
+    item.targetPrice != null && (item.decision === "loss" || item.decision === "workhorse" || item.decision === "drag");
   return (
-    <div className="space-y-3.5" data-testid="inspector">
+    <div className="space-y-3.5" data-testid="inspector" aria-live="polite" aria-atomic="true">
       <div>
         <div className="text-base font-bold tracking-tight text-fg-strong">{item.name}</div>
         <div className="mt-2 flex flex-wrap items-center gap-2">
           <span className="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-xs font-semibold" style={{ backgroundColor: `${d.fill}1f`, color: d.fill }}>
             <Icon className="h-3.5 w-3.5" /> {d.label}
           </span>
-          <span className="inline-flex items-center gap-1 text-xs font-semibold text-fg">
-            <ArrowUpRight className="h-3.5 w-3.5 text-fg-subtle" /> {d.action}
-          </span>
+          {/* The next move is a REAL control, never a decorative arrow: reprice
+              decisions copy the target price; needs_data links to the item
+              master. Plain text for protect/promote/review. */}
+          {showCopyTarget ? (
+            <button
+              type="button"
+              onClick={() => {
+                void navigator.clipboard?.writeText(item.targetPrice!.toFixed(2)).then(() => setCopied(true)).catch(() => setCopied(false));
+              }}
+              className="inline-flex items-center gap-1 rounded-lg border border-fg/15 bg-bg px-2 py-1 text-xs font-semibold text-fg-strong shadow-sm transition-colors hover:border-fg/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+            >
+              {copied ? <Check className="h-3.5 w-3.5 text-success-fg" /> : <Copy className="h-3.5 w-3.5 text-fg-subtle" />}
+              {copied ? "Target price copied" : `${d.action} — copy target ${formatIls(item.targetPrice!)}`}
+            </button>
+          ) : item.decision === "needs_data" ? (
+            <Link
+              href={`/admin/masters/items/${encodeURIComponent(item.id)}`}
+              className="inline-flex items-center gap-1 rounded-lg border border-fg/15 bg-bg px-2 py-1 text-xs font-semibold text-fg-strong shadow-sm transition-colors hover:border-fg/25 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+            >
+              Complete the data <ArrowUpRight className="h-3.5 w-3.5 text-fg-subtle" />
+            </Link>
+          ) : (
+            <span className="inline-flex items-center gap-1 text-xs font-semibold text-fg">{d.action}</span>
+          )}
         </div>
         <div className="mt-2 flex flex-wrap items-center gap-1.5 text-2xs">
           <span className="rounded-full border border-border/60 bg-bg-subtle/50 px-2 py-0.5 text-fg-subtle">{basisLabel}</span>
@@ -883,10 +923,10 @@ function Inspector({ item, windowDays }: { item: ViewItem | null; windowDays: nu
           <WaterfallLine label="Unit price" value={r.unit_price_ils} strong />
           <WaterfallLine label={`Channel fees (${formatPct(toNum(r.fees_pct_total) ?? 0, 1)})`} value={r.fees_per_unit_ils} negative />
           <WaterfallLine label="Materials" value={r.materials_cogs_ils} negative />
-          <WaterfallLine label="Margin after materials (CM1)" value={r.cm1_ils} strong divider />
+          <WaterfallLine label="Margin after materials" value={r.cm1_ils} strong divider />
           <WaterfallLine label="Operating cost / unit" value={r.opex_per_unit_ils} negative />
           <WaterfallLine label="Shipping / order share" value={r.per_order_alloc_ils} negative />
-          <WaterfallLine label="True margin (CM2)" value={r.cm2_ils} strong divider danger={(toNum(r.cm2_ils) ?? 0) < 0} />
+          <WaterfallLine label="True margin" value={r.cm2_ils} strong divider danger={(toNum(r.cm2_ils) ?? 0) < 0} />
         </div>
       ) : null}
 
@@ -1093,7 +1133,7 @@ function Quadrant({
       <line x1={xSplit} y1={padT} x2={xSplit} y2={padT + plotH} stroke="currentColor" strokeOpacity={0.28} strokeDasharray="4 4" />
       <line x1={padL} y1={ySplit} x2={padL + plotW} y2={ySplit} stroke="currentColor" strokeOpacity={0.28} strokeDasharray="4 4" />
       <text x={xSplit + 4} y={padT + plotH - 4} className="fill-current" fontSize="9" opacity={0.45}>median {formatQtyInt(velMedian)}</text>
-      <text x={padL + 4} y={ySplit - 4} className="fill-current" fontSize="9" opacity={0.45}>{targetPct}% target</text>
+      <text x={padL + plotW - 6} y={ySplit - 4} textAnchor="end" className="fill-current" fontSize="9" opacity={0.65}>{targetPct}% target</text>
 
       {/* quadrant captions */}
       <text x={padL + plotW - 6} y={padT + 15} textAnchor="end" className="fill-current" fontSize="11" fontWeight={600} opacity={0.5}>★ Stars · protect</text>

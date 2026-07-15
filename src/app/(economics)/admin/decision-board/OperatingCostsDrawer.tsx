@@ -13,7 +13,7 @@
 // the board reflects the server's recomputation after save (SPEC §V.1).
 // ---------------------------------------------------------------------------
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { X, Plus, Coins, AlertTriangle } from "lucide-react";
 
 export interface CostModelRow {
@@ -81,6 +81,16 @@ export function OperatingCostsDrawer({
   });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+  const panelRef = useRef<HTMLDivElement>(null);
+  const closeBtnRef = useRef<HTMLButtonElement>(null);
+  const restoreFocusRef = useRef<HTMLElement | null>(null);
+
+  // Unsaved edits? Escape/backdrop must not silently discard them.
+  const dirty = useMemo(
+    () => adding || JSON.stringify(lines) !== JSON.stringify(toEditable(costModel)),
+    [lines, adding, costModel],
+  );
 
   // Re-seed the editable copy each time the drawer opens on fresh data.
   useEffect(() => {
@@ -88,17 +98,57 @@ export function OperatingCostsDrawer({
       setLines(toEditable(costModel));
       setError(null);
       setAdding(false);
+      setConfirmDiscard(false);
     }
   }, [open, costModel]);
 
+  // Dialog focus management: capture the trigger, move focus in on open,
+  // give it back on close.
+  useEffect(() => {
+    if (open) {
+      restoreFocusRef.current = document.activeElement as HTMLElement | null;
+      closeBtnRef.current?.focus();
+    } else {
+      restoreFocusRef.current?.focus?.();
+      restoreFocusRef.current = null;
+    }
+  }, [open]);
+
+  const dirtyRef = useRef(dirty);
+  dirtyRef.current = dirty;
   useEffect(() => {
     if (!open) return;
     const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key !== "Escape") return;
+      if (dirtyRef.current) setConfirmDiscard(true);
+      else onClose();
     };
     document.addEventListener("keydown", onKey);
     return () => document.removeEventListener("keydown", onKey);
   }, [open, onClose]);
+
+  // Keep Tab inside the dialog (aria-modal contract).
+  const trapTab = (e: React.KeyboardEvent) => {
+    if (e.key !== "Tab" || !panelRef.current) return;
+    const els = panelRef.current.querySelectorAll<HTMLElement>(
+      'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])',
+    );
+    if (els.length === 0) return;
+    const first = els[0]!;
+    const last = els[els.length - 1]!;
+    if (e.shiftKey && document.activeElement === first) {
+      e.preventDefault();
+      last.focus();
+    } else if (!e.shiftKey && document.activeElement === last) {
+      e.preventDefault();
+      first.focus();
+    }
+  };
+
+  const requestClose = () => {
+    if (dirty) setConfirmDiscard(true);
+    else onClose();
+  };
 
   const invalid = useMemo(() => {
     const all = adding && newLine.cost_key ? [...lines, newLine] : lines;
@@ -165,9 +215,9 @@ export function OperatingCostsDrawer({
   return (
     <div className="fixed inset-0 z-40" role="dialog" aria-modal="true" aria-label="Operating costs" data-testid="operating-costs-drawer">
       {/* backdrop */}
-      <div className="absolute inset-0 bg-black/30" onClick={onClose} aria-hidden />
+      <div className="absolute inset-0 bg-black/30" onClick={requestClose} aria-hidden />
       {/* panel */}
-      <div className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col border-l border-border/60 bg-bg shadow-pop">
+      <div ref={panelRef} onKeyDown={trapTab} className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col border-l border-border/60 bg-bg shadow-pop">
         <div className="flex items-center justify-between border-b border-border/60 px-4 py-3">
           <div className="flex items-center gap-2">
             <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-accent-soft">
@@ -175,12 +225,13 @@ export function OperatingCostsDrawer({
             </span>
             <div>
               <div className="text-sm font-bold tracking-tight text-fg-strong">Operating costs</div>
-              <div className="text-2xs text-fg-subtle">Feeds true margin (CM2). All amounts ex-VAT.</div>
+              <div className="text-2xs text-fg-subtle">Feeds true margin. All amounts ex-VAT.</div>
             </div>
           </div>
           <button
+            ref={closeBtnRef}
             type="button"
-            onClick={onClose}
+            onClick={requestClose}
             aria-label="Close"
             className="inline-flex h-8 w-8 items-center justify-center rounded-lg text-fg-subtle transition-colors hover:bg-bg-subtle/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
           >
@@ -205,7 +256,7 @@ export function OperatingCostsDrawer({
                   <div className="flex items-center justify-between gap-2">
                     <div className="min-w-0">
                       <div className="truncate text-sm font-semibold text-fg-strong">{l.label_en}</div>
-                      <div className="text-3xs uppercase tracking-sops text-fg-subtle">{l.cost_key} · {BASIS_LABEL[l.basis]}</div>
+                      <div className="text-3xs uppercase tracking-sops text-fg-subtle">{BASIS_LABEL[l.basis]}</div>
                     </div>
                     <button
                       type="button"
@@ -257,7 +308,7 @@ export function OperatingCostsDrawer({
                   return (
                     <div key={`${l.cost_key}|${l.scope}`} className="flex items-center justify-between gap-2 rounded-lg border border-border/50 bg-bg-subtle/40 px-3 py-2">
                       <div className="min-w-0 text-xs">
-                        <div className="truncate font-medium text-fg">{l.cost_key} → {l.scope}</div>
+                        <div className="truncate font-medium text-fg">{l.label_en} — {l.scope}</div>
                         <div className="text-3xs text-fg-subtle">{BASIS_LABEL[l.basis]} · replaces the global line</div>
                       </div>
                       <input
@@ -280,7 +331,16 @@ export function OperatingCostsDrawer({
           {/* add line */}
           {adding ? (
             <div className="rounded-xl border border-dashed border-border/70 p-3">
-              <div className="mb-2 text-2xs font-semibold uppercase tracking-sops text-fg-subtle">New cost line</div>
+              <div className="mb-2 flex items-center justify-between">
+                <span className="text-2xs font-semibold uppercase tracking-sops text-fg-subtle">New cost line</span>
+                <button
+                  type="button"
+                  onClick={() => { setAdding(false); setNewLine({ cost_key: "", scope: "GLOBAL", basis: "per_unit_ils", value: "0", label_en: "", active: true }); }}
+                  className="text-3xs font-medium text-fg-subtle underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+                >
+                  Discard
+                </button>
+              </div>
               <div className="grid grid-cols-2 gap-2">
                 <input
                   aria-label="New line name"
@@ -330,26 +390,49 @@ export function OperatingCostsDrawer({
           ) : null}
         </div>
 
-        <div className="flex items-center justify-between gap-2 border-t border-border/60 px-4 py-3">
-          <span className="text-3xs text-fg-subtle">Saved as one batch · every change is audit-logged.</span>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={onClose}
-              className="rounded-lg px-3 py-2 text-sm font-medium text-fg-subtle transition-colors hover:bg-bg-subtle/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
-            >
-              Cancel
-            </button>
-            <button
-              type="button"
-              onClick={save}
-              disabled={saving || invalid}
-              className="rounded-lg border border-fg/15 bg-bg px-3.5 py-2 text-sm font-semibold text-fg-strong shadow-sm transition-all hover:-translate-y-px hover:border-fg/25 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:cursor-not-allowed disabled:opacity-50"
-            >
-              {saving ? "Saving…" : "Save costs"}
-            </button>
+        {confirmDiscard ? (
+          <div className="flex items-center justify-between gap-2 border-t border-warning/40 bg-warning-softer/40 px-4 py-3" role="alertdialog" aria-label="Discard unsaved changes?">
+            <span className="text-xs font-medium text-warning-fg">Discard unsaved changes?</span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setConfirmDiscard(false)}
+                className="rounded-lg px-3 py-2 text-sm font-medium text-fg transition-colors hover:bg-bg-subtle/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+              >
+                Keep editing
+              </button>
+              <button
+                type="button"
+                onClick={() => { setConfirmDiscard(false); onClose(); }}
+                className="rounded-lg border border-warning/50 bg-bg px-3.5 py-2 text-sm font-semibold text-warning-fg shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+              >
+                Discard changes
+              </button>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="flex items-center justify-between gap-2 border-t border-border/60 px-4 py-3">
+            <span className="text-3xs text-fg-subtle">Saved as one batch · every change is audit-logged.</span>
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={requestClose}
+                className="rounded-lg px-3 py-2 text-sm font-medium text-fg-subtle transition-colors hover:bg-bg-subtle/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                onClick={save}
+                disabled={saving || invalid}
+                title={invalid ? "Fix the highlighted values above before saving" : undefined}
+                className="rounded-lg border border-fg/15 bg-bg px-3.5 py-2 text-sm font-semibold text-fg-strong shadow-sm transition-all hover:-translate-y-px hover:border-fg/25 hover:shadow-pop focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 disabled:cursor-not-allowed disabled:opacity-50"
+              >
+                {saving ? "Saving…" : "Save costs"}
+              </button>
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
