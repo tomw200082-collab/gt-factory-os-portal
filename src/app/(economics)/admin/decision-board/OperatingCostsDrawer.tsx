@@ -215,9 +215,9 @@ export function OperatingCostsDrawer({
   return (
     <div className="fixed inset-0 z-40" role="dialog" aria-modal="true" aria-label="Operating costs" data-testid="operating-costs-drawer">
       {/* backdrop */}
-      <div className="absolute inset-0 bg-black/30" onClick={requestClose} aria-hidden />
+      <div className="db-drawer-backdrop absolute inset-0 bg-black/30" onClick={requestClose} aria-hidden />
       {/* panel */}
-      <div ref={panelRef} onKeyDown={trapTab} className="absolute inset-y-0 right-0 flex w-full max-w-md flex-col border-l border-border/60 bg-bg shadow-pop">
+      <div ref={panelRef} onKeyDown={trapTab} className="db-drawer-panel absolute inset-y-0 right-0 flex w-full max-w-md flex-col border-l border-border/60 bg-bg shadow-pop">
         <div className="flex items-center justify-between border-b border-border/60 px-4 py-3">
           <div className="flex items-center gap-2">
             <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-accent-soft">
@@ -264,9 +264,11 @@ export function OperatingCostsDrawer({
                       aria-checked={l.active}
                       aria-label={`${l.label_en} on/off`}
                       onClick={() => update(idx, { active: !l.active })}
-                      className={`relative h-6 w-11 shrink-0 rounded-full transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40 ${l.active ? "bg-success" : "bg-bg-muted"}`}
+                      className="-m-2.5 shrink-0 rounded-xl p-2.5 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/40"
                     >
-                      <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${l.active ? "left-[22px]" : "left-0.5"}`} aria-hidden />
+                      <span className={`relative block h-6 w-11 rounded-full transition-colors ${l.active ? "bg-success" : "bg-bg-muted"}`}>
+                        <span className={`absolute top-0.5 h-5 w-5 rounded-full bg-white shadow transition-all ${l.active ? "left-[22px]" : "left-0.5"}`} aria-hidden />
+                      </span>
                     </button>
                   </div>
                   <div className="mt-2.5 flex items-center gap-2">
