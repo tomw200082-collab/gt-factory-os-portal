@@ -220,8 +220,22 @@ export function Badge({
       </span>
     );
   } else {
+    // A non-interactive badge that carries a tooltip must still be
+    // keyboard-reachable, or its tooltip content is mouse-hover-only
+    // (ux-release-gate A11Y-001). Making the span a tab stop lets Radix wire
+    // aria-describedby and fire the tooltip on focus. Only when it actually
+    // has a tooltip — plain badges stay out of the tab order.
+    const focusable = tooltip != null;
     node = (
-      <span aria-label={ariaLabel} className={baseClass}>
+      <span
+        aria-label={ariaLabel}
+        tabIndex={focusable ? 0 : undefined}
+        className={cn(
+          baseClass,
+          focusable &&
+            "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
+        )}
+      >
         {inner}
       </span>
     );

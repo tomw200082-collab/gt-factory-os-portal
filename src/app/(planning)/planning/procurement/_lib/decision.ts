@@ -283,7 +283,7 @@ function whyNowFromRisk(driver: LineRisk, extraCritical: number): string {
     extraCritical > 0 ? ` · ‎+${extraCritical} שורות דחופות נוספות` : "";
   switch (driver.severity) {
     case "shortage_now":
-      return `${driver.label} על אפס — גם בהזמנה היום צפוי פער של ~${daysHe(driver.shortageDays)}${more}`;
+      return `${driver.label} כבר על אפס — גם בהזמנה היום צפוי פער של ~${daysHe(driver.shortageDays)}${more}`;
     case "shortage_expected":
       return `${driver.label} ייגמר ~${fmtDateHe(driver.zeroDate)} — הזמנה היום עדיין משאירה פער של ~${daysHe(driver.shortageDays)}${more}`;
     case "order_today":

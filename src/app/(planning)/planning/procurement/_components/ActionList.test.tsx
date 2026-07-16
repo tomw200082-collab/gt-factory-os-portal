@@ -260,10 +260,28 @@ describe("ActionList", () => {
     expect(chip.getAttribute("href")).toBe("/stock/physical-count");
     expect(chip.textContent).toContain("לספור קודם");
     expect(chip.textContent).toContain("45");
+    // ux-release-gate A11Y-002: the rationale rides on the link's accessible
+    // name (the link is the tab stop), not on a non-focused inner span.
+    expect(chip.getAttribute("aria-label")).toContain("לספור קודם");
+    expect(chip.getAttribute("aria-label")).toContain("45");
     // Session-level recount summary counts it too.
     expect(
       screen.getByTestId("procurement-recount-summary").textContent,
     ).toContain("1");
+  });
+
+  it("L12 filtering to no matches announces the empty result via an aria-live region (ux-release-gate A11Y-005)", async () => {
+    const user = userEvent.setup();
+    render(<ActionList pos={POS} today={TODAY} />);
+    const status = document.querySelector('[role="status"][aria-live="polite"]');
+    expect(status).not.toBeNull();
+    // Nothing announced until a filter is active.
+    expect(status?.textContent).toBe("");
+    await user.type(
+      screen.getByTestId("procurement-filter-search"),
+      "לא-קיים-בכלל",
+    );
+    expect(status?.textContent).toContain("אין הזמנות התואמות");
   });
 
   it("L10 the bucket filter can narrow to recount-needed rows only", async () => {

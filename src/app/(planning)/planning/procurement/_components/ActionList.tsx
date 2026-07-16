@@ -143,7 +143,7 @@ function CoverageCaption({ trace }: { trace: unknown }): JSX.Element | null {
         : "text-fg-faint";
   const head =
     r.severity === "stockout"
-      ? "צפוי לאזול"
+      ? "ייגמר"
       : r.severity === "below_safety"
         ? "מתחת לרצפת הביטחון"
         : "כיסוי מספק";
@@ -216,7 +216,7 @@ function LineTrustCaption({
     );
   }
   if (risk.ltSource === "global_default") {
-    flags.push("זמן אספקה: ברירת מחדל (14 ימ׳)");
+    flags.push("זמן אספקה: לא הוגדר — 14 ימ׳");
   }
   if (risk.missingPrice) {
     flags.push("מחיר חסר — העלות מוצגת 0");
@@ -319,7 +319,11 @@ function ProcurementRow({
                 · להזמין עד {fmtDateHe(waitUntil)}
               </span>
             )}
-            {inbound.length > 0 && (
+            {/* ux-release-gate INTER-205: gate on `actionable` (matches the
+                recount chip below) — a warning-tone "action needed" chip on an
+                already-placed/skipped row reads as a live task on a closed
+                order. */}
+            {actionable && inbound.length > 0 && (
               <Badge
                 tone="warning"
                 size="xs"
@@ -330,16 +334,23 @@ function ProcurementRow({
               </Badge>
             )}
             {actionable && recount && (
+              // ux-release-gate A11Y-002/INTER-201/INTER-202: the tooltip
+              // rationale lives on the <a> (the real tab stop) via aria-label
+              // + native title, so keyboard/SR users get it — the inner Badge
+              // no longer carries its own tooltip (which was on a non-focused
+              // span). hover:underline + focus ring make it read as a link,
+              // not a static chip.
               <Link
                 href={COUNT_HREF}
-                className="inline-flex"
+                aria-label={`לספור קודם — ${recount.label}${recount.worstAgeDays != null ? `, נספר לפני ${recount.worstAgeDays} ימים` : ", לא נספר מעולם"}. ספירה קצרה לפני ההזמנה תמנע קנייה מיותרת. פותח את מסך הספירה.`}
+                title={`ההמלצה נשענת על מלאי שלא אומת (${recount.label}${recount.worstAgeDays != null ? ` — נספר לפני ${recount.worstAgeDays} ימים` : " — לא נספר מעולם"}). ספירה קצרה לפני ההזמנה תמנע קנייה מיותרת.`}
+                className="inline-flex rounded-md decoration-dotted underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
                 data-testid={`procurement-recount-${po.session_po_id}`}
               >
                 <Badge
                   tone="info"
                   size="xs"
                   icon={<ClipboardList className="h-3 w-3" />}
-                  tooltip={`ההמלצה נשענת על מלאי שלא אומת (${recount.label}${recount.worstAgeDays != null ? ` — נספר לפני ${recount.worstAgeDays} ימים` : " — לא נספר מעולם"}). ספירה קצרה לפני ההזמנה תמנע קנייה מיותרת. לחיצה פותחת את מסך הספירה.`}
                 >
                   לספור קודם
                   {recount.worstAgeDays != null
@@ -359,7 +370,9 @@ function ProcurementRow({
               className="btn btn-accent btn-sm w-full shrink-0 sm:w-auto"
               data-testid={`procurement-open-${po.session_po_id}`}
             >
-              פתח במיקוד ←
+              {/* ux-release-gate A11Y-009: hide the decorative arrow from the
+                  accessible name (a screen reader would read "leftwards arrow"). */}
+              פתח במיקוד <span aria-hidden>←</span>
             </button>
           ) : (
             <Link
@@ -367,7 +380,7 @@ function ProcurementRow({
               className="btn btn-accent btn-sm w-full shrink-0 sm:w-auto"
               data-testid={`procurement-open-${po.session_po_id}`}
             >
-              פתח ←
+              פתח <span aria-hidden>←</span>
             </Link>
           ))}
       </div>
@@ -551,7 +564,8 @@ export function ActionList({
                 aria-hidden
               />
               <span className="font-bold text-danger-fg">
-                {mustRows.length} חייב לצאת היום
+                {mustRows.length} חייב{mustRows.length === 1 ? "" : "ות"} לצאת
+                היום
               </span>
               <span className="tabular-nums text-fg-muted">
                 · {formatIls(mustCost)}
@@ -634,12 +648,26 @@ export function ActionList({
                 setQuery("");
                 setBucketFilter("all");
               }}
-              className="text-3xs font-medium text-accent hover:underline"
+              // ux-release-gate INTER-204: a 14px zero-padding text link is
+              // below the touch-target minimum — give it real height matching
+              // the adjacent selects.
+              className="inline-flex min-h-[2rem] items-center px-2 text-3xs font-medium text-accent hover:underline"
               data-testid="procurement-filter-clear"
             >
               נקה סינון
             </button>
           )}
+        </div>
+
+        {/* ux-release-gate A11Y-005: the search/filter re-render is silent to a
+            screen reader — announce the match count so a non-sighted planner
+            knows the list changed (and when nothing matched). */}
+        <div className="sr-only" role="status" aria-live="polite" aria-atomic="true">
+          {isFiltered
+            ? visibleCount === 0
+              ? "אין הזמנות התואמות את הסינון"
+              : `${visibleCount} הזמנות מוצגות`
+            : ""}
         </div>
 
         {isFiltered && visibleCount === 0 && (

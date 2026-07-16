@@ -139,13 +139,17 @@ export function warningChip(w: PurchaseSessionWarning): WarningChip {
         code: w.code,
         label: `${n || ""} ללא ספק`.trim(),
         tooltip:
-          "שורות שנדרשות אך לא שובצו לאף ספק — לא מופיעות ברשימה. יש להשלים ספק ראשי בנתוני האב.",
+          "שורות שנדרשות אך לא שובצו לאף ספק — לא מופיעות ברשימה. יש להשלים ספק ראשי בהגדרות הפריט.",
       };
     case "stale_stock_input":
       return {
         code: w.code,
-        label: "סטיית אימות מלאי",
-        tooltip: w.detail,
+        // ux-release-gate COPY-008: distinct from the always-present drift
+        // chip's "סטיית מלאי" — two near-identical orange chips otherwise.
+        label: "קלט מלאי ישן",
+        tooltip:
+          w.detail ||
+          "קלט המלאי לסשן זה ישן — כמויות עלולות להיות לא מדויקות. רעננו מלאי לפני הסתמכות.",
       };
     case "no_orders_needed":
       return {
