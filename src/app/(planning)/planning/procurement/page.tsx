@@ -37,9 +37,13 @@ import {
   useCurrentSession,
   useStartSession,
 } from "../purchase-session/_lib/api";
-import type { PurchaseSessionPo } from "../purchase-session/_lib/types";
+import type {
+  PurchaseSessionPo,
+  PurchaseSessionWarning,
+} from "../purchase-session/_lib/types";
 import { formatIls } from "@/lib/utils/format-money";
 import { ActionList } from "./_components/ActionList";
+import { IntegrityStrip } from "./_components/IntegrityStrip";
 import { CalendarView } from "./_components/CalendarView";
 import { RecommendationsToConvert } from "./_components/RecommendationsToConvert";
 import { FocusMode } from "./_components/FocusMode";
@@ -203,24 +207,12 @@ export default function ProcurementPage(): JSX.Element {
         </div>
       )}
 
-      {/* Session warnings — typed {code, detail} the engine emits (e.g. an
-          overdue open-PO that should hold back re-ordering, or components with
-          no resolvable supplier). Previously never rendered, so the planner
-          could under-order without knowing why. */}
-      {session && session.warnings.length > 0 && (
-        <div className="space-y-2" data-testid="procurement-warnings">
-          {session.warnings.map((w, i) => (
-            <div
-              key={`${w.code}-${i}`}
-              role="alert"
-              className="flex items-start gap-2 rounded-md border border-warning/40 bg-warning-softer px-4 py-3 text-sm text-warning-fg"
-            >
-              <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
-              <span className="min-w-0 flex-1">{w.detail}</span>
-            </div>
-          ))}
-        </div>
-      )}
+      {/* Input-trustworthiness strip (Tranche 132) — one compact line: stock
+          verification, count freshness, forecast age, firmed-plan window and
+          the engine's structural warnings as chips. Replaces the previous
+          stack of full-width warning banners; the machine-readable warning
+          payload also surfaces inline on the affected rows in ActionList. */}
+      {session && <IntegrityStrip session={session} />}
 
       {/* Approved purchase recommendations → PO. Canonical conversion home
           after planning runs were made diagnostic-only (Tranche 072). Renders
@@ -239,6 +231,7 @@ export default function ProcurementPage(): JSX.Element {
       ) : (
         <SessionView
           pos={session.pos}
+          warnings={session.warnings}
           sessionDate={session.session_date}
           totalCost={session.totals.total_cost}
           initialView={initialView}
@@ -264,6 +257,7 @@ export default function ProcurementPage(): JSX.Element {
 
 function SessionView({
   pos,
+  warnings,
   sessionDate,
   totalCost,
   initialView,
@@ -271,6 +265,7 @@ function SessionView({
   onOpenById,
 }: {
   pos: PurchaseSessionPo[];
+  warnings: PurchaseSessionWarning[];
   sessionDate: string;
   totalCost: number;
   initialView: "list" | "calendar";
@@ -390,7 +385,11 @@ function SessionView({
       </div>
 
       {view === "list" ? (
-        <ActionList pos={pos} onOpen={(po) => onOpenById(po.session_po_id)} />
+        <ActionList
+          pos={pos}
+          warnings={warnings}
+          onOpen={(po) => onOpenById(po.session_po_id)}
+        />
       ) : (
         <CalendarView pos={pos} onOpen={onOpenById} />
       )}

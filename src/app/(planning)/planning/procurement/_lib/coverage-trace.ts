@@ -29,6 +29,21 @@ export interface CoverageTrace {
   purchase_to_inv_factor: number | null;
   lead_time_days: number | null;
   demand_model_version: string | null;
+  // --- trace_version 3 (backend 0284) — per-line confidence signals. ---
+  // All are `undefined` on pre-0284 traces so the UI can tell "old trace"
+  // apart from "engine said null".
+  /** 3 on 0284+ traces; undefined before. */
+  trace_version?: number;
+  /** 'component_master' | 'supplier_item' | 'supplier_default' | 'global_default'. */
+  lt_source?: string | null;
+  criticality?: string | null;
+  /** Days since the last physical count of this target; null = never counted. */
+  last_count_age_days?: number | null;
+  moq?: number | null;
+  order_multiple?: number | null;
+  qty_purchase_before_rounding?: number | null;
+  /** Codes from the engine's per-line blocking issues (e.g. 'missing_price'). */
+  blocking_codes?: string[];
 }
 
 function num(v: unknown): number | null {
@@ -39,6 +54,18 @@ function num(v: unknown): number | null {
 
 function str(v: unknown): string | null {
   return typeof v === "string" && v.length > 0 ? v : null;
+}
+
+/** Codes from the engine's per-line `blocking` array ({code, detail}[]). */
+function blockingCodes(v: unknown): string[] {
+  if (!Array.isArray(v)) return [];
+  return v
+    .map((b) =>
+      b && typeof b === "object" && typeof (b as { code?: unknown }).code === "string"
+        ? ((b as { code: string }).code)
+        : null,
+    )
+    .filter((c): c is string => c != null);
 }
 
 /** Safe parse of the on-the-wire `unknown`. Returns null when the value is not
@@ -53,7 +80,7 @@ export function parseCoverageTrace(raw: unknown): CoverageTrace | null {
     "projected_on_hand_at_need_inv",
   ];
   if (!recognized.some((k) => k in o)) return null;
-  return {
+  const trace: CoverageTrace = {
     on_hand_inv: num(o.on_hand_inv),
     total_horizon_demand_inv: num(o.total_horizon_demand_inv),
     avg_daily_demand_inv: num(o.avg_daily_demand_inv),
@@ -68,7 +95,19 @@ export function parseCoverageTrace(raw: unknown): CoverageTrace | null {
     purchase_to_inv_factor: num(o.purchase_to_inv_factor),
     lead_time_days: num(o.lead_time_days),
     demand_model_version: str(o.demand_model_version),
+    blocking_codes: blockingCodes(o.blocking),
   };
+  // trace_version 3 fields ride along only when the engine emitted them, so
+  // `undefined` keeps meaning "old trace" downstream (vs an explicit null).
+  if ("trace_version" in o) trace.trace_version = num(o.trace_version) ?? undefined;
+  if ("lt_source" in o) trace.lt_source = str(o.lt_source);
+  if ("criticality" in o) trace.criticality = str(o.criticality);
+  if ("last_count_age_days" in o) trace.last_count_age_days = num(o.last_count_age_days);
+  if ("moq" in o) trace.moq = num(o.moq);
+  if ("order_multiple" in o) trace.order_multiple = num(o.order_multiple);
+  if ("qty_purchase_before_rounding" in o)
+    trace.qty_purchase_before_rounding = num(o.qty_purchase_before_rounding);
+  return trace;
 }
 
 export type CoverageSeverity = "stockout" | "below_safety" | "ok";

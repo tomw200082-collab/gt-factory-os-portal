@@ -94,6 +94,16 @@ export interface PurchaseSession {
   consolidation_window_days: number;
   rebuild_verifier_drift: number | null;
   warnings: PurchaseSessionWarning[];
+  // Engine provenance the API has returned since 0235 but the portal type
+  // dropped until tranche 132: which demand model ran, and the firmed-plan
+  // window snapshot (firmed weeks, drafts excluded). Optional — older
+  // sessions carry null.
+  demand_model_version?: string | null;
+  firmed_window?: unknown | null;
+  // 0284: input-trustworthiness snapshot (forecast age + coverage gap,
+  // physical-count staleness over the buy-list targets, verifier drift).
+  // null on sessions generated before the migration.
+  input_integrity?: unknown | null;
   release_fence: string | null;
   created_at: string;
   completed_at: string | null;
