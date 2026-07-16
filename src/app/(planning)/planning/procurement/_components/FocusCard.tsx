@@ -40,7 +40,6 @@ import {
 import type {
   PlaceLinePrice,
   PoStatus,
-  PoTier,
   PurchaseSessionPo,
 } from "../../purchase-session/_lib/types";
 import { AddLineForm } from "./AddLineForm";
@@ -49,16 +48,6 @@ import {
   parseCoverageTrace,
 } from "../_lib/coverage-trace";
 
-const TIER_LABEL: Record<PoTier, string> = {
-  urgent: "דחוף",
-  must: "חובה השבוע",
-  recommended: "מומלץ להקדים",
-};
-const TIER_TONE: Record<PoTier, BadgeTone> = {
-  urgent: "danger",
-  must: "warning",
-  recommended: "neutral",
-};
 const STATUS_LABEL: Record<PoStatus, string> = {
   proposed: "מוצע",
   approved: "אושר — מוכן לשליחה",
@@ -353,9 +342,11 @@ export function FocusCard({
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="text-xl font-bold text-fg">{po.supplier_snapshot}</h2>
-          <Badge tone={TIER_TONE[po.tier]} size="xs">
-            {TIER_LABEL[po.tier]}
-          </Badge>
+          {/* Tranche 132 ux-release-gate FLOW-002: the SQL tier badge
+              (urgent/must/recommended) contradicted the shortage-math `whyNow`
+              text below it whenever the two disagreed — ActionList already
+              dropped this badge for the same reason; FocusCard renders the
+              same PO and must not reintroduce the conflicting signal. */}
           <Badge tone={STATUS_TONE[po.status]} size="xs">
             {STATUS_LABEL[po.status]}
           </Badge>
