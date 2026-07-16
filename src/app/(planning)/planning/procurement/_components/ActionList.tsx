@@ -63,6 +63,7 @@ import {
 import {
   buildInboundIssueMap,
   inboundIssueLabel,
+  inboundIssuePrimaryHref,
   inboundIssueTooltip,
   type InboundIssue,
 } from "../_lib/session-warnings";
@@ -322,16 +323,34 @@ function ProcurementRow({
             {/* ux-release-gate INTER-205: gate on `actionable` (matches the
                 recount chip below) — a warning-tone "action needed" chip on an
                 already-placed/skipped row reads as a live task on a closed
-                order. */}
+                order. Tranche 133: clicking the chip opens the exact PO that
+                needs the fix (date set / supplier chased) — same
+                click-to-fix pattern as the recount chip below. Falls back to
+                a plain tooltip-only badge when no po_id resolved (never a
+                broken link). */}
             {actionable && inbound.length > 0 && (
-              <Badge
-                tone="warning"
-                size="xs"
-                dot
-                tooltip={inboundIssueTooltip(inbound)}
-              >
-                {inboundIssueLabel(inbound)}
-              </Badge>
+              inboundIssuePrimaryHref(inbound) ? (
+                <Link
+                  href={inboundIssuePrimaryHref(inbound)!}
+                  aria-label={`${inboundIssueLabel(inbound)}. ${inboundIssueTooltip(inbound)} פותח את ההזמנה.`}
+                  title={inboundIssueTooltip(inbound)}
+                  className="inline-flex rounded-md decoration-dotted underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+                  data-testid={`procurement-inbound-${po.session_po_id}`}
+                >
+                  <Badge tone="warning" size="xs" dot>
+                    {inboundIssueLabel(inbound)}
+                  </Badge>
+                </Link>
+              ) : (
+                <Badge
+                  tone="warning"
+                  size="xs"
+                  dot
+                  tooltip={inboundIssueTooltip(inbound)}
+                >
+                  {inboundIssueLabel(inbound)}
+                </Badge>
+              )
             )}
             {actionable && recount && (
               // ux-release-gate A11Y-002/INTER-201/INTER-202: the tooltip

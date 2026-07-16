@@ -211,8 +211,18 @@ export default function ProcurementPage(): JSX.Element {
           verification, count freshness, forecast age, firmed-plan window and
           the engine's structural warnings as chips. Replaces the previous
           stack of full-width warning banners; the machine-readable warning
-          payload also surfaces inline on the affected rows in ActionList. */}
-      {session && <IntegrityStrip session={session} />}
+          payload also surfaces inline on the affected rows in ActionList.
+          Tranche 133: onRefresh reuses handleStart (the same supersede-
+          confirm flow as the header's "הרצת מושב חדש") so a planner who just
+          finished a physical count can get updated recommendations without
+          hunting for the header button. */}
+      {session && (
+        <IntegrityStrip
+          session={session}
+          onRefresh={handleStart}
+          refreshPending={startMut.isPending}
+        />
+      )}
 
       {/* Approved purchase recommendations → PO. Canonical conversion home
           after planning runs were made diagnostic-only (Tranche 072). Renders

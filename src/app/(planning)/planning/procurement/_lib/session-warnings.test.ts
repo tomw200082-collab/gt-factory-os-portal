@@ -1,17 +1,24 @@
 // ---------------------------------------------------------------------------
-// Session-warning decoding tests — Tranche 132.
+// Session-warning decoding tests — Tranche 132, extended Tranche 133.
 //
 //   W1 — builds a target→issues map from the machine-readable lines payload
 //   W2 — issue labels: no-ETA quantity, overdue days
 //   W3 — unknown codes / missing payloads degrade gracefully
 //   W4 — warning chips carry Hebrew labels with the line count
+//   W6 — PO-hygiene warning chips resolve a fix href to the first PO
+//   W7 — components_without_supplier resolves is_item-aware master-data hrefs
+//   W8 — stale_stock_input has no href (its fix is the refresh action, not a link)
+//   W9 — inboundIssuePrimaryHref follows the same worst-first priority as the label
 // ---------------------------------------------------------------------------
 
 import { describe, expect, it } from "vitest";
 import {
   buildInboundIssueMap,
   inboundIssueLabel,
+  inboundIssuePrimaryHref,
   inboundIssueTooltip,
+  parseUnassignedTargets,
+  unassignedFixHref,
   warningChip,
 } from "./session-warnings";
 import type { PurchaseSessionWarning } from "../../purchase-session/_lib/types";
@@ -85,5 +92,76 @@ describe("buildInboundIssueMap", () => {
     expect(generic.tooltip).toBe("details here");
     const noDetail = warningChip({ code: "weird", detail: "" });
     expect(noDetail.tooltip).toBe("פנו לתמיכה לפרטים.");
+  });
+
+  it("W6 PO-hygiene warning chips resolve a fix href to the first affected PO", () => {
+    expect(warningChip(WARNINGS[0]).href).toBe("/purchase-orders/PO-2026-00263");
+    expect(warningChip(WARNINGS[1]).href).toBe("/purchase-orders/PO-2026-00216");
+  });
+
+  it("W7 components_without_supplier resolves is_item-aware master-data hrefs (0286)", () => {
+    const componentWarning: PurchaseSessionWarning = {
+      code: "components_without_supplier",
+      detail: "1 planned line(s) …",
+      lines: [
+        {
+          target_id: "RAW-APPLE-DRY",
+          is_item: false,
+          label: "Dried Apple",
+          qty_purchase: 12,
+          uom: "KG",
+          need_date: "2026-07-20",
+        },
+      ],
+    };
+    const itemWarning: PurchaseSessionWarning = {
+      code: "components_without_supplier",
+      detail: "1 planned line(s) …",
+      lines: [
+        { target_id: "FG-COLA-1L", is_item: true, label: "Cola 1L" },
+      ],
+    };
+    const preMigrationWarning: PurchaseSessionWarning = {
+      code: "components_without_supplier",
+      detail: "1 planned line(s) …",
+      lines: [{ target_id: "SEMI-FRE-BASE", label: "Fresh Tea Base" }], // no is_item — pre-0286 session
+    };
+
+    expect(warningChip(componentWarning).href).toBe(
+      "/admin/masters/components/RAW-APPLE-DRY",
+    );
+    expect(warningChip(itemWarning).href).toBe(
+      "/admin/masters/items/FG-COLA-1L",
+    );
+    // Never a guessed route — degrade to no link on old sessions.
+    expect(warningChip(preMigrationWarning).href).toBeNull();
+
+    const targets = parseUnassignedTargets(componentWarning);
+    expect(targets).toHaveLength(1);
+    expect(targets[0].isItem).toBe(false);
+    expect(unassignedFixHref(targets[0])).toBe(
+      "/admin/masters/components/RAW-APPLE-DRY",
+    );
+    expect(unassignedFixHref({ targetId: "X", isItem: null })).toBeNull();
+  });
+
+  it("W8 stale_stock_input has no href — its fix is the refresh action, not a navigation link", () => {
+    const chip = warningChip({
+      code: "stale_stock_input",
+      detail: "rebuild_verifier drift is 3 — …",
+    });
+    expect(chip.href).toBeNull();
+    expect(chip.tooltip).toContain("רענון המלצות");
+  });
+
+  it("W9 inboundIssuePrimaryHref follows the same worst-first priority as the label", () => {
+    const map = buildInboundIssueMap(WARNINGS);
+    expect(inboundIssuePrimaryHref(map.get("RAW-NANA")!)).toBe(
+      "/purchase-orders/PO-2026-00263",
+    );
+    expect(inboundIssuePrimaryHref(map.get("PKG-BOTTLE-1L")!)).toBe(
+      "/purchase-orders/PO-2026-00216",
+    );
+    expect(inboundIssuePrimaryHref([])).toBeNull();
   });
 });
