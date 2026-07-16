@@ -124,7 +124,9 @@ describe("classifyPo — fallback (no trace)", () => {
     expect(
       classifyPo(po({ order_by_date: "2026-06-10" }), TODAY).whyNow,
     ).toMatch(/אפשר להמתין/);
-    expect(classifyPo(po({ status: "placed" }), TODAY).whyNow).toBe("הוזמן");
+    expect(classifyPo(po({ status: "placed" }), TODAY).whyNow).toBe(
+      "הועבר לביצוע",
+    );
     expect(classifyPo(po({ status: "skipped" }), TODAY).whyNow).toBe(
       "דולג / בוטל",
     );

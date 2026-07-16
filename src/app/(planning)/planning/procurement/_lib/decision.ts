@@ -252,7 +252,11 @@ function whyNowFallback(
   days: number | null,
 ): string {
   if (bucket === "handled") {
-    return input.status === "placed" ? "הוזמן" : "דולג / בוטל";
+    // Tranche 130 renamed the placed-status label to "הועבר לביצוע" (it hands
+    // to the office-manager queue, not a completed order) — match it here too
+    // (ux-release-gate COPY-001 caught this row's whyNow line still saying
+    // the old "הוזמן" while its status badge already says the new wording).
+    return input.status === "placed" ? "הועבר לביצוע" : "דולג / בוטל";
   }
 
   const orderBy = fmtDateHe(input.order_by_date);

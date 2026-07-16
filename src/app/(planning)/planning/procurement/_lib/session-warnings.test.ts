@@ -76,8 +76,14 @@ describe("buildInboundIssueMap", () => {
   it("W4 warning chips carry Hebrew labels with counts", () => {
     expect(warningChip(WARNINGS[0]).label).toBe("2 בדרך ללא תאריך");
     expect(warningChip(WARNINGS[1]).label).toBe("1 אספקות באיחור");
+  });
+
+  it("W5 an unmapped warning code never leaks its raw name as the label (ux-release-gate COPY-003)", () => {
     const generic = warningChip({ code: "weird", detail: "details here" });
-    expect(generic.label).toBe("weird");
+    expect(generic.label).not.toBe("weird");
+    expect(generic.label).toBe("התראת מערכת");
     expect(generic.tooltip).toBe("details here");
+    const noDetail = warningChip({ code: "weird", detail: "" });
+    expect(noDetail.tooltip).toBe("פנו לתמיכה לפרטים.");
   });
 });

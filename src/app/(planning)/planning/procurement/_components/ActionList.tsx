@@ -612,7 +612,7 @@ export function ActionList({
             <option value="all">כל הקטגוריות</option>
             <option value="must_today">חייב לצאת היום</option>
             <option value="can_wait">יכול לחכות</option>
-            <option value="recount">דורש ספירה</option>
+            <option value="recount">לספור קודם</option>
             <option value="handled">טופל</option>
           </select>
           <select

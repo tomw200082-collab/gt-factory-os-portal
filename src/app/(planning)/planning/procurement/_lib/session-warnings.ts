@@ -154,6 +154,14 @@ export function warningChip(w: PurchaseSessionWarning): WarningChip {
         tooltip: w.detail,
       };
     default:
-      return { code: w.code, label: w.code, tooltip: w.detail };
+      // ux-release-gate COPY-003: never surface the raw backend code as a
+      // user-facing label (the repo's established rule — see FLOW-016 in
+      // purchase-session/_lib/api.ts's jsonOrThrow). Only reachable for a
+      // warning code this switch hasn't been taught yet.
+      return {
+        code: w.code,
+        label: "התראת מערכת",
+        tooltip: w.detail || "פנו לתמיכה לפרטים.",
+      };
   }
 }
