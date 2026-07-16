@@ -7,9 +7,12 @@
 // then place (create the real PO). Reuses the existing session mutations.
 //
 // State machine (driven by live po.status):
-//   proposed → "אשר והפק מסמך"  (approve)
-//   approved → order document + expected-date + "סמן כבוצע — צור הזמנה" (place)
-//   placed   → success + PO ref (parent auto-advances)
+//   proposed → "הפק מסמך הזמנה"  (approve — generates the Hebrew order document)
+//   approved → order document + expected-date + "העבר לביצוע רכש" (place —
+//              hands the order to the office manager's placement queue; it is
+//              NOT yet placed with the supplier, so the label must not read as
+//              "done" — Tom-directed 2026-07-16, ux-release-gate FLOW-6)
+//   placed   → "הועבר לביצוע" + PO ref (parent auto-advances)
 // "דלג" is available until resolved. Line edit (final_qty + drop) is inline.
 // ---------------------------------------------------------------------------
 
@@ -17,6 +20,7 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
+  Ban,
   Check,
   ClipboardCopy,
   FileText,
@@ -58,9 +62,18 @@ const TIER_TONE: Record<PoTier, BadgeTone> = {
 const STATUS_LABEL: Record<PoStatus, string> = {
   proposed: "מוצע",
   approved: "אושר — מוכן לשליחה",
-  placed: "בוצע",
-  skipped: "דולג",
+  placed: "הועבר לביצוע",
+  skipped: "דולג / בוטל",
 };
+
+// Preset cancel reasons (Tom-directed 2026-07-16 — same catalogue as the
+// placement-queue discard panel, tranche 130, for corridor-wide consistency).
+const CANCEL_REASONS = [
+  "כבר לא נדרש",
+  "כפילות",
+  "המלצת המנוע שגויה",
+  "לבחון שוב בסבב הבא",
+] as const;
 const STATUS_TONE: Record<PoStatus, BadgeTone> = {
   proposed: "neutral",
   approved: "info",
@@ -212,6 +225,19 @@ export function FocusCard({
   // write-back for small deltas and appears only when a price was edited.
   const [draftPrice, setDraftPrice] = useState<Record<string, string>>({});
   const [confirmPriceUpdate, setConfirmPriceUpdate] = useState(true);
+
+  // Cancel-with-reason (Tom-directed 2026-07-16): distinct from the quick,
+  // reason-less "דחה" (defer) — "דחה" auto-resurfaces next session because the
+  // engine recomputes from live net demand every week; this is the deliberate
+  // alternative for a PO that should be declined WITH an audit trail. Same
+  // backend action (skip → status='skipped'), now passing skip_reason (the
+  // column + write path already existed server-side — the UI never collected
+  // it until now).
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelDetail, setCancelDetail] = useState("");
+  const composedCancelReason =
+    cancelReason === "אחר" ? cancelDetail.trim() : cancelReason;
 
   const primaryRef = useRef<HTMLButtonElement>(null);
 
@@ -641,7 +667,7 @@ export function FocusCard({
         >
           <Check className="h-5 w-5 shrink-0" aria-hidden />
           <span>
-            ההזמנה נוצרה וממתינה לביצוע מול הספק.
+            ההזמנה הועברה לתור הביצוע של מנהלת החשבונות.
             {po.po_id && (
               <span className="font-mono text-xs">
                 {" "}·{" "}
@@ -655,6 +681,76 @@ export function FocusCard({
               </span>
             )}
           </span>
+        </div>
+      )}
+
+      {/* Cancel-with-reason panel */}
+      {cancelling && po.status !== "placed" && po.status !== "skipped" && (
+        <div
+          className="space-y-3 rounded-lg border border-danger/30 bg-danger-softer/40 p-4"
+          data-testid={`focus-cancel-panel-${po.session_po_id}`}
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <label className="text-xs font-medium text-fg">סיבת ביטול</label>
+            <select
+              className="input w-48"
+              value={cancelReason}
+              onChange={(e) => setCancelReason(e.target.value)}
+              data-testid={`focus-cancel-reason-${po.session_po_id}`}
+            >
+              <option value="">— בחר/י —</option>
+              {CANCEL_REASONS.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+              <option value="אחר">אחר…</option>
+            </select>
+            {cancelReason === "אחר" ? (
+              <input
+                type="text"
+                className="input w-48"
+                placeholder="פרט/י סיבה"
+                value={cancelDetail}
+                onChange={(e) => setCancelDetail(e.target.value)}
+                aria-label="פירוט סיבת הביטול"
+                data-testid={`focus-cancel-detail-${po.session_po_id}`}
+              />
+            ) : null}
+          </div>
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setCancelling(false);
+                setCancelReason("");
+                setCancelDetail("");
+              }}
+              disabled={busy}
+              className="btn btn-ghost btn-sm"
+            >
+              חזרה
+            </button>
+            <button
+              type="button"
+              onClick={() =>
+                skipMut.mutate(
+                  {
+                    poId: po.session_po_id,
+                    skip_reason: composedCancelReason,
+                  },
+                  { onSuccess: () => onResolve({ kind: "skipped" }) },
+                )
+              }
+              disabled={!composedCancelReason || busy}
+              title={!composedCancelReason ? "יש לבחור סיבת ביטול" : undefined}
+              className="btn btn-sm border border-danger/50 bg-danger-softer text-danger-fg hover:bg-danger/10"
+              data-testid={`focus-cancel-submit-${po.session_po_id}`}
+            >
+              <Ban className="h-3.5 w-3.5" aria-hidden />
+              בטל הזמנה
+            </button>
+          </div>
         </div>
       )}
 
@@ -699,10 +795,23 @@ export function FocusCard({
               }
               disabled={busy}
               className="btn btn-sm btn-ghost"
+              title="דחייה מהירה — ההזמנה תוצע שוב אוטומטית בסבב הבא אם הצורך עדיין קיים"
               data-testid="focus-skip"
             >
               <SkipForward className="h-3.5 w-3.5" aria-hidden />
               דלג
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setCancelling(true)}
+              disabled={busy}
+              className="btn btn-sm btn-ghost text-danger-fg hover:bg-danger-softer"
+              title="כמו דלג, אבל עם סיבה מתועדת לביקורת — לשימוש כשרוצים לתעד למה"
+              data-testid="focus-cancel-toggle"
+            >
+              <Ban className="h-3.5 w-3.5" aria-hidden />
+              בטל עם סיבה
             </button>
 
             {po.status === "proposed" && (
@@ -714,7 +823,7 @@ export function FocusCard({
                 className="btn btn-accent"
                 data-testid="focus-approve"
               >
-                {approveMut.isPending ? "מאשר…" : "אשר והפק מסמך"}
+                {approveMut.isPending ? "מפיק מסמך…" : "הפק מסמך הזמנה"}
               </button>
             )}
 
@@ -746,7 +855,7 @@ export function FocusCard({
                 className="btn btn-accent"
                 data-testid="focus-place"
               >
-                {placeMut.isPending ? "יוצר PO…" : "סמן כבוצע — צור הזמנה"}
+                {placeMut.isPending ? "מעביר…" : "העבר לביצוע רכש"}
               </button>
             )}
           </div>

@@ -218,6 +218,15 @@ export const HOME_TILES: readonly HomeTile[] = [
     he: { label: "הזמנות רכש", blurb: "הזמנות פתוחות, חלקיות ושהתקבלו." },
   },
   {
+    // FLOW-8 (ux-release-gate 2026-07-16, closed by Tom decision same day):
+    // this tile is minRole:"planner" because placing an order requires
+    // planning:execute — but ROLE_COCKPIT gives every "planner" persona
+    // lang:"en" (only "viewer" gets "he"), so a `he` field here could never
+    // render for any real user. The office manager (Doreen) is provisioned
+    // role=planner (she needs planning:execute), so she sees this tile in
+    // English on /home; her actual work page (/purchase-orders/placement-queue)
+    // stays Hebrew regardless, per its own route-level authorization below.
+    // Do not re-add `he` here without also revisiting ROLE_COCKPIT's lang map.
     href: "/purchase-orders/placement-queue",
     label: "Orders to place",
     blurb: "Confirm supplier price + terms, then place the order.",
@@ -225,7 +234,6 @@ export const HOME_TILES: readonly HomeTile[] = [
     group: "office",
     minRole: "planner",
     required: "planning:execute",
-    he: { label: "הזמנות לביצוע", blurb: "אישור מחיר ותנאי תשלום, וביצוע ההזמנה." },
   },
   {
     href: "/admin/cost-drafts",

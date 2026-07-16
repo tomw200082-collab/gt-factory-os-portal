@@ -125,4 +125,38 @@ describe("PlacementRow", () => {
     ) as HTMLButtonElement;
     await waitFor(() => expect(submitBtn.disabled).toBe(false));
   });
+
+  it("cancel-with-reason: discard stays disabled until a reason is chosen (Tom-directed 2026-07-16)", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async () =>
+        new Response(JSON.stringify({ rows: [] }), { status: 200 }),
+      );
+
+    renderRow();
+
+    // Open the cancel panel from the header (no need to expand the lines).
+    await userEvent.click(screen.getByTestId("placement-cancel-toggle-po1"));
+
+    const cancelBtn = screen.getByTestId(
+      "placement-cancel-submit-po1",
+    ) as HTMLButtonElement;
+    // No reason yet → disabled with an explanatory title.
+    expect(cancelBtn.disabled).toBe(true);
+    expect(cancelBtn.getAttribute("title")).toContain("סיבת");
+
+    // A disabled discard button must not reach the cancel endpoint.
+    await userEvent.click(cancelBtn);
+    expect(
+      fetchMock.mock.calls.filter((c) => String(c[0]).includes("/cancel"))
+        .length,
+    ).toBe(0);
+
+    // Choose a preset reason → discard enables.
+    const reasonSelect = screen.getByTestId(
+      "placement-cancel-reason-po1",
+    ) as HTMLSelectElement;
+    await userEvent.selectOptions(reasonSelect, "כפילות");
+    await waitFor(() => expect(cancelBtn.disabled).toBe(false));
+  });
 });

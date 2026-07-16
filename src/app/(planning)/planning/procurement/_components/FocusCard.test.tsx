@@ -158,4 +158,35 @@ describe("FocusCard", () => {
     opts.onSuccess();
     expect(onResolve).toHaveBeenCalledWith({ kind: "skipped" });
   });
+
+  it("F6 cancel-with-reason: submit stays disabled until a reason is chosen, then sends skip_reason (Tom-directed 2026-07-16)", async () => {
+    const user = userEvent.setup();
+    const onResolve = vi.fn();
+    render(
+      <FocusCard
+        po={makePo({ status: "proposed" })}
+        whyNow="חייב לצאת היום"
+        isOverdue={false}
+        onResolve={onResolve}
+      />,
+    );
+    await user.click(screen.getByTestId("focus-cancel-toggle"));
+    const submitBtn = screen.getByTestId(
+      "focus-cancel-submit-spo_1",
+    ) as HTMLButtonElement;
+    expect(submitBtn.disabled).toBe(true);
+
+    await user.selectOptions(
+      screen.getByTestId("focus-cancel-reason-spo_1"),
+      "כפילות",
+    );
+    expect(submitBtn.disabled).toBe(false);
+    await user.click(submitBtn);
+
+    expect(skipMutate).toHaveBeenCalledTimes(1);
+    const [args, opts] = skipMutate.mock.calls[0];
+    expect(args).toEqual({ poId: "spo_1", skip_reason: "כפילות" });
+    opts.onSuccess();
+    expect(onResolve).toHaveBeenCalledWith({ kind: "skipped" });
+  });
 });

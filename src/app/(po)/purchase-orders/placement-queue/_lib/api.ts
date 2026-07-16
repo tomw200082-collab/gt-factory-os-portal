@@ -154,6 +154,73 @@ export function usePoLines(poId: string, enabled: boolean) {
   });
 }
 
+export interface CancelArgs {
+  poId: string;
+  po_number: string;
+  // Human, operator-composed Hebrew reason (preset + optional free text). Shown
+  // in the confirm dialog and appended to the PO notes for audit.
+  reason: string;
+}
+
+// Cancel an APPROVED_TO_ORDER PO out of the placement queue, WITH a reason.
+// Tom-directed (2026-07-16): the office manager must be able to discard orders
+// that should no longer be placed (stale/duplicate/ordered-elsewhere) instead
+// of leaving them to rot in the queue. The reason is appended to the PO notes
+// (never overwriting the session-origin note) so the discard is auditable, then
+// the existing cancel endpoint flips APPROVED_TO_ORDER → CANCELLED (backend
+// cancel_handler supports this per migration 0258 — no backend change needed).
+export function useCancelOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: CancelArgs) => {
+      // 1. Best-effort read of existing notes so the reason is appended, not
+      //    overwritten. A read failure must never block the cancel itself.
+      let baseNotes = "";
+      try {
+        const detailRes = await fetch(
+          `/api/purchase-orders/${encodeURIComponent(args.poId)}`,
+          { headers: { Accept: "application/json" } },
+        );
+        if (detailRes.ok) {
+          const body = (await detailRes.json()) as
+            | { row?: { notes?: string | null }; notes?: string | null }
+            | null;
+          baseNotes = body?.row?.notes ?? body?.notes ?? "";
+        }
+      } catch {
+        baseNotes = "";
+      }
+      const stamp = new Date().toISOString().slice(0, 10);
+      const reasonLine = `בוטל מהתור ${stamp} — ${args.reason}`;
+      const notes = [baseNotes, reasonLine].filter(Boolean).join("\n");
+      // 2. Persist the reason (append) while the PO is still editable. A notes
+      //    write failure degrades to "reason not persisted" — it must not block
+      //    the discard, which is the operator's real intent.
+      try {
+        await fetch(`/api/purchase-orders/${encodeURIComponent(args.poId)}`, {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ notes }),
+        });
+      } catch {
+        // proceed to cancel regardless
+      }
+      // 3. Cancel (APPROVED_TO_ORDER → CANCELLED).
+      const res = await fetch(
+        `/api/purchase-orders/${encodeURIComponent(args.poId)}/cancel`,
+        { method: "POST", headers: { "content-type": "application/json" } },
+      );
+      return jsonOrThrow(res, "ביטול ההזמנה נכשל.");
+    },
+    onSuccess: () => {
+      // The cancelled PO leaves the queue and updates the PO list.
+      void qc.invalidateQueries({ queryKey: QUEUE_KEY });
+      void qc.invalidateQueries({ queryKey: ["planner", "purchase-orders"] });
+      void qc.invalidateQueries({ queryKey: ["purchase-orders"] });
+    },
+  });
+}
+
 export function usePlaceOrder() {
   const qc = useQueryClient();
   return useMutation({

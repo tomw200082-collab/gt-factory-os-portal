@@ -22,6 +22,7 @@ import {
   ChevronRight,
   Clock,
   PackageOpen,
+  Search,
 } from "lucide-react";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
@@ -60,7 +61,7 @@ const TIER_TONE: Record<PoTier, BadgeTone> = {
 const STATUS_LABEL: Record<PoStatus, string> = {
   proposed: "מוצע",
   approved: "אושר — מוכן לשליחה",
-  placed: "בוצע",
+  placed: "הועבר לביצוע",
   skipped: "דולג",
 };
 const STATUS_TONE: Record<PoStatus, BadgeTone> = {
@@ -312,12 +313,43 @@ export interface ActionListProps {
   today?: string;
 }
 
+// Filter/sort controls (Tom-directed 2026-07-16 — every corridor page needs
+// them). Pure client-side over the already-fetched session; the decision
+// engine's must_today/can_wait/handled buckets are untouched, filter/sort
+// apply WITHIN each bucket so the priority grouping stays intact.
+type TierFilter = "all" | PoTier;
+type SortKey = "order_by_date" | "amount_desc" | "supplier";
+
+const SORTERS: Record<SortKey, (a: PurchaseSessionPo, b: PurchaseSessionPo) => number> = {
+  order_by_date: (a, b) => (a.order_by_date < b.order_by_date ? -1 : a.order_by_date > b.order_by_date ? 1 : 0),
+  amount_desc: (a, b) => b.total_cost - a.total_cost,
+  supplier: (a, b) => a.supplier_snapshot.localeCompare(b.supplier_snapshot, "he"),
+};
+
 export function ActionList({ pos, onOpen, today }: ActionListProps): JSX.Element {
-  const groups = useMemo(() => groupByDecision(pos, today), [pos, today]);
+  const [supplierQuery, setSupplierQuery] = useState("");
+  const [tierFilter, setTierFilter] = useState<TierFilter>("all");
+  const [sortKey, setSortKey] = useState<SortKey>("order_by_date");
+
+  const filtered = useMemo(() => {
+    const q = supplierQuery.trim().toLowerCase();
+    return pos
+      .filter((po) => !q || po.supplier_snapshot.toLowerCase().includes(q))
+      .filter((po) => tierFilter === "all" || po.tier === tierFilter)
+      .sort(SORTERS[sortKey]);
+  }, [pos, supplierQuery, tierFilter, sortKey]);
+
+  const groups = useMemo(() => groupByDecision(filtered, today), [filtered, today]);
+  const isFiltered =
+    supplierQuery.trim() !== "" || tierFilter !== "all";
 
   // One orienting line for the whole session — how much must move today and
   // the money at risk — so the planner knows where to start before scanning.
-  const mustToday = groups.must_today;
+  // Always computed from the FULL, unfiltered session: a supplier search or
+  // tier filter narrows the list below, but must never shrink the reported
+  // risk — that would hide real exposure behind an active filter.
+  const fullGroups = useMemo(() => groupByDecision(pos, today), [pos, today]);
+  const mustToday = fullGroups.must_today;
   const atRiskTotal = mustToday.reduce((s, r) => s + (r.po.total_cost || 0), 0);
 
   return (
@@ -336,6 +368,71 @@ export function ActionList({ pos, onOpen, today }: ActionListProps): JSX.Element
           </span>
         </div>
       )}
+
+      {/* Filter + sort (Tom-directed 2026-07-16) */}
+      <div
+        className="flex flex-wrap items-center gap-2 rounded-md border border-border/60 bg-bg-subtle/20 px-3 py-2"
+        data-testid="procurement-filter-bar"
+      >
+        <div className="relative flex-1 min-w-[10rem]">
+          <Search
+            className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-faint"
+            aria-hidden
+          />
+          <input
+            type="search"
+            value={supplierQuery}
+            onChange={(e) => setSupplierQuery(e.target.value)}
+            placeholder="סינון לפי ספק…"
+            aria-label="סינון לפי ספק"
+            className="input w-full py-1.5 pr-8 text-xs"
+            data-testid="procurement-filter-supplier"
+          />
+        </div>
+        <select
+          value={tierFilter}
+          onChange={(e) => setTierFilter(e.target.value as TierFilter)}
+          aria-label="סינון לפי דחיפות"
+          className="input w-36 py-1.5 text-xs"
+          data-testid="procurement-filter-tier"
+        >
+          <option value="all">כל הדחיפויות</option>
+          <option value="urgent">{TIER_LABEL.urgent}</option>
+          <option value="must">{TIER_LABEL.must}</option>
+          <option value="recommended">{TIER_LABEL.recommended}</option>
+        </select>
+        <select
+          value={sortKey}
+          onChange={(e) => setSortKey(e.target.value as SortKey)}
+          aria-label="מיון"
+          className="input w-40 py-1.5 text-xs"
+          data-testid="procurement-sort"
+        >
+          <option value="order_by_date">מיין: תאריך הזמנה</option>
+          <option value="amount_desc">מיין: סכום (גבוה תחילה)</option>
+          <option value="supplier">מיין: ספק (א-ת)</option>
+        </select>
+        {isFiltered && (
+          <button
+            type="button"
+            onClick={() => {
+              setSupplierQuery("");
+              setTierFilter("all");
+            }}
+            className="text-3xs font-medium text-accent hover:underline"
+            data-testid="procurement-filter-clear"
+          >
+            נקה סינון
+          </button>
+        )}
+      </div>
+
+      {isFiltered && filtered.length === 0 && (
+        <div className="rounded-md border border-border/60 bg-bg-subtle/30 px-4 py-6 text-center text-xs text-fg-muted">
+          אין הזמנות התואמות את הסינון.
+        </div>
+      )}
+
       {SECTIONS.map((section) => {
         const rows = groups[section.key];
         const Icon = section.icon;
