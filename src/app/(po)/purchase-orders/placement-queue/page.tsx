@@ -12,7 +12,7 @@
 // role in the locked role lattice; the office manager signs in as planner.
 // ---------------------------------------------------------------------------
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -21,19 +21,49 @@ import {
   CheckCircle2,
   X,
   Ban,
+  Search,
 } from "lucide-react";
 import { RoleGate } from "@/lib/auth/role-gate";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
-import { ApiError, usePlacementQueue } from "./_lib/api";
+import { ApiError, usePlacementQueue, type QueuePo } from "./_lib/api";
 import { PlacementRow } from "./_components/PlacementRow";
+
+// Filter/sort (Tom-directed 2026-07-16 — every corridor page needs them).
+// Client-side over the already-fetched queue; the default order-by-date sort
+// (urgency-first, set by usePlacementQueue) stays the default sort key here.
+type SortKey = "order_by_date" | "amount_desc" | "supplier";
+
+const SORTERS: Record<SortKey, (a: QueuePo, b: QueuePo) => number> = {
+  order_by_date: (a, b) => {
+    const ax = a.order_by_date ?? "9999-12-31";
+    const bx = b.order_by_date ?? "9999-12-31";
+    return ax < bx ? -1 : ax > bx ? 1 : a.po_number.localeCompare(b.po_number);
+  },
+  amount_desc: (a, b) => Number(b.total_net) - Number(a.total_net),
+  supplier: (a, b) =>
+    (a.supplier_name ?? "").localeCompare(b.supplier_name ?? "", "he"),
+};
 
 function QueueInner(): JSX.Element {
   const { data, isLoading, isError, error, refetch } = usePlacementQueue();
   const rows = data?.rows ?? [];
   const todayIso = new Date().toISOString().slice(0, 10);
+  // Always computed from the FULL queue — a supplier filter must never shrink
+  // the reported overdue count, or it would hide real exposure behind an
+  // active filter (same correctness rule as the procurement ActionList).
   const overdueCount = rows.filter(
     (po) => !!po.order_by_date && po.order_by_date < todayIso,
   ).length;
+
+  const [supplierQuery, setSupplierQuery] = useState("");
+  const [sortKey, setSortKey] = useState<SortKey>("order_by_date");
+  const isFiltered = supplierQuery.trim() !== "";
+  const visibleRows = useMemo(() => {
+    const q = supplierQuery.trim().toLowerCase();
+    return rows
+      .filter((po) => !q || (po.supplier_name ?? "").toLowerCase().includes(q))
+      .sort(SORTERS[sortKey]);
+  }, [rows, supplierQuery, sortKey]);
   // Durable success confirmation: a placed PO's row unmounts (it leaves the
   // queue), so the page owns the "order placed" banner.
   const [placed, setPlaced] = useState<{
@@ -191,8 +221,58 @@ function QueueInner(): JSX.Element {
               </span>
             </div>
           )}
+
+          {/* Filter + sort (Tom-directed 2026-07-16) */}
+          <div
+            className="flex flex-wrap items-center gap-2 rounded-md border border-border/60 bg-bg-subtle/20 px-3 py-2"
+            data-testid="placement-queue-filter-bar"
+          >
+            <div className="relative flex-1 min-w-[10rem]">
+              <Search
+                className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-faint"
+                aria-hidden
+              />
+              <input
+                type="search"
+                value={supplierQuery}
+                onChange={(e) => setSupplierQuery(e.target.value)}
+                placeholder="סינון לפי ספק…"
+                aria-label="סינון לפי ספק"
+                className="input w-full py-1.5 pr-8 text-xs"
+                data-testid="placement-queue-filter-supplier"
+              />
+            </div>
+            <select
+              value={sortKey}
+              onChange={(e) => setSortKey(e.target.value as SortKey)}
+              aria-label="מיון"
+              className="input w-40 py-1.5 text-xs"
+              data-testid="placement-queue-sort"
+            >
+              <option value="order_by_date">מיין: דחיפות (ברירת מחדל)</option>
+              <option value="amount_desc">מיין: סכום (גבוה תחילה)</option>
+              <option value="supplier">מיין: ספק (א-ת)</option>
+            </select>
+            {isFiltered && (
+              <button
+                type="button"
+                onClick={() => setSupplierQuery("")}
+                className="text-3xs font-medium text-accent hover:underline"
+                data-testid="placement-queue-filter-clear"
+              >
+                נקה סינון
+              </button>
+            )}
+          </div>
+
+          {isFiltered && visibleRows.length === 0 && (
+            <div className="rounded-md border border-border/60 bg-bg-subtle/30 px-4 py-6 text-center text-xs text-fg-muted">
+              אין הזמנות התואמות את הסינון.
+            </div>
+          )}
+
           <ul className="space-y-3" data-testid="placement-queue-list">
-            {rows.map((po) => (
+            {visibleRows.map((po) => (
               <PlacementRow
                 key={po.po_id}
                 po={po}

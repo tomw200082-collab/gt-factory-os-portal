@@ -107,4 +107,38 @@ describe("ActionList", () => {
     // stub to its target.
     expect(open.getAttribute("href")).toBe("/planning/procurement");
   });
+
+  it("L6 supplier filter narrows the visible rows to a matching supplier (Tom-directed 2026-07-16)", async () => {
+    const user = userEvent.setup();
+    render(<ActionList pos={POS} today={TODAY} />);
+    await user.type(
+      screen.getByTestId("procurement-filter-supplier"),
+      "overdue",
+    );
+    expect(screen.getByTestId("procurement-row-overdue")).toBeTruthy();
+    expect(screen.queryByTestId("procurement-row-future")).toBeNull();
+    expect(screen.queryByTestId("procurement-row-done")).toBeNull();
+  });
+
+  it("L7 the at-risk summary always reflects the FULL session, even while a filter narrows the list (Tom-directed 2026-07-16)", async () => {
+    const user = userEvent.setup();
+    const extra = makePo("overdue2", {
+      order_by_date: "2026-05-25",
+      supplier_snapshot: "ספק אחר",
+      total_cost: 250,
+    });
+    render(<ActionList pos={[...POS, extra]} today={TODAY} />);
+    // Both overdue/must-today POs count toward the risk banner up front.
+    expect(screen.getByTestId("procurement-at-risk-summary").textContent).toContain("2 חייב");
+
+    // Filtering to a supplier that only matches ONE of the two overdue POs
+    // must not shrink the reported risk — it should still say 2.
+    await user.type(
+      screen.getByTestId("procurement-filter-supplier"),
+      "ספק אחר",
+    );
+    expect(screen.queryByTestId("procurement-row-overdue")).toBeNull();
+    expect(screen.getByTestId("procurement-row-overdue2")).toBeTruthy();
+    expect(screen.getByTestId("procurement-at-risk-summary").textContent).toContain("2 חייב");
+  });
 });
