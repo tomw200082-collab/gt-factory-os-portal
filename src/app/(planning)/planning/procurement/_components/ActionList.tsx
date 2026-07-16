@@ -60,7 +60,7 @@ const TIER_TONE: Record<PoTier, BadgeTone> = {
 const STATUS_LABEL: Record<PoStatus, string> = {
   proposed: "מוצע",
   approved: "אושר — מוכן לשליחה",
-  placed: "בוצע",
+  placed: "הועבר לביצוע",
   skipped: "דולג",
 };
 const STATUS_TONE: Record<PoStatus, BadgeTone> = {

@@ -20,6 +20,7 @@ import {
   ClipboardCheck,
   CheckCircle2,
   X,
+  Ban,
 } from "lucide-react";
 import { RoleGate } from "@/lib/auth/role-gate";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
@@ -38,6 +39,12 @@ function QueueInner(): JSX.Element {
   const [placed, setPlaced] = useState<{
     po_id: string;
     po_number: string;
+  } | null>(null);
+  // Durable discard confirmation — the cancelled row unmounts on refetch, so
+  // the page owns the "order removed from queue" banner (Tom-directed).
+  const [cancelled, setCancelled] = useState<{
+    po_number: string;
+    reason: string;
   } | null>(null);
 
   return (
@@ -82,6 +89,31 @@ function QueueInner(): JSX.Element {
             className="shrink-0 rounded p-0.5 text-success-fg hover:bg-success/10"
             aria-label="סגירת ההודעה"
             data-testid="placement-queue-success-dismiss"
+          >
+            <X className="h-4 w-4" aria-hidden />
+          </button>
+        </div>
+      ) : null}
+
+      {cancelled ? (
+        <div
+          role="status"
+          aria-live="polite"
+          className="flex items-start gap-2 rounded-md border border-border/60 bg-bg-subtle/60 px-4 py-3 text-sm text-fg"
+          data-testid="placement-queue-cancelled"
+        >
+          <Ban className="mt-0.5 h-4 w-4 shrink-0 text-fg-muted" aria-hidden />
+          <span className="min-w-0 flex-1">
+            ההזמנה <span className="font-semibold">{cancelled.po_number}</span>{" "}
+            בוטלה והוסרה מהתור.{" "}
+            <span className="text-fg-muted">סיבה: {cancelled.reason}</span>
+          </span>
+          <button
+            type="button"
+            onClick={() => setCancelled(null)}
+            className="shrink-0 rounded p-0.5 text-fg-muted hover:bg-bg-subtle"
+            aria-label="סגירת ההודעה"
+            data-testid="placement-queue-cancelled-dismiss"
           >
             <X className="h-4 w-4" aria-hidden />
           </button>
@@ -164,9 +196,14 @@ function QueueInner(): JSX.Element {
               <PlacementRow
                 key={po.po_id}
                 po={po}
-                onPlaced={(p) =>
-                  setPlaced({ po_id: p.po_id, po_number: p.po_number })
-                }
+                onPlaced={(p) => {
+                  setCancelled(null);
+                  setPlaced({ po_id: p.po_id, po_number: p.po_number });
+                }}
+                onCancelled={(p, reason) => {
+                  setPlaced(null);
+                  setCancelled({ po_number: p.po_number, reason });
+                }}
               />
             ))}
           </ul>

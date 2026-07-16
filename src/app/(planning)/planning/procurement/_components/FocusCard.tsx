@@ -7,9 +7,12 @@
 // then place (create the real PO). Reuses the existing session mutations.
 //
 // State machine (driven by live po.status):
-//   proposed → "אשר והפק מסמך"  (approve)
-//   approved → order document + expected-date + "סמן כבוצע — צור הזמנה" (place)
-//   placed   → success + PO ref (parent auto-advances)
+//   proposed → "הפק מסמך הזמנה"  (approve — generates the Hebrew order document)
+//   approved → order document + expected-date + "העבר לביצוע רכש" (place —
+//              hands the order to the office manager's placement queue; it is
+//              NOT yet placed with the supplier, so the label must not read as
+//              "done" — Tom-directed 2026-07-16, ux-release-gate FLOW-6)
+//   placed   → "הועבר לביצוע" + PO ref (parent auto-advances)
 // "דלג" is available until resolved. Line edit (final_qty + drop) is inline.
 // ---------------------------------------------------------------------------
 
@@ -58,7 +61,7 @@ const TIER_TONE: Record<PoTier, BadgeTone> = {
 const STATUS_LABEL: Record<PoStatus, string> = {
   proposed: "מוצע",
   approved: "אושר — מוכן לשליחה",
-  placed: "בוצע",
+  placed: "הועבר לביצוע",
   skipped: "דולג",
 };
 const STATUS_TONE: Record<PoStatus, BadgeTone> = {
@@ -641,7 +644,7 @@ export function FocusCard({
         >
           <Check className="h-5 w-5 shrink-0" aria-hidden />
           <span>
-            ההזמנה נוצרה וממתינה לביצוע מול הספק.
+            ההזמנה הועברה לתור הביצוע של מנהלת החשבונות.
             {po.po_id && (
               <span className="font-mono text-xs">
                 {" "}·{" "}
@@ -714,7 +717,7 @@ export function FocusCard({
                 className="btn btn-accent"
                 data-testid="focus-approve"
               >
-                {approveMut.isPending ? "מאשר…" : "אשר והפק מסמך"}
+                {approveMut.isPending ? "מפיק מסמך…" : "הפק מסמך הזמנה"}
               </button>
             )}
 
@@ -746,7 +749,7 @@ export function FocusCard({
                 className="btn btn-accent"
                 data-testid="focus-place"
               >
-                {placeMut.isPending ? "יוצר PO…" : "סמן כבוצע — צור הזמנה"}
+                {placeMut.isPending ? "מעביר…" : "העבר לביצוע רכש"}
               </button>
             )}
           </div>

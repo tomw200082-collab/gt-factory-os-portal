@@ -16,6 +16,8 @@ import {
   ChevronDown,
   ChevronUp,
   AlertTriangle,
+  XCircle,
+  Ban,
 } from "lucide-react";
 import { useConfirm } from "@/components/overlays/ConfirmDialog";
 import { formatIls } from "@/lib/utils/format-money";
@@ -24,9 +26,19 @@ import { PAYMENT_TERMS, paymentTermByCode } from "@/lib/payment-terms";
 import {
   usePoLines,
   usePlaceOrder,
+  useCancelOrder,
   type QueuePo,
   type QueuePoLine,
 } from "../_lib/api";
+
+// Preset discard reasons (Tom-directed 2026-07-16). "אחר" requires free text.
+const CANCEL_REASONS = [
+  "כבר לא נדרש",
+  "כפילות",
+  "הוזמן בערוץ אחר",
+  "הספק לא זמין",
+  "מחיר/תנאים לא מתאימים",
+] as const;
 
 function lineName(l: QueuePoLine): string {
   return (
@@ -37,16 +49,57 @@ function lineName(l: QueuePoLine): string {
 export function PlacementRow({
   po,
   onPlaced,
+  onCancelled,
 }: {
   po: QueuePo;
   // Called after a successful place so the page can show a durable success
   // banner — the row itself unmounts when the queue refetch drops this PO.
   onPlaced?: (po: QueuePo) => void;
+  // Called after a successful discard (cancel-with-reason) for the same
+  // durable-banner reason — the row unmounts when the queue refetch drops it.
+  onCancelled?: (po: QueuePo, reason: string) => void;
 }): JSX.Element {
   const { confirm, dialog } = useConfirm();
   const [open, setOpen] = useState(false);
   const linesQuery = usePoLines(po.po_id, open);
   const placeMut = usePlaceOrder();
+  const cancelMut = useCancelOrder();
+
+  // Cancel-with-reason (Tom-directed 2026-07-16). Opens inline (not the lines
+  // panel) so the office manager can clear stale orders without expanding each.
+  const [cancelling, setCancelling] = useState(false);
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelDetail, setCancelDetail] = useState("");
+  const [cancelError, setCancelError] = useState<string | null>(null);
+  const composedReason =
+    cancelReason === "אחר" ? cancelDetail.trim() : cancelReason;
+
+  async function handleCancel(): Promise<void> {
+    setCancelError(null);
+    if (!composedReason) {
+      setCancelError("יש לבחור סיבה לביטול.");
+      return;
+    }
+    const ok = await confirm({
+      title: `לבטל את ההזמנה ${po.po_number}?`,
+      description: `ההזמנה תוסר מתור הביצוע ותסומן כמבוטלת. הסיבה תישמר בהערות ההזמנה: "${composedReason}". שחזור הזמנה שבוטלה נעשה רק דרך מנהל המערכת.`,
+      confirmLabel: "בטל הזמנה",
+      cancelLabel: "חזרה",
+      tone: "danger",
+      srFallbackDescription: "אשר/י ביטול הזמנה זו.",
+    });
+    if (!ok) return;
+    cancelMut.mutate(
+      { poId: po.po_id, po_number: po.po_number, reason: composedReason },
+      {
+        onSuccess: () => {
+          setCancelling(false);
+          onCancelled?.(po, composedReason);
+        },
+        onError: (e: Error) => setCancelError(e.message),
+      },
+    );
+  }
 
   const [termCode, setTermCode] = useState<string>("");
   const [customTerm, setCustomTerm] = useState<string>("");
@@ -157,12 +210,14 @@ export function PlacementRow({
   return (
     <li className="card overflow-hidden" data-testid={`placement-row-${po.po_id}`}>
       {dialog}
-      {/* Header — tap to expand */}
+      {/* Header — expand (tap) + discard (cancel-with-reason). Two sibling
+          buttons, never nested, so both stay keyboard-reachable. */}
+      <div className="flex items-stretch">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
         aria-expanded={open}
-        className="flex min-h-[56px] w-full items-center justify-between gap-3 px-4 py-3 text-right transition-colors hover:bg-bg-subtle/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        className="flex min-h-[56px] flex-1 items-center justify-between gap-3 px-4 py-3 text-right transition-colors hover:bg-bg-subtle/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         data-testid={`placement-row-toggle-${po.po_id}`}
       >
         <div className="min-w-0 flex-1">
@@ -197,6 +252,120 @@ export function PlacementRow({
           <ChevronDown className="h-4 w-4 shrink-0 text-fg-muted" aria-hidden />
         )}
       </button>
+      <button
+        type="button"
+        onClick={() => {
+          setCancelling((v) => !v);
+          setCancelError(null);
+        }}
+        aria-expanded={cancelling}
+        aria-label={`בטל את ההזמנה ${po.po_number}`}
+        title="בטל הזמנה"
+        className="flex shrink-0 items-center border-r border-border/60 px-3 text-fg-muted transition-colors hover:bg-danger-softer hover:text-danger-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-danger"
+        data-testid={`placement-cancel-toggle-${po.po_id}`}
+      >
+        <XCircle className="h-4 w-4" aria-hidden />
+      </button>
+      </div>
+
+      {/* Cancel-with-reason panel */}
+      {cancelling ? (
+        <div
+          className="space-y-3 border-t border-danger/30 bg-danger-softer/40 p-4"
+          data-testid={`placement-cancel-panel-${po.po_id}`}
+        >
+          <div className="flex flex-wrap items-center gap-2">
+            <label
+              htmlFor={`placement-cancel-reason-${po.po_id}`}
+              className="text-sm font-medium text-fg"
+            >
+              סיבת ביטול
+            </label>
+            <select
+              id={`placement-cancel-reason-${po.po_id}`}
+              className="input w-52"
+              value={cancelReason}
+              onChange={(e) => {
+                setCancelReason(e.target.value);
+                setCancelError(null);
+              }}
+              data-testid={`placement-cancel-reason-${po.po_id}`}
+            >
+              <option value="">— בחר/י —</option>
+              {CANCEL_REASONS.map((r) => (
+                <option key={r} value={r}>
+                  {r}
+                </option>
+              ))}
+              <option value="אחר">אחר…</option>
+            </select>
+            {cancelReason === "אחר" ? (
+              <input
+                type="text"
+                className="input w-52"
+                placeholder="פרט/י סיבה"
+                value={cancelDetail}
+                onChange={(e) => {
+                  setCancelDetail(e.target.value);
+                  setCancelError(null);
+                }}
+                data-testid={`placement-cancel-detail-${po.po_id}`}
+                aria-label="פירוט סיבת הביטול"
+              />
+            ) : null}
+          </div>
+
+          <div
+            role="alert"
+            aria-live="assertive"
+            className={
+              cancelError
+                ? "flex items-start gap-2 rounded-md border border-danger/40 bg-danger-softer px-3 py-2 text-sm text-danger-fg"
+                : "sr-only"
+            }
+            data-testid={`placement-cancel-error-${po.po_id}`}
+          >
+            {cancelError ? (
+              <>
+                <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" aria-hidden />
+                <span>{cancelError}</span>
+              </>
+            ) : null}
+          </div>
+
+          <div className="flex items-center justify-end gap-2">
+            <button
+              type="button"
+              onClick={() => {
+                setCancelling(false);
+                setCancelError(null);
+              }}
+              disabled={cancelMut.isPending}
+              className="btn btn-ghost btn-sm"
+            >
+              חזרה
+            </button>
+            <button
+              type="button"
+              onClick={() => void handleCancel()}
+              disabled={!composedReason || cancelMut.isPending}
+              title={!composedReason ? "יש לבחור סיבת ביטול" : undefined}
+              className="btn btn-sm border border-danger/50 bg-danger-softer text-danger-fg hover:bg-danger/10"
+              data-testid={`placement-cancel-submit-${po.po_id}`}
+            >
+              {cancelMut.isPending ? (
+                <Loader2
+                  className="h-4 w-4 animate-spin motion-reduce:animate-none"
+                  aria-hidden
+                />
+              ) : (
+                <Ban className="h-4 w-4" aria-hidden />
+              )}
+              בטל הזמנה
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {open ? (
         <div className="border-t border-border/60 p-4">
