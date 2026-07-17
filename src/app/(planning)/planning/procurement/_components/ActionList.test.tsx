@@ -15,6 +15,7 @@
 //   L9  — stale-count lines get a "לספור קודם" chip linking to the count page
 //   L10 — the "דורש ספירה" bucket filter narrows to recount rows
 //   L11 — proposed rows show no status badge; approved rows do
+//   L13 — the inline inbound-issue chip is a real link to the affected PO
 // ---------------------------------------------------------------------------
 
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -325,5 +326,34 @@ describe("ActionList", () => {
     expect(within(plain).queryByText("מוצע")).toBeNull();
     const appr = screen.getByTestId("procurement-row-appr");
     expect(within(appr).getByText("אושר — מוכן לשליחה")).toBeTruthy();
+  });
+
+  it("L13 the inline inbound-issue chip is a real link to the affected PO (133)", () => {
+    const warnings: PurchaseSessionWarning[] = [
+      {
+        code: "po_missing_expected_delivery",
+        detail: "1 open PO line(s) …",
+        lines: [
+          {
+            po_id: "PO-2026-00263",
+            target_id: "c1",
+            is_item: false,
+            open_qty: 5,
+            line_status: "PARTIAL",
+          },
+        ],
+      },
+    ];
+    render(
+      <ActionList
+        pos={[makeStockoutPo("dbl")]}
+        warnings={warnings}
+        today={TODAY}
+      />,
+    );
+    const chip = screen.getByTestId("procurement-inbound-dbl");
+    expect(chip.tagName).toBe("A");
+    expect(chip.getAttribute("href")).toBe("/purchase-orders/PO-2026-00263");
+    expect(chip.textContent).toContain("בדרך 5 ללא תאריך");
   });
 });

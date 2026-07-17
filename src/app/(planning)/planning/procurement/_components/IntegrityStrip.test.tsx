@@ -1,15 +1,20 @@
 // ---------------------------------------------------------------------------
-// IntegrityStrip tests — Tranche 132.
+// IntegrityStrip tests — Tranche 132, extended Tranche 133.
 //
 //   S1 — renders drift / counts / forecast / firmed-plan chips from a
 //        live-shaped 0284 session
 //   S2 — pre-0284 session (no input_integrity / firmed_window) degrades to
 //        drift + warnings only — nothing crashes, nothing invents data
 //   S3 — engine warnings render as compact chips (not banners)
+//   S4 — the refresh action appears only when the input actually looks
+//        untrustworthy, and calls onRefresh on click
+//   S5 — a warning chip with a resolved fix href renders as a real link
+//   S6 — the mobile collapse toggle flips aria-expanded without crashing
 // ---------------------------------------------------------------------------
 
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { IntegrityStrip } from "./IntegrityStrip";
 import type { PurchaseSession } from "../../purchase-session/_lib/types";
 
@@ -106,5 +111,67 @@ describe("IntegrityStrip", () => {
     expect(strip.textContent).toContain("1 בדרך ללא תאריך");
     // Informational "nothing needed" is not a warning chip.
     expect(strip.textContent).not.toContain("אין צורך בהזמנות");
+  });
+
+  it("S4a no untrustworthy signal → no refresh action, even with onRefresh supplied", () => {
+    const onRefresh = vi.fn();
+    render(<IntegrityStrip session={makeSession()} onRefresh={onRefresh} />);
+    expect(screen.queryByTestId("procurement-integrity-refresh")).toBeNull();
+  });
+
+  it("S4b drift present → refresh action shows and fires onRefresh on click", async () => {
+    const user = userEvent.setup();
+    const onRefresh = vi.fn();
+    render(
+      <IntegrityStrip
+        session={makeSession({ rebuild_verifier_drift: 3 })}
+        onRefresh={onRefresh}
+      />,
+    );
+    await user.click(screen.getByTestId("procurement-integrity-refresh"));
+    expect(onRefresh).toHaveBeenCalledTimes(1);
+  });
+
+  it("S4c no onRefresh supplied → never rendered, even with drift", () => {
+    render(
+      <IntegrityStrip session={makeSession({ rebuild_verifier_drift: 3 })} />,
+    );
+    expect(screen.queryByTestId("procurement-integrity-refresh")).toBeNull();
+  });
+
+  it("S5 a warning chip with a resolved fix href renders as a real link", () => {
+    render(
+      <IntegrityStrip
+        session={makeSession({
+          warnings: [
+            {
+              code: "po_overdue_receipt",
+              detail: "1 open PO line(s) …",
+              lines: [{ po_id: "PO-9", target_id: "c1", days_overdue: 4 }],
+            },
+          ],
+        })}
+      />,
+    );
+    const link = screen.getByTestId(
+      "procurement-integrity-warning-po_overdue_receipt",
+    );
+    expect(link.tagName).toBe("A");
+    expect(link.getAttribute("href")).toBe("/purchase-orders/PO-9");
+  });
+
+  it("S6 the mobile collapse toggle flips aria-expanded", async () => {
+    const user = userEvent.setup();
+    render(<IntegrityStrip session={makeSession()} />);
+    const toggle = screen.getByTestId("procurement-integrity-strip-toggle");
+    expect(toggle.getAttribute("aria-expanded")).toBe("false");
+    await user.click(toggle);
+    expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    // The full detail content is still reachable regardless of collapse
+    // state (jsdom doesn't evaluate the sm: breakpoint that visually hides
+    // it) — the toggle only needs to not lose or duplicate content.
+    expect(screen.getByTestId("procurement-integrity-strip").textContent).toContain(
+      "מלאי מאומת",
+    );
   });
 });

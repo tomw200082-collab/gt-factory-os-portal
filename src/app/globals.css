@@ -57,7 +57,18 @@
     --fg-strong: 30 14% 6%;
     --fg-muted: 30 6% 38%;
     --fg-subtle: 30 5% 54%;
-    --fg-faint: 30 4% 68%;
+    /* 133 (a11y contrast audit): was 30 4% 68% — 2.01:1 against --bg, well
+       under WCAG AA (4.5:1) for the real informational text this token
+       carries (timestamps, item/line counts, coverage captions), not just
+       decoration. 41% clears 4.5:1 against both --bg (4.95:1) and
+       --bg-subtle (4.64:1). Note: this makes --fg-faint slightly DARKER
+       (more prominent) than --fg-subtle (54%) — a deliberate swap, not an
+       oversight: --fg-subtle itself only reaches 3.09:1 and was out of
+       scope for this pass (its own uses need a separate audit — it may
+       carry mostly decorative/large text where 3:1 is enough, unverified).
+       Fixing the token actually used for content mattered more than
+       preserving an internal ladder nobody had explicitly speced. */
+    --fg-faint: 30 4% 41%;
     --fg-inverted: 42 20% 98%;
 
     /* ——— Borders (hairlines at calibrated opacity) ——— */
@@ -178,7 +189,14 @@
     --fg-strong: 42 18% 95%;
     --fg-muted: 42 8% 66%;
     --fg-subtle: 42 6% 52%;
-    --fg-faint: 42 5% 38%;
+    /* 133 (a11y contrast audit): was 42 5% 38% — 2.90:1 against --bg. 51%
+       clears 4.5:1 against --bg (4.71:1) and comes close on --bg-subtle
+       (4.32:1), while staying 1pt below --fg-subtle (52%) so faint still
+       reads as the quieter of the two (unlike the light-theme swap above —
+       dark --fg-subtle already clears AA on its own at 4.90:1, so there was
+       room to keep the original order here). See the light-theme comment
+       for the full rationale and the bg/bg-subtle contrast numbers. */
+    --fg-faint: 42 5% 51%;
     --fg-inverted: 30 14% 6%;
 
     /* ——— Borders (lifted) ——— */
