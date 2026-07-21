@@ -221,6 +221,11 @@ export default function ProcurementPage(): JSX.Element {
           session={session}
           onRefresh={handleStart}
           refreshPending={startMut.isPending}
+          // ux-release-gate 2026-07-21 INT-P0-1: while the header confirm zone
+          // is armed, the strip button must disable — otherwise a second tap
+          // on it falls straight through handleStart's guard and supersedes
+          // the session without the confirm ever being seen.
+          refreshConfirming={confirmingStart}
         />
       )}
 

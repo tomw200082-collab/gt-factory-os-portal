@@ -336,7 +336,9 @@ export function FocusMode({
         >
           <div className="flex items-center gap-2 rounded-full border border-success/40 bg-success-softer px-4 py-1.5 text-xs font-medium text-success-fg shadow-sm">
             <CheckCircle2 className="h-4 w-4" aria-hidden />
-            {flash.kind === "placed" ? "ההזמנה נוצרה" : "ההזמנה דולגה"}
+            {/* ux-release-gate 2026-07-21 COPY-101: corridor vocabulary —
+                the hand-off to the placement queue, not a completion. */}
+            {flash.kind === "placed" ? "ההזמנה הועברה לביצוע" : "ההזמנה דולגה"}
           </div>
         </div>
       )}
@@ -480,8 +482,8 @@ function DoneSummary({
           {total === 0
             ? "המנוע רץ — אין כרגע מה להזמין בתוך האופק."
             : hasRemaining
-              ? `מתוך ${total}: ${placed} בוצעו · ${skipped} דולגו · ${remaining} עדיין פתוחות.`
-              : `מתוך ${total} הזמנות: ${placed} בוצעו · ${skipped} דולגו.`}
+              ? `מתוך ${total}: ${placed} הועברו לביצוע · ${skipped} דולגו · ${remaining} עדיין פתוחות.`
+              : `מתוך ${total} הזמנות: ${placed} הועברו לביצוע · ${skipped} דולגו.`}
         </div>
       </div>
       <div className="flex flex-wrap items-center justify-center gap-2">

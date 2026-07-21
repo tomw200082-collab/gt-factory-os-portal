@@ -20,13 +20,13 @@ import { Fragment, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import {
   AlertTriangle,
-  Ban,
   Check,
   ClipboardCopy,
   FileText,
   Pencil,
   Plus,
   SkipForward,
+  XCircle,
 } from "lucide-react";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { formatIls } from "@/lib/utils/format-money";
@@ -229,6 +229,13 @@ export function FocusCard({
     cancelReason === "אחר" ? cancelDetail.trim() : cancelReason;
 
   const primaryRef = useRef<HTMLButtonElement>(null);
+  // ux-release-gate 2026-07-21 A11Y-102: move focus into the cancel panel
+  // when it opens — otherwise keyboard/AT users are left on the trigger with
+  // no announcement that a panel appeared.
+  const cancelSelectRef = useRef<HTMLSelectElement>(null);
+  useEffect(() => {
+    if (cancelling) cancelSelectRef.current?.focus();
+  }, [cancelling]);
 
   const busy =
     editMut.isPending ||
@@ -257,16 +264,22 @@ export function FocusCard({
 
   // INTER-004: report unsaved line-quantity/drop edits so FocusMode can confirm
   // before closing instead of silently discarding them.
+  // ux-release-gate 2026-07-21 INT-101: an armed cancel panel (reason picked
+  // or typed) is unsaved work too — without this, overlay-close discarded the
+  // typed reason silently.
+  const cancelDirty =
+    cancelling && (cancelReason !== "" || cancelDetail.trim() !== "");
   const isDirty =
-    editing &&
-    po.lines.some((l) => {
-      const q = draftQty[l.session_po_line_id];
-      const dropped = draftDrop[l.session_po_line_id] ?? l.is_dropped;
-      return (
-        (q !== undefined && q !== String(l.final_qty)) ||
-        dropped !== l.is_dropped
-      );
-    });
+    cancelDirty ||
+    (editing &&
+      po.lines.some((l) => {
+        const q = draftQty[l.session_po_line_id];
+        const dropped = draftDrop[l.session_po_line_id] ?? l.is_dropped;
+        return (
+          (q !== undefined && q !== String(l.final_qty)) ||
+          dropped !== l.is_dropped
+        );
+      }));
   useEffect(() => {
     onDirtyChange?.(isDirty);
   }, [isDirty, onDirtyChange]);
@@ -466,7 +479,10 @@ export function FocusCard({
         </div>
         <div className="overflow-x-auto">
         <table className="w-full min-w-[28rem] text-xs">
-          <thead className="border-b border-border/40 text-3xs uppercase tracking-sops text-fg-subtle">
+          {/* ux-release-gate 2026-07-21 A11Y-104: fg-muted, not fg-subtle —
+              these headers are real informational text and fg-subtle's light
+              theme sits at 3.09:1, under AA at this size. */}
+          <thead className="border-b border-border/40 text-3xs uppercase tracking-sops text-fg-muted">
             <tr>
               <th className="px-3 py-1.5 text-right font-semibold">פריט</th>
               <th className="px-3 py-1.5 text-left font-semibold">מומלץ</th>
@@ -502,7 +518,7 @@ export function FocusCard({
                       <span className="mr-1 text-3xs text-accent">(נוסף)</span>
                     )}
                   </td>
-                  <td className="px-3 py-1.5 text-left font-mono tabular-nums text-fg-subtle">
+                  <td className="px-3 py-1.5 text-left font-mono tabular-nums text-fg-muted">
                     {fmtQty(l.recommended_qty)}
                   </td>
                   <td className="px-3 py-1.5 text-left font-mono tabular-nums text-fg">
@@ -680,10 +696,30 @@ export function FocusCard({
         <div
           className="space-y-3 rounded-lg border border-danger/30 bg-danger-softer/40 p-4"
           data-testid={`focus-cancel-panel-${po.session_po_id}`}
+          // ux-release-gate 2026-07-21 INT-101: Escape dismisses THIS panel
+          // only. stopPropagation keeps the event from reaching FocusMode's
+          // window-level Escape handler (React delegates at the root, which
+          // sits below window in the bubble path), which would close the
+          // whole overlay and discard the typed reason.
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.stopPropagation();
+              setCancelling(false);
+              setCancelReason("");
+              setCancelDetail("");
+            }
+          }}
         >
           <div className="flex flex-wrap items-center gap-2">
-            <label className="text-xs font-medium text-fg">סיבת ביטול</label>
+            <label
+              htmlFor={`focus-cancel-reason-${po.session_po_id}`}
+              className="text-xs font-medium text-fg"
+            >
+              סיבת ביטול
+            </label>
             <select
+              ref={cancelSelectRef}
+              id={`focus-cancel-reason-${po.session_po_id}`}
               className="input w-48"
               value={cancelReason}
               onChange={(e) => setCancelReason(e.target.value)}
@@ -738,7 +774,7 @@ export function FocusCard({
               className="btn btn-sm border border-danger/50 bg-danger-softer text-danger-fg hover:bg-danger/10"
               data-testid={`focus-cancel-submit-${po.session_po_id}`}
             >
-              <Ban className="h-3.5 w-3.5" aria-hidden />
+              <XCircle className="h-3.5 w-3.5" aria-hidden />
               בטל הזמנה
             </button>
           </div>
@@ -797,11 +833,12 @@ export function FocusCard({
               type="button"
               onClick={() => setCancelling(true)}
               disabled={busy}
+              aria-expanded={cancelling}
               className="btn btn-sm btn-ghost text-danger-fg hover:bg-danger-softer"
               title="כמו דלג, אבל עם סיבה מתועדת לביקורת — לשימוש כשרוצים לתעד למה"
               data-testid="focus-cancel-toggle"
             >
-              <Ban className="h-3.5 w-3.5" aria-hidden />
+              <XCircle className="h-3.5 w-3.5" aria-hidden />
               בטל עם סיבה
             </button>
 

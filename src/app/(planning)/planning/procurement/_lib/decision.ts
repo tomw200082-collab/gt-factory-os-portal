@@ -383,7 +383,10 @@ export function classifyPo<T extends DecisionInput>(
 
   const whyNow = mustToday
     ? whyNowFromRisk(driver, Math.max(0, criticalCount - 1))
-    : `אפשר להמתין עד ${fmtDateHe(driver.lastSafeOrderDate)} (בעוד ${daysHe(driverLastSafeInDays)}) — הזמנה עד אז עדיין מגיעה לפני חוסר`;
+    : // ux-release-gate 2026-07-21 FLOW-104: lastSafe derives from the
+      // extrapolated zeroDate — mark it "~" like every other extrapolated
+      // figure (module contract, header lines 26-30).
+      `אפשר להמתין עד ~${fmtDateHe(driver.lastSafeOrderDate)} (בעוד ${daysHe(driverLastSafeInDays)}) — הזמנה עד אז עדיין מגיעה לפני חוסר`;
 
   return {
     po,

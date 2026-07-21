@@ -159,4 +159,26 @@ describe("PlacementRow", () => {
     await userEvent.selectOptions(reasonSelect, "כפילות");
     await waitFor(() => expect(cancelBtn.disabled).toBe(false));
   });
+
+  it("expand and cancel panels are mutually exclusive (ux-release-gate 2026-07-21 INT-102)", async () => {
+    renderRow();
+    const expandToggle = screen.getByTestId("placement-row-toggle-po1");
+    const cancelToggle = screen.getByTestId("placement-cancel-toggle-po1");
+
+    await userEvent.click(expandToggle);
+    expect(expandToggle.getAttribute("aria-expanded")).toBe("true");
+
+    // Opening cancel closes expand — "בצע הזמנה" and "בטל הזמנה" must never
+    // be presented stacked in the same row.
+    await userEvent.click(cancelToggle);
+    expect(cancelToggle.getAttribute("aria-expanded")).toBe("true");
+    expect(expandToggle.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByTestId("placement-cancel-panel-po1")).not.toBeNull();
+
+    // And opening expand closes cancel.
+    await userEvent.click(expandToggle);
+    expect(expandToggle.getAttribute("aria-expanded")).toBe("true");
+    expect(cancelToggle.getAttribute("aria-expanded")).toBe("false");
+    expect(screen.queryByTestId("placement-cancel-panel-po1")).toBeNull();
+  });
 });

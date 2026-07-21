@@ -215,7 +215,14 @@ export function PlacementRow({
       <div className="flex items-stretch">
       <button
         type="button"
-        onClick={() => setOpen((v) => !v)}
+        onClick={() => {
+          // ux-release-gate 2026-07-21 INT-102: expand and cancel panels are
+          // mutually exclusive — never show "בצע הזמנה" and "בטל הזמנה"
+          // stacked in the same row.
+          setOpen((v) => !v);
+          setCancelling(false);
+          setCancelError(null);
+        }}
         aria-expanded={open}
         className="flex min-h-[56px] flex-1 items-center justify-between gap-3 px-4 py-3 text-right transition-colors hover:bg-bg-subtle/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
         data-testid={`placement-row-toggle-${po.po_id}`}
@@ -257,14 +264,21 @@ export function PlacementRow({
         onClick={() => {
           setCancelling((v) => !v);
           setCancelError(null);
+          // INT-102: see the expand toggle — the two panels never co-exist.
+          setOpen(false);
         }}
         aria-expanded={cancelling}
         aria-label={`בטל את ההזמנה ${po.po_number}`}
         title="בטל הזמנה"
-        className="flex shrink-0 items-center border-r border-border/60 px-3 text-fg-muted transition-colors hover:bg-danger-softer hover:text-danger-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-danger"
+        className="flex shrink-0 items-center gap-1.5 border-r border-border/60 px-3 text-fg-muted transition-colors hover:bg-danger-softer hover:text-danger-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-danger"
         data-testid={`placement-cancel-toggle-${po.po_id}`}
       >
         <XCircle className="h-4 w-4" aria-hidden />
+        {/* ux-release-gate 2026-07-21 VIS-101: same trigger grammar as the
+            FocusCard cancel — visible label where there is room. */}
+        <span className="hidden text-xs font-medium sm:inline">
+          בטל עם סיבה
+        </span>
       </button>
       </div>
 
