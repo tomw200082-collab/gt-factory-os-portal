@@ -182,7 +182,7 @@ describe("classifyPo — trace math (v2)", () => {
     expect(c.shortageDays).toBe(0);
     expect(c.isOverdue).toBe(false);
     expect(c.waitUntil).toBe("2026-06-01");
-    expect(c.whyNow).toContain("אפשר להמתין עד 01/06");
+    expect(c.whyNow).toContain("אפשר להמתין עד ~01/06");
     expect(c.whyNow).toContain("3 ימים");
   });
 

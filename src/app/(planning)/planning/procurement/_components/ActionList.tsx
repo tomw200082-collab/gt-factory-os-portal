@@ -243,7 +243,8 @@ function ProcurementRow({
   today: string;
   onOpen?: (po: PurchaseSessionPo) => void;
 }): JSX.Element {
-  const { po, bucket, whyNow, shortageDays, recount, waitUntil } = classified;
+  const { po, bucket, whyNow, shortageDays, recount, waitUntil, usedTraceMath } =
+    classified;
   const [expanded, setExpanded] = useState(false);
   const lineCount = activeLineCount(po);
   const actionable = bucket !== "handled";
@@ -316,8 +317,13 @@ function ProcurementRow({
               {lineCount} פריט{lineCount === 1 ? "" : "ים"}
             </span>
             {bucket === "can_wait" && waitUntil && (
+              // ux-release-gate 2026-07-21 FLOW-104: a trace-derived deadline
+              // is an extrapolation — carry the same "~" the must-today
+              // strings already use. The v1 fallback date is the engine's own
+              // order_by_date and stays plain.
               <span className="tabular-nums">
-                · להזמין עד {fmtDateHe(waitUntil)}
+                · להזמין עד {usedTraceMath ? "~" : ""}
+                {fmtDateHe(waitUntil)}
               </span>
             )}
             {/* ux-release-gate INTER-205: gate on `actionable` (matches the

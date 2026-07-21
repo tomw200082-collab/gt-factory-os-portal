@@ -34,6 +34,7 @@ import Link from "next/link";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import { ChevronDown, RefreshCw, ShieldCheck } from "lucide-react";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
+import { useCapability } from "@/lib/auth/role-gate";
 import { cn } from "@/lib/cn";
 import type { PurchaseSession } from "../../purchase-session/_lib/types";
 import {
@@ -72,6 +73,7 @@ export function IntegrityStrip({
   session,
   onRefresh,
   refreshPending,
+  refreshConfirming,
 }: {
   session: PurchaseSession;
   /** Reruns the session with fresh stock/count/forecast data (133) —
@@ -80,8 +82,20 @@ export function IntegrityStrip({
    *  entirely (e.g. read-only contexts). */
   onRefresh?: () => void;
   refreshPending?: boolean;
+  /** True while the caller's supersede-confirm zone is armed and awaiting
+   *  the operator's decision. ux-release-gate 2026-07-21 INT-P0-1: without
+   *  this the first tap armed the confirm with zero feedback here and a
+   *  second tap on the still-enabled button fell through the caller's
+   *  guard — superseding the session without the confirm ever being seen. */
+  refreshConfirming?: boolean;
 }): JSX.Element {
   const [expanded, setExpanded] = useState(false);
+  // FLOW-101 (ux-release-gate 2026-07-21): components_without_supplier fix
+  // links target /admin/masters/** which sits behind admin:execute — for any
+  // other role the link is a dead-end "Access restricted" wall, so degrade
+  // those chips to tooltip-only at render (the pure warningChip util stays
+  // role-agnostic).
+  const canAdminFix = useCapability("admin:execute");
 
   const integrity = parseInputIntegrity(session.input_integrity ?? null);
   const firmed = parseFirmedWindow(session.firmed_window ?? null);
@@ -145,6 +159,14 @@ export function IntegrityStrip({
             )}
           >
             {issueCount > 0 ? `${issueCount} לבדיקה` : "תקין"}
+            {/* INT-105: the refresh action lives inside the (hidden-until-
+                expanded) detail row — hint its existence in the collapsed
+                bar so the post-count refresh loop is discoverable on mobile. */}
+            {showRefresh && (
+              <span className="inline-flex items-center gap-0.5 text-accent">
+                · <RefreshCw className="h-3 w-3" aria-hidden /> רענן
+              </span>
+            )}
             <ChevronDown
               className={cn(
                 "h-3.5 w-3.5 transition-transform",
@@ -223,12 +245,23 @@ export function IntegrityStrip({
               master-data record); the rest stay tooltip-only badges. */}
           {structuralWarnings.map((w, i) => {
             const chip = warningChip(w);
-            return chip.href ? (
+            // FLOW-101: an /admin/** fix target is only a real fix for a role
+            // that can open it — everyone else gets the tooltip-only badge
+            // with an explicit hand-off note instead of a dead-end link.
+            const adminBlocked =
+              chip.href != null &&
+              chip.href.startsWith("/admin") &&
+              !canAdminFix;
+            const href = adminBlocked ? null : chip.href;
+            const tooltip = adminBlocked
+              ? `${chip.tooltip} התיקון דורש הרשאת מנהל — פנו למנהל להשלמת הספק.`
+              : chip.tooltip;
+            return href ? (
               <Link
                 key={`${chip.code}-${i}`}
-                href={chip.href}
-                aria-label={`${chip.label}. ${chip.tooltip}`}
-                title={chip.tooltip}
+                href={href}
+                aria-label={`${chip.label}. ${tooltip}`}
+                title={tooltip}
                 className="inline-flex rounded-md decoration-dotted underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
                 data-testid={`procurement-integrity-warning-${chip.code}`}
               >
@@ -242,7 +275,7 @@ export function IntegrityStrip({
                 tone="warning"
                 size="xs"
                 dot
-                tooltip={chip.tooltip}
+                tooltip={tooltip}
               >
                 {chip.label}
               </Badge>
@@ -258,16 +291,26 @@ export function IntegrityStrip({
             <button
               type="button"
               onClick={onRefresh}
-              disabled={refreshPending}
+              // INT-P0-1: also disabled while the caller's confirm zone is
+              // armed — a second tap here must never be able to land as the
+              // implicit "confirm".
+              disabled={refreshPending || refreshConfirming}
               className="inline-flex min-h-[2rem] items-center gap-1 rounded-md px-2 text-3xs font-semibold text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 disabled:opacity-60"
               title="מריץ מושב רכש חדש כדי שההמלצות ישקפו מלאי, ספירות ותאריכי אספקה עדכניים. מושב פתוח עם אישורים שלא נשמרו יוחלף."
               data-testid="procurement-integrity-refresh"
             >
               <RefreshCw
-                className={cn("h-3.5 w-3.5", refreshPending && "animate-spin")}
+                className={cn(
+                  "h-3.5 w-3.5 motion-reduce:animate-none",
+                  refreshPending && "animate-spin",
+                )}
                 aria-hidden
               />
-              {refreshPending ? "מריץ…" : "רענון המלצות"}
+              {refreshPending
+                ? "מריץ…"
+                : refreshConfirming
+                  ? "ממתין לאישור…"
+                  : "רענון המלצות"}
             </button>
           )}
 

@@ -10,6 +10,11 @@
 //        untrustworthy, and calls onRefresh on click
 //   S5 — a warning chip with a resolved fix href renders as a real link
 //   S6 — the mobile collapse toggle flips aria-expanded without crashing
+//   S7 — refreshConfirming disables the refresh action (ux-release-gate
+//        2026-07-21 INT-P0-1: a second tap must not land as the implicit
+//        supersede confirm)
+//   S8 — an /admin fix target degrades to a tooltip-only badge for a role
+//        without admin:execute (FLOW-101)
 // ---------------------------------------------------------------------------
 
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -18,7 +23,17 @@ import userEvent from "@testing-library/user-event";
 import { IntegrityStrip } from "./IntegrityStrip";
 import type { PurchaseSession } from "../../purchase-session/_lib/types";
 
-afterEach(() => cleanup());
+// IntegrityStrip consults useCapability (FLOW-101) which needs the session
+// provider — stub it with a switchable value so tests run without one.
+const capability = vi.hoisted(() => ({ value: true }));
+vi.mock("@/lib/auth/role-gate", () => ({
+  useCapability: () => capability.value,
+}));
+
+afterEach(() => {
+  capability.value = true;
+  cleanup();
+});
 
 function makeSession(overrides: Partial<PurchaseSession> = {}): PurchaseSession {
   return {
@@ -173,5 +188,55 @@ describe("IntegrityStrip", () => {
     expect(screen.getByTestId("procurement-integrity-strip").textContent).toContain(
       "מלאי מאומת",
     );
+  });
+
+  it("S7 refreshConfirming disables the refresh action and blocks a second tap", async () => {
+    const user = userEvent.setup();
+    const onRefresh = vi.fn();
+    render(
+      <IntegrityStrip
+        session={makeSession({ rebuild_verifier_drift: 3 })}
+        onRefresh={onRefresh}
+        refreshConfirming
+      />,
+    );
+    const btn = screen.getByTestId(
+      "procurement-integrity-refresh",
+    ) as HTMLButtonElement;
+    expect(btn.disabled).toBe(true);
+    expect(btn.textContent).toContain("ממתין לאישור…");
+    await user.click(btn).catch(() => undefined);
+    expect(onRefresh).not.toHaveBeenCalled();
+  });
+
+  it("S8 an /admin fix chip degrades to a badge for a role without admin:execute", () => {
+    const warnings = [
+      {
+        code: "components_without_supplier",
+        detail: "…",
+        lines: [{ target_id: "c-77", is_item: false, label: "פירה קיווי" }],
+      },
+    ];
+    capability.value = false;
+    const { unmount } = render(
+      <IntegrityStrip session={makeSession({ warnings })} />,
+    );
+    expect(
+      screen.queryByTestId(
+        "procurement-integrity-warning-components_without_supplier",
+      ),
+    ).toBeNull();
+    expect(
+      screen.getByTestId("procurement-integrity-strip").textContent,
+    ).toContain("1 ללא ספק");
+    unmount();
+
+    capability.value = true;
+    render(<IntegrityStrip session={makeSession({ warnings })} />);
+    const link = screen.getByTestId(
+      "procurement-integrity-warning-components_without_supplier",
+    );
+    expect(link.tagName).toBe("A");
+    expect(link.getAttribute("href")).toBe("/admin/masters/components/c-77");
   });
 });

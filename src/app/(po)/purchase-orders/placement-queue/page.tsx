@@ -72,7 +72,10 @@ function QueueInner(): JSX.Element {
   } | null>(null);
   // Durable discard confirmation — the cancelled row unmounts on refetch, so
   // the page owns the "order removed from queue" banner (Tom-directed).
+  // ux-release-gate 2026-07-21 FLOW-105: po_id captured too, so the banner
+  // can link to the PO where the reason persists in the notes.
   const [cancelled, setCancelled] = useState<{
+    po_id: string;
     po_number: string;
     reason: string;
   } | null>(null);
@@ -136,7 +139,15 @@ function QueueInner(): JSX.Element {
           <span className="min-w-0 flex-1">
             ההזמנה <span className="font-semibold">{cancelled.po_number}</span>{" "}
             בוטלה והוסרה מהתור.{" "}
-            <span className="text-fg-muted">סיבה: {cancelled.reason}</span>
+            <span className="text-fg-muted">סיבה: {cancelled.reason}</span>{" "}
+            ·{" "}
+            <Link
+              href={`/purchase-orders/${encodeURIComponent(cancelled.po_id)}`}
+              className="font-medium underline-offset-2 hover:underline"
+              data-testid="placement-queue-cancelled-po-link"
+            >
+              צפה בהזמנה
+            </Link>
           </span>
           <button
             type="button"
@@ -257,12 +268,29 @@ function QueueInner(): JSX.Element {
               <button
                 type="button"
                 onClick={() => setSupplierQuery("")}
-                className="text-3xs font-medium text-accent hover:underline"
+                // ux-release-gate 2026-07-21 INT-103: real touch target,
+                // matching the ActionList twin (INTER-204 pattern).
+                className="inline-flex min-h-[2rem] items-center px-2 text-3xs font-medium text-accent hover:underline"
                 data-testid="placement-queue-filter-clear"
               >
                 נקה סינון
               </button>
             )}
+          </div>
+
+          {/* ux-release-gate 2026-07-21 A11Y-103: announce filter results —
+              mirrors the ActionList A11Y-005 region. */}
+          <div
+            className="sr-only"
+            role="status"
+            aria-live="polite"
+            aria-atomic="true"
+          >
+            {isFiltered
+              ? visibleRows.length === 0
+                ? "אין הזמנות התואמות את הסינון"
+                : `${visibleRows.length} הזמנות מוצגות`
+              : ""}
           </div>
 
           {isFiltered && visibleRows.length === 0 && (
@@ -282,7 +310,11 @@ function QueueInner(): JSX.Element {
                 }}
                 onCancelled={(p, reason) => {
                   setPlaced(null);
-                  setCancelled({ po_number: p.po_number, reason });
+                  setCancelled({
+                    po_id: p.po_id,
+                    po_number: p.po_number,
+                    reason,
+                  });
                 }}
               />
             ))}
