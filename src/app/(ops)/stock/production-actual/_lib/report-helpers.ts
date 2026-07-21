@@ -11,8 +11,15 @@
 //                             for the 7 structured variance reason codes
 //                             (mirror of api/src/production-actuals/schemas.ts
 //                             ProductionActualSubmitSchema.variance_reason_code).
+//   - planBoardReturnHref   — Tranche 134: back-to-the-exact-plan-card deep
+//                             link for the post-submit return journey.
 //
 // No React, no fetch — unit-tested in report-helpers.test.ts.
+
+import {
+  startOfWeek,
+  toIsoDate,
+} from "../../../../(planning)/planning/production-plan/_lib/helpers";
 
 // Same band the variance display already uses (W4 contract §3 / helpers.ts
 // on the plan board). Keep the three call sites numerically identical.
@@ -144,4 +151,30 @@ export function fmtShortfallMessage(
   const qty = fmtQtyNum(shortBy);
   const unit = uom ? ` ${uom}` : "";
   return `Short ${qty}${unit} of ${componentName} — will be deducted to 0`;
+}
+
+// ---------------------------------------------------------------------------
+// Tranche 134 — return-to-board deep link. After a report is submitted from a
+// plan card, "back to the daily plan" must land the operator on the exact
+// place they left: same visible week (?week=) and the same plan card
+// (?focus_plan= — the board scrolls it into view and flashes a highlight
+// ring). Week math is imported from the board's own helpers so the Sunday-
+// first convention can never drift between the two surfaces.
+// ---------------------------------------------------------------------------
+export const PLAN_BOARD_HREF = "/planning/production-plan";
+
+export function planBoardReturnHref(
+  planId: string | null | undefined,
+  planDate: string | null | undefined,
+): string {
+  if (!planId) return PLAN_BOARD_HREF;
+  const params = new URLSearchParams();
+  if (planDate && /^\d{4}-\d{2}-\d{2}$/.test(planDate)) {
+    const d = new Date(`${planDate}T00:00:00`);
+    if (!Number.isNaN(d.getTime())) {
+      params.set("week", toIsoDate(startOfWeek(d)));
+    }
+  }
+  params.set("focus_plan", planId);
+  return `${PLAN_BOARD_HREF}?${params.toString()}`;
 }

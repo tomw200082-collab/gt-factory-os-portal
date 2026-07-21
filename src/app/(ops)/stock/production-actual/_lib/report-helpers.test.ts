@@ -5,6 +5,7 @@ import {
   computeAfterBalance,
   exceedsVarianceBand,
   fmtShortfallMessage,
+  planBoardReturnHref,
   varianceReasonLabel,
   VARIANCE_REASON_CODES,
   VARIANCE_REASON_LABELS,
@@ -149,5 +150,51 @@ describe("variance reason labels", () => {
     expect(varianceReasonLabel(null)).toBeNull();
     expect(varianceReasonLabel(undefined)).toBeNull();
     expect(varianceReasonLabel("future_code")).toBe("future_code");
+  });
+});
+
+// Tranche 134 — return-to-board deep link.
+describe("planBoardReturnHref", () => {
+  it("carries the plan's week (Sunday-first) and the focus_plan id", () => {
+    // 2026-07-15 is a Wednesday; its Sunday-first week starts 2026-07-12.
+    expect(planBoardReturnHref("plan-abc", "2026-07-15")).toBe(
+      "/planning/production-plan?week=2026-07-12&focus_plan=plan-abc",
+    );
+  });
+
+  it("a Sunday plan date is its own week start", () => {
+    expect(planBoardReturnHref("p1", "2026-07-12")).toBe(
+      "/planning/production-plan?week=2026-07-12&focus_plan=p1",
+    );
+  });
+
+  it("a Saturday plan date maps to the preceding Sunday", () => {
+    expect(planBoardReturnHref("p1", "2026-07-18")).toBe(
+      "/planning/production-plan?week=2026-07-12&focus_plan=p1",
+    );
+  });
+
+  it("missing/invalid plan date still focuses the card, without a week param", () => {
+    expect(planBoardReturnHref("p1", null)).toBe(
+      "/planning/production-plan?focus_plan=p1",
+    );
+    expect(planBoardReturnHref("p1", "not-a-date")).toBe(
+      "/planning/production-plan?focus_plan=p1",
+    );
+  });
+
+  it("no plan id degrades to the plain board href", () => {
+    expect(planBoardReturnHref(null, "2026-07-15")).toBe(
+      "/planning/production-plan",
+    );
+    expect(planBoardReturnHref(undefined, undefined)).toBe(
+      "/planning/production-plan",
+    );
+  });
+
+  it("URL-encodes the plan id", () => {
+    expect(planBoardReturnHref("a b/c", null)).toBe(
+      "/planning/production-plan?focus_plan=a+b%2Fc",
+    );
   });
 });

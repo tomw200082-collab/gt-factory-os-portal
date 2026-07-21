@@ -39,6 +39,7 @@ export function ProductionJobCard({
   canAct,
   isToday,
   isPast,
+  highlighted,
   onEdit,
   onCancel,
   onDelete,
@@ -48,6 +49,9 @@ export function ProductionJobCard({
   canAct: boolean;
   isToday: boolean;
   isPast: boolean;
+  /** Tranche 134 — transient return-focus ring after coming back from the
+   *  Production Report form (?focus_plan= landed on this card). */
+  highlighted?: boolean;
   onEdit: (p: ProductionPlanRow) => void;
   onCancel: (p: ProductionPlanRow) => void;
   onDelete: (p: ProductionPlanRow) => void;
@@ -145,11 +149,16 @@ export function ProductionJobCard({
         isCancelled && "border-l-border/40 bg-bg-subtle/60 opacity-70",
         // B4 — drafts are muted: not firmed, no urgency color.
         isDraft && !isCancelled && !isDone && "border-l-border/60 bg-bg-subtle/50 opacity-80",
+        // Tranche 134 — transient "you came back to THIS card" ring. Static
+        // (no animation), so no reduced-motion concern; fades with the
+        // default transition when the flag clears.
+        highlighted && "ring-2 ring-accent ring-offset-2 ring-offset-bg-subtle",
       )}
       data-testid="production-job-card"
       data-plan-id={plan.plan_id}
       data-rendered-state={plan.rendered_state}
       data-plan-status={plan.status}
+      data-return-focus={highlighted ? "true" : undefined}
     >
       <div className="px-3 pt-3 pb-2.5">
         {/* Produced eyebrow — after a report, signals the hero number is the
