@@ -23,6 +23,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { RecipeHealthCard } from "@/components/admin/recipe-health/RecipeHealthCard";
 
+// Fixture dates are computed relative to "now" — pinned calendar dates in
+// this family previously went stale as real time advanced past the 90-day
+// PRICE_AGE_WARN_DAYS policy (2026-07-21 incident). 10 days ago is safely
+// inside every freshness window.
+const FRESH_AT = new Date(Date.now() - 10 * 86_400_000).toISOString();
+
+
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
     push: vi.fn(),
@@ -57,7 +64,7 @@ const REAL_VERSION_ROW = {
   bom_version_id: "BV-ACTIVE",
   version_label: "v3",
   status: "ACTIVE",
-  updated_at: "2026-04-10T12:00:00Z",
+  updated_at: FRESH_AT,
 };
 
 function realLine(id: string, componentId: string, qty: string) {
@@ -71,7 +78,7 @@ function realLine(id: string, componentId: string, qty: string) {
     component_uom: "KG",
     bom_kind: "BASE",
     component_ref_type: "COMPONENT",
-    updated_at: "2026-04-10T12:00:00Z",
+    updated_at: FRESH_AT,
   };
 }
 
@@ -87,7 +94,7 @@ function realPrimarySupplierItem(componentId: string) {
     std_cost_per_inv_uom: "2.50",
     lead_time_days: 5,
     moq: "1",
-    updated_at: "2026-04-20T12:00:00Z",
+    updated_at: FRESH_AT,
   };
 }
 

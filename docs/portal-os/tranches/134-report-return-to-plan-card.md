@@ -23,12 +23,33 @@ A plan card's "Open Production Report" link carries `?from_plan_id=` OUT, but ev
 - `src/app/(planning)/planning/production-plan/_components/ProductionDayLane.tsx` (prop pass-through)
 - `src/app/(planning)/planning/production-plan/_components/ProductionJobCard.tsx` (ring + data attr)
 - `tests/e2e/production-plan-board.spec.ts` (+1 @mocked test)
+- `tests/unit/admin/{recipe-health-card,bom-line-real-shape,bom-line-row}.test.tsx` (CI-unblock fast-follow, see below)
 - `docs/portal-os/tranches/134-report-return-to-plan-card.md` (this file)
+
+## CI-unblock fast-follow (pulled into this tranche after portal-pr-guard went red)
+
+The 7 pre-existing Recipe-Health-family failures flagged below turned out to
+fail in **CI too** on this PR's guard run (the Actions runner shares the same
+calendar) — meaning `portal-pr-guard` was red for ANY portal PR from
+2026-07-19 onward, not just in the local sandbox. Root cause confirmed from
+the CI log: every "healthy" fixture pinned `updated_at: 2026-04-20`, which
+crossed the 90-day `PRICE_AGE_WARN_DAYS` policy on 2026-07-19 — the cards
+started rendering "Production-ready **with warnings** (stale price)" and the
+green-path assertions (`/Production-ready$/`) stopped matching. Fix: the three
+files' fixture dates are now computed relative to `Date.now()` (`FRESH_AT` =
+10 days ago, safely inside every freshness window — the same fix this spec
+family's own board spec applied to its `TODAY` constant after an identical
+incident, per its header comment). `bom-line-row`'s `if_match_updated_at`
+round-trip assertion now compares against `FRESH_AT` itself (already a
+`toISOString()` output, so normalisation round-trips byte-identically).
+No product code touched; no test's *intent* changed (none of the 7 asserted
+staleness — grep confirms the only "stale" in the family is the
+date-independent 409 STALE_ROW concurrency case).
 
 ## Evidence
 
 - `npx tsc --noEmit` → clean.
-- `npx vitest run` → 925/932; the 7 failures (recipe-health-card ×4, bom-line-real-shape ×2, bom-line-row ×1 — all admin Recipe-Health family, untouched by this diff) **reproduce identically on clean origin/main** via `git stash` base runs — pre-existing date-drift in that family's fixtures (the sandbox clock advanced past their pinned dates), not a regression. Report-helpers scope: 22/22.
+- `npx vitest run` → **932/932** after the CI-unblock fast-follow above (initially 925/932 — the 7 failures reproduced identically on clean origin/main via `git stash` base runs, proving them pre-existing, before the CI red on this very PR showed they had to be fixed here rather than deferred). Report-helpers scope: 22/22.
 - `npx playwright test tests/e2e/production-plan-board.spec.ts --grep @mocked` → **5/5** (real dev server, sandbox Chromium), including the new test: card scrolled into viewport, `data-return-focus` on exactly the reported card, URL cleaned, ring transient.
 - **Full-journey proof** (throwaway stubbed spec, not committed, screenshots reviewed): opened the real form via a card's `?from_plan_id=` link → banner link already deep-linked → filled qty, submitted → success panel's "← Back to the daily plan" href = `?week=<plan week>&focus_plan=<plan id>` → clicked it → board landed on the plan's week with the card in-viewport and ringed.
 
@@ -36,4 +57,3 @@ A plan card's "Open Production Report" link carries `?from_plan_id=` OUT, but ev
 
 - Restoring exact scroll-position pixels — the anchor is the reported card (what the operator actually left), which is strictly more useful than a pixel offset and stable across viewport sizes.
 - The post-submit "re-plan remainder" link (points at a *newly created tomorrow plan*, not the place the operator left) and submission-detail board links — different journeys.
-- The pre-existing Recipe-Health test-fixture date drift (needs its own small fix pass; flagged above).

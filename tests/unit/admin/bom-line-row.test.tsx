@@ -12,6 +12,13 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
 import { BomLineRow } from "@/components/bom-edit/BomLineRow";
 
+// Fixture dates are computed relative to "now" — pinned calendar dates in
+// this family previously went stale as real time advanced past the 90-day
+// PRICE_AGE_WARN_DAYS policy (2026-07-21 incident). 10 days ago is safely
+// inside every freshness window.
+const FRESH_AT = new Date(Date.now() - 10 * 86_400_000).toISOString();
+
+
 function wrap() {
   const qc = new QueryClient({
     defaultOptions: {
@@ -46,7 +53,7 @@ const baseLine = {
   final_component_name: "Sugar",
   final_component_qty: "1.0",
   component_uom: "KG",
-  updated_at: "2026-04-20T12:00:00Z",
+  updated_at: FRESH_AT,
 };
 const baseReadiness = {
   component_id: "C-1",
@@ -55,7 +62,7 @@ const baseReadiness = {
   primary_supplier_id: "SUP-1",
   primary_supplier_name: "ACME",
   active_price_value: "2.50",
-  active_price_updated_at: "2026-04-20T12:00:00Z",
+  active_price_updated_at: FRESH_AT,
 };
 
 describe("BomLineRow", () => {
@@ -137,7 +144,9 @@ describe("BomLineRow", () => {
     // patchEntity spreads fields into the body; the qty field is quantity_per
     // (numeric), and if_match_updated_at is normalised via Date.toISOString().
     expect(body.quantity_per).toBe(2);
-    expect(body.if_match_updated_at).toBe("2026-04-20T12:00:00.000Z");
+    // FRESH_AT is already a Date.toISOString() output, so the normalisation
+    // round-trips it byte-identically.
+    expect(body.if_match_updated_at).toBe(FRESH_AT);
     expect(typeof body.idempotency_key).toBe("string");
   });
 

@@ -10,6 +10,14 @@ import { RecipeTrackSummary } from "@/components/admin/recipe-health/RecipeTrack
 import { RecipeHealthCard } from "@/components/admin/recipe-health/RecipeHealthCard";
 import type { TrackHealth } from "@/lib/admin/recipe-readiness.types";
 
+// Fixture dates are computed relative to "now" — pinned calendar dates in
+// this family previously went stale as real time advanced past the 90-day
+// PRICE_AGE_WARN_DAYS policy (2026-07-21 incident: every "healthy" fixture
+// pinned to 2026-04-20 crossed the threshold and the green-path tests went
+// red repo-wide). 10 days ago is safely inside every freshness window.
+const FRESH_AT = new Date(Date.now() - 10 * 86_400_000).toISOString();
+
+
 // Mock next/navigation so useRouter() resolves outside an App Router shell.
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn(), replace: vi.fn(), prefetch: vi.fn(), back: vi.fn() }),
@@ -156,7 +164,7 @@ function mockApi({ baseLines, packLines, perComponent }: MockApiArgs) {
           JSON.stringify({
             rows: baseLines.map((l) => ({
               ...l,
-              updated_at: "2026-04-20T00:00:00Z",
+              updated_at: FRESH_AT,
             })),
           }),
           { status: 200 },
@@ -169,7 +177,7 @@ function mockApi({ baseLines, packLines, perComponent }: MockApiArgs) {
           JSON.stringify({
             rows: packLines.map((l) => ({
               ...l,
-              updated_at: "2026-04-20T00:00:00Z",
+              updated_at: FRESH_AT,
             })),
           }),
           { status: 200 },
@@ -197,7 +205,7 @@ const SI_C1: Record<string, unknown> = {
   component_status: "ACTIVE",
   is_primary: true,
   std_cost_per_inv_uom: "2.5",
-  updated_at: "2026-04-20T00:00:00Z",
+  updated_at: FRESH_AT,
 };
 
 const SI_C2: Record<string, unknown> = {
@@ -209,7 +217,7 @@ const SI_C2: Record<string, unknown> = {
   component_status: "ACTIVE",
   is_primary: true,
   std_cost_per_inv_uom: "0.50",
-  updated_at: "2026-04-20T00:00:00Z",
+  updated_at: FRESH_AT,
 };
 
 describe("RecipeHealthCard — MANUFACTURED full data", () => {
@@ -299,7 +307,7 @@ describe("RecipeHealthCard — red when pack BOM is empty", () => {
                   bom_line_id: "L1",
                   final_component_id: "C-1",
                   final_component_qty: "1.0",
-                  updated_at: "2026-04-20T00:00:00Z",
+                  updated_at: FRESH_AT,
                 },
               ],
             }),
@@ -455,7 +463,7 @@ describe("RecipeHealthCard — Edit recipe button confirmations", () => {
                   bom_line_id: "L1",
                   final_component_id: "C-1",
                   final_component_qty: "1.0",
-                  updated_at: "2026-04-20T00:00:00Z",
+                  updated_at: FRESH_AT,
                 },
               ],
             }),
