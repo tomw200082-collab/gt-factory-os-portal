@@ -56,6 +56,7 @@ export function ProductionDayLane({
   isOverdue,
   dayTotal,
   dominantUom,
+  highlightPlanId,
   onAdd,
   onAddNote,
   onEdit,
@@ -74,6 +75,8 @@ export function ProductionDayLane({
   isOverdue: boolean;
   dayTotal: number;
   dominantUom: string;
+  /** Tranche 134 — plan whose card flashes the return-focus highlight ring. */
+  highlightPlanId?: string | null;
   onAdd: (date: Date) => void;
   onAddNote: (date: Date) => void;
   onEdit: (p: ProductionPlanRow) => void;
@@ -228,6 +231,7 @@ export function ProductionDayLane({
                 canAct={canAct}
                 isToday={isToday}
                 isPast={isPast}
+                highlighted={p.plan_id === highlightPlanId}
                 onEdit={onEdit}
                 onCancel={onCancel}
                 onDelete={onDelete}

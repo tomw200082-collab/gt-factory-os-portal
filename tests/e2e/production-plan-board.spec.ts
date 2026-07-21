@@ -192,4 +192,61 @@ test.describe("@mocked production plan board", () => {
       page.getByText(/Cannot read properties of undefined/i),
     ).toHaveCount(0);
   });
+
+  // Tranche 134 — the return leg from the Production Report form:
+  // ?focus_plan= scrolls the reported plan's card into view, flashes the
+  // return-focus ring, and strips the param from the URL (keeping ?week=).
+  test("134: ?focus_plan= focuses the reported card and cleans the URL", async ({
+    page,
+  }) => {
+    await setFakeRole(page, "planner");
+
+    const rows = [
+      baseRow({ plan_id: "plan_other", item_name: "CALM 1L" }),
+      baseRow({
+        plan_id: "plan_reported",
+        item_name: "MATCHA 500ML",
+        status: "completed",
+        rendered_state: "done",
+        completed_submission_id: "sub_9",
+        completed_actual: {
+          submission_id: "sub_9",
+          event_at: `${TODAY}T10:00:00Z`,
+          output_qty: "500",
+          scrap_qty: "0",
+          output_uom: "L",
+          variance_qty: "0",
+          variance_pct: "0.00",
+        },
+      }),
+    ];
+
+    await page.route("**/api/production-plan?**", (route) =>
+      route.fulfill({ json: { rows, count: rows.length, as_of: `${TODAY}T00:00:00Z` } }),
+    );
+
+    await page.goto("/planning/production-plan?focus_plan=plan_reported");
+
+    // Scope to the board's job cards — data-plan-id also appears on the
+    // today-strip rows outside the week board.
+    const card = page.locator(
+      '[data-testid="production-job-card"][data-plan-id="plan_reported"]',
+    );
+    await expect(card).toBeVisible({ timeout: 15_000 });
+    // The transient return-focus ring lands on exactly the reported card.
+    await expect(card).toHaveAttribute("data-return-focus", "true");
+    await expect(
+      page.locator(
+        '[data-testid="production-job-card"][data-plan-id="plan_other"]',
+      ),
+    ).not.toHaveAttribute("data-return-focus", "true");
+    // The card is actually inside the viewport (scrollIntoView ran).
+    await expect(card).toBeInViewport();
+    // Param stripped so refresh/back doesn't re-jolt.
+    await expect(page).toHaveURL(/\/planning\/production-plan(?:$|\?(?!.*focus_plan))/);
+    // Ring is transient — gone within ~2.5s.
+    await expect(card).not.toHaveAttribute("data-return-focus", "true", {
+      timeout: 5_000,
+    });
+  });
 });

@@ -62,6 +62,7 @@ import {
   computeAfterBalance,
   exceedsVarianceBand,
   fmtShortfallMessage,
+  planBoardReturnHref,
   varianceReasonLabel,
   VARIANCE_REASON_CODES,
   VARIANCE_REASON_LABELS,
@@ -2475,7 +2476,9 @@ export default function ProductionActualPage() {
                   </span>
                 </span>
                 <Link
-                  href="/planning/production-plan"
+                  // Tranche 134 — jump straight to this plan's card on the
+                  // board (same week, card scrolled into view).
+                  href={planBoardReturnHref(linkedPlan.plan_id, linkedPlan.plan_date)}
                   className="btn btn-ghost btn-sm"
                 >
                   View on the daily plan board
@@ -3010,7 +3013,12 @@ export default function ProductionActualPage() {
           {done.planConflict === "PLAN_ALREADY_COMPLETED" ? (
             <div className="mt-2 flex flex-wrap items-center gap-3">
               <Link
-                href="/planning/production-plan"
+                // Tranche 134 — land on the conflicting plan's own card so the
+                // operator sees WHICH submission already completed it.
+                href={planBoardReturnHref(
+                  linkedPlan?.plan_id ?? null,
+                  linkedPlan?.plan_date ?? null,
+                )}
                 className="btn btn-sm"
                 data-testid="production-actual-view-existing-plan"
               >
@@ -3035,7 +3043,12 @@ export default function ProductionActualPage() {
                 </button>
               ) : null}
               <Link
-                href="/planning/production-plan"
+                // Tranche 134 — open at the mismatched plan's card so
+                // switching starts from the right lane.
+                href={planBoardReturnHref(
+                  linkedPlan?.plan_id ?? null,
+                  linkedPlan?.plan_date ?? null,
+                )}
                 className="text-xs font-medium underline underline-offset-2 hover:no-underline"
               >
                 Open the daily plan board to switch plans
@@ -3081,8 +3094,15 @@ export default function ProductionActualPage() {
                 </Link>
               ) : null}
               {done.committed?.linked_plan_id ? (
+                // Tranche 134 — return to the exact place the operator left:
+                // same week + the reported plan's card scrolled into view
+                // (?week= + ?focus_plan=), not the board's default
+                // today-centered view of the current week.
                 <Link
-                  href="/planning/production-plan"
+                  href={planBoardReturnHref(
+                    done.committed.linked_plan_id,
+                    done.committedPlan?.plan_date ?? null,
+                  )}
                   className="btn btn-sm gap-1.5"
                   data-testid="production-actual-success-back-to-plan"
                 >

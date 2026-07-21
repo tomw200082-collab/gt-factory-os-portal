@@ -1551,12 +1551,22 @@ export default function ProductionPlanPage() {
   // client paint, no hydration mismatch — then this mount effect honors a
   // ?week= param if present. We read window.location directly (rather than
   // useSearchParams) to keep the page SSR-/build-safe with no Suspense wrapper.
+  // Tranche 134 — ?focus_plan=<plan_id>: the return leg from the Production
+  // Report form. Once plans land, the board scrolls that card into view and
+  // flashes a highlight ring, instead of the default today-centering — so
+  // reporting production drops the operator back on the exact card they left.
+  const [focusPlanId, setFocusPlanId] = useState<string | null>(null);
+  const [highlightPlanId, setHighlightPlanId] = useState<string | null>(null);
+
   useEffect(() => {
-    const wk = new URLSearchParams(window.location.search).get("week");
+    const params = new URLSearchParams(window.location.search);
+    const wk = params.get("week");
     if (wk && /^\d{4}-\d{2}-\d{2}$/.test(wk)) {
       const d = new Date(`${wk}T00:00:00`);
       if (!Number.isNaN(d.getTime())) setWeekStart(startOfWeek(d));
     }
+    const focus = params.get("focus_plan");
+    if (focus) setFocusPlanId(focus);
   }, []);
 
   // Change the visible week AND reflect it in the URL. replaceState (not push)
@@ -1814,14 +1824,51 @@ export default function ProductionPlanPage() {
 
   // Run once per week-view load, after plans data lands, and only when today
   // is inside the visible week. Refetches (60s interval) never re-trigger it.
+  // Tranche 134: a pending ?focus_plan= return takes over this load's scroll
+  // — the focus effect below centers the returned-to card (and marks
+  // autoCenteredWeekRef itself), so today-centering must not fight it.
   useEffect(() => {
+    if (focusPlanId) return;
     const weekKey = toIsoDate(weekStart);
     if (autoCenteredWeekRef.current === weekKey) return;
     if (!hasData) return;
     autoCenteredWeekRef.current = weekKey;
     if (todayInWeek) centerTodayLane(false);
     updateTodayVisibility();
-  }, [hasData, todayInWeek, weekStart, centerTodayLane, updateTodayVisibility]);
+  }, [focusPlanId, hasData, todayInWeek, weekStart, centerTodayLane, updateTodayVisibility]);
+
+  // Tranche 134 — consume ?focus_plan=: after plans land, scroll the card
+  // into view (both axes: the horizontal lane inside the board container and
+  // the page's vertical scroll), flash a ~2.5s highlight ring, then strip the
+  // param so refresh/back doesn't re-jolt. A stale id (plan deleted or moved
+  // out of the visible week) falls back to the normal today-centering.
+  useEffect(() => {
+    if (!focusPlanId || !hasData) return;
+    const weekKey = toIsoDate(weekStart);
+    const card = boardRef.current?.querySelector<HTMLElement>(
+      `[data-plan-id="${CSS.escape(focusPlanId)}"]`,
+    );
+    if (card) {
+      card.scrollIntoView({ behavior: "auto", block: "center", inline: "center" });
+      setHighlightPlanId(focusPlanId);
+      window.setTimeout(() => setHighlightPlanId(null), 2500);
+      autoCenteredWeekRef.current = weekKey;
+      updateTodayVisibility();
+    }
+    // Card not found → leave autoCenteredWeekRef unset; clearing focusPlanId
+    // re-runs the today-centering effect above as the fallback.
+    setFocusPlanId(null);
+    const params = new URLSearchParams(window.location.search);
+    if (params.has("focus_plan")) {
+      params.delete("focus_plan");
+      const qs = params.toString();
+      window.history.replaceState(
+        null,
+        "",
+        `${window.location.pathname}${qs ? `?${qs}` : ""}`,
+      );
+    }
+  }, [focusPlanId, hasData, weekStart, updateTodayVisibility]);
 
   useEffect(() => {
     window.addEventListener("resize", updateTodayVisibility);
@@ -2563,6 +2610,7 @@ export default function ProductionPlanPage() {
                       isOverdue={isOverdue}
                       dayTotal={info.total}
                       dominantUom={dominantUom}
+                      highlightPlanId={highlightPlanId}
                       onAdd={(d) => setShowManualAdd({ defaultDate: toIsoDate(d) })}
                       onAddNote={(d) => setShowAddNote({ defaultDate: toIsoDate(d) })}
                       onEdit={setEditingPlan}
