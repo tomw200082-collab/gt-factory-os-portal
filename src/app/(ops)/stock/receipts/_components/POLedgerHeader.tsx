@@ -16,7 +16,9 @@
 // All numbers come from po_lines[]; the parent owns the fetch.
 // ---------------------------------------------------------------------------
 
+import { useState } from "react";
 import Link from "next/link";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import { cn } from "@/lib/cn";
 import {
   type PoLineOption,
@@ -37,6 +39,12 @@ interface POLedgerHeaderProps {
   urlLocked: boolean;
   onSwitch?: () => void;
   isLoading: boolean;
+  // Tranche 137 (door mode) — the progress row (lines-fully-received / qty%
+  // detail) is planner-oriented chrome Dennis doesn't need to make the
+  // qty-and-confirm decision. When true, it starts behind a single
+  // disclosure toggle instead of always-open. The section is never removed
+  // — just collapsed by default — so a tap still reaches it.
+  collapseProgressByDefault?: boolean;
 }
 
 export function POLedgerHeader({
@@ -49,8 +57,12 @@ export function POLedgerHeader({
   urlLocked,
   onSwitch,
   isLoading,
+  collapseProgressByDefault = false,
 }: POLedgerHeaderProps) {
   const bucket = expectedBucketLabel(expectedReceiveDate);
+  const [progressExpanded, setProgressExpanded] = useState(
+    !collapseProgressByDefault,
+  );
 
   // Aggregate progress.
   // Lines complete = line_status === "CLOSED" (received-in-full).
@@ -163,50 +175,73 @@ export function POLedgerHeader({
         </div>
       </div>
 
+      {/* Tranche 137 (door mode) — single disclosure toggle for the
+          progress row, collapsed by default for the operator role. The
+          section itself is unchanged below; this only gates whether it
+          renders open on mount. */}
+      {collapseProgressByDefault ? (
+        <button
+          type="button"
+          className="mt-1.5 inline-flex items-center gap-1 text-3xs font-medium text-fg-muted underline-offset-2 transition-colors hover:text-accent hover:underline focus:outline-none focus-visible:underline focus-visible:text-accent"
+          onClick={() => setProgressExpanded((v) => !v)}
+          aria-expanded={progressExpanded}
+          data-testid="receipt-po-ledger-progress-toggle"
+        >
+          {progressExpanded ? "Hide progress" : "Show progress"}
+          {progressExpanded ? (
+            <ChevronUp className="h-3 w-3" aria-hidden="true" />
+          ) : (
+            <ChevronDown className="h-3 w-3" aria-hidden="true" />
+          )}
+        </button>
+      ) : null}
+
       {/* Row 2: progress bar + summary */}
-      <div className="mt-2">
-        {isLoading ? (
-          <div
-            className="h-2 w-full animate-pulse rounded-full bg-bg-subtle"
-            aria-busy="true"
-          />
-        ) : active.length === 0 ? (
-          <div className="text-xs text-fg-muted">
-            No receivable lines on this PO.
-          </div>
-        ) : (
-          <>
+      {progressExpanded ? (
+        <div className="mt-2" data-testid="receipt-po-ledger-progress-row">
+          {isLoading ? (
             <div
-              className="h-2 w-full overflow-hidden rounded-full bg-bg-subtle"
-              role="progressbar"
-              aria-valuemin={0}
-              aria-valuemax={100}
-              aria-valuenow={qtyPct}
-              aria-label={`${qtyPct}% received by quantity`}
-            >
+              className="h-2 w-full animate-pulse rounded-full bg-bg-subtle"
+              aria-busy="true"
+            />
+          ) : active.length === 0 ? (
+            <div className="text-xs text-fg-muted">
+              No receivable lines on this PO.
+            </div>
+          ) : (
+            <>
               <div
-                className={cn(
-                  "h-full transition-all duration-300",
-                  qtyPct >= 100 ? "bg-success-fg" : "bg-accent",
-                )}
-                style={{ width: `${qtyPct}%` }}
-              />
-            </div>
-            <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-3xs text-fg-muted">
-              <span data-testid="receipt-po-ledger-lines-progress">
-                <span className="font-semibold text-fg">
-                  {closed}/{active.length}
-                </span>{" "}
-                line{active.length !== 1 ? "s" : ""} fully received
-              </span>
-              <span data-testid="receipt-po-ledger-qty-progress">
-                <span className="font-semibold text-fg">{qtyPct}%</span>{" "}
-                by qty
-              </span>
-            </div>
-          </>
-        )}
-      </div>
+                className="h-2 w-full overflow-hidden rounded-full bg-bg-subtle"
+                role="progressbar"
+                aria-valuemin={0}
+                aria-valuemax={100}
+                aria-valuenow={qtyPct}
+                aria-label={`${qtyPct}% received by quantity`}
+              >
+                <div
+                  className={cn(
+                    "h-full transition-all duration-300",
+                    qtyPct >= 100 ? "bg-success-fg" : "bg-accent",
+                  )}
+                  style={{ width: `${qtyPct}%` }}
+                />
+              </div>
+              <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5 text-3xs text-fg-muted">
+                <span data-testid="receipt-po-ledger-lines-progress">
+                  <span className="font-semibold text-fg">
+                    {closed}/{active.length}
+                  </span>{" "}
+                  line{active.length !== 1 ? "s" : ""} fully received
+                </span>
+                <span data-testid="receipt-po-ledger-qty-progress">
+                  <span className="font-semibold text-fg">{qtyPct}%</span>{" "}
+                  by qty
+                </span>
+              </div>
+            </>
+          )}
+        </div>
+      ) : null}
     </div>
   );
 }

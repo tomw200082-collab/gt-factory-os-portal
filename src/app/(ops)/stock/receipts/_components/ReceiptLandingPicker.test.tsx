@@ -12,7 +12,7 @@
 // ---------------------------------------------------------------------------
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { ReceiptLandingPicker } from "./ReceiptLandingPicker";
@@ -52,6 +52,52 @@ function renderPicker(extra: Partial<Parameters<typeof ReceiptLandingPicker>[0]>
   );
   return props;
 }
+
+describe("ReceiptLandingPicker — door mode default bucket (Tranche 137)", () => {
+  it("leads with 'Expected today & this week' and excludes POs due beyond 7 days", async () => {
+    const today = new Date();
+    const iso = (daysFromNow: number) => {
+      const d = new Date(today);
+      d.setDate(d.getDate() + daysFromNow);
+      const pad = (n: number) => String(n).padStart(2, "0");
+      return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    };
+    const overdue: PoOption = { ...PO, po_id: "po-overdue", po_number: "PO-OVERDUE", expected_receive_date: iso(-2) };
+    const soon: PoOption = { ...PO, po_id: "po-soon", po_number: "PO-SOON", expected_receive_date: iso(3) };
+    const later: PoOption = { ...PO, po_id: "po-later", po_number: "PO-LATER", expected_receive_date: iso(30) };
+
+    renderPicker({ openPos: [later, soon, overdue] });
+
+    // Door-mode default: the "Expected today & this week" card is the first
+    // card on the picker (leads over search + manual).
+    const cards = screen.getAllByTestId(/^receipt-landing-(expected|search|manual)$/);
+    expect(cards[0].getAttribute("data-testid")).toBe("receipt-landing-expected");
+
+    // Overdue and within-7-days rows appear in that bucket (getByTestId
+    // throws if either is missing, so reaching the next line is the proof).
+    screen.getByTestId("receipt-landing-expected-row-po-overdue");
+    screen.getByTestId("receipt-landing-expected-row-po-soon");
+    // ...sorted overdue-first (door priority: what's late gets attention first).
+    const expectedCard = screen.getByTestId("receipt-landing-expected");
+    const rowOrder = within(expectedCard)
+      .getAllByTestId(/^receipt-landing-expected-row-/)
+      .map((el) => el.getAttribute("data-testid"));
+    expect(rowOrder).toEqual([
+      "receipt-landing-expected-row-po-overdue",
+      "receipt-landing-expected-row-po-soon",
+    ]);
+    // ...while a PO due a month out is NOT in the default bucket (findable
+    // only via search) — keeps the door-mode default list short.
+    expect(screen.queryByTestId("receipt-landing-expected-row-po-later")).toBeNull();
+  });
+
+  it("demotes the manual/no-PO CTA to a secondary (outline) button, not the primary action", () => {
+    renderPicker();
+    const manualStart = screen.getByTestId("receipt-landing-manual-start");
+    expect(manualStart.className).toContain("btn-outline");
+    expect(manualStart.className).not.toContain("btn-primary");
+  });
+});
 
 describe("ReceiptLandingPicker — express full receive", () => {
   it("calls onReceiveAllInFull with the PO and not onSelectPo", async () => {

@@ -132,3 +132,50 @@ export function expectedBucketLabel(isoDate: string | null): {
   const s = `in ${d}d`;
   return { label: s, longLabel: withDay(s), tier: "later", overdue: false };
 }
+
+// ---------------------------------------------------------------------------
+// Tranche 137 — short-receipt summary builder.
+//
+// Symmetric counterpart to the over-receipt check that already lived inline
+// in page.tsx (quantity > open_qty). A "short" line is matched to a PO line
+// and posts less than the remaining open_qty — an expected, allowed outcome
+// (the PO line stays OPEN/PARTIAL for the rest), not an exception. Extracted
+// as a pure function (mirrors expectedBucketLabel above) so the pre-submit
+// summary and the success-panel delta can share one tested calculation.
+// ---------------------------------------------------------------------------
+export interface ShortReceiptLineInput {
+  po_line_id: string;
+  quantity: string;
+  unit: string;
+  label: string;
+}
+
+export interface ShortReceiptLine {
+  idx: number;
+  label: string;
+  unit: string;
+  shortBy: number;
+}
+
+export function computeShortReceiptLines(
+  lines: ShortReceiptLineInput[],
+  poLines: PoLineOption[],
+): ShortReceiptLine[] {
+  const out: ShortReceiptLine[] = [];
+  lines.forEach((l, idx) => {
+    if (!l.po_line_id) return;
+    const pl = poLines.find((p) => p.po_line_id === l.po_line_id);
+    if (!pl) return;
+    const q = Number(l.quantity) || 0;
+    const open = Number(pl.open_qty) || 0;
+    if (q > 0 && q < open) {
+      out.push({
+        idx,
+        label: l.label || pl.component_name || pl.item_name || `Line ${pl.line_number}`,
+        unit: l.unit,
+        shortBy: open - q,
+      });
+    }
+  });
+  return out;
+}

@@ -40,11 +40,17 @@ import { SectionCard } from "@/components/workflow/SectionCard";
 import { UOMS, type Uom } from "@/lib/contracts/enums";
 import { componentItemType } from "@/lib/contracts/components";
 import { cn } from "@/lib/cn";
+// Tranche 137 — door-mode: the operator role gets a quieter PO ledger
+// header (progress detail collapsed by default) so Dennis sees identity +
+// action, not planner-depth stats.
+import { useSession } from "@/lib/auth/session-provider";
 // Tranche 020 — Smart-picker UX for PO linkage.
 import { ReceiptLandingPicker } from "./_components/ReceiptLandingPicker";
 import { POLedgerHeader } from "./_components/POLedgerHeader";
 import { POLineMatchCard } from "./_components/POLineMatchCard";
-import type { ReceiptTrack } from "./_components/types";
+// Tranche 137 — computeShortReceiptLines is the shared calc used by both the
+// pre-submit sticky-bar summary and the success-panel per-line delta.
+import { type ReceiptTrack, computeShortReceiptLines } from "./_components/types";
 // Tranche 022 — strip 8-dp noise from prefill values before they hit
 // the number input.
 import { fmtNumStr } from "@/lib/utils/format-quantity";
@@ -248,7 +254,16 @@ interface DoneState {
   poNumber?: string;
   postedLines?: number;
   // UX: posted line details for success display (improvement #19)
-  postedLineDetails?: Array<{ label: string; quantity: string; unit: Uom }>;
+  // Tranche 137 — shortBy carries the symmetric under-receipt delta (open_qty
+  // minus posted quantity) so the success panel can show "Short by N unit —
+  // PO stays open for the rest" per line, mirroring the over-receipt callout.
+  // Omitted (undefined) for lines with no PO match or no shortfall.
+  postedLineDetails?: Array<{
+    label: string;
+    quantity: string;
+    unit: Uom;
+    shortBy?: number;
+  }>;
 }
 
 // ---------------------------------------------------------------------------
@@ -514,6 +529,11 @@ export default function GoodsReceiptPage() {
   const searchParams = useSearchParams();
   const urlPoId = searchParams?.get("po_id") ?? "";
   const queryClient = useQueryClient();
+  // Tranche 137 — door mode. Dennis (operator) gets a quieter PO ledger
+  // header (progress detail collapsed by default); planner/admin see the
+  // full always-open header unchanged.
+  const { session } = useSession();
+  const isOperatorRole = session.role === "operator";
 
   const itemsQuery = useQuery<ListEnvelope<ItemRow>>({
     queryKey: ["master", "items", "ACTIVE"],
@@ -887,13 +907,36 @@ export default function GoodsReceiptPage() {
           .filter((s): s is string => s !== null);
         const itemSummary = [supplierName, ...lineParts].join(" · ");
         // Capture per-line details for the bulleted list (improvement #19)
-        const postedLineDetails = lines
-          .map((l) => {
-            const row = receivableByKey.get(l.receivable_key);
-            if (!row || !l.quantity) return null;
-            return { label: row.label, quantity: l.quantity, unit: l.unit };
-          })
-          .filter((x): x is { label: string; quantity: string; unit: Uom } => x !== null);
+        // Tranche 137 — shortBy carries forward into the success panel so a
+        // short receipt's "PO stays open for the rest" delta survives the
+        // form reset below, mirroring the pre-submit shortReceiptLines calc.
+        const shortByIdx = new Map(
+          computeShortReceiptLines(
+            lines.map((l) => ({
+              po_line_id: l.po_line_id,
+              quantity: l.quantity,
+              unit: l.unit,
+              label: receivableByKey.get(l.receivable_key)?.label ?? "",
+            })),
+            poLines,
+          ).map((s) => [s.idx, s.shortBy]),
+        );
+        const postedLineDetails: Array<{
+          label: string;
+          quantity: string;
+          unit: Uom;
+          shortBy?: number;
+        }> = [];
+        lines.forEach((l, idx) => {
+          const row = receivableByKey.get(l.receivable_key);
+          if (!row || !l.quantity) return;
+          postedLineDetails.push({
+            label: row.label,
+            quantity: l.quantity,
+            unit: l.unit,
+            shortBy: shortByIdx.get(idx),
+          });
+        });
         setDone({
           kind: "success",
           message: committed.idempotent_replay
@@ -1038,6 +1081,28 @@ export default function GoodsReceiptPage() {
     }
     return n;
   }, [lines, poLines, poId]);
+
+  // Tranche 137 — symmetric under-receipt visibility. Over-receipt already
+  // gets a loud two-step confirm (above); short-receipts (received <
+  // open_qty) are a normal, expected outcome (the PO stays OPEN/PARTIAL for
+  // the rest) but previously had zero pre-submit surfacing beyond the
+  // neutral "Left" pill on POLineMatchCard. Mirrors overReceiptCount's shape.
+  // Presentation only — open_qty math is already server-truth. Calculation
+  // lives in computeShortReceiptLines (types.ts) so it's unit-testable and
+  // shared with the success-panel delta at submit time.
+  const shortReceiptLines = useMemo(() => {
+    if (!poId || poLines.length === 0) return [];
+    return computeShortReceiptLines(
+      lines.map((l) => ({
+        po_line_id: l.po_line_id,
+        quantity: l.quantity,
+        unit: l.unit,
+        label: receivableByKey.get(l.receivable_key)?.label ?? "",
+      })),
+      poLines,
+    );
+  }, [lines, poLines, poId, receivableByKey]);
+  const shortReceiptCount = shortReceiptLines.length;
 
   // Tranche 065 (FLOW-R01) — two-step submit when over-receipts exist:
   // while true, the submit button is replaced by the amber inline
@@ -1268,6 +1333,7 @@ export default function GoodsReceiptPage() {
                 }
           }
           isLoading={poDetailQuery.isLoading}
+          collapseProgressByDefault={isOperatorRole}
         />
       ) : null}
 
@@ -1319,11 +1385,25 @@ export default function GoodsReceiptPage() {
                   </div>
                   <ul className="mt-1 space-y-0.5">
                     {done.postedLineDetails.map((ld, i) => (
-                      <li key={i} className="flex items-center gap-1 text-xs opacity-90">
-                        <span className="text-success-fg">+</span>
-                        <span>
-                          {ld.quantity} {ld.unit} of <strong>{ld.label}</strong>
-                        </span>
+                      <li key={i} className="text-xs opacity-90">
+                        <div className="flex items-center gap-1">
+                          <span className="text-success-fg">+</span>
+                          <span>
+                            {ld.quantity} {ld.unit} of <strong>{ld.label}</strong>
+                          </span>
+                        </div>
+                        {/* Tranche 137 — symmetric under-receipt delta on
+                            the success panel, same "PO stays open" copy as
+                            the pre-submit summary. */}
+                        {ld.shortBy ? (
+                          <div
+                            className="ml-4 text-3xs"
+                            data-testid="receipt-success-short-delta"
+                          >
+                            Short vs ordered: {fmtNumStr(String(ld.shortBy))}{" "}
+                            {ld.unit} — PO stays open for the rest.
+                          </div>
+                        ) : null}
                       </li>
                     ))}
                   </ul>
@@ -2043,10 +2123,13 @@ export default function GoodsReceiptPage() {
                         />
                       </label>
 
-                      {/* #29: Remove button with × SVG icon */}
+                      {/* #29: Remove button with × SVG icon.
+                          Tranche 137 (door mode) — bumped from btn-sm (28px)
+                          to an explicit 44px square so it's a reliable
+                          per-line touch target at the door. */}
                       <button
                         type="button"
-                        className="btn btn-ghost btn-sm group flex items-center gap-1 md:self-end transition-colors duration-150"
+                        className="btn btn-ghost group flex h-11 w-11 shrink-0 items-center justify-center gap-1 md:self-end transition-colors duration-150"
                         onClick={() => removeLine(idx)}
                         disabled={lines.length === 1 || phase === "submitting"}
                         aria-label={`Remove line ${idx + 1}`}
@@ -2164,6 +2247,44 @@ export default function GoodsReceiptPage() {
                       {overReceiptCount !== 1 ? "s" : ""}
                     </span>
                   ) : null}
+                  {/* Tranche 137 — symmetric short-receipt badge. Neutral
+                      (not danger) tone: a short receipt is an expected,
+                      allowed outcome, not an exception. */}
+                  {shortReceiptCount > 0 ? (
+                    <span
+                      className="inline-flex items-center gap-1 rounded-full bg-warning-softer px-2 py-0.5 text-3xs font-semibold text-warning-fg"
+                      data-testid="receipt-summary-short-receipt"
+                    >
+                      <ArrowDown className="h-3 w-3" aria-hidden="true" />
+                      {shortReceiptCount} short
+                    </span>
+                  ) : null}
+                </div>
+              ) : null}
+
+              {/* Tranche 137 — pre-submit short-receipt summary. Mirrors the
+                  over-receipt confirm zone's role (naming the exception
+                  count) but is informational, not a confirm gate: a short
+                  receipt needs no extra tap to post, only visibility that
+                  the PO line stays open for the remainder. */}
+              {shortReceiptCount > 0 ? (
+                <div
+                  className="mb-2 rounded-md border border-warning/40 bg-warning-softer px-3 py-2 text-xs text-warning-fg"
+                  role="status"
+                  data-testid="receipt-short-receipt-summary"
+                >
+                  <div className="font-semibold">
+                    {shortReceiptCount} line{shortReceiptCount !== 1 ? "s" : ""} short vs ordered
+                  </div>
+                  <ul className="mt-1 space-y-0.5">
+                    {shortReceiptLines.map((s) => (
+                      <li key={s.idx}>
+                        <span className="font-medium">{s.label}:</span> Short
+                        vs ordered: {fmtNumStr(String(s.shortBy))} {s.unit} —
+                        PO stays open for the rest.
+                      </li>
+                    ))}
+                  </ul>
                 </div>
               ) : null}
 
