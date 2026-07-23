@@ -59,7 +59,11 @@ export function CandidateSupplierList({
           <li key={c.supplier_id}>
             <label
               className={cn(
-                "flex items-start gap-2 rounded-lg border px-3 py-2 transition",
+                // min-h keeps the whole row a comfortable touch target; the
+                // radio is sr-only, so surface its keyboard focus on the label
+                // (focus-within) — otherwise keyboard users get no focus cue.
+                "flex min-h-[44px] items-start gap-2 rounded-lg border px-3 py-2 transition",
+                "focus-within:border-accent focus-within:ring-2 focus-within:ring-accent/50",
                 c.is_current
                   ? "border-border bg-bg-muted/60"
                   : "cursor-pointer border-border hover:border-accent/60 hover:bg-accent/5",

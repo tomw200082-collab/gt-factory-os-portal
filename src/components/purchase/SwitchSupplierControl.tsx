@@ -124,7 +124,7 @@ export function SwitchSupplierControl({
           onClick={() => setOpen(false)}
           aria-label="סגור"
           disabled={isPending}
-          className="rounded p-0.5 text-fg-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 disabled:opacity-50"
+          className="-m-1 rounded p-2 text-fg-muted hover:text-fg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 disabled:opacity-50"
         >
           <X className="h-4 w-4" aria-hidden />
         </button>
@@ -154,8 +154,9 @@ export function SwitchSupplierControl({
                 type="button"
                 disabled={isPending}
                 onClick={() => setReason(active ? "" : q)}
+                aria-pressed={active}
                 className={cn(
-                  "rounded-full border px-2.5 py-0.5 text-3xs transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
+                  "rounded-full border px-3 py-1.5 text-3xs transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
                   active
                     ? "border-accent bg-accent/10 text-accent"
                     : "border-border text-fg-muted hover:border-accent/50",

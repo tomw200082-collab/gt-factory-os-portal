@@ -56,7 +56,9 @@ export function SupplierCallLink({
       aria-label={label}
       dir="ltr"
       className={cn(
-        "inline-flex items-center gap-1 rounded font-mono text-xs text-accent",
+        // -my-1/py-1 enlarge the tap target toward 44px without inflating the
+        // dense row height (touch-target-size).
+        "-my-1 inline-flex min-h-[28px] items-center gap-1 rounded px-1 py-1 font-mono text-xs text-accent",
         "hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
         className,
       )}
