@@ -4,7 +4,8 @@
     "This file is human-ritual-only — hook refuses normal edits.",
     "Update via a tranche-fix with kind=baseline-update after an intentional surface change has landed.",
     "Tranche 046 (2026-06-11, kind=baseline-update): anchors populated from live repo truth — routes[] mirrors the regenerated route-manifest.json (path+status), nav_items[] mirrors src/lib/nav/manifest.ts NAV_MANIFEST (href+label+min_role), role_gates{} mirrors src/middleware.ts ROLE_GATES (prefix → allowed roles, first-match-wins order). critical_invariants corrected to state the actual layout gating. anchor_sha unchanged from seed — supersede on next intentional surface change.",
-    "Tranche 090 (2026-06-25, kind=baseline-update): re-anchored after the regression-sentinel flagged 4 authorized post-baseline surface additions as low-severity drift. anchor_sha advanced to 096467f. Added: nav_items credit-tracking (CLAUDE.md bookkeeper surface), /admin/decision-board (tranche 080), /purchase-orders/placement-queue (tranche 086); role_gate /inventory/bulk-count (mirrors middleware, before broader /inventory); routes rows for the three new manifest orphans. Additive only — nothing removed."
+    "Tranche 090 (2026-06-25, kind=baseline-update): re-anchored after the regression-sentinel flagged 4 authorized post-baseline surface additions as low-severity drift. anchor_sha advanced to 096467f. Added: nav_items credit-tracking (CLAUDE.md bookkeeper surface), /admin/decision-board (tranche 080), /purchase-orders/placement-queue (tranche 086); role_gate /inventory/bulk-count (mirrors middleware, before broader /inventory); routes rows for the three new manifest orphans. Additive only — nothing removed.",
+    "Tranche 138 (2026-07-23, kind=baseline-update): lean-nav re-anchor (Tom-approved D1 fold list + D2 hidden-doctrine, 2026-07-23). NAV pruning + role scoping ONLY — zero route deletion, routes[] and role_gates{} UNCHANGED (every URL stays live and middleware-reachable exactly as before; the fold is client nav-visibility). nav_items[] changes: /planning ('Planning Overview') and /planning/forecast ('Forecast') min_role raised viewer→planner (self-declared diagnostic + monthly Tom cadence; operators/viewers have no action, writes are server-blocked). NOT reflected in nav_items[] because this snapshot tracks only href+label+min_role: (a) /credit-tracking + /stock/movement-log gained a client-side exact `roles` allow-list [viewer,planner,admin] that scopes them out of the OPERATOR sidebar (min_role unchanged — the route stays reachable for operators by URL/⌘K); (b) /planning/production-simulation + /planning/blockers gained placement:'command' (folded to ⌘K + deep link, still live, still in NAV_MANIFEST so active-path/breadcrumb/palette resolve them); (c) viewer's 4 stock:execute rows + /me/activity are HIDDEN by the D2 never-grantable rule (SideNav render logic, not the manifest). All of (a)/(b)/(c) are nav-visibility mechanisms with no baseline-tracked field, so they are documented here rather than as row diffs. anchor_sha advanced to the tranche-138 nav-truth commit."
   ],
   "generated_at": "2026-06-11T00:00:00Z",
   "anchor_sha": "096467f",
@@ -100,8 +101,8 @@
     { "href": "/inventory", "label": "Inventory", "min_role": "viewer" },
     { "href": "/credit-tracking", "label": "Credit Tracking", "min_role": "viewer" },
     { "href": "/stock/movement-log", "label": "Movement Log", "min_role": "viewer" },
-    { "href": "/planning", "label": "Planning Overview", "min_role": "viewer" },
-    { "href": "/planning/forecast", "label": "Forecast", "min_role": "viewer" },
+    { "href": "/planning", "label": "Planning Overview", "min_role": "planner" },
+    { "href": "/planning/forecast", "label": "Forecast", "min_role": "planner" },
     { "href": "/planning/production-plan", "label": "Daily Production Plan", "min_role": "viewer" },
     { "href": "/planning/procurement", "label": "Procurement", "min_role": "planner" },
     { "href": "/planning/production-simulation", "label": "Production Simulation", "min_role": "planner" },

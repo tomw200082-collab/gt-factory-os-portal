@@ -265,19 +265,22 @@ export const HOME_TILES: readonly HomeTile[] = [
     required: "stock:execute",
   },
   {
-    href: "/stock/waste-adjustments",
-    label: "Waste / adjustment",
-    blurb: "Record loss or positive adjustments.",
-    icon: MinusCircle,
+    // Tranche 138 — ordered ahead of Waste/adjustment so the operator's stock
+    // group leads with the Dennis/Maxim reality (Production Report is the hero
+    // tile; Goods receipt + Physical count are the next two daily actions).
+    href: "/stock/physical-count",
+    label: "Physical count",
+    blurb: "Blind count — you don't see current stock. Freeze on submit; stock truth updates on approval.",
+    icon: ClipboardCheck,
     group: "stock",
     minRole: "viewer",
     required: "stock:execute",
   },
   {
-    href: "/stock/physical-count",
-    label: "Physical count",
-    blurb: "Blind count — you don't see current stock. Freeze on submit; stock truth updates on approval.",
-    icon: ClipboardCheck,
+    href: "/stock/waste-adjustments",
+    label: "Waste / adjustment",
+    blurb: "Record loss or positive adjustments.",
+    icon: MinusCircle,
     group: "stock",
     minRole: "viewer",
     required: "stock:execute",

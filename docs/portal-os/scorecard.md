@@ -1,5 +1,30 @@
-# Portal Readiness: 94/100 (delta: +50 total, +1 this update)
+# Portal Readiness: 94/100 (delta: +50 total, +0 this update)
 
+> **2026-07-23 lean-nav (Tranche 138).** **+0 — deliberately no numeric
+> delta.** A per-role nav pruning + role-scoping pass (Tom-approved D1 fold
+> list + D2 hidden-doctrine, 2026-07-23). Its target category `nav_integrity`
+> is already at the 10/10 ceiling; this is a qualitative lean/nav-quality
+> improvement (fewer rows per role, permanently-locked padlocks removed, two
+> diagnostics folded to ⌘K), and moving a rubric score for a visibility-only
+> change would be dishonest. Recorded as a `nav_integrity` evidence line and a
+> `scorecard.json` `_notes` entry, no score change. **VISIBILITY-only — zero
+> route deletion, `route-manifest.json` + middleware ROLE_GATES + the
+> capability lattice all untouched; every folded URL still loads directly
+> (proven per-role in e2e) and stays ⌘K-reachable.** New `roles?: Role[]`
+> exact allow-list on `NavItem` (overrides the `min_role` floor), applied
+> uniformly in SideNav + TopBar + CommandPalette; `placement:"command"` folds
+> production-simulation + blockers out of the rail but keeps them in
+> `NAV_MANIFEST` (⌘K + deep link); `/planning` overview + forecast min_role
+> viewer→planner; `/credit-tracking` + `/stock/movement-log` scoped out of the
+> operator rail; the D2 `isCapabilityPermanentlyUnreachable` rule hides the
+> viewer's four permanently-locked stock forms + `/me/activity` (rows a role
+> could still gain keep the truthful subdued padlock); operator cockpit stock
+> group leads with Production Report + Goods receipt + Physical count. Rails:
+> operator ~14→9, viewer ~13→6, planner/admin drop the two diagnostic folds.
+> tsc 0, eslint 0, vitest 982/982 (968 + 14 new), playwright `@mocked`
+> chromium 10/10 (`lean-nav.spec.ts`) + 4 per-role sidebar screenshots.
+> `baseline.json` re-anchored (`kind=baseline-update`).
+>
 > **2026-07-23 Today board (Tranche 136).** +1: `dashboard_truth` 9 → 10.
 > A 3-tab **Today board** (Yesterday / Today / Tomorrow, read-only v1) mounts
 > inside the existing `/home` for operator/planner/admin (viewer/bookkeeper

@@ -25,32 +25,17 @@ import { ChevronDown, Lock, LogOut, Moon, Search, Sun, X } from "lucide-react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useState, useCallback, useEffect, useRef } from "react";
 import { useSession } from "@/lib/auth/session-provider";
-import { authorizeCapability } from "@/lib/auth/authorize";
 import { useTheme } from "@/lib/theme";
 import {
   NAV_MANIFEST,
-  type NavItem,
   type NavItemBadge,
   type NavGroup,
 } from "@/lib/nav/manifest";
-import type { Role } from "@/lib/contracts/enums";
+import { isSidebarRowVisible, type SidebarRow } from "@/lib/nav/visible";
+import { authorizeCapability } from "@/lib/auth/authorize";
 import { cn } from "@/lib/cn";
 
-const ROLE_ORDER: Record<Role, number> = {
-  viewer: 1,
-  operator: 2,
-  planner: 3,
-  admin: 4,
-};
-
-function meetsMinRole(role: Role, min: Role): boolean {
-  return ROLE_ORDER[role] >= ROLE_ORDER[min];
-}
-
-interface SideNavEntry {
-  item: NavItem;
-  subdued: boolean;
-}
+type SideNavEntry = SidebarRow;
 
 function readBadgeCount(
   queryClient: ReturnType<typeof useQueryClient>,
@@ -239,12 +224,12 @@ export function SideNav({ onNavigate, density = "compact" }: SideNavProps = {}) 
 
       {NAV_MANIFEST.map((group) => {
         const entries: SideNavEntry[] = group.items
-          // Tranche 090 — "top"-placed items (Dashboard, Inbox) live in the
-          // TopBar, not the sidebar. A group left empty by this filter is
-          // skipped below (entries.length === 0), so the Overview group
-          // disappears from the sidebar automatically.
-          .filter((i) => i.placement !== "top")
-          .filter((i) => meetsMinRole(session.role, i.min_role))
+          // Tranche 138 — one visibility gate for the rail: placement === side
+          // (TopBar/⌘K-only items excluded), the role floor/allow-list, and the
+          // never-grantable HIDE rule (D2). Rows the role could still unlock
+          // remain, rendered subdued. A group emptied by this filter is skipped
+          // below (entries.length === 0).
+          .filter((i) => isSidebarRowVisible(session.role, i))
           .filter((i) => searchLower === "" || i.label.toLowerCase().includes(searchLower))
           .map((i) => {
             const grantOK =
