@@ -1020,6 +1020,20 @@ function EditModal({
             </label>
           </div>
 
+          {/* FLOW-013 — for a base batch this quantity is the TOTAL base-liquid
+              volume, and every product's share rescales with it. Warn so an
+              edit here isn't mistaken for a per-product change. */}
+          {plan.is_base_batch ? (
+            <div
+              className="rounded-md border border-warning/40 bg-warning-softer px-3 py-2 text-xs text-warning-fg"
+              data-testid="edit-base-batch-warning"
+            >
+              This is the total base-batch size. Changing it resizes the whole
+              batch — every product&apos;s planned quantity rescales. To change
+              how the batch splits between products, use the pack-split editor.
+            </div>
+          ) : null}
+
           <label className="block">
             <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-muted">
               Notes
@@ -1392,6 +1406,16 @@ function CancelModal({
           <span className="font-medium">Heads up: </span>
           Cancelling a plan does not change inventory. It only removes the row
           from the production board.
+          {/* FLOW-014 — a base batch is one plan covering N products; name that
+              scope so the planner knows the whole batch is being cancelled. */}
+          {plan.is_base_batch ? (
+            <>
+              {" "}
+              This cancels the entire base batch and all{" "}
+              {plan.pack_manifest_count} product
+              {plan.pack_manifest_count === 1 ? "" : "s"} in it.
+            </>
+          ) : null}
         </div>
 
         <form

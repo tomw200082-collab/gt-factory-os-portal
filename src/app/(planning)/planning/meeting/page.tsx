@@ -1456,7 +1456,7 @@ function ProcurePanel() {
             <ArrowRight className="h-4 w-4 text-accent transition-transform group-hover:translate-x-0.5" />
           </Link>
           <Link
-            href="/planning/procurement"
+            href="/planning/procurement?view=calendar"
             className={cn("group flex items-center justify-between rounded-lg border border-border bg-bg-raised p-4 shadow-hairline transition-colors hover:bg-bg-muted", focusRing)}
           >
             <span className="flex items-center gap-3">

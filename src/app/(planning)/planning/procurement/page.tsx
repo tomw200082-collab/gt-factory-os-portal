@@ -242,7 +242,7 @@ export default function ProcurementPage(): JSX.Element {
           onRetry={() => void refetch()}
         />
       ) : !session ? (
-        <EmptyNoSession />
+        <EmptyNoSession onStart={handleStart} starting={startMut.isPending} />
       ) : (
         <SessionView
           pos={session.pos}
@@ -503,7 +503,13 @@ function LoadingState(): JSX.Element {
   );
 }
 
-function EmptyNoSession(): JSX.Element {
+function EmptyNoSession({
+  onStart,
+  starting,
+}: {
+  onStart?: () => void;
+  starting?: boolean;
+}): JSX.Element {
   return (
     <div
       className="card flex flex-col items-center gap-3 p-8 text-center"
@@ -514,6 +520,19 @@ function EmptyNoSession(): JSX.Element {
         התחילו מושב רכש שבועי כדי לראות את כל ההזמנות המוצעות, מסודרות לפי מה
         שחייב לצאת היום ומה יכול לחכות.
       </div>
+      {/* FLOW-007 — the empty state carries its own primary action so the
+          planner never has to scroll back up to the header to start. */}
+      {onStart ? (
+        <button
+          type="button"
+          className="btn btn-primary mt-1"
+          onClick={onStart}
+          disabled={starting}
+          data-testid="procurement-no-session-start"
+        >
+          {starting ? "מתחיל…" : "התחל מושב רכש"}
+        </button>
+      ) : null}
     </div>
   );
 }
