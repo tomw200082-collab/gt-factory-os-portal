@@ -17,6 +17,9 @@ export interface QueuePo {
   po_number: string;
   supplier_id: string;
   supplier_name: string | null;
+  // Tranche 140 raw-material-first: current supplier contact phone for the
+  // click-to-call affordance. Optional — null / older API responses.
+  supplier_phone?: string | null;
   status: string;
   expected_receive_date: string | null;
   currency: string;

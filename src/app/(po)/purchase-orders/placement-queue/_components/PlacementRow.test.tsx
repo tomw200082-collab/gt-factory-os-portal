@@ -16,6 +16,7 @@ const PO: QueuePo = {
   po_number: "PO-2026-00001",
   supplier_id: "sup1",
   supplier_name: "אקמה",
+  supplier_phone: "050-999 8888",
   status: "APPROVED_TO_ORDER",
   expected_receive_date: "2026-06-30",
   currency: "ILS",
@@ -57,6 +58,17 @@ function renderRow() {
 }
 
 describe("PlacementRow", () => {
+  it("exposes the supplier as a labelled attribute with a click-to-call link in the expanded panel (tranche 140)", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async () => {
+      return new Response(JSON.stringify(LINES), { status: 200 });
+    });
+    renderRow();
+    await userEvent.click(screen.getByTestId("placement-row-toggle-po1"));
+    await screen.findByTestId("placement-price-l1");
+    const call = screen.getByRole("link", { name: /התקשר/ });
+    expect(call.getAttribute("href")).toBe("tel:0509998888");
+  });
+
   it("blocks placing without a payment term — submit stays disabled with an explanatory title (DR-018 INTER-003)", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")

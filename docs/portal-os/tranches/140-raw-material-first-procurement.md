@@ -9,8 +9,8 @@ Both procurement surfaces become **raw-material-first**: each raw material (line
 
 ## Two surfaces, two data paths
 
-- **`/planning/procurement`** — purchase-*session* drafts (planner). Switch = session-line re-route (backend migration 0288 `handleRerouteLine`, companion PR `gt-factory-os`).
-- **`/purchase-orders/placement-queue`** — real `APPROVED_TO_ORDER` purchase orders (office manager / Dorin, who actually phones suppliers). Switch = whole-PO supplier switch (backend `fn_switch_po_supplier`, companion PR).
+- **`/planning/procurement`** — purchase-*session* drafts (planner). **Per-material supplier switch** lives here (backend migration 0288 `handleRerouteLine`, companion PR `gt-factory-os` #182): each material shows its supplier + call link + "החלף ספק" (next candidate preselected, optional reason, no-alternative → return-to-planner).
+- **`/purchase-orders/placement-queue`** — real `APPROVED_TO_ORDER` purchase orders (office manager / Dorin, who phones suppliers). Ships **material-first presentation + click-to-call** (supplier surfaced as a labelled attribute with a `tel:` link; materials are the heroes). A real-PO *in-place supplier switch* on this surface is a **deliberately deferred** follow-up: mutating real POs is higher blast-radius and cannot be DB-tested in the authoring sandbox, and the supplier decision already has a safe home on the session re-route above. When a supplier can't fulfil at call time, the change routes through the planner's session re-route rather than mutating a live PO.
 
 **Cross-lane note:** the backend halves live in `gt-factory-os` on the same branch — companion PR (#182 + follow-up). Authorized by Tom's direct dispatch.
 

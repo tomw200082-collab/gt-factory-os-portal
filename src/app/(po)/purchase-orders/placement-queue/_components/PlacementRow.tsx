@@ -23,6 +23,7 @@ import { useConfirm } from "@/components/overlays/ConfirmDialog";
 import { formatIls } from "@/lib/utils/format-money";
 import { fmtNumStr } from "@/lib/utils/format-quantity";
 import { PAYMENT_TERMS, paymentTermByCode } from "@/lib/payment-terms";
+import { SupplierCallLink } from "@/components/purchase/SupplierCallLink";
 import {
   usePoLines,
   usePlaceOrder,
@@ -412,6 +413,20 @@ export function PlacementRow({
             </div>
           ) : (
             <div className="space-y-4">
+              {/* Tranche 140 raw-material-first: the materials below are the
+                  heroes; the supplier is a labelled attribute with a
+                  click-to-call so the office manager phones them in one tap. */}
+              <div className="flex flex-wrap items-center gap-x-3 gap-y-1 rounded-md border border-border/50 bg-bg-subtle/30 px-3 py-2">
+                <span className="text-xs text-fg-muted">ספק:</span>
+                <span className="text-sm font-medium text-fg">
+                  {po.supplier_name ?? "ספק לא ידוע"}
+                </span>
+                <SupplierCallLink
+                  phone={po.supplier_phone}
+                  supplierName={po.supplier_name ?? undefined}
+                />
+              </div>
+
               {/* Lines + per-line price */}
               <ul className="space-y-2">
                 {lines.map((l) => (
