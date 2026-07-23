@@ -22,6 +22,9 @@ export interface DraftWeekPackEntry {
   item_id: string;
   item_name: string | null;
   qty: number;
+  // Liters of base per unit — optional (older API deploys omit it); the tune
+  // dialog's liters meter degrades to unit totals when absent.
+  fill_l_per_unit?: string | null;
 }
 
 export interface DraftWeekRow {
@@ -256,11 +259,13 @@ export function useDraftWeek(weekStart: string, enabled = true) {
         `/api/planning/draft-week?week_start=${encodeURIComponent(weekStart)}`,
       );
       if (!res.ok) {
+        // COPY-003/010 (2026-07-23 gate) — no raw HTTP codes to operators;
+        // permission errors carry a recovery path.
         throw new CadenceFetchError(
           res.status,
           res.status === 403
-            ? "You don't have permission to view the draft week."
-            : `Could not load the draft week (HTTP ${res.status}).`,
+            ? "You don't have permission to view the draft week. Ask an administrator to grant you the planner or admin role."
+            : "We couldn't load the draft batches for this week. Try refreshing. If the problem continues, contact the system administrator.",
         );
       }
       return (await res.json()) as DraftWeekResponse;
@@ -338,17 +343,12 @@ export function useFirmWeek() {
         }),
       });
       if (!res.ok) {
-        let detail = "";
-        try {
-          const j = (await res.json()) as { detail?: string; error?: string };
-          detail = j.detail ?? j.error ?? "";
-        } catch {
-          /* ignore */
-        }
+        // COPY-004 (2026-07-23 gate) — raw backend detail / HTTP codes never
+        // reach the operator.
         throw new Error(
           mapCadenceMutationErrorMessage(
             res.status,
-            `Could not firm the week (HTTP ${res.status})${detail ? ` — ${detail}` : ""}.`,
+            "We couldn't lock this week. Try again, or contact the system administrator if the problem continues.",
           ),
         );
       }
@@ -396,17 +396,11 @@ export function useCancelFirmedWeek() {
         }),
       });
       if (!res.ok) {
-        let detail = "";
-        try {
-          const j = (await res.json()) as { detail?: string; error?: string };
-          detail = j.detail ?? j.error ?? "";
-        } catch {
-          /* ignore */
-        }
+        // COPY-004 — same operator-facing hardening as the firm mutation.
         throw new Error(
           mapCadenceMutationErrorMessage(
             res.status,
-            `Could not unlock the week (HTTP ${res.status})${detail ? ` — ${detail}` : ""}.`,
+            "We couldn't unlock this week. Try again, or contact the system administrator if the problem continues.",
           ),
         );
       }

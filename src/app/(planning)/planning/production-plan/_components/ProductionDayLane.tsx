@@ -40,7 +40,9 @@ function laneHeaderBorder(isToday: boolean, isOverdue: boolean): string {
 function dayNameColor(isToday: boolean, isOverdue: boolean, isPast: boolean): string {
   if (isToday) return "text-accent";
   if (isOverdue) return "text-warning-fg";
-  if (isPast) return "text-fg-subtle";
+  // VIS-002 (2026-07-23 gate): fg-subtle (3.09:1) failed AA on structural
+  // board navigation; past days stay de-emphasized via the lane opacity.
+  if (isPast) return "text-fg-muted";
   return "text-fg-muted";
 }
 
@@ -167,7 +169,10 @@ export function ProductionDayLane({
                     "No production planned" — which states what's absent, not the
                     action. Keep the absence as context and make the button label
                     the action ("Add production"). */}
-                <span className="text-[10px] text-fg-faint">No production planned</span>
+                {/* COPY-009 — scope the absence to the day. */}
+                <span className="text-[10px] text-fg-muted">
+                  No production planned for {dayName} yet
+                </span>
                 <button
                   type="button"
                   className="flex flex-col items-center gap-2 group/add transition-opacity duration-150"
@@ -188,7 +193,8 @@ export function ProductionDayLane({
                       strokeWidth={2}
                     />
                   </div>
-                  <span className="text-[10px] font-medium text-fg-subtle group-hover/add:text-accent transition-colors duration-150">
+                  {/* VIS-002 — primary action label must clear AA contrast. */}
+                  <span className="text-[10px] font-medium text-fg-muted group-hover/add:text-accent transition-colors duration-150">
                     Add production
                   </span>
                 </button>

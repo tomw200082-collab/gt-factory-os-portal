@@ -8,6 +8,10 @@ export interface PackManifestLine {
   item_id: string;
   item_name: string | null;
   qty: string;
+  // Liters of base per unit (items.base_fill_qty_per_unit), serialized as
+  // text. Optional: older API deploys may omit it; the tune dialog's liters
+  // meter degrades to unit totals when absent.
+  fill_l_per_unit?: string | null;
   uom: string | null;
 }
 
@@ -128,6 +132,11 @@ export type PatchProductionPlanRequest =
       uom?: string;
       notes?: string;
       bom_version_id_pinned?: string;
+      // Base-batch pack-split tuning (meeting cockpit): the COMPLETE intended
+      // split — the backend replaces the row's manifest wholesale and
+      // recomputes fg_share. Base-batch rows only; cannot be combined with
+      // planned_qty/uom (batch stays = batch_size_l).
+      pack_manifest?: Array<{ item_id: string; qty: number }>;
     };
 
 // DELETE /api/v1/mutations/production-plan/:id — hard-delete response.
