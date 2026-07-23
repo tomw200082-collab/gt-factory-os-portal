@@ -1,5 +1,23 @@
-# Portal Readiness: 93/100 (delta: +49 total, +1 this update)
+# Portal Readiness: 94/100 (delta: +50 total, +1 this update)
 
+> **2026-07-23 Today board (Tranche 136).** +1: `dashboard_truth` 9 → 10.
+> A 3-tab **Today board** (Yesterday / Today / Tomorrow, read-only v1) mounts
+> inside the existing `/home` for operator/planner/admin (viewer/bookkeeper
+> cockpit unchanged) per the 2026-07-22 mapping-v3 Q6 decision. Yesterday is
+> a real runs-today-vs-yesterday view — plan-vs-actual per plan row, joined
+> client-side ahead of the backend aggregation gap (G1), with a first-position
+> "no report entered" flag (Q12). Today is the locked plan + supplier
+> arrivals (linked to `/stock/receipts?po_id=`, tranche 137). Tomorrow is
+> per-item READY/SHORT from the same production-aware Inventory Flow
+> projection (Q5). No new endpoints — reuses `useRovingTabList`, `usePlans`,
+> `useInventoryFlow` verbatim. Every remaining named gap (G1 canonical join,
+> G2 delivery exceptions, G3 route/departure, G4 aggregate-READY per item)
+> renders an explicit honest note, never a fabricated number. The manifest's
+> proposed `operator_daily_fit` scorecard category does not exist in this
+> 10-category rubric (same finding as Tranche 137); credited under
+> `dashboard_truth` instead — its own recorded gap named exactly this kind of
+> view (see `scorecard.json` `_notes`).
+>
 > **2026-07-23 door-mode goods receipts (Tranche 137).** +1: `ops_surface`
 > 8 → 9. `/stock/receipts` got a door-mode pass for the operator role per the
 > 2026-07-22 mapping-v3 Q10 decision: landing defaults to "Expected today",
@@ -46,7 +64,7 @@ Post-Tranche-036 (procurement-merge + suite-green session). Previous: 86/100 (po
 | data_truthfulness | 8 | +3 | Real /admin/integrations health (backend-blocked); aggregate KPIs (backend-blocked). |
 | planning_surface | 10 | +3 | Maintained. DR-018 P0 batch closed (Tranche 121); P1/P2 backlog (tranches 122-125) still open. |
 | ops_surface | 9 | +6 | Recent-submissions (backend-blocked); auto-post deep-link target (backend-blocked). Dennis's real operator account provisioning is an admin/Tom action outside portal-code scope. |
-| dashboard_truth | 9 | +3 | Aggregate KPIs (backend-blocked). |
+| dashboard_truth | 10 | +4 | Maintained. G1 (canonical plan-vs-actual view), G2 (delivery exceptions), G3 (route/departure), G4 (aggregate-READY per item) remain backend-blocked; Tranche 136's /home Today board client-joins/omits honestly ahead of those endpoints landing. |
 | technical_substrate | 10 | +4 | Maintained. |
 | regression_resistance | 10 | +7 | ESLint not yet in CI (no config); baseline + quarantine rituals; backend-dependent *-real e2e not gated. |
 

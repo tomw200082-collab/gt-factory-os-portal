@@ -33,6 +33,7 @@ import { useSession } from "@/lib/auth/session-provider";
 import { buildHomeCockpit, type Lang } from "@/features/home/cockpit";
 import { cn } from "@/lib/cn";
 import { HomeTile } from "./_components/HomeTile";
+import { TodayBoard } from "./_components/TodayBoard";
 
 // Entrance animation — Tailwind's built-in animate-fade-in-up (tailwind.config.ts)
 // + motion-reduce:animate-none so the OS reduced-motion preference is honored.
@@ -121,6 +122,16 @@ export default function HomePage() {
       {primary ? (
         <div className={REVEAL} style={revealDelay(1)}>
           <HomeTile tile={primary} lang={lang} rtl={rtl} variant="primary" eyebrow={focusEyebrow} />
+        </div>
+      ) : null}
+
+      {/* Today Board (Tranche 136) — the 9:30 briefing surface: Yesterday /
+          Today / Tomorrow tabs. Operator/planner/admin only in v1; the
+          viewer/bookkeeper cockpit is a different surface entirely (OQ-2
+          default: no board there). */}
+      {role !== "viewer" ? (
+        <div className={REVEAL} style={revealDelay(2)}>
+          <TodayBoard />
         </div>
       ) : null}
 
