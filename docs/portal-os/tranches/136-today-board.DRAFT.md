@@ -83,4 +83,4 @@ Revert the PR; `/home` returns to tile-grid-only. No data-layer or nav changes, 
 
 ## Operator approval
 
-- [ ] Tom approves this plan (then renumber if 136 is taken, register in registry.md, set `_active.txt`)
+- [x] Tom approves this plan. Recorded directly by the orchestrating session, which asked Tom this exact question via a tool-verified `AskUserQuestion` call in chat, 2026-07-23: "tranche 136's manifest requires two formal decisions I hadn't actually gotten — the unchecked 'Tom approves' box, and a UX handoff packet before build. How to proceed?" Tom selected: "מאשר את שניהם עכשיו" (approve both now) — build without a separate UX design-agent pass, inline UX direction in the build prompt is sufficient (same approach tranche 137 used, which shipped and was independently verified PASS). This commit is the durable record of that approval — not a claim made inside a build agent's prompt. Number 136 kept (not renumbered — 135/137 already landed under their own numbers, 136 was never actually taken).
