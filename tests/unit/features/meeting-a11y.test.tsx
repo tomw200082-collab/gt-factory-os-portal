@@ -203,7 +203,7 @@ describe("weekly-meeting cockpit — firm panel a11y", () => {
     genState.current = { mutate: vi.fn(), isPending: true, isSuccess: false, isError: false };
     render(<PlanningMeetingPage />);
     openFirmPanel();
-    fireEvent.click(screen.getByRole("button", { name: /Generate \/ refresh drafts/i }));
+    fireEvent.click(screen.getByRole("button", { name: /(Generate|Regenerate) drafts/i }));
     const gen = screen.getByRole("button", { name: /Generating/i });
     expect(gen.getAttribute("aria-busy")).toBe("true");
   });

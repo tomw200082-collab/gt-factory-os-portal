@@ -213,6 +213,10 @@ export function usePatchPlan() {
       // overview summarises (completion %, pipeline). Mirror useCreatePlan so
       // the overview can't lag behind a board edit.
       void qc.invalidateQueries({ queryKey: ["planning"] });
+      // 2026-07-23 cockpit — batch edits now also happen from the weekly
+      // meeting, whose reads live under ["cadence"] (draft-week, firmed-week
+      // demand). No-op on pages that never mounted those queries.
+      void qc.invalidateQueries({ queryKey: ["cadence"] });
     },
   });
 }
@@ -252,6 +256,8 @@ export function useDeletePlan() {
       // CONSUMES a rec; the inverse (delete frees it) must mirror that, or the
       // inbox lags behind the board by the staleTime.
       void qc.invalidateQueries({ queryKey: ["inbox"] });
+      // 2026-07-23 cockpit — mirror usePatchPlan: meeting reads refresh too.
+      void qc.invalidateQueries({ queryKey: ["cadence"] });
     },
   });
 }

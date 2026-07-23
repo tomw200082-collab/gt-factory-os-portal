@@ -148,7 +148,10 @@ export function ProductionJobCard({
         isDone && "border-l-success bg-bg-raised border-success/20",
         isCancelled && "border-l-border/40 bg-bg-subtle/60 opacity-70",
         // B4 — drafts are muted: not firmed, no urgency color.
-        isDraft && !isCancelled && !isDone && "border-l-border/60 bg-bg-subtle/50 opacity-80",
+        // VIS-003 (2026-07-23 gate): opacity alone collapsed at board density —
+        // a draft read as a confirmed batch. Distinct info-tinted surface keeps
+        // the state legible at scan speed; the chip stays the semantic layer.
+        isDraft && !isCancelled && !isDone && "border-l-info bg-info-softer/50 opacity-90",
         // Tranche 134 — transient "you came back to THIS card" ring. Static
         // (no animation), so no reduced-motion concern; fades with the
         // default transition when the flag clears.
@@ -419,9 +422,15 @@ export function ProductionJobCard({
               Open Production Report
             </Link>
           ) : (
-            <span className="text-[10px] text-fg-faint" title="Confirm this plan before reporting production">
-              Not reportable yet
-            </span>
+            // COPY-006 (2026-07-23 gate): "Not reportable yet" stated an
+            // absence with no way forward; the link IS the direction.
+            <Link
+              href={`/planning/meeting?step=firm&week=${toIsoDate(startOfWeek(new Date(`${plan.plan_date}T00:00:00`)))}`}
+              className="text-[10px] text-accent hover:underline"
+              data-testid="plan-row-lock-to-report"
+            >
+              Lock in Weekly Meeting to report →
+            </Link>
           )}
 
           {/* Edit + cancel. INTER-010 (Tranche 048): min 32×32px touch
@@ -530,6 +539,7 @@ export function ProductionJobCard({
           <Link
             href={`/stock/production-actual?submission_id=${completedActual.submission_id}`}
             className="text-[10px] text-accent hover:underline shrink-0"
+            aria-label={`View production report for ${cardTitle}`}
           >
             View report →
           </Link>
@@ -547,11 +557,12 @@ export function ProductionJobCard({
         heroUom={heroUom}
       />
 
-      {/* Notes */}
+      {/* Notes — FLOW-010: Hebrew data values need bidi isolation in this
+          LTR card or punctuation/numbers reorder around the Hebrew. */}
       {plan.notes && (
         <div className="px-3 pb-3 text-[10px] text-fg-muted">
           <span className="font-medium">Notes: </span>
-          {plan.notes}
+          <bdi dir="auto">{plan.notes}</bdi>
         </div>
       )}
     </div>

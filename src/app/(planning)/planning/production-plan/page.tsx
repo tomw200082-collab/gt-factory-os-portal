@@ -71,6 +71,7 @@ import {
 import { WeekTimelineRail } from "./_components/WeekTimelineRail";
 import { ProductionDayLane } from "./_components/ProductionDayLane";
 import { RecipeOverridePanel } from "./_components/RecipeOverridePanel";
+import { BatchTuneDialog, tunableFromPlanRow } from "./_components/BatchTuneDialog";
 import { ItemStockContext } from "./_components/ItemStockContext";
 import { usePrefetchInventoryFlow } from "../inventory-flow/_lib/useInventoryFlow";
 import type {
@@ -300,7 +301,7 @@ function ManualAddModal({
       aria-modal="true"
       aria-labelledby="manual-add-modal-title"
       data-testid="manual-add-modal"
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={(e) => { if (e.target === e.currentTarget && !isSubmitting) onClose(); }}
       onKeyDown={onDialogKeyDown}
       tabIndex={-1}
     >
@@ -333,7 +334,7 @@ function ManualAddModal({
               AddFromRecommendationsModal below). */}
           <div className="min-h-0 flex-1 space-y-3 overflow-y-auto pr-1">
           <label className="block">
-            <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+            <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-muted">
               Production day *
             </span>
             <input
@@ -354,7 +355,7 @@ function ManualAddModal({
           </label>
 
           <label className="block">
-            <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+            <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-muted">
               Product *
             </span>
             <select
@@ -407,7 +408,7 @@ function ManualAddModal({
 
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
-              <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+              <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-muted">
                 Planned quantity *
               </span>
               <input
@@ -449,7 +450,7 @@ function ManualAddModal({
               <ManualAddFieldErrors field="planned_qty" serverErrors={serverErrors} />
             </label>
             <label className="block">
-              <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+              <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-muted">
                 Unit of measure *
               </span>
               <select
@@ -478,7 +479,7 @@ function ManualAddModal({
           </div>
 
           <label className="block">
-            <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+            <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-muted">
               Notes
             </span>
             <textarea
@@ -607,7 +608,7 @@ function AddFromRecommendationsModal({
       aria-labelledby="add-from-recs-modal-title"
       data-testid="add-from-recs-modal"
       tabIndex={-1}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={(e) => { if (e.target === e.currentTarget && !isSubmitting) onClose(); }}
       onKeyDown={onDialogKeyDown}
     >
       {/* FLOW-017 (Tranche 054) — cap the sheet height so the footer
@@ -642,7 +643,7 @@ function AddFromRecommendationsModal({
 
         <div className="mt-3 flex flex-wrap items-end gap-2">
           <label className="block">
-            <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+            <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-muted">
               Filter by target date (optional)
             </span>
             <input
@@ -802,7 +803,11 @@ function AddFromRecommendationsModal({
               onClick={() => { if (selectedRec) onConfirm(selectedRec); }}
               data-testid="add-from-recs-confirm"
             >
-              <Plus className="h-3 w-3" strokeWidth={2.5} />
+              {isSubmitting ? (
+                <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" strokeWidth={2.5} aria-hidden />
+              ) : (
+                <Plus className="h-3 w-3" strokeWidth={2.5} />
+              )}
               {isSubmitting ? "Adding…" : "Add to plan"}
             </button>
           </div>
@@ -859,10 +864,13 @@ function EditModal({
 
   // DR-018 INTER-007 (Tranche 123) — Escape / backdrop-click / Cancel all
   // used to close silently even with unsaved edits. Guard once, reuse
-  // everywhere a close can be triggered.
+  // everywhere a close can be triggered. INT-002 (2026-07-23 gate): while a
+  // mutation is in flight nothing closes — a mid-save dismiss discarded the
+  // in-flight context.
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
   function requestClose() {
-    if (isDirty && !isSubmitting) {
+    if (isSubmitting) return;
+    if (isDirty) {
       setConfirmingDiscard(true);
       return;
     }
@@ -897,7 +905,13 @@ function EditModal({
         >
           Edit plan
         </h2>
-        <p className="mt-1 text-3xs text-fg-muted">{plan.item_name ?? "Unnamed item"}</p>
+        {/* FLOW-004 — base-batch rows have item_name null; "Unnamed item"
+            stripped the operator's context mid-edit. */}
+        <p className="mt-1 text-3xs text-fg-muted">
+          {plan.is_base_batch
+            ? `Base batch · ${plan.pack_manifest_count} product${plan.pack_manifest_count === 1 ? "" : "s"}`
+            : (plan.item_name ?? "Unnamed item")}
+        </p>
 
         {/* INT-05 (DR-019) — a draft looks identical to a firmed plan here;
             an edit made right before the next Generate would silently
@@ -942,7 +956,7 @@ function EditModal({
           }}
         >
           <label className="block">
-            <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+            <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-muted">
               Production day
             </span>
             <input
@@ -955,7 +969,7 @@ function EditModal({
 
           <div className="grid grid-cols-2 gap-3">
             <label className="block">
-              <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+              <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-muted">
                 Planned quantity
               </span>
               <input
@@ -984,7 +998,7 @@ function EditModal({
               ) : null}
             </label>
             <label className="block">
-              <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+              <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-muted">
                 Unit of measure
               </span>
               {/* INTER-002 (Tranche 079) — UoM is a select over the known
@@ -1007,7 +1021,7 @@ function EditModal({
           </div>
 
           <label className="block">
-            <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+            <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-muted">
               Notes
             </span>
             <textarea
@@ -1101,7 +1115,7 @@ function AddNoteModal({
       aria-labelledby="add-note-modal-title"
       data-testid="add-note-modal"
       tabIndex={-1}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={(e) => { if (e.target === e.currentTarget && !isSubmitting) onClose(); }}
       onKeyDown={onDialogKeyDown}
     >
       <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-pop">
@@ -1126,7 +1140,7 @@ function AddNoteModal({
           }}
         >
           <label className="block">
-            <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+            <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-muted">
               Day *
             </span>
             <input
@@ -1139,7 +1153,7 @@ function AddNoteModal({
           </label>
 
           <label className="block">
-            <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+            <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-muted">
               Note *
             </span>
             <textarea
@@ -1197,9 +1211,11 @@ function EditNoteModal({
   const isDirty = planDate !== plan.plan_date || notes !== (plan.notes ?? "");
 
   // DR-018 INTER-007 (Tranche 123) — same dirty-close guard as EditModal.
+  // INT-002 — nothing closes while the mutation is in flight.
   const [confirmingDiscard, setConfirmingDiscard] = useState(false);
   function requestClose() {
-    if (isDirty && !isSubmitting) {
+    if (isSubmitting) return;
+    if (isDirty) {
       setConfirmingDiscard(true);
       return;
     }
@@ -1246,7 +1262,7 @@ function EditNoteModal({
           }}
         >
           <label className="block">
-            <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+            <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-muted">
               Day
             </span>
             <input
@@ -1258,7 +1274,7 @@ function EditNoteModal({
           </label>
 
           <label className="block">
-            <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+            <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-muted">
               Note
             </span>
             <textarea
@@ -1350,7 +1366,7 @@ function CancelModal({
       aria-labelledby="cancel-modal-title"
       data-testid="cancel-modal"
       tabIndex={-1}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={(e) => { if (e.target === e.currentTarget && !isSubmitting) onClose(); }}
       onKeyDown={onDialogKeyDown}
     >
       <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-pop">
@@ -1365,7 +1381,11 @@ function CancelModal({
         <p className="mt-1 text-3xs text-fg-muted">
           {plan.plan_type === "note"
             ? "Note"
-            : `${plan.item_name ?? "this item"} · ${fmtQty(plan.planned_qty ?? "0", plan.uom ?? "")}`}
+            : `${
+                plan.is_base_batch
+                  ? `Base batch · ${plan.pack_manifest_count} product${plan.pack_manifest_count === 1 ? "" : "s"}`
+                  : (plan.item_name ?? "this item")
+              } · ${fmtQty(plan.planned_qty ?? "0", plan.uom ?? "")}`}
         </p>
 
         <div className="mt-3 rounded border border-warning/30 bg-warning-softer/30 p-3 text-xs text-warning-fg">
@@ -1385,7 +1405,7 @@ function CancelModal({
           }}
         >
           <label className="block">
-            <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+            <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-muted">
               Reason for cancellation (optional)
             </span>
             <textarea
@@ -1448,7 +1468,7 @@ function DeleteModal({
       aria-labelledby="delete-modal-title"
       data-testid="delete-modal"
       tabIndex={-1}
-      onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}
+      onClick={(e) => { if (e.target === e.currentTarget && !isSubmitting) onClose(); }}
       onKeyDown={onDialogKeyDown}
     >
       <div className="w-full max-w-lg rounded-t-lg sm:rounded-lg border border-border bg-bg-raised p-5 shadow-pop">
@@ -1463,7 +1483,11 @@ function DeleteModal({
         <p className="mt-1 text-3xs text-fg-muted">
           {plan.plan_type === "note"
             ? "Note"
-            : `${plan.item_name ?? "this item"} · ${fmtQty(plan.planned_qty ?? "0", plan.uom ?? "")}`}
+            : `${
+                plan.is_base_batch
+                  ? `Base batch · ${plan.pack_manifest_count} product${plan.pack_manifest_count === 1 ? "" : "s"}`
+                  : (plan.item_name ?? "this item")
+              } · ${fmtQty(plan.planned_qty ?? "0", plan.uom ?? "")}`}
           {isCancelled ? " · cancelled" : ""}
         </p>
 
@@ -1483,7 +1507,11 @@ function DeleteModal({
             onClick={onConfirm}
             data-testid="delete-submit"
           >
-            <Trash2 className="h-3 w-3" strokeWidth={2.5} />
+            {isSubmitting ? (
+              <Loader2 className="h-3 w-3 animate-spin motion-reduce:animate-none" strokeWidth={2.5} aria-hidden />
+            ) : (
+              <Trash2 className="h-3 w-3" strokeWidth={2.5} />
+            )}
             {isSubmitting ? "Deleting…" : "Delete"}
           </button>
         </div>
@@ -1646,7 +1674,12 @@ export default function ProductionPlanPage() {
   const hasData = plansQuery.data !== undefined && !plansQuery.isError;
   const allPlans = plansQuery.data?.rows ?? [];
   const productionPlans = allPlans.filter((p) => p.plan_type === "production");
-  const plannedCount = productionPlans.filter((p) => p.rendered_state === "planned").length;
+  // COPY-001 (2026-07-23 gate): "planned" must mean committed intent only.
+  // rendered_state==='planned' also covers drafts + in_production; counting
+  // drafts as planned misled the header ("3 planned" that won't produce).
+  const plannedCount = productionPlans.filter(
+    (p) => p.rendered_state === "planned" && p.status !== "draft",
+  ).length;
   const doneCount = productionPlans.filter((p) => p.rendered_state === "done").length;
   const cancelledCount = productionPlans.filter((p) => p.rendered_state === "cancelled").length;
   // DR-018 FLOW-007 (Tranche 123) — drafts can otherwise sit indefinitely
@@ -2194,6 +2227,13 @@ export default function ProductionPlanPage() {
                 <span className="text-fg-faint" aria-hidden>·</span>
                 <span className="font-mono font-semibold tabular-nums text-fg-strong">{plannedCount}</span>
                 <span className="text-fg-muted">planned</span>
+                {draftCount > 0 && (
+                  <>
+                    <span className="text-fg-faint" aria-hidden>·</span>
+                    <span className="font-mono font-semibold tabular-nums text-info-fg">{draftCount}</span>
+                    <span className="text-fg-muted">drafts to lock</span>
+                  </>
+                )}
                 <span className="text-fg-faint" aria-hidden>·</span>
                 <span className="font-mono font-semibold tabular-nums text-success-fg">{doneCount}</span>
                 <span className="text-fg-muted">completed</span>
@@ -2356,7 +2396,7 @@ export default function ProductionPlanPage() {
           data-testid="today-strip"
         >
           <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs">
-            <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+            <span className="text-3xs font-semibold uppercase tracking-sops text-fg-muted">
               Today
             </span>
             {todaySummary.todayPlanned === 0 ? (
@@ -2652,6 +2692,15 @@ export default function ProductionPlanPage() {
                 <span className="font-mono font-semibold text-fg-strong tabular-nums">{plannedCount}</span>{" "}
                 planned
               </span>
+              {draftCount > 0 && (
+                <>
+                  <span className="text-fg-faint">·</span>
+                  <span>
+                    <span className="font-mono font-semibold text-info-fg tabular-nums">{draftCount}</span>{" "}
+                    drafts to lock
+                  </span>
+                </>
+              )}
               <span className="text-fg-faint">·</span>
               <span>
                 <span className="font-mono font-semibold text-success-fg tabular-nums">{doneCount}</span>{" "}
@@ -2722,6 +2771,16 @@ export default function ProductionPlanPage() {
           onClose={() => setEditingPlan(null)}
           onSubmit={handleEdit}
           isSubmitting={patchMut.isPending}
+        />
+      ) : editingPlan?.is_base_batch ? (
+        // 2026-07-23 gate (Tom): base-batch rows had NO quantity-tuning
+        // affordance — EditModal's qty/uom fields are illegal for them
+        // (planned_qty stays = batch_size_l) and the pack split was
+        // uneditable everywhere. BatchTuneDialog is the split editor.
+        <BatchTuneDialog
+          batch={tunableFromPlanRow(editingPlan)}
+          onClose={() => setEditingPlan(null)}
+          onSaved={() => flashToast("success", `Batch updated — ${planLabel(editingPlan)}`)}
         />
       ) : editingPlan ? (
         <EditModal

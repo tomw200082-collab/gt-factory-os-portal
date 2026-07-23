@@ -30,6 +30,7 @@ import {
   Droplet,
   RefreshCw,
   PackageCheck,
+  Pencil,
 } from "lucide-react";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
@@ -61,6 +62,40 @@ import {
 // count reuses the production-plan list read (already date-range-filtered
 // server-side) instead of adding a new backend contract.
 import { usePlans } from "@/app/(planning)/planning/production-plan/_lib/usePlans";
+// 2026-07-23 gate (Tom): "make it so I can tune EVERYTHING directly from the
+// weekly meeting page." The meeting is now a tuning cockpit — every batch chip
+// (draft W2) and every incoming-week (W1) batch opens the shared tune dialog:
+// day, pack split with live liters meter, quantity, notes, cancel.
+import {
+  BatchTuneDialog,
+  tunableFromPlanRow,
+  type TunableBatch,
+} from "@/app/(planning)/planning/production-plan/_components/BatchTuneDialog";
+import type { ProductionPlanRow } from "@/app/(planning)/planning/production-plan/_lib/types";
+
+function tunableFromDraftWeekRow(r: DraftWeekRow): TunableBatch {
+  const isTea = r.track === "tea_tank";
+  return {
+    plan_id: r.plan_id,
+    plan_date: r.plan_date,
+    is_base_batch: isTea,
+    title: isTea ? (r.base_name ?? "Tea base") : (r.item_name ?? "Matcha repack"),
+    batch_size_l: r.batch_size_l ?? null,
+    status: "draft",
+    planned_qty: isTea ? null : r.planned_qty,
+    uom: r.uom ?? null,
+    notes: r.notes ?? null,
+    packs: r.packs.map((p) => ({
+      item_id: p.item_id,
+      item_name: p.item_name ?? null,
+      qty: p.qty,
+      fill_l_per_unit:
+        p.fill_l_per_unit != null && Number.isFinite(parseFloat(p.fill_l_per_unit))
+          ? parseFloat(p.fill_l_per_unit)
+          : null,
+    })),
+  };
+}
 
 // Single source of truth for the keyboard focus ring. Applied to every
 // interactive control on this surface (buttons + nav links) so focus is always
@@ -233,7 +268,7 @@ function StatTile({
 // ---------------------------------------------------------------------------
 // Draft batch chip
 // ---------------------------------------------------------------------------
-function BatchChip({ row }: { row: DraftWeekRow }) {
+function BatchChip({ row, onTune }: { row: DraftWeekRow; onTune?: (r: DraftWeekRow) => void }) {
   const isTea = row.track === "tea_tank";
   const tint = isTea ? familyTintVar(row.base_family) : "var(--family-matcha)";
   const title = isTea
@@ -268,12 +303,41 @@ function BatchChip({ row }: { row: DraftWeekRow }) {
             </Badge>
           ) : null}
         </span>
-        {expandable ? (
-          <ChevronDown
-            className={cn("h-3.5 w-3.5 shrink-0 text-fg-faint transition-transform", open && "rotate-180")}
-            aria-hidden="true"
-          />
-        ) : null}
+        <span className="flex shrink-0 items-center gap-0.5">
+          {/* 2026-07-23 cockpit — tune this batch without leaving the meeting. */}
+          {onTune ? (
+            <span
+              role="button"
+              tabIndex={0}
+              className={cn(
+                "inline-flex min-h-[28px] min-w-[28px] items-center justify-center rounded text-fg-muted transition-colors hover:bg-bg-muted hover:text-accent",
+                focusRing,
+              )}
+              onClick={(e) => {
+                e.stopPropagation();
+                onTune(row);
+              }}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  onTune(row);
+                }
+              }}
+              aria-label={`Tune ${title} — quantities, day, or cancel`}
+              title="Tune this batch"
+              data-testid="batch-chip-tune"
+            >
+              <Pencil className="h-3 w-3" strokeWidth={2.5} aria-hidden="true" />
+            </span>
+          ) : null}
+          {expandable ? (
+            <ChevronDown
+              className={cn("h-3.5 w-3.5 shrink-0 text-fg-faint transition-transform", open && "rotate-180")}
+              aria-hidden="true"
+            />
+          ) : null}
+        </span>
       </div>
       <div className="mt-0.5 text-2xs uppercase tracking-ops text-fg-subtle">{sub}</div>
       {expandable && open ? (
@@ -448,6 +512,11 @@ function CommitmentPanel({
 // ---------------------------------------------------------------------------
 function FirmPanel({ canAct, initialWeekStart }: { canAct: boolean; initialWeekStart?: string }) {
   const [weekStart, setWeekStart] = useState<string>(() => initialWeekStart ?? defaultFirmWeekStart());
+  // 2026-07-23 cockpit — the one tune dialog for both weeks' batches. Cache
+  // refresh after save/cancel is handled inside usePatchPlan (which now
+  // invalidates ["cadence"] too), keeping this page QueryClient-free for the
+  // existing mock-based test suites.
+  const [tuning, setTuning] = useState<TunableBatch | null>(null);
   // FLOW-NEW-01 (ux-flow-architect re-audit) — initialWeekStart arrives one
   // tick after mount (the parent page reads ?week= from window.location.search
   // inside its own useEffect), so the useState initializer above always saw
@@ -530,6 +599,12 @@ function FirmPanel({ canAct, initialWeekStart }: { canAct: boolean; initialWeekS
 
   const rows = draft.data?.rows ?? [];
   const firmedCount = draft.data?.firmed_count ?? 0;
+  // FLOW-007 — how many of this week's drafts carry hand edits (regeneration
+  // wipes them; the confirm copy names the count).
+  const editedDraftCount = useMemo(
+    () => rows.filter((r) => r.is_user_modified).length,
+    [rows],
+  );
   const days = useMemo(() => workingDaysOf(weekStart), [weekStart]);
   const byDay = useMemo(() => {
     const m = new Map<string, DraftWeekRow[]>();
@@ -583,6 +658,18 @@ function FirmPanel({ canAct, initialWeekStart }: { canAct: boolean; initialWeekS
   // any batch still sitting in draft here is an orphan (e.g. a stray
   // engine regenerate) that will silently miss production unless caught.
   const nearDraft = useDraftWeek(nearWeek);
+  // 2026-07-23 cockpit — the incoming week's actual plan rows, tunable
+  // in place (same list read the production-plan board uses).
+  const nearPlans = usePlans(nearWeek, toIsoDate(addDays(parseIsoDate(nearWeek), 6)));
+  const nearWeekTunables = useMemo(() => {
+    const m = new Map<string, ProductionPlanRow[]>();
+    for (const p of nearPlans.data?.rows ?? []) {
+      if (p.plan_type !== "production" || p.rendered_state === "cancelled") continue;
+      if (!m.has(p.plan_date)) m.set(p.plan_date, []);
+      m.get(p.plan_date)!.push(p);
+    }
+    return m;
+  }, [nearPlans.data]);
 
   const shiftWeek = (deltaWeeks: number) =>
     setWeekStart((w) => toIsoDate(addDays(parseIsoDate(w), deltaWeeks * 7)));
@@ -637,7 +724,12 @@ function FirmPanel({ canAct, initialWeekStart }: { canAct: boolean; initialWeekS
             {confirmingGen ? (
               <>
                 <span className="max-w-[46ch] text-xs text-fg-muted" data-testid="meeting-gen-confirm-copy">
-                  Re-generating replaces the engine&apos;s drafts across the whole horizon — including the {batchCount} batch{batchCount === 1 ? "" : "es"} shown here for {fmtWeekRange(weekStart)} — and any edits you&apos;ve made to them. Manually added plans are not affected.
+                  Re-generating replaces the engine&apos;s drafts across the whole horizon — including the {batchCount} batch{batchCount === 1 ? "" : "es"} shown here for {fmtWeekRange(weekStart)}
+                  {/* FLOW-007 — quantify the hand-edit blast radius. */}
+                  {editedDraftCount > 0
+                    ? `, ${editedDraftCount} of which ${editedDraftCount === 1 ? "carries" : "carry"} your hand edits`
+                    : ""}
+                  . Manually added plans are not affected.
                 </span>
                 <button
                   type="button"
@@ -681,7 +773,8 @@ function FirmPanel({ canAct, initialWeekStart }: { canAct: boolean; initialWeekS
                 data-testid="meeting-gen-trigger"
               >
                 <RefreshCw className="h-4 w-4" aria-hidden="true" />
-                Generate / refresh drafts
+                {/* COPY-012 — one unambiguous verb per state. */}
+                {batchCount > 0 ? "Regenerate drafts" : "Generate drafts"}
               </button>
             )}
           </div>
@@ -904,19 +997,33 @@ function FirmPanel({ canAct, initialWeekStart }: { canAct: boolean; initialWeekS
             <div className="mt-0.5 text-xs text-fg-muted">
               {result.week_firmed_total} batch{result.week_firmed_total === 1 ? "" : "es"} now committed for {fmtWeekRange(result.week_start)}. The Sunday session will buy against this week. To undo, cancel batches one at a time from the production plan, or unlock the whole week below.
             </div>
-            {/* Tranche 065 (FLOW-A5) — bridge straight into the next chain
-                step instead of leaving the planner to find procurement. */}
-            <Link
-              href="/planning/procurement"
-              className={cn(
-                "mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-success-fg underline underline-offset-2 hover:no-underline",
-                focusRing,
-              )}
-              data-testid="meeting-firm-success-go-procurement"
-            >
-              <ShoppingCart className="h-3.5 w-3.5" aria-hidden="true" />
-              Open Sunday procurement →
-            </Link>
+            {/* FLOW-009 (2026-07-23 gate) — Thursday's real next step is
+                verifying the locked week on the board; procurement is Sunday's.
+                Both links stay, correctly ranked and labeled. */}
+            <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
+              <Link
+                href={`/planning/production-plan?week=${result.week_start}`}
+                className={cn(
+                  "inline-flex items-center gap-1.5 text-xs font-semibold text-success-fg underline underline-offset-2 hover:no-underline",
+                  focusRing,
+                )}
+                data-testid="meeting-firm-success-view-week"
+              >
+                <CalendarCheck className="h-3.5 w-3.5" aria-hidden="true" />
+                View the locked week on the board →
+              </Link>
+              <Link
+                href="/planning/procurement"
+                className={cn(
+                  "inline-flex items-center gap-1.5 text-xs font-medium text-success-fg/80 underline underline-offset-2 hover:no-underline",
+                  focusRing,
+                )}
+                data-testid="meeting-firm-success-go-procurement"
+              >
+                <ShoppingCart className="h-3.5 w-3.5" aria-hidden="true" />
+                For Sunday: open Procurement
+              </Link>
+            </div>
           </div>
         </div>
       ) : null}
@@ -1009,8 +1116,10 @@ function FirmPanel({ canAct, initialWeekStart }: { canAct: boolean; initialWeekS
                 cancelled one at a time if something changes. Re-running Generate will not touch
                 locked batches.
               </div>
+              {/* FLOW-003 — carry the week; landing on today's board and
+                  arrowing twice was silent context loss. */}
               <Link
-                href="/planning/production-plan"
+                href={`/planning/production-plan?week=${weekStart}`}
                 className={cn("mt-2 inline-flex items-center gap-1.5 rounded text-xs font-medium text-accent hover:underline", focusRing)}
               >
                 Open production plan to adjust <ArrowRight className="h-3.5 w-3.5" />
@@ -1021,6 +1130,21 @@ function FirmPanel({ canAct, initialWeekStart }: { canAct: boolean; initialWeekS
                 <div className="mt-3 border-t border-success-border/50 pt-3">
                   {confirmingUnlock ? (
                     <div className="space-y-2">
+                      {/* COPY-002 (2026-07-23 gate) — a bulk-destructive action
+                          must state its procurement consequence, not just its
+                          mechanics. */}
+                      <div
+                        role="status"
+                        className="flex items-start gap-2 rounded-md border border-danger-border bg-danger-softer px-3 py-2 text-xs text-danger-fg"
+                        data-testid="unlock-consequence-banner"
+                      >
+                        <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+                        <span>
+                          Unlocking cancels all {firmedCount} locked batch{firmedCount === 1 ? "" : "es"}.
+                          The Sunday procurement session will no longer buy materials for this week —
+                          regenerate and re-lock a week to resume production.
+                        </span>
+                      </div>
                       <label className="block text-xs text-fg-muted" htmlFor="unlock-week-reason">
                         Reason for unlocking (required — kept with the cancelled batches)
                       </label>
@@ -1062,7 +1186,9 @@ function FirmPanel({ canAct, initialWeekStart }: { canAct: boolean; initialWeekS
                             focusRing,
                           )}
                         >
-                          {cancelWeek.isPending ? "Unlocking…" : `Unlock ${firmedCount} batch${firmedCount === 1 ? "" : "es"}`}
+                          {cancelWeek.isPending
+                            ? "Unlocking…"
+                            : `Cancel ${firmedCount} batch${firmedCount === 1 ? "" : "es"} and stop procurement`}
                         </button>
                       </div>
                     </div>
@@ -1143,7 +1269,13 @@ function FirmPanel({ canAct, initialWeekStart }: { canAct: boolean; initialWeekS
                           —
                         </div>
                       ) : (
-                        dayRows.map((r) => <BatchChip key={r.plan_id} row={r} />)
+                        dayRows.map((r) => (
+                          <BatchChip
+                            key={r.plan_id}
+                            row={r}
+                            onTune={canAct ? (row) => setTuning(tunableFromDraftWeekRow(row)) : undefined}
+                          />
+                        ))
                       )}
                     </div>
                   </div>
@@ -1154,33 +1286,123 @@ function FirmPanel({ canAct, initialWeekStart }: { canAct: boolean; initialWeekS
         )}
       </SectionCard>
 
-      {/* Near week (W1) — final-tune the incoming, already-firmed week */}
-      <div className="flex items-center justify-between gap-3 rounded-lg border border-border-faint bg-bg-subtle/40 px-4 py-3">
-        <div className="min-w-0 text-sm">
-          <span className="font-medium">Incoming week · {fmtWeekRange(nearWeek)}</span>
-          <span className="text-fg-muted">
-            {" — "}
-            {(nearDemand.data?.total_fg_units ?? 0).toLocaleString()} units committed. Last tweaks
-            before it produces.
-          </span>
-          {(nearDraft.data?.batch_count ?? 0) > 0 && (
-            <div
-              className="mt-1 flex items-center gap-1.5 text-xs font-medium text-warning-fg"
-              data-testid="near-week-orphan-drafts"
+      {/* Near week (W1) — final-tune the incoming, already-firmed week.
+          2026-07-23 cockpit: was a one-line strip whose only affordance was a
+          link away to the board; the batches themselves now render here with
+          the same tune dialog, so last tweaks happen inside the meeting. */}
+      <SectionCard
+        title={`Incoming week · ${fmtWeekRange(nearWeek)}`}
+        description={`${(nearDemand.data?.total_fg_units ?? 0).toLocaleString()} units committed — last tweaks before it produces. Tap a batch to tune it.`}
+      >
+        {(nearDraft.data?.batch_count ?? 0) > 0 && (
+          <div
+            className="mb-3 flex items-center gap-1.5 text-xs font-medium text-warning-fg"
+            data-testid="near-week-orphan-drafts"
+          >
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            {nearDraft.data!.batch_count} draft batch{nearDraft.data!.batch_count === 1 ? "" : "es"} here{" "}
+            {nearDraft.data!.batch_count === 1 ? "was" : "were"} never locked — won&apos;t produce unless firmed.
+          </div>
+        )}
+        {nearPlans.isLoading ? (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5" aria-busy="true">
+            {Array.from({ length: 5 }).map((_, i) => (
+              <div key={i} className="h-24 animate-pulse rounded-lg bg-bg-subtle motion-reduce:animate-none" />
+            ))}
+          </div>
+        ) : nearPlans.isError ? (
+          <div className="py-3 text-sm text-fg-muted">
+            We couldn&apos;t load the incoming week.{" "}
+            <button
+              type="button"
+              onClick={() => nearPlans.refetch()}
+              className={cn("font-medium text-accent hover:underline", focusRing)}
             >
-              <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-              {nearDraft.data!.batch_count} draft batch{nearDraft.data!.batch_count === 1 ? "" : "es"} here{" "}
-              {nearDraft.data!.batch_count === 1 ? "was" : "were"} never locked — won&apos;t produce unless firmed.
-            </div>
-          )}
+              Try again
+            </button>
+          </div>
+        ) : (
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-5">
+            {workingDaysOf(nearWeek).map((d) => {
+              const { dayName, dateLabel } = fmtDayHeader(parseIsoDate(d));
+              const dayPlans = nearWeekTunables.get(d) ?? [];
+              return (
+                <div
+                  key={d}
+                  role="group"
+                  aria-label={`${dayName} ${dateLabel} — ${dayPlans.length === 0 ? "no batches" : `${dayPlans.length} batch${dayPlans.length === 1 ? "" : "es"}`}`}
+                  className="rounded-lg border border-border-faint bg-bg-subtle/40 p-2"
+                >
+                  <div className="mb-2 flex items-baseline justify-between px-1">
+                    <span className="text-xs font-semibold uppercase tracking-ops text-fg-muted">{dayName}</span>
+                    <span className="text-2xs text-fg-subtle">{dateLabel}</span>
+                  </div>
+                  <div className="space-y-2">
+                    {dayPlans.length === 0 ? (
+                      <div className="rounded-md border border-dashed border-border-faint py-4 text-center text-2xs text-fg-faint" aria-hidden="true">
+                        —
+                      </div>
+                    ) : (
+                      dayPlans.map((p) => {
+                        const t = tunableFromPlanRow(p);
+                        const done = p.rendered_state === "done";
+                        return (
+                          <button
+                            key={p.plan_id}
+                            type="button"
+                            disabled={!canAct || done}
+                            onClick={() => setTuning(t)}
+                            className={cn(
+                              "w-full rounded-md border border-border bg-bg-raised p-2.5 text-left shadow-hairline transition-colors",
+                              canAct && !done && "hover:bg-bg-muted",
+                              done && "opacity-70",
+                              focusRing,
+                            )}
+                            aria-label={
+                              done
+                                ? `${t.title} — completed`
+                                : `Tune ${t.title} — quantities, day, or cancel`
+                            }
+                            title={done ? "Already reported" : "Tune this batch"}
+                            data-testid="near-week-batch"
+                          >
+                            <div className="flex items-center justify-between gap-1.5">
+                              <span className="truncate text-sm font-medium" dir="auto">{t.title}</span>
+                              {done ? (
+                                <CheckCircle2 className="h-3.5 w-3.5 shrink-0 text-success" aria-hidden="true" />
+                              ) : canAct ? (
+                                <Pencil className="h-3 w-3 shrink-0 text-fg-faint" aria-hidden="true" />
+                              ) : null}
+                            </div>
+                            <div className="mt-0.5 text-2xs uppercase tracking-ops text-fg-subtle">
+                              {t.is_base_batch
+                                ? `${t.batch_size_l ?? "?"} L · ${t.packs.length} pack${t.packs.length === 1 ? "" : "s"}`
+                                : `${t.planned_qty ?? "?"} ${t.uom ?? ""}`}
+                            </div>
+                          </button>
+                        );
+                      })
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        )}
+        <div className="mt-3 text-right">
+          <Link
+            href={`/planning/production-plan?week=${nearWeek}`}
+            className={cn("rounded text-xs font-medium text-accent hover:underline", focusRing)}
+          >
+            Open on the full board →
+          </Link>
         </div>
-        <Link
-          href={`/planning/production-plan?week=${nearWeek}`}
-          className={cn("shrink-0 rounded text-xs font-medium text-accent hover:underline", focusRing)}
-        >
-          Fine-tune →
-        </Link>
-      </div>
+      </SectionCard>
+
+      {/* The cockpit's tune dialog — one dialog for W1 batches and W2 drafts. */}
+      {tuning ? (
+        <BatchTuneDialog batch={tuning} onClose={() => setTuning(null)} />
+      ) : null}
     </div>
   );
 }

@@ -204,7 +204,7 @@ describe("weekly-meeting cockpit — firm week selector fits 390px (FLOW-007, T0
   it("moves Generate / refresh drafts to its own right-aligned row below the week nav", () => {
     render(<PlanningMeetingPage />);
     openFirmPanel();
-    const gen = screen.getByRole("button", { name: /Generate \/ refresh drafts/i });
+    const gen = screen.getByRole("button", { name: /(Generate|Regenerate) drafts/i });
     const row = gen.parentElement!;
     const cls = row.getAttribute("class") ?? "";
     expect(cls.includes("mt-3")).toBe(true);
@@ -219,7 +219,7 @@ describe("weekly-meeting cockpit — batch chip tap-to-expand", () => {
     render(<PlanningMeetingPage />);
     openFirmPanel();
 
-    const chip = screen.getByRole("button", { name: /CALM base/i });
+    const chip = screen.getByRole("button", { name: /^CALM base/i });
     expect(chip.getAttribute("aria-expanded")).toBe("false");
 
     fireEvent.click(chip);
