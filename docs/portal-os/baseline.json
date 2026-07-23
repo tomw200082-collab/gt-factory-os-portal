@@ -8,7 +8,7 @@
     "Tranche 138 (2026-07-23, kind=baseline-update): lean-nav re-anchor (Tom-approved D1 fold list + D2 hidden-doctrine, 2026-07-23). NAV pruning + role scoping ONLY — zero route deletion, routes[] and role_gates{} UNCHANGED (every URL stays live and middleware-reachable exactly as before; the fold is client nav-visibility). nav_items[] changes: /planning ('Planning Overview') and /planning/forecast ('Forecast') min_role raised viewer→planner (self-declared diagnostic + monthly Tom cadence; operators/viewers have no action, writes are server-blocked). NOT reflected in nav_items[] because this snapshot tracks only href+label+min_role: (a) /credit-tracking + /stock/movement-log gained a client-side exact `roles` allow-list [viewer,planner,admin] that scopes them out of the OPERATOR sidebar (min_role unchanged — the route stays reachable for operators by URL/⌘K); (b) /planning/production-simulation + /planning/blockers gained placement:'command' (folded to ⌘K + deep link, still live, still in NAV_MANIFEST so active-path/breadcrumb/palette resolve them); (c) viewer's 4 stock:execute rows + /me/activity are HIDDEN by the D2 never-grantable rule (SideNav render logic, not the manifest). All of (a)/(b)/(c) are nav-visibility mechanisms with no baseline-tracked field, so they are documented here rather than as row diffs. anchor_sha advanced to the tranche-138 nav-truth commit."
   ],
   "generated_at": "2026-06-11T00:00:00Z",
-  "anchor_sha": "096467f",
+  "anchor_sha": "51fbab4",
   "routes": [
     { "path": "/", "status": "live" },
     { "path": "/login", "status": "live" },
