@@ -97,6 +97,17 @@ export function FocusMode({
   }, [cardDirty, onClose]);
   const flashTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
+  // ux-release-gate 2026-07-23 INTER-A3/A4/A11Y-013: the unsaved-changes
+  // dialog had no focus management of its own, and the outer Tab-trap
+  // (below) queried focusables across the WHOLE overlay — including the
+  // FocusCard price/quantity inputs visually covered behind this dialog.
+  // A dedicated ref scopes both the initial focus and the Tab-trap to just
+  // this dialog's two buttons while it's open.
+  const closeDialogRef = useRef<HTMLDivElement>(null);
+  const closeDialogFirstButtonRef = useRef<HTMLButtonElement>(null);
+  useEffect(() => {
+    if (confirmingClose) closeDialogFirstButtonRef.current?.focus();
+  }, [confirmingClose]);
   // DR-018 A11Y-001 (Tranche 121) — keyboard/AT users lost their position
   // every time the overlay opened (no focus-in) or closed (no focus-restore).
   // Captured at render time (not in an effect): FocusCard autofocuses its
@@ -209,12 +220,20 @@ export function FocusMode({
     function onKey(e: KeyboardEvent): void {
       if (e.key === "Escape") {
         e.preventDefault();
-        requestClose();
+        // ux-release-gate 2026-07-23 INTER-A3: requestClose() just re-arms
+        // confirmingClose (already true) — a no-op the planner reads as
+        // "Escape does nothing". While the dialog is open, Escape must
+        // dismiss IT (back to editing), not re-request the close it's
+        // already confirming.
+        if (confirmingClose) setConfirmingClose(false);
+        else requestClose();
         return;
       }
-      // Focus trap — keep Tab cycling within the overlay.
+      // Focus trap — keep Tab cycling within the overlay (or, while the
+      // close-confirm dialog is open, within just that dialog — see
+      // INTER-A4/A11Y-013 above).
       if (e.key === "Tab") {
-        const root = containerRef.current;
+        const root = confirmingClose ? closeDialogRef.current : containerRef.current;
         if (!root) return;
         const focusables = root.querySelectorAll<HTMLElement>(
           'a[href],button:not([disabled]),input:not([disabled]),select:not([disabled]),textarea:not([disabled]),[tabindex]:not([tabindex="-1"])',
@@ -247,7 +266,7 @@ export function FocusMode({
     }
     window.addEventListener("keydown", onKey);
     return () => window.removeEventListener("keydown", onKey);
-  }, [requestClose, goNext, goPrev]);
+  }, [requestClose, goNext, goPrev, confirmingClose]);
 
   // Reset the close-confirm + dirty flags whenever the focused order changes.
   useEffect(() => {
@@ -394,14 +413,25 @@ export function FocusMode({
         </div>
       )}
 
-      {/* INTER-004: unsaved-edit guard before closing the overlay. */}
+      {/* INTER-004: unsaved-edit guard before closing the overlay.
+          ux-release-gate 2026-07-23 INTER-A3/A4/A11Y-013: local Escape
+          handling (stopPropagation keeps the window-level handler above
+          from re-arming this same dialog) + a ref so the outer Tab-trap
+          scopes to just these two buttons while this dialog is open. */}
       {confirmingClose && (
         <div
+          ref={closeDialogRef}
           className="absolute inset-0 z-20 flex items-center justify-center bg-bg/80 p-4"
           role="alertdialog"
           aria-modal="true"
           aria-label="שינויים שלא נשמרו"
           data-testid="focus-close-confirm"
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.stopPropagation();
+              setConfirmingClose(false);
+            }
+          }}
         >
           <div className="w-full max-w-sm rounded-lg border border-border bg-bg-raised p-5 text-center shadow-lg">
             <p className="text-sm font-semibold text-fg">
@@ -410,6 +440,7 @@ export function FocusMode({
             <p className="mt-1 text-xs text-fg-muted">סגירה תבטל אותם.</p>
             <div className="mt-4 flex items-center justify-center gap-2">
               <button
+                ref={closeDialogFirstButtonRef}
                 type="button"
                 className="btn btn-sm"
                 onClick={() => setConfirmingClose(false)}
@@ -476,7 +507,12 @@ function DoneSummary({
             ? "אין הזמנות שדורשות פעולה"
             : hasRemaining
               ? "עברת על כל ההזמנות"
-              : "סיימת את מושב הרכש 🎉"}
+              // ux-release-gate 2026-07-23 COPY-021/INTER-A12/A11Y-020:
+              // flagged independently by 3 of 3 dimension agents — the emoji
+              // is read aloud by screen readers ("party popper" mid-sentence)
+              // and is off-register for a factory-operations tool; the
+              // Hebrew sentence alone already reads as a clear completion.
+              : "סיימת את מושב הרכש"}
         </div>
         <div className="text-sm text-fg-muted">
           {total === 0

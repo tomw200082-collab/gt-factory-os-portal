@@ -69,6 +69,23 @@ function fmtTimeHe(ts: string | null): string | null {
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 }
 
+// ux-release-gate 2026-07-23 FLOW-008: time-only was ambiguous for a session
+// left open across days (GT Everyday's weekly cadence means "נוצר 09:15" with
+// no date could be today or from last week's session). Same-day still shows
+// time only; a different day gets "DD/MM · HH:MM".
+function fmtSessionCreatedHe(ts: string | null): string | null {
+  const time = fmtTimeHe(ts);
+  if (!ts || !time) return null;
+  const created = new Date(ts);
+  const now = new Date();
+  const sameDay =
+    created.getFullYear() === now.getFullYear() &&
+    created.getMonth() === now.getMonth() &&
+    created.getDate() === now.getDate();
+  if (sameDay) return time;
+  return `${fmtDateHe(ts.slice(0, 10))} · ${time}`;
+}
+
 export function IntegrityStrip({
   session,
   onRefresh,
@@ -109,7 +126,7 @@ export function IntegrityStrip({
   const forecast = integrity?.forecast ?? null;
   const fTone = forecastTone(forecast);
 
-  const createdTime = fmtTimeHe(session.created_at);
+  const createdTime = fmtSessionCreatedHe(session.created_at);
 
   const structuralWarnings = session.warnings.filter(
     (w) => w.code !== "no_orders_needed",
@@ -295,7 +312,9 @@ export function IntegrityStrip({
               // armed — a second tap here must never be able to land as the
               // implicit "confirm".
               disabled={refreshPending || refreshConfirming}
-              className="inline-flex min-h-[2rem] items-center gap-1 rounded-md px-2 text-3xs font-semibold text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 disabled:opacity-60"
+              // ux-release-gate 2026-07-23 VISUAL-004: no border/background —
+              // read as a text link inside the chip row rather than a button.
+              className="inline-flex min-h-[2rem] items-center gap-1 rounded-md border border-border/60 bg-bg-raised px-2 text-3xs font-semibold text-accent hover:bg-bg-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 disabled:opacity-60"
               title="מריץ מושב רכש חדש כדי שההמלצות ישקפו מלאי, ספירות ותאריכי אספקה עדכניים. מושב פתוח עם אישורים שלא נשמרו יוחלף."
               data-testid="procurement-integrity-refresh"
             >
@@ -313,6 +332,16 @@ export function IntegrityStrip({
                   : "רענון המלצות"}
             </button>
           )}
+          {/* ux-release-gate 2026-07-23 INTER-A7/A11Y-014: the confirm zone
+              this button arms lives in the page header (meta="", possibly
+              scrolled off-screen on a long session) — nothing pointed the
+              planner there. Always-mounted so a screen reader that already
+              registered the live region announces immediately when armed. */}
+          <span role="status" aria-live="assertive" className="sr-only">
+            {refreshConfirming
+              ? "יש לאשר את הפעולה בראש הדף."
+              : ""}
+          </span>
 
           {createdTime && (
             <span className="ms-auto text-3xs tabular-nums text-fg-faint">

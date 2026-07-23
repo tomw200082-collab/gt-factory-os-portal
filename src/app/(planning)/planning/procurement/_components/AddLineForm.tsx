@@ -99,9 +99,14 @@ export function AddLineForm({
           invalid={touched && !orderableValid}
           testId="add-line-orderable"
           ariaLabel="פריט או רכיב"
+          describedBy={
+            touched && !orderableValid ? "add-line-orderable-error" : undefined
+          }
         />
         {touched && !orderableValid && (
-          <div className="text-xs text-danger-fg">יש לבחור פריט או רכיב.</div>
+          <div id="add-line-orderable-error" className="text-xs text-danger-fg">
+            יש לבחור פריט או רכיב.
+          </div>
         )}
       </div>
 
@@ -122,9 +127,13 @@ export function AddLineForm({
             disabled={busy}
             data-testid="add-line-qty"
             aria-label="כמות"
+            aria-invalid={touched && !qtyValid ? true : undefined}
+            aria-describedby={touched && !qtyValid ? "add-line-qty-error" : undefined}
           />
           {touched && !qtyValid && (
-            <div className="text-xs text-danger-fg">כמות חייבת להיות גדולה מ-0.</div>
+            <div id="add-line-qty-error" className="text-xs text-danger-fg">
+              כמות חייבת להיות גדולה מ-0.
+            </div>
           )}
         </div>
         <select

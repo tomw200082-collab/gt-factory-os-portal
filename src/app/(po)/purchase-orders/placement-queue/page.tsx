@@ -25,8 +25,22 @@ import {
 } from "lucide-react";
 import { RoleGate } from "@/lib/auth/role-gate";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
+import { cn } from "@/lib/cn";
 import { ApiError, usePlacementQueue, type QueuePo } from "./_lib/api";
 import { PlacementRow } from "./_components/PlacementRow";
+
+// ux-release-gate 2026-07-23 FLOW-005: coarse "updated N minutes ago" — not
+// a precision timer, just enough to tell the office manager the list isn't
+// stale from an hour ago.
+function fmtRelativeHe(updatedAtMs: number): string {
+  const diffSec = Math.max(0, Math.round((Date.now() - updatedAtMs) / 1000));
+  if (diffSec < 30) return "עכשיו";
+  if (diffSec < 60) return "לפני פחות מדקה";
+  const min = Math.round(diffSec / 60);
+  if (min < 60) return `לפני ${min} דק׳`;
+  const hr = Math.round(min / 60);
+  return `לפני ${hr} שע׳`;
+}
 
 // Filter/sort (Tom-directed 2026-07-16 — every corridor page needs them).
 // Client-side over the already-fetched queue; the default order-by-date sort
@@ -45,7 +59,8 @@ const SORTERS: Record<SortKey, (a: QueuePo, b: QueuePo) => number> = {
 };
 
 function QueueInner(): JSX.Element {
-  const { data, isLoading, isError, error, refetch } = usePlacementQueue();
+  const { data, isLoading, isError, error, refetch, isFetching, dataUpdatedAt } =
+    usePlacementQueue();
   const rows = data?.rows ?? [];
   const todayIso = new Date().toISOString().slice(0, 10);
   // Always computed from the FULL queue — a supplier filter must never shrink
@@ -87,6 +102,11 @@ function QueueInner(): JSX.Element {
         eyebrow="רכש"
         title="הזמנות לביצוע"
         description="הזמנות שאושרו וממתינות לביצוע מול הספק. הזינו מחיר ותנאי תשלום לכל הזמנה, ובצעו אותה — היא תיפתח ותעבור לקבלת סחורה."
+        // ux-release-gate 2026-07-23 FLOW-006: no path back to the
+        // procurement session this queue came from — the office manager had
+        // no one-tap way to check whether the planner still has open work.
+        backHref="/planning/procurement"
+        backLabel="חזרה לרכש"
       />
 
       {placed ? (
@@ -228,7 +248,11 @@ function QueueInner(): JSX.Element {
             >
               <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
               <span>
-                {rows.length} הזמנות ממתינות — {overdueCount} באיחור
+                {/* ux-release-gate 2026-07-23 COPY-020: "ממתינות" (waiting) was
+                    redundant — every order here is by definition waiting; the
+                    phrasing could also misread as if only the overdue count
+                    mattered. "בתור" (in queue) is precise to this surface. */}
+                {rows.length} הזמנות בתור — {overdueCount} באיחור
               </span>
             </div>
           )}
@@ -260,7 +284,7 @@ function QueueInner(): JSX.Element {
               className="input w-40 py-1.5 text-xs"
               data-testid="placement-queue-sort"
             >
-              <option value="order_by_date">מיין: דחיפות (ברירת מחדל)</option>
+              <option value="order_by_date">מיין: דחיפות</option>
               <option value="amount_desc">מיין: סכום (גבוה תחילה)</option>
               <option value="supplier">מיין: ספק (א-ת)</option>
             </select>
@@ -276,6 +300,31 @@ function QueueInner(): JSX.Element {
                 נקה סינון
               </button>
             )}
+            {/* ux-release-gate 2026-07-23 FLOW-005: refetchOnWindowFocus is
+                deliberately off (preserves in-progress price/terms edits per
+                row), but that left no way to see a PO the planner approved
+                after the queue was opened, short of a full reload that would
+                discard those edits. Each PlacementRow holds its own edit
+                state locally, so a list refetch here is safe — it only
+                adds/removes rows. */}
+            <button
+              type="button"
+              onClick={() => void refetch()}
+              disabled={isFetching}
+              className="mr-auto inline-flex min-h-[2rem] items-center gap-1 rounded border border-border/70 bg-bg-raised px-2 text-3xs font-medium text-fg-muted hover:border-border-strong hover:text-fg disabled:opacity-60"
+              data-testid="placement-queue-refresh"
+            >
+              <RefreshCw
+                className={cn("h-3 w-3 motion-reduce:animate-none", isFetching && "animate-spin")}
+                aria-hidden
+              />
+              רענן
+              {dataUpdatedAt ? (
+                <span className="text-fg-faint">
+                  · עודכן {fmtRelativeHe(dataUpdatedAt)}
+                </span>
+              ) : null}
+            </button>
           </div>
 
           {/* ux-release-gate 2026-07-21 A11Y-103: announce filter results —

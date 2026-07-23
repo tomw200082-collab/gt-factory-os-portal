@@ -521,7 +521,7 @@ function ManualPoFormInner(): JSX.Element {
             <div className="text-xs text-fg-muted">
               {phase === "idempotent"
                 ? "We re-fetched the original PO; submitting again did not create another one."
-                : "Status: OPEN. Add receipts when goods arrive."}
+                : "Status: Open. Add receipts when goods arrive."}
             </div>
             {(successPoNumber || successPoId) && (
               <div className="text-3xs text-fg-faint font-mono">

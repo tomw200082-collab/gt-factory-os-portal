@@ -9,7 +9,7 @@
 // Hebrew + RTL operator surface (authorized in CLAUDE.md for this route).
 // ---------------------------------------------------------------------------
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Loader2,
   PackageCheck,
@@ -73,6 +73,14 @@ export function PlacementRow({
   const [cancelError, setCancelError] = useState<string | null>(null);
   const composedReason =
     cancelReason === "אחר" ? cancelDetail.trim() : cancelReason;
+  // ux-release-gate 2026-07-23 INTER-A1/A11Y-011: FocusCard's cancel panel
+  // already moves focus to the reason select on open — this row's panel
+  // never got the same fix, so keyboard/AT users landed on the trigger with
+  // no indication the panel appeared below.
+  const cancelSelectRef = useRef<HTMLSelectElement>(null);
+  useEffect(() => {
+    if (cancelling) cancelSelectRef.current?.focus();
+  }, [cancelling]);
 
   async function handleCancel(): Promise<void> {
     setCancelError(null);
@@ -270,7 +278,9 @@ export function PlacementRow({
         aria-expanded={cancelling}
         aria-label={`בטל את ההזמנה ${po.po_number}`}
         title="בטל הזמנה"
-        className="flex shrink-0 items-center gap-1.5 border-r border-border/60 px-3 text-fg-muted transition-colors hover:bg-danger-softer hover:text-danger-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-danger"
+        // ux-release-gate 2026-07-23 VISUAL-007: icon-only on mobile (label
+        // hidden below sm:) measured ~40px wide — under the 44px touch floor.
+        className="flex min-w-[44px] shrink-0 items-center justify-center gap-1.5 border-r border-border/60 px-3 text-fg-muted transition-colors hover:bg-danger-softer hover:text-danger-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-danger"
         data-testid={`placement-cancel-toggle-${po.po_id}`}
       >
         <XCircle className="h-4 w-4" aria-hidden />
@@ -287,6 +297,18 @@ export function PlacementRow({
         <div
           className="space-y-3 border-t border-danger/30 bg-danger-softer/40 p-4"
           data-testid={`placement-cancel-panel-${po.po_id}`}
+          // ux-release-gate 2026-07-23 INTER-A2: Escape did nothing here —
+          // there is no parent overlay to bubble to (unlike FocusMode), so
+          // it must be handled locally, mirroring FocusCard's cancel panel.
+          onKeyDown={(e) => {
+            if (e.key === "Escape") {
+              e.stopPropagation();
+              setCancelling(false);
+              setCancelReason("");
+              setCancelDetail("");
+              setCancelError(null);
+            }
+          }}
         >
           <div className="flex flex-wrap items-center gap-2">
             <label
@@ -296,6 +318,7 @@ export function PlacementRow({
               סיבת ביטול
             </label>
             <select
+              ref={cancelSelectRef}
               id={`placement-cancel-reason-${po.po_id}`}
               className="input w-52"
               value={cancelReason}
@@ -407,8 +430,14 @@ export function PlacementRow({
               </button>
             </div>
           ) : lines.length === 0 ? (
+            // ux-release-gate 2026-07-23 FLOW-004: an approved PO whose lines
+            // were all closed/cancelled elsewhere left the office manager
+            // stuck here — nothing to price, no path forward. The cancel
+            // action (still reachable via the header toggle) is the way out;
+            // name it explicitly instead of a dead-end sentence.
             <div className="text-sm text-fg-muted">
-              אין שורות פתוחות בהזמנה זו.
+              כל שורות ההזמנה נסגרו או בוטלו. ניתן לבטל הזמנה זו באמצעות
+              &ldquo;בטל עם סיבה&rdquo; למעלה, או לפנות למנהל הרכש.
             </div>
           ) : (
             <div className="space-y-4">
@@ -431,7 +460,15 @@ export function PlacementRow({
                       </div>
                     </div>
                     <label className="flex items-center gap-1.5">
-                      <span className="text-xs text-fg-muted">מחיר ליח׳ ₪</span>
+                      {/* ux-release-gate 2026-07-23 COPY-024/INTER-A10: full
+                          word (not "ליח׳") — this is the price Doreen is about
+                          to commit to, worth the extra character; asterisk
+                          when the field starts empty (no catalog price) so a
+                          required field is visible without hovering the
+                          disabled place button to read its tooltip. */}
+                      <span className="text-xs text-fg-muted">
+                        מחיר ליחידה ₪{!priceFor(l) && <span className="text-danger-fg">*</span>}
+                      </span>
                       <input
                         type="number"
                         inputMode="decimal"

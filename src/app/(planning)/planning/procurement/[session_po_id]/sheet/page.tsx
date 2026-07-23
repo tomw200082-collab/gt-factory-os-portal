@@ -40,7 +40,7 @@ function AssetChips({ line }: { line: SheetLine }) {
 export default function OrderSheetPage() {
   const params = useParams<{ session_po_id: string }>();
   const sessionPoId = params.session_po_id;
-  const { data, isLoading, isError, error } = useCurrentSession();
+  const { data, isLoading, isError } = useCurrentSession();
 
   const po = useMemo(
     () => data?.session?.pos.find((p) => p.session_po_id === sessionPoId) ?? null,
@@ -62,7 +62,7 @@ export default function OrderSheetPage() {
           <button
             type="button"
             onClick={() => window.print()}
-            className="inline-flex items-center gap-1.5 rounded-lg border border-border bg-bg px-3 py-1.5 text-sm font-semibold text-fg hover:bg-bg-subtle"
+            className="inline-flex items-center gap-1.5 rounded border border-border/80 bg-bg-raised px-3 py-1.5 text-sm font-semibold text-fg hover:bg-bg-subtle"
             data-testid="order-sheet-print"
           >
             <Printer className="h-4 w-4" aria-hidden /> הדפס / שמור כ-PDF
@@ -70,16 +70,42 @@ export default function OrderSheetPage() {
         )}
       </div>
 
-      {isLoading && <p className="text-sm text-fg-muted">טוען…</p>}
+      {/* ux-release-gate 2026-07-23 FLOW-001/COPY-008/A11Y-022: structured
+          loading/error/not-found states — the toolbar back-link above is
+          always present, but each state now also carries its own recovery
+          path and no raw API error message ever reaches this Hebrew surface. */}
+      {isLoading && (
+        <div className="no-print space-y-2" aria-busy="true" aria-live="polite">
+          <div className="h-6 w-2/3 animate-pulse rounded bg-bg-subtle" />
+          <div className="h-4 w-1/3 animate-pulse rounded bg-bg-subtle" />
+          <div className="h-32 w-full animate-pulse rounded-xl bg-bg-subtle" />
+        </div>
+      )}
       {isError && (
-        <p className="text-sm text-danger">
-          שגיאה בטעינת הנתונים: {(error as Error)?.message ?? "לא ידוע"}
-        </p>
+        <div
+          role="alert"
+          className="no-print rounded-md border border-danger/40 bg-danger-softer px-4 py-3 text-sm text-danger-fg"
+        >
+          <div className="font-medium">שגיאה בטעינת גיליון ההזמנה</div>
+          <div className="mt-1 text-xs opacity-90">נסה שוב, או חזור לדף הרכש.</div>
+        </div>
       )}
       {!isLoading && !isError && !po && (
-        <p className="text-sm text-fg-muted">
-          לא נמצאה הזמנה פתוחה עבור מזהה זה. ייתכן שהמושב נסגר או שההזמנה הוסרה.
-        </p>
+        <div
+          className="no-print rounded-md border border-warning/40 bg-warning-softer px-4 py-3 text-sm text-warning-fg"
+          data-testid="order-sheet-not-found"
+        >
+          <div className="font-medium">לא נמצאה הזמנה פתוחה עבור מזהה זה</div>
+          <div className="mt-1 text-xs opacity-90">
+            ייתכן שהמושב נסגר או שההזמנה הוסרה.
+          </div>
+          <Link
+            href="/planning/procurement"
+            className="mt-2 inline-flex items-center gap-1 text-xs font-medium underline underline-offset-2 hover:no-underline"
+          >
+            <ArrowRight className="h-3.5 w-3.5" aria-hidden /> חזרה לרכש
+          </Link>
+        </div>
       )}
 
       {model && (

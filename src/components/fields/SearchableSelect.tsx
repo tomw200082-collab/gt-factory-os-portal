@@ -49,6 +49,8 @@ interface SearchableSelectProps {
   contentWidth?: "trigger" | "auto";
   testId?: string;
   ariaLabel?: string;
+  /** id of an element (e.g. inline validation text) describing this field */
+  describedBy?: string;
 }
 
 export function SearchableSelect({
@@ -65,6 +67,7 @@ export function SearchableSelect({
   contentWidth = "trigger",
   testId,
   ariaLabel,
+  describedBy,
 }: SearchableSelectProps): JSX.Element {
   const listboxId = useId();
   const [open, setOpen] = useState(false);
@@ -170,6 +173,7 @@ export function SearchableSelect({
           aria-expanded={open}
           aria-controls={listboxId}
           aria-invalid={invalid || undefined}
+          aria-describedby={describedBy}
           data-testid={testId}
           className={cn(
             "input w-full flex items-center justify-between gap-2 text-left",
