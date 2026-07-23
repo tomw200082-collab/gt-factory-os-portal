@@ -138,6 +138,153 @@ mandate. No P0 shipped unresolved.
   `ux-shot.spec.ts` under the sanctioned dev-shim auth for the initial
   audit pass.
 
+### Round 2 — re-audit + fix (complete)
+
+Fresh dispatch of the same five agents against the Round 1-fixed code
+(not a rehash — each was briefed to find what Round 1 missed or left
+incomplete, plus give an explicit verdict on Round 1's three deferred
+items). Heavy cross-dimension convergence this round — several findings
+were independently raised by 2-4 agents, which is treated as a
+confidence signal, not de-duplication busywork.
+
+**Deferred items from Round 1, resolved:**
+- `CalendarView` tier-vs-bucket conflict — confirmed real by two agents
+  (flow, copy) with concrete cross-view evidence (the same PO reads
+  "חובה השבוע" in the calendar and "יכול לחכות" in the action list).
+  Fixed: `TIER_LABEL` now reuses ActionList's own bucket vocabulary
+  (`urgent`→"חייב לצאת היום", `must`/`recommended`→"יכול לחכות", merged
+  under one summary chip with the dot color carrying the remaining
+  urgency signal); zero-count chips no longer render.
+- `AddLineForm` UOM raw enum codes — fixed with a label map (metric/count
+  abbreviations KG/L/ML/G/MG/TON kept as-is; UNIT/PCS/BAG/CASE/BOX/
+  BOTTLE/TIN given Hebrew labels). `value` stays the enum code.
+- `IntegrityStrip` armed-refresh affordance — turned out to be two real
+  bugs, not one polish item: the sr-only live region sat inside a
+  `display:none` mobile-collapsed parent (silenced screen readers
+  exactly when armed) and used a non-standard `role="status"` +
+  `aria-live="assertive"` pairing. Fixed both, and added a visible
+  pulsing indicator in both the collapsed mobile bar and the expanded
+  row (a live region only helps screen-reader users; sighted users
+  scrolled away from the header needed a visual cue too).
+
+**Fixed, by file (P0/P1 unless noted):**
+
+- `procurement/page.tsx` — fixed a StrictMode-unsafe focus-return guard
+  in my own Round 1 code (a "have I run once" ref flag isn't invariant
+  to React 18's double-invoke-effects-on-mount; replaced with tracking
+  the actual previous value of `confirmingStart`, which only reacts to
+  a real close transition). Two raw error messages from Round 1 review
+  turned out already fixed; this round's actual finds here were the
+  StrictMode bug and the IntegrityStrip changes above.
+- `purchase-orders/[po_id]/page.tsx` (largest file again) — the PO-level
+  cancel dialog gained the same focus-trap/Escape/focus-return treatment
+  as the procurement page's supersede-confirm (3-way convergence:
+  interaction, flow, a11y all independently flagged the missing trap);
+  the per-line cancel dialog gained an Escape handler and a stable
+  ref-callback for its focus-on-open (the previous inline arrow-function
+  ref re-fired on every render, stealing focus back mid-interaction —
+  fixed via a per-line ref cache built once at the component's top
+  level, not inside the row `.map()`, to stay hook-rule-compliant
+  without a wider per-row-component refactor); added a `DRAFT` case to
+  `POStatusBadge` (fell through to the raw enum); two `supplier_id`
+  UUID-fallback leaks fixed (`supplierLabel`, two separate
+  declarations); `AttachedGrCard`'s raw `item_id` fallback replaced;
+  edit-mutation and line-edit-mutation raw error messages replaced with
+  fixed strings; a raw ISO `expected_receive_date` in the "still
+  awaiting" panel now formatted; line-edit inputs wired to their error
+  via `aria-describedby`; an APPROVED_TO_ORDER PO now shows a link to
+  the placement queue instead of a dead end (no cancel path exists here
+  for that status); the Cancel PO button/dialog moved to the far edge
+  of the header action row, separated from Receive/View-receipts;
+  "Internal ID" relabeled "PO reference"; the sidebar Linkages card's GR
+  subtitle now uses the same status labels as `GrStatusBadge` instead of
+  the raw backend string.
+- `RecommendationsToConvert.tsx` — the conversion mutation's `onError`
+  rendered the raw `Error.message` (which itself can carry the
+  backend's raw `detail` field, per `_lib/recommendations.ts`) —
+  replaced with a fixed Hebrew string, independently flagged by both
+  the flow and copy agents. Also fixed the success-banner grammar when
+  `po_number` is absent (was "...הומרה ל.", now a full sentence either
+  way).
+- `PlacementRow.tsx` — both mutation `onError` handlers were missing the
+  `instanceof ApiError` guard that `_lib/api.ts` was explicitly built
+  for (its own doc comment states the rule) — a raw network `TypeError`
+  could have reached the Hebrew UI verbatim; fixed both. Two raw ISO
+  dates now formatted. The overdue indicator gained a danger icon (was
+  color-only).
+- `purchase-orders/page.tsx` — `NewPoDropdown`: Tab no longer leaves the
+  menu open while focus silently moves elsewhere (WAI-ARIA Menu Button
+  violation, runtime-confirmed by the interaction agent's own Playwright
+  script); Home/End now jump to the first/last item. The header's
+  "0 POs" badge no longer flashes before the real count loads.
+- `purchase-orders/new/page.tsx` — a raw Zod validation message could
+  reach the operator in the 422 fallback path; a raw supplier UUID
+  fallback in the draft summary; a raw ISO expected-date in the same
+  summary; "ref {uuid}" (developer shorthand) in the success state
+  relabeled "Order ID:".
+- `SearchableSelect.tsx` — the popover's search input had no accessible
+  name (placeholder text only, not a programmatic label) — now derives
+  one from the trigger's own `ariaLabel`.
+- `[session_po_id]/sheet/page.tsx` — both back-link occurrences used
+  `ArrowRight`, which points forward in the LTR context this toolbar
+  actually inherits (only the printable sheet body itself is RTL) —
+  fixed to `ArrowLeft`.
+- `FocusCard.tsx` — `CANCEL_REASONS` gained the same two supplier/price
+  reasons `PlacementRow` and `[po_id]` already offer, closing a parity
+  gap the copy agent flagged.
+- Test fixes for intentional behavior changes: `CalendarView.test.tsx`
+  and `procurement-calendar-mobile.test.tsx` updated to the new tier
+  labels; `AddLineForm.test.tsx`'s shared `pickOrderable` helper scoped
+  its query to the open listbox after the new UOM label for CASE
+  ("קרטון") happened to collide with the test's own mock component name
+  — a real native-`<select>`-always-in-DOM test hazard, not a product
+  bug.
+
+**Investigated, not a bug (false positive):** the visual agent flagged
+a P0 for the placement queue showing "Access restricted" under the
+`viewer` role. Confirmed against tranche 086's locked decision — no
+distinct bookkeeper role exists in this system; the real office-manager
+account is provisioned as `planner`, which is what the `planning:execute`
+gate correctly requires. No code change.
+
+**Deferred to Round 3 (visual polish round) or later, logged not
+dropped:**
+- Systemic `.btn-sm` touch-target gap (28px, below WCAG's 44px) —
+  flagged by both a11y and visual agents but explicitly scoped as
+  needing a token-level design decision, not a per-instance patch.
+- `DetailPage`'s shared tab-list wrapping on mobile (touches a component
+  used beyond this corridor — wants its own look, not a rushed bundle
+  into an already-large round) and the PO detail lines-table's 9-column
+  mobile overflow.
+- A cluster of P2 visual findings on `[po_id]/page.tsx`: zero-value stat
+  tiles rendered in semantic danger/accent color, a mobile stat-tile
+  grid orphan, the "FROM RECOMMENDATION" provenance chip using
+  status-level accent weight, the expected-date chip never carrying
+  urgency tone, a duplicated "ordered value" figure across two cards,
+  a Hebrew supplier name interpolated into English prose without a
+  `<bdi>` wrap.
+- The cancel-reason notes-PATCH's best-effort silent failure (if the
+  PATCH fails, the PO still cancels but the reason isn't persisted —
+  an audit-completeness gap, not a broken flow) and the start-mutation
+  error-retry re-arming the confirm zone instead of retrying directly.
+
+**Evidence:**
+- `npx tsc --noEmit` — clean, 0 errors.
+- `npx eslint` on every changed file — 0 errors; same 3 pre-existing
+  `react-hooks/exhaustive-deps` warnings as Round 1, confirmed
+  unrelated.
+- `npx vitest run` — 123 files / 1006 tests, all passing (after
+  updating 2 tests for the intentional tier-label change and 1 test's
+  query-scoping fix for the coincidental Hebrew-text collision above).
+- Runtime keyboard verification: the interaction and accessibility
+  agents each wrote small standalone Playwright scripts driving real
+  Tab/Escape/Arrow key presses against the running dev server (rather
+  than relying on static code reading) to confirm/refute focus-trap and
+  menu-button claims — parked at
+  `scratchpad/a11y-r2-keyboard.spec.ts` for reuse in later rounds
+  rather than committed (ad hoc verification harness, not a reviewed
+  addition to the tracked test suite).
+
 ## Files
 
 (finalized at tranche close — every source file touched across all 5 rounds)

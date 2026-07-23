@@ -56,8 +56,12 @@ export function RecommendationsToConvert(): JSX.Element | null {
       });
       void queryClient.invalidateQueries({ queryKey: ["inbox"] });
     },
-    onError: (err: Error) => {
-      setErrorMsg(err.message);
+    onError: () => {
+      // ux-release-gate 2026-07-23 R2-F06/COPY-021: convertRecToPO can throw
+      // an Error built directly from the backend's raw `detail` field (see
+      // _lib/recommendations.ts) — never render that text on this Hebrew
+      // surface, same rule already applied everywhere else in the corridor.
+      setErrorMsg("לא ניתן להמיר את ההמלצה להזמנת רכש. נסו שוב.");
     },
   });
 
@@ -135,8 +139,13 @@ export function RecommendationsToConvert(): JSX.Element | null {
         >
           <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden />
           <span className="flex-1">
-            {done.idempotent_replay ? "כבר הומר ל" : "ההמלצה הומרה ל"}
-            {done.po_number ?? "הזמנה"}.
+            {done.po_number
+              ? done.idempotent_replay
+                ? `כבר הומר ל${done.po_number}.`
+                : `ההמלצה הומרה ל${done.po_number}.`
+              : done.idempotent_replay
+                ? "כבר הומר להזמנת רכש קיימת."
+                : "ההמלצה הומרה להזמנת רכש חדשה."}
           </span>
           <Link
             href={`/purchase-orders/${encodeURIComponent(done.po_id)}`}

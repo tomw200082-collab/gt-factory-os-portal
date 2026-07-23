@@ -12,7 +12,7 @@
 import { useMemo } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ArrowRight, Printer } from "lucide-react";
+import { ArrowLeft, Printer } from "lucide-react";
 import { useCurrentSession } from "../../../purchase-session/_lib/api";
 import {
   buildOrderSheetModel,
@@ -56,7 +56,10 @@ export default function OrderSheetPage() {
           href="/planning/procurement"
           className="inline-flex items-center gap-1 text-sm text-fg-muted hover:text-fg"
         >
-          <ArrowRight className="h-4 w-4" aria-hidden /> חזרה לרכש
+          {/* R2-F07: this toolbar sits outside the RTL body and inherits the
+              app shell's LTR flow — ArrowRight visually points forward, not
+              back, in that context. */}
+          <ArrowLeft className="h-4 w-4" aria-hidden /> חזרה לרכש
         </Link>
         {model && (
           <button
@@ -103,7 +106,8 @@ export default function OrderSheetPage() {
             href="/planning/procurement"
             className="mt-2 inline-flex items-center gap-1 text-xs font-medium underline underline-offset-2 hover:no-underline"
           >
-            <ArrowRight className="h-3.5 w-3.5" aria-hidden /> חזרה לרכש
+            {/* R2-F07: same LTR-context fix as the toolbar back-link above. */}
+            <ArrowLeft className="h-3.5 w-3.5" aria-hidden /> חזרה לרכש
           </Link>
         </div>
       )}

@@ -43,7 +43,10 @@ describe("CalendarView", () => {
     // Tier summary strip shows the labels. Tranche 053 (FLOW-004) added the
     // mobile grouped list, which repeats the tier chip per row — so the label
     // legitimately appears more than once now (getAllByText, was getByText).
-    expect(screen.getAllByText(/חובה השבוע/).length).toBeGreaterThanOrEqual(1);
+    // ux-release-gate 2026-07-23 R2-F01/COPY-032: "must" now shares
+    // ActionList's "יכול לחכות" bucket label instead of the old, conflicting
+    // "חובה השבוע" tier label.
+    expect(screen.getAllByText(/יכול לחכות/).length).toBeGreaterThanOrEqual(1);
   });
 
   it("V2 clicking a day chip opens that order", async () => {

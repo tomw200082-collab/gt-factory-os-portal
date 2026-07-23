@@ -10,7 +10,7 @@
 // ---------------------------------------------------------------------------
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import type { OrderableRow } from "@/components/purchase-orders/types";
 
@@ -46,12 +46,17 @@ afterEach(() => {
 });
 
 // SearchableSelect is a combobox; pick by opening and clicking the option label.
+// Query is scoped to the open listbox — the UOM <select> below also renders
+// its options into the DOM at all times (native <select> behavior), and can
+// share text with an orderable label (e.g. "קרטון" is both a mock component
+// name here and the real Hebrew label for the CASE unit-of-measure).
 async function pickOrderable(
   user: ReturnType<typeof userEvent.setup>,
   label: string,
 ): Promise<void> {
   await user.click(screen.getByTestId("add-line-orderable"));
-  await user.click(await screen.findByText(label));
+  const listbox = await screen.findByRole("listbox");
+  await user.click(await within(listbox).findByText(label));
 }
 
 describe("AddLineForm", () => {

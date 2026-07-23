@@ -220,6 +220,11 @@ export function SearchableSelect({
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKey}
               placeholder={searchPlaceholder}
+              // A11Y-R2-011: a placeholder is not a programmatic accessible
+              // name — it disappears on input and isn't reliably read as a
+              // label by all AT. Derive one from the trigger's own label
+              // (falls back to the placeholder text itself).
+              aria-label={ariaLabel ? `Search ${ariaLabel}` : searchPlaceholder}
               autoComplete="off"
               spellCheck={false}
               // A11Y-008 — the search field is the active combobox controlling

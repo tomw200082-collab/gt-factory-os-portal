@@ -85,16 +85,24 @@ export default function ProcurementPage(): JSX.Element {
   const confirmZoneRef = useRef<HTMLDivElement>(null);
   const confirmFirstButtonRef = useRef<HTMLButtonElement>(null);
   const startTriggerRef = useRef<HTMLButtonElement>(null);
-  const confirmStartSkipFocusReturn = useRef(true);
   const confirmZoneTrap = useFocusTrap(confirmZoneRef, confirmingStart);
+  // ux-release-gate 2026-07-23 A11Y-R2-002: a "have I run once" ref flag is
+  // NOT StrictMode-safe — React 18 double-invokes this effect once on mount
+  // (mount → cleanup → mount again), so a flag that just flips true→false on
+  // first run reads as "not first run" on the second, StrictMode-only
+  // invocation and steals focus to the start button on page load. Tracking
+  // the actual previous VALUE of confirmingStart instead is invariant to how
+  // many times the effect fires — it only reacts to a real true→false
+  // transition, which mount-time double-invocation never produces.
+  const confirmingStartWasOpen = useRef(false);
 
   useEffect(() => {
     if (confirmingStart) {
       confirmFirstButtonRef.current?.focus();
-    } else if (!confirmStartSkipFocusReturn.current) {
+    } else if (confirmingStartWasOpen.current) {
       startTriggerRef.current?.focus();
     }
-    confirmStartSkipFocusReturn.current = false;
+    confirmingStartWasOpen.current = confirmingStart;
   }, [confirmingStart]);
 
   function openFocus(startId: string | null): void {

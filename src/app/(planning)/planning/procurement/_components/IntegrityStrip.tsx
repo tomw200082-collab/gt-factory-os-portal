@@ -32,7 +32,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import * as Tooltip from "@radix-ui/react-tooltip";
-import { ChevronDown, RefreshCw, ShieldCheck } from "lucide-react";
+import { ChevronDown, ChevronUp, RefreshCw, ShieldCheck } from "lucide-react";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { useCapability } from "@/lib/auth/role-gate";
 import { cn } from "@/lib/cn";
@@ -172,17 +172,31 @@ export function IntegrityStrip({
           <span
             className={cn(
               "inline-flex items-center gap-1 text-3xs font-semibold",
-              TONE_TO_TEXT[overallTone],
+              refreshConfirming ? "text-accent" : TONE_TO_TEXT[overallTone],
             )}
           >
-            {issueCount > 0 ? `${issueCount} לבדיקה` : "תקין"}
-            {/* INT-105: the refresh action lives inside the (hidden-until-
-                expanded) detail row — hint its existence in the collapsed
-                bar so the post-count refresh loop is discoverable on mobile. */}
-            {showRefresh && (
-              <span className="inline-flex items-center gap-0.5 text-accent">
-                · <RefreshCw className="h-3 w-3" aria-hidden /> רענן
+            {/* ux-release-gate 2026-07-23 A11Y-R2-005/VISUAL-R2-016: the
+                confirm zone can arm from the page header even while this
+                strip is still collapsed on mobile (its own refresh button
+                isn't the only trigger) — the collapsed bar must carry its
+                own visible cue, not just the (possibly hidden) detail row. */}
+            {refreshConfirming ? (
+              <span className="inline-flex animate-pulse items-center gap-1">
+                <ChevronUp className="h-3 w-3" aria-hidden />
+                יש לאשר בראש הדף
               </span>
+            ) : (
+              <>
+                {issueCount > 0 ? `${issueCount} לבדיקה` : "תקין"}
+                {/* INT-105: the refresh action lives inside the (hidden-until-
+                    expanded) detail row — hint its existence in the collapsed
+                    bar so the post-count refresh loop is discoverable on mobile. */}
+                {showRefresh && (
+                  <span className="inline-flex items-center gap-0.5 text-accent">
+                    · <RefreshCw className="h-3 w-3" aria-hidden /> רענן
+                  </span>
+                )}
+              </>
             )}
             <ChevronDown
               className={cn(
@@ -193,6 +207,16 @@ export function IntegrityStrip({
             />
           </span>
         </button>
+
+        {/* ux-release-gate 2026-07-23 A11Y-R2-005: moved out of the
+            conditionally display:none detail row below — a live region
+            inside a hidden ancestor never announces, silencing mobile
+            screen-reader users exactly when the strip is collapsed.
+            A11Y-R2-007: role="alert" alone (implicit assertive) replaces
+            the non-standard role="status" + explicit aria-live pairing. */}
+        <span role="alert" className="sr-only">
+          {refreshConfirming ? "יש לאשר את הפעולה בראש הדף." : ""}
+        </span>
 
         <div
           id="procurement-integrity-strip-detail"
@@ -332,16 +356,19 @@ export function IntegrityStrip({
                   : "רענון המלצות"}
             </button>
           )}
-          {/* ux-release-gate 2026-07-23 INTER-A7/A11Y-014: the confirm zone
-              this button arms lives in the page header (meta="", possibly
-              scrolled off-screen on a long session) — nothing pointed the
-              planner there. Always-mounted so a screen reader that already
-              registered the live region announces immediately when armed. */}
-          <span role="status" aria-live="assertive" className="sr-only">
-            {refreshConfirming
-              ? "יש לאשר את הפעולה בראש הדף."
-              : ""}
-          </span>
+          {/* ux-release-gate 2026-07-23 VISUAL-R2-016: sighted users (desktop,
+              or mobile once expanded) get a visible pointer to the confirm
+              zone in the page header — the sr-only announcement above covers
+              screen readers regardless of expand state. */}
+          {refreshConfirming && (
+            <span
+              aria-hidden="true"
+              className="inline-flex animate-pulse items-center gap-1 rounded border border-accent/40 bg-accent-soft/30 px-2 py-0.5 text-3xs font-semibold text-accent"
+            >
+              <ChevronUp className="h-3 w-3" aria-hidden />
+              יש לאשר בראש הדף
+            </span>
+          )}
 
           {createdTime && (
             <span className="ms-auto text-3xs tabular-nums text-fg-faint">

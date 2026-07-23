@@ -343,6 +343,21 @@ function NewPoDropdown(): JSX.Element | null {
       e.preventDefault();
       const onSecond = document.activeElement === secondItemRef.current;
       (onSecond ? firstItemRef : secondItemRef).current?.focus();
+    } else if (e.key === "Home") {
+      // INTER-R2-001
+      e.preventDefault();
+      firstItemRef.current?.focus();
+    } else if (e.key === "End") {
+      e.preventDefault();
+      secondItemRef.current?.focus();
+    } else if (e.key === "Tab") {
+      // ux-release-gate 2026-07-23 A11Y-R2-001: Tab left the menu open while
+      // focus silently moved elsewhere (WAI-ARIA Menu Button violation —
+      // Tab must close the menu). Close + return to the trigger, same as
+      // Escape: deterministic, and avoids relying on native tab-order
+      // continuation after the focused menu item is removed mid-keydown,
+      // which is inconsistent across browsers.
+      closeAndReturnFocus();
     }
   }
 
@@ -665,9 +680,13 @@ export default function PurchaseOrdersListPage() {
         description="Live read of approved purchase orders. Created from approved planning recommendations or manually by planners and admins."
         meta={
           <>
-            <Badge tone="info" dotted>
-              {total} PO{total === 1 ? "" : "s"}
-            </Badge>
+            {/* R2-F08: total defaults to 0 while posQuery.data is still
+                undefined — showed a false "0 POs" flash on every load. */}
+            {posQuery.data !== undefined && !posQuery.isError && (
+              <Badge tone="info" dotted>
+                {total} PO{total === 1 ? "" : "s"}
+              </Badge>
+            )}
             <Badge tone="neutral" dotted>
               Live
             </Badge>

@@ -17,6 +17,19 @@ import { UOMS, type Uom } from "@/lib/contracts/enums";
 import { cn } from "@/lib/cn";
 import type { LineAdd } from "../../purchase-session/_lib/types";
 
+// ux-release-gate 2026-07-23 R2-F02/COPY-035: metric/count abbreviations
+// (KG, L, ML, G, MG, TON) are standard shop-floor shorthand and stay as-is;
+// the remaining codes are ambiguous on a Hebrew RTL surface without a label.
+const UOM_LABEL: Partial<Record<Uom, string>> = {
+  UNIT: "יחידה",
+  PCS: "יחידות",
+  BAG: "שק",
+  CASE: "קרטון",
+  BOX: "קופסה",
+  BOTTLE: "בקבוק",
+  TIN: "פח",
+};
+
 export interface AddLineFormProps {
   onAdd: (line: LineAdd) => void;
   onCancel: () => void;
@@ -146,7 +159,7 @@ export function AddLineForm({
         >
           {UOMS.map((u) => (
             <option key={u} value={u}>
-              {u}
+              {UOM_LABEL[u] ?? u}
             </option>
           ))}
         </select>

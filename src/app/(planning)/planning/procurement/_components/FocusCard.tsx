@@ -59,11 +59,16 @@ const STATUS_LABEL: Record<PoStatus, string> = {
 
 // Preset cancel reasons (Tom-directed 2026-07-16 — same catalogue as the
 // placement-queue discard panel, tranche 130, for corridor-wide consistency).
+// COPY-034: parity with PlacementRow's and [po_id]'s reason sets — supplier
+// availability and price/terms are plausible reasons at this stage too, not
+// only "the engine got it wrong" / "revisit next round".
 const CANCEL_REASONS = [
   "כבר לא נדרש",
   "כפילות",
   "המלצת המנוע שגויה",
   "לבחון שוב בסבב הבא",
+  "הספק לא זמין",
+  "מחיר/תנאים לא מתאימים",
 ] as const;
 const STATUS_TONE: Record<PoStatus, BadgeTone> = {
   proposed: "neutral",

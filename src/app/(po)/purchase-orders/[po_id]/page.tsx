@@ -35,6 +35,7 @@ import { Badge } from "@/components/badges/StatusBadge";
 import { fmtNumStr } from "@/lib/utils/format-quantity";
 import { cn } from "@/lib/cn";
 import { summarizePoLineCosts } from "@/components/purchase-orders/po-cost-summary";
+import { useFocusTrap } from "@/components/a11y/useFocusTrap";
 
 // --- Types (mirrors of upstream schemas) ------------------------------------
 
@@ -233,6 +234,9 @@ function POStatusBadge({ status }: { status: string }): JSX.Element {
     return <Badge tone="success" variant="solid">Received</Badge>;
   if (status === "CANCELLED")
     return <Badge tone="neutral" dotted>Cancelled</Badge>;
+  // ux-release-gate 2026-07-23 COPY-026: DRAFT fell through to the raw-enum
+  // fallback (canCancelPo already treats DRAFT as a real, cancellable status).
+  if (status === "DRAFT") return <Badge tone="neutral" dotted>Draft</Badge>;
   return <Badge tone="neutral">{status}</Badge>;
 }
 
@@ -283,6 +287,15 @@ function ReceiptProgress({
 }
 
 // --- Attached GR card -------------------------------------------------------
+
+// COPY-036: shares GrStatusBadge's labels for plain-text contexts (the
+// sidebar Linkages card's subtitle isn't a badge, but needs the same map).
+const GR_STATUS_LABEL: Record<string, string> = {
+  posted: "Posted",
+  pending: "Pending",
+  rejected: "Rejected",
+  cancelled: "Cancelled",
+};
 
 function GrStatusBadge({ status }: { status: string }): JSX.Element {
   if (status === "posted") return <Badge tone="success" variant="solid">Posted</Badge>;
@@ -350,7 +363,10 @@ function AttachedGrCard({
                         </span>
                       </span>
                     ) : (
-                      <span className="font-mono text-xs">{line.item_id}</span>
+                      // COPY-025: raw UUID fallback — never surface it.
+                      <span className="text-xs text-fg-muted">
+                        (item name unavailable)
+                      </span>
                     )}
                   </td>
                   <td className="px-4 py-2 text-right font-mono text-xs tabular-nums text-fg">{fmtQty(line.quantity)}</td>
@@ -541,7 +557,8 @@ export default function PurchaseOrderDetailPage({
   });
 
   // Supplier display name — available directly from po.supplier_name (API JOIN).
-  const supplierLabel = po?.supplier_name ?? po?.supplier_id;
+  // COPY-024: never fall back to the raw supplier UUID as display text.
+  const supplierLabel = po?.supplier_name ?? "Supplier";
 
   // PO audit history.
   const historyQuery = useQuery<PurchaseOrderHistoryResponse>({
@@ -596,8 +613,24 @@ export default function PurchaseOrderDetailPage({
   // Focus the reason select (not the confirm button, which stays disabled
   // until a reason is chosen) — same pattern as FocusCard/PlacementRow.
   const cancelReasonSelectRef = useRef<HTMLSelectElement>(null);
+  // ux-release-gate 2026-07-23 INTER-R2-002/R2-F05/A11Y-R2-003: the dialog
+  // had aria-modal="true" with no focus trap and no Escape handler — Tab
+  // could leave the dialog entirely and Escape did nothing. Mirrors the
+  // procurement page's supersede-confirm fix (same useFocusTrap hook); the
+  // "skip on mount" ref avoids the StrictMode double-effect focus-theft bug
+  // found there (A11Y-R2-002) by only returning focus on a real true→false
+  // transition, never on mount.
+  const cancelTriggerRef = useRef<HTMLButtonElement>(null);
+  const cancelConfirmRef = useRef<HTMLDivElement>(null);
+  const cancelConfirmTrap = useFocusTrap(cancelConfirmRef, cancelConfirming);
+  const cancelConfirmWasOpen = useRef(false);
   useEffect(() => {
-    if (cancelConfirming) cancelReasonSelectRef.current?.focus();
+    if (cancelConfirming) {
+      cancelReasonSelectRef.current?.focus();
+    } else if (cancelConfirmWasOpen.current) {
+      cancelTriggerRef.current?.focus();
+    }
+    cancelConfirmWasOpen.current = cancelConfirming;
   }, [cancelConfirming]);
 
   const cancelMut = useMutation({
@@ -717,8 +750,10 @@ export default function PurchaseOrderDetailPage({
       // Tranche 065 (FLOW-PO01) — flash the "Order updated." note.
       setUpdateSaved(true);
     },
-    onError: (err: unknown) => {
-      setEditError((err as Error).message ?? "Update failed. Try again.");
+    // COPY-028: fetchJson can surface the backend's raw error field
+    // (a Postgres constraint name, an internal message) — never render it.
+    onError: () => {
+      setEditError("Could not save changes. Check your connection and try again.");
     },
   });
 
@@ -739,6 +774,35 @@ export default function PurchaseOrderDetailPage({
   // --- Line cancel state ----------------------------------------------------
   const [lineCancelConfirmId, setLineCancelConfirmId] = useState<string | null>(null);
   const [lineCancelError, setLineCancelError] = useState<string | null>(null);
+  // ux-release-gate 2026-07-23 A11Y-R2-009: the previous inline callback ref
+  // (`ref={(el) => el?.focus()}`) got a new function identity every render,
+  // so React tore it down and re-invoked it on every re-render of this row
+  // (e.g. each time lineCancelMut.isPending changed) — not just when the
+  // dialog opened, stealing focus back mid-interaction. A per-line component
+  // would be the textbook fix, but a stable ref-callback cache (keyed by
+  // line id, built once in a ref at this component's top level — never
+  // inside the .map() below, which would violate the Rules of Hooks) gets
+  // the same "focus once on open, not on every re-render" result without a
+  // wider refactor.
+  const lineCancelFocusRefs = useRef(
+    new Map<string, (el: HTMLButtonElement | null) => void>(),
+  );
+  function getLineCancelFocusRef(lineId: string) {
+    let fn = lineCancelFocusRefs.current.get(lineId);
+    if (!fn) {
+      let focused = false;
+      fn = (el) => {
+        if (el && !focused) {
+          el.focus();
+          focused = true;
+        } else if (!el) {
+          focused = false;
+        }
+      };
+      lineCancelFocusRefs.current.set(lineId, fn);
+    }
+    return fn;
+  }
 
   const lineCancelMut = useMutation({
     mutationFn: async (poLineId: string) => {
@@ -809,8 +873,9 @@ export default function PurchaseOrderDetailPage({
       setLineEditingId(null);
       setLineEditError(null);
     },
-    onError: (err: unknown) => {
-      setLineEditError((err as Error).message ?? "Update failed. Try again.");
+    // COPY-029: same rule as the PO-level edit mutation above.
+    onError: () => {
+      setLineEditError("Could not save this line. Check your connection and try again.");
     },
   });
 
@@ -873,7 +938,8 @@ export default function PurchaseOrderDetailPage({
       const allSettled = lineRows.every(
         (l) => l.line_status === "CLOSED" || l.line_status === "CANCELLED",
       );
-      const supplierLabel = po?.supplier_name ?? po?.supplier_id ?? "supplier";
+      // COPY-024: supplier_id (raw UUID) must never be the display fallback.
+      const supplierLabel = po?.supplier_name ?? "supplier";
       const cost = summarizePoLineCosts(lineRows);
       const cur = po?.currency ?? "ILS";
       const receivedPct = Math.round(cost.receivedFraction * 100);
@@ -967,7 +1033,7 @@ export default function PurchaseOrderDetailPage({
             </ul>
             {po?.expected_receive_date ? (
               <div className="mt-1.5 text-fg-faint">
-                Expected by {po.expected_receive_date}
+                Expected by {fmtDate(po.expected_receive_date)}
               </div>
             ) : (
               <div className="mt-1.5 text-fg-faint">No delivery date set.</div>
@@ -1118,6 +1184,15 @@ export default function PurchaseOrderDetailPage({
                             role="alertdialog"
                             aria-modal="true"
                             aria-label="Confirm cancel line"
+                            onKeyDown={(e) => {
+                              // INTER-R2-003/A11Y-R2-004: no keyboard escape
+                              // previously existed for this inline dialog.
+                              if (e.key === "Escape") {
+                                e.stopPropagation();
+                                setLineCancelConfirmId(null);
+                                setLineCancelError(null);
+                              }
+                            }}
                           >
                             <span className="text-3xs text-fg-muted text-right">
                               Cancel this line? It closes permanently and won&apos;t
@@ -1125,12 +1200,7 @@ export default function PurchaseOrderDetailPage({
                             </span>
                             <div className="flex items-center gap-1.5">
                               <button
-                                // ux-release-gate 2026-07-23 A11Y-026: this
-                                // block only mounts once isLineCancelConfirming
-                                // flips true, so focusing on mount is exactly
-                                // "focus when the dialog opens" — a callback
-                                // ref avoids needing a per-row hook inside .map().
-                                ref={(el) => el?.focus()}
+                                ref={getLineCancelFocusRef(line.po_line_id)}
                                 type="button"
                                 className="btn btn-danger btn-xs"
                                 onClick={() => lineCancelMut.mutate(line.po_line_id)}
@@ -1182,6 +1252,11 @@ export default function PurchaseOrderDetailPage({
                               className="input input-sm w-36"
                               value={lineEditExpected}
                               onChange={(e) => setLineEditExpected(e.target.value)}
+                              aria-describedby={
+                                lineEditError
+                                  ? `po-line-edit-error-${line.po_line_id}`
+                                  : undefined
+                              }
                             />
                           </div>
                           <div className="flex flex-col gap-1 flex-1 min-w-[14rem]">
@@ -1199,11 +1274,22 @@ export default function PurchaseOrderDetailPage({
                               onChange={(e) => setLineEditNotes(e.target.value)}
                               placeholder="Line note…"
                               maxLength={2000}
+                              aria-describedby={
+                                lineEditError
+                                  ? `po-line-edit-error-${line.po_line_id}`
+                                  : undefined
+                              }
                             />
                           </div>
                           <div className="flex items-center gap-2">
                             {lineEditError && (
-                              <span className="text-xs text-danger-fg">{lineEditError}</span>
+                              // A11Y-R2-010: id target for the inputs' aria-describedby above.
+                              <span
+                                id={`po-line-edit-error-${line.po_line_id}`}
+                                className="text-xs text-danger-fg"
+                              >
+                                {lineEditError}
+                              </span>
                             )}
                             <button
                               type="button"
@@ -1329,7 +1415,7 @@ export default function PurchaseOrderDetailPage({
         { label: "Created by", value: po.created_by_snapshot },
         { label: "Created", value: fmtDateTime(po.created_at) },
         { label: "Last updated", value: fmtDateTime(po.updated_at) },
-        { label: "Internal ID", value: po.po_id, mono: true },
+        { label: "PO reference", value: po.po_id, mono: true },
       ];
       return (
         <div className="space-y-3">
@@ -1516,7 +1602,8 @@ export default function PurchaseOrderDetailPage({
   const grItems = (grsQuery.data?.rows ?? []).map((gr, i) => ({
     label: `Goods receipt ${i + 1} — ${fmtDate(gr.event_at)}`,
     href: `/purchase-orders/${encodeURIComponent(po_id)}?tab=attached-grs`,
-    subtitle: gr.status,
+    // COPY-036: raw backend status string — mirror GrStatusBadge's labels.
+    subtitle: GR_STATUS_LABEL[gr.status] ?? gr.status,
   }));
   linkages.push({
     label: "Attached goods receipts",
@@ -1624,29 +1711,59 @@ export default function PurchaseOrderDetailPage({
                 View receipts →
               </Link>
             )}
-            {/* ux-release-gate 2026-07-23 A11Y-009: always-mounted so a
-                screen reader with an aria-live region already registered
-                announces a failure the moment it appears. */}
-            <span role="alert" aria-live="assertive" className="text-xs text-danger-fg">
-              {cancelError}
-            </span>
-            {canCancelPo && !cancelConfirming && (
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm text-danger-fg hover:bg-danger/10"
-                onClick={() => { setCancelConfirming(true); setCancelError(null); }}
-                disabled={cancelMut.isPending}
+            {/* R2-F09: an APPROVED_TO_ORDER PO has no cancel path here (only
+                the placement queue can act on it) and previously gave no
+                indication of that — a planner following the "View order"
+                link from FocusCard's placed-success banner landed on a dead
+                end. */}
+            {po && po.status === "APPROVED_TO_ORDER" && (
+              <Link
+                href="/purchase-orders/placement-queue"
+                className="btn btn-ghost btn-sm"
+                data-testid="po-view-placement-queue-link"
+                title="This order is awaiting placement. Price, terms, and cancellation happen in the placement queue."
               >
-                Cancel PO
-              </button>
+                Awaiting placement — open queue →
+              </Link>
             )}
-            {canCancelPo && cancelConfirming && (
+            {/* VISUAL-R2-011: destructive action pushed to the far edge of
+                the row, separated from Receive/View receipts (primary /
+                neutral actions) rather than sitting immediately next to them. */}
+            <div className="ms-auto flex items-center gap-2">
+              {/* ux-release-gate 2026-07-23 A11Y-009: always-mounted so a
+                  screen reader with an aria-live region already registered
+                  announces a failure the moment it appears. */}
+              <span role="alert" aria-live="assertive" className="text-xs text-danger-fg">
+                {cancelError}
+              </span>
+              {canCancelPo && !cancelConfirming && (
+                <button
+                  type="button"
+                  ref={cancelTriggerRef}
+                  className="btn btn-ghost btn-sm text-danger-fg hover:bg-danger/10"
+                  onClick={() => { setCancelConfirming(true); setCancelError(null); }}
+                  disabled={cancelMut.isPending}
+                >
+                  Cancel PO
+                </button>
+              )}
+              {canCancelPo && cancelConfirming && (
               <div
+                ref={cancelConfirmRef}
                 role="alertdialog"
                 aria-modal="true"
                 aria-label={po ? `Confirm cancel PO ${po.po_number}` : "Confirm cancel PO"}
                 className="flex flex-wrap items-center gap-2 rounded-md border border-danger/30 bg-danger-softer/40 p-2"
                 data-testid="po-cancel-confirm"
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.stopPropagation();
+                    setCancelConfirming(false);
+                    setCancelError(null);
+                    return;
+                  }
+                  cancelConfirmTrap.onKeyDown(e);
+                }}
               >
                 <div className="flex flex-col gap-1">
                   <span className="text-xs font-medium text-fg">
@@ -1709,7 +1826,8 @@ export default function PurchaseOrderDetailPage({
                   Keep
                 </button>
               </div>
-            )}
+              )}
+            </div>
           </div>
         ),
       }}

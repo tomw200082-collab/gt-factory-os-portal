@@ -27,9 +27,11 @@ import {
   usePoLines,
   usePlaceOrder,
   useCancelOrder,
+  ApiError,
   type QueuePo,
   type QueuePoLine,
 } from "../_lib/api";
+import { fmtDateHe } from "../../../../(planning)/planning/procurement/_lib/decision";
 
 // Preset discard reasons (Tom-directed 2026-07-16). "אחר" requires free text.
 const CANCEL_REASONS = [
@@ -104,7 +106,14 @@ export function PlacementRow({
           setCancelling(false);
           onCancelled?.(po, composedReason);
         },
-        onError: (e: Error) => setCancelError(e.message),
+        // ux-release-gate 2026-07-23 COPY-022: only ApiError carries an
+        // operator-safe .message (see _lib/api.ts's jsonOrThrow) — a plain
+        // Error (network failure, unguarded runtime error) must never be
+        // rendered raw on this Hebrew surface.
+        onError: (e: Error) =>
+          setCancelError(
+            e instanceof ApiError ? e.message : "לא ניתן לבטל את ההזמנה. נסו שוב.",
+          ),
       },
     );
   }
@@ -210,7 +219,11 @@ export function PlacementRow({
           setOpen(false);
           onPlaced?.(po);
         },
-        onError: (e: Error) => setErrorMsg(e.message),
+        // COPY-023: same operator-safe-message rule as handleCancel above.
+        onError: (e: Error) =>
+          setErrorMsg(
+            e instanceof ApiError ? e.message : "לא ניתן לבצע את ההזמנה. נסו שוב.",
+          ),
       },
     );
   }
@@ -248,16 +261,21 @@ export function PlacementRow({
               <span
                 className={
                   po.order_by_date < todayIso
-                    ? "font-semibold text-danger-fg"
+                    ? "inline-flex items-center gap-1 font-semibold text-danger-fg"
                     : "font-medium text-fg"
                 }
               >
-                · להזמין עד {po.order_by_date}
+                {/* VISUAL-R2-013: color was the only overdue signal — add the
+                    same danger icon the procurement surface already uses. */}
+                {po.order_by_date < todayIso && (
+                  <AlertTriangle className="h-3 w-3 shrink-0" aria-hidden />
+                )}
+                · להזמין עד {fmtDateHe(po.order_by_date)}
                 {po.order_by_date < todayIso ? " (באיחור)" : ""}
               </span>
             ) : null}
             {po.expected_receive_date ? (
-              <span>· צפי הגעה {po.expected_receive_date}</span>
+              <span>· צפי הגעה {fmtDateHe(po.expected_receive_date)}</span>
             ) : null}
           </div>
         </div>
