@@ -609,14 +609,11 @@ export function FocusCard({
                       colSpan={5 + (!isResolved ? 1 : 0)}
                       className="px-3 pb-2 pt-0"
                     >
+                      {/* The current supplier + call link live in the card
+                          header (one per PO). Here we only surface the
+                          per-material action — switching this material to its
+                          own next candidate supplier. */}
                       <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-                        <span className="text-3xs text-fg-muted">
-                          ספק: {po.supplier_snapshot}
-                        </span>
-                        <SupplierCallLink
-                          phone={po.supplier_phone}
-                          supplierName={po.supplier_snapshot}
-                        />
                         <SwitchSupplierControl
                           candidates={l.candidate_suppliers ?? []}
                           materialLabel={l.line_label}
