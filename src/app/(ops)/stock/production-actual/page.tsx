@@ -50,7 +50,13 @@
 
 import { useMemo, useState, useEffect, useRef, useCallback } from "react";
 import Link from "next/link";
-import { AlertTriangle, FlaskConical } from "lucide-react";
+import {
+  AlertTriangle,
+  FlaskConical,
+  Boxes,
+  CheckCircle2,
+  ArrowRight,
+} from "lucide-react";
 import { useSearchParams, useRouter } from "next/navigation";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
@@ -68,6 +74,7 @@ import {
   VARIANCE_REASON_LABELS,
   type VarianceReasonCode,
 } from "./_lib/report-helpers";
+import { computeBatchProgress, type BatchProgress } from "./_lib/base-batch";
 
 // ---------------------------------------------------------------------------
 // Production Actual contract — inlined.
@@ -200,10 +207,25 @@ type ListEnvelope<T> = { rows: T[]; count: number };
 // Production plan row — mirror of api/src/production-plan/schemas.ts.
 // We only need the fields we actually consume from the prefill query.
 // ---------------------------------------------------------------------------
+// One entry of a base-batch's pack_manifest (mirror of
+// production-plan/_lib/types.ts PackManifestLine). A base-batch plan yields
+// several pack SKUs; each manifest line is the planned qty of one SKU.
+interface PackManifestLine {
+  item_id: string;
+  item_name: string | null;
+  qty: string;
+  fill_l_per_unit?: string | null;
+  uom: string | null;
+}
+
 interface ProductionPlanRow {
   plan_id: string;
   plan_date: string;
-  item_id: string;
+  // NULL for a base-batch plan (the batch plans a BASE liquid split across N
+  // pack SKUs rather than one FG item). Matches the canonical
+  // production-plan/_lib/types.ts contract; the earlier non-null typing here
+  // was drift that hid the base-batch case at compile time.
+  item_id: string | null;
   item_name: string | null;
   planned_qty: string;
   uom: string;
@@ -215,6 +237,13 @@ interface ProductionPlanRow {
   bom_version_id_pinned: string | null;
   bom_version_label: string | null;
   completed_submission_id: string | null;
+  // Base-batch report support: a base-batch row (item_id NULL) is reported one
+  // pack-SKU at a time. These describe the split so the report page can guide
+  // the operator through each member with its planned qty pre-filled.
+  base_bom_head_id?: string | null;
+  is_base_batch?: boolean;
+  pack_manifest_count?: number;
+  pack_manifest?: PackManifestLine[];
 }
 
 interface ListProductionPlanResponse {
@@ -245,6 +274,10 @@ interface ProductionActualListRow {
   reversed: boolean;
   reversed_by_submission_id: string | null;
   reversed_at: string | null;
+  // 0243 — the production_plan this actual is linked to (base-batch coverage).
+  // Present since the list endpoint added the field; optional so the type
+  // degrades gracefully if the portal deploys before that backend change.
+  from_plan_id?: string | null;
 }
 
 // ---------------------------------------------------------------------------
@@ -544,6 +577,17 @@ interface DoneState {
   // so the success panel reads the plan from here for the variance row and
   // the "Re-plan remainder" action.
   committedPlan?: ProductionPlanRow | null;
+  // Base-batch member reporting: set when the just-submitted report was one
+  // pack SKU of a base batch. Drives the batch-aware success panel (per-member
+  // variance vs the member's planned qty, "Report next product", "Close
+  // batch"). fromPlanId is intentionally NOT cleared on a base-batch member
+  // submit, so the batch context survives across members.
+  committedBatchMember?: {
+    item_id: string;
+    item_name: string | null;
+    planned_qty: string;
+    uom: string | null;
+  } | null;
 }
 
 // Decimal-string arithmetic helpers (keep server-side precision intact for
@@ -555,6 +599,303 @@ function stringDiv(num: string, denom: string, prodQty: number): string {
   const r = (n * prodQty) / d;
   const s = r.toFixed(4);
   return s.includes('.') ? s.replace(/\.?0+$/, '') : s;
+}
+
+// ---------------------------------------------------------------------------
+// Base-batch member picker — replaces the single-item combobox when the report
+// was opened from a base-batch plan (item_id NULL + pack_manifest). Shows each
+// pack SKU with its planned quantity already filled in, live per-member
+// coverage, and an explicit "close batch" once every product is reported. The
+// operator never re-picks a product or re-types a planned quantity — they open
+// a product (one tap), adjust the produced amount, and submit.
+// ---------------------------------------------------------------------------
+function BaseBatchMemberPicker({
+  plan,
+  progress,
+  coverageLoading,
+  canSubmit,
+  closing,
+  closeState,
+  onSelectMember,
+  onCloseBatch,
+}: {
+  plan: ProductionPlanRow;
+  progress: BatchProgress | null;
+  coverageLoading: boolean;
+  canSubmit: boolean;
+  closing: boolean;
+  closeState: {
+    state: "idle" | "pending" | "success" | "error";
+    message?: string;
+  };
+  onSelectMember: (itemId: string) => void;
+  onCloseBatch: () => void;
+}) {
+  const members = progress?.members ?? [];
+  const total =
+    progress?.totalMembers ?? plan.pack_manifest_count ?? members.length;
+  const reported = progress?.reportedMembers ?? 0;
+  const allReported = progress?.allReported ?? false;
+  const anyReported = progress?.anyReported ?? false;
+  const nextId = progress?.nextUnreportedItemId ?? null;
+  const pct = total > 0 ? Math.round((reported / total) * 100) : 0;
+
+  return (
+    <div className="space-y-4" data-testid="base-batch-picker">
+      <SectionCard
+        title="Report each product in this batch"
+        description="This is a base batch — one liquid batch packed into several products. Each product's planned quantity is filled in; report what was actually produced, then close the batch."
+      >
+        {/* Progress header + bar */}
+        <div className="mb-4 rounded-lg border border-border/50 bg-bg-subtle/40 px-4 py-3">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div className="flex items-center gap-2 text-sm font-semibold text-fg-strong">
+              <Boxes className="h-4 w-4 text-accent" strokeWidth={2} aria-hidden />
+              Base batch · {fmtPlanDate(plan.plan_date)}
+            </div>
+            <span
+              className={cn(
+                "chip text-xs font-semibold",
+                allReported ? "chip-success" : "chip-info",
+              )}
+              data-testid="base-batch-progress-pill"
+            >
+              {reported} of {total} products reported
+            </span>
+          </div>
+          <div className="mt-2.5 h-1.5 w-full overflow-hidden rounded-full bg-border/40">
+            <div
+              className={cn(
+                "h-full rounded-full transition-all duration-300",
+                allReported ? "bg-success" : "bg-accent",
+              )}
+              style={{ width: `${pct}%` }}
+              aria-hidden
+            />
+          </div>
+        </div>
+
+        {/* Member list */}
+        {coverageLoading && members.length === 0 ? (
+          <div className="space-y-2" aria-busy="true" aria-live="polite">
+            <div className="h-16 w-full animate-pulse rounded-lg bg-bg-subtle" />
+            <div className="h-16 w-full animate-pulse rounded-lg bg-bg-subtle" />
+          </div>
+        ) : members.length === 0 ? (
+          <div className="rounded-md border border-warning/40 bg-warning-softer px-4 py-3 text-sm text-warning-fg">
+            This batch has no product split to report. Check the plan on the
+            daily board.
+          </div>
+        ) : (
+          <ul className="space-y-2.5" data-testid="base-batch-member-list">
+            {members.map((m) => {
+              const isNext = m.item_id === nextId;
+              return (
+                <li
+                  key={m.item_id}
+                  data-testid="base-batch-member-row"
+                  data-reported={m.reported ? "true" : "false"}
+                  className={cn(
+                    "flex flex-wrap items-center justify-between gap-3 rounded-lg border border-l-[3px] px-4 py-3 transition-colors",
+                    m.reported
+                      ? "border-success/30 border-l-success bg-success-softer/30"
+                      : isNext
+                        ? "border-accent/40 border-l-accent bg-accent/5"
+                        : "border-border/50 border-l-border/50 bg-bg-raised",
+                  )}
+                >
+                  <div className="min-w-0">
+                    <div className="flex items-center gap-2">
+                      {m.reported ? (
+                        <CheckCircle2
+                          className="h-4 w-4 shrink-0 text-success"
+                          strokeWidth={2}
+                          aria-hidden
+                        />
+                      ) : null}
+                      <span className="truncate text-sm font-semibold text-fg-strong">
+                        {m.item_name ?? m.item_id}
+                      </span>
+                    </div>
+                    <div className="mt-0.5 text-xs text-fg-muted">
+                      Planned{" "}
+                      <span className="font-mono font-semibold tabular-nums text-fg">
+                        {fmtNumStr(String(m.plannedQty))} {m.uom ?? ""}
+                      </span>
+                      {m.reported ? (
+                        <>
+                          {" · reported "}
+                          <span className="font-mono font-semibold tabular-nums text-success-fg">
+                            {fmtNumStr(String(m.reportedQty))} {m.uom ?? ""}
+                          </span>
+                          {m.reportedCount > 1
+                            ? ` (${m.reportedCount} reports)`
+                            : ""}
+                        </>
+                      ) : null}
+                    </div>
+                  </div>
+                  {canSubmit ? (
+                    m.reported ? (
+                      <button
+                        type="button"
+                        className="btn btn-ghost btn-xs text-accent"
+                        onClick={() => onSelectMember(m.item_id)}
+                        data-testid="base-batch-member-report-again"
+                      >
+                        Report again
+                      </button>
+                    ) : (
+                      <button
+                        type="button"
+                        className={cn(
+                          "btn btn-sm gap-1.5",
+                          isNext ? "btn-primary" : "btn-ghost text-accent",
+                        )}
+                        onClick={() => onSelectMember(m.item_id)}
+                        data-testid="base-batch-member-report"
+                      >
+                        Report {fmtNumStr(String(m.plannedQty))} {m.uom ?? ""}
+                        <ArrowRight
+                          className="h-3.5 w-3.5"
+                          strokeWidth={2.5}
+                          aria-hidden
+                        />
+                      </button>
+                    )
+                  ) : (
+                    <span className="text-xs text-fg-faint">
+                      {m.reported ? "Reported" : "Not reported"}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </SectionCard>
+
+      {/* Close batch */}
+      {canSubmit ? (
+        <SectionCard title="Finish the batch">
+          <div className="flex flex-col gap-3">
+            <p className="text-sm text-fg-muted">
+              {allReported
+                ? "All products reported. Close the batch to mark it complete on the board."
+                : "Close the batch once every product is reported. You can close with some unreported — the batch records only what was reported."}
+            </p>
+            {closeState.state === "error" && closeState.message ? (
+              <div
+                className="rounded-md border border-danger/40 bg-danger-softer px-3 py-2 text-xs text-danger-fg"
+                role="alert"
+              >
+                {closeState.message}
+              </div>
+            ) : null}
+            <div>
+              <button
+                type="button"
+                className={cn("btn", allReported ? "btn-primary btn-lg" : "")}
+                disabled={closing || !anyReported}
+                onClick={onCloseBatch}
+                data-testid="base-batch-close"
+              >
+                {closing
+                  ? "Closing…"
+                  : allReported
+                    ? "Close batch"
+                    : "Close batch anyway"}
+              </button>
+              {!anyReported ? (
+                <div className="mt-1.5 text-xs text-fg-faint">
+                  Report at least one product before closing the batch.
+                </div>
+              ) : null}
+            </div>
+          </div>
+        </SectionCard>
+      ) : null}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Base-batch closed panel — terminal state after the operator closes a base
+// batch. Shows the per-member coverage summary the backend returned.
+// ---------------------------------------------------------------------------
+function BatchClosedPanel({
+  plan,
+  coverage,
+}: {
+  plan: ProductionPlanRow;
+  coverage: Array<{
+    item_id: string;
+    manifest_qty: number;
+    reported_qty: string;
+    linked_actual_count: number;
+  }>;
+}) {
+  const nameById = new Map<string, string | null>();
+  for (const m of plan.pack_manifest ?? []) nameById.set(m.item_id, m.item_name);
+  return (
+    <div className="space-y-4" data-testid="base-batch-closed">
+      <div className="rounded-md border border-success/40 bg-success-softer px-4 py-4 text-success-fg">
+        <div className="flex items-center gap-2">
+          <CheckCircle2
+            className="h-5 w-5 text-success"
+            strokeWidth={2}
+            aria-hidden
+          />
+          <div className="text-base font-semibold">Batch closed</div>
+        </div>
+        <div className="mt-1 text-sm opacity-90">
+          The base batch for {fmtPlanDate(plan.plan_date)} is complete. Reported
+          quantities have already updated inventory.
+        </div>
+      </div>
+      {coverage.length > 0 ? (
+        <SectionCard title="What the batch produced">
+          <div className="overflow-x-auto">
+            <table className="w-full border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-border/50 text-left text-3xs font-semibold uppercase tracking-wide text-fg-subtle">
+                  <th className="px-3 py-2">Product</th>
+                  <th className="px-3 py-2 text-right">Planned</th>
+                  <th className="px-3 py-2 text-right">Reported</th>
+                </tr>
+              </thead>
+              <tbody>
+                {coverage.map((c) => (
+                  <tr key={c.item_id} className="border-b border-border/30">
+                    <td className="px-3 py-2 font-medium text-fg">
+                      {nameById.get(c.item_id) ?? c.item_id}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono tabular-nums text-fg-muted">
+                      {fmtNumStr(String(c.manifest_qty))}
+                    </td>
+                    <td className="px-3 py-2 text-right font-mono font-semibold tabular-nums">
+                      {fmtNumStr(c.reported_qty)}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </SectionCard>
+      ) : null}
+      <div className="flex flex-wrap gap-2">
+        <Link
+          href={planBoardReturnHref(plan.plan_id, plan.plan_date)}
+          className="btn btn-primary btn-sm"
+        >
+          ← Back to the daily plan
+        </Link>
+        <Link href="/stock/movement-log" className="btn btn-sm">
+          View posted ledger →
+        </Link>
+      </div>
+    </div>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -1489,9 +1830,18 @@ export default function ProductionActualPage() {
   const planQueryWindow = useMemo(() => {
     const today = new Date();
     const back = new Date(today);
-    back.setDate(today.getDate() - 30);
+    // Overdue coverage: reach back far enough that a slipped batch still
+    // resolves for prefill/linking. The whole range MUST stay ≤ 90 days —
+    // the list API (ListProductionPlanQuerySchema) rejects a wider window
+    // with a 422, which previously (a −30/+90 = 120-day range) made the plan
+    // query always fail: single-item reports still prefilled from the URL
+    // item_id/suggested_qty, but a base-batch report — which has no URL item
+    // and depends entirely on resolving the plan's pack manifest — could not
+    // load at all. −60/+29 = 89 days keeps the window valid and favours the
+    // realistic case (reporting today's or a recently-overdue batch).
+    back.setDate(today.getDate() - 60);
     const fwd = new Date(today);
-    fwd.setDate(today.getDate() + 90);
+    fwd.setDate(today.getDate() + 29);
     const ymd = (d: Date) =>
       `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     return { from: ymd(back), to: ymd(fwd) };
@@ -1537,6 +1887,83 @@ export default function ProductionActualPage() {
   const [outputQty, setOutputQty] = useState<string>(initialSuggestedQty);
   const [scrapQty, setScrapQty] = useState<string>("0");
 
+  // ---------------------------------------------------------------------------
+  // Base-batch reporting. A base-batch plan (item_id NULL + pack_manifest) is
+  // reported one pack SKU at a time — the operator confirms each product's
+  // produced quantity (pre-filled from the plan split) and the batch is closed
+  // explicitly once every product is reported. This block derives the batch
+  // context, reads per-member coverage, and supplies the per-member variance
+  // baseline. All single-item behaviour is untouched when isBaseBatch is false.
+  // ---------------------------------------------------------------------------
+  const isBaseBatch =
+    Boolean(linkedPlan?.is_base_batch) && (linkedPlan?.item_id ?? null) === null;
+  const batchManifest: PackManifestLine[] = useMemo(
+    () => (isBaseBatch ? (linkedPlan?.pack_manifest ?? []) : []),
+    [isBaseBatch, linkedPlan?.pack_manifest],
+  );
+
+  // Per-member coverage: which pack SKUs already have a (non-reversed) report
+  // linked to this plan. Read from the list endpoint filtered by from_plan_id
+  // (0243) so re-entry cannot double-post a member and the operator always
+  // sees live progress.
+  const batchCoverageQuery = useQuery<{ rows: ProductionActualListRow[] }>({
+    queryKey: ["production-actuals", "by-plan", fromPlanId],
+    queryFn: () =>
+      fetchJson(
+        `/api/production-actuals/history?from_plan_id=${encodeURIComponent(
+          fromPlanId ?? "",
+        )}&limit=200`,
+      ),
+    enabled: Boolean(fromPlanId) && isBaseBatch,
+    staleTime: 15_000,
+  });
+
+  const batchProgress = useMemo(() => {
+    if (!isBaseBatch || !fromPlanId || batchManifest.length === 0) return null;
+    return computeBatchProgress(
+      batchManifest.map((m) => ({
+        item_id: m.item_id,
+        item_name: m.item_name,
+        qty: m.qty,
+        uom: m.uom,
+      })),
+      (batchCoverageQuery.data?.rows ?? []).map((r) => ({
+        item_id: r.item_id,
+        output_qty: r.output_qty,
+        reversed: r.reversed,
+        from_plan_id: r.from_plan_id ?? null,
+      })),
+      fromPlanId,
+    );
+  }, [isBaseBatch, fromPlanId, batchManifest, batchCoverageQuery.data]);
+
+  // The pack-manifest member currently being reported (the selected item, in
+  // batch mode). Its manifest qty — NOT the base-batch liters — is the variance
+  // baseline and the pre-fill target for the member.
+  const activeMember = useMemo(() => {
+    if (!isBaseBatch || !selectedItemId) return null;
+    return batchManifest.find((m) => m.item_id === selectedItemId) ?? null;
+  }, [isBaseBatch, selectedItemId, batchManifest]);
+
+  // Variance baseline: in batch mode compare the member output to the member's
+  // manifest qty; otherwise to the single-item plan's planned_qty.
+  const varianceBaselineQty: string | null = isBaseBatch
+    ? (activeMember?.qty ?? null)
+    : (linkedPlan?.planned_qty ?? null);
+
+  // Explicit terminal close of the base batch (planner/admin). Holds the
+  // per-member coverage summary the backend returns on close.
+  const [batchClose, setBatchClose] = useState<{
+    state: "idle" | "pending" | "success" | "error";
+    message?: string;
+    coverage?: Array<{
+      item_id: string;
+      manifest_qty: number;
+      reported_qty: string;
+      linked_actual_count: number;
+    }>;
+  }>({ state: "idle" });
+
   // Apply the plan-derived prefill once the plan query lands. This runs
   // separately from the items-prefill effect so we don't race the two
   // queries against each other.
@@ -1550,6 +1977,15 @@ export default function ProductionActualPage() {
     if (planQuery.isLoading || planQuery.isError) return;
     if (!linkedPlan) {
       // Plan not in the window — surface inline below; do not stomp item.
+      planPrefillAppliedRef.current = true;
+      return;
+    }
+    if (linkedPlan.is_base_batch || linkedPlan.item_id === null) {
+      // Base-batch plan: there is no single item to pre-select, and
+      // planned_qty is the base-liquid volume, not a per-SKU output. The
+      // member picker (rendered below) drives item + qty prefill per product.
+      // Leaving selectedItemId/outputQty untouched avoids stomping them to
+      // null / the wrong (base-liters) quantity.
       planPrefillAppliedRef.current = true;
       return;
     }
@@ -1685,6 +2121,9 @@ export default function ProductionActualPage() {
   useEffect(() => {
     if (autoOpenFiredRef.current) return;
     if (!fromPlanIdParam) return;
+    // Base-batch mode never auto-opens: there is no single item to open, and
+    // the member picker drives per-product opening (selectMember → handleOpen).
+    if (isBaseBatch) return;
     if (!selectedItemId) return;
     if (phase !== "pick") return;
     if (itemsQuery.isLoading || itemsQuery.isError) return;
@@ -1694,18 +2133,49 @@ export default function ProductionActualPage() {
     // handleOpen reads selectedItemId, isAdmin, and stable setters from
     // closure — safe to omit from deps since this effect fires only once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [fromPlanIdParam, selectedItemId, phase, itemsQuery.isLoading, itemsQuery.isError, producibleItems]);
+  }, [fromPlanIdParam, isBaseBatch, selectedItemId, phase, itemsQuery.isLoading, itemsQuery.isError, producibleItems]);
 
-  async function handleOpen(e?: React.FormEvent): Promise<void> {
+  // Base-batch: begin reporting one pack SKU. Pre-fills the member's item and
+  // its planned qty, resets the per-member entry state, and opens the form for
+  // that product. Reuses the exact single-item open→enter→submit path — the
+  // backend accepts the member via from_plan_id + item_id (link_kind
+  // base_batch_member). Plain function (not memoised) so it always closes over
+  // fresh state and the current handleOpen.
+  function selectMember(itemId: string): void {
+    const member = batchManifest.find((m) => m.item_id === itemId);
+    if (!member) return;
+    setDone(null);
+    setBatchClose({ state: "idle" });
+    setSelectedItemId(member.item_id);
+    setItemSearch(member.item_name ?? member.item_id);
+    setOutputQty(fmtNumStr(member.qty));
+    setScrapQty("0");
+    setNotes("");
+    setVarianceReasonCode("");
+    setVarianceNote("");
+    setVarianceReasonSkipped(false);
+    setVarianceReasonError(null);
+    setShortageAck(false);
+    void handleOpen(undefined, member.item_id);
+  }
+
+  async function handleOpen(
+    e?: React.FormEvent,
+    // Base-batch member flow passes the item explicitly because it sets
+    // selectedItemId and opens in the same tick — reading state here would be
+    // a render behind. When omitted the normal single-item path uses state.
+    itemIdOverride?: string,
+  ): Promise<void> {
     e?.preventDefault();
     setDone(null);
-    if (!selectedItemId) {
+    const itemId = itemIdOverride ?? selectedItemId;
+    if (!itemId) {
       setDone({ kind: "error", message: "Choose an item to produce." });
       return;
     }
     setPhase("submitting");
     try {
-      const q = new URLSearchParams({ item_id: selectedItemId });
+      const q = new URLSearchParams({ item_id: itemId });
       // 0237 (Tranche 052) — pass the plan context so a plan-level recipe
       // override replaces the base-source lines in the snapshot and the
       // response flags customized_recipe.
@@ -1835,12 +2305,15 @@ export default function ProductionActualPage() {
   }, [shortageSignature]);
 
   // C8 — does this submit need a variance reason prompt? Only when linked
-  // to a live plan and the output is outside the ±2% band.
+  // to a live plan and the output is outside the ±2% band. In batch mode the
+  // baseline is the active member's manifest qty (varianceBaselineQty), not
+  // the base-batch liters.
   const varianceReasonApplicable =
     linkedPlan !== null &&
     linkedPlan.rendered_state === "planned" &&
+    varianceBaselineQty !== null &&
     outputQty.trim() !== "" &&
-    exceedsVarianceBand(outputQty, linkedPlan.planned_qty);
+    exceedsVarianceBand(outputQty, varianceBaselineQty);
 
   const submitProductionActual = useCallback(
     async (overrideFromPlanId: string | null): Promise<void> => {
@@ -1932,11 +2405,27 @@ export default function ProductionActualPage() {
           (body as { status?: unknown }).status === "posted"
         ) {
           const committed = body as ProductionActualCommitted;
+          // Base-batch member submit: capture which pack SKU this was so the
+          // success panel can show per-member variance + the "report next
+          // product" / "close batch" actions, and keep the batch context
+          // alive (do NOT clear fromPlanId) so the remaining products can be
+          // reported and the batch closed.
+          const wasBatchMember = isBaseBatch && activeMember !== null;
+          const batchMember = wasBatchMember
+            ? {
+                item_id: activeMember!.item_id,
+                item_name: activeMember!.item_name,
+                planned_qty: activeMember!.qty,
+                uom: activeMember!.uom,
+              }
+            : null;
           setDone({
             kind: "success",
             message: committed.idempotent_replay
               ? "Already posted earlier — no duplicate created."
-              : "Inventory has been updated.",
+              : wasBatchMember
+                ? `Reported ${batchMember!.item_name ?? "product"} — inventory updated.`
+                : "Inventory has been updated.",
             committed,
             committedItemName: snapshot.item_name,
             // Tranche 041 — capture the snapshot before setSnapshot(null)
@@ -1945,6 +2434,7 @@ export default function ProductionActualPage() {
             // Tranche 048 (C7) — capture the linked plan row before
             // setFromPlanId(null) below clears the derived `linkedPlan`.
             committedPlan: committed.linked_plan_id ? linkedPlan : null,
+            committedBatchMember: batchMember,
           });
           // Tranche 048 (C7) — a fresh submit resets any prior re-plan state.
           setReplan({ state: "idle" });
@@ -1958,30 +2448,32 @@ export default function ProductionActualPage() {
             void queryClient.invalidateQueries({
               queryKey: ["production-plan"],
             });
-          }
-          // Drop ?from_plan_id from the URL on success so a refresh after
-          // submit does not re-resurrect the linked-plan banner for a plan
-          // that has just been marked done. The success panel itself is
-          // already populated from React state and does not need the URL
-          // param. Cycle 2 wired the from_plan_id UX; this closes the
-          // round-trip by cleaning the URL once the link has been
-          // committed. Same cleanup runs for the retry-without-link path
-          // because handleResubmitWithoutLink clears the URL before its
-          // submitProductionActual(null) call, so this branch is a no-op
-          // if the param was already removed.
-          if (typeof window !== "undefined" && overrideFromPlanId) {
-            const url = new URL(window.location.href);
-            if (url.searchParams.has("from_plan_id")) {
-              url.searchParams.delete("from_plan_id");
-              router.replace(url.pathname + (url.search || ""), {
-                scroll: false,
+            // Base-batch: refresh per-member coverage so progress + the next
+            // unreported product reflect the report we just posted.
+            if (wasBatchMember) {
+              void queryClient.invalidateQueries({
+                queryKey: ["production-actuals", "by-plan", overrideFromPlanId],
               });
             }
           }
-          // Drop the React-state link too so the post-submit panel reads
-          // from `done.committed.linked_plan_id` rather than `fromPlanId`,
-          // which is intended for the pre-submit banner only.
-          setFromPlanId(null);
+          // Single-item only: drop ?from_plan_id from the URL and state on
+          // success so a refresh does not re-resurrect the banner for a plan
+          // that is now done, and the panel reads from
+          // done.committed.linked_plan_id. Base-batch KEEPS the link — the
+          // batch is not finished until every product is reported and the
+          // operator closes it, so clearing it would strand the flow.
+          if (!wasBatchMember) {
+            if (typeof window !== "undefined" && overrideFromPlanId) {
+              const url = new URL(window.location.href);
+              if (url.searchParams.has("from_plan_id")) {
+                url.searchParams.delete("from_plan_id");
+                router.replace(url.pathname + (url.search || ""), {
+                  scroll: false,
+                });
+              }
+            }
+            setFromPlanId(null);
+          }
           // Clear inputs but keep the success panel.
           setSnapshot(null);
           setOutputQty("");
@@ -2187,6 +2679,10 @@ export default function ProductionActualPage() {
       varianceReasonCode,
       varianceNote,
       varianceReasonSkipped,
+      // Base-batch member submit: capture which product was reported and keep
+      // the batch link alive.
+      isBaseBatch,
+      activeMember,
     ],
   );
 
@@ -2260,6 +2756,71 @@ export default function ProductionActualPage() {
     setVarianceReasonError(null);
     // Partial-materials reporting — a fresh form starts unacknowledged.
     setShortageAck(false);
+  }
+
+  // Base-batch terminal close (planner/admin). Reported quantities already
+  // moved stock via the per-member submits; this only marks the batch plan
+  // completed and returns the per-member coverage summary. Reversible by
+  // reopening the plan on the board.
+  async function handleCloseBatch(): Promise<void> {
+    if (!fromPlanId) return;
+    setBatchClose({ state: "pending" });
+    try {
+      const res = await fetch(
+        `/api/production-plan/${encodeURIComponent(fromPlanId)}/close-batch`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({}),
+        },
+      );
+      const body = (await res.json().catch(() => null)) as {
+        status?: string;
+        coverage?: Array<{
+          item_id: string;
+          manifest_qty: number;
+          reported_qty: string;
+          linked_actual_count: number;
+        }>;
+        reason_code?: string;
+        detail?: string;
+        skipped?: boolean;
+      } | null;
+      if (res.ok && body && body.status === "completed") {
+        setBatchClose({ state: "success", coverage: body.coverage ?? [] });
+        // Show the terminal BatchClosedPanel (rendered in the pick phase) even
+        // when the operator closed from the per-member success panel.
+        setDone(null);
+        setPhase("pick");
+        // Board + coverage should reflect the closed batch.
+        void queryClient.invalidateQueries({ queryKey: ["production-plan"] });
+        void queryClient.invalidateQueries({
+          queryKey: ["production-actuals", "by-plan", fromPlanId],
+        });
+      } else if (res.status === 503 && body?.skipped) {
+        setBatchClose({
+          state: "error",
+          message:
+            "The system is briefly paused (break-glass). The batch was not closed — try again shortly.",
+        });
+      } else {
+        const reason = body?.reason_code ?? `HTTP ${res.status}`;
+        setBatchClose({
+          state: "error",
+          message: isAdmin
+            ? `Could not close the batch: ${reason}${body?.detail ? ` — ${body.detail}` : ""}`
+            : "Could not close the batch. Please try again.",
+        });
+      }
+    } catch (err) {
+      setBatchClose({
+        state: "error",
+        message:
+          err instanceof Error
+            ? err.message
+            : "Network error while closing the batch.",
+      });
+    }
   }
 
   // ---------------------------------------------------------------------------
@@ -2394,8 +2955,9 @@ export default function ProductionActualPage() {
     linkedPlan.rendered_state === "planned" &&
     snapshot !== null &&
     canSubmit &&
+    varianceBaselineQty !== null &&
     outputQty.trim() !== "" &&
-    Number(outputQty) === Number(linkedPlan.planned_qty) &&
+    Number(outputQty) === Number(varianceBaselineQty) &&
     Number(scrapQty || "0") === 0;
 
   // Stepper helpers.
@@ -2420,7 +2982,7 @@ export default function ProductionActualPage() {
     <div dir="ltr">
       <WorkflowHeader
         size="section"
-        eyebrow="Operator form"
+        eyebrow="Stock · Daily execution"
         title="Production Report"
         description="Report output and any scrap. Component consumption is computed from the active BOM."
       />
@@ -2438,6 +3000,31 @@ export default function ProductionActualPage() {
             <div className="flex items-center gap-2">
               <span className="font-medium">Linked to a production plan</span>
               <span className="text-xs opacity-80">— loading plan details…</span>
+            </div>
+          ) : linkedPlan && linkedPlan.is_base_batch ? (
+            // Base-batch banner — compact context only; the member picker
+            // below carries the full per-product progress, so this avoids a
+            // duplicate progress display.
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <div className="flex items-center gap-2">
+                <Boxes className="h-4 w-4 shrink-0" strokeWidth={2} aria-hidden />
+                <span className="font-medium">
+                  Reporting a base batch · {fmtPlanDate(linkedPlan.plan_date)} ·{" "}
+                  {linkedPlan.pack_manifest_count ??
+                    linkedPlan.pack_manifest?.length ??
+                    0}{" "}
+                  products. Report each product below.
+                </span>
+              </div>
+              <Link
+                href={planBoardReturnHref(
+                  linkedPlan.plan_id,
+                  linkedPlan.plan_date,
+                )}
+                className="btn btn-ghost btn-sm shrink-0"
+              >
+                View on the daily plan board
+              </Link>
             </div>
           ) : linkedPlan ? (
             <div>
@@ -2470,7 +3057,7 @@ export default function ProductionActualPage() {
               </div>
               <div className="mt-2 flex items-center gap-3 text-xs">
                 <span className="opacity-80">
-                  Progress: target{" "}
+                  Plan target{" "}
                   <span className="font-mono tabular-nums font-semibold">
                     {fmtNumStr(linkedPlan.planned_qty)} {linkedPlan.uom}
                   </span>
@@ -2499,12 +3086,11 @@ export default function ProductionActualPage() {
           ) : planLoadFailed ? (
             <div>
               <div className="font-medium">
-                Linked plan not found
+                The linked plan could not be found
               </div>
               <div className="mt-1 text-xs opacity-90">
-                Plan id {fromPlanId} was not visible in the current window. You
-                can submit without linking, or
-                {" "}
+                It may be outside the current window. You can report without
+                linking to a plan,{" "}
                 <button
                   type="button"
                   className="underline underline-offset-2 hover:no-underline"
@@ -2512,6 +3098,14 @@ export default function ProductionActualPage() {
                 >
                   retry the lookup
                 </button>
+                , or
+                {" "}
+                <Link
+                  href="/planning/production-plan"
+                  className="underline underline-offset-2 hover:no-underline"
+                >
+                  go back to the daily plan board
+                </Link>
                 .
               </div>
             </div>
@@ -2630,6 +3224,126 @@ export default function ProductionActualPage() {
                   </div>
                 ) : null}
               </div>
+
+              {/* Base-batch: per-product result + report-next / close-batch.
+                  Replaces the single-item variance + re-plan + linked-plan
+                  blocks (guarded off below) so the operator flows product →
+                  product → close without leaving this panel. */}
+              {done.committedBatchMember
+                ? (() => {
+                    const member = done.committedBatchMember!;
+                    const v = computeVariance(
+                      done.committed!.output_qty,
+                      member.planned_qty,
+                    );
+                    const isOnTarget = v.variance_sign === "on_target";
+                    const members = batchProgress?.members ?? [];
+                    // Optimistic: count the product we just reported even
+                    // before the coverage query refetches.
+                    const reportedIds = new Set(
+                      members.filter((m) => m.reported).map((m) => m.item_id),
+                    );
+                    reportedIds.add(member.item_id);
+                    const total =
+                      batchProgress?.totalMembers ??
+                      linkedPlan?.pack_manifest?.length ??
+                      reportedIds.size;
+                    const doneCount = Math.min(reportedIds.size, total);
+                    const nextMember =
+                      members.find((m) => !reportedIds.has(m.item_id)) ?? null;
+                    const allDone = doneCount >= total;
+                    return (
+                      <div
+                        className="rounded-lg border border-accent/30 bg-accent/5 p-3"
+                        data-testid="production-actual-batch-next"
+                      >
+                        <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                          <span className="font-semibold text-fg-strong">
+                            {member.item_name ?? "Product"}
+                          </span>
+                          <span className="text-fg-muted">
+                            planned{" "}
+                            <span className="font-mono tabular-nums">
+                              {fmtNumStr(member.planned_qty)}{" "}
+                              {member.uom ?? done.committed!.output_uom}
+                            </span>
+                          </span>
+                          <span
+                            className={cn(
+                              "inline-flex items-center gap-1 rounded px-1.5 py-0.5 text-3xs font-semibold uppercase",
+                              isOnTarget
+                                ? "bg-success-softer text-success-fg"
+                                : "bg-warning-softer text-warning-fg",
+                            )}
+                          >
+                            {VARIANCE_SIGN_LABEL[v.variance_sign]}{" "}
+                            {fmtVarianceQty(v.variance_qty)}{" "}
+                            {done.committed!.output_uom}
+                          </span>
+                        </div>
+                        <div className="mt-2.5 flex flex-wrap items-center gap-2">
+                          <span
+                            className={cn(
+                              "chip text-xs font-semibold",
+                              allDone ? "chip-success" : "chip-info",
+                            )}
+                          >
+                            {doneCount} of {total} products reported
+                          </span>
+                          <div className="ml-auto flex flex-wrap gap-2">
+                            {canSubmit && nextMember ? (
+                              <button
+                                type="button"
+                                className="btn btn-primary btn-sm gap-1.5"
+                                onClick={() => selectMember(nextMember.item_id)}
+                                data-testid="production-actual-batch-report-next"
+                              >
+                                Report {nextMember.item_name ?? "next product"}
+                                <ArrowRight
+                                  className="h-3.5 w-3.5"
+                                  strokeWidth={2.5}
+                                  aria-hidden
+                                />
+                              </button>
+                            ) : null}
+                            {canSubmit ? (
+                              <button
+                                type="button"
+                                className={cn("btn btn-sm", allDone ? "btn-primary" : "")}
+                                disabled={batchClose.state === "pending"}
+                                onClick={() => void handleCloseBatch()}
+                                data-testid="production-actual-batch-close"
+                              >
+                                {batchClose.state === "pending"
+                                  ? "Closing…"
+                                  : "Close batch"}
+                              </button>
+                            ) : null}
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm"
+                              onClick={() => {
+                                setDone(null);
+                                resetFlow();
+                              }}
+                              data-testid="production-actual-batch-all-products"
+                            >
+                              All products
+                            </button>
+                          </div>
+                        </div>
+                        {batchClose.state === "error" && batchClose.message ? (
+                          <div
+                            className="mt-2 rounded border border-danger/40 bg-danger-softer px-2 py-1 text-3xs text-danger-fg"
+                            role="alert"
+                          >
+                            {batchClose.message}
+                          </div>
+                        ) : null}
+                      </div>
+                    );
+                  })()
+                : null}
 
               {/* Partial-materials reporting (2026-07-14) — components the
                   recipe needed but that were floored to available (down to 0)
@@ -2771,23 +3485,27 @@ export default function ProductionActualPage() {
                 </div>
               )}
 
-              {done.committed.linked_plan_id ? (() => {
+              {done.committed.linked_plan_id && !done.committedBatchMember ? (() => {
                 // Tranche 048 — fromPlanId is cleared on success, so the
                 // derived `linkedPlan` is null here; read the commit-time
                 // capture instead (with the live row as a fallback).
+                // Base-batch member submits use the dedicated batch block above
+                // (a member's context ≠ the base-batch UUID + base liters).
                 const plan = done.committedPlan ?? linkedPlan;
+                // COPY-012 — identify the linked plan by date + product, not a
+                // raw UUID (meaningless to an operator). The submission_id
+                // "View full report" link below remains the audit anchor.
                 return (
-                  <div>
+                  <div className="text-fg-muted">
                     Linked plan:{" "}
-                    <span className="font-mono">
-                      {done.committed.linked_plan_id}
-                    </span>
                     {plan ? (
-                      <span className="text-fg-muted">
-                        {" "}· {fmtPlanDate(plan.plan_date)} ·{" "}
-                        {plan.item_name ?? plan.item_id}
+                      <span className="font-medium text-fg">
+                        {fmtPlanDate(plan.plan_date)} ·{" "}
+                        {plan.item_name ?? plan.item_id ?? "plan"}
                       </span>
-                    ) : null}
+                    ) : (
+                      <span className="font-medium text-fg">this plan</span>
+                    )}
                   </div>
                 );
               })() : null}
@@ -2797,7 +3515,9 @@ export default function ProductionActualPage() {
                   the form still has the linked plan in state (carries
                   planned_qty + uom). On no-link submits (§4.1.1) the
                   variance row is omitted entirely. */}
-              {done.committed.linked_plan_id && (done.committedPlan ?? linkedPlan) ? (
+              {done.committed.linked_plan_id &&
+              !done.committedBatchMember &&
+              (done.committedPlan ?? linkedPlan) ? (
                 (() => {
                   // Tranche 048 — read the commit-time plan capture; the
                   // derived `linkedPlan` is already null at this point
@@ -2883,6 +3603,7 @@ export default function ProductionActualPage() {
                   re-plan the remainder for tomorrow. Creates a new plan row
                   only; stock is unaffected. */}
               {done.committed.linked_plan_id &&
+              !done.committedBatchMember &&
               done.committedPlan &&
               computeVariance(
                 done.committed.output_qty,
@@ -3108,7 +3829,18 @@ export default function ProductionActualPage() {
                 >
                   ← Back to the daily plan
                 </Link>
-              ) : null}
+              ) : (
+                // FLOW-006 — the plan board is the daily hub; every successful
+                // report offers a one-click return, even a report made without
+                // a plan link.
+                <Link
+                  href="/planning/production-plan"
+                  className="btn btn-sm gap-1.5"
+                  data-testid="production-actual-success-back-to-plan"
+                >
+                  ← Back to the daily plan
+                </Link>
+              )}
               {done.committed?.item_id ? (
                 <Link
                   href={`/planning/inventory-flow/${encodeURIComponent(done.committed.item_id)}`}
@@ -3144,17 +3876,22 @@ export default function ProductionActualPage() {
                   Back to the planning run
                 </Link>
               ) : null}
-              <button
-                type="button"
-                className="btn btn-sm btn-ghost"
-                onClick={() => {
-                  setDone(null);
-                  resetFlow();
-                }}
-                data-testid="production-actual-success-new-report"
-              >
-                Report another
-              </button>
+              {/* Batch mode owns its own "report next / all products / close"
+                  actions in the batch block above, so the generic
+                  "Report another" is hidden to avoid a redundant control. */}
+              {!done.committedBatchMember ? (
+                <button
+                  type="button"
+                  className="btn btn-sm btn-ghost"
+                  onClick={() => {
+                    setDone(null);
+                    resetFlow();
+                  }}
+                  data-testid="production-actual-success-new-report"
+                >
+                  Report another
+                </button>
+              ) : null}
             </div>
           ) : null}
         </div>
@@ -3191,6 +3928,26 @@ export default function ProductionActualPage() {
         </SectionCard>
       ) : phase === "pick" ? (
         <div data-testid="production-actual-step-1">
+          {isBaseBatch && linkedPlan ? (
+            batchClose.state === "success" ? (
+              <BatchClosedPanel
+                plan={linkedPlan}
+                coverage={batchClose.coverage ?? []}
+              />
+            ) : (
+              <BaseBatchMemberPicker
+                plan={linkedPlan}
+                progress={batchProgress}
+                coverageLoading={batchCoverageQuery.isLoading}
+                canSubmit={canSubmit}
+                closing={batchClose.state === "pending"}
+                closeState={batchClose}
+                onSelectMember={selectMember}
+                onCloseBatch={() => void handleCloseBatch()}
+              />
+            )
+          ) : (
+          <>
           {/* Step indicator */}
           <StepIndicator phase={phase} />
 
@@ -3368,6 +4125,8 @@ export default function ProductionActualPage() {
               </button>
             </div>
           </form>
+          </>
+          )}
         </div>
       ) : phase === "entering" || phase === "submitting" ? (
         <div data-testid="production-actual-step-2">

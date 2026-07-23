@@ -89,6 +89,26 @@ export function ProductionJobCard({
     ? `Base batch · ${plan.pack_manifest_count} product${plan.pack_manifest_count === 1 ? "" : "s"}`
     : (plan.item_name ?? "Unnamed item");
 
+  // Production-report deep link. A base-batch row has NO single item and its
+  // planned_qty is the base-liquid volume — passing either as item_id /
+  // suggested_qty pre-fills the report form with the wrong product and the
+  // wrong quantity. So base-batch cards link with from_plan_id only; the
+  // report page reads the pack manifest and guides the operator product by
+  // product. Single-item cards keep the item + suggested-qty prefill.
+  const reportHref = plan.is_base_batch
+    ? `/stock/production-actual?from_plan_id=${encodeURIComponent(plan.plan_id)}`
+    : `/stock/production-actual?from_plan_id=${encodeURIComponent(plan.plan_id)}${
+        plan.item_id ? `&item_id=${encodeURIComponent(plan.item_id)}` : ""
+      }${plan.planned_qty ? `&suggested_qty=${encodeURIComponent(plan.planned_qty)}` : ""}`;
+  // COPY-018 — "Open Production Report" read like opening an existing
+  // document; the operator is creating one. Base batches say "products"
+  // (plural) to signal the multi-SKU flow.
+  const reportLabel = plan.is_base_batch
+    ? "Report products"
+    : isToday
+      ? "Report production"
+      : "Report actual";
+
   const [impactOpen, setImpactOpen] = useState(false);
 
   // Tranche 052 — recipe-override eligibility: MANUFACTURED single-item
@@ -245,7 +265,7 @@ export function ProductionJobCard({
               >
                 <span className="truncate">{line.item_name ?? line.item_id}</span>
                 <span className="font-mono tabular-nums shrink-0">
-                  {fmtQty(line.qty, null)}
+                  {fmtQty(line.qty, line.uom)}
                 </span>
               </li>
             ))}
@@ -410,16 +430,20 @@ export function ProductionJobCard({
           {/* Report button — primary for today; hidden on drafts */}
           {!isDraft ? (
             <Link
-              href={`/stock/production-actual?from_plan_id=${encodeURIComponent(plan.plan_id)}${plan.item_id ? `&item_id=${encodeURIComponent(plan.item_id)}` : ""}&suggested_qty=${encodeURIComponent(plan.planned_qty ?? "")}`}
+              href={reportHref}
               className={cn(
                 "btn btn-xs gap-1",
                 isToday ? "btn-primary" : "btn-ghost text-accent",
               )}
-              title="Report actual production"
+              title={
+                plan.is_base_batch
+                  ? "Report actual production for each product in the batch"
+                  : "Report actual production"
+              }
               data-testid="plan-row-report"
             >
               <Factory className="h-2.5 w-2.5" strokeWidth={2.5} />
-              Open Production Report
+              {reportLabel}
             </Link>
           ) : (
             // COPY-006 (2026-07-23 gate): "Not reportable yet" stated an
