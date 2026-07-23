@@ -37,12 +37,15 @@ test.describe("Fake login / role switch", () => {
     await expect(page.getByRole("link", { name: /Waste/i })).toHaveCount(0);
   });
 
-  test("planner sees the Production Simulation link in Planning", async ({ page }) => {
+  test("Production Simulation is folded out of the planner sidebar (tranche 138)", async ({ page }) => {
+    // Tranche 138 demoted /planning/production-simulation to placement:"command"
+    // — ⌘K + deep link only. It must no longer appear as a sidebar link for
+    // ANY role (the next test proves the page itself still loads for planner).
     await setFakeRole(page, "planner");
     await page.goto("/dashboard");
     await expect(
       page.getByRole("link", { name: /Production Simulation/i }),
-    ).toBeVisible();
+    ).toHaveCount(0);
   });
 
   test("planner can reach /planning/production-simulation directly", async ({ page }) => {

@@ -135,3 +135,44 @@ export function authorizeCapability(
 export function capabilitiesFor(role: Role): CapabilityGrants {
   return ROLE_CAPABILITY_LATTICE[role];
 }
+
+/**
+ * isCapabilityPermanentlyUnreachable — tranche 138 (D2, Tom-approved
+ * 2026-07-23).
+ *
+ * The SideNav's default "truthfulness rule" renders a row the role can't yet
+ * use as SUBDUED with a padlock ("show why, don't pretend it doesn't exist").
+ * D2 relaxes that for exactly one case: a row whose `required_capability` the
+ * role can NEVER satisfy — those are pure noise (a viewer will never gain
+ * `stock:execute`, so four locked Stock forms + "My activity" only clutter the
+ * rail). Such rows are HIDDEN instead of padlocked.
+ *
+ * The distinction is a pure read of ROLE_CAPABILITY_LATTICE:
+ *   - Already satisfied → not unreachable (false). Nothing to hide.
+ *   - Not satisfied, and the role holds only READ (or nothing) on that axis →
+ *     it is a read-only / no-standing participant there and can never execute
+ *     → PERMANENTLY unreachable (true) → hide.
+ *   - Not satisfied, but the role already EXECUTES on the axis and merely lacks
+ *     the higher OVERRIDE tier → it is "on the execution track", one grant away
+ *     → NOT permanent (false) → keep the truthful subdued padlock.
+ *
+ * With today's static lattice the only rows this hides are the viewer's
+ * stock:execute rows; the "execute-but-not-override" branch is the intended
+ * safety valve so a genuine below-but-attainable grant stays subdued.
+ */
+export function isCapabilityPermanentlyUnreachable(
+  role: Role,
+  required: CapabilityRequirement,
+): boolean {
+  // Held now → reachable → nothing to hide. (Also covers the synthetic
+  // "viewer:read" tier, which every role satisfies.)
+  if (authorizeCapability(role, required)) return false;
+
+  const { axis } = parseRequirement(required);
+  if (axis === "viewer") return false; // synthetic tier, never "locked"
+
+  const granted = ROLE_CAPABILITY_LATTICE[role][axis as CapabilityAxis];
+  // Read-only or absent on this axis ⇒ can never execute here ⇒ permanent.
+  // Already-executing-but-below-override ⇒ attainable ⇒ keep subdued.
+  return levelRank(granted) <= LEVEL_ORDER.read;
+}

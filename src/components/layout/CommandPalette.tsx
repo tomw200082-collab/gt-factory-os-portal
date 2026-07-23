@@ -17,16 +17,8 @@ import { useRouter } from "next/navigation";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import { useSession } from "@/lib/auth/session-provider";
-import { NAV_MANIFEST } from "@/lib/nav/manifest";
-import type { Role } from "@/lib/contracts/enums";
+import { NAV_MANIFEST, navItemAllowsRole } from "@/lib/nav/manifest";
 import { cn } from "@/lib/cn";
-
-const ROLE_ORDER: Record<Role, number> = {
-  viewer: 1,
-  operator: 2,
-  planner: 3,
-  admin: 4,
-};
 
 interface Dest {
   href: string;
@@ -45,10 +37,14 @@ export function CommandPalette() {
 
   // Every destination the current role may reach, flattened from the manifest.
   const destinations = useMemo<Dest[]>(() => {
+    // Every destination the role may reach — including placement:"command"
+    // folds (tranche 138), which live ONLY here + as deep links. Role-filtered
+    // through the shared gate so a `roles` allow-list hides an item from ⌘K
+    // exactly as it does from the sidebar/top-bar (no cross-surface drift).
     const out: Dest[] = [];
     for (const group of NAV_MANIFEST) {
       for (const item of group.items) {
-        if (ROLE_ORDER[session.role] < ROLE_ORDER[item.min_role]) continue;
+        if (!navItemAllowsRole(session.role, item)) continue;
         out.push({
           href: item.href,
           label: item.label,

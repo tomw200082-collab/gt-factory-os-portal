@@ -6,7 +6,7 @@ import { usePathname } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { useSession } from "@/lib/auth/session-provider";
 import { activeNavLabel } from "@/lib/nav/active";
-import { NAV_MANIFEST, type NavItem } from "@/lib/nav/manifest";
+import { NAV_MANIFEST, navItemAllowsRole, type NavItem } from "@/lib/nav/manifest";
 import { CommandPalette } from "./CommandPalette";
 import { useReviewMode } from "@/lib/review-mode/store";
 import { useTheme } from "@/lib/theme";
@@ -354,15 +354,9 @@ function BrandMark() {
 }
 
 // Tranche 090 — primary "pulse" tabs in the TopBar. Sourced from the manifest
-// items tagged placement:"top" (Dashboard, Inbox), role-filtered, with the same
-// live count badge the sidebar used for Inbox. Desktop only.
-const TOP_ROLE_ORDER: Record<Role, number> = {
-  viewer: 1,
-  operator: 2,
-  planner: 3,
-  admin: 4,
-};
-
+// items tagged placement:"top" (Dashboard, Inbox), role-filtered (tranche 138:
+// via the shared navItemAllowsRole so a `roles` allow-list is honored here too),
+// with the same live count badge the sidebar used for Inbox. Desktop only.
 function readTopBadge(
   queryClient: ReturnType<typeof useQueryClient>,
   item: NavItem,
@@ -383,9 +377,7 @@ function TopNavTabs() {
   const queryClient = useQueryClient();
 
   const items = NAV_MANIFEST.flatMap((g) => g.items).filter(
-    (i) =>
-      i.placement === "top" &&
-      TOP_ROLE_ORDER[session.role] >= TOP_ROLE_ORDER[i.min_role],
+    (i) => i.placement === "top" && navItemAllowsRole(session.role, i),
   );
   if (items.length === 0) return null;
 

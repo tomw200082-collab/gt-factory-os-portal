@@ -76,6 +76,14 @@ export interface NavItem {
   // layout-independent filtering (e.g. hiding admin-only entries from
   // operators entirely rather than showing them subdued).
   min_role: Role;
+  // Tranche 138 — optional EXACT role allow-list. `min_role` is only a floor
+  // and cannot exclude a middle role (e.g. keep viewer + planner + admin but
+  // drop operator). When `roles` is present it OVERRIDES `min_role`: the entry
+  // is curated only for the listed roles. This is a nav-visibility filter
+  // only — it never changes route access (middleware + layout RoleGate are
+  // unchanged), so every URL stays reachable via ⌘K / deep link. Applied
+  // identically by SideNav, TopBar, and CommandPalette (see navItemAllowsRole).
+  roles?: Role[];
   // When present, the entry renders subdued (not hidden) for roles that
   // have min_role access but lack this capability. When absent, the entry
   // is fully available to any role that passes min_role.
@@ -87,7 +95,13 @@ export interface NavItem {
   // (the universal pulse: Dashboard, Inbox) instead of the SideNav. The item
   // STAYS in the manifest so active-path resolution + breadcrumb labels keep
   // working; the SideNav simply skips "top" items. Default/absent = "side".
-  placement?: "top" | "side";
+  //
+  // Tranche 138 — "command": a demoted-but-live surface. It renders in NEITHER
+  // the SideNav nor the TopBar, but STAYS in the manifest so the CommandPalette
+  // (⌘K) and active-path/breadcrumb resolution keep finding it, and the URL
+  // stays a live deep link. Used for diagnostic-only pages folded out of
+  // primary nav (production-simulation, blockers) without deleting the route.
+  placement?: "top" | "side" | "command";
 }
 
 export interface NavGroup {
@@ -97,6 +111,30 @@ export interface NavGroup {
   // state; the sidebar auto-expands if the active path is within the group.
   collapsible?: boolean;
   defaultCollapsed?: boolean;
+}
+
+// Coarse role rank — viewer < operator < planner < admin. Shared by every nav
+// consumer (SideNav, TopBar, CommandPalette) so the role floor is computed one
+// way, not re-derived per component.
+export const NAV_ROLE_ORDER: Record<Role, number> = {
+  viewer: 1,
+  operator: 2,
+  planner: 3,
+  admin: 4,
+};
+
+/**
+ * navItemAllowsRole — the single coarse role gate for nav visibility.
+ *
+ * When `item.roles` is present it is an EXACT allow-list and OVERRIDES the
+ * `min_role` floor (tranche 138); otherwise `min_role` is a lower bound.
+ * SideNav, TopBar, and CommandPalette all call this so a folded item can never
+ * vanish from one surface while lingering in another. Route ACCESS is
+ * unaffected — this only decides whether the entry is *listed*.
+ */
+export function navItemAllowsRole(role: Role, item: NavItem): boolean {
+  if (item.roles) return item.roles.includes(role);
+  return NAV_ROLE_ORDER[role] >= NAV_ROLE_ORDER[item.min_role];
 }
 
 export const NAV_MANIFEST: NavGroup[] = [
@@ -151,6 +189,10 @@ export const NAV_MANIFEST: NavGroup[] = [
         icon: CircleDollarSign,
         min_role: "viewer",
         required_capability: "viewer:read",
+        // Tranche 138 — the bookkeeper's queue (Dorin/office). Operators
+        // (Dennis/Maxim) never work credits, so scope it out of their sidebar
+        // via the exact allow-list; the route stays reachable for them by URL.
+        roles: ["viewer", "planner", "admin"],
       },
     ],
   },
@@ -204,6 +246,10 @@ export const NAV_MANIFEST: NavGroup[] = [
         icon: ScrollText,
         min_role: "viewer",
         required_capability: "viewer:read",
+        // Tranche 138 — ledger read-model for verification/debug (Tom + office
+        // usage, not floor usage). Out of the operator sidebar; reachable by
+        // URL/⌘K for everyone the middleware already admits.
+        roles: ["viewer", "planner", "admin"],
       },
     ],
   },
@@ -219,14 +265,20 @@ export const NAV_MANIFEST: NavGroup[] = [
         href: "/planning",
         label: "Planning Overview",
         icon: LineChart,
-        min_role: "viewer",
+        // Tranche 138 — raised viewer→planner. Self-declared "Engine
+        // diagnostic" (retitled tranche 125), not a corridor surface;
+        // operators/viewers have no action on it. Route access unchanged.
+        min_role: "planner",
         required_capability: "planning:read",
       },
       {
         href: "/planning/forecast",
         label: "Forecast",
         icon: TrendingUp,
-        min_role: "viewer",
+        // Tranche 138 — raised viewer→planner. Monthly Tom cadence; operator/
+        // viewer writes are server-blocked anyway, so the row was pure noise
+        // for Dennis/Maxim/Dorin. Route access unchanged.
+        min_role: "planner",
         required_capability: "planning:read",
       },
       // Tranche 045 — "Run History" removed from primary nav. The page stays
@@ -285,6 +337,11 @@ export const NAV_MANIFEST: NavGroup[] = [
         icon: Network,
         min_role: "planner",
         required_capability: "planning:read",
+        // Tranche 138 — folded out of primary nav (⌘K + deep link only). It
+        // carries a permanent containment banner ("preview only, not source of
+        // truth"), is IDB-backed, and sits in no corridor, so it only cluttered
+        // the Planning group. Page stays live (route-manifest unchanged).
+        placement: "command",
       },
       {
         href: "/planning/inventory-flow",
@@ -299,6 +356,10 @@ export const NAV_MANIFEST: NavGroup[] = [
         icon: AlertOctagon,
         min_role: "viewer",
         required_capability: "planning:read",
+        // Tranche 138 — folded out of primary nav (⌘K + deep link only). It
+        // depends on diagnostic runs, and dashboard/critical-today already
+        // surfaces the actionable subset. Page stays live.
+        placement: "command",
       },
       {
         // 2026-05-17 — moved here from the Admin group and widened from
