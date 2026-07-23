@@ -6,9 +6,10 @@
     "Tranches 012-015 this run genuinely advance production-control: PO chain unblocked end-to-end, inbox federates exceptions, role-boundary matrix tests land.",
     "2026-05-30 manual update (post-Tranche 027..036): +2 (86 -> 88). flow_continuity 9 -> 10 (procurement merge epic + focus-mode close loop, e2e-proven). regression_resistance 9 -> 10 (whole unit suite red->green 35->0, vitest + @mocked e2e gated in portal-pr-guard). Hand-updated at session close; a /portal-scorecard recompute can re-derive.",
     "2026-06-25 truth correction (Tranche A / 092): +3 (88 -> 91). NOT new work — stale ratings corrected against shipped reality. admin_superuser_depth 5 -> 7: the /portal-audit admin-surface auditor proved /admin/users (role mgmt + activate/deactivate via /api/users[/id]), /admin/jobs (60s monitor via /api/admin/jobs), and /admin/integrations (Shopify sync-status + honesty banner) are LIVE real-data surfaces — QuarantinedPage no longer exists anywhere in src/app. 3 of the 5 backend-package deliverables shipped; only audit-log history (#1) + four-eyes master-data approval queue (#2) + the run-now/resync mutation halves remain genuinely backend-blocked. nav_integrity 9 -> 10: Tranche 090 performed the kind=baseline-update ritual (baseline.json re-anchored) and closed the manifest-orphan gap (route-manifest +3 rows) — the sole remaining gap.",
-    "2026-07-03 DR-018 UX-release-gate P0 batch (Tranche 121, this update): +1 (91 -> 92). planning_surface 9 -> 10: closed all 5 P0 findings from the DR-018 gate (FLOW-001 Weekly Meeting nav entry, VISUAL-001 .btn-accent alias, INTER-001 generate-drafts confirm, A11Y-001 FocusMode focus-in/restore + a latent stacking-context bug that made its close button unclickable, A11Y-002 inventory-flow ARIA grid roles) — all e2e-proven (@mocked, chromium). Evidence lists for tranches 093-120 (post-092) were not individually back-filled into this JSON in this update — registry.md is the authoritative one-line-per-tranche index in the interim; a full /portal-scorecard recompute remains the right way to true up every category's evidence trail."
+    "2026-07-03 DR-018 UX-release-gate P0 batch (Tranche 121, this update): +1 (91 -> 92). planning_surface 9 -> 10: closed all 5 P0 findings from the DR-018 gate (FLOW-001 Weekly Meeting nav entry, VISUAL-001 .btn-accent alias, INTER-001 generate-drafts confirm, A11Y-001 FocusMode focus-in/restore + a latent stacking-context bug that made its close button unclickable, A11Y-002 inventory-flow ARIA grid roles) — all e2e-proven (@mocked, chromium). Evidence lists for tranches 093-120 (post-092) were not individually back-filled into this JSON in this update — registry.md is the authoritative one-line-per-tranche index in the interim; a full /portal-scorecard recompute remains the right way to true up every category's evidence trail.",
+    "2026-07-23 Tranche 137 (receipts-against-po, door mode): +1 (92 -> 93). Manifest target category was 'operator_daily_fit' — that key does not exist in this 10-category rubric (never introduced by a prior /portal-scorecard recompute); the nearest real category covering an operator's daily-use stock form is ops_surface, which already carries the Tranche 013 receipt-PO-linkage entry this tranche builds on. Credited there rather than inventing an 11th category outside the recompute ritual. ops_surface 8 -> 9: /stock/receipts got a door-mode pass for the operator role (landing defaults to 'Expected today', manual track visually demoted, PO-ledger progress detail collapsed by default behind one disclosure toggle, ≥44px per-line touch targets) plus symmetric short-receipt visibility (pre-submit summary + success-panel delta naming the PO-stays-open outcome, mirroring the existing over-receipt confirm). Presentation-only; no backend/contract change. tsc 0, eslint 0, vitest 944/944 (935 baseline + 9 new), playwright @mocked chromium 25/25 (2 new) + mobile-safari screenshot pass."
   ],
-  "generated_at": "2026-07-03T00:00:00Z",
+  "generated_at": "2026-07-23T00:00:00Z",
   "source_audit": "docs/portal-os/audit-reports/2026-04-22-all-reaudit.md",
   "source_tranches": [
     "docs/portal-os/tranches/001-bootstrap-truthfulness.md",
@@ -30,8 +31,8 @@
     "docs/portal-os/tranches/017-deploy-unblock-dashboard-dynamic.md"
   ],
   "backend_package_reference": "docs/portal-os/backend-package-admin-superuser-depth.md",
-  "previous_score": 91,
-  "total": 92,
+  "previous_score": 92,
+  "total": 93,
   "categories": {
     "admin_superuser_depth": {
       "score": 7,
@@ -102,15 +103,16 @@
       "gap": "Planning-exceptions dashboard (counts + filters at top) — optional polish. DR-018 P1/P2 backlog (tranches 122-125) still open as of this update."
     },
     "ops_surface": {
-      "score": 8,
+      "score": 9,
       "evidence": [
         "Tranche 004: Physical Count Cancel wired",
         "Tranche 006: waste + physical-count banner deep-links",
         "Tranche 008: four operator forms mobile-first (viewport, drawer, ≥36px targets, inputMode, datetime-local)",
         "Tranche 013: Goods Receipt can reference PO + per-line po_line_id; upstream can finally advance PO line state from operator receipts",
-        "STALE_BOM_VERSION 409 recovery in production-actual is exemplary"
+        "STALE_BOM_VERSION 409 recovery in production-actual is exemplary",
+        "Tranche 137: /stock/receipts door-mode pass for the operator role — landing leads with 'Expected today', manual/no-PO track visually demoted (not hidden), PO-ledger progress detail collapses by default behind one disclosure toggle for role===operator, ≥44px per-line touch targets (qty steppers + remove-line); symmetric short-receipt visibility added (pre-submit summary + success-panel delta, mirroring the existing over-receipt confirm) so a short receipt is no longer silent about 'PO stays open for the rest'"
       ],
-      "gap": "Recent-submissions surface (backend-blocked); receipts + production-actual auto-post banners still lack deep-link target (depends on /stock/submissions)."
+      "gap": "Recent-submissions surface (backend-blocked); receipts + production-actual auto-post banners still lack deep-link target (depends on /stock/submissions). Dennis's real operator account provisioning (Supabase + /admin/users) is an admin/Tom action outside this tranche's portal-code scope."
     },
     "dashboard_truth": {
       "score": 9,
@@ -150,6 +152,6 @@
       "gap": "ESLint not yet in CI (no eslint config exists; separate tranche). Baseline freeze + quarantine seed rituals still pending. Backend-dependent *-real e2e not CI-gated (need Supabase)."
     }
   },
-  "delta": 3,
-  "delta_notes": "Tranche A/092 (2026-06-25): +3 truth-correction (88 → 91), not new feature work — two stale ratings corrected against shipped reality. admin_superuser_depth 5→7 (the three admin shells /admin/users + /admin/jobs + /admin/integrations are live real-data surfaces, not QuarantinedPage which no longer exists in src/app; 3 of 5 backend-package deliverables shipped). nav_integrity 9→10 (Tranche 090 baseline-update ritual + manifest-orphan closure). ALL 10 categories are now ≥ 7 and 9 of 10 are ≥ 8 (admin_superuser_depth at 7 is the lone sub-8). Remaining true gaps are backend-lane: audit-log history + four-eyes approval queue + run-now/resync mutation halves."
+  "delta": 1,
+  "delta_notes": "Tranche 137 (2026-07-23): +1 (92 → 93). ops_surface 8→9 — door-mode pass on /stock/receipts for the operator role (Dennis, RM-door goods receipt) plus symmetric short-receipt visibility. Portal-side machinery for PO-attached receiving already existed (tranches 013/020/065/086); this tranche closed the operator-fit + short-receipt-visibility gap identified in the 2026-07-22 mapping-v3 Q10 decision. Credited under ops_surface — the manifest's proposed 'operator_daily_fit' category key does not exist in this rubric; see the 2026-07-23 _notes entry."
 }

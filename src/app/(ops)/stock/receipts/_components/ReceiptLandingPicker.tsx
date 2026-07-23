@@ -424,9 +424,13 @@ export function ReceiptLandingPicker({
           </p>
         </div>
         <div className="p-3 sm:p-4">
+          {/* Tranche 137 (door mode) — demoted from btn-primary to
+              btn-outline. Manual entry stays reachable but reads as the
+              secondary path; "Expected today" is the primary decision for
+              the door operator. */}
           <button
             type="button"
-            className="btn btn-primary w-full transition-colors duration-150"
+            className="btn btn-outline w-full transition-colors duration-150"
             onClick={onStartManual}
             data-testid="receipt-landing-manual-start"
           >

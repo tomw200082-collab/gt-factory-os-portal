@@ -1,5 +1,18 @@
-# Portal Readiness: 92/100 (delta: +48 total, +1 this update)
+# Portal Readiness: 93/100 (delta: +49 total, +1 this update)
 
+> **2026-07-23 door-mode goods receipts (Tranche 137).** +1: `ops_surface`
+> 8 → 9. `/stock/receipts` got a door-mode pass for the operator role per the
+> 2026-07-22 mapping-v3 Q10 decision: landing defaults to "Expected today",
+> the manual/no-PO track is visually demoted (not hidden), the PO-ledger
+> progress detail collapses by default behind one disclosure toggle for
+> `role==="operator"`, and per-line touch targets are ≥44px. Added the
+> symmetric counterpart to the existing over-receipt confirm: a short receipt
+> (received < open_qty) now gets a pre-submit summary and a success-panel
+> delta naming "PO stays open for the rest" — previously silent. No
+> backend/contract change. The manifest's proposed `operator_daily_fit`
+> scorecard category does not exist in this 10-category rubric; credited
+> under `ops_surface` instead (see `scorecard.json` `_notes`).
+>
 > **2026-07-03 DR-018 UX-release-gate P0 batch (Tranche 121).** +1:
 > `planning_surface` 9 → 10. Closed all 5 P0 findings from the DR-018 gate
 > (`/planning/meeting`↔`/planning/procurement`↔`/purchase-orders/placement-queue`
@@ -32,7 +45,7 @@ Post-Tranche-036 (procurement-merge + suite-green session). Previous: 86/100 (po
 | role_gate_correctness | 10 | +4 | Maintained. Middleware scaffold activates as layer 3 when backend populates `app_metadata.role`. |
 | data_truthfulness | 8 | +3 | Real /admin/integrations health (backend-blocked); aggregate KPIs (backend-blocked). |
 | planning_surface | 10 | +3 | Maintained. DR-018 P0 batch closed (Tranche 121); P1/P2 backlog (tranches 122-125) still open. |
-| ops_surface | 8 | +5 | Recent-submissions (backend-blocked); auto-post deep-link target (backend-blocked). |
+| ops_surface | 9 | +6 | Recent-submissions (backend-blocked); auto-post deep-link target (backend-blocked). Dennis's real operator account provisioning is an admin/Tom action outside portal-code scope. |
 | dashboard_truth | 9 | +3 | Aggregate KPIs (backend-blocked). |
 | technical_substrate | 10 | +4 | Maintained. |
 | regression_resistance | 10 | +7 | ESLint not yet in CI (no config); baseline + quarantine rituals; backend-dependent *-real e2e not gated. |
@@ -108,4 +121,4 @@ When #1/#2 land, portal-side the work is M-or-smaller per shell.
 - No critical drift in the most recent weekly cron report.
 - At least one tranche landed for every category that started below 6/10 — **all 4 met** (admin_superuser_depth +2, nav_integrity +5, flow_continuity +7, regression_resistance +6).
 
-last_reviewed: 2026-07-03
+last_reviewed: 2026-07-23
