@@ -166,7 +166,7 @@ test.describe("@mocked production picking", () => {
     await setFakeRole(page, "operator");
     // The run is in production (materials already collected) → reportable.
     await page.route("**/api/production-runs/*/pick-list", (route) =>
-      route.fulfill({ json: { ...PICK_LIST, status: "IN_PRODUCTION" } }),
+      route.fulfill({ json: { ...PICK_LIST, stage: "SINGLE", status: "IN_PRODUCTION" } }),
     );
 
     await page.goto("/production/runs/RUN1/report");
@@ -247,7 +247,9 @@ test.describe("@mocked production picking", () => {
     await setFakeRole(page, "operator");
     await stubToday(page, [todayRow()]);
     await page.route("**/api/production-runs/*/pick-list", (route) =>
-      route.fulfill({ json: PICK_LIST }),
+      // SINGLE, not the TANK default: a tank makes liquid for the filling runs
+      // and has no output of its own to report.
+      route.fulfill({ json: { ...PICK_LIST, stage: "SINGLE", item_id: "ITEM1" } }),
     );
     await page.route("**/api/production-runs/*/pick-confirm", (route) =>
       route.fulfill({
@@ -278,10 +280,27 @@ test.describe("@mocked production picking", () => {
     await expect(reportCta).toHaveAttribute("href", /\/production\/runs\/RUN1\/report/);
   });
 
+  test("tranche 147: a TANK run is never offered a report — it would 409", async ({ page }) => {
+    await setFakeRole(page, "operator");
+    // PICK_LIST is a TANK run: it makes the liquid the filling runs use, and
+    // has no product of its own. Offering "Report production" here used to
+    // send the operator into a 409 with no way out.
+    await page.route("**/api/production-runs/*/pick-list", (route) =>
+      route.fulfill({ json: { ...PICK_LIST, status: "IN_PRODUCTION" } }),
+    );
+
+    await page.goto("/production/runs/RUN1");
+    await expect(page.getByTestId("pick-in-production-banner")).toBeVisible();
+    await expect(page.getByTestId("pick-in-production-report")).toHaveCount(0);
+    await expect(page.getByTestId("pick-in-production-banner")).toContainText(
+      "Report the filling jobs",
+    );
+  });
+
   test("IN_PRODUCTION run: pick rows are read-only (tranche 145 INTER-001/FLOW-001)", async ({ page }) => {
     await setFakeRole(page, "operator");
     await page.route("**/api/production-runs/*/pick-list", (route) =>
-      route.fulfill({ json: { ...PICK_LIST, status: "IN_PRODUCTION" } }),
+      route.fulfill({ json: { ...PICK_LIST, stage: "SINGLE", status: "IN_PRODUCTION" } }),
     );
 
     await page.goto("/production/runs/RUN1");
@@ -299,7 +318,7 @@ test.describe("@mocked production picking", () => {
   test("report 'Back to today' links to /production (tranche 145 FLOW-002)", async ({ page }) => {
     await setFakeRole(page, "operator");
     await page.route("**/api/production-runs/*/pick-list", (route) =>
-      route.fulfill({ json: { ...PICK_LIST, status: "IN_PRODUCTION" } }),
+      route.fulfill({ json: { ...PICK_LIST, stage: "SINGLE", status: "IN_PRODUCTION" } }),
     );
 
     await page.goto("/production/runs/RUN1/report");
