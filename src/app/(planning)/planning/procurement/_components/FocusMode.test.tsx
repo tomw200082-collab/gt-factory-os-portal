@@ -32,6 +32,7 @@ vi.mock("../../purchase-session/_lib/api", () => ({
     isPending: false,
     error: null,
   }),
+  useRerouteLine: () => ({ ...noop, variables: undefined }),
 }));
 
 import { FocusMode } from "./FocusMode";

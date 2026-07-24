@@ -12,11 +12,30 @@
 
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
+// Tranche 140: a whole-PO switch-target supplier. Shape-compatible with the
+// shared SupplierCandidate the SwitchSupplierControl consumes.
+export interface QueueCandidateSupplier {
+  supplier_id: string;
+  supplier_name: string;
+  phone: string | null;
+  is_primary: boolean;
+  is_current: boolean;
+  unit_cost: number;
+  lead_time_days: number | null;
+  moq: number | null;
+}
+
 export interface QueuePo {
   po_id: string;
   po_number: string;
   supplier_id: string;
   supplier_name: string | null;
+  // Tranche 140 raw-material-first: current supplier contact phone for the
+  // click-to-call affordance. Optional — null / older API responses.
+  supplier_phone?: string | null;
+  // Tranche 140: whole-PO switch targets — ACTIVE suppliers that cover every
+  // material in this order (incl. the current supplier, is_current). Optional.
+  candidate_suppliers?: QueueCandidateSupplier[];
   status: string;
   expected_receive_date: string | null;
   currency: string;
@@ -217,6 +236,41 @@ export function useCancelOrder() {
       void qc.invalidateQueries({ queryKey: QUEUE_KEY });
       void qc.invalidateQueries({ queryKey: ["planner", "purchase-orders"] });
       void qc.invalidateQueries({ queryKey: ["purchase-orders"] });
+    },
+  });
+}
+
+export interface SwitchSupplierArgs {
+  poId: string;
+  target_supplier_id: string;
+  // OPTIONAL — the buyer may record why she switched, never forced.
+  reason?: string;
+}
+
+// Tranche 140: switch a whole APPROVED_TO_ORDER PO to another supplier that can
+// fulfil every material. In-place + audited on the backend; the queue refetches
+// so the row shows the new supplier.
+export function useSwitchSupplier() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: SwitchSupplierArgs) => {
+      const res = await fetch(
+        `/api/purchase-orders/${encodeURIComponent(args.poId)}/switch-supplier`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            target_supplier_id: args.target_supplier_id,
+            reason: args.reason,
+          }),
+        },
+      );
+      return jsonOrThrow(res, "החלפת הספק נכשלה.");
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: QUEUE_KEY });
+      void qc.invalidateQueries({ queryKey: ["purchase-orders"] });
+      void qc.invalidateQueries({ queryKey: ["planner", "purchase-orders"] });
     },
   });
 }

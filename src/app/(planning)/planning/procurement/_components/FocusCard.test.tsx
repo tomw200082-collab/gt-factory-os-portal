@@ -19,12 +19,18 @@ const approveMutate = vi.fn();
 const placeMutate = vi.fn();
 const skipMutate = vi.fn();
 const editMutate = vi.fn();
+const rerouteMutate = vi.fn();
 
 vi.mock("../../purchase-session/_lib/api", () => ({
   useEditPo: () => ({ mutate: editMutate, isPending: false, error: null }),
   useApprovePo: () => ({ mutate: approveMutate, isPending: false, error: null }),
   usePlacePo: () => ({ mutate: placeMutate, isPending: false, error: null }),
   useSkipPo: () => ({ mutate: skipMutate, isPending: false, error: null }),
+  useRerouteLine: () => ({
+    mutate: rerouteMutate,
+    isPending: false,
+    variables: undefined,
+  }),
 }));
 
 // Imported after the mock is registered.

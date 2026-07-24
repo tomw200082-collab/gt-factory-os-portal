@@ -23,10 +23,13 @@ import { useConfirm } from "@/components/overlays/ConfirmDialog";
 import { formatIls } from "@/lib/utils/format-money";
 import { fmtNumStr } from "@/lib/utils/format-quantity";
 import { PAYMENT_TERMS, paymentTermByCode } from "@/lib/payment-terms";
+import { SupplierCallLink } from "@/components/purchase/SupplierCallLink";
+import { SwitchSupplierControl } from "@/components/purchase/SwitchSupplierControl";
 import {
   usePoLines,
   usePlaceOrder,
   useCancelOrder,
+  useSwitchSupplier,
   type QueuePo,
   type QueuePoLine,
 } from "../_lib/api";
@@ -64,6 +67,8 @@ export function PlacementRow({
   const linesQuery = usePoLines(po.po_id, open);
   const placeMut = usePlaceOrder();
   const cancelMut = useCancelOrder();
+  const switchMut = useSwitchSupplier();
+  const [switchError, setSwitchError] = useState<string | null>(null);
 
   // Cancel-with-reason (Tom-directed 2026-07-16). Opens inline (not the lines
   // panel) so the office manager can clear stale orders without expanding each.
@@ -412,6 +417,46 @@ export function PlacementRow({
             </div>
           ) : (
             <div className="space-y-4">
+              {/* Tranche 140 raw-material-first: the materials below are the
+                  heroes; the supplier is a labelled attribute with a
+                  click-to-call so the office manager phones them in one tap. */}
+              <div className="flex flex-col gap-2 rounded-md border border-border/50 bg-bg-subtle/30 px-3 py-2">
+                <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                  <span className="text-xs text-fg-muted">ספק:</span>
+                  <span className="text-sm font-medium text-fg">
+                    {po.supplier_name ?? "ספק לא ידוע"}
+                  </span>
+                  <SupplierCallLink
+                    phone={po.supplier_phone}
+                    supplierName={po.supplier_name ?? undefined}
+                  />
+                </div>
+                {/* Tranche 140: switch the whole order to another supplier that
+                    can fulfil every material — for when the current one is out
+                    / unreachable. Optional reason. */}
+                <SwitchSupplierControl
+                  candidates={po.candidate_suppliers ?? []}
+                  materialLabel={`הזמנה ${po.po_number}`}
+                  isPending={switchMut.isPending}
+                  error={switchError}
+                  onResetError={() => setSwitchError(null)}
+                  onSwitch={({ target_supplier_id, reason }) => {
+                    setSwitchError(null);
+                    switchMut.mutate(
+                      { poId: po.po_id, target_supplier_id, reason },
+                      {
+                        onError: (err) =>
+                          setSwitchError(
+                            err instanceof Error
+                              ? err.message
+                              : "החלפת הספק נכשלה.",
+                          ),
+                      },
+                    );
+                  }}
+                />
+              </div>
+
               {/* Lines + per-line price */}
               <ul className="space-y-2">
                 {lines.map((l) => (
