@@ -95,7 +95,7 @@ test.describe("@mocked production picking", () => {
   test("open a run → pick rows show the prefilled required quantity", async ({ page }) => {
     await setFakeRole(page, "operator");
     await stubToday(page, [todayRow()]);
-    await page.route("**/api/production-runs/*/pick-list", (route) =>
+    await page.route("**/api/production-runs/*/pick-list**", (route) =>
       route.fulfill({ json: PICK_LIST }),
     );
 
@@ -113,7 +113,7 @@ test.describe("@mocked production picking", () => {
   test("Done stays disabled until every row is resolved, then enables", async ({ page }) => {
     await setFakeRole(page, "operator");
     await stubToday(page, [todayRow()]);
-    await page.route("**/api/production-runs/*/pick-list", (route) =>
+    await page.route("**/api/production-runs/*/pick-list**", (route) =>
       route.fulfill({ json: PICK_LIST }),
     );
 
@@ -165,7 +165,7 @@ test.describe("@mocked production picking", () => {
   test("end-of-run report submits with only output; QC is optional", async ({ page }) => {
     await setFakeRole(page, "operator");
     // The run is in production (materials already collected) → reportable.
-    await page.route("**/api/production-runs/*/pick-list", (route) =>
+    await page.route("**/api/production-runs/*/pick-list**", (route) =>
       route.fulfill({ json: { ...PICK_LIST, stage: "SINGLE", status: "IN_PRODUCTION" } }),
     );
 
@@ -246,7 +246,7 @@ test.describe("@mocked production picking", () => {
   test("pick-confirm success screen links to the report", async ({ page }) => {
     await setFakeRole(page, "operator");
     await stubToday(page, [todayRow()]);
-    await page.route("**/api/production-runs/*/pick-list", (route) =>
+    await page.route("**/api/production-runs/*/pick-list**", (route) =>
       // SINGLE, not the TANK default: a tank makes liquid for the filling runs
       // and has no output of its own to report.
       route.fulfill({ json: { ...PICK_LIST, stage: "SINGLE", item_id: "ITEM1" } }),
@@ -285,7 +285,7 @@ test.describe("@mocked production picking", () => {
     // PICK_LIST is a TANK run: it makes the liquid the filling runs use, and
     // has no product of its own. Offering "Report production" here used to
     // send the operator into a 409 with no way out.
-    await page.route("**/api/production-runs/*/pick-list", (route) =>
+    await page.route("**/api/production-runs/*/pick-list**", (route) =>
       route.fulfill({ json: { ...PICK_LIST, status: "IN_PRODUCTION" } }),
     );
 
@@ -299,7 +299,7 @@ test.describe("@mocked production picking", () => {
 
   test("IN_PRODUCTION run: pick rows are read-only (tranche 145 INTER-001/FLOW-001)", async ({ page }) => {
     await setFakeRole(page, "operator");
-    await page.route("**/api/production-runs/*/pick-list", (route) =>
+    await page.route("**/api/production-runs/*/pick-list**", (route) =>
       route.fulfill({ json: { ...PICK_LIST, stage: "SINGLE", status: "IN_PRODUCTION" } }),
     );
 
@@ -317,7 +317,7 @@ test.describe("@mocked production picking", () => {
 
   test("report 'Back to today' links to /production (tranche 145 FLOW-002)", async ({ page }) => {
     await setFakeRole(page, "operator");
-    await page.route("**/api/production-runs/*/pick-list", (route) =>
+    await page.route("**/api/production-runs/*/pick-list**", (route) =>
       route.fulfill({ json: { ...PICK_LIST, stage: "SINGLE", status: "IN_PRODUCTION" } }),
     );
 
@@ -363,7 +363,7 @@ test.describe("@mocked production picking", () => {
   }) => {
     await setFakeRole(page, "operator");
     // In-production run → the Add/Return correction control is available.
-    await page.route("**/api/production-runs/*/pick-list", (route) =>
+    await page.route("**/api/production-runs/*/pick-list**", (route) =>
       route.fulfill({
         json: {
           ...PICK_LIST,
@@ -393,7 +393,7 @@ test.describe("@mocked production picking", () => {
   }) => {
     await setFakeRole(page, "operator");
     await stubToday(page, [todayRow()]);
-    await page.route("**/api/production-runs/*/pick-list", (route) =>
+    await page.route("**/api/production-runs/*/pick-list**", (route) =>
       route.fulfill({ json: PICK_LIST }),
     );
 
