@@ -95,7 +95,7 @@ test.describe("@mocked production picking", () => {
   test("open a run → pick rows show the prefilled required quantity", async ({ page }) => {
     await setFakeRole(page, "operator");
     await stubToday(page, [todayRow()]);
-    await page.route("**/api/production-runs/*/pick-list", (route) =>
+    await page.route("**/api/production-runs/*/pick-list**", (route) =>
       route.fulfill({ json: PICK_LIST }),
     );
 
@@ -113,7 +113,7 @@ test.describe("@mocked production picking", () => {
   test("Done stays disabled until every row is resolved, then enables", async ({ page }) => {
     await setFakeRole(page, "operator");
     await stubToday(page, [todayRow()]);
-    await page.route("**/api/production-runs/*/pick-list", (route) =>
+    await page.route("**/api/production-runs/*/pick-list**", (route) =>
       route.fulfill({ json: PICK_LIST }),
     );
 
@@ -165,22 +165,34 @@ test.describe("@mocked production picking", () => {
   test("end-of-run report submits with only output; QC is optional", async ({ page }) => {
     await setFakeRole(page, "operator");
     // The run is in production (materials already collected) → reportable.
-    await page.route("**/api/production-runs/*/pick-list", (route) =>
-      route.fulfill({ json: { ...PICK_LIST, status: "IN_PRODUCTION" } }),
+    await page.route("**/api/production-runs/*/pick-list**", (route) =>
+      route.fulfill({ json: { ...PICK_LIST, stage: "SINGLE", status: "IN_PRODUCTION" } }),
     );
 
     await page.goto("/production/runs/RUN1/report");
 
     await expect(page.getByTestId("report-form")).toBeVisible();
 
+    // Tranche 147 — the form opens pre-filled with the planned quantity, so
+    // the usual case ("we made what we planned") is a confirm, not a
+    // transcription. It is labelled as the plan, not as a measurement.
+    const output = page.getByTestId("report-output-qty");
+    await expect(output).toHaveValue(PICK_LIST.target_qty);
+    await expect(page.getByTestId("report-output-prefilled")).toBeVisible();
+
     // QC fields are optional — the whole QC block starts collapsed and does
-    // NOT gate submit. Submit is blocked only until output is a positive number.
+    // NOT gate submit. Submit is blocked only when output is not a positive
+    // number, which now means only after the operator clears the pre-fill.
     const submit = page.getByTestId("report-submit");
+    await expect(submit).toHaveAttribute("aria-disabled", "false");
+    await output.fill("");
     await expect(submit).toHaveAttribute("aria-disabled", "true");
 
-    // Type good units only. Leave scrap at its default, QC untouched.
-    await page.getByTestId("report-output-qty").fill("150");
+    // Type the real good units. Leave scrap at its default, QC untouched.
+    await output.fill("150");
     await expect(submit).toHaveAttribute("aria-disabled", "false");
+    // Once edited, the value is the operator's — the plan hint is gone.
+    await expect(page.getByTestId("report-output-prefilled")).toHaveCount(0);
 
     // Prove QC is reachable but never required — open it, leave it empty.
     await page.getByTestId("report-qc-toggle").click();
@@ -206,6 +218,22 @@ test.describe("@mocked production picking", () => {
       }),
     );
 
+    // Finishing the run is the one action that moves stock, and it cannot be
+    // undone — so it takes two deliberate taps. The first shows the figure
+    // being committed; only the second posts.
+    await submit.click();
+    await expect(page.getByTestId("report-confirm")).toBeVisible();
+    await expect(page.getByTestId("report-confirm")).toContainText("150");
+    await expect(page.getByTestId("report-confirm-no")).toBeVisible();
+
+    // Changing the number backs out of the confirm — the operator is no longer
+    // agreeing to the figure they were shown.
+    await output.fill("151");
+    await expect(page.getByTestId("report-confirm")).toHaveCount(0);
+    await output.fill("150");
+
+    await submit.click();
+    await expect(page.getByTestId("report-confirm")).toBeVisible();
     await submit.click();
     const successCard = page.getByTestId("report-success");
     await expect(successCard).toBeVisible();
@@ -218,8 +246,10 @@ test.describe("@mocked production picking", () => {
   test("pick-confirm success screen links to the report", async ({ page }) => {
     await setFakeRole(page, "operator");
     await stubToday(page, [todayRow()]);
-    await page.route("**/api/production-runs/*/pick-list", (route) =>
-      route.fulfill({ json: PICK_LIST }),
+    await page.route("**/api/production-runs/*/pick-list**", (route) =>
+      // SINGLE, not the TANK default: a tank makes liquid for the filling runs
+      // and has no output of its own to report.
+      route.fulfill({ json: { ...PICK_LIST, stage: "SINGLE", item_id: "ITEM1" } }),
     );
     await page.route("**/api/production-runs/*/pick-confirm", (route) =>
       route.fulfill({
@@ -250,10 +280,27 @@ test.describe("@mocked production picking", () => {
     await expect(reportCta).toHaveAttribute("href", /\/production\/runs\/RUN1\/report/);
   });
 
+  test("tranche 147: a TANK run is never offered a report — it would 409", async ({ page }) => {
+    await setFakeRole(page, "operator");
+    // PICK_LIST is a TANK run: it makes the liquid the filling runs use, and
+    // has no product of its own. Offering "Report production" here used to
+    // send the operator into a 409 with no way out.
+    await page.route("**/api/production-runs/*/pick-list**", (route) =>
+      route.fulfill({ json: { ...PICK_LIST, status: "IN_PRODUCTION" } }),
+    );
+
+    await page.goto("/production/runs/RUN1");
+    await expect(page.getByTestId("pick-in-production-banner")).toBeVisible();
+    await expect(page.getByTestId("pick-in-production-report")).toHaveCount(0);
+    await expect(page.getByTestId("pick-in-production-banner")).toContainText(
+      "Report the filling jobs",
+    );
+  });
+
   test("IN_PRODUCTION run: pick rows are read-only (tranche 145 INTER-001/FLOW-001)", async ({ page }) => {
     await setFakeRole(page, "operator");
-    await page.route("**/api/production-runs/*/pick-list", (route) =>
-      route.fulfill({ json: { ...PICK_LIST, status: "IN_PRODUCTION" } }),
+    await page.route("**/api/production-runs/*/pick-list**", (route) =>
+      route.fulfill({ json: { ...PICK_LIST, stage: "SINGLE", status: "IN_PRODUCTION" } }),
     );
 
     await page.goto("/production/runs/RUN1");
@@ -270,8 +317,8 @@ test.describe("@mocked production picking", () => {
 
   test("report 'Back to today' links to /production (tranche 145 FLOW-002)", async ({ page }) => {
     await setFakeRole(page, "operator");
-    await page.route("**/api/production-runs/*/pick-list", (route) =>
-      route.fulfill({ json: { ...PICK_LIST, status: "IN_PRODUCTION" } }),
+    await page.route("**/api/production-runs/*/pick-list**", (route) =>
+      route.fulfill({ json: { ...PICK_LIST, stage: "SINGLE", status: "IN_PRODUCTION" } }),
     );
 
     await page.goto("/production/runs/RUN1/report");
@@ -316,7 +363,7 @@ test.describe("@mocked production picking", () => {
   }) => {
     await setFakeRole(page, "operator");
     // In-production run → the Add/Return correction control is available.
-    await page.route("**/api/production-runs/*/pick-list", (route) =>
+    await page.route("**/api/production-runs/*/pick-list**", (route) =>
       route.fulfill({
         json: {
           ...PICK_LIST,
@@ -346,7 +393,7 @@ test.describe("@mocked production picking", () => {
   }) => {
     await setFakeRole(page, "operator");
     await stubToday(page, [todayRow()]);
-    await page.route("**/api/production-runs/*/pick-list", (route) =>
+    await page.route("**/api/production-runs/*/pick-list**", (route) =>
       route.fulfill({ json: PICK_LIST }),
     );
 

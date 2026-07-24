@@ -30,8 +30,11 @@ export interface ProductionRunTodayRow {
   run_id: string;
   plan_id: string | null;
   stage: ProductionStage;
-  item_id: string;
-  item_name: string;
+  // NULL on a TANK run — it makes base liquid, not a product. The backend has
+  // always typed these nullable; the portal did not, so a tank row could put
+  // `null` straight into a heading.
+  item_id: string | null;
+  item_name: string | null;
   base_bom_head_id: string | null;
   target_qty: string; // NUMERIC as text — preserve precision
   uom: string;

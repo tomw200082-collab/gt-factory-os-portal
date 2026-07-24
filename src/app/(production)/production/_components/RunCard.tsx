@@ -9,13 +9,21 @@
 // ---------------------------------------------------------------------------
 
 import Link from "next/link";
-import { ArrowRight, Ban, CheckCircle2, FlaskConical, PackageOpen } from "lucide-react";
+import {
+  ArrowRight,
+  Ban,
+  CheckCircle2,
+  ClipboardCheck,
+  FlaskConical,
+  PackageOpen,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/lib/cn";
 import { fmtNumStr } from "@/lib/utils/format-quantity";
 import { t } from "../_lib/copy";
 import {
+  isRunReportable,
   isRunTerminal,
   runDisplayName,
   type RunStatusMeta,
@@ -58,9 +66,14 @@ function StatusChip({
 export function RunCard({
   run,
   index,
+  date,
 }: {
   run: ProductionRunTodayRow;
   index: number;
+  /** The day being viewed. Carried into the report link so "back" returns to
+   *  this day's list rather than to today — reporting an earlier day usually
+   *  means reporting several runs of it. */
+  date?: string;
 }) {
   const status = runStatusMeta(run.status);
   const terminal = isRunTerminal(run.status);
@@ -68,18 +81,31 @@ export function RunCard({
   const done = run.status === "REPORTED";
   const name = runDisplayName(run);
 
+  // Reporting never depends on having collected first — back-dated reporting
+  // is routine (tranche 147). A TANK run is the one exception: it has no
+  // finished product of its own, so there is nothing to report on it.
+  const canReport = isRunReportable(run);
+
   return (
+    <div
+      className={cn(
+        "card group/card overflow-hidden p-0 transition-all duration-200 motion-reduce:transition-none",
+        "focus-within:border-accent/40",
+        "hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-pop",
+        "motion-reduce:hover:translate-y-0",
+        terminal && "opacity-70 hover:translate-y-0",
+      )}
+    >
     <Link
       href={`/production/runs/${encodeURIComponent(run.run_id)}`}
       data-testid={`run-card-${run.run_id}`}
       data-status={run.status}
       aria-label={`${t("run_step_prefix")} ${stepNumber(index)} · ${name} · ${t(status.labelKey)}`}
       className={cn(
-        "card group flex items-stretch gap-0 overflow-hidden p-0 transition-all duration-200 motion-reduce:transition-none",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
-        "hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-pop",
-        "motion-reduce:hover:translate-y-0",
-        terminal && "opacity-70 hover:translate-y-0",
+        "group/body flex items-stretch gap-0",
+        // Full-strength ring: at /50 over the card surface this lands near
+        // 2.1:1, under the 3:1 WCAG asks of a focus indicator.
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent",
       )}
     >
       {/* Step rail — the work-order sequence marker */}
@@ -141,7 +167,7 @@ export function RunCard({
             <span className="inline-flex items-center gap-1 text-sm font-semibold text-accent">
               {t("run_open")}
               <ArrowRight
-                className="h-4 w-4 transition-transform duration-200 motion-reduce:transition-none group-hover:translate-x-0.5"
+                className="h-4 w-4 transition-transform duration-200 motion-reduce:transition-none group-hover/body:translate-x-0.5"
                 strokeWidth={2.5}
                 aria-hidden
               />
@@ -152,12 +178,30 @@ export function RunCard({
         {/* On mobile the affordance sits at the far right, always visible */}
         {!terminal ? (
           <ArrowRight
-            className="h-5 w-5 shrink-0 text-accent transition-transform duration-200 motion-reduce:transition-none group-hover:translate-x-0.5 sm:hidden"
+            className="h-5 w-5 shrink-0 text-accent transition-transform duration-200 motion-reduce:transition-none group-hover/body:translate-x-0.5 sm:hidden"
             strokeWidth={2.5}
             aria-hidden
           />
         ) : null}
       </div>
     </Link>
+
+    {/* Second action: go straight to the report. Collecting first is the
+        normal order, never a precondition — a run made yesterday, or made
+        while nobody touched the screen, is still reported from here. */}
+    {canReport ? (
+      <div className="border-t border-border/70 bg-bg-subtle/40 px-4 py-2 sm:px-5">
+        <Link
+          href={`/production/runs/${encodeURIComponent(run.run_id)}/report${date ? `?date=${encodeURIComponent(date)}` : ""}`}
+          className="inline-flex min-h-[3.25rem] w-full items-center gap-1.5 rounded-sm text-sm font-semibold text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-1 focus-visible:ring-offset-bg"
+          data-testid={`run-report-${run.run_id}`}
+          aria-label={`${t("report_cta")} · ${name}`}
+        >
+          <ClipboardCheck className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+          {t("report_cta")}
+        </Link>
+      </div>
+    ) : null}
+    </div>
   );
 }

@@ -3,7 +3,7 @@
 // ---------------------------------------------------------------------------
 // AddMaterialControl — corrections on an ACTIVE run. Add more of a material or
 // return some, as append-only deltas (never a rewrite of the original pick).
-// Each save posts one material-delta ledger movement. Simple English, big
+// Each save appends one signed production_run_pick row — no ledger movement; the report consumes the net (0297). Simple English, big
 // touch targets. Shown only once the run is active (PICKING / IN_PRODUCTION).
 // ---------------------------------------------------------------------------
 
