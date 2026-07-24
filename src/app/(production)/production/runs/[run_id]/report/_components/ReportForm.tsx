@@ -87,6 +87,7 @@ export function ReportForm({ runId }: { runId: string }) {
   // on today after every single report (tranche 147).
   const backDate = params.get("date");
   const backHref = backDate ? `/production?date=${encodeURIComponent(backDate)}` : "/production";
+  const backLabel = backDate ? t("day_back_to_that_day") : t("pick_done_back_to_runs");
 
   const query = useQuery<PickListResponse>({
     queryKey: ["production-runs", "pick-list", runId],
@@ -221,7 +222,7 @@ export function ReportForm({ runId }: { runId: string }) {
         {liveRegion}
         <div className="mb-4">
           <Link href={backHref} className="btn btn-sm gap-1.5">
-            ← {t("pick_done_back_to_runs")}
+            ← {backLabel}
           </Link>
         </div>
         <div
@@ -320,7 +321,7 @@ export function ReportForm({ runId }: { runId: string }) {
         <WorkflowHeader
           size="section"
           backHref={backHref}
-          backLabel={t("pick_done_back_to_runs")}
+          backLabel={backLabel}
           eyebrow={t("report_eyebrow")}
           title={t("report_title")}
         />
@@ -340,7 +341,7 @@ export function ReportForm({ runId }: { runId: string }) {
             className="btn btn-primary btn-sm mt-3"
             data-testid="report-already-back"
           >
-            {t("pick_done_back_to_runs")}
+            {backLabel}
           </Link>
         </div>
       </div>
@@ -355,7 +356,7 @@ export function ReportForm({ runId }: { runId: string }) {
       <WorkflowHeader
         size="section"
         backHref={backHref}
-        backLabel={t("pick_done_back_to_runs")}
+        backLabel={backLabel}
         eyebrow={t("report_eyebrow")}
         title={t("report_title")}
         meta={

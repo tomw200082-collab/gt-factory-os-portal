@@ -23,6 +23,9 @@ export const pickingDict = {
   day_picker_label: { en: "Day", ru: "" },
   day_opening_report: { en: "Opening the production report…", ru: "" },
   day_back_to_today: { en: "Back to today", ru: "" },
+  // The back link's destination follows the day being worked, so its label has
+  // to as well — "Back to today" pointing at 23 July describes the wrong place.
+  day_back_to_that_day: { en: "Back to that day", ru: "" },
   day_title_past: { en: "Another day", ru: "" },
   day_subtitle_past: { en: "You can report a job you made earlier.", ru: "" },
   day_empty_past_title: { en: "No production on this day.", ru: "" },
