@@ -84,7 +84,7 @@ export const QUICK_ACTIONS: readonly QuickAction[] = [
     category: "stock",
   },
   {
-    href: "/stock/production-actual",
+    href: "/production",
     label: "Production Actual",
     blurb: "Output + scrap; BOM-derived consumption.",
     icon: Factory,
