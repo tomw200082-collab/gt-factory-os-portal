@@ -120,7 +120,10 @@ test.describe("@mocked placement queue", () => {
     await page.goto("/purchase-orders/placement-queue");
     const banner = page.getByTestId("placement-queue-overdue-banner");
     await expect(banner).toBeVisible();
-    await expect(banner).toContainText("2 הזמנות ממתינות");
+    // ux-release-gate 2026-07-23 COPY-020 (tranche 140 round 1): "ממתינות"
+    // (waiting) → "בתור" (in queue) — this assertion was never updated to
+    // match, caught by CI on tranche 140's closing PR.
+    await expect(banner).toContainText("2 הזמנות בתור");
     await expect(banner).toContainText("1 באיחור");
   });
 
