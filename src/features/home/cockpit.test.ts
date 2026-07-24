@@ -133,11 +133,10 @@ describe("tileText — language resolution", () => {
 // jargon fixes so a future edit can't silently reintroduce internal model
 // terms or drift from the destination page's own heading.
 describe("HOME_TILES — copy hygiene (ux-release-gate P1s)", () => {
-  it("Production Report tile matches the destination page's Title Case heading, not internal jargon", () => {
-    const tile = HOME_TILES.find((t) => t.href === "/stock/production-actual")!;
-    expect(tile.label).toBe("Production Report");
-    expect(tile.blurb).not.toMatch(/BOM-derived/i);
-  });
+  // Tranche 143: the "Production Report" tile (href /stock/production-actual)
+  // was removed from HOME_TILES as part of the picking cutover — its copy
+  // regression is no longer reachable via a home tile. The replacement
+  // "Today's runs" tile (/production) carries no BOM-derived jargon to pin.
 
   it("Physical count tile does not leak the internal balance_anchors term", () => {
     const tile = HOME_TILES.find((t) => t.href === "/stock/physical-count")!;

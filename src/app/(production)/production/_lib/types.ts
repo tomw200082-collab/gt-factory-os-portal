@@ -54,12 +54,18 @@ export interface ProductionRunsTodayResponse {
 export interface PickListLine {
   component_id: string;
   component_name: string;
+  // Tranche 143 (migration 0296): optional Latin-script display name for the
+  // production floor (operator is a weak Hebrew/English reader). NULL = fall
+  // back to component_name. Sent by the backend as of tranche 143.
+  floor_name?: string | null;
   source: PickSource;
   item_type: PickItemType;
   required_qty: string; // NUMERIC as text
   uom: string;
   on_hand: string; // NUMERIC as text
-  // Forward-compat (tranche 142): Hebrew secondary label for the material.
+  // Forward-compat: Hebrew secondary label for the material. Not sent by the
+  // backend today (component_name already carries the Hebrew value); kept
+  // optional in case a distinct name_he ever lands.
   name_he?: string | null;
 }
 

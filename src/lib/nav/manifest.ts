@@ -238,13 +238,6 @@ export const NAV_MANIFEST: NavGroup[] = [
         required_capability: "stock:execute",
       },
       {
-        href: "/stock/production-actual",
-        label: "Production Report",
-        icon: Factory,
-        min_role: "viewer",
-        required_capability: "stock:execute",
-      },
-      {
         href: "/inventory",
         label: "Inventory",
         icon: Layers,

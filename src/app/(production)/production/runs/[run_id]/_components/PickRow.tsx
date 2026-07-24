@@ -45,6 +45,13 @@ export function PickRow({
   // The big number: what they took once resolved, else the prefilled requirement.
   const shownQty = resolved ? resolution!.picked_qty : requiredNum(line);
 
+  // Tranche 143 (migration 0296): floor_name is a Latin-script display name
+  // for the weak Hebrew/English reader. When present it becomes the big
+  // primary name and component_name (Hebrew) drops to the small secondary
+  // line; when absent, component_name stays primary (unchanged behavior).
+  const displayName = line.floor_name ?? line.component_name;
+  const secondaryName = line.floor_name ? line.component_name : line.name_he;
+
   // State-sensitive action name for AT (A11Y-005) — the visible inner text of
   // the confirm button is decorative under an explicit aria-label, so the
   // label must carry the current resolution AND the shortage/excess flags
@@ -57,7 +64,7 @@ export function PickRow({
         ? t("pick_row_not_collected")
         : t("pick_row_confirm");
   const confirmAriaLabel = [
-    `${line.component_name} — ${statePhrase}`,
+    `${displayName} — ${statePhrase}`,
     shortage ? t("pick_row_missing") : null,
     excess ? t("pick_row_extra") : null,
   ]
@@ -111,11 +118,11 @@ export function PickRow({
 
         <span className="min-w-0 flex-1">
           <span className="block truncate text-base font-bold text-fg-strong sm:text-lg">
-            {line.component_name}
+            {displayName}
           </span>
-          {line.name_he ? (
+          {secondaryName ? (
             <span className="block truncate text-xs text-fg-muted">
-              <bdi>{line.name_he}</bdi>
+              <bdi>{secondaryName}</bdi>
             </span>
           ) : null}
 
@@ -166,7 +173,7 @@ export function PickRow({
         type="button"
         onClick={onEdit}
         disabled={disabled}
-        aria-label={`${t("pick_edit_title")} ${line.component_name}`}
+        aria-label={`${t("pick_edit_title")} ${displayName}`}
         data-testid={`pick-edit-${line.source}-${line.component_id}`}
         className={cn(
           "flex w-24 shrink-0 flex-col items-center justify-center border-l border-border/70 px-1 py-2 transition-colors motion-reduce:transition-none sm:w-28",
