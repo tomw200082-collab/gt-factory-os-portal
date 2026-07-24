@@ -37,7 +37,10 @@ import {
   useEditPo,
   usePlacePo,
   useSkipPo,
+  useRerouteLine,
 } from "../../purchase-session/_lib/api";
+import { SupplierCallLink } from "@/components/purchase/SupplierCallLink";
+import { SwitchSupplierControl } from "@/components/purchase/SwitchSupplierControl";
 import type {
   PlaceLinePrice,
   PoStatus,
@@ -203,6 +206,11 @@ export function FocusCard({
   const approveMut = useApprovePo();
   const placeMut = usePlacePo();
   const skipMut = useSkipPo();
+  const rerouteMut = useRerouteLine();
+  // Per-line re-route error (keyed by session_po_line_id).
+  const [rerouteError, setRerouteError] = useState<Record<string, string | null>>(
+    {},
+  );
 
   const [editing, setEditing] = useState(false);
   const [addingLine, setAddingLine] = useState(false);
@@ -377,6 +385,10 @@ export function FocusCard({
       <div className="space-y-2">
         <div className="flex flex-wrap items-center gap-2">
           <h2 className="text-xl font-bold text-fg">{po.supplier_snapshot}</h2>
+          <SupplierCallLink
+            phone={po.supplier_phone}
+            supplierName={po.supplier_snapshot}
+          />
           {/* Tranche 132 ux-release-gate FLOW-002: the SQL tier badge
               (urgent/must/recommended) contradicted the shortage-math `whyNow`
               text below it whenever the two disagreed — ActionList already
@@ -612,6 +624,60 @@ export function FocusCard({
                       5 + (!isResolved ? 1 : 0) + (editing ? 1 : 0)
                     }
                   />
+                )}
+                {!dropped && !isResolved && !editing && (
+                  <tr data-testid={`focus-line-supplier-${l.session_po_line_id}`}>
+                    <td
+                      colSpan={5 + (!isResolved ? 1 : 0)}
+                      className="px-3 pb-2 pt-0"
+                    >
+                      {/* The current supplier + call link live in the card
+                          header (one per PO). Here we only surface the
+                          per-material action — switching this material to its
+                          own next candidate supplier. */}
+                      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
+                        <SwitchSupplierControl
+                          candidates={l.candidate_suppliers ?? []}
+                          materialLabel={l.line_label}
+                          isPending={
+                            rerouteMut.isPending &&
+                            rerouteMut.variables?.lineId === l.session_po_line_id
+                          }
+                          error={rerouteError[l.session_po_line_id] ?? null}
+                          onResetError={() =>
+                            setRerouteError((p) => ({
+                              ...p,
+                              [l.session_po_line_id]: null,
+                            }))
+                          }
+                          onSwitch={({ target_supplier_id, reason }) => {
+                            setRerouteError((p) => ({
+                              ...p,
+                              [l.session_po_line_id]: null,
+                            }));
+                            rerouteMut.mutate(
+                              {
+                                poId: po.session_po_id,
+                                lineId: l.session_po_line_id,
+                                target_supplier_id,
+                                reason,
+                              },
+                              {
+                                onError: (err) =>
+                                  setRerouteError((p) => ({
+                                    ...p,
+                                    [l.session_po_line_id]:
+                                      err instanceof Error
+                                        ? err.message
+                                        : "החלפת הספק נכשלה",
+                                  })),
+                              },
+                            );
+                          }}
+                        />
+                      </div>
+                    </td>
+                  </tr>
                 )}
                 </Fragment>
               );

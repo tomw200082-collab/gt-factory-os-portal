@@ -70,9 +70,11 @@ test.describe("lean-nav — operator (Dennis/Maxim) rail is scoped down @mocked"
     ]) {
       expect(await sidebarHasRow(page, label), `${label} should be pruned`).toBe(0);
     }
-    // The operator's real daily rows survive.
+    // The operator's real daily rows survive. "Production Report" was
+    // retired by the tranche-143 picking cutover — "Today's runs" (/production)
+    // is its replacement entry point.
     expect(await sidebarHasRow(page, "Goods Receipt")).toBeGreaterThan(0);
-    expect(await sidebarHasRow(page, "Production Report")).toBeGreaterThan(0);
+    expect(await sidebarHasRow(page, "Today's runs")).toBeGreaterThan(0);
   });
 
   test("pruned URLs still load directly for operator — access unchanged @mocked", async ({ page }) => {

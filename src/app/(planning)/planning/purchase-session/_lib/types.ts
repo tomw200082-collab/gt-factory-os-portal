@@ -32,6 +32,21 @@ export interface LineAsset {
   dpi: number | null;
 }
 
+// 0288 raw-material-first: a ranked candidate supplier for a line's
+// component/item. Ranking: primary → cheapest → shortest lead (approved
+// supplier_items only). is_current marks the supplier whose PO the line
+// currently sits in. Drives the material-first supplier chooser + click-to-call.
+export interface LineCandidateSupplier {
+  supplier_id: string;
+  supplier_name: string;
+  phone: string | null;
+  is_primary: boolean;
+  is_current: boolean;
+  unit_cost: number;
+  lead_time_days: number | null;
+  moq: number | null;
+}
+
 export interface PurchaseSessionLine {
   session_po_line_id: string;
   component_id: string | null;
@@ -52,12 +67,19 @@ export interface PurchaseSessionLine {
   label_size?: LineLabelSize | null;
   procurement_spec?: LineProcurementSpec | null;
   assets?: LineAsset[];
+  // 0288 raw-material-first: ranked candidate suppliers for this line's
+  // component/item, each with a phone. Optional — older API responses omit it
+  // (treated as [] at the read boundary).
+  candidate_suppliers?: LineCandidateSupplier[];
 }
 
 export interface PurchaseSessionPo {
   session_po_id: string;
   supplier_id: string;
   supplier_snapshot: string;
+  // 0288: current supplier's contact phone for click-to-call. Optional —
+  // null when the supplier record has no phone / older API responses.
+  supplier_phone?: string | null;
   tier: PoTier;
   status: PoStatus;
   order_by_date: string;

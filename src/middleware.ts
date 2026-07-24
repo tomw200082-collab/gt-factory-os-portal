@@ -60,6 +60,10 @@ const ROLE_GATES: Array<{ prefix: string; allow: string[] }> = [
   { prefix: "/inventory/bulk-count", allow: ["operator", "planner", "admin"] },
   { prefix: "/stock/movement-log", allow: ["operator", "planner", "admin", "viewer"] },
   { prefix: "/stock", allow: ["operator", "planner", "admin"] },
+  // Tranche 141 — /production is the operator's start-of-run picking surface.
+  // stock:execute audience (operator+planner+admin); viewer blocked. Matches
+  // the (production)/layout.tsx RoleGate minimum="stock:execute".
+  { prefix: "/production", allow: ["operator", "planner", "admin"] },
   { prefix: "/planning", allow: ["operator", "planner", "admin", "viewer"] },
   { prefix: "/purchase-orders", allow: ["operator", "planner", "admin", "viewer"] },
   { prefix: "/exceptions", allow: ["operator", "planner", "admin", "viewer"] },

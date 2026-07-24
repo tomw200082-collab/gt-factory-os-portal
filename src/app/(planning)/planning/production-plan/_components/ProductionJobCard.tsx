@@ -89,17 +89,11 @@ export function ProductionJobCard({
     ? `Base batch · ${plan.pack_manifest_count} product${plan.pack_manifest_count === 1 ? "" : "s"}`
     : (plan.item_name ?? "Unnamed item");
 
-  // Production-report deep link. A base-batch row has NO single item and its
-  // planned_qty is the base-liquid volume — passing either as item_id /
-  // suggested_qty pre-fills the report form with the wrong product and the
-  // wrong quantity. So base-batch cards link with from_plan_id only; the
-  // report page reads the pack manifest and guides the operator product by
-  // product. Single-item cards keep the item + suggested-qty prefill.
-  const reportHref = plan.is_base_batch
-    ? `/stock/production-actual?from_plan_id=${encodeURIComponent(plan.plan_id)}`
-    : `/stock/production-actual?from_plan_id=${encodeURIComponent(plan.plan_id)}${
-        plan.item_id ? `&item_id=${encodeURIComponent(plan.item_id)}` : ""
-      }${plan.planned_qty ? `&suggested_qty=${encodeURIComponent(plan.planned_qty)}` : ""}`;
+  // Tranche 143 — cutover to the picking flow's Today list. /production
+  // shows every run for the day (base-batch tanks + per-SKU packs); it does
+  // not read from_plan_id / item_id / suggested_qty deep-link params (the
+  // operator finds the run in the list), so this is now a plain link.
+  const reportHref = "/production";
   // COPY-018 — "Open Production Report" read like opening an existing
   // document; the operator is creating one. Base batches say "products"
   // (plural) to signal the multi-SKU flow.

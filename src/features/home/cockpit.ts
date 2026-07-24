@@ -29,12 +29,12 @@ import {
   Clock,
   Cog,
   Coins,
-  Factory,
   GitBranch,
   Inbox,
   Layers,
   LayoutDashboard,
   LineChart,
+  ListChecks,
   MinusCircle,
   Package,
   PackageCheck,
@@ -247,10 +247,13 @@ export const HOME_TILES: readonly HomeTile[] = [
   },
   // ——— Stock ————————————————————————————————————————————————————————
   {
-    href: "/stock/production-actual",
-    label: "Production Report",
-    blurb: "Report output and scrap; consumption is computed from the active recipe.",
-    icon: Factory,
+    // Tranche 141 — the operator's start-of-run picking surface. Leads the
+    // stock group and is the operator cockpit's hero tile (their #1 action:
+    // collect today's materials before production).
+    href: "/production",
+    label: "Today's runs",
+    blurb: "Collect materials for today's runs; confirm to update stock.",
+    icon: ListChecks,
     group: "stock",
     minRole: "viewer",
     required: "stock:execute",
@@ -388,9 +391,10 @@ export const ROLE_COCKPIT: Record<Role, RoleCockpit> = {
     lang: "en",
     dir: "ltr",
   },
-  // Production operator — production-first, then the rest of the floor tasks.
+  // Production operator — lands on today's runs (start-of-run picking), then
+  // the rest of the floor tasks.
   operator: {
-    primaryHref: "/stock/production-actual",
+    primaryHref: "/production",
     groupOrder: ["stock", "triage", "overview"],
     lang: "en",
     dir: "ltr",

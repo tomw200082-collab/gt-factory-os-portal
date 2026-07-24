@@ -2292,7 +2292,7 @@ export default function ProductionPlanPage() {
             <Boxes className="h-3 w-3" strokeWidth={2} />
             Inventory flow
           </Link>
-          <Link href="/stock/production-actual" className="flex items-center gap-1 py-2 hover:text-fg transition-colors">
+          <Link href="/production" className="flex items-center gap-1 py-2 hover:text-fg transition-colors">
             <Factory className="h-3 w-3" strokeWidth={2} />
             Report production
           </Link>

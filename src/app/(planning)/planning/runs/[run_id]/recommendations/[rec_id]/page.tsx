@@ -285,8 +285,10 @@ export default function RecommendationDrillDownPage() {
         {/* Action buttons — adapts to rec_status × rec_type:
             - draft: "Approve" / "Dismiss" — inline approve/dismiss (loop 10)
             - approved purchase: "Create purchase order" → /convert flow
-            - approved production: "Open production report" → /stock/production-actual
-              with prefilled item_id + suggested_qty + back-chain breadcrumb */}
+            - approved production: no direct deep link from here (tranche 072
+              made this page diagnostic-only) — guidance below points to
+              Inbox (approve/dismiss) and Procurement (convert to PO); actual
+              production reporting happens at /production (tranche 143). */}
         {/* Tranche 072 — planning runs are diagnostic-only. Recommendation
             approve / dismiss live in the Inbox; converting an approved purchase
             recommendation into a PO lives in Procurement. This drill-in is

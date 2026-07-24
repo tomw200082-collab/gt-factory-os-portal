@@ -135,7 +135,7 @@ export function PlannedItemSection({
                   </div>
                 </div>
                 <Link
-                  href={`/stock/production-actual?item_id=${encodeURIComponent(r.item_id)}`}
+                  href="/production"
                   // Touch target ≥ 44px tall on mobile per dispatch
                   // validation gate 5 — interactive primary CTA.
                   className="inline-flex min-h-[44px] items-center rounded-sm border border-info/40 bg-bg-raised px-3 py-2 text-2xs font-semibold uppercase tracking-sops text-info-fg hover:bg-info-softer sm:min-h-0 sm:px-2 sm:py-1"

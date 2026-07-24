@@ -176,3 +176,33 @@ export function useSkipPo() {
     },
   );
 }
+
+// 0288 raw-material-first: re-route a single session line to a different
+// candidate supplier. Omit target_supplier_id ⇒ the backend picks the next
+// ranked candidate; reason is OPTIONAL. The line moves into the target
+// supplier's PO, so the returned envelope is the DESTINATION PO — the whole
+// session is refetched via the ["purchase-session"] invalidation, so the
+// source PO (possibly auto-skipped when drained) also refreshes.
+export function useRerouteLine() {
+  return usePurchaseMutation(
+    async (args: {
+      poId: string;
+      lineId: string;
+      target_supplier_id?: string;
+      reason?: string;
+    }): Promise<PoEnvelope> => {
+      const res = await fetch(
+        `/api/purchase-session/po/${args.poId}/lines/${args.lineId}/reroute`,
+        {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            target_supplier_id: args.target_supplier_id,
+            reason: args.reason,
+          }),
+        },
+      );
+      return (await jsonOrThrow(res)) as PoEnvelope;
+    },
+  );
+}

@@ -1,12 +1,14 @@
 // Base-batch report-link regression test.
 //
-// The "Open Production Report" link used to pass the base-batch plan's
-// planned_qty (the base-liquid volume) as ?suggested_qty and, because a
-// base-batch row has item_id = null, no ?item_id. The report form then
-// pre-filled the wrong quantity and no product. A base-batch card must link
-// with from_plan_id ONLY (the report page reads the pack manifest and guides
-// the operator product by product); a single-item card keeps its item_id +
-// suggested_qty prefill.
+// Historically the "Open Production Report" link deep-linked into the old
+// /stock/production-actual form with from_plan_id/item_id/suggested_qty
+// query params (a base-batch row has item_id = null, so a naive link would
+// have pre-filled the wrong quantity and no product).
+//
+// Tranche 143 cut this link over to /production (the picking flow's Today
+// list), which does not read any of those deep-link params — the operator
+// finds the run in the list instead. Both base-batch and single-item cards
+// now link to a plain "/production" with no query string.
 
 import { describe, expect, it, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
@@ -79,11 +81,9 @@ function reportHref(plan: ProductionPlanRow, isToday = false): string {
 afterEach(() => cleanup());
 
 describe("ProductionJobCard production-report link", () => {
-  it("base-batch card links with from_plan_id ONLY (no item_id, no suggested_qty)", () => {
+  it("base-batch card links to /production with no query params", () => {
     const href = reportHref(row({ is_base_batch: true, item_id: null }));
-    expect(href).toContain("from_plan_id=p-1");
-    expect(href).not.toContain("item_id=");
-    expect(href).not.toContain("suggested_qty=");
+    expect(href).toBe("/production");
   });
 
   it("base-batch report CTA reads 'Report products' (plural, multi-SKU)", () => {
@@ -104,7 +104,7 @@ describe("ProductionJobCard production-report link", () => {
     );
   });
 
-  it("single-item card keeps item_id + suggested_qty prefill", () => {
+  it("single-item card also links to /production with no query params", () => {
     const href = reportHref(
       row({
         is_base_batch: false,
@@ -115,9 +115,7 @@ describe("ProductionJobCard production-report link", () => {
         pack_manifest: [],
       }),
     );
-    expect(href).toContain("from_plan_id=p-1");
-    expect(href).toContain("item_id=FG-DET-1L");
-    expect(href).toContain("suggested_qty=363");
+    expect(href).toBe("/production");
   });
 
   it("single-item CTA label reflects today vs past", () => {
