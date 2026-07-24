@@ -37,7 +37,10 @@ interface CandidateSupplierListProps {
 }
 
 function meta(c: SupplierCandidate): string {
-  const parts: string[] = [formatIls(c.unit_cost) + " ליח׳"];
+  const parts: string[] = [];
+  // unit_cost is 0 for whole-PO candidates (per-unit cost is undefined across a
+  // multi-material basket) — omit it there rather than show "0.00 ₪".
+  if (c.unit_cost > 0) parts.push(formatIls(c.unit_cost) + " ליח׳");
   if (c.lead_time_days != null) parts.push(`אספקה ${c.lead_time_days} ימים`);
   if (c.moq != null && c.moq > 0) parts.push(`מ' הזמנה ${c.moq}`);
   return parts.join(" · ");
@@ -107,7 +110,9 @@ export function CandidateSupplierList({
                     </Badge>
                   ) : null}
                 </span>
-                <span className="text-3xs text-fg-muted">{meta(c)}</span>
+                {meta(c) ? (
+                  <span className="text-3xs text-fg-muted">{meta(c)}</span>
+                ) : null}
                 <SupplierCallLink
                   phone={c.phone}
                   supplierName={c.supplier_name}

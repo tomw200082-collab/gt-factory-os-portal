@@ -17,6 +17,28 @@ const PO: QueuePo = {
   supplier_id: "sup1",
   supplier_name: "אקמה",
   supplier_phone: "050-999 8888",
+  candidate_suppliers: [
+    {
+      supplier_id: "sup1",
+      supplier_name: "אקמה",
+      phone: "050-999 8888",
+      is_primary: false,
+      is_current: true,
+      unit_cost: 0,
+      lead_time_days: null,
+      moq: null,
+    },
+    {
+      supplier_id: "sup2",
+      supplier_name: "ספק חלופי",
+      phone: "050-777 6666",
+      is_primary: false,
+      is_current: false,
+      unit_cost: 0,
+      lead_time_days: null,
+      moq: null,
+    },
+  ],
   status: "APPROVED_TO_ORDER",
   expected_receive_date: "2026-06-30",
   currency: "ILS",
@@ -67,6 +89,34 @@ describe("PlacementRow", () => {
     await screen.findByTestId("placement-price-l1");
     const call = screen.getByRole("link", { name: /התקשר/ });
     expect(call.getAttribute("href")).toBe("tel:0509998888");
+  });
+
+  it("switches the whole PO to another candidate supplier (tranche 140)", async () => {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/api/purchase-order-lines")) {
+          return new Response(JSON.stringify(LINES), { status: 200 });
+        }
+        return new Response(JSON.stringify({ row: {} }), { status: 200 });
+      });
+
+    renderRow();
+    await userEvent.click(screen.getByTestId("placement-row-toggle-po1"));
+    await screen.findByTestId("placement-price-l1");
+
+    await userEvent.click(screen.getByRole("button", { name: /החלף ספק/ }));
+    // The alternative supplier is offered.
+    expect(screen.getByText("ספק חלופי")).toBeTruthy();
+    await userEvent.click(screen.getByRole("button", { name: /העבר לספק/ }));
+
+    const switchCalls = fetchMock.mock.calls.filter((c) =>
+      String(c[0]).includes("/switch-supplier"),
+    );
+    expect(switchCalls.length).toBe(1);
+    const body = JSON.parse(String((switchCalls[0][1] as RequestInit).body));
+    expect(body.target_supplier_id).toBe("sup2");
   });
 
   it("blocks placing without a payment term — submit stays disabled with an explanatory title (DR-018 INTER-003)", async () => {
