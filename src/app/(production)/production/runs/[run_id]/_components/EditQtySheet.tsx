@@ -50,6 +50,10 @@ export function EditQtySheet({
 
   if (!line) return null;
 
+  // Same big-name resolution as PickRow: the Latin floor name leads for the
+  // weak-Hebrew-reader operator; fall back to component_name when unset.
+  const displayName = line.floor_name ?? line.component_name;
+
   function step(delta: number) {
     const current = Number(value);
     const base = Number.isFinite(current) ? current : 0;
@@ -82,8 +86,8 @@ export function EditQtySheet({
           {t("pick_edit_title")}
         </h2>
         <p className="mt-0.5 truncate text-sm text-fg-muted">
-          {line.component_name}
-          <span className="ml-2 text-fg-subtle">
+          {displayName}
+          <span className="ml-2 text-fg-muted">
             {t("pick_need")}{" "}
             <span className="font-mono tabular-nums">
               {fmtNumStr(line.required_qty)} {line.uom}
@@ -118,6 +122,7 @@ export function EditQtySheet({
             value={value}
             onChange={(e) => setValue(e.target.value)}
             data-testid="edit-qty-input"
+            aria-label={`${displayName} — ${t("pick_edit_title")}`}
             aria-describedby={!positive ? "edit-qty-hint" : undefined}
           />
           <button
@@ -152,6 +157,7 @@ export function EditQtySheet({
             className="btn btn-primary btn-lg w-full"
             onClick={handleSave}
             disabled={!positive}
+            title={!positive ? t("pick_not_taken_hint") : undefined}
             data-testid="edit-qty-save"
           >
             {t("pick_save")}

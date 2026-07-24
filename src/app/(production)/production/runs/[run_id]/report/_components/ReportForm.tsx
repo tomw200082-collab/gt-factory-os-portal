@@ -20,6 +20,8 @@ import {
   ClipboardCheck,
   FlaskConical,
   Loader2,
+  Minus,
+  Plus,
   RotateCw,
 } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
@@ -144,11 +146,13 @@ export function ReportForm({ runId }: { runId: string }) {
 
   const isStale = report.error?.message === STALE;
 
-  const liveMessage = query.isLoading
-    ? t("loading")
-    : query.isError || !data
-      ? t("error_load_pick_list")
-      : t(runStatusMeta(data.status).labelKey);
+  const liveMessage = done
+    ? t("report_success")
+    : query.isLoading
+      ? t("loading")
+      : query.isError || !data
+        ? t("error_load_pick_list")
+        : t(runStatusMeta(data.status).labelKey);
   const liveRegion = (
     <span className="sr-only" aria-live="polite" data-testid="report-live">
       {liveMessage}
@@ -223,8 +227,12 @@ export function ReportForm({ runId }: { runId: string }) {
           <div className="text-xl font-bold text-fg-strong">
             {t("report_success")}
           </div>
+          {/* Server-confirmed values (report.data), not the raw form state —
+              shows what actually posted. */}
           <p className="text-sm text-fg-muted">
-            {name} · {fmtNumStr(output)} {data.uom}
+            {name} ·{" "}
+            {fmtNumStr(String(report.data?.output_qty ?? output))}{" "}
+            {report.data?.output_uom ?? data.uom}
           </p>
           <Link
             href="/production"
@@ -280,7 +288,7 @@ export function ReportForm({ runId }: { runId: string }) {
       {liveRegion}
       <WorkflowHeader
         size="section"
-        backHref={`/production/runs/${encodeURIComponent(runId)}`}
+        backHref="/production"
         backLabel={t("pick_done_back_to_runs")}
         eyebrow={t("report_eyebrow")}
         title={t("report_title")}
@@ -357,22 +365,26 @@ export function ReportForm({ runId }: { runId: string }) {
       >
         {/* Output — the one required field, hero stepper */}
         <SectionCard>
-          <label className="block min-w-0">
-            <span className="mb-2 block text-base font-semibold text-fg">
+          <div className="block min-w-0">
+            <label
+              htmlFor="report-output-qty"
+              className="mb-2 block text-base font-semibold text-fg"
+            >
               {t("report_output")}
-            </span>
+            </label>
             <div className="flex items-stretch gap-0">
               <button
                 type="button"
-                className="btn h-14 min-w-[3rem] rounded-r-none border-r-0 px-4 text-2xl font-bold leading-none"
+                className="btn h-14 min-w-[3rem] rounded-r-none border-r-0 px-4"
                 onClick={() => step(output, -1, setOutput)}
                 disabled={disableForm}
                 aria-label="Less good units"
                 data-testid="report-output-minus"
               >
-                −
+                <Minus className="h-6 w-6" strokeWidth={2.5} aria-hidden />
               </button>
               <input
+                id="report-output-qty"
                 type="number"
                 inputMode="decimal"
                 step="any"
@@ -386,17 +398,17 @@ export function ReportForm({ runId }: { runId: string }) {
               />
               <button
                 type="button"
-                className="btn h-14 min-w-[3rem] rounded-l-none border-l-0 px-4 text-2xl font-bold leading-none"
+                className="btn h-14 min-w-[3rem] rounded-l-none border-l-0 px-4"
                 onClick={() => step(output, 1, setOutput)}
                 disabled={disableForm}
                 aria-label="More good units"
                 data-testid="report-output-plus"
               >
-                +
+                <Plus className="h-6 w-6" strokeWidth={2.5} aria-hidden />
               </button>
-              <span className="ml-3 flex items-center text-sm font-medium text-fg-muted">
-                {data.uom}
-              </span>
+            </div>
+            <div className="mt-1 text-center text-sm font-medium text-fg-muted">
+              {data.uom}
             </div>
             {!outputOk ? (
               <p
@@ -407,25 +419,29 @@ export function ReportForm({ runId }: { runId: string }) {
                 {t("report_need_output")}
               </p>
             ) : null}
-          </label>
+          </div>
 
           {/* Scrap — optional, smaller stepper */}
           <div className="mt-6 block min-w-0">
-            <span className="mb-2 block text-sm font-semibold text-fg">
+            <label
+              htmlFor="report-scrap-qty"
+              className="mb-2 block text-sm font-semibold text-fg"
+            >
               {t("report_scrap")}
-            </span>
+            </label>
             <div className="flex items-stretch gap-0">
               <button
                 type="button"
-                className="btn h-12 min-w-[2.75rem] rounded-r-none border-r-0 px-3 text-lg font-bold leading-none"
+                className="btn h-12 min-w-[2.75rem] rounded-r-none border-r-0 px-3"
                 onClick={() => step(scrap, -1, setScrap)}
                 disabled={disableForm}
                 aria-label="Less bad units"
                 data-testid="report-scrap-minus"
               >
-                −
+                <Minus className="h-5 w-5" strokeWidth={2.5} aria-hidden />
               </button>
               <input
+                id="report-scrap-qty"
                 type="number"
                 inputMode="decimal"
                 step="any"
@@ -438,17 +454,17 @@ export function ReportForm({ runId }: { runId: string }) {
               />
               <button
                 type="button"
-                className="btn h-12 min-w-[2.75rem] rounded-l-none border-l-0 px-3 text-lg font-bold leading-none"
+                className="btn h-12 min-w-[2.75rem] rounded-l-none border-l-0 px-3"
                 onClick={() => step(scrap, 1, setScrap)}
                 disabled={disableForm}
                 aria-label="More bad units"
                 data-testid="report-scrap-plus"
               >
-                +
+                <Plus className="h-5 w-5" strokeWidth={2.5} aria-hidden />
               </button>
-              <span className="ml-3 flex items-center text-sm font-medium text-fg-muted">
-                {data.uom}
-              </span>
+            </div>
+            <div className="mt-1 text-center text-sm font-medium text-fg-muted">
+              {data.uom}
             </div>
           </div>
         </SectionCard>
@@ -468,10 +484,10 @@ export function ReportForm({ runId }: { runId: string }) {
               className="btn btn-ghost btn-xs text-accent"
               onClick={() => setQcOpen((v) => !v)}
               aria-expanded={qcOpen}
-              aria-controls="report-qc-panel"
+              aria-controls={qcOpen ? "report-qc-panel" : undefined}
               data-testid="report-qc-toggle"
             >
-              {qcOpen ? t("pick_cancel") : t("run_open")}
+              {qcOpen ? t("report_qc_close") : t("run_open")}
             </button>
           }
         >
@@ -561,7 +577,7 @@ export function ReportForm({ runId }: { runId: string }) {
               {t("report_notes")}
             </span>
             <textarea
-              className="input min-h-[3rem] w-full"
+              className="textarea min-h-12 w-full"
               rows={2}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
@@ -582,6 +598,7 @@ export function ReportForm({ runId }: { runId: string }) {
             disabled={!outputOk || report.isPending}
             aria-disabled={!outputOk || report.isPending}
             aria-describedby={!outputOk ? "report-output-hint" : undefined}
+            title={!outputOk ? t("report_need_output") : undefined}
             data-testid="report-submit"
             className={cn(
               "btn btn-lg w-full gap-2 text-base",

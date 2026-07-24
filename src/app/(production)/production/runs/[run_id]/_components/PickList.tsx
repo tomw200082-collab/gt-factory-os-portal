@@ -137,11 +137,13 @@ export function PickList({ runId }: { runId: string }) {
   // Persistent SR status line — one always-mounted region so load-complete and
   // state changes are announced even as the ephemeral skeleton unmounts
   // (A11Y-009).
-  const liveMessage = query.isLoading
-    ? t("loading")
-    : query.isError || !data
-      ? t("error_load_pick_list")
-      : t(runStatusMeta(data.status).labelKey);
+  const liveMessage = done
+    ? t("pick_done_success")
+    : query.isLoading
+      ? t("loading")
+      : query.isError || !data
+        ? t("error_load_pick_list")
+        : t(runStatusMeta(data.status).labelKey);
   const liveRegion = (
     <span className="sr-only" aria-live="polite" data-testid="pick-list-live">
       {liveMessage}
@@ -260,7 +262,7 @@ export function PickList({ runId }: { runId: string }) {
             key={lineKey(line)}
             line={line}
             resolution={resolutions[lineKey(line)]}
-            disabled={terminal}
+            disabled={terminal || committed}
             onConfirm={() =>
               setResolutions((prev) => ({
                 ...prev,
@@ -412,8 +414,9 @@ export function PickList({ runId }: { runId: string }) {
         </div>
       )}
 
-      {/* Corrections on an active run */}
-      {active ? (
+      {/* Corrections on an active run (only when the run actually has lines —
+          an empty BOM shows the empty-state card alone, not an empty picker). */}
+      {active && lines.length > 0 ? (
         <div className="mt-4">
           <AddMaterialControl
             runId={runId}
