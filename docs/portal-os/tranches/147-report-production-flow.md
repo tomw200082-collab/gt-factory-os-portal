@@ -1,6 +1,6 @@
 # Tranche 147 — Report production: reachable, pre-filled, and the moment stock moves
 
-**Status:** in progress
+**Status:** verified — 5-lens `/ux-release-gate` run, zero P0 remaining (CONDITIONAL_SHIP; two P1 copy items held for Tom)
 **Origin:** Tom, 2026-07-24 (in writing, this session), reporting a broken journey on `/planning/production-plan`:
 
 > "When I want to report production now and I press the button on some item's card for production — it takes me to this page (`/production`) and does not let me report production. Production reporting must always be available, because sometimes we report after the fact. […] The most important fix is that when you press 'actual production', the navigation takes us to a page pre-filled with what was planned and we can edit it; once we approve, it is added to finished goods according to what came out. Also, on the today's-runs page you enter the raw materials and packaging as you know, but only after entering actual production does everything we entered there actually come off stock. The reason is that sometimes production is cancelled at the last minute and then everything is returned to place, even after we've collected."
@@ -57,10 +57,30 @@ manifest:
 - src/app/(production)/production/_lib/copy.ts
 - src/app/(production)/production/runs/[run_id]/_components/PickList.tsx
 - src/app/(production)/production/runs/[run_id]/report/_components/ReportForm.tsx
+- src/app/(production)/production/runs/[run_id]/report/_lib/report.ts
+- src/app/(production)/production/runs/[run_id]/_components/DoneBar.tsx
+- src/app/(production)/production/runs/[run_id]/_components/AddMaterialControl.tsx
+- src/app/(production)/production/_lib/types.ts
+- src/app/api/production-runs/[run_id]/pick-list/route.ts
+- tests/e2e/production-picking.spec.ts
 - docs/portal-os/tranches/147-report-production-flow.md
 - docs/portal-os/tranches/_active.txt
 
+## UX release gate
+
+Full five-lens run. Record: `gt-factory-os-production-brain/docs/phase8/dry-runs/2026-07-24-ux-release-gate-tranche-147.md`.
+
+Three of the four worst findings were second-order effects of this tranche's own changes:
+
+- **P0** — pre-filling the output field removed the "natural pause" tranche 146 relied on when it deferred a submit confirmation, leaving the one stock-moving action unguarded. Now a two-step confirm naming product + quantity; editing the number backs out of it.
+- **P0** — `handlePickList` answered 409 for terminal runs, so tapping a Done card showed a fake network error and the portal's existing read-only screens were unreachable dead code. Terminal runs now answer 200 from the persisted picks. `?intent=report` also stops the GET flipping `PLANNED → PICKING`.
+- **P0** — the stock note claimed materials come off for a run nobody collected for.
+- **P1** — TANK report dead-ends in `PickList`; back-dated reporting bouncing to today after each report; the success screen ignoring `linked_plan_id` and `shortfalls`; `item_id`/`item_name` typed non-null against a nullable backend; two labels for one journey; five accessibility findings (focus-ring contrast, unannounced pre-fill provenance, unannounced stock consequence, reduced-motion, touch targets); two visual findings (banner stacking, hover-group leak).
+
+**Held for Tom:** the content lens wants `"Done"` → `"Completed"` and `"To do"` → `"Planned"` per the standard lexicon. Not applied — `/production` has an explicit simple-English-for-Denis mandate and those words passed Gates 145/146. Two authorities disagree; the tie is Tom's.
+
 ## Evidence
-- Portal: `npx tsc --noEmit` clean; `npx vitest run` — see the run recorded on the PR.
-- Backend: `npx tsc --noEmit` clean; `npm run test:production-runs`.
-- **Not verified in this container:** the pgTAP suite (`db/tests/0295_production_run_picking.test.sql`, updated for the new ordering). pgTAP is not installed here and no Postgres is reachable, so those assertions are unrun — they are stated, not evidenced.
+- Portal: `tsc --noEmit` clean; `eslint` clean; `vitest run` **1080/1080** across 129 files.
+- Backend: `cd api && tsc --noEmit` → **0 errors in `production-runs`** (3 on `main`, pre-existing, fixed here); `npm run test:production-runs` **18/18**.
+- **Not verified in this container:** the pgTAP suite (`db/tests/0295_production_run_picking.test.sql`, updated for the new ordering) — pgTAP is not installed and no Postgres is reachable. Render-grade screenshots — the Playwright harness could not launch (the installed version wants a Chromium build not present here, and `playwright install` is not permitted). Both are stated, not evidenced.
+- Live check against `gt-ops-prod` before any code was written: `production_run`, `production_run_pick`, `PICK_CONSUMPTION` and `MATERIAL_DELTA` counts all **0** — the picking flow has never run in production, so there is no in-flight data whose consumption ordering could be caught mid-change.
