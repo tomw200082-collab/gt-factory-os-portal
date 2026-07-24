@@ -207,8 +207,11 @@ test.describe("@mocked production picking", () => {
     );
 
     await submit.click();
-    await expect(page.getByTestId("report-success")).toBeVisible();
-    await expect(page.getByText("Run finished. Good job.")).toBeVisible();
+    const successCard = page.getByTestId("report-success");
+    await expect(successCard).toBeVisible();
+    // Scope to the visible card: tranche 145 (A11Y-T145-08) also announces the
+    // success copy in an sr-only live region, so the string now appears twice.
+    await expect(successCard.getByText("Run finished. Good job.")).toBeVisible();
     await expect(page.getByTestId("report-back")).toBeVisible();
   });
 
@@ -245,6 +248,36 @@ test.describe("@mocked production picking", () => {
     const reportCta = page.getByTestId("pick-done-report");
     await expect(reportCta).toBeVisible();
     await expect(reportCta).toHaveAttribute("href", /\/production\/runs\/RUN1\/report/);
+  });
+
+  test("IN_PRODUCTION run: pick rows are read-only (tranche 145 INTER-001/FLOW-001)", async ({ page }) => {
+    await setFakeRole(page, "operator");
+    await page.route("**/api/production-runs/*/pick-list", (route) =>
+      route.fulfill({ json: { ...PICK_LIST, status: "IN_PRODUCTION" } }),
+    );
+
+    await page.goto("/production/runs/RUN1");
+    await expect(page.getByTestId("pick-in-production-banner")).toBeVisible();
+
+    // Rows are inert once collecting is committed — no orphan taps.
+    await expect(page.getByTestId("pick-confirm-base-C1")).toBeDisabled();
+    await expect(page.getByTestId("pick-edit-base-C1")).toBeDisabled();
+
+    // Done bar is gone; the correction path (Add/Return) is the way to change things.
+    await expect(page.getByTestId("done-bar")).toHaveCount(0);
+    await expect(page.getByTestId("active-add-open")).toBeVisible();
+  });
+
+  test("report 'Back to today' links to /production (tranche 145 FLOW-002)", async ({ page }) => {
+    await setFakeRole(page, "operator");
+    await page.route("**/api/production-runs/*/pick-list", (route) =>
+      route.fulfill({ json: { ...PICK_LIST, status: "IN_PRODUCTION" } }),
+    );
+
+    await page.goto("/production/runs/RUN1/report");
+    await expect(page.getByTestId("report-form")).toBeVisible();
+    const back = page.getByRole("link", { name: /back to today/i }).first();
+    await expect(back).toHaveAttribute("href", "/production");
   });
 
   test("unplanned-run dialog opens with a product list", async ({ page }) => {

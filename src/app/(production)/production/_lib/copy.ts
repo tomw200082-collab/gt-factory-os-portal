@@ -42,6 +42,8 @@ export const pickingDict = {
   unplanned_cancel: { en: "Not now", ru: "" },
   unplanned_need_item: { en: "Pick a product first.", ru: "" },
   unplanned_need_qty: { en: "Type how many.", ru: "" },
+  unplanned_results: { en: "products found", ru: "" }, // sr live: "3 products found"
+  unplanned_no_results: { en: "No products found.", ru: "" }, // sr live, 0 matches
 
   // ── /production/runs/[id] — picking screen ───────────────────────────────
   pick_tank_heading: { en: "Collect for the tank", ru: "" },
@@ -138,6 +140,7 @@ export const pickingDict = {
   report_scrap: { en: "How many bad / thrown?", ru: "" },
   report_qc_heading: { en: "Quality check (optional)", ru: "" },
   report_qc_hint: { en: "You can skip this. It never stops you.", ru: "" },
+  report_qc_close: { en: "Close", ru: "" }, // collapse the QC panel (keeps values)
   report_brix: { en: "Brix", ru: "" },
   report_ph: { en: "pH", ru: "" },
   report_sample_taken: { en: "Sample taken", ru: "" },
