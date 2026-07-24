@@ -49,6 +49,8 @@ interface SearchableSelectProps {
   contentWidth?: "trigger" | "auto";
   testId?: string;
   ariaLabel?: string;
+  /** id of an element (e.g. inline validation text) describing this field */
+  describedBy?: string;
 }
 
 export function SearchableSelect({
@@ -65,6 +67,7 @@ export function SearchableSelect({
   contentWidth = "trigger",
   testId,
   ariaLabel,
+  describedBy,
 }: SearchableSelectProps): JSX.Element {
   const listboxId = useId();
   const [open, setOpen] = useState(false);
@@ -170,6 +173,7 @@ export function SearchableSelect({
           aria-expanded={open}
           aria-controls={listboxId}
           aria-invalid={invalid || undefined}
+          aria-describedby={describedBy}
           data-testid={testId}
           className={cn(
             "input w-full flex items-center justify-between gap-2 text-left",
@@ -216,6 +220,11 @@ export function SearchableSelect({
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKey}
               placeholder={searchPlaceholder}
+              // A11Y-R2-011: a placeholder is not a programmatic accessible
+              // name — it disappears on input and isn't reliably read as a
+              // label by all AT. Derive one from the trigger's own label
+              // (falls back to the placeholder text itself).
+              aria-label={ariaLabel ? `Search ${ariaLabel}` : searchPlaceholder}
               autoComplete="off"
               spellCheck={false}
               // A11Y-008 — the search field is the active combobox controlling

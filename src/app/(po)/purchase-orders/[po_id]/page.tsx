@@ -15,7 +15,7 @@
 //   - history              LIVE — GET /api/purchase-orders/:po_id/history
 // ---------------------------------------------------------------------------
 
-import { use, useState, useCallback, useEffect, Fragment } from "react";
+import { use, useState, useCallback, useEffect, useRef, Fragment } from "react";
 import Link from "next/link";
 import { CheckCircle2 } from "lucide-react";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
@@ -35,6 +35,7 @@ import { Badge } from "@/components/badges/StatusBadge";
 import { fmtNumStr } from "@/lib/utils/format-quantity";
 import { cn } from "@/lib/cn";
 import { summarizePoLineCosts } from "@/components/purchase-orders/po-cost-summary";
+import { useFocusTrap } from "@/components/a11y/useFocusTrap";
 
 // --- Types (mirrors of upstream schemas) ------------------------------------
 
@@ -193,10 +194,14 @@ function fmtQty(value: string | null | undefined): string {
   return n.toLocaleString(undefined, { maximumFractionDigits: 4 });
 }
 
+// ux-release-gate 2026-07-23 COPY-045: explicit "en-US" (not the browser's
+// default locale) — matches /purchase-orders/page.tsx. A Hebrew-locale
+// browser previously rendered Hebrew month abbreviations on this page while
+// the PO list showed English ones for the same PO.
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return "—";
   try {
-    return new Date(iso).toLocaleDateString(undefined, {
+    return new Date(iso).toLocaleDateString("en-US", {
       year: "numeric",
       month: "short",
       day: "2-digit",
@@ -209,7 +214,7 @@ function fmtDate(iso: string | null | undefined): string {
 function fmtDateTime(iso: string | null | undefined): string {
   if (!iso) return "—";
   try {
-    return new Date(iso).toLocaleString(undefined, {
+    return new Date(iso).toLocaleString("en-US", {
       year: "numeric",
       month: "short",
       day: "2-digit",
@@ -222,12 +227,20 @@ function fmtDateTime(iso: string | null | undefined): string {
 }
 
 function POStatusBadge({ status }: { status: string }): JSX.Element {
+  // ux-release-gate 2026-07-23 COPY-003: APPROVED_TO_ORDER fell through to
+  // the raw-enum fallback below — this page's own list view (purchase-orders
+  // list) already has the correct human label for this status.
+  if (status === "APPROVED_TO_ORDER")
+    return <Badge tone="warning" dotted>To place</Badge>;
   if (status === "OPEN") return <Badge tone="info" dotted>Open</Badge>;
   if (status === "PARTIAL") return <Badge tone="warning" dotted>Partial</Badge>;
   if (status === "RECEIVED")
     return <Badge tone="success" variant="solid">Received</Badge>;
   if (status === "CANCELLED")
     return <Badge tone="neutral" dotted>Cancelled</Badge>;
+  // ux-release-gate 2026-07-23 COPY-026: DRAFT fell through to the raw-enum
+  // fallback (canCancelPo already treats DRAFT as a real, cancellable status).
+  if (status === "DRAFT") return <Badge tone="neutral" dotted>Draft</Badge>;
   return <Badge tone="neutral">{status}</Badge>;
 }
 
@@ -257,7 +270,11 @@ function ReceiptProgress({
   return (
     <div
       className="mt-1 h-1 w-full overflow-hidden rounded-full bg-border/40"
-      title={`${pct}% received`}
+      role="progressbar"
+      aria-label="Receipt progress"
+      aria-valuenow={pct}
+      aria-valuemin={0}
+      aria-valuemax={100}
     >
       <div
         className={`h-full rounded-full transition-all ${
@@ -274,6 +291,23 @@ function ReceiptProgress({
 }
 
 // --- Attached GR card -------------------------------------------------------
+
+// COPY-036: shares GrStatusBadge's labels for plain-text contexts (the
+// sidebar Linkages card's subtitle isn't a badge, but needs the same map).
+const GR_STATUS_LABEL: Record<string, string> = {
+  posted: "Posted",
+  pending: "Pending",
+  rejected: "Rejected",
+  cancelled: "Cancelled",
+};
+
+// COPY-039: raw item_type codes (FG/RM/PKG) rendered verbatim in the
+// attached-GR lines table.
+const ITEM_TYPE_LABEL: Record<string, string> = {
+  FG: "Finished goods",
+  RM: "Raw material",
+  PKG: "Packaging",
+};
 
 function GrStatusBadge({ status }: { status: string }): JSX.Element {
   if (status === "posted") return <Badge tone="success" variant="solid">Posted</Badge>;
@@ -299,20 +333,21 @@ function AttachedGrCard({
     >
       <div className="flex items-center gap-3 px-4 py-3 bg-bg-subtle/40 border-b border-border/40">
         <GrStatusBadge status={gr.status} />
-        <span className="text-xs text-fg-muted">received {fmtDate(gr.event_at)}</span>
+        {/* COPY-047: Title Case to match this card's own column headers. */}
+        <span className="text-xs text-fg-muted">Received {fmtDate(gr.event_at)}</span>
         {gr.posted_at && (
-          <span className="text-xs text-fg-faint ml-auto">posted {fmtDate(gr.posted_at)}</span>
+          <span className="text-xs text-fg-faint ml-auto">Posted {fmtDate(gr.posted_at)}</span>
         )}
       </div>
       {gr.lines.length > 0 && (
         <div className="overflow-x-auto"><table className="w-full text-sm border-collapse">
           <thead>
             <tr className="border-b border-border/30">
-              <th className="px-4 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Item</th>
-              <th className="px-4 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Qty</th>
-              <th className="px-4 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">UoM</th>
-              <th className="px-4 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Type</th>
-              <th className="px-4 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">PO line</th>
+              <th scope="col" className="px-4 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Item</th>
+              <th scope="col" className="px-4 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Qty</th>
+              <th scope="col" className="px-4 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">UoM</th>
+              <th scope="col" className="px-4 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Type</th>
+              <th scope="col" className="px-4 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">PO line</th>
             </tr>
           </thead>
           <tbody>
@@ -341,12 +376,17 @@ function AttachedGrCard({
                         </span>
                       </span>
                     ) : (
-                      <span className="font-mono text-xs">{line.item_id}</span>
+                      // COPY-025: raw UUID fallback — never surface it.
+                      <span className="text-xs text-fg-muted">
+                        (item name unavailable)
+                      </span>
                     )}
                   </td>
                   <td className="px-4 py-2 text-right font-mono text-xs tabular-nums text-fg">{fmtQty(line.quantity)}</td>
                   <td className="px-4 py-2 text-xs text-fg-muted">{line.unit}</td>
-                  <td className="px-4 py-2 text-xs text-fg-muted">{line.item_type}</td>
+                  <td className="px-4 py-2 text-xs text-fg-muted">
+                    {ITEM_TYPE_LABEL[line.item_type] ?? line.item_type}
+                  </td>
                   <td className="px-4 py-2 text-xs text-fg-muted">{poLineLabel}</td>
                 </tr>
               );
@@ -376,6 +416,42 @@ const ACTION_LABELS: Record<string, string> = {
   POL_CANCEL: "Line cancelled",
 };
 
+// ux-release-gate 2026-07-23 FLOW-012: the diff table below used to render
+// changed_fields keys verbatim — raw Postgres column names on an otherwise
+// humanized page. Unknown keys still fall back to the raw name (no crash),
+// same graceful-degradation pattern used elsewhere on this page.
+const FIELD_LABELS: Record<string, string> = {
+  status: "Status",
+  expected_receive_date: "Expected receive date",
+  notes: "Notes",
+  payment_terms: "Payment terms",
+  payment_terms_net_days: "Payment terms (net days)",
+  payment_terms_eom: "Payment terms (EOM)",
+  po_number: "PO number",
+  supplier_id: "Supplier",
+  total_net: "Total",
+  currency: "Currency",
+  ordered_qty: "Ordered quantity",
+  final_qty: "Final quantity",
+  unit_price_net: "Unit price",
+  cancel_reason: "Cancel reason",
+  skip_reason: "Skip reason",
+};
+function fieldLabel(field: string): string {
+  return FIELD_LABELS[field] ?? field;
+}
+
+// ux-release-gate 2026-07-23 FLOW-010: preset reasons for PO cancellation —
+// mirrors the placement-queue discard catalogue's intent (tranche 130) in
+// this page's English register.
+const CANCEL_REASONS = [
+  "No longer needed",
+  "Duplicate order",
+  "Ordered through another channel",
+  "Supplier unavailable",
+  "Price or terms issue",
+] as const;
+
 function actionTone(action: string): "success" | "warning" | "neutral" | "info" {
   if (action === "PO_CREATE" || action === "PO_LINE_CREATE") return "success";
   if (action === "PO_CANCEL" || action === "POL_CANCEL") return "neutral";
@@ -389,8 +465,28 @@ function fmtDiffValue(v: unknown): string {
   return String(v);
 }
 
+// COPY-048: plain-string mirror of POStatusBadge's labels, for the history
+// diff table (which renders text, not a Badge component).
+const PO_STATUS_LABEL: Record<string, string> = {
+  DRAFT: "Draft",
+  APPROVED_TO_ORDER: "To place",
+  OPEN: "Open",
+  PARTIAL: "Partial",
+  RECEIVED: "Received",
+  CANCELLED: "Cancelled",
+};
+
+function fmtDiffValueForField(field: string, v: unknown): string {
+  if (field === "status" && typeof v === "string") {
+    return PO_STATUS_LABEL[v] ?? v;
+  }
+  return fmtDiffValue(v);
+}
+
 function HistoryEventRow({ event }: { event: ChangeLogHistoryRow }): JSX.Element {
-  const label = ACTION_LABELS[event.action] ?? event.action;
+  // COPY-048: an unrecognized future action code fell through to the raw
+  // enum as the primary badge label.
+  const label = ACTION_LABELS[event.action] ?? "System update";
   const isLineEvent = event.entity_table === "purchase_order_lines";
   const changedFields = Array.isArray(event.changed_fields) ? event.changed_fields : [];
   const oldVals = event.old_values as Record<string, unknown> | null;
@@ -419,7 +515,8 @@ function HistoryEventRow({ event }: { event: ChangeLogHistoryRow }): JSX.Element
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
           <span className="text-sm font-medium text-fg">{event.actor_snapshot}</span>
           {isLineEvent && (
-            <span className="text-3xs text-fg-faint">line item</span>
+            // COPY-046: matches the "PO line" column header used elsewhere on this page.
+            <span className="text-3xs text-fg-faint">PO line</span>
           )}
           <span className="text-xs text-fg-muted ml-auto">{fmtDateTime(event.created_at)}</span>
         </div>
@@ -434,21 +531,21 @@ function HistoryEventRow({ event }: { event: ChangeLogHistoryRow }): JSX.Element
                   return (
                     <tr key={field} className="border-b border-border/20 last:border-b-0">
                       <td className="px-2 py-1 text-3xs font-mono text-fg-subtle bg-bg-subtle/40 whitespace-nowrap w-px">
-                        {field}
+                        {fieldLabel(field)}
                       </td>
                       {isUpdate ? (
                         <>
                           <td className="px-2 py-1 text-3xs font-mono text-fg-muted line-through opacity-60 max-w-[10rem] truncate">
-                            {fmtDiffValue(oldVal)}
+                            {fmtDiffValueForField(field, oldVal)}
                           </td>
                           <td className="px-2 py-1 text-3xs text-fg-faint">→</td>
                           <td className="px-2 py-1 text-3xs font-mono text-fg max-w-[10rem] truncate">
-                            {fmtDiffValue(newVal)}
+                            {fmtDiffValueForField(field, newVal)}
                           </td>
                         </>
                       ) : (
                         <td className="px-2 py-1 text-3xs font-mono text-fg max-w-xs truncate" colSpan={3}>
-                          {fmtDiffValue(newVal ?? oldVal)}
+                          {fmtDiffValueForField(field, newVal ?? oldVal)}
                         </td>
                       )}
                     </tr>
@@ -496,7 +593,8 @@ export default function PurchaseOrderDetailPage({
   });
 
   // Supplier display name — available directly from po.supplier_name (API JOIN).
-  const supplierLabel = po?.supplier_name ?? po?.supplier_id;
+  // COPY-024: never fall back to the raw supplier UUID as display text.
+  const supplierLabel = po?.supplier_name ?? "Supplier";
 
   // PO audit history.
   const historyQuery = useQuery<PurchaseOrderHistoryResponse>({
@@ -536,9 +634,70 @@ export default function PurchaseOrderDetailPage({
   const [cancelConfirming, setCancelConfirming] = useState(false);
   const [cancelError, setCancelError] = useState<string | null>(null);
   const [cancelSuccess, setCancelSuccess] = useState(false);
+  // ux-release-gate 2026-07-23 FLOW-010: this cancel had no reason field and
+  // no consequence statement, unlike the richer cancel dialogs already
+  // established for session POs (FocusCard) and the placement queue
+  // (PlacementRow) — breaking the corridor's cancel-audit doctrine
+  // (tranches 130-131). Mirrors PlacementRow's exact pattern: the /cancel
+  // endpoint itself takes no reason, so the reason is appended to `notes`
+  // via PATCH first (best-effort — a notes-write failure must not block the
+  // cancel itself), then the existing cancel endpoint is called unchanged.
+  const [cancelReason, setCancelReason] = useState("");
+  const [cancelReasonOther, setCancelReasonOther] = useState("");
+  const composedCancelReason =
+    cancelReason === "Other" ? cancelReasonOther.trim() : cancelReason;
+  // Focus the reason select (not the confirm button, which stays disabled
+  // until a reason is chosen) — same pattern as FocusCard/PlacementRow.
+  const cancelReasonSelectRef = useRef<HTMLSelectElement>(null);
+  // ux-release-gate 2026-07-23 INTER-R2-002/R2-F05/A11Y-R2-003: the dialog
+  // had aria-modal="true" with no focus trap and no Escape handler — Tab
+  // could leave the dialog entirely and Escape did nothing. Mirrors the
+  // procurement page's supersede-confirm fix (same useFocusTrap hook); the
+  // "skip on mount" ref avoids the StrictMode double-effect focus-theft bug
+  // found there (A11Y-R2-002) by only returning focus on a real true→false
+  // transition, never on mount.
+  const cancelTriggerRef = useRef<HTMLButtonElement>(null);
+  const cancelConfirmRef = useRef<HTMLDivElement>(null);
+  const cancelConfirmTrap = useFocusTrap(cancelConfirmRef, cancelConfirming);
+  const cancelConfirmWasOpen = useRef(false);
+  useEffect(() => {
+    if (cancelConfirming) {
+      cancelReasonSelectRef.current?.focus();
+    } else if (cancelConfirmWasOpen.current) {
+      cancelTriggerRef.current?.focus();
+    }
+    cancelConfirmWasOpen.current = cancelConfirming;
+  }, [cancelConfirming]);
 
   const cancelMut = useMutation({
     mutationFn: async () => {
+      let baseNotes = "";
+      try {
+        const detailRes = await fetch(
+          `/api/purchase-orders/${encodeURIComponent(po_id)}`,
+          { headers: { Accept: "application/json" } },
+        );
+        if (detailRes.ok) {
+          const body = (await detailRes.json()) as
+            | { row?: { notes?: string | null }; notes?: string | null }
+            | null;
+          baseNotes = body?.row?.notes ?? body?.notes ?? "";
+        }
+      } catch {
+        baseNotes = "";
+      }
+      const stamp = new Date().toISOString().slice(0, 10);
+      const reasonLine = `Cancelled ${stamp} — ${composedCancelReason}`;
+      const notes = [baseNotes, reasonLine].filter(Boolean).join("\n");
+      try {
+        await fetch(`/api/purchase-orders/${encodeURIComponent(po_id)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ notes }),
+        });
+      } catch {
+        // Reason logging is best-effort — proceed to cancel regardless.
+      }
       const res = await fetch(
         `/api/purchase-orders/${encodeURIComponent(po_id)}/cancel`,
         { method: "POST" },
@@ -558,6 +717,8 @@ export default function PurchaseOrderDetailPage({
       setCancelConfirming(false);
       setCancelError(null);
       setCancelSuccess(true);
+      setCancelReason("");
+      setCancelReasonOther("");
       router.refresh();
     },
     onError: (err: unknown) => {
@@ -565,10 +726,12 @@ export default function PurchaseOrderDetailPage({
       if (msg.toLowerCase().includes("partial receipts") || msg.toLowerCase().includes("partial receipt")) {
         setCancelError("Cannot cancel — this PO has posted receipts. Cancel individual open lines first.");
       } else if (msg.toLowerCase().includes("cannot cancel purchase order in status")) {
-        const status = po?.status?.toLowerCase() ?? "its current state";
-        setCancelError(`Cannot cancel — PO is in ${status}. Only OPEN and DRAFT POs can be cancelled.`);
+        setCancelError("Cannot cancel — only open or draft purchase orders can be cancelled.");
       } else {
-        setCancelError(msg || "Cancel failed. Try again.");
+        // COPY-041: the two branches above pattern-match known backend
+        // messages into clean copy; anything else falls back to a fixed
+        // string rather than the raw (possibly backend-internal) message.
+        setCancelError("Could not cancel this order. Check your connection and try again.");
       }
       setCancelConfirming(false);
     },
@@ -626,8 +789,10 @@ export default function PurchaseOrderDetailPage({
       // Tranche 065 (FLOW-PO01) — flash the "Order updated." note.
       setUpdateSaved(true);
     },
-    onError: (err: unknown) => {
-      setEditError((err as Error).message ?? "Update failed. Try again.");
+    // COPY-028: fetchJson can surface the backend's raw error field
+    // (a Postgres constraint name, an internal message) — never render it.
+    onError: () => {
+      setEditError("Could not save changes. Check your connection and try again.");
     },
   });
 
@@ -648,6 +813,35 @@ export default function PurchaseOrderDetailPage({
   // --- Line cancel state ----------------------------------------------------
   const [lineCancelConfirmId, setLineCancelConfirmId] = useState<string | null>(null);
   const [lineCancelError, setLineCancelError] = useState<string | null>(null);
+  // ux-release-gate 2026-07-23 A11Y-R2-009: the previous inline callback ref
+  // (`ref={(el) => el?.focus()}`) got a new function identity every render,
+  // so React tore it down and re-invoked it on every re-render of this row
+  // (e.g. each time lineCancelMut.isPending changed) — not just when the
+  // dialog opened, stealing focus back mid-interaction. A per-line component
+  // would be the textbook fix, but a stable ref-callback cache (keyed by
+  // line id, built once in a ref at this component's top level — never
+  // inside the .map() below, which would violate the Rules of Hooks) gets
+  // the same "focus once on open, not on every re-render" result without a
+  // wider refactor.
+  const lineCancelFocusRefs = useRef(
+    new Map<string, (el: HTMLButtonElement | null) => void>(),
+  );
+  function getLineCancelFocusRef(lineId: string) {
+    let fn = lineCancelFocusRefs.current.get(lineId);
+    if (!fn) {
+      let focused = false;
+      fn = (el) => {
+        if (el && !focused) {
+          el.focus();
+          focused = true;
+        } else if (!el) {
+          focused = false;
+        }
+      };
+      lineCancelFocusRefs.current.set(lineId, fn);
+    }
+    return fn;
+  }
 
   const lineCancelMut = useMutation({
     mutationFn: async (poLineId: string) => {
@@ -668,8 +862,11 @@ export default function PurchaseOrderDetailPage({
       setLineCancelConfirmId(null);
       setLineCancelError(null);
     },
-    onError: (err: unknown) => {
-      setLineCancelError((err as Error).message ?? "Cancel failed. Try again.");
+    // COPY-040: no pattern-match guard existed on this path at all — the
+    // raw backend error (which can name a status enum, e.g. "Cannot cancel
+    // line in status RECEIVED") reached the operator verbatim.
+    onError: () => {
+      setLineCancelError("Could not cancel this line. Check your connection and try again.");
       setLineCancelConfirmId(null);
     },
   });
@@ -718,8 +915,9 @@ export default function PurchaseOrderDetailPage({
       setLineEditingId(null);
       setLineEditError(null);
     },
-    onError: (err: unknown) => {
-      setLineEditError((err as Error).message ?? "Update failed. Try again.");
+    // COPY-029: same rule as the PO-level edit mutation above.
+    onError: () => {
+      setLineEditError("Could not save this line. Check your connection and try again.");
     },
   });
 
@@ -728,24 +926,24 @@ export default function PurchaseOrderDetailPage({
     <>
       <POStatusBadge status={po.status} />
       <Badge tone="neutral" dotted>
-        order {fmtDate(po.order_date)}
+        Ordered {fmtDate(po.order_date)}
       </Badge>
       {po.expected_receive_date ? (
         <Badge tone="neutral">
-          expect {fmtDate(po.expected_receive_date)}
+          Expected {fmtDate(po.expected_receive_date)}
         </Badge>
       ) : null}
       <Badge tone="neutral">
-        total {fmtMoney(po.total_net, po.currency)}
+        Total {fmtMoney(po.total_net, po.currency)}
       </Badge>
       {po.source_recommendation_id ? (
         <Badge tone="info" dotted>
-          from recommendation
+          From recommendation
         </Badge>
       ) : null}
       {grsQuery.data && grsQuery.data.count > 0 ? (
         <Badge tone="success" dotted>
-          {grsQuery.data.count} GR{grsQuery.data.count === 1 ? "" : "s"}
+          {grsQuery.data.count} receipt{grsQuery.data.count === 1 ? "" : "s"}
         </Badge>
       ) : null}
     </>
@@ -782,7 +980,8 @@ export default function PurchaseOrderDetailPage({
       const allSettled = lineRows.every(
         (l) => l.line_status === "CLOSED" || l.line_status === "CANCELLED",
       );
-      const supplierLabel = po?.supplier_name ?? po?.supplier_id ?? "supplier";
+      // COPY-024: supplier_id (raw UUID) must never be the display fallback.
+      const supplierLabel = po?.supplier_name ?? "supplier";
       const cost = summarizePoLineCosts(lineRows);
       const cur = po?.currency ?? "ILS";
       const receivedPct = Math.round(cost.receivedFraction * 100);
@@ -833,6 +1032,7 @@ export default function PurchaseOrderDetailPage({
                 <div
                   className="h-1.5 w-full overflow-hidden rounded-full bg-border/40"
                   role="progressbar"
+                  aria-label="Received by value"
                   aria-valuenow={receivedPct}
                   aria-valuemin={0}
                   aria-valuemax={100}
@@ -875,7 +1075,7 @@ export default function PurchaseOrderDetailPage({
             </ul>
             {po?.expected_receive_date ? (
               <div className="mt-1.5 text-fg-faint">
-                Expected by {po.expected_receive_date}
+                Expected by {fmtDate(po.expected_receive_date)}
               </div>
             ) : (
               <div className="mt-1.5 text-fg-faint">No delivery date set.</div>
@@ -891,7 +1091,10 @@ export default function PurchaseOrderDetailPage({
           </div>
         )}
         {lineCancelError && (
-          <div className="rounded-md border border-danger/40 bg-danger/5 px-4 py-2 text-xs text-danger-fg">
+          <div
+            role="alert"
+            className="rounded-md border border-danger/40 bg-danger/5 px-4 py-2 text-xs text-danger-fg"
+          >
             {lineCancelError}
           </div>
         )}
@@ -899,17 +1102,17 @@ export default function PurchaseOrderDetailPage({
           <table className="w-full border-collapse text-sm" data-testid="po-lines-table">
             <thead>
               <tr className="border-b border-border/70 bg-bg-subtle/60">
-                <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">#</th>
-                <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Item / Component</th>
-                <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Ordered</th>
-                <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Received</th>
-                <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Open</th>
-                <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">UoM</th>
-                <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Unit price</th>
-                <th className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Line total</th>
-                <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Status</th>
-                <th className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Expected</th>
-                {canEditLines && <th className="px-2 py-2" />}
+                <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">#</th>
+                <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Item / Component</th>
+                <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Ordered</th>
+                <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Received</th>
+                <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Open</th>
+                <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">UoM</th>
+                <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Unit price</th>
+                <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Line total</th>
+                <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Status</th>
+                <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">Expected</th>
+                {canEditLines && <th scope="col" className="px-2 py-2" />}
               </tr>
             </thead>
             <tbody>
@@ -1021,7 +1224,17 @@ export default function PurchaseOrderDetailPage({
                           <div
                             className="flex flex-col items-end gap-1.5"
                             role="alertdialog"
+                            aria-modal="true"
                             aria-label="Confirm cancel line"
+                            onKeyDown={(e) => {
+                              // INTER-R2-003/A11Y-R2-004: no keyboard escape
+                              // previously existed for this inline dialog.
+                              if (e.key === "Escape") {
+                                e.stopPropagation();
+                                setLineCancelConfirmId(null);
+                                setLineCancelError(null);
+                              }
+                            }}
                           >
                             <span className="text-3xs text-fg-muted text-right">
                               Cancel this line? It closes permanently and won&apos;t
@@ -1029,6 +1242,7 @@ export default function PurchaseOrderDetailPage({
                             </span>
                             <div className="flex items-center gap-1.5">
                               <button
+                                ref={getLineCancelFocusRef(line.po_line_id)}
                                 type="button"
                                 className="btn btn-danger btn-xs"
                                 onClick={() => lineCancelMut.mutate(line.po_line_id)}
@@ -1052,6 +1266,7 @@ export default function PurchaseOrderDetailPage({
                             type="button"
                             className="text-3xs text-fg-faint hover:text-fg"
                             onClick={() => { setLineEditingId(null); setLineEditError(null); }}
+                            aria-label="Close line edit"
                           >
                             ✕
                           </button>
@@ -1067,32 +1282,56 @@ export default function PurchaseOrderDetailPage({
                       <td colSpan={canEditLines ? 11 : 10} className="px-3 py-3">
                         <div className="flex flex-wrap items-end gap-3">
                           <div className="flex flex-col gap-1">
-                            <label className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                            <label
+                              htmlFor={`po-line-edit-expected-${line.po_line_id}`}
+                              className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle"
+                            >
                               Expected date
                             </label>
                             <input
+                              id={`po-line-edit-expected-${line.po_line_id}`}
                               type="date"
                               className="input input-sm w-36"
                               value={lineEditExpected}
                               onChange={(e) => setLineEditExpected(e.target.value)}
+                              aria-describedby={
+                                lineEditError
+                                  ? `po-line-edit-error-${line.po_line_id}`
+                                  : undefined
+                              }
                             />
                           </div>
                           <div className="flex flex-col gap-1 flex-1 min-w-[14rem]">
-                            <label className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                            <label
+                              htmlFor={`po-line-edit-notes-${line.po_line_id}`}
+                              className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle"
+                            >
                               Notes
                             </label>
                             <input
+                              id={`po-line-edit-notes-${line.po_line_id}`}
                               type="text"
                               className="input input-sm w-full"
                               value={lineEditNotes}
                               onChange={(e) => setLineEditNotes(e.target.value)}
                               placeholder="Line note…"
                               maxLength={2000}
+                              aria-describedby={
+                                lineEditError
+                                  ? `po-line-edit-error-${line.po_line_id}`
+                                  : undefined
+                              }
                             />
                           </div>
                           <div className="flex items-center gap-2">
                             {lineEditError && (
-                              <span className="text-xs text-danger-fg">{lineEditError}</span>
+                              // A11Y-R2-010: id target for the inputs' aria-describedby above.
+                              <span
+                                id={`po-line-edit-error-${line.po_line_id}`}
+                                className="text-xs text-danger-fg"
+                              >
+                                {lineEditError}
+                              </span>
                             )}
                             <button
                               type="button"
@@ -1184,15 +1423,13 @@ export default function PurchaseOrderDetailPage({
         },
         { label: "Site", value: po.site_id, mono: true },
         {
+          // ux-release-gate 2026-07-23 FLOW-011: this used to link to
+          // /planning/runs/[id], a diagnostic-only surface since Tranche 045
+          // (approve/dismiss removed) — no operator value from here. Rendered
+          // as read-only text instead, matching the Recommendation ID field's
+          // own pattern on the source-recommendation tab.
           label: "Source planning run",
-          value: po.source_run_id ? (
-            <Link
-              href={`/planning/runs/${encodeURIComponent(po.source_run_id)}`}
-              className="font-mono text-accent hover:underline"
-            >
-              View run →
-            </Link>
-          ) : "—",
+          value: po.source_run_id ? "Yes" : "—",
         },
         {
           label: "Source",
@@ -1220,7 +1457,7 @@ export default function PurchaseOrderDetailPage({
         { label: "Created by", value: po.created_by_snapshot },
         { label: "Created", value: fmtDateTime(po.created_at) },
         { label: "Last updated", value: fmtDateTime(po.updated_at) },
-        { label: "Internal ID", value: po.po_id, mono: true },
+        { label: "PO reference", value: po.po_id, mono: true },
       ];
       return (
         <div className="space-y-3">
@@ -1291,24 +1528,17 @@ export default function PurchaseOrderDetailPage({
       }
       return (
         // Tranche 065 (FLOW-PO02) — human labels instead of raw field names.
+        // ux-release-gate 2026-07-23 COPY-005/COPY-019/FLOW-011: dropped the
+        // raw UUIDs — "Planning run" linked to /planning/runs/[id], a
+        // diagnostic-only surface since Tranche 045 with no operator value;
+        // "Recommendation ID" is an explicitly forbidden UI label
+        // (portal_ux_standard.md §1).
         <DetailFieldGrid
           rows={[
+            { label: "Planning run", value: po.source_run_id ? "Yes" : "—" },
             {
-              label: "Planning run",
-              value: (
-                <Link
-                  href={`/planning/runs/${encodeURIComponent(po.source_run_id)}`}
-                  className="font-mono text-accent hover:underline"
-                >
-                  {po.source_run_id}
-                </Link>
-              ),
-              mono: true,
-            },
-            {
-              label: "Recommendation ID",
-              value: po.source_recommendation_id,
-              mono: true,
+              label: "Planning recommendation",
+              value: po.source_recommendation_id ? "Yes" : "—",
             },
           ]}
         />
@@ -1319,7 +1549,9 @@ export default function PurchaseOrderDetailPage({
   // --- Attached GRs tab ---------------------------------------------------
   const attachedGrsTab: TabDescriptor = {
     key: "attached-grs",
-    label: "Attached GRs",
+    // ux-release-gate 2026-07-23 COPY-018: "GR" is an unexplained logistics
+    // abbreviation nowhere defined on this page.
+    label: "Goods receipts",
     content: (() => {
       if (grsQuery.isLoading) return <DetailTabLoading />;
       if (grsQuery.isError) {
@@ -1392,33 +1624,28 @@ export default function PurchaseOrderDetailPage({
       label: "Supplier",
       items: [
         {
-          label: po.supplier_id,
+          // ux-release-gate 2026-07-23: label was the raw supplier_id UUID
+          // with the name relegated to a subtitle — backwards. Name leads;
+          // the id-based href still resolves the correct supplier record.
+          label: po.supplier_name ?? "Supplier",
           href: `/admin/masters/suppliers/${encodeURIComponent(po.supplier_id)}`,
-          subtitle: po.supplier_name ?? undefined,
         },
       ],
     });
   }
 
-  if (po?.source_run_id) {
-    linkages.push({
-      label: "Source planning run",
-      items: [
-        {
-          label: po.source_run_id,
-          href: `/planning/runs/${encodeURIComponent(po.source_run_id)}`,
-          subtitle: po.source_recommendation_id
-            ? `rec ${po.source_recommendation_id}`
-            : undefined,
-        },
-      ],
-    });
-  }
+  // ux-release-gate 2026-07-23 FLOW-011: dropped the "Source planning run"
+  // linkage — /planning/runs/[id] is diagnostic-only since Tranche 045 (no
+  // approve/dismiss, no operator value) and its item label was a raw UUID
+  // with a "rec {uuid}" abbreviation as the subtitle (COPY-005). The
+  // Source recommendation TAB above is the corridor's real audit surface
+  // for this provenance.
 
   const grItems = (grsQuery.data?.rows ?? []).map((gr, i) => ({
     label: `Goods receipt ${i + 1} — ${fmtDate(gr.event_at)}`,
     href: `/purchase-orders/${encodeURIComponent(po_id)}?tab=attached-grs`,
-    subtitle: gr.status,
+    // COPY-036: raw backend status string — mirror GrStatusBadge's labels.
+    subtitle: GR_STATUS_LABEL[gr.status] ?? gr.status,
   }));
   linkages.push({
     label: "Attached goods receipts",
@@ -1526,40 +1753,123 @@ export default function PurchaseOrderDetailPage({
                 View receipts →
               </Link>
             )}
-            {cancelError && (
-              <span className="text-xs text-danger-fg">{cancelError}</span>
-            )}
-            {canCancelPo && !cancelConfirming && (
-              <button
-                type="button"
-                className="btn btn-ghost btn-sm text-danger-fg hover:bg-danger/10"
-                onClick={() => { setCancelConfirming(true); setCancelError(null); }}
-                disabled={cancelMut.isPending}
+            {/* R2-F09: an APPROVED_TO_ORDER PO has no cancel path here (only
+                the placement queue can act on it) and previously gave no
+                indication of that — a planner following the "View order"
+                link from FocusCard's placed-success banner landed on a dead
+                end. */}
+            {po && po.status === "APPROVED_TO_ORDER" && (
+              <Link
+                href="/purchase-orders/placement-queue"
+                className="btn btn-ghost btn-sm"
+                data-testid="po-view-placement-queue-link"
+                title="This order is awaiting placement. Price, terms, and cancellation happen in the placement queue."
               >
-                Cancel PO
-              </button>
+                Awaiting placement — open queue →
+              </Link>
             )}
-            {canCancelPo && cancelConfirming && (
-              <div className="flex items-center gap-1.5">
-                <span className="text-xs text-fg-muted">Cancel this PO?</span>
+            {/* VISUAL-R2-011: destructive action pushed to the far edge of
+                the row, separated from Receive/View receipts (primary /
+                neutral actions) rather than sitting immediately next to them. */}
+            <div className="ms-auto flex items-center gap-2">
+              {/* ux-release-gate 2026-07-23 A11Y-009: always-mounted so a
+                  screen reader with an aria-live region already registered
+                  announces a failure the moment it appears. */}
+              <span role="alert" aria-live="assertive" className="text-xs text-danger-fg">
+                {cancelError}
+              </span>
+              {canCancelPo && !cancelConfirming && (
+                <button
+                  type="button"
+                  ref={cancelTriggerRef}
+                  className="btn btn-ghost btn-sm text-danger-fg hover:bg-danger/10"
+                  onClick={() => { setCancelConfirming(true); setCancelError(null); }}
+                  disabled={cancelMut.isPending}
+                >
+                  Cancel PO
+                </button>
+              )}
+              {canCancelPo && cancelConfirming && (
+              <div
+                ref={cancelConfirmRef}
+                role="alertdialog"
+                aria-modal="true"
+                aria-label={po ? `Confirm cancel PO ${po.po_number}` : "Confirm cancel PO"}
+                className="flex flex-wrap items-center gap-2 rounded-md border border-danger/30 bg-danger-softer/40 p-2"
+                data-testid="po-cancel-confirm"
+                onKeyDown={(e) => {
+                  if (e.key === "Escape") {
+                    e.stopPropagation();
+                    setCancelConfirming(false);
+                    setCancelError(null);
+                    return;
+                  }
+                  cancelConfirmTrap.onKeyDown(e);
+                }}
+              >
+                <div className="flex flex-col gap-1">
+                  <span className="text-xs font-medium text-fg">
+                    Cancel purchase order {po?.po_number}?
+                  </span>
+                  <span className="text-3xs text-fg-muted">
+                    All open lines will be closed. Goods receipt against this PO
+                    will no longer be possible.
+                  </span>
+                </div>
+                <label htmlFor="po-cancel-reason" className="sr-only">
+                  Cancellation reason
+                </label>
+                <select
+                  ref={cancelReasonSelectRef}
+                  id="po-cancel-reason"
+                  className="input input-sm"
+                  value={cancelReason}
+                  onChange={(e) => setCancelReason(e.target.value)}
+                  data-testid="po-cancel-reason"
+                >
+                  <option value="">— Select a reason —</option>
+                  {CANCEL_REASONS.map((r) => (
+                    <option key={r} value={r}>{r}</option>
+                  ))}
+                  <option value="Other">Other…</option>
+                </select>
+                {cancelReason === "Other" ? (
+                  <input
+                    type="text"
+                    className="input input-sm"
+                    placeholder="Specify reason"
+                    value={cancelReasonOther}
+                    onChange={(e) => setCancelReasonOther(e.target.value)}
+                    aria-label="Cancellation reason detail"
+                    data-testid="po-cancel-reason-other"
+                  />
+                ) : null}
                 <button
                   type="button"
                   className="btn btn-sm bg-danger text-fg-inverted hover:bg-danger/90"
                   onClick={() => cancelMut.mutate()}
-                  disabled={cancelMut.isPending}
+                  disabled={!composedCancelReason || cancelMut.isPending}
+                  title={!composedCancelReason ? "Choose a reason first" : undefined}
+                  data-testid="po-cancel-confirm-submit"
                 >
-                  {cancelMut.isPending ? "Cancelling…" : "Yes, cancel"}
+                  {cancelMut.isPending ? "Cancelling…" : "Cancel PO"}
                 </button>
                 <button
                   type="button"
                   className="btn btn-ghost btn-sm"
-                  onClick={() => { setCancelConfirming(false); setCancelError(null); }}
+                  onClick={() => {
+                    setCancelConfirming(false);
+                    setCancelError(null);
+                    setCancelReason("");
+                    setCancelReasonOther("");
+                  }}
                   disabled={cancelMut.isPending}
                 >
                   Keep
                 </button>
               </div>
-            )}
+              )}
+            </div>
           </div>
         ),
       }}

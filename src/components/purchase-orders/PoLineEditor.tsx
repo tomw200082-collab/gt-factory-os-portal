@@ -18,6 +18,20 @@ import { useMemo } from "react";
 import { AlertTriangle, FilePlus2, Trash2 } from "lucide-react";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { UOMS, type Uom } from "@/lib/contracts/enums";
+
+// ux-release-gate 2026-07-23 COPY-050: English parallel of AddLineForm.tsx's
+// Round 2 UOM_LABEL fix (COPY-035) — that one only covered the Hebrew
+// surface; this component renders the same raw enum codes on the English
+// /purchase-orders/new page. Metric/count abbreviations stay as-is.
+const UOM_LABEL: Partial<Record<Uom, string>> = {
+  UNIT: "Unit",
+  PCS: "Pieces",
+  BAG: "Bag",
+  CASE: "Case",
+  BOX: "Box",
+  BOTTLE: "Bottle",
+  TIN: "Tin",
+};
 import {
   SearchableSelect,
   type SearchableSelectOption,
@@ -437,7 +451,7 @@ export function PoLineEditor(props: PoLineEditorProps): JSX.Element {
                     >
                       {UOMS.map((u) => (
                         <option key={u} value={u}>
-                          {u}
+                          {UOM_LABEL[u] ?? u}
                         </option>
                       ))}
                     </select>

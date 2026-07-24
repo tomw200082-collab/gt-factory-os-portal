@@ -93,7 +93,10 @@ interface SectionMeta {
   key: DecisionBucket;
   title: string;
   hint: string;
-  tone: BadgeTone;
+  // ux-release-gate 2026-07-23 VISUAL-002: narrowed from BadgeTone (which
+  // includes "neutral") to what SECTIONS below actually uses — this value
+  // now also drives SectionCard's tone prop, whose type is a stricter subset.
+  tone: "danger" | "warning" | "success";
   icon: typeof Clock;
 }
 
@@ -115,7 +118,11 @@ const SECTIONS: SectionMeta[] = [
   {
     key: "handled",
     title: "טופל",
-    hint: "הוזמן, דולג או בוטל",
+    // ux-release-gate 2026-07-23 COPY-013: "הוזמן" is stale — tranche 130
+    // renamed the placed status to "הועבר לביצוע" (STATUS_LABEL below is
+    // already correct) since a placed order hands off to Doreen's queue,
+    // it isn't a completed order yet. This hint kept the old word.
+    hint: "הועבר לביצוע, דולג או בוטל",
     tone: "success",
     icon: CheckCircle2,
   },
@@ -387,12 +394,18 @@ function ProcurementRow({
           </div>
         </div>
 
+        {/* ux-release-gate 2026-07-23 VISUAL-003: btn-accent is a visual
+            alias for btn-primary (both filled teal) — this row-scope action
+            shared the exact visual weight of the session-level "התחל מיקוד"
+            button. With 5-10 rows visible that's 6-11 identical filled-teal
+            buttons on screen; outline keeps filled teal reserved for the
+            one session-scope action. */}
         {actionable &&
           (onOpen ? (
             <button
               type="button"
               onClick={() => onOpen(po)}
-              className="btn btn-accent btn-sm w-full shrink-0 sm:w-auto"
+              className="btn btn-outline btn-sm w-full shrink-0 sm:w-auto"
               data-testid={`procurement-open-${po.session_po_id}`}
             >
               {/* ux-release-gate A11Y-009: hide the decorative arrow from the
@@ -402,7 +415,7 @@ function ProcurementRow({
           ) : (
             <Link
               href={FALLBACK_OPEN_HREF}
-              className="btn btn-accent btn-sm w-full shrink-0 sm:w-auto"
+              className="btn btn-outline btn-sm w-full shrink-0 sm:w-auto"
               data-testid={`procurement-open-${po.session_po_id}`}
             >
               פתח <span aria-hidden>←</span>
@@ -672,6 +685,11 @@ export function ActionList({
               onClick={() => {
                 setQuery("");
                 setBucketFilter("all");
+                // ux-release-gate 2026-07-23 INTER-A8: this used to leave a
+                // non-urgency sort active with no visible indicator — the
+                // planner's default triage order (urgency-first) silently
+                // stayed overridden after a search session.
+                setSortKey("urgency");
               }}
               // ux-release-gate INTER-204: a 14px zero-padding text link is
               // below the touch-target minimum — give it real height matching
@@ -715,7 +733,11 @@ export function ActionList({
           const Icon = section.icon;
           const total = rows.reduce((sum, r) => sum + (r.po.total_cost || 0), 0);
           return (
-            <SectionCard key={section.key}>
+            // ux-release-gate 2026-07-23 VISUAL-002: SectionCard already
+            // supports an urgency-tinted border (TONE_CLASSES) — the three
+            // decision buckets never passed it, so all three read as the
+            // same visual weight regardless of priority.
+            <SectionCard key={section.key} tone={section.tone}>
               <div className="flex items-center justify-between gap-3 border-b border-border/60 px-6 py-4">
                 <div className="flex items-center gap-2.5">
                   <Icon

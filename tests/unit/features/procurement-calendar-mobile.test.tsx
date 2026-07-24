@@ -71,7 +71,9 @@ describe("procurement CalendarView — FLOW-004 mobile grouped list", () => {
     // Row carries supplier name + ₪ amount.
     const row = screen.getByTestId("calendar-list-entry-po-1");
     expect(row.textContent).toContain("ספק א");
-    expect(row.textContent).toContain("דחוף"); // urgent tier chip label
+    // ux-release-gate 2026-07-23 R2-F01/COPY-032: urgent now reads as
+    // ActionList's "חייב לצאת היום" bucket label, not the old "דחוף" tier term.
+    expect(row.textContent).toContain("חייב לצאת היום"); // urgent tier chip label
   });
 
   it("taps a row like the desktop cell button (onOpen with the session_po_id)", () => {

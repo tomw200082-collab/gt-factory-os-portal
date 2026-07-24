@@ -33,10 +33,18 @@ const MONTH_HE = [
   "ינואר", "פברואר", "מרץ", "אפריל", "מאי", "יוני",
   "יולי", "אוגוסט", "ספטמבר", "אוקטובר", "נובמבר", "דצמבר",
 ];
+// ux-release-gate 2026-07-23 R2-F01/COPY-032: these used to be the SQL
+// engine's raw tier vocabulary ("דחוף"/"חובה השבוע"/"מומלץ להקדים"), which
+// contradicted ActionList's decision-bucket labels for the exact same PO
+// when a planner switched from list to calendar view. Aligned to
+// ActionList's own bucket terms ("חייב לצאת היום"/"יכול לחכות") — must and
+// recommended now read identically since both mean "can wait", with the
+// per-entry dot/chip color (tierDot/tierChip) still carrying the urgency
+// gradient between them.
 const TIER_LABEL: Record<PoTierLike, string> = {
-  urgent: "דחוף",
-  must: "חובה השבוע",
-  recommended: "מומלץ להקדים",
+  urgent: "חייב לצאת היום",
+  must: "יכול לחכות",
+  recommended: "יכול לחכות",
 };
 function tierDot(t: PoTierLike): string {
   if (t === "urgent") return "bg-danger";
@@ -77,6 +85,29 @@ export function CalendarView({
   const byDay = useMemo(() => groupByDay(entries), [entries]);
   const totals = useMemo(() => calTotals(entries), [entries]);
 
+  // R2-F01/COPY-032: must + recommended now share the "יכול לחכות" label —
+  // show one merged summary chip (not two identically-labeled ones), and
+  // drop any bucket with nothing in it rather than a "· 0" chip (R2-F11).
+  const bucketSummary = useMemo(() => {
+    const buckets = [
+      {
+        key: "urgent" as const,
+        label: TIER_LABEL.urgent,
+        count: totals.byTier.urgent,
+        dot: tierDot("urgent"),
+        chip: tierChip("urgent"),
+      },
+      {
+        key: "can_wait" as const,
+        label: TIER_LABEL.must,
+        count: totals.byTier.must + totals.byTier.recommended,
+        dot: tierDot("must"),
+        chip: tierChip("must"),
+      },
+    ];
+    return buckets.filter((b) => b.count > 0);
+  }, [totals.byTier]);
+
   // FLOW-004: chunk the Sunday-aligned grid into weeks; keep only weeks that
   // actually carry orders. Same single source of truth (byDay) as the grid.
   const weeks = useMemo<WeekGroup[]>(() => {
@@ -102,16 +133,16 @@ export function CalendarView({
       {/* Summary strip */}
       <div className="card flex flex-wrap items-center justify-between gap-3 p-4">
         <div className="flex flex-wrap items-center gap-2">
-          {(Object.keys(TIER_LABEL) as PoTierLike[]).map((t) => (
+          {bucketSummary.map((b) => (
             <span
-              key={t}
+              key={b.key}
               className={cn(
                 "inline-flex items-center gap-1.5 rounded-full border px-2.5 py-0.5 text-3xs font-semibold",
-                tierChip(t),
+                b.chip,
               )}
             >
-              <span className={cn("h-2 w-2 rounded-full", tierDot(t))} />
-              {`${TIER_LABEL[t]} · ${totals.byTier[t]}`}
+              <span className={cn("h-2 w-2 rounded-full", b.dot)} />
+              {`${b.label} · ${b.count}`}
             </span>
           ))}
         </div>
@@ -191,7 +222,10 @@ export function CalendarView({
 
       {/* Grid — desktop md+ only (FLOW-004 keeps it byte-identical at md+) */}
       <div className="card hidden overflow-hidden p-0 md:block">
-        <div className="grid grid-cols-7 border-b border-border/60 bg-bg-subtle/50">
+        <div
+          className="grid grid-cols-7 border-b border-border/60 bg-bg-subtle/50"
+          aria-hidden="true"
+        >
           {DOW_HE.map((d) => (
             <div
               key={d}

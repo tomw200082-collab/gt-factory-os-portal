@@ -16,7 +16,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { Loader2, FileOutput, CheckCircle2 } from "lucide-react";
+import { Loader2, FileOutput, CheckCircle2, X } from "lucide-react";
 import { useConfirm } from "@/components/overlays/ConfirmDialog";
 import {
   fetchApprovedPurchaseRecs,
@@ -24,6 +24,7 @@ import {
   type PurchaseRecToConvert,
   type ConvertToPOResult,
 } from "../_lib/recommendations";
+import { fmtDateHe } from "../_lib/decision";
 
 const QK = ["procurement", "approved-purchase-recs"] as const;
 
@@ -55,8 +56,12 @@ export function RecommendationsToConvert(): JSX.Element | null {
       });
       void queryClient.invalidateQueries({ queryKey: ["inbox"] });
     },
-    onError: (err: Error) => {
-      setErrorMsg(err.message);
+    onError: () => {
+      // ux-release-gate 2026-07-23 R2-F06/COPY-021: convertRecToPO can throw
+      // an Error built directly from the backend's raw `detail` field (see
+      // _lib/recommendations.ts) — never render that text on this Hebrew
+      // surface, same rule already applied everywhere else in the corridor.
+      setErrorMsg("לא ניתן להמיר את ההמלצה להזמנת רכש. נסו שוב.");
     },
   });
 
@@ -78,20 +83,14 @@ export function RecommendationsToConvert(): JSX.Element | null {
         className="card border-danger/40 p-4 text-sm text-danger-fg"
         role="alert"
       >
-        <div>
-          {(recsQuery.error as Error)?.message ?? "לא ניתן לטעון המלצות מאושרות."}
-        </div>
-        {/* INTER-010 (Tranche 079) — English-pattern retry, matching the
-            existing English-only structure on this component (component
-            comments and JSX prop names are already English; only Hebrew
-            data strings live in this surface and they are untouched). */}
+        <div>לא ניתן לטעון המלצות מאושרות.</div>
         <button
           type="button"
           onClick={() => void recsQuery.refetch()}
           className="mt-2 text-xs font-medium underline hover:no-underline"
           data-testid="procurement-recs-retry"
         >
-          Try again
+          נסה שוב
         </button>
       </div>
     );
@@ -140,8 +139,13 @@ export function RecommendationsToConvert(): JSX.Element | null {
         >
           <CheckCircle2 className="h-4 w-4 shrink-0" aria-hidden />
           <span className="flex-1">
-            {done.idempotent_replay ? "כבר הומר ל" : "ההמלצה הומרה ל"}
-            {done.po_number ?? "הזמנה"}.
+            {done.po_number
+              ? done.idempotent_replay
+                ? `כבר הומר ל${done.po_number}.`
+                : `ההמלצה הומרה ל${done.po_number}.`
+              : done.idempotent_replay
+                ? "כבר הומר להזמנת רכש קיימת."
+                : "ההמלצה הומרה להזמנת רכש חדשה."}
           </span>
           <Link
             href={`/purchase-orders/${encodeURIComponent(done.po_id)}`}
@@ -149,6 +153,14 @@ export function RecommendationsToConvert(): JSX.Element | null {
           >
             פתח הזמנה ←
           </Link>
+          <button
+            type="button"
+            onClick={() => setDone(null)}
+            className="shrink-0 rounded p-0.5 text-success-fg/70 hover:bg-success/20 hover:text-success-fg"
+            aria-label="סגור הודעה"
+          >
+            <X className="h-3.5 w-3.5" aria-hidden />
+          </button>
         </div>
       )}
 
@@ -182,7 +194,9 @@ export function RecommendationsToConvert(): JSX.Element | null {
                       {rec.uom ? ` ${rec.uom}` : ""}
                     </span>
                     {rec.supplier_name ? <> · {rec.supplier_name}</> : null}
-                    {rec.order_by_date ? <> · להזמין עד {rec.order_by_date}</> : null}
+                    {rec.order_by_date ? (
+                      <> · להזמין עד {fmtDateHe(rec.order_by_date)}</>
+                    ) : null}
                   </div>
                 </div>
                 <button

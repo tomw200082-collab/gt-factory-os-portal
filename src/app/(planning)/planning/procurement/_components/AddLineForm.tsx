@@ -17,6 +17,19 @@ import { UOMS, type Uom } from "@/lib/contracts/enums";
 import { cn } from "@/lib/cn";
 import type { LineAdd } from "../../purchase-session/_lib/types";
 
+// ux-release-gate 2026-07-23 R2-F02/COPY-035: metric/count abbreviations
+// (KG, L, ML, G, MG, TON) are standard shop-floor shorthand and stay as-is;
+// the remaining codes are ambiguous on a Hebrew RTL surface without a label.
+const UOM_LABEL: Partial<Record<Uom, string>> = {
+  UNIT: "יחידה",
+  PCS: "יחידות",
+  BAG: "שק",
+  CASE: "קרטון",
+  BOX: "קופסה",
+  BOTTLE: "בקבוק",
+  TIN: "פח",
+};
+
 export interface AddLineFormProps {
   onAdd: (line: LineAdd) => void;
   onCancel: () => void;
@@ -99,9 +112,14 @@ export function AddLineForm({
           invalid={touched && !orderableValid}
           testId="add-line-orderable"
           ariaLabel="פריט או רכיב"
+          describedBy={
+            touched && !orderableValid ? "add-line-orderable-error" : undefined
+          }
         />
         {touched && !orderableValid && (
-          <div className="text-xs text-danger-fg">יש לבחור פריט או רכיב.</div>
+          <div id="add-line-orderable-error" className="text-xs text-danger-fg">
+            יש לבחור פריט או רכיב.
+          </div>
         )}
       </div>
 
@@ -122,9 +140,13 @@ export function AddLineForm({
             disabled={busy}
             data-testid="add-line-qty"
             aria-label="כמות"
+            aria-invalid={touched && !qtyValid ? true : undefined}
+            aria-describedby={touched && !qtyValid ? "add-line-qty-error" : undefined}
           />
           {touched && !qtyValid && (
-            <div className="text-xs text-danger-fg">כמות חייבת להיות גדולה מ-0.</div>
+            <div id="add-line-qty-error" className="text-xs text-danger-fg">
+              כמות חייבת להיות גדולה מ-0.
+            </div>
           )}
         </div>
         <select
@@ -137,7 +159,7 @@ export function AddLineForm({
         >
           {UOMS.map((u) => (
             <option key={u} value={u}>
-              {u}
+              {UOM_LABEL[u] ?? u}
             </option>
           ))}
         </select>

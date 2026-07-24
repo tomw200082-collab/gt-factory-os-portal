@@ -23,6 +23,7 @@ import {
   Check,
   ClipboardCopy,
   FileText,
+  Loader2,
   Pencil,
   Plus,
   SkipForward,
@@ -50,6 +51,7 @@ import {
   buildCoverageReasoning,
   parseCoverageTrace,
 } from "../_lib/coverage-trace";
+import { fmtDateHe } from "../_lib/decision";
 
 const STATUS_LABEL: Record<PoStatus, string> = {
   proposed: "מוצע",
@@ -60,11 +62,16 @@ const STATUS_LABEL: Record<PoStatus, string> = {
 
 // Preset cancel reasons (Tom-directed 2026-07-16 — same catalogue as the
 // placement-queue discard panel, tranche 130, for corridor-wide consistency).
+// COPY-034: parity with PlacementRow's and [po_id]'s reason sets — supplier
+// availability and price/terms are plausible reasons at this stage too, not
+// only "the engine got it wrong" / "revisit next round".
 const CANCEL_REASONS = [
   "כבר לא נדרש",
   "כפילות",
   "המלצת המנוע שגויה",
   "לבחון שוב בסבב הבא",
+  "הספק לא זמין",
+  "מחיר/תנאים לא מתאימים",
 ] as const;
 const STATUS_TONE: Record<PoStatus, BadgeTone> = {
   proposed: "neutral",
@@ -212,9 +219,13 @@ export function FocusCard({
   // INTER-005: block save (instead of silently reverting) when a non-dropped
   // line has an invalid quantity.
   const [editError, setEditError] = useState<string | null>(null);
-  const [placeDate, setPlaceDate] = useState<string>(
-    po.earliest_need_date ?? "",
-  );
+  // ux-release-gate 2026-07-23 FLOW-007: this used to pre-fill from
+  // earliest_need_date (when the FACTORY needs the stock) — a different date
+  // than what the field asks for (when the SUPPLIER is expected to deliver).
+  // Pre-filling the wrong date silently fed a wrong expected_receive_date into
+  // the real PO, corrupting downstream "Late" detection. Left blank; helper
+  // text below the field states the distinction explicitly.
+  const [placeDate, setPlaceDate] = useState<string>("");
   const [copied, setCopied] = useState(false);
   // Price Truth (Tranche 043) — optional per-line price actually paid (per
   // order UOM), keyed by session_po_line_id; sent only at place time for the
@@ -233,6 +244,11 @@ export function FocusCard({
   const [cancelling, setCancelling] = useState(false);
   const [cancelReason, setCancelReason] = useState("");
   const [cancelDetail, setCancelDetail] = useState("");
+  // ux-release-gate 2026-07-23 INTER-A13: "דלג" and "בטל הזמנה" share one
+  // mutation (skipMut) — tracking which button fired it so only the button
+  // actually clicked shows a spinner (skipMut.isPending alone can't tell them
+  // apart, since either click sets it true).
+  const [skipKind, setSkipKind] = useState<"quick" | "reasoned" | null>(null);
   const composedCancelReason =
     cancelReason === "אחר" ? cancelDetail.trim() : cancelReason;
 
@@ -251,12 +267,18 @@ export function FocusCard({
     placeMut.isPending ||
     skipMut.isPending;
 
-  const actionError =
-    (editMut.error as Error | null)?.message ??
-    (approveMut.error as Error | null)?.message ??
-    (placeMut.error as Error | null)?.message ??
-    (skipMut.error as Error | null)?.message ??
-    null;
+  // ux-release-gate 2026-07-23 COPY-011: raw mutation .message strings can
+  // carry API field names, enum values, or stack fragments — never surface
+  // them directly on this Hebrew operator surface. Fixed copy per action.
+  const actionError = editMut.isError
+    ? "לא ניתן לשמור את השינויים בשורות ההזמנה. נסה שוב."
+    : approveMut.isError
+      ? "לא ניתן להפיק את מסמך ההזמנה. נסה שוב."
+      : placeMut.isError
+        ? "לא ניתן להעביר את ההזמנה לביצוע. נסה שוב."
+        : skipMut.isError
+          ? "לא ניתן לעדכן את סטטוס ההזמנה. נסה שוב."
+          : null;
 
   // Autofocus the primary CTA whenever the order or its status changes, so the
   // keyboard-driven planner can just press Enter to advance the state machine.
@@ -403,14 +425,14 @@ export function FocusCard({
                 isOverdue && "text-danger-fg font-medium",
               )}
             >
-              להזמין עד {po.order_by_date}
+              להזמין עד {fmtDateHe(po.order_by_date)}
             </span>
           )}
           {po.earliest_need_date && (
-            <span className="tabular-nums">נדרש {po.earliest_need_date}</span>
+            <span className="tabular-nums">נדרש {fmtDateHe(po.earliest_need_date)}</span>
           )}
           {po.covered_through_date && (
-            <span className="tabular-nums">מכוסה עד {po.covered_through_date}</span>
+            <span className="tabular-nums">מכוסה עד {fmtDateHe(po.covered_through_date)}</span>
           )}
         </div>
       </div>
@@ -547,7 +569,7 @@ export function FocusCard({
                             [l.session_po_line_id]: e.target.value,
                           }));
                         }}
-                        className="w-20 rounded border border-border/60 bg-bg px-1 py-0.5 text-xs"
+                        className="w-20 rounded border border-border/60 bg-bg-raised px-1 py-0.5 text-xs hover:border-border-strong focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25"
                         aria-label={`כמות עבור ${l.line_label}`}
                       />
                     ) : (
@@ -572,7 +594,7 @@ export function FocusCard({
                           }))
                         }
                         placeholder={fmtQty(l.unit_cost)}
-                        className="w-20 rounded border border-border/60 bg-bg px-1 py-0.5 text-xs font-mono tabular-nums"
+                        className="w-20 rounded border border-border/60 bg-bg-raised px-1 py-0.5 text-xs font-mono tabular-nums hover:border-border-strong focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/25"
                         aria-label={`מחיר ליחידה עבור ${l.line_label}`}
                         data-testid={`focus-line-price-${l.session_po_line_id}`}
                         disabled={busy || dropped}
@@ -665,9 +687,16 @@ export function FocusCard({
         </div>
       </div>
 
-      {/* Printable order sheet — detailed Hebrew order with spec + labels */}
+      {/* Printable order sheet — detailed Hebrew order with spec + labels.
+          ux-release-gate 2026-07-23 FLOW-002 (P0): this used to navigate
+          same-tab, which closed the FocusMode overlay and lost the walk-through
+          queue position with no warning. Opens in a new tab so the focus
+          session in this tab is untouched; the sheet page has its own
+          back-link to /planning/procurement. */}
       <Link
         href={`/planning/procurement/${po.session_po_id}/sheet`}
+        target="_blank"
+        rel="noopener noreferrer"
         className="inline-flex items-center gap-1 text-3xs font-semibold uppercase tracking-sops text-fg-muted hover:text-fg transition-colors"
         data-testid="focus-open-sheet"
       >
@@ -701,15 +730,17 @@ export function FocusCard({
               className="inline-flex items-center gap-1 rounded-full border border-border/60 px-2 py-0.5 text-3xs text-fg-muted hover:text-fg transition-colors"
               data-testid="focus-copy-doc"
             >
-              {copied ? (
-                <>
-                  <Check className="h-3 w-3" aria-hidden /> הועתק
-                </>
-              ) : (
-                <>
-                  <ClipboardCopy className="h-3 w-3" aria-hidden /> העתק
-                </>
-              )}
+              <span aria-live="polite">
+                {copied ? (
+                  <>
+                    <Check className="h-3 w-3 inline" aria-hidden /> הועתק
+                  </>
+                ) : (
+                  <>
+                    <ClipboardCopy className="h-3 w-3 inline" aria-hidden /> העתק
+                  </>
+                )}
+              </span>
             </button>
           </div>
           <pre
@@ -742,14 +773,18 @@ export function FocusCard({
           <span>
             ההזמנה הועברה לתור הביצוע של מנהלת החשבונות.
             {po.po_id && (
-              <span className="font-mono text-xs">
+              // ux-release-gate 2026-07-23 COPY-010/FLOW-013: no PO-number field
+              // exists on PurchaseSessionPo, so the previous link showed a raw
+              // UUID fragment (po_id.slice(0,8)). Removed — the copy above is
+              // sufficient; the link target still resolves the full order.
+              <span className="text-xs">
                 {" "}·{" "}
                 <Link
                   href={`/purchase-orders/${po.po_id}`}
                   className="underline-offset-2 hover:underline"
                   data-testid="focus-placed-po-link"
                 >
-                  PO {po.po_id.slice(0, 8)}…
+                  צפה בהזמנה
                 </Link>
               </span>
             )}
@@ -826,21 +861,26 @@ export function FocusCard({
             </button>
             <button
               type="button"
-              onClick={() =>
+              onClick={() => {
+                setSkipKind("reasoned");
                 skipMut.mutate(
                   {
                     poId: po.session_po_id,
                     skip_reason: composedCancelReason,
                   },
                   { onSuccess: () => onResolve({ kind: "skipped" }) },
-                )
-              }
+                );
+              }}
               disabled={!composedCancelReason || busy}
               title={!composedCancelReason ? "יש לבחור סיבת ביטול" : undefined}
               className="btn btn-sm border border-danger/50 bg-danger-softer text-danger-fg hover:bg-danger/10"
               data-testid={`focus-cancel-submit-${po.session_po_id}`}
             >
-              <XCircle className="h-3.5 w-3.5" aria-hidden />
+              {skipMut.isPending && skipKind === "reasoned" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" aria-hidden />
+              ) : (
+                <XCircle className="h-3.5 w-3.5" aria-hidden />
+              )}
               בטל הזמנה
             </button>
           </div>
@@ -857,9 +897,16 @@ export function FocusCard({
                 type="date"
                 value={placeDate}
                 onChange={(e) => setPlaceDate(e.target.value)}
+                min={new Date().toISOString().slice(0, 10)}
                 className="input"
                 data-testid="focus-place-date"
               />
+              {/* ux-release-gate 2026-07-23 FLOW-007: clarify this is the
+                  SUPPLIER's delivery date, not the factory's stock-need date —
+                  the two can differ by the item's lead time. */}
+              <span className="text-3xs text-fg-faint">
+                מועד האספקה הצפוי מהספק — לא מועד הצורך במפעל
+              </span>
             </label>
           )}
 
@@ -880,18 +927,23 @@ export function FocusCard({
           <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
             <button
               type="button"
-              onClick={() =>
+              onClick={() => {
+                setSkipKind("quick");
                 skipMut.mutate(
                   { poId: po.session_po_id },
                   { onSuccess: () => onResolve({ kind: "skipped" }) },
-                )
-              }
+                );
+              }}
               disabled={busy}
               className="btn btn-sm btn-ghost"
               title="דחייה מהירה — ההזמנה תוצע שוב אוטומטית בסבב הבא אם הצורך עדיין קיים"
               data-testid="focus-skip"
             >
-              <SkipForward className="h-3.5 w-3.5" aria-hidden />
+              {skipMut.isPending && skipKind === "quick" ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin motion-reduce:animate-none" aria-hidden />
+              ) : (
+                <SkipForward className="h-3.5 w-3.5" aria-hidden />
+              )}
               דלג
             </button>
 

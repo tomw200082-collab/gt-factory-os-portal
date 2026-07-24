@@ -32,7 +32,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import * as Tooltip from "@radix-ui/react-tooltip";
-import { ChevronDown, RefreshCw, ShieldCheck } from "lucide-react";
+import { ChevronDown, ChevronUp, RefreshCw, ShieldCheck } from "lucide-react";
 import { Badge, type BadgeTone } from "@/components/ui/Badge";
 import { useCapability } from "@/lib/auth/role-gate";
 import { cn } from "@/lib/cn";
@@ -67,6 +67,23 @@ function fmtTimeHe(ts: string | null): string | null {
   if (Number.isNaN(t)) return null;
   const d = new Date(t);
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
+}
+
+// ux-release-gate 2026-07-23 FLOW-008: time-only was ambiguous for a session
+// left open across days (GT Everyday's weekly cadence means "נוצר 09:15" with
+// no date could be today or from last week's session). Same-day still shows
+// time only; a different day gets "DD/MM · HH:MM".
+function fmtSessionCreatedHe(ts: string | null): string | null {
+  const time = fmtTimeHe(ts);
+  if (!ts || !time) return null;
+  const created = new Date(ts);
+  const now = new Date();
+  const sameDay =
+    created.getFullYear() === now.getFullYear() &&
+    created.getMonth() === now.getMonth() &&
+    created.getDate() === now.getDate();
+  if (sameDay) return time;
+  return `${fmtDateHe(ts.slice(0, 10))} · ${time}`;
 }
 
 export function IntegrityStrip({
@@ -109,7 +126,7 @@ export function IntegrityStrip({
   const forecast = integrity?.forecast ?? null;
   const fTone = forecastTone(forecast);
 
-  const createdTime = fmtTimeHe(session.created_at);
+  const createdTime = fmtSessionCreatedHe(session.created_at);
 
   const structuralWarnings = session.warnings.filter(
     (w) => w.code !== "no_orders_needed",
@@ -155,17 +172,31 @@ export function IntegrityStrip({
           <span
             className={cn(
               "inline-flex items-center gap-1 text-3xs font-semibold",
-              TONE_TO_TEXT[overallTone],
+              refreshConfirming ? "text-accent" : TONE_TO_TEXT[overallTone],
             )}
           >
-            {issueCount > 0 ? `${issueCount} לבדיקה` : "תקין"}
-            {/* INT-105: the refresh action lives inside the (hidden-until-
-                expanded) detail row — hint its existence in the collapsed
-                bar so the post-count refresh loop is discoverable on mobile. */}
-            {showRefresh && (
-              <span className="inline-flex items-center gap-0.5 text-accent">
-                · <RefreshCw className="h-3 w-3" aria-hidden /> רענן
+            {/* ux-release-gate 2026-07-23 A11Y-R2-005/VISUAL-R2-016: the
+                confirm zone can arm from the page header even while this
+                strip is still collapsed on mobile (its own refresh button
+                isn't the only trigger) — the collapsed bar must carry its
+                own visible cue, not just the (possibly hidden) detail row. */}
+            {refreshConfirming ? (
+              <span className="inline-flex animate-pulse items-center gap-1">
+                <ChevronUp className="h-3 w-3" aria-hidden />
+                יש לאשר בראש הדף
               </span>
+            ) : (
+              <>
+                {issueCount > 0 ? `${issueCount} לבדיקה` : "תקין"}
+                {/* INT-105: the refresh action lives inside the (hidden-until-
+                    expanded) detail row — hint its existence in the collapsed
+                    bar so the post-count refresh loop is discoverable on mobile. */}
+                {showRefresh && (
+                  <span className="inline-flex items-center gap-0.5 text-accent">
+                    · <RefreshCw className="h-3 w-3" aria-hidden /> רענן
+                  </span>
+                )}
+              </>
             )}
             <ChevronDown
               className={cn(
@@ -176,6 +207,16 @@ export function IntegrityStrip({
             />
           </span>
         </button>
+
+        {/* ux-release-gate 2026-07-23 A11Y-R2-005: moved out of the
+            conditionally display:none detail row below — a live region
+            inside a hidden ancestor never announces, silencing mobile
+            screen-reader users exactly when the strip is collapsed.
+            A11Y-R2-007: role="alert" alone (implicit assertive) replaces
+            the non-standard role="status" + explicit aria-live pairing. */}
+        <span role="alert" className="sr-only">
+          {refreshConfirming ? "יש לאשר את הפעולה בראש הדף." : ""}
+        </span>
 
         <div
           id="procurement-integrity-strip-detail"
@@ -295,7 +336,9 @@ export function IntegrityStrip({
               // armed — a second tap here must never be able to land as the
               // implicit "confirm".
               disabled={refreshPending || refreshConfirming}
-              className="inline-flex min-h-[2rem] items-center gap-1 rounded-md px-2 text-3xs font-semibold text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 disabled:opacity-60"
+              // ux-release-gate 2026-07-23 VISUAL-004: no border/background —
+              // read as a text link inside the chip row rather than a button.
+              className="inline-flex min-h-[2rem] items-center gap-1 rounded-md border border-border/60 bg-bg-raised px-2 text-3xs font-semibold text-accent hover:bg-bg-subtle focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 disabled:opacity-60"
               title="מריץ מושב רכש חדש כדי שההמלצות ישקפו מלאי, ספירות ותאריכי אספקה עדכניים. מושב פתוח עם אישורים שלא נשמרו יוחלף."
               data-testid="procurement-integrity-refresh"
             >
@@ -312,6 +355,19 @@ export function IntegrityStrip({
                   ? "ממתין לאישור…"
                   : "רענון המלצות"}
             </button>
+          )}
+          {/* ux-release-gate 2026-07-23 VISUAL-R2-016: sighted users (desktop,
+              or mobile once expanded) get a visible pointer to the confirm
+              zone in the page header — the sr-only announcement above covers
+              screen readers regardless of expand state. */}
+          {refreshConfirming && (
+            <span
+              aria-hidden="true"
+              className="inline-flex animate-pulse items-center gap-1 rounded border border-accent/40 bg-accent-soft/30 px-2 py-0.5 text-3xs font-semibold text-accent"
+            >
+              <ChevronUp className="h-3 w-3" aria-hidden />
+              יש לאשר בראש הדף
+            </span>
           )}
 
           {createdTime && (

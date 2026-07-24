@@ -59,6 +59,20 @@ function newIdempotencyKey(): string {
   return `po_manual_${Date.now()}_${Math.random().toString(36).slice(2)}`;
 }
 
+// COPY-039: matches [po_id]/page.tsx's fmtDate — same corridor, same format.
+function fmtDate(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleDateString(undefined, {
+      year: "numeric",
+      month: "short",
+      day: "2-digit",
+    });
+  } catch {
+    return iso;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Form
 // ---------------------------------------------------------------------------
@@ -456,10 +470,10 @@ function ManualPoFormInner(): JSX.Element {
         setServerError(
           isOpaqueToken
             ? "Validation failed on the server. Please re-check supplier, line items, and quantities, then try again."
-            : genericToken ||
-                (data.issues?.[0]?.message
-                  ? `Validation error: ${data.issues[0].message}`
-                  : "Validation error. Check the form and try again."),
+            : // COPY-031: a raw Zod issue message ("Expected number, received
+              // string") used to fall through here — developer-facing text,
+              // not an operator-facing one.
+              genericToken || "Validation error. Check the form and try again.",
         );
       }
       setPhase("idle");
@@ -477,7 +491,7 @@ function ManualPoFormInner(): JSX.Element {
   if (phase === "success" || phase === "idempotent") {
     return (
       <>
-        <WorkflowHeader size="section" eyebrow="Purchase Orders" title="New manual order" />
+        <WorkflowHeader size="section" eyebrow="Purchase Orders" title="New purchase order" />
         <SectionCard>
           <div
             className="px-6 py-10 text-center space-y-3"
@@ -521,13 +535,14 @@ function ManualPoFormInner(): JSX.Element {
             <div className="text-xs text-fg-muted">
               {phase === "idempotent"
                 ? "We re-fetched the original PO; submitting again did not create another one."
-                : "Status: OPEN. Add receipts when goods arrive."}
+                : "Status: Open. Add receipts when goods arrive."}
             </div>
             {(successPoNumber || successPoId) && (
               <div className="text-3xs text-fg-faint font-mono">
                 {successPoNumber
                   ? `PO ${successPoNumber}`
-                  : `ref ${successPoId!.slice(0, 8)}…`}
+                  : // COPY-038: "ref" is developer shorthand for an operator surface.
+                    `Order ID: ${successPoId!.slice(0, 8)}…`}
               </div>
             )}
             <div className="flex flex-wrap items-center justify-center gap-2 pt-2">
@@ -567,7 +582,7 @@ function ManualPoFormInner(): JSX.Element {
       <WorkflowHeader
         size="section"
         eyebrow="Purchase Orders"
-        title="New manual order"
+        title="New purchase order"
         description="Manual purchase orders are not reviewed by the planning engine. Use this only for urgent or exceptional needs not covered by a planning recommendation. Providing a reason is optional but recommended for audit traceability."
         meta={
           <span className="inline-flex items-center gap-1.5 rounded-full border border-warning/40 bg-warning/5 px-2.5 py-0.5 text-3xs font-semibold uppercase tracking-sops text-warning-fg">
@@ -656,8 +671,9 @@ function ManualPoFormInner(): JSX.Element {
         {(() => {
           const summary = summarizePoDraft(lines);
           if (!supplierId && summary.lineCount === 0) return null;
+          // COPY-027: never fall back to the raw supplier UUID.
           const supplierName = supplierId
-            ? suppliersById.get(supplierId)?.supplier_name_official ?? supplierId
+            ? suppliersById.get(supplierId)?.supplier_name_official ?? "Supplier"
             : null;
           return (
             <div
@@ -675,7 +691,7 @@ function ManualPoFormInner(): JSX.Element {
                   for <bdi className="font-semibold">{supplierName}</bdi>
                 </>
               ) : null}
-              {expectedDate ? <>, expected {expectedDate}</> : null}
+              {expectedDate ? <>, expected {fmtDate(expectedDate)}</> : null}
               {summary.totalValue !== null ? (
                 <>
                   {" "}

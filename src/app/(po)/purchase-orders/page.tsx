@@ -103,6 +103,19 @@ const STATUS_OPTIONS: POStatus[] = [
   "CANCELLED",
 ];
 
+// ux-release-gate 2026-07-23 COPY-001/VISUAL-001 (P0): the filter chips used
+// to render these raw enum values directly as button text. POStatusBadge
+// below already has the human labels — this map keeps the filter row
+// consistent with the badges and the KPI tiles instead of duplicating a
+// second raw-enum surface.
+const STATUS_LABEL_FILTER: Record<POStatus, string> = {
+  APPROVED_TO_ORDER: "To place",
+  OPEN: "Open",
+  PARTIAL: "Partial",
+  RECEIVED: "Received",
+  CANCELLED: "Cancelled",
+};
+
 // ---------------------------------------------------------------------------
 // Formatting helpers — locale forced to en-US for stable, predictable display
 // regardless of browser locale (Tom is on Hebrew browser locale; the previous
@@ -251,8 +264,8 @@ function LinesSummaryCell({
       </div>
       <div
         className="h-1 w-full overflow-hidden rounded-full bg-border/40"
-        title={`${pct}% received`}
         role="progressbar"
+        aria-label={`${pct}% lines received`}
         aria-valuenow={pct}
         aria-valuemin={0}
         aria-valuemax={100}
@@ -287,17 +300,31 @@ function NewPoDropdown(): JSX.Element | null {
   const canCreate = useCapability("planning:execute");
   const [open, setOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  // ux-release-gate 2026-07-23 A11Y-004: WAI-ARIA Menu Button pattern needs
+  // focus moved into the menu on open and Arrow-key cycling between items —
+  // neither existed before (focus stayed on the trigger; Arrow keys did
+  // nothing).
+  const firstItemRef = useRef<HTMLAnchorElement>(null);
+  const secondItemRef = useRef<HTMLButtonElement>(null);
   const router = useRouter();
+
+  function closeAndReturnFocus(): void {
+    setOpen(false);
+    triggerRef.current?.focus();
+  }
 
   useEffect(() => {
     if (!open) return;
+    // Focus the first menu item as soon as the menu mounts.
+    firstItemRef.current?.focus();
     function handleClick(e: MouseEvent): void {
       if (menuRef.current && !menuRef.current.contains(e.target as Node)) {
         setOpen(false);
       }
     }
     function handleKey(e: KeyboardEvent): void {
-      if (e.key === "Escape") setOpen(false);
+      if (e.key === "Escape") closeAndReturnFocus();
     }
     document.addEventListener("mousedown", handleClick);
     document.addEventListener("keydown", handleKey);
@@ -307,11 +334,39 @@ function NewPoDropdown(): JSX.Element | null {
     };
   }, [open]);
 
+  function handleMenuKeyDown(e: React.KeyboardEvent): void {
+    if (e.key === "ArrowDown") {
+      e.preventDefault();
+      const onFirst = document.activeElement === firstItemRef.current;
+      (onFirst ? secondItemRef : firstItemRef).current?.focus();
+    } else if (e.key === "ArrowUp") {
+      e.preventDefault();
+      const onSecond = document.activeElement === secondItemRef.current;
+      (onSecond ? firstItemRef : secondItemRef).current?.focus();
+    } else if (e.key === "Home") {
+      // INTER-R2-001
+      e.preventDefault();
+      firstItemRef.current?.focus();
+    } else if (e.key === "End") {
+      e.preventDefault();
+      secondItemRef.current?.focus();
+    } else if (e.key === "Tab") {
+      // ux-release-gate 2026-07-23 A11Y-R2-001: Tab left the menu open while
+      // focus silently moved elsewhere (WAI-ARIA Menu Button violation —
+      // Tab must close the menu). Close + return to the trigger, same as
+      // Escape: deterministic, and avoids relying on native tab-order
+      // continuation after the focused menu item is removed mid-keydown,
+      // which is inconsistent across browsers.
+      closeAndReturnFocus();
+    }
+  }
+
   if (!canCreate) return null;
 
   return (
     <div className="relative" ref={menuRef}>
       <button
+        ref={triggerRef}
         type="button"
         data-testid="po-list-new-po-trigger"
         onClick={() => setOpen((v) => !v)}
@@ -333,12 +388,14 @@ function NewPoDropdown(): JSX.Element | null {
       {open && (
         <div
           role="menu"
+          onKeyDown={handleMenuKeyDown}
           className="absolute right-0 top-full z-20 mt-1 min-w-[280px] rounded-md border border-border bg-bg-raised shadow-pop animate-fade-in-up overflow-hidden"
         >
           {/* Tranche 065 (FLOW-A3, Tom-decided corridor consolidation) —
               planning-backed ordering goes through the procurement session,
               not the diagnostic runs surface. */}
           <Link
+            ref={firstItemRef}
             href="/planning/procurement"
             role="menuitem"
             data-testid="po-list-new-from-recommendation"
@@ -357,6 +414,7 @@ function NewPoDropdown(): JSX.Element | null {
             </div>
           </Link>
           <button
+            ref={secondItemRef}
             type="button"
             role="menuitem"
             data-testid="po-list-new-manual"
@@ -622,9 +680,13 @@ export default function PurchaseOrdersListPage() {
         description="Live read of approved purchase orders. Created from approved planning recommendations or manually by planners and admins."
         meta={
           <>
-            <Badge tone="info" dotted>
-              {total} PO{total === 1 ? "" : "s"}
-            </Badge>
+            {/* R2-F08: total defaults to 0 while posQuery.data is still
+                undefined — showed a false "0 POs" flash on every load. */}
+            {posQuery.data !== undefined && !posQuery.isError && (
+              <Badge tone="info" dotted>
+                {total} PO{total === 1 ? "" : "s"}
+              </Badge>
+            )}
             <Badge tone="neutral" dotted>
               Live
             </Badge>
@@ -780,6 +842,22 @@ export default function PurchaseOrdersListPage() {
         </div>
       )}
 
+      {/* ux-release-gate 2026-07-23 FLOW-003: the "To place" tile filters
+          this list, but the actual placement action happens on a different
+          route — without this link, a planner had no one-click path from
+          "3 To place" to where those orders are placed. */}
+      {allPosQuery.data && stats.approvedCount > 0 && (
+        <div className="mb-2">
+          <Link
+            href="/purchase-orders/placement-queue"
+            className="inline-flex items-center gap-1 text-xs font-medium text-accent hover:underline"
+            data-testid="po-list-placement-queue-link"
+          >
+            Manage in placement queue →
+          </Link>
+        </div>
+      )}
+
       <SectionCard contentClassName="p-0">
         {/* Filter row */}
         <div
@@ -807,13 +885,13 @@ export default function PurchaseOrdersListPage() {
                   }
                 }}
                 className={cn(
-                  "inline-flex items-center gap-1.5 rounded-sm border px-2 py-1 text-3xs font-semibold uppercase tracking-sops transition-colors duration-150",
+                  "inline-flex min-h-[2rem] items-center gap-1.5 rounded-sm border px-2 py-1 text-3xs font-semibold uppercase tracking-sops transition-colors duration-150",
                   active
                     ? "border-accent/50 bg-accent-soft text-accent"
                     : "border-border/70 bg-bg-raised text-fg-muted hover:border-border-strong hover:text-fg",
                 )}
               >
-                {s}
+                {STATUS_LABEL_FILTER[s]}
               </button>
             );
           })}
@@ -847,6 +925,7 @@ export default function PurchaseOrdersListPage() {
             <input
               className="input input-sm pl-8 w-full sm:w-72"
               placeholder="Search PO number, supplier, notes…"
+              aria-label="Search PO number, supplier, notes"
               value={query}
               onChange={(e) => {
                 setQuery(e.target.value);
@@ -990,13 +1069,12 @@ export default function PurchaseOrdersListPage() {
                           {r.po_number}
                         </div>
                         <div className="mt-0.5 truncate text-xs text-fg-muted">
+                          {/* ux-release-gate 2026-07-23 COPY-002: dropped the
+                              raw supplier_id UUID fragment + SQL-style
+                              "supplier_id" tooltip — "Unknown supplier"
+                              already states the condition clearly. */}
                           {r.supplier_name ?? (
-                            <span className="italic" title={`supplier_id ${r.supplier_id}`}>
-                              Unknown supplier
-                              <span className="ml-1 font-mono text-3xs opacity-70">
-                                ({r.supplier_id.slice(0, 8)}…)
-                              </span>
-                            </span>
+                            <span className="italic">Unknown supplier</span>
                           )}
                         </div>
                       </div>
@@ -1095,15 +1173,12 @@ export default function PurchaseOrdersListPage() {
                         </Link>
                       </td>
                       <td className="text-xs">
+                        {/* ux-release-gate 2026-07-23 COPY-002: dropped the
+                            raw supplier_id UUID fragment + SQL-style
+                            "supplier_id" tooltip. */}
                         {r.supplier_name ?? (
-                          <span
-                            className="text-fg-muted italic"
-                            title={`supplier_id ${r.supplier_id}`}
-                          >
+                          <span className="text-fg-muted italic">
                             Unknown supplier
-                            <span className="ml-1 font-mono text-3xs opacity-70">
-                              ({r.supplier_id.slice(0, 8)}…)
-                            </span>
                           </span>
                         )}
                       </td>

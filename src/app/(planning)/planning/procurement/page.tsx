@@ -19,7 +19,12 @@
 // page and operators are blocked there — no extra gate needed here.
 // ---------------------------------------------------------------------------
 
-import { useState, type KeyboardEvent as ReactKeyboardEvent } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+  type KeyboardEvent as ReactKeyboardEvent,
+} from "react";
 import Link from "next/link";
 import { useSearchParams } from "next/navigation";
 import {
@@ -50,9 +55,10 @@ import { FocusMode } from "./_components/FocusMode";
 import { buildFocusQueue } from "./_lib/focus-queue";
 import { fmtDateHe } from "./_lib/decision";
 import { useRovingTabList } from "@/components/a11y/useRovingTabList";
+import { useFocusTrap } from "@/components/a11y/useFocusTrap";
 
 export default function ProcurementPage(): JSX.Element {
-  const { data, isLoading, isError, error, refetch } = useCurrentSession();
+  const { data, isLoading, isError, refetch } = useCurrentSession();
   const startMut = useStartSession();
   const session = data?.session ?? null;
 
@@ -72,6 +78,32 @@ export default function ProcurementPage(): JSX.Element {
   const [confirmingStart, setConfirmingStart] = useState(false);
   // Tranche 065 (FLOW-PC03) — dismissible success banner after a start.
   const [startBannerDismissed, setStartBannerDismissed] = useState(false);
+
+  // ux-release-gate A11Y-012: the supersede warning is role="alertdialog"
+  // but nothing moved focus into it or handled Escape — mirrors the fix
+  // already applied to FocusMode's close-confirm and the PO cancel dialog.
+  const confirmZoneRef = useRef<HTMLDivElement>(null);
+  const confirmFirstButtonRef = useRef<HTMLButtonElement>(null);
+  const startTriggerRef = useRef<HTMLButtonElement>(null);
+  const confirmZoneTrap = useFocusTrap(confirmZoneRef, confirmingStart);
+  // ux-release-gate 2026-07-23 A11Y-R2-002: a "have I run once" ref flag is
+  // NOT StrictMode-safe — React 18 double-invokes this effect once on mount
+  // (mount → cleanup → mount again), so a flag that just flips true→false on
+  // first run reads as "not first run" on the second, StrictMode-only
+  // invocation and steals focus to the start button on page load. Tracking
+  // the actual previous VALUE of confirmingStart instead is invariant to how
+  // many times the effect fires — it only reacts to a real true→false
+  // transition, which mount-time double-invocation never produces.
+  const confirmingStartWasOpen = useRef(false);
+
+  useEffect(() => {
+    if (confirmingStart) {
+      confirmFirstButtonRef.current?.focus();
+    } else if (confirmingStartWasOpen.current) {
+      startTriggerRef.current?.focus();
+    }
+    confirmingStartWasOpen.current = confirmingStart;
+  }, [confirmingStart]);
 
   function openFocus(startId: string | null): void {
     setFocusStartId(startId);
@@ -116,10 +148,20 @@ export default function ProcurementPage(): JSX.Element {
             // browser confirm: states what is lost, offers an explicit way
             // to stay in the current session.
             <div
+              ref={confirmZoneRef}
               className="flex flex-wrap items-center gap-2 rounded-md border border-warning/40 bg-warning-softer px-3 py-2"
               role="alertdialog"
+              aria-modal="true"
               aria-label="אישור החלפת מושב"
               data-testid="procurement-start-confirm-zone"
+              onKeyDown={(e) => {
+                if (e.key === "Escape") {
+                  e.stopPropagation();
+                  setConfirmingStart(false);
+                  return;
+                }
+                confirmZoneTrap.onKeyDown(e);
+              }}
             >
               <AlertTriangle
                 className="h-4 w-4 shrink-0 text-warning-fg"
@@ -133,10 +175,11 @@ export default function ProcurementPage(): JSX.Element {
               </span>
               <div className="flex items-center gap-1.5">
                 <button
+                  ref={confirmFirstButtonRef}
                   type="button"
                   onClick={handleStart}
                   disabled={startMut.isPending}
-                  className="btn btn-sm bg-warning text-fg-inverted hover:bg-warning/90"
+                  className="btn btn-sm min-h-[44px] bg-warning text-fg-inverted hover:bg-warning/90"
                   data-testid="procurement-start-confirm"
                 >
                   התחל מושב חדש
@@ -145,7 +188,7 @@ export default function ProcurementPage(): JSX.Element {
                   type="button"
                   onClick={() => setConfirmingStart(false)}
                   disabled={startMut.isPending}
-                  className="btn btn-ghost btn-sm"
+                  className="btn btn-ghost btn-sm min-h-[44px]"
                   data-testid="procurement-start-dismiss"
                 >
                   השאר במושב הנוכחי
@@ -154,10 +197,11 @@ export default function ProcurementPage(): JSX.Element {
             </div>
           ) : (
             <button
+              ref={startTriggerRef}
               type="button"
               onClick={handleStart}
               disabled={startMut.isPending}
-              className="btn btn-primary btn-sm"
+              className="btn btn-primary btn-sm min-h-[44px]"
               data-testid="procurement-start"
             >
               {startMut.isPending
@@ -172,7 +216,7 @@ export default function ProcurementPage(): JSX.Element {
 
       {startMut.isError && (
         <ErrorBanner
-          message={(startMut.error as Error).message}
+          message="לא ניתן להתחיל מושב רכש חדש."
           onRetry={handleStart}
         />
       )}
@@ -238,7 +282,7 @@ export default function ProcurementPage(): JSX.Element {
         <LoadingState />
       ) : isError ? (
         <ErrorBanner
-          message={(error as Error)?.message ?? "לא ניתן לטעון את מושב הרכש."}
+          message="לא ניתן לטעון את מושב הרכש."
           onRetry={() => void refetch()}
         />
       ) : !session ? (
@@ -326,12 +370,13 @@ function SessionView({
         data-testid="procurement-summary"
       >
         <div className="flex flex-col gap-0.5">
-          <div className="text-sm text-fg">
-            מושב מתאריך <span className="font-semibold">{sessionDate}</span>
-          </div>
           <div className="text-xs text-fg-muted">
+            מושב מתאריך{" "}
+            <span className="font-medium text-fg">{fmtDateHe(sessionDate)}</span>
+          </div>
+          <div className="text-sm text-fg">
             סה״כ:{" "}
-            <span className="font-mono tabular-nums text-fg">
+            <span className="font-mono tabular-nums text-base font-semibold text-fg-strong">
               {formatIls(totalCost)}
             </span>
           </div>
@@ -530,7 +575,8 @@ function EmptyNoSession({
           disabled={starting}
           data-testid="procurement-no-session-start"
         >
-          {starting ? "מתחיל…" : "התחל מושב רכש"}
+          {/* COPY-043: same mutation as the header's "הרצת מושב חדש" button — match its pending label. */}
+          {starting ? "מריץ…" : "התחל מושב רכש"}
         </button>
       ) : null}
     </div>

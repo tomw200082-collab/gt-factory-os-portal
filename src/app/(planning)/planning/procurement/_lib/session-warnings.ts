@@ -135,7 +135,7 @@ export function inboundIssuePrimaryHref(
 export function inboundIssueTooltip(issues: readonly InboundIssue[]): string {
   return issues
     .map((i) => {
-      const po = i.poId ?? "PO";
+      const po = i.poId ?? "הזמנה";
       if (i.kind === "no_eta") {
         const qty = i.openQty != null ? `${i.openQty} פתוחים` : "כמות פתוחה";
         return `${po}: ${qty} ללא תאריך אספקה — לא נספרו כמלאי נכנס. ודאו תאריך לפני שמזמינים שוב.`;
