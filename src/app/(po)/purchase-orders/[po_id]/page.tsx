@@ -555,6 +555,11 @@ export default function PurchaseOrderDetailPage({
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
       void queryClient.invalidateQueries({ queryKey: ["purchase-order-lines", po_id] });
+      // Tranche 141 — the planner list reads ["planner","purchase-orders",…],
+      // which is not a prefix-match of ["purchase-orders"]; without this the
+      // list (and its KPI tiles) kept showing the PO as open after a
+      // confirmed, correctly-persisted cancel.
+      void queryClient.invalidateQueries({ queryKey: ["planner", "purchase-orders"] });
       setCancelConfirming(false);
       setCancelError(null);
       setCancelSuccess(true);
@@ -621,6 +626,9 @@ export default function PurchaseOrderDetailPage({
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: ["purchase-orders", "detail", po_id] });
       void queryClient.invalidateQueries({ queryKey: ["purchase-orders", "history", po_id] });
+      // Tranche 141 — expected_receive_date drives the planner list's "Late"
+      // KPI tile and per-row late flag; keep it in sync without a reload.
+      void queryClient.invalidateQueries({ queryKey: ["planner", "purchase-orders"] });
       setEditing(false);
       setEditError(null);
       // Tranche 065 (FLOW-PO01) — flash the "Order updated." note.
@@ -665,6 +673,9 @@ export default function PurchaseOrderDetailPage({
       void queryClient.invalidateQueries({ queryKey: ["purchase-order-lines", po_id] });
       void queryClient.invalidateQueries({ queryKey: ["purchase-orders", "history", po_id] });
       void queryClient.invalidateQueries({ queryKey: ["purchase-orders", "detail", po_id] });
+      // Tranche 141 — a line cancel changes open_qty/line_count shown per-row
+      // on the planner list; keep it in sync without a reload.
+      void queryClient.invalidateQueries({ queryKey: ["planner", "purchase-orders"] });
       setLineCancelConfirmId(null);
       setLineCancelError(null);
     },

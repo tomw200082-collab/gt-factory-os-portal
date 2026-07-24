@@ -121,6 +121,11 @@ export function FgOutPickUndoControl({
       setOpen(false);
       setReason("");
       qc.invalidateQueries({ queryKey: ["fg-out-pick-reversal-status", movementId] });
+      // Tranche 141 — undoing a FG-out pick posts a reversal to the ledger;
+      // refresh the Inventory dashboard and ledger view so they don't keep
+      // showing the pre-undo (decremented) balance.
+      void qc.invalidateQueries({ queryKey: ["stock"] });
+      void qc.invalidateQueries({ queryKey: ["stock-ledger"] });
       if (result.dual_role_cover_warning) {
         // Do NOT call onUndone() here — on this page that closes the whole
         // drawer (DetailsDrawer's onReversed), and React 18 batches this

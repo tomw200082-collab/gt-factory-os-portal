@@ -30,7 +30,7 @@
 import { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { FgOutPauseControl } from "@/components/stock/FgOutPauseControl";
@@ -436,6 +436,7 @@ function DetailsDrawer({
   onReversed: () => void;
 }) {
   const { session } = useSession();
+  const queryClient = useQueryClient();
   const [undoOpen, setUndoOpen] = useState(false);
   const [undoReason, setUndoReason] = useState("");
   const [undoBusy, setUndoBusy] = useState(false);
@@ -480,6 +481,12 @@ function DetailsDrawer({
       );
       if (res.ok) {
         setUndoDone(true);
+        // Tranche 141 — undoing a count restores the previous balance
+        // immediately; refresh the Inventory dashboard and this page's own
+        // ledger list (["stock-ledger",…]) so they don't keep showing the
+        // now-reversed value until "Close" is clicked.
+        void queryClient.invalidateQueries({ queryKey: ["stock"] });
+        void queryClient.invalidateQueries({ queryKey: ["stock-ledger"] });
         return;
       }
       const body = await res.json().catch(() => null);

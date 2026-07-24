@@ -254,6 +254,11 @@ export default function InventoryMovementReviewPage() {
       const body = await res.json().catch(() => undefined);
       if (res.status === 200) {
         invalidateInboxSources();
+        // Tranche 141 — approval posts every line to the ledger; refresh the
+        // Inventory dashboard and ledger view so they don't keep showing
+        // pre-approval balances.
+        void queryClient.invalidateQueries({ queryKey: ["stock"] });
+        void queryClient.invalidateQueries({ queryKey: ["stock-ledger"] });
         // FLOW-IM-002 / FLOW-IM-003 — keep the backend's posted_lines[] so the
         // success state can list each posted ledger row and link out.
         const postedLines: PostedLine[] =

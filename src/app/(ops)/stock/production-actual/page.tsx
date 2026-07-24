@@ -1102,6 +1102,18 @@ function SubmissionDetailView({ submissionId }: { submissionId: string }) {
         void queryClient.invalidateQueries({
           queryKey: ["production-actuals", "history"],
         });
+        // Tranche 141 — the "already reported" live check on the entry form
+        // reads by-plan coverage; without this it kept showing the plan as
+        // still-reported right after a reversal. And the reversal undoes
+        // consumption/output on the ledger, so the Inventory dashboard needs
+        // the same refresh every other stock-changing action gets.
+        if (linkedPlanId) {
+          void queryClient.invalidateQueries({
+            queryKey: ["production-actuals", "by-plan", linkedPlanId],
+          });
+        }
+        void queryClient.invalidateQueries({ queryKey: ["stock"] });
+        void queryClient.invalidateQueries({ queryKey: ["stock-ledger"] });
         void detailQuery.refetch();
         return;
       }
@@ -2442,6 +2454,11 @@ export default function ProductionActualPage() {
           void queryClient.invalidateQueries({
             queryKey: ["production-actuals", "history"],
           });
+          // Tranche 141 — a posted production report consumes and produces
+          // real stock; refresh the Inventory dashboard and ledger view so
+          // they don't keep showing pre-submission balances.
+          void queryClient.invalidateQueries({ queryKey: ["stock"] });
+          void queryClient.invalidateQueries({ queryKey: ["stock-ledger"] });
           // Refresh the plan list so the linked plan flips to done state on
           // re-navigation back to /planning/production-plan.
           if (overrideFromPlanId) {

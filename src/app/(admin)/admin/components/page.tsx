@@ -296,6 +296,9 @@ function ComponentsPageInner(): JSX.Element {
         message: `Status updated for ${vars.component_id} → ${vars.newStatus}.`,
       });
       void queryClient.invalidateQueries({ queryKey: ["admin", "components"] });
+      // Tranche 141 — keep the Archive tab and admin health summary in sync.
+      void queryClient.invalidateQueries({ queryKey: ["admin", "archive", "components"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin", "health"] });
     },
     onError: (err: Error, vars) => {
       const msg =
@@ -492,9 +495,18 @@ function ComponentsPageInner(): JSX.Element {
       }
       return created;
     },
-    onSuccess: () => {
+    onSuccess: (_data, vars) => {
       void queryClient.invalidateQueries({ queryKey: ["api", "supplier-items"] });
       void queryClient.invalidateQueries({ queryKey: ["api", "supplier-items", "primary"] });
+      // Tranche 141 — supplier_items is also read under two other,
+      // independent query-key namespaces (QuickFixDrawer's
+      // ["supplier-items","by-component",id] and the admin Supplier Items
+      // page's ["admin","supplier-items"]); without these they kept showing
+      // the pre-change primary supplier.
+      void queryClient.invalidateQueries({
+        queryKey: ["supplier-items", "by-component", vars.componentId],
+      });
+      void queryClient.invalidateQueries({ queryKey: ["admin", "supplier-items"] });
       setShowSupplierPicker(false);
       setPendingSupplier("");
       setBanner({ kind: "success", message: "Primary supplier updated." });
