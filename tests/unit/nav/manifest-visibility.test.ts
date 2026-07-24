@@ -34,6 +34,7 @@ describe("sidebar visibility — per-role snapshots (D1 fold list)", () => {
 
   it("operator (Dennis/Maxim) sees stock forms + plan, not office/credit/planner surfaces", () => {
     expect(sidebarHrefsForRole("operator")).toEqual([
+      "/production",
       "/stock/receipts",
       "/stock/waste-adjustments",
       "/stock/physical-count",

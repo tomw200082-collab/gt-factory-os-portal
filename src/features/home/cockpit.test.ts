@@ -30,9 +30,9 @@ describe("buildHomeCockpit — per-role primary + language", () => {
     expect(view.lang).toBe("en");
   });
 
-  it("operator lands on the Production report, English LTR", () => {
+  it("operator lands on Today's runs (start-of-run picking), English LTR", () => {
     const view = buildHomeCockpit("operator");
-    expect(view.primary?.href).toBe("/stock/production-actual");
+    expect(view.primary?.href).toBe("/production");
     expect(view.lang).toBe("en");
   });
 

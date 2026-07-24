@@ -51,6 +51,7 @@ manifest:
 - src/features/home/cockpit.ts
 - src/features/home/cockpit.test.ts
 - src/middleware.ts
+- tests/unit/nav/manifest-visibility.test.ts
 - tests/e2e/production-picking.spec.ts
 
 ## Out-of-scope
@@ -79,4 +80,10 @@ Revert the PR on main. Purely additive new route group + one nav/cockpit/middlew
 - [ ] Tom approves this plan (autonomy granted in chat 2026-07-24; PR merge = approval, paired with brain PR #62).
 
 ## Actual evidence (filled in by the build run)
-<pasted after execution: typecheck summary, test pass count, PR URL>
+- **Build run 2026-07-24 (autonomous):** full `/production` operator surface built.
+- `npx tsc --noEmit` — clean (rc=0).
+- `npx eslint . --max-warnings=0` on all touched paths — clean (rc=0).
+- `npx vitest run` — **1048/1048 passed** (128 files); new pure-logic suites: `copy.test.ts` 5/5, `runs.test.ts` 10/10, `pick.test.ts` 17/17, `cockpit.test.ts` 23/23 (operator-landing assertion updated to `/production`).
+- `npx playwright test production-picking --grep @mocked` — **5/5 passed** (list ordered; open run → prefilled qty; tap-confirm + inline edit; Done gate disabled→enabled; unplanned dialog). Required a manual `NEXT_PUBLIC_ENABLE_DEV_SHIM_AUTH=true` dev server in the local sandbox (no `.env.local`); CI supplies it via `portal-pr-guard`.
+- Manifest note: the required nav addition (`/production` in the Stock group) forced a one-line snapshot update in `tests/unit/nav/manifest-visibility.test.ts` (operator rail), a file outside the tranche manifest — flagged for review.
+- PR URL: <lead to fill after push>
