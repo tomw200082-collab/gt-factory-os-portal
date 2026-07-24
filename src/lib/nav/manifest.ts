@@ -37,6 +37,7 @@ import {
   LayoutDashboard,
   LineChart,
   Link2,
+  ListChecks,
   MinusCircle,
   Network,
   Package,
@@ -206,6 +207,16 @@ export const NAV_MANIFEST: NavGroup[] = [
     defaultCollapsed: true,
     items: [
       {
+        // Tranche 141 — the operator's start-of-run materials-collection
+        // surface (today's runs → stage-aware picking). Leads the Stock group
+        // because it is the production operator's #1 daily action.
+        href: "/production",
+        label: "Today's runs",
+        icon: ListChecks,
+        min_role: "viewer",
+        required_capability: "stock:execute",
+      },
+      {
         href: "/stock/receipts",
         label: "Goods Receipt",
         icon: PackageOpen,
@@ -223,13 +234,6 @@ export const NAV_MANIFEST: NavGroup[] = [
         href: "/stock/physical-count",
         label: "Physical Count",
         icon: ClipboardCheck,
-        min_role: "viewer",
-        required_capability: "stock:execute",
-      },
-      {
-        href: "/stock/production-actual",
-        label: "Production Report",
-        icon: Factory,
         min_role: "viewer",
         required_capability: "stock:execute",
       },

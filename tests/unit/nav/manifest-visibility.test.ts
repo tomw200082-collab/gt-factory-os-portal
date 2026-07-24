@@ -34,10 +34,10 @@ describe("sidebar visibility — per-role snapshots (D1 fold list)", () => {
 
   it("operator (Dennis/Maxim) sees stock forms + plan, not office/credit/planner surfaces", () => {
     expect(sidebarHrefsForRole("operator")).toEqual([
+      "/production",
       "/stock/receipts",
       "/stock/waste-adjustments",
       "/stock/physical-count",
-      "/stock/production-actual",
       "/inventory",
       "/planning/production-plan",
       "/planning/inventory-flow",
@@ -119,13 +119,12 @@ describe("placement:command folds (production-simulation, blockers)", () => {
 });
 
 describe("D2 — never-grantable rows are HIDDEN, attainable rows stay subdued", () => {
-  it("hides the viewer's permanently-locked stock:execute rows (4 forms + My activity)", () => {
+  it("hides the viewer's permanently-locked stock:execute rows (3 forms + My activity)", () => {
     const viewer = sidebarHrefsForRole("viewer");
     for (const href of [
       "/stock/receipts",
       "/stock/waste-adjustments",
       "/stock/physical-count",
-      "/stock/production-actual",
       "/me/activity",
     ]) {
       expect(viewer).not.toContain(href);
