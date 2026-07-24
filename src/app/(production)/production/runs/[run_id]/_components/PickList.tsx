@@ -139,11 +139,13 @@ export function PickList({ runId }: { runId: string }) {
   // (A11Y-009).
   const liveMessage = done
     ? t("pick_done_success")
-    : query.isLoading
-      ? t("loading")
-      : query.isError || !data
-        ? t("error_load_pick_list")
-        : t(runStatusMeta(data.status).labelKey);
+    : confirm.isPending
+      ? t("pick_done_saving")
+      : query.isLoading
+        ? t("loading")
+        : query.isError || !data
+          ? t("error_load_pick_list")
+          : t(runStatusMeta(data.status).labelKey);
   const liveRegion = (
     <span className="sr-only" aria-live="polite" data-testid="pick-list-live">
       {liveMessage}
@@ -262,7 +264,7 @@ export function PickList({ runId }: { runId: string }) {
             key={lineKey(line)}
             line={line}
             resolution={resolutions[lineKey(line)]}
-            disabled={terminal || committed}
+            disabled={terminal || committed || confirm.isPending}
             onConfirm={() =>
               setResolutions((prev) => ({
                 ...prev,

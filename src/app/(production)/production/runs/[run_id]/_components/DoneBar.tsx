@@ -83,6 +83,7 @@ export function DoneBar({
           disabled={pending}
           aria-disabled={!allDone || pending}
           aria-describedby={!allDone ? "done-blocked-reason" : undefined}
+          title={!allDone ? blockedMsg : undefined}
           data-testid="done-collecting"
           className={cn(
             "btn btn-lg w-full gap-2 text-base",

@@ -295,6 +295,7 @@ export function UnplannedRunDialog({
                 type="button"
                 className="btn h-14 rounded-r-none border-r-0 px-4"
                 onClick={() => stepQty(-1)}
+                disabled={mutation.isPending}
                 aria-label="Decrease quantity"
               >
                 <Minus className="h-5 w-5" strokeWidth={2.5} aria-hidden />
@@ -325,6 +326,7 @@ export function UnplannedRunDialog({
                 type="button"
                 className="btn h-14 rounded-l-none border-l-0 px-4"
                 onClick={() => stepQty(1)}
+                disabled={mutation.isPending}
                 aria-label="Increase quantity"
               >
                 <Plus className="h-5 w-5" strokeWidth={2.5} aria-hidden />

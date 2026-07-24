@@ -134,7 +134,7 @@ export function EditQtySheet({
             <Plus className="h-6 w-6" strokeWidth={2.5} aria-hidden />
           </button>
         </div>
-        <div className="mt-1 text-center text-sm font-medium text-fg-subtle">
+        <div className="mt-1 text-center text-sm font-medium text-fg-muted">
           {line.uom}
         </div>
 
