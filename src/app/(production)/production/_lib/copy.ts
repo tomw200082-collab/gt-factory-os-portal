@@ -131,6 +131,32 @@ export const pickingDict = {
     en: "Could not load the materials. Check your connection and try again.",
     ru: "",
   },
+  // ── /production/runs/[id]/report — end-of-run report ─────────────────────
+  report_title: { en: "Finish the run", ru: "" },
+  report_eyebrow: { en: "Production", ru: "" },
+  report_output: { en: "How many good units?", ru: "" },
+  report_scrap: { en: "How many bad / thrown?", ru: "" },
+  report_qc_heading: { en: "Quality check (optional)", ru: "" },
+  report_qc_hint: { en: "You can skip this. It never stops you.", ru: "" },
+  report_brix: { en: "Brix", ru: "" },
+  report_ph: { en: "pH", ru: "" },
+  report_sample_taken: { en: "Sample taken", ru: "" },
+  report_qc_note: { en: "Note", ru: "" },
+  report_notes: { en: "Anything to add?", ru: "" },
+  report_notes_ph: { en: "Type here…", ru: "" },
+  report_submit: { en: "Finish run", ru: "" },
+  report_saving: { en: "Saving…", ru: "" },
+  report_need_output: { en: "Type the good units first.", ru: "" },
+  report_success: { en: "Run finished. Good job.", ru: "" },
+  report_cta: { en: "Report production", ru: "" },
+  report_already_title: { en: "This run is already finished.", ru: "" },
+  report_already_body: { en: "The work was saved. Nothing to add.", ru: "" },
+  report_err_not_reportable: {
+    en: "This run is not ready to finish. Ask the planner.",
+    ru: "",
+  },
+  report_err_already: { en: "This run was already finished.", ru: "" },
+
   close_dialog: { en: "Close", ru: "" },
 } as const;
 

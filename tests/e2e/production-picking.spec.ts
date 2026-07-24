@@ -162,6 +162,91 @@ test.describe("@mocked production picking", () => {
     await expect(page.getByTestId("pick-done-success")).toBeVisible();
   });
 
+  test("end-of-run report submits with only output; QC is optional", async ({ page }) => {
+    await setFakeRole(page, "operator");
+    // The run is in production (materials already collected) → reportable.
+    await page.route("**/api/production-runs/*/pick-list", (route) =>
+      route.fulfill({ json: { ...PICK_LIST, status: "IN_PRODUCTION" } }),
+    );
+
+    await page.goto("/production/runs/RUN1/report");
+
+    await expect(page.getByTestId("report-form")).toBeVisible();
+
+    // QC fields are optional — the whole QC block starts collapsed and does
+    // NOT gate submit. Submit is blocked only until output is a positive number.
+    const submit = page.getByTestId("report-submit");
+    await expect(submit).toHaveAttribute("aria-disabled", "true");
+
+    // Type good units only. Leave scrap at its default, QC untouched.
+    await page.getByTestId("report-output-qty").fill("150");
+    await expect(submit).toHaveAttribute("aria-disabled", "false");
+
+    // Prove QC is reachable but never required — open it, leave it empty.
+    await page.getByTestId("report-qc-toggle").click();
+    await expect(page.getByTestId("report-qc-brix")).toBeVisible();
+    await expect(page.getByTestId("report-qc-brix")).toHaveValue("");
+    await expect(page.getByTestId("report-qc-ph")).toHaveValue("");
+
+    await page.route("**/api/production-runs/*/report", (route) =>
+      route.fulfill({
+        status: 201,
+        json: {
+          run_id: "RUN1",
+          submission_id: "RSUB1",
+          status: "posted",
+          item_id: "ITEM1",
+          output_qty: "150",
+          scrap_qty: "0",
+          output_uom: "L",
+          run_status: "REPORTED",
+          linked_plan_id: "PLAN1",
+          idempotent_replay: false,
+        },
+      }),
+    );
+
+    await submit.click();
+    await expect(page.getByTestId("report-success")).toBeVisible();
+    await expect(page.getByText("Run finished. Good job.")).toBeVisible();
+    await expect(page.getByTestId("report-back")).toBeVisible();
+  });
+
+  test("pick-confirm success screen links to the report", async ({ page }) => {
+    await setFakeRole(page, "operator");
+    await stubToday(page, [todayRow()]);
+    await page.route("**/api/production-runs/*/pick-list", (route) =>
+      route.fulfill({ json: PICK_LIST }),
+    );
+    await page.route("**/api/production-runs/*/pick-confirm", (route) =>
+      route.fulfill({
+        status: 201,
+        json: {
+          run_id: "RUN1",
+          submission_id: "SUB1",
+          status: "posted",
+          run_status: "PICKING",
+          linked_plan_id: "PLAN1",
+          consumed: [],
+          shortfalls: [],
+          signals: [],
+          idempotent_replay: false,
+        },
+      }),
+    );
+
+    await page.goto("/production/runs/RUN1");
+    await page.getByTestId("pick-confirm-base-C1").click();
+    await page.getByTestId("pick-confirm-base-C2").click();
+    await page.getByTestId("done-collecting").click();
+    await page.getByTestId("done-confirm-yes").click();
+
+    // INTER-006: the done card offers a path forward to the report.
+    const reportCta = page.getByTestId("pick-done-report");
+    await expect(reportCta).toBeVisible();
+    await expect(reportCta).toHaveAttribute("href", /\/production\/runs\/RUN1\/report/);
+  });
+
   test("unplanned-run dialog opens with a product list", async ({ page }) => {
     await setFakeRole(page, "operator");
     await stubToday(page, []);

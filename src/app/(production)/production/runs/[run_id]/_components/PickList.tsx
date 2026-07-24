@@ -13,7 +13,14 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
-import { CheckCircle2, Droplets, Loader2, Package, RotateCw } from "lucide-react";
+import {
+  ArrowRight,
+  CheckCircle2,
+  Droplets,
+  Loader2,
+  Package,
+  RotateCw,
+} from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Badge } from "@/components/ui/Badge";
@@ -214,13 +221,23 @@ export function PickList({ runId }: { runId: string }) {
           <p className="text-sm text-fg-muted">
             {name} · {fmtNumStr(data.target_qty)} {data.uom}
           </p>
-          <Link
-            href="/production"
-            className="btn btn-primary btn-lg mt-2"
-            data-testid="pick-done-back"
-          >
-            {t("pick_done_back_to_runs")}
-          </Link>
+          <div className="mt-2 flex flex-col items-center gap-2">
+            <Link
+              href={`/production/runs/${encodeURIComponent(runId)}/report`}
+              className="btn btn-primary btn-lg gap-1.5"
+              data-testid="pick-done-report"
+            >
+              {t("report_cta")}
+              <ArrowRight className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+            </Link>
+            <Link
+              href="/production"
+              className="btn btn-ghost btn-sm"
+              data-testid="pick-done-back"
+            >
+              {t("pick_done_back_to_runs")}
+            </Link>
+          </div>
         </div>
       </div>
     );
@@ -305,11 +322,19 @@ export function PickList({ runId }: { runId: string }) {
         /* Re-entry after collecting is committed and production has started —
            read-only; the picks are already in the ledger. */
         <div
-          className="mb-4 rounded-md border border-warning/40 bg-warning-softer px-4 py-3 text-sm text-warning-fg"
+          className="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-md border border-warning/40 bg-warning-softer px-4 py-3 text-sm text-warning-fg"
           role="status"
           data-testid="pick-in-production-banner"
         >
-          {t("pick_in_production_banner")}
+          <span>{t("pick_in_production_banner")}</span>
+          <Link
+            href={`/production/runs/${encodeURIComponent(runId)}/report`}
+            className="btn btn-primary btn-sm gap-1.5 shrink-0"
+            data-testid="pick-in-production-report"
+          >
+            {t("report_cta")}
+            <ArrowRight className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+          </Link>
         </div>
       ) : null}
 

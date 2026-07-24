@@ -42,4 +42,17 @@ describe("pickingDict — shape + weak-reader discipline", () => {
       expect(pickingDict[key].en).not.toMatch(forbidden);
     }
   });
+
+  it("exposes the end-of-run report copy (tranche 142)", () => {
+    expect(t("report_title")).toBe("Finish the run");
+    expect(t("report_output")).toBe("How many good units?");
+    expect(t("report_scrap")).toBe("How many bad / thrown?");
+    expect(t("report_qc_heading")).toBe("Quality check (optional)");
+    expect(t("report_submit")).toBe("Finish run");
+    expect(t("report_success")).toBe("Run finished. Good job.");
+    expect(t("report_cta")).toBe("Report production");
+    // The two output questions phrase output/scrap plainly (good/bad units).
+    expect(t("report_output").endsWith("?")).toBe(true);
+    expect(t("report_scrap").endsWith("?")).toBe(true);
+  });
 });
