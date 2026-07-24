@@ -109,7 +109,10 @@ export function RunList() {
           type="date"
           className="input h-11"
           value={date}
-          max={today}
+          // Today is the practical ceiling for browsing, but a plan made ahead
+          // of its date links here with a future date — accept the value it
+          // arrived with rather than rendering the field out of range.
+          max={date > today ? date : today}
           onChange={(e) => {
             const next = e.target.value || today;
             // Changing the day drops the plan scope — it belongs to one date.
@@ -151,15 +154,30 @@ export function RunList() {
       {/* Persistent SR status — always mounted so its text update is announced
           even after the ephemeral skeleton unmounts (A11Y-009). */}
       <span className="sr-only" aria-live="polite" data-testid="production-today-live">
-        {query.isLoading
-          ? t("loading")
-          : query.isError
-            ? t("error_load_runs")
-            : t("today_subtitle")}
+        {forwardTo
+          ? t("day_opening_report")
+          : query.isLoading
+            ? t("loading")
+            : query.isError
+              ? t("error_load_runs")
+              : t("today_subtitle")}
       </span>
 
       {/* Loading */}
-      {query.isLoading ? (
+      {forwardTo ? (
+        /* Mid-forward. Showing the list for the frame before the redirect
+           lands would flash a screen the operator never asked for — this is
+           the plan card's "Report production" journey, so say what is
+           happening instead. */
+        <div
+          className="card flex flex-col items-center gap-3 px-6 py-12 text-center"
+          role="status"
+          data-testid="production-forwarding"
+        >
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-accent border-t-transparent motion-reduce:animate-none" aria-hidden />
+          <p className="text-sm text-fg-muted">{t("day_opening_report")}</p>
+        </div>
+      ) : query.isLoading ? (
         <div className="space-y-3" aria-busy="true">
           {[0, 1, 2].map((i) => (
             <div

@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   autoForwardRunId,
   isRunActive,
+  isRunReportable,
   isRunTerminal,
   planRuns,
   runDisplayName,
@@ -146,15 +147,15 @@ describe("planRuns — scoping the day to one plan", () => {
 
 describe("autoForwardRunId — only an unambiguous single target", () => {
   it("forwards when the plan has exactly one reportable run", () => {
-    expect(autoForwardRunId([run({ run_id: "only", status: "PLANNED" })])).toBe("only");
+    expect(autoForwardRunId([run({ run_id: "only", stage: "SINGLE", status: "PLANNED" })])).toBe("only");
   });
 
   it("forwards a run that was never picked — back-dated reporting must work", () => {
-    expect(autoForwardRunId([run({ run_id: "r", status: "PLANNED" })])).toBe("r");
+    expect(autoForwardRunId([run({ run_id: "r", stage: "SINGLE", status: "PLANNED" })])).toBe("r");
   });
 
   it("forwards mid-production too", () => {
-    expect(autoForwardRunId([run({ run_id: "r", status: "IN_PRODUCTION" })])).toBe("r");
+    expect(autoForwardRunId([run({ run_id: "r", stage: "SINGLE", status: "IN_PRODUCTION" })])).toBe("r");
   });
 
   it("does NOT forward a base batch — tank + packs would report the wrong product", () => {
@@ -167,16 +168,46 @@ describe("autoForwardRunId — only an unambiguous single target", () => {
   });
 
   it("does NOT forward when nothing is left to report", () => {
-    expect(autoForwardRunId([run({ status: "REPORTED" })])).toBeNull();
-    expect(autoForwardRunId([run({ status: "CANCELLED" })])).toBeNull();
+    expect(autoForwardRunId([run({ stage: "SINGLE", status: "REPORTED" })])).toBeNull();
+    expect(autoForwardRunId([run({ stage: "SINGLE", status: "CANCELLED" })])).toBeNull();
     expect(autoForwardRunId([])).toBeNull();
   });
 
   it("ignores finished runs when finding the single remaining target", () => {
     const rows = [
-      run({ run_id: "done", status: "REPORTED" }),
-      run({ run_id: "left", status: "IN_PRODUCTION" }),
+      run({ run_id: "done", stage: "SINGLE", status: "REPORTED" }),
+      run({ run_id: "left", stage: "SINGLE", status: "IN_PRODUCTION" }),
     ];
     expect(autoForwardRunId(rows)).toBe("left");
+  });
+});
+
+describe("isRunReportable — a TANK run has no product of its own", () => {
+  it("a TANK run is never reportable, at any status", () => {
+    expect(isRunReportable(run({ stage: "TANK", status: "PLANNED" }))).toBe(false);
+    expect(isRunReportable(run({ stage: "TANK", status: "PICKING" }))).toBe(false);
+    expect(isRunReportable(run({ stage: "TANK", status: "IN_PRODUCTION" }))).toBe(false);
+  });
+
+  it("PACK and SINGLE runs are reportable while not terminal", () => {
+    expect(isRunReportable(run({ stage: "PACK", status: "PLANNED" }))).toBe(true);
+    expect(isRunReportable(run({ stage: "SINGLE", status: "IN_PRODUCTION" }))).toBe(true);
+  });
+
+  it("nothing terminal is reportable", () => {
+    expect(isRunReportable(run({ stage: "SINGLE", status: "REPORTED" }))).toBe(false);
+    expect(isRunReportable(run({ stage: "PACK", status: "CANCELLED" }))).toBe(false);
+  });
+
+  it("a lone TANK run does not auto-forward — it would land on a 409", () => {
+    expect(autoForwardRunId([run({ run_id: "tank", stage: "TANK", status: "PLANNED" })])).toBeNull();
+  });
+
+  it("tank + one pack forwards to the pack, not the tank", () => {
+    const rows = [
+      run({ run_id: "tank", stage: "TANK" }),
+      run({ run_id: "pack", stage: "PACK" }),
+    ];
+    expect(autoForwardRunId(rows)).toBe("pack");
   });
 });

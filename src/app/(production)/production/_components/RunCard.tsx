@@ -23,6 +23,7 @@ import { cn } from "@/lib/cn";
 import { fmtNumStr } from "@/lib/utils/format-quantity";
 import { t } from "../_lib/copy";
 import {
+  isRunReportable,
   isRunTerminal,
   runDisplayName,
   type RunStatusMeta,
@@ -75,12 +76,10 @@ export function RunCard({
   const done = run.status === "REPORTED";
   const name = runDisplayName(run);
 
-  // A TANK run makes liquid for other runs to fill — it has no finished
-  // product of its own, so there is nothing to report on it (the backend
-  // returns RUN_NOT_REPORTABLE). Every other non-terminal run can be reported
-  // at any time, including one nobody collected for: back-dated reporting is
-  // routine, so this CTA never depends on having picked first (tranche 147).
-  const canReport = !terminal && run.stage !== "TANK";
+  // Reporting never depends on having collected first — back-dated reporting
+  // is routine (tranche 147). A TANK run is the one exception: it has no
+  // finished product of its own, so there is nothing to report on it.
+  const canReport = isRunReportable(run);
 
   return (
     <div

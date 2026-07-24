@@ -21,6 +21,7 @@ export const pickingDict = {
 
   // ── day switcher — reporting an earlier day (tranche 147) ────────────────
   day_picker_label: { en: "Day", ru: "" },
+  day_opening_report: { en: "Opening the production report…", ru: "" },
   day_back_to_today: { en: "Back to today", ru: "" },
   day_title_past: { en: "Another day", ru: "" },
   day_subtitle_past: { en: "You can report a job you made earlier.", ru: "" },

@@ -39,18 +39,33 @@ export function planRuns(
   return rows.filter((r) => r.plan_id === planId);
 }
 
+/** Whether a run can be reported at all.
+ *
+ *  A TANK run makes liquid for other runs to fill — it has no finished product
+ *  of its own, so the backend answers RUN_NOT_REPORTABLE for it (its liquids
+ *  are consumed when the plan's first PACK run is reported). Everything else
+ *  non-terminal is reportable, including a run nobody collected for: reporting
+ *  after the fact must not depend on having picked first. */
+export function isRunReportable(row: {
+  status: ProductionRunStatus;
+  stage: ProductionStage;
+}): boolean {
+  return !isRunTerminal(row.status) && row.stage !== "TANK";
+}
+
 /** The run to open the report form on directly, or null to show the list.
  *
  *  Only an unambiguous single target auto-forwards: exactly one run that can
- *  still be reported. A base batch (tank + one run per pack SKU) has several,
- *  so the operator chooses — silently picking one of them would report the
- *  wrong product. An already-reported run does not count as a target: a plan
- *  whose only run is done should land on the list showing it done, not on a
- *  form that refuses. Pure. */
+ *  actually be reported. A base batch (tank + one run per pack SKU) has
+ *  several, so the operator chooses — silently picking one of them would
+ *  report the wrong product. An already-reported run does not count as a
+ *  target: a plan whose only run is done should land on the list showing it
+ *  done, not on a form that refuses. Nor does a lone TANK run, which would
+ *  forward straight into a 409. Pure. */
 export function autoForwardRunId(
   rows: readonly ProductionRunTodayRow[],
 ): string | null {
-  const reportable = rows.filter((r) => !isRunTerminal(r.status));
+  const reportable = rows.filter(isRunReportable);
   return reportable.length === 1 ? reportable[0].run_id : null;
 }
 
