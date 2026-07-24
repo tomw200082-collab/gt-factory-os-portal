@@ -154,7 +154,7 @@ export function AddMaterialControl({
               <option value="">—</option>
               {lines.map((l) => (
                 <option key={`${l.source}:${l.component_id}`} value={`${l.source}:${l.component_id}`}>
-                  {l.component_name}
+                  {l.floor_name ?? l.component_name}
                 </option>
               ))}
             </select>
@@ -178,6 +178,7 @@ export function AddMaterialControl({
                 type="button"
                 className="btn h-14 rounded-r-none border-r-0 px-4"
                 onClick={() => step(-1)}
+                disabled={mutation.isPending}
                 aria-label="Decrease quantity"
               >
                 <Minus className="h-5 w-5" strokeWidth={2.5} aria-hidden />
@@ -201,6 +202,7 @@ export function AddMaterialControl({
                 type="button"
                 className="btn h-14 rounded-l-none border-l-0 px-4"
                 onClick={() => step(1)}
+                disabled={mutation.isPending}
                 aria-label="Increase quantity"
               >
                 <Plus className="h-5 w-5" strokeWidth={2.5} aria-hidden />

@@ -310,4 +310,81 @@ test.describe("@mocked production picking", () => {
     await page.getByTestId("unplanned-item-ITEM9").click();
     await expect(page.getByTestId("unplanned-qty")).toHaveValue("1");
   });
+
+  test("active-run correction dropdown shows the floor name, not Hebrew (tranche 146 INTER-006)", async ({
+    page,
+  }) => {
+    await setFakeRole(page, "operator");
+    // In-production run → the Add/Return correction control is available.
+    await page.route("**/api/production-runs/*/pick-list", (route) =>
+      route.fulfill({
+        json: {
+          ...PICK_LIST,
+          status: "IN_PRODUCTION",
+          lines: [
+            { ...PICK_LIST.lines[0], component_name: "סוכר", floor_name: "Sugar" },
+            { ...PICK_LIST.lines[1], component_name: "מיץ לימון", floor_name: null },
+          ],
+        },
+      }),
+    );
+
+    await page.goto("/production/runs/RUN1");
+    await page.getByTestId("active-add-open").click();
+    const select = page.getByTestId("active-material");
+    await expect(select).toBeVisible();
+
+    // The Latin floor name leads (matches PickRow / EditQtySheet); the Hebrew
+    // component_name is only the fallback when no floor_name exists.
+    await expect(select.locator("option", { hasText: "Sugar" })).toHaveCount(1);
+    await expect(select.locator("option", { hasText: "סוכר" })).toHaveCount(0);
+    await expect(select.locator("option", { hasText: "מיץ לימון" })).toHaveCount(1);
+  });
+
+  test("pick rows lock while the pick-confirm is in flight (tranche 146 INTER-007)", async ({
+    page,
+  }) => {
+    await setFakeRole(page, "operator");
+    await stubToday(page, [todayRow()]);
+    await page.route("**/api/production-runs/*/pick-list", (route) =>
+      route.fulfill({ json: PICK_LIST }),
+    );
+
+    // Hold the pick-confirm open so the in-flight window is observable.
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route("**/api/production-runs/*/pick-confirm", async (route) => {
+      await gate;
+      await route.fulfill({
+        status: 201,
+        json: {
+          run_id: "RUN1",
+          submission_id: "SUB1",
+          status: "posted",
+          run_status: "PICKING",
+          linked_plan_id: "PLAN1",
+          consumed: [],
+          shortfalls: [],
+          signals: [],
+          idempotent_replay: false,
+        },
+      });
+    });
+
+    await page.goto("/production/runs/RUN1");
+    await page.getByTestId("pick-confirm-base-C1").click();
+    await page.getByTestId("pick-confirm-base-C2").click();
+    await page.getByTestId("done-collecting").click();
+    await page.getByTestId("done-confirm-yes").click();
+
+    // While the stock-decrementing confirm round-trips, the rows behind it are
+    // inert — no orphan taps against a run that is already committing.
+    await expect(page.getByTestId("pick-confirm-base-C1")).toBeDisabled();
+    await expect(page.getByTestId("pick-edit-base-C1")).toBeDisabled();
+
+    release();
+    await expect(page.getByTestId("pick-done-success")).toBeVisible();
+  });
 });

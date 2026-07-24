@@ -148,11 +148,13 @@ export function ReportForm({ runId }: { runId: string }) {
 
   const liveMessage = done
     ? t("report_success")
-    : query.isLoading
-      ? t("loading")
-      : query.isError || !data
-        ? t("error_load_pick_list")
-        : t(runStatusMeta(data.status).labelKey);
+    : report.isPending
+      ? t("report_saving")
+      : query.isLoading
+        ? t("loading")
+        : query.isError || !data
+          ? t("error_load_pick_list")
+          : t(runStatusMeta(data.status).labelKey);
   const liveRegion = (
     <span className="sr-only" aria-live="polite" data-testid="report-live">
       {liveMessage}
