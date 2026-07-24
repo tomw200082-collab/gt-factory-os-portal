@@ -518,7 +518,7 @@ export default function PhysicalCountPage() {
     }>("/api/physical-count", envelope);
     switch (result.kind) {
       case "posted":
-        // Tranche 141 — a direct-posted count changes real on-hand
+        // Tranche 144 — a direct-posted count changes real on-hand
         // quantities immediately; refresh the Inventory dashboard and
         // ledger view so they don't keep showing pre-count balances.
         void queryClient.invalidateQueries({ queryKey: ["stock"] });

@@ -973,7 +973,7 @@ export default function GoodsReceiptPage() {
         void queryClient.invalidateQueries({
           queryKey: ["ops", "receipts", "open-pos"],
         });
-        // Tranche 141 — a posted receipt changes real on-hand quantities;
+        // Tranche 144 — a posted receipt changes real on-hand quantities;
         // the Inventory dashboard (["stock","FG"/"RM_PKG"/"value"]) and the
         // ledger view (["stock-ledger",…]) were never in this invalidation
         // set, so they kept showing pre-receipt balances until reload.

@@ -481,7 +481,7 @@ function DetailsDrawer({
       );
       if (res.ok) {
         setUndoDone(true);
-        // Tranche 141 — undoing a count restores the previous balance
+        // Tranche 144 — undoing a count restores the previous balance
         // immediately; refresh the Inventory dashboard and this page's own
         // ledger list (["stock-ledger",…]) so they don't keep showing the
         // now-reversed value until "Close" is clicked.

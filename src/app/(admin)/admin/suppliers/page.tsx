@@ -274,7 +274,7 @@ function SuppliersPageInner(): JSX.Element {
         }.`,
       });
       void queryClient.invalidateQueries({ queryKey: ["admin", "suppliers"] });
-      // Tranche 141 — keep the Archive tab and admin health summary in sync.
+      // Tranche 144 — keep the Archive tab and admin health summary in sync.
       void queryClient.invalidateQueries({ queryKey: ["admin", "archive", "suppliers"] });
       void queryClient.invalidateQueries({ queryKey: ["admin", "health"] });
     },

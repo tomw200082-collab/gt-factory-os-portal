@@ -121,7 +121,7 @@ export function FgOutPickUndoControl({
       setOpen(false);
       setReason("");
       qc.invalidateQueries({ queryKey: ["fg-out-pick-reversal-status", movementId] });
-      // Tranche 141 — undoing a FG-out pick posts a reversal to the ledger;
+      // Tranche 144 — undoing a FG-out pick posts a reversal to the ledger;
       // refresh the Inventory dashboard and ledger view so they don't keep
       // showing the pre-undo (decremented) balance.
       void qc.invalidateQueries({ queryKey: ["stock"] });

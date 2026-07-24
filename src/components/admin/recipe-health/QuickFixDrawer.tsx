@@ -104,7 +104,7 @@ export function QuickFixDrawer({
       qc.invalidateQueries({
         queryKey: ["supplier-items", "by-component", componentId],
       });
-      // Tranche 141 — supplier_items is also read under the admin/components
+      // Tranche 144 — supplier_items is also read under the admin/components
       // inline panel (["api","supplier-items",…]) and the admin Supplier
       // Items page (["admin","supplier-items"]); without these they kept
       // showing the pre-promote primary supplier.
@@ -135,7 +135,7 @@ export function QuickFixDrawer({
       qc.invalidateQueries({
         queryKey: ["supplier-items", "by-component", componentId],
       });
-      // Tranche 141 — same cross-namespace sync as `promote` above.
+      // Tranche 144 — same cross-namespace sync as `promote` above.
       qc.invalidateQueries({ queryKey: ["api", "supplier-items"] });
       qc.invalidateQueries({ queryKey: ["admin", "supplier-items"] });
       setEditingPriceRowId(null);
@@ -171,7 +171,7 @@ export function QuickFixDrawer({
         qc.invalidateQueries({
           queryKey: ["supplier-items", "by-component", componentId],
         });
-        // Tranche 141 — same cross-namespace sync as `promote`/`updatePrice`.
+        // Tranche 144 — same cross-namespace sync as `promote`/`updatePrice`.
         qc.invalidateQueries({ queryKey: ["api", "supplier-items"] });
         qc.invalidateQueries({ queryKey: ["admin", "supplier-items"] });
         onClose();

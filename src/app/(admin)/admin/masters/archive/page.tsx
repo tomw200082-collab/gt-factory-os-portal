@@ -159,7 +159,7 @@ export default function AdminMastersArchivePage(): JSX.Element {
       setBanner({ kind: "success", message: "Item restored and set to Active." });
       void queryClient.invalidateQueries({ queryKey: ["admin", "archive", "items"] });
       void queryClient.invalidateQueries({ queryKey: ["admin", "health"] });
-      // Tranche 141 — the main Items list uses a disjoint key
+      // Tranche 144 — the main Items list uses a disjoint key
       // (["admin","items", statusFilter, supplyFilter]); without this it
       // kept showing the item as archived after a successful restore.
       void queryClient.invalidateQueries({ queryKey: ["admin", "items"] });
@@ -181,7 +181,7 @@ export default function AdminMastersArchivePage(): JSX.Element {
       setBanner({ kind: "success", message: "Component restored and set to Active." });
       void queryClient.invalidateQueries({ queryKey: ["admin", "archive", "components"] });
       void queryClient.invalidateQueries({ queryKey: ["admin", "health"] });
-      // Tranche 141 — the main Components list uses a disjoint key; without
+      // Tranche 144 — the main Components list uses a disjoint key; without
       // this it kept showing the component as archived after a restore.
       void queryClient.invalidateQueries({ queryKey: ["admin", "components"] });
     },
@@ -201,7 +201,7 @@ export default function AdminMastersArchivePage(): JSX.Element {
       setConfirmId(null);
       setBanner({ kind: "success", message: "Supplier restored and set to Active." });
       void queryClient.invalidateQueries({ queryKey: ["admin", "archive", "suppliers"] });
-      // Tranche 141 — the main Suppliers list uses a disjoint key; without
+      // Tranche 144 — the main Suppliers list uses a disjoint key; without
       // this it kept showing the supplier as archived after a restore.
       // Also refresh the admin health summary, mirroring the item/component
       // restore mutations above.

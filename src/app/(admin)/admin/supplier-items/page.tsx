@@ -281,7 +281,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
       void queryClient.invalidateQueries({
         queryKey: ["admin", "supplier-items"],
       });
-      // Tranche 141 — supplier_items is also read by QuickFixDrawer
+      // Tranche 144 — supplier_items is also read by QuickFixDrawer
       // (["supplier-items","by-component",id]) and admin/components'
       // inline panel (["api","supplier-items",…]); invalidate the shared
       // top-level prefixes so both refresh too.
@@ -313,7 +313,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
       void queryClient.invalidateQueries({
         queryKey: ["admin", "supplier-items"],
       });
-      // Tranche 141 — same cross-namespace sync as fieldMutation above.
+      // Tranche 144 — same cross-namespace sync as fieldMutation above.
       void queryClient.invalidateQueries({ queryKey: ["supplier-items"] });
       void queryClient.invalidateQueries({ queryKey: ["api", "supplier-items"] });
     },
@@ -362,7 +362,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
       void queryClient.invalidateQueries({
         queryKey: ["admin", "supplier-items"],
       });
-      // Tranche 141 — same cross-namespace sync as fieldMutation above.
+      // Tranche 144 — same cross-namespace sync as fieldMutation above.
       void queryClient.invalidateQueries({ queryKey: ["supplier-items"] });
       void queryClient.invalidateQueries({ queryKey: ["api", "supplier-items"] });
     },
@@ -387,7 +387,7 @@ export default function AdminSupplierItemsPage(): JSX.Element {
       void queryClient.invalidateQueries({
         queryKey: ["admin", "supplier-items"],
       });
-      // Tranche 141 — this is a soft-delete; without these, QuickFixDrawer
+      // Tranche 144 — this is a soft-delete; without these, QuickFixDrawer
       // and admin/components' inline panel kept showing the archived
       // sourcing link as still active.
       void queryClient.invalidateQueries({ queryKey: ["supplier-items"] });

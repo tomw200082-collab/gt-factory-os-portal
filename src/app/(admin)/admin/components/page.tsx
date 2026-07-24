@@ -296,7 +296,7 @@ function ComponentsPageInner(): JSX.Element {
         message: `Status updated for ${vars.component_id} → ${vars.newStatus}.`,
       });
       void queryClient.invalidateQueries({ queryKey: ["admin", "components"] });
-      // Tranche 141 — keep the Archive tab and admin health summary in sync.
+      // Tranche 144 — keep the Archive tab and admin health summary in sync.
       void queryClient.invalidateQueries({ queryKey: ["admin", "archive", "components"] });
       void queryClient.invalidateQueries({ queryKey: ["admin", "health"] });
     },
@@ -498,7 +498,7 @@ function ComponentsPageInner(): JSX.Element {
     onSuccess: (_data, vars) => {
       void queryClient.invalidateQueries({ queryKey: ["api", "supplier-items"] });
       void queryClient.invalidateQueries({ queryKey: ["api", "supplier-items", "primary"] });
-      // Tranche 141 — supplier_items is also read under two other,
+      // Tranche 144 — supplier_items is also read under two other,
       // independent query-key namespaces (QuickFixDrawer's
       // ["supplier-items","by-component",id] and the admin Supplier Items
       // page's ["admin","supplier-items"]); without these they kept showing

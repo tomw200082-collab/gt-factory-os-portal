@@ -200,7 +200,7 @@ export default function WasteReviewPage() {
     const r = await callApprove(submissionId, session, approvalNotes || null);
     if (r.kind === "approved") {
       invalidateInboxSources();
-      // Tranche 141 — approval posts the waste movement to the ledger;
+      // Tranche 144 — approval posts the waste movement to the ledger;
       // refresh the Inventory dashboard and ledger view so they don't keep
       // showing the pre-approval balance.
       void queryClient.invalidateQueries({ queryKey: ["stock"] });

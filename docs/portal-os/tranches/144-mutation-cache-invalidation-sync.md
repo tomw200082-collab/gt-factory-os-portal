@@ -1,4 +1,4 @@
-# Tranche 141 — Mutation cache-invalidation sync (post-cancel/delete stale views)
+# Tranche 144 — Mutation cache-invalidation sync (post-cancel/delete stale views)
 
 **Status:** in progress
 **Origin:** Tom chat dispatch 2026-07-24 — "יש הזמנות רכש פתוחות שכבר מחקתי... כרגע חלק מהדברים שאני מוחק בפורטל כנראה לא נמחקים בדאטהבייס של הבקאנד." Deep investigation (portal + backend + live Postgres) found the *backend* is correct end-to-end (PO cancel persists fully, audited, DELETE is trigger-blocked by design — see `docs/integrations/purchase_orders_schema_contract.md` §6.2). The actual defect is client-side: TanStack Query `invalidateQueries` calls target the wrong/incomplete key after a mutation, so a sibling screen keeps showing pre-mutation state until its `staleTime` expires or a manual reload happens (`refetchOnWindowFocus` is disabled app-wide). A follow-up portal-wide sweep found the same bug class repeated across purchase orders, the office-manager placement queue, every stock-quantity-changing action (goods receipt / waste / physical count / inventory-movement approvals / FG-out undo / production-actual), and several admin master-data archive↔restore pairs.

@@ -201,7 +201,7 @@ export default function PhysicalCountReviewPage() {
     const r = await callApprove(submissionId, session, approvalNotes || null);
     if (r.kind === "approved") {
       invalidateInboxSources();
-      // Tranche 141 — approval replaces the balance anchor for this item;
+      // Tranche 144 — approval replaces the balance anchor for this item;
       // refresh the Inventory dashboard and ledger view so they don't keep
       // showing the pre-approval balance.
       void queryClient.invalidateQueries({ queryKey: ["stock"] });
