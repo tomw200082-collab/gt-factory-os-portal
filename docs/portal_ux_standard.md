@@ -14,6 +14,30 @@ This is a working rule, not a design manifesto. Future screens that drift from t
 
 Use these terms verbatim where applicable; do not rename them per surface.
 
+> **Scoped exception — the `/production` operator corridor (Tom, 2026-07-24, in writing).**
+> The lexicon below is written for planner- and office-facing surfaces, where the
+> reader has context and time. It does **not** apply to `/production`,
+> `/production/runs/[run_id]`, or `/production/runs/[run_id]/report`.
+>
+> Those screens are Denis's, and he reads English poorly. They use the shortest
+> word that is still unambiguous, held in one dictionary
+> (`src/app/(production)/production/_lib/copy.ts`):
+>
+> | Lexicon term | `/production` uses |
+> |---|---|
+> | `Completed` | `Done` |
+> | `Planned` | `To do` |
+> | `Open Production Report` | `Report production` |
+>
+> This is a deliberate reading-level decision, not drift. It was raised as a P1
+> by the content lens during the tranche-147 `/ux-release-gate` run — where the
+> lens itself proposed regularising the short form rather than treating it as a
+> violation — and Tom chose the simpler words. Future gate runs should read this
+> note before flagging those three strings again.
+>
+> Everything else in the lexicon still binds on that corridor, and the whole
+> lexicon binds everywhere else.
+
 | Concept | Use | Avoid |
 |---|---|---|
 | The product being produced | `Product` | item, sku, item_id |

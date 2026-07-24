@@ -1,6 +1,6 @@
 # Tranche 147 — Report production: reachable, pre-filled, and the moment stock moves
 
-**Status:** verified — 5-lens `/ux-release-gate` run, zero P0 remaining (CONDITIONAL_SHIP; two P1 copy items held for Tom)
+**Status:** verified — 5-lens `/ux-release-gate` run, zero P0 and zero P1 remaining (SHIP)
 **Origin:** Tom, 2026-07-24 (in writing, this session), reporting a broken journey on `/planning/production-plan`:
 
 > "When I want to report production now and I press the button on some item's card for production — it takes me to this page (`/production`) and does not let me report production. Production reporting must always be available, because sometimes we report after the fact. […] The most important fix is that when you press 'actual production', the navigation takes us to a page pre-filled with what was planned and we can edit it; once we approve, it is added to finished goods according to what came out. Also, on the today's-runs page you enter the raw materials and packaging as you know, but only after entering actual production does everything we entered there actually come off stock. The reason is that sometimes production is cancelled at the last minute and then everything is returned to place, even after we've collected."
@@ -77,7 +77,7 @@ Three of the four worst findings were second-order effects of this tranche's own
 - **P0** — the stock note claimed materials come off for a run nobody collected for.
 - **P1** — TANK report dead-ends in `PickList`; back-dated reporting bouncing to today after each report; the success screen ignoring `linked_plan_id` and `shortfalls`; `item_id`/`item_name` typed non-null against a nullable backend; two labels for one journey; five accessibility findings (focus-ring contrast, unannounced pre-fill provenance, unannounced stock consequence, reduced-motion, touch targets); two visual findings (banner stacking, hover-group leak).
 
-**Held for Tom:** the content lens wants `"Done"` → `"Completed"` and `"To do"` → `"Planned"` per the standard lexicon. Not applied — `/production` has an explicit simple-English-for-Denis mandate and those words passed Gates 145/146. Two authorities disagree; the tie is Tom's.
+**Resolved by Tom, 2026-07-24 — "DENIS SIMPLE WORDS":** `/production` keeps `Done`, `To do` and `Report production`. No code change was needed. The conflict is now written into `docs/portal_ux_standard.md` §1 as a scoped exception, so the next gate run reads the decision rather than re-raising it as a P1.
 
 ## Evidence
 - Portal: `tsc --noEmit` clean; `eslint` clean; `vitest run` **1080/1080** across 129 files.
