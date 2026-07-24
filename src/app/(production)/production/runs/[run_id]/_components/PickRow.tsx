@@ -87,7 +87,7 @@ export function PickRow({
         type="button"
         onClick={onConfirm}
         disabled={disabled}
-        aria-pressed={confirmed ? true : undefined}
+        aria-pressed={resolved}
         aria-label={confirmAriaLabel}
         data-testid={`pick-confirm-${line.source}-${line.component_id}`}
         className={cn(

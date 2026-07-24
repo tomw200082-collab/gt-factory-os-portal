@@ -46,6 +46,14 @@ export function AddMaterialControl({
     [lines, componentKey],
   );
 
+  // Client-side gate: a material must be chosen and the qty positive before the
+  // save can fire. Prevents the "tap → mutation throws → red error" round-trip
+  // for the empty-selection / zero-qty cases (a disabled button explains why).
+  const canSave = !!selectedLine && Number.isFinite(Number(qty)) && Number(qty) > 0;
+  const cannotSaveReason = !selectedLine
+    ? t("active_need_item")
+    : t("unplanned_need_qty");
+
   const mutation = useMutation<void, Error>({
     mutationFn: async () => {
       if (!selectedLine) throw new Error(t("active_need_item"));
@@ -146,7 +154,7 @@ export function AddMaterialControl({
               <option value="">—</option>
               {lines.map((l) => (
                 <option key={`${l.source}:${l.component_id}`} value={`${l.source}:${l.component_id}`}>
-                  {l.component_name}
+                  {l.floor_name ?? l.component_name}
                 </option>
               ))}
             </select>
@@ -170,6 +178,7 @@ export function AddMaterialControl({
                 type="button"
                 className="btn h-14 rounded-r-none border-r-0 px-4"
                 onClick={() => step(-1)}
+                disabled={mutation.isPending}
                 aria-label="Decrease quantity"
               >
                 <Minus className="h-5 w-5" strokeWidth={2.5} aria-hidden />
@@ -193,6 +202,7 @@ export function AddMaterialControl({
                 type="button"
                 className="btn h-14 rounded-l-none border-l-0 px-4"
                 onClick={() => step(1)}
+                disabled={mutation.isPending}
                 aria-label="Increase quantity"
               >
                 <Plus className="h-5 w-5" strokeWidth={2.5} aria-hidden />
@@ -234,7 +244,8 @@ export function AddMaterialControl({
               type="button"
               className={cn("btn btn-primary btn-lg flex-1 gap-2")}
               onClick={() => mutation.mutate()}
-              disabled={mutation.isPending}
+              disabled={!canSave || mutation.isPending}
+              title={!canSave ? cannotSaveReason : undefined}
               data-testid="active-delta-save"
             >
               {mutation.isPending ? (

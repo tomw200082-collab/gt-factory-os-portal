@@ -46,7 +46,7 @@ export function DoneBar({
         {/* Progress meter */}
         <div className="mb-2.5">
           <div className="mb-1 flex items-center justify-between text-2xs font-semibold">
-            <span className="uppercase tracking-sops text-fg-subtle">
+            <span className="uppercase tracking-sops text-fg-muted">
               {resolved} / {total} {t("pick_progress")}
             </span>
             <span
@@ -83,6 +83,7 @@ export function DoneBar({
           disabled={pending}
           aria-disabled={!allDone || pending}
           aria-describedby={!allDone ? "done-blocked-reason" : undefined}
+          title={!allDone ? blockedMsg : undefined}
           data-testid="done-collecting"
           className={cn(
             "btn btn-lg w-full gap-2 text-base",
@@ -158,6 +159,7 @@ function DoneConfirmDialog({
         role="dialog"
         aria-modal="true"
         aria-labelledby="done-confirm-title"
+        tabIndex={-1}
         className="reveal w-full max-w-sm rounded-t-2xl border border-border bg-bg p-6 text-center shadow-pop outline-none sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
         data-testid="done-confirm"
@@ -167,10 +169,6 @@ function DoneConfirmDialog({
         </span>
         <h2
           id="done-confirm-title"
-          ref={(el) => {
-            a11y.initialFocusRef.current = el;
-          }}
-          tabIndex={-1}
           className="text-lg font-bold text-fg-strong outline-none"
         >
           {t("pick_done_confirm_title")}
@@ -179,6 +177,9 @@ function DoneConfirmDialog({
         <div className="mt-5 flex flex-col gap-2">
           <button
             type="button"
+            ref={(el) => {
+              a11y.initialFocusRef.current = el;
+            }}
             className="btn btn-primary btn-lg w-full gap-2"
             onClick={onConfirm}
             disabled={pending}

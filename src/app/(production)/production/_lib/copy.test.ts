@@ -43,6 +43,15 @@ describe("pickingDict — shape + weak-reader discipline", () => {
     }
   });
 
+  it("exposes the tranche-145 UX-gate copy (QC close + search result count)", () => {
+    // QC toggle collapse must NOT reuse "Cancel" (implies discard); it's a Close.
+    expect(t("report_qc_close")).toBe("Close");
+    expect(t("report_qc_close")).not.toBe(t("pick_cancel"));
+    // Search-results live region strings for the unplanned-run product picker.
+    expect(t("unplanned_results")).toBe("products found");
+    expect(t("unplanned_no_results")).toBe("No products found.");
+  });
+
   it("exposes the end-of-run report copy (tranche 142)", () => {
     expect(t("report_title")).toBe("Finish the run");
     expect(t("report_output")).toBe("How many good units?");

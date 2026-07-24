@@ -207,8 +207,11 @@ test.describe("@mocked production picking", () => {
     );
 
     await submit.click();
-    await expect(page.getByTestId("report-success")).toBeVisible();
-    await expect(page.getByText("Run finished. Good job.")).toBeVisible();
+    const successCard = page.getByTestId("report-success");
+    await expect(successCard).toBeVisible();
+    // Scope to the visible card: tranche 145 (A11Y-T145-08) also announces the
+    // success copy in an sr-only live region, so the string now appears twice.
+    await expect(successCard.getByText("Run finished. Good job.")).toBeVisible();
     await expect(page.getByTestId("report-back")).toBeVisible();
   });
 
@@ -247,6 +250,36 @@ test.describe("@mocked production picking", () => {
     await expect(reportCta).toHaveAttribute("href", /\/production\/runs\/RUN1\/report/);
   });
 
+  test("IN_PRODUCTION run: pick rows are read-only (tranche 145 INTER-001/FLOW-001)", async ({ page }) => {
+    await setFakeRole(page, "operator");
+    await page.route("**/api/production-runs/*/pick-list", (route) =>
+      route.fulfill({ json: { ...PICK_LIST, status: "IN_PRODUCTION" } }),
+    );
+
+    await page.goto("/production/runs/RUN1");
+    await expect(page.getByTestId("pick-in-production-banner")).toBeVisible();
+
+    // Rows are inert once collecting is committed — no orphan taps.
+    await expect(page.getByTestId("pick-confirm-base-C1")).toBeDisabled();
+    await expect(page.getByTestId("pick-edit-base-C1")).toBeDisabled();
+
+    // Done bar is gone; the correction path (Add/Return) is the way to change things.
+    await expect(page.getByTestId("done-bar")).toHaveCount(0);
+    await expect(page.getByTestId("active-add-open")).toBeVisible();
+  });
+
+  test("report 'Back to today' links to /production (tranche 145 FLOW-002)", async ({ page }) => {
+    await setFakeRole(page, "operator");
+    await page.route("**/api/production-runs/*/pick-list", (route) =>
+      route.fulfill({ json: { ...PICK_LIST, status: "IN_PRODUCTION" } }),
+    );
+
+    await page.goto("/production/runs/RUN1/report");
+    await expect(page.getByTestId("report-form")).toBeVisible();
+    const back = page.getByRole("link", { name: /back to today/i }).first();
+    await expect(back).toHaveAttribute("href", "/production");
+  });
+
   test("unplanned-run dialog opens with a product list", async ({ page }) => {
     await setFakeRole(page, "operator");
     await stubToday(page, []);
@@ -276,5 +309,82 @@ test.describe("@mocked production picking", () => {
     // Pick the product → qty defaults to 1 → start enabled.
     await page.getByTestId("unplanned-item-ITEM9").click();
     await expect(page.getByTestId("unplanned-qty")).toHaveValue("1");
+  });
+
+  test("active-run correction dropdown shows the floor name, not Hebrew (tranche 146 INTER-006)", async ({
+    page,
+  }) => {
+    await setFakeRole(page, "operator");
+    // In-production run → the Add/Return correction control is available.
+    await page.route("**/api/production-runs/*/pick-list", (route) =>
+      route.fulfill({
+        json: {
+          ...PICK_LIST,
+          status: "IN_PRODUCTION",
+          lines: [
+            { ...PICK_LIST.lines[0], component_name: "סוכר", floor_name: "Sugar" },
+            { ...PICK_LIST.lines[1], component_name: "מיץ לימון", floor_name: null },
+          ],
+        },
+      }),
+    );
+
+    await page.goto("/production/runs/RUN1");
+    await page.getByTestId("active-add-open").click();
+    const select = page.getByTestId("active-material");
+    await expect(select).toBeVisible();
+
+    // The Latin floor name leads (matches PickRow / EditQtySheet); the Hebrew
+    // component_name is only the fallback when no floor_name exists.
+    await expect(select.locator("option", { hasText: "Sugar" })).toHaveCount(1);
+    await expect(select.locator("option", { hasText: "סוכר" })).toHaveCount(0);
+    await expect(select.locator("option", { hasText: "מיץ לימון" })).toHaveCount(1);
+  });
+
+  test("pick rows lock while the pick-confirm is in flight (tranche 146 INTER-007)", async ({
+    page,
+  }) => {
+    await setFakeRole(page, "operator");
+    await stubToday(page, [todayRow()]);
+    await page.route("**/api/production-runs/*/pick-list", (route) =>
+      route.fulfill({ json: PICK_LIST }),
+    );
+
+    // Hold the pick-confirm open so the in-flight window is observable.
+    let release: () => void = () => {};
+    const gate = new Promise<void>((resolve) => {
+      release = resolve;
+    });
+    await page.route("**/api/production-runs/*/pick-confirm", async (route) => {
+      await gate;
+      await route.fulfill({
+        status: 201,
+        json: {
+          run_id: "RUN1",
+          submission_id: "SUB1",
+          status: "posted",
+          run_status: "PICKING",
+          linked_plan_id: "PLAN1",
+          consumed: [],
+          shortfalls: [],
+          signals: [],
+          idempotent_replay: false,
+        },
+      });
+    });
+
+    await page.goto("/production/runs/RUN1");
+    await page.getByTestId("pick-confirm-base-C1").click();
+    await page.getByTestId("pick-confirm-base-C2").click();
+    await page.getByTestId("done-collecting").click();
+    await page.getByTestId("done-confirm-yes").click();
+
+    // While the stock-decrementing confirm round-trips, the rows behind it are
+    // inert — no orphan taps against a run that is already committing.
+    await expect(page.getByTestId("pick-confirm-base-C1")).toBeDisabled();
+    await expect(page.getByTestId("pick-edit-base-C1")).toBeDisabled();
+
+    release();
+    await expect(page.getByTestId("pick-done-success")).toBeVisible();
   });
 });
