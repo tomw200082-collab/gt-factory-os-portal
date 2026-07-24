@@ -9,7 +9,14 @@
 // ---------------------------------------------------------------------------
 
 import Link from "next/link";
-import { ArrowRight, Ban, CheckCircle2, FlaskConical, PackageOpen } from "lucide-react";
+import {
+  ArrowRight,
+  Ban,
+  CheckCircle2,
+  ClipboardCheck,
+  FlaskConical,
+  PackageOpen,
+} from "lucide-react";
 
 import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/lib/cn";
@@ -68,18 +75,31 @@ export function RunCard({
   const done = run.status === "REPORTED";
   const name = runDisplayName(run);
 
+  // A TANK run makes liquid for other runs to fill — it has no finished
+  // product of its own, so there is nothing to report on it (the backend
+  // returns RUN_NOT_REPORTABLE). Every other non-terminal run can be reported
+  // at any time, including one nobody collected for: back-dated reporting is
+  // routine, so this CTA never depends on having picked first (tranche 147).
+  const canReport = !terminal && run.stage !== "TANK";
+
   return (
+    <div
+      className={cn(
+        "card group overflow-hidden p-0 transition-all duration-200 motion-reduce:transition-none",
+        "focus-within:border-accent/40",
+        "hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-pop",
+        "motion-reduce:hover:translate-y-0",
+        terminal && "opacity-70 hover:translate-y-0",
+      )}
+    >
     <Link
       href={`/production/runs/${encodeURIComponent(run.run_id)}`}
       data-testid={`run-card-${run.run_id}`}
       data-status={run.status}
       aria-label={`${t("run_step_prefix")} ${stepNumber(index)} · ${name} · ${t(status.labelKey)}`}
       className={cn(
-        "card group flex items-stretch gap-0 overflow-hidden p-0 transition-all duration-200 motion-reduce:transition-none",
-        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
-        "hover:-translate-y-0.5 hover:border-accent/40 hover:shadow-pop",
-        "motion-reduce:hover:translate-y-0",
-        terminal && "opacity-70 hover:translate-y-0",
+        "flex items-stretch gap-0",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50",
       )}
     >
       {/* Step rail — the work-order sequence marker */}
@@ -159,5 +179,23 @@ export function RunCard({
         ) : null}
       </div>
     </Link>
+
+    {/* Second action: go straight to the report. Collecting first is the
+        normal order, never a precondition — a run made yesterday, or made
+        while nobody touched the screen, is still reported from here. */}
+    {canReport ? (
+      <div className="border-t border-border/70 bg-bg-subtle/40 px-4 py-2 sm:px-5">
+        <Link
+          href={`/production/runs/${encodeURIComponent(run.run_id)}/report`}
+          className="inline-flex min-h-11 items-center gap-1.5 rounded-sm text-sm font-semibold text-accent hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+          data-testid={`run-report-${run.run_id}`}
+          aria-label={`${t("report_cta")} · ${name}`}
+        >
+          <ClipboardCheck className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+          {t("report_cta")}
+        </Link>
+      </div>
+    ) : null}
+    </div>
   );
 }

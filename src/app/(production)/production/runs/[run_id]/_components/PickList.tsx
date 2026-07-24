@@ -310,6 +310,18 @@ export function PickList({ runId }: { runId: string }) {
         }
       />
 
+      {/* When materials actually leave stock. Stated up front, because the
+          answer changed in tranche 147 and the whole screen reads differently
+          depending on it: collecting records, reporting is what moves stock. */}
+      {!terminal ? (
+        <p
+          className="mb-4 rounded-md border border-border/70 bg-bg-subtle/50 px-4 py-3 text-sm text-fg-muted"
+          data-testid="pick-stock-timing-note"
+        >
+          {t("pick_stock_timing_note")}
+        </p>
+      ) : null}
+
       {/* Terminal run — read-only notice, with the right message per outcome
           (REPORTED = materials taken; CANCELLED = nothing taken). */}
       {terminal ? (

@@ -14,10 +14,22 @@
 export const pickingDict = {
   // ── /production — today's run list (operator landing) ────────────────────
   today_title: { en: "Today", ru: "" },
-  today_subtitle: { en: "Your work for today", ru: "" },
+  today_subtitle: { en: "Collect materials, then report what you made", ru: "" },
   today_empty_title: { en: "No production today.", ru: "" },
   today_empty_body: { en: "When a job is planned for today, it shows up here.", ru: "" },
   today_eyebrow: { en: "Production", ru: "" },
+
+  // ── day switcher — reporting an earlier day (tranche 147) ────────────────
+  day_picker_label: { en: "Day", ru: "" },
+  day_back_to_today: { en: "Back to today", ru: "" },
+  day_title_past: { en: "Another day", ru: "" },
+  day_subtitle_past: { en: "You can report a job you made earlier.", ru: "" },
+  day_empty_past_title: { en: "No production on this day.", ru: "" },
+  day_empty_past_body: { en: "Pick another day, or start an extra job.", ru: "" },
+  day_plan_scope: { en: "Showing one planned job.", ru: "" },
+  day_plan_scope_clear: { en: "Show all", ru: "" },
+  day_empty_plan_title: { en: "This job is not on this day.", ru: "" },
+  day_empty_plan_body: { en: "Check the day above, or show all jobs.", ru: "" },
   run_step_prefix: { en: "Step", ru: "" }, // "Step 1", "Step 2"
   run_tank_kind: { en: "Make tank", ru: "" }, // liquids stage (TANK)
   run_fill_kind: { en: "Fill", ru: "" }, // packaging stage (PACK)
@@ -76,19 +88,29 @@ export const pickingDict = {
   pick_done_button: { en: "Done collecting", ru: "" },
   pick_done_left_one: { en: "1 item left to check", ru: "" },
   pick_done_left_many: { en: "items left to check", ru: "" }, // "3 items left to check"
-  pick_done_confirm_title: { en: "Take these from stock?", ru: "" },
-  pick_done_confirm_body: { en: "Stock goes down now for what you took.", ru: "" },
-  pick_done_confirm_yes: { en: "Yes, take from stock", ru: "" },
+  // Stock does NOT move here any more (tranche 147) — it moves when the run is
+  // reported. The copy has to say so, or the operator will believe the shelf
+  // count already changed and double-count it later.
+  pick_done_confirm_title: { en: "Save what you took?", ru: "" },
+  pick_done_confirm_body: {
+    en: "Stock does not change yet. It changes when you report what you made.",
+    ru: "",
+  },
+  pick_done_confirm_yes: { en: "Yes, save it", ru: "" },
   pick_done_saving: { en: "Saving…", ru: "" },
   pick_done_confirm_no: { en: "Not yet", ru: "" },
-  pick_done_success: { en: "Materials taken. You can start making.", ru: "" },
-  pick_terminal_done: { en: "Materials were taken from stock.", ru: "" },
+  pick_done_success: { en: "Saved. You can start making.", ru: "" },
+  pick_terminal_done: { en: "This job is finished. Stock is updated.", ru: "" },
   pick_terminal_cancelled: {
-    en: "This job was cancelled. No materials were taken.",
+    en: "This job was cancelled. Nothing came off stock.",
     ru: "",
   },
   pick_in_production_banner: {
-    en: "Collecting is done. This job is being made.",
+    en: "Collecting is done. Report what you made when the job is finished.",
+    ru: "",
+  },
+  pick_stock_timing_note: {
+    en: "Materials come off stock when you report what you made — not now. If the job is cancelled, put them back and nothing changes.",
     ru: "",
   },
   pick_done_back_to_runs: { en: "Back to today", ru: "" },
@@ -106,7 +128,7 @@ export const pickingDict = {
   active_return_save: { en: "Return it", ru: "" },
   active_saving: { en: "Saving…", ru: "" },
   active_add_done: { en: "Added to the job.", ru: "" },
-  active_return_done: { en: "Returned to stock.", ru: "" },
+  active_return_done: { en: "Taken off the job.", ru: "" },
 
   // ── shared: loading / error ──────────────────────────────────────────────
   loading: { en: "Loading…", ru: "" },
@@ -152,6 +174,14 @@ export const pickingDict = {
   report_need_output: { en: "Type the good units first.", ru: "" },
   report_success: { en: "Run finished. Good job.", ru: "" },
   report_cta: { en: "Report production", ru: "" },
+  report_output_prefilled: {
+    en: "This is the planned amount. Change it to what you really made.",
+    ru: "",
+  },
+  report_stock_note: {
+    en: "Finishing the run adds the good units to stock and takes off the materials you collected.",
+    ru: "",
+  },
   report_already_title: { en: "This run is already finished.", ru: "" },
   report_already_body: { en: "The work was saved. Nothing to add.", ru: "" },
   report_err_not_reportable: {

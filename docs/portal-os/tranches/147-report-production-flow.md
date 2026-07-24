@@ -1,0 +1,66 @@
+# Tranche 147 — Report production: reachable, pre-filled, and the moment stock moves
+
+**Status:** in progress
+**Origin:** Tom, 2026-07-24 (in writing, this session), reporting a broken journey on `/planning/production-plan`:
+
+> "When I want to report production now and I press the button on some item's card for production — it takes me to this page (`/production`) and does not let me report production. Production reporting must always be available, because sometimes we report after the fact. […] The most important fix is that when you press 'actual production', the navigation takes us to a page pre-filled with what was planned and we can edit it; once we approve, it is added to finished goods according to what came out. Also, on the today's-runs page you enter the raw materials and packaging as you know, but only after entering actual production does everything we entered there actually come off stock. The reason is that sometimes production is cancelled at the last minute and then everything is returned to place, even after we've collected."
+
+sizing: M
+scorecard_target_category: ops_surface
+expected_delta: closes the plan-card → report dead-end, makes back-dated reporting a first-class path, and moves RM/PKG consumption from pick-time to report-time.
+
+## What was wrong
+
+1. **The plan card could not reach a report.** Tranche 143 cut `reportHref` down to a bare `"/production"`. That list is hard-coded to *today*, so a plan on any other date dead-ended — and even today's plan made the operator hunt for the right run among the day's tank + pack runs.
+2. **Back-dated reporting was unreachable.** `/production` had no way to view another day, and the report endpoint rejected a run still in `PLANNED` — i.e. exactly the run nobody opened the pick screen for, which is the common case when reporting after the fact.
+3. **The output field started empty**, so "we made what we planned" was a transcription job rather than a confirmation.
+4. **Stock moved at the wrong moment.** Consumption posted at pick confirmation. When a run is cancelled after the materials are collected — which happens on this floor — the ledger had already been debited and the return needed reversal rows to undo. Tom's model is the opposite: collecting is a record, reporting is what makes it real.
+
+## The two pages, as Tom describes them
+
+- **`/production` — "today's runs"**: the page worked *before and during* production. Enter the raw materials and packaging collected. **Records only. Stock does not move here.**
+- **`/production/runs/[id]/report` — "actual production"**: enter the quantity that actually came out of what was collected. **This is the only moment stock moves**: finished goods go up, collected materials come off — together, in one transaction. The gap between recipe and reality is visible because both numbers are captured.
+
+## Changes
+
+### Backend (`gt-factory-os`, same branch)
+- `pick-confirm-handler.ts` — writes `production_run_pick` rows only; **no ledger rows**. Shortage/excess signals kept as advisory (they no longer cap anything). Idempotent replay now reconstructs from pick rows instead of ledger rows.
+- `material-delta-handler.ts` — "+ Add" / "Return" corrections become **signed pick rows** (`+qty` took more, `−qty` put back) instead of ledger rows. This is a correctness fix, not just symmetry: a "Return" posted before the report would have credited stock that was never debited.
+- `report-handler.ts` — nets the run's un-consumed pick rows per `(source, component_id)`, posts one capped `PICK_CONSUMPTION` row per positive net **in the same transaction as `PRODUCTION_OUTPUT`**, then stamps `stock_ledger_movement_id` on the contributing rows so a re-report cannot double-consume. Also accepts a `PLANNED` run — a run reported after the fact simply consumes nothing.
+- `net-picks.ts` (new) — the netting + cap arithmetic as a pure module, so the code that decides how much inventory disappears is checkable without a database.
+- `schemas.ts` — `ReportCommittedResponse` gains `consumed` + `shortfalls`.
+- `db/migrations/0297_consumption_at_report_time.sql` (new) — **comment-only**. No structural change was needed: `stock_ledger_movement_id` was already nullable and `picked_qty` is `numeric(24,8)`, so a negative correction row fits. The comments are restated so the database describes what the handlers now do.
+
+### Portal
+- `ProductionJobCard.tsx` — `reportHref` carries the plan's own `plan_date`, its `plan_id`, and `report=1`.
+- `RunList.tsx` — reads `?date=` (defaults to today) and `?plan=`; adds a day picker capped at today; auto-forwards to the report form when a plan resolves to exactly one reportable run; plan-scope and past-day empty states.
+- `runs.ts` — `planRuns()` and `autoForwardRunId()` as pure helpers.
+- `RunCard.tsx` — a second action, "Report production", on every non-terminal non-TANK run, so reporting never requires collecting first.
+- `ReportForm.tsx` — output field shows the planned quantity until the operator types, labelled as the plan rather than a measurement.
+- `PickList.tsx` + `copy.ts` — the copy said "Stock goes down now for what you took". It now says stock changes when you report. Leaving that string would have taught the operator to double-count.
+
+## Deliberately not done
+- **No cancel-run endpoint.** Under the new ordering a cancelled run has nothing to reverse — that is the whole benefit — so the reversal machinery Tom's scenario used to need does not need building.
+- **`autoForwardRunId` does not guess for a base batch.** Tank + one run per pack SKU is genuinely ambiguous; silently picking one would report the wrong product.
+
+## Resolves from the 146 backlog
+- **FLOW-P2-001** ("report form guard for PLANNED/PICKING via direct URL") — no longer an error path. Reporting a `PLANNED` run is now a supported journey, not something to guard against.
+
+## Manifest (files that may be touched)
+manifest:
+- src/app/(planning)/planning/production-plan/_components/ProductionJobCard.tsx
+- src/app/(planning)/planning/production-plan/_components/card-report-link.test.tsx
+- src/app/(production)/production/_components/RunList.tsx
+- src/app/(production)/production/_components/RunCard.tsx
+- src/app/(production)/production/_lib/runs.ts
+- src/app/(production)/production/_lib/runs.test.ts
+- src/app/(production)/production/_lib/copy.ts
+- src/app/(production)/production/runs/[run_id]/_components/PickList.tsx
+- src/app/(production)/production/runs/[run_id]/report/_components/ReportForm.tsx
+- docs/portal-os/tranches/147-report-production-flow.md
+- docs/portal-os/tranches/_active.txt
+
+## Evidence
+- Portal: `npx tsc --noEmit` clean; `npx vitest run` — see the run recorded on the PR.
+- Backend: `npx tsc --noEmit` clean; `npm run test:production-runs`.
+- **Not verified in this container:** the pgTAP suite (`db/tests/0295_production_run_picking.test.sql`, updated for the new ordering). pgTAP is not installed here and no Postgres is reachable, so those assertions are unrun — they are stated, not evidenced.

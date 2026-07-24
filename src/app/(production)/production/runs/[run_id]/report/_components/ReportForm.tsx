@@ -60,6 +60,14 @@ async function fetchRun(runId: string): Promise<PickListResponse> {
 
 const STALE = "__STALE__";
 
+/** The planned quantity to pre-fill the output field with, as a plain string.
+ *  Empty when the run has not loaded or carries no usable target, so the field
+ *  falls back to blank rather than showing "0" or "NaN". */
+function plannedOutput(data: PickListResponse | null): string {
+  const n = Number(data?.target_qty ?? "");
+  return Number.isFinite(n) && n > 0 ? String(n) : "";
+}
+
 /** Clamp-at-zero stepper. Keeps whole numbers whole; otherwise 2dp. */
 function step(value: string, delta: number, set: (v: string) => void): void {
   const current = Number(value || "0");
@@ -79,7 +87,13 @@ export function ReportForm({ runId }: { runId: string }) {
   const data = query.data ?? null;
 
   // ── form state ─────────────────────────────────────────────────────────
-  const [output, setOutput] = useState("");
+  // Output shows the planned quantity until the operator types (tranche 147):
+  // the usual case is "we made what we planned", so this is a confirm, not a
+  // transcription. `null` means untouched — deriving the shown value instead
+  // of seeding state keeps a cleared field cleared, and never overwrites an
+  // edit when the run query refetches. It is a starting point, never an
+  // assumption: what the operator submits is what actually came out.
+  const [outputEdit, setOutput] = useState<string | null>(null);
   const [scrap, setScrap] = useState("0");
   const [qcOpen, setQcOpen] = useState(false);
   const [qcBrix, setQcBrix] = useState("");
@@ -89,7 +103,9 @@ export function ReportForm({ runId }: { runId: string }) {
   const [notes, setNotes] = useState("");
   const [done, setDone] = useState(false);
 
+  const output = outputEdit ?? plannedOutput(data);
   const outputOk = isOutputValid(output);
+  const isPlannedValue = outputEdit === null && output !== "";
 
   const report = useMutation<ReportSuccess, Error>({
     mutationFn: async () => {
@@ -420,6 +436,15 @@ export function ReportForm({ runId }: { runId: string }) {
               >
                 {t("report_need_output")}
               </p>
+            ) : isPlannedValue ? (
+              /* Say plainly that this number is the plan, not a measurement —
+                 an unlabelled pre-filled figure invites a blind confirm. */
+              <p
+                className="mt-2 text-center text-xs text-fg-muted"
+                data-testid="report-output-prefilled"
+              >
+                {t("report_output_prefilled")}
+              </p>
             ) : null}
           </div>
 
@@ -621,11 +646,9 @@ export function ReportForm({ runId }: { runId: string }) {
               </>
             )}
           </button>
-          {!outputOk ? (
-            <p className="mt-1.5 text-center text-xs text-fg-muted">
-              {t("report_need_output")}
-            </p>
-          ) : null}
+          <p className="mt-1.5 text-center text-xs text-fg-muted">
+            {!outputOk ? t("report_need_output") : t("report_stock_note")}
+          </p>
         </div>
       </form>
     </div>

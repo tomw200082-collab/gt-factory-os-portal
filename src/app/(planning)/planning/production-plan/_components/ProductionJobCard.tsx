@@ -89,11 +89,14 @@ export function ProductionJobCard({
     ? `Base batch · ${plan.pack_manifest_count} product${plan.pack_manifest_count === 1 ? "" : "s"}`
     : (plan.item_name ?? "Unnamed item");
 
-  // Tranche 143 — cutover to the picking flow's Today list. /production
-  // shows every run for the day (base-batch tanks + per-SKU packs); it does
-  // not read from_plan_id / item_id / suggested_qty deep-link params (the
-  // operator finds the run in the list), so this is now a plain link.
-  const reportHref = "/production";
+  // Tranche 147 — the CTA lands on the report, not on a list the operator has
+  // to search. It carries the plan's own date (so reporting a past day works —
+  // back-dated reports are routine here) and its plan_id. /production resolves
+  // that plan's runs: a single-item plan has exactly one, so it forwards
+  // straight to that run's report form, pre-filled with the planned quantity.
+  // A base batch has several runs (the tank + one per pack SKU), so it shows
+  // just that plan's runs to choose from.
+  const reportHref = `/production?date=${encodeURIComponent(plan.plan_date)}&plan=${encodeURIComponent(plan.plan_id)}&report=1`;
   // COPY-018 — "Open Production Report" read like opening an existing
   // document; the operator is creating one. Base batches say "products"
   // (plural) to signal the multi-SKU flow.

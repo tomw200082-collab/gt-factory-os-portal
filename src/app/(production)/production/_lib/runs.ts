@@ -29,6 +29,31 @@ export function stepNumber(index: number): number {
   return index + 1;
 }
 
+/** The runs belonging to one production plan, in the given order. A null/empty
+ *  `planId` means "no scope" and returns the list untouched. Pure. */
+export function planRuns(
+  rows: readonly ProductionRunTodayRow[],
+  planId: string | null | undefined,
+): ProductionRunTodayRow[] {
+  if (!planId) return [...rows];
+  return rows.filter((r) => r.plan_id === planId);
+}
+
+/** The run to open the report form on directly, or null to show the list.
+ *
+ *  Only an unambiguous single target auto-forwards: exactly one run that can
+ *  still be reported. A base batch (tank + one run per pack SKU) has several,
+ *  so the operator chooses — silently picking one of them would report the
+ *  wrong product. An already-reported run does not count as a target: a plan
+ *  whose only run is done should land on the list showing it done, not on a
+ *  form that refuses. Pure. */
+export function autoForwardRunId(
+  rows: readonly ProductionRunTodayRow[],
+): string | null {
+  const reportable = rows.filter((r) => !isRunTerminal(r.status));
+  return reportable.length === 1 ? reportable[0].run_id : null;
+}
+
 /** Copy key for the stage's short kind label (Make tank / Fill / Make & fill).
  *  An unexpected stage falls back to the "both" kind so a bad value never
  *  produces `t(undefined)` → a thrown render (A11Y-006). The `never` assertion
