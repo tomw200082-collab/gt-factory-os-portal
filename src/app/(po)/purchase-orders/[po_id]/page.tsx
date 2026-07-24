@@ -194,10 +194,14 @@ function fmtQty(value: string | null | undefined): string {
   return n.toLocaleString(undefined, { maximumFractionDigits: 4 });
 }
 
+// ux-release-gate 2026-07-23 COPY-045: explicit "en-US" (not the browser's
+// default locale) — matches /purchase-orders/page.tsx. A Hebrew-locale
+// browser previously rendered Hebrew month abbreviations on this page while
+// the PO list showed English ones for the same PO.
 function fmtDate(iso: string | null | undefined): string {
   if (!iso) return "—";
   try {
-    return new Date(iso).toLocaleDateString(undefined, {
+    return new Date(iso).toLocaleDateString("en-US", {
       year: "numeric",
       month: "short",
       day: "2-digit",
@@ -210,7 +214,7 @@ function fmtDate(iso: string | null | undefined): string {
 function fmtDateTime(iso: string | null | undefined): string {
   if (!iso) return "—";
   try {
-    return new Date(iso).toLocaleString(undefined, {
+    return new Date(iso).toLocaleString("en-US", {
       year: "numeric",
       month: "short",
       day: "2-digit",
@@ -297,6 +301,14 @@ const GR_STATUS_LABEL: Record<string, string> = {
   cancelled: "Cancelled",
 };
 
+// COPY-039: raw item_type codes (FG/RM/PKG) rendered verbatim in the
+// attached-GR lines table.
+const ITEM_TYPE_LABEL: Record<string, string> = {
+  FG: "Finished goods",
+  RM: "Raw material",
+  PKG: "Packaging",
+};
+
 function GrStatusBadge({ status }: { status: string }): JSX.Element {
   if (status === "posted") return <Badge tone="success" variant="solid">Posted</Badge>;
   if (status === "pending") return <Badge tone="warning" dotted>Pending</Badge>;
@@ -321,9 +333,10 @@ function AttachedGrCard({
     >
       <div className="flex items-center gap-3 px-4 py-3 bg-bg-subtle/40 border-b border-border/40">
         <GrStatusBadge status={gr.status} />
-        <span className="text-xs text-fg-muted">received {fmtDate(gr.event_at)}</span>
+        {/* COPY-047: Title Case to match this card's own column headers. */}
+        <span className="text-xs text-fg-muted">Received {fmtDate(gr.event_at)}</span>
         {gr.posted_at && (
-          <span className="text-xs text-fg-faint ml-auto">posted {fmtDate(gr.posted_at)}</span>
+          <span className="text-xs text-fg-faint ml-auto">Posted {fmtDate(gr.posted_at)}</span>
         )}
       </div>
       {gr.lines.length > 0 && (
@@ -371,7 +384,9 @@ function AttachedGrCard({
                   </td>
                   <td className="px-4 py-2 text-right font-mono text-xs tabular-nums text-fg">{fmtQty(line.quantity)}</td>
                   <td className="px-4 py-2 text-xs text-fg-muted">{line.unit}</td>
-                  <td className="px-4 py-2 text-xs text-fg-muted">{line.item_type}</td>
+                  <td className="px-4 py-2 text-xs text-fg-muted">
+                    {ITEM_TYPE_LABEL[line.item_type] ?? line.item_type}
+                  </td>
                   <td className="px-4 py-2 text-xs text-fg-muted">{poLineLabel}</td>
                 </tr>
               );
@@ -450,8 +465,28 @@ function fmtDiffValue(v: unknown): string {
   return String(v);
 }
 
+// COPY-048: plain-string mirror of POStatusBadge's labels, for the history
+// diff table (which renders text, not a Badge component).
+const PO_STATUS_LABEL: Record<string, string> = {
+  DRAFT: "Draft",
+  APPROVED_TO_ORDER: "To place",
+  OPEN: "Open",
+  PARTIAL: "Partial",
+  RECEIVED: "Received",
+  CANCELLED: "Cancelled",
+};
+
+function fmtDiffValueForField(field: string, v: unknown): string {
+  if (field === "status" && typeof v === "string") {
+    return PO_STATUS_LABEL[v] ?? v;
+  }
+  return fmtDiffValue(v);
+}
+
 function HistoryEventRow({ event }: { event: ChangeLogHistoryRow }): JSX.Element {
-  const label = ACTION_LABELS[event.action] ?? event.action;
+  // COPY-048: an unrecognized future action code fell through to the raw
+  // enum as the primary badge label.
+  const label = ACTION_LABELS[event.action] ?? "System update";
   const isLineEvent = event.entity_table === "purchase_order_lines";
   const changedFields = Array.isArray(event.changed_fields) ? event.changed_fields : [];
   const oldVals = event.old_values as Record<string, unknown> | null;
@@ -480,7 +515,8 @@ function HistoryEventRow({ event }: { event: ChangeLogHistoryRow }): JSX.Element
         <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
           <span className="text-sm font-medium text-fg">{event.actor_snapshot}</span>
           {isLineEvent && (
-            <span className="text-3xs text-fg-faint">line item</span>
+            // COPY-046: matches the "PO line" column header used elsewhere on this page.
+            <span className="text-3xs text-fg-faint">PO line</span>
           )}
           <span className="text-xs text-fg-muted ml-auto">{fmtDateTime(event.created_at)}</span>
         </div>
@@ -500,16 +536,16 @@ function HistoryEventRow({ event }: { event: ChangeLogHistoryRow }): JSX.Element
                       {isUpdate ? (
                         <>
                           <td className="px-2 py-1 text-3xs font-mono text-fg-muted line-through opacity-60 max-w-[10rem] truncate">
-                            {fmtDiffValue(oldVal)}
+                            {fmtDiffValueForField(field, oldVal)}
                           </td>
                           <td className="px-2 py-1 text-3xs text-fg-faint">→</td>
                           <td className="px-2 py-1 text-3xs font-mono text-fg max-w-[10rem] truncate">
-                            {fmtDiffValue(newVal)}
+                            {fmtDiffValueForField(field, newVal)}
                           </td>
                         </>
                       ) : (
                         <td className="px-2 py-1 text-3xs font-mono text-fg max-w-xs truncate" colSpan={3}>
-                          {fmtDiffValue(newVal ?? oldVal)}
+                          {fmtDiffValueForField(field, newVal ?? oldVal)}
                         </td>
                       )}
                     </tr>
@@ -692,7 +728,10 @@ export default function PurchaseOrderDetailPage({
       } else if (msg.toLowerCase().includes("cannot cancel purchase order in status")) {
         setCancelError("Cannot cancel — only open or draft purchase orders can be cancelled.");
       } else {
-        setCancelError(msg || "Cancel failed. Try again.");
+        // COPY-041: the two branches above pattern-match known backend
+        // messages into clean copy; anything else falls back to a fixed
+        // string rather than the raw (possibly backend-internal) message.
+        setCancelError("Could not cancel this order. Check your connection and try again.");
       }
       setCancelConfirming(false);
     },
@@ -823,8 +862,11 @@ export default function PurchaseOrderDetailPage({
       setLineCancelConfirmId(null);
       setLineCancelError(null);
     },
-    onError: (err: unknown) => {
-      setLineCancelError((err as Error).message ?? "Cancel failed. Try again.");
+    // COPY-040: no pattern-match guard existed on this path at all — the
+    // raw backend error (which can name a status enum, e.g. "Cannot cancel
+    // line in status RECEIVED") reached the operator verbatim.
+    onError: () => {
+      setLineCancelError("Could not cancel this line. Check your connection and try again.");
       setLineCancelConfirmId(null);
     },
   });

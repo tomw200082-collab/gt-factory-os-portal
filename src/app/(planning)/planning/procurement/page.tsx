@@ -575,7 +575,8 @@ function EmptyNoSession({
           disabled={starting}
           data-testid="procurement-no-session-start"
         >
-          {starting ? "מתחיל…" : "התחל מושב רכש"}
+          {/* COPY-043: same mutation as the header's "הרצת מושב חדש" button — match its pending label. */}
+          {starting ? "מריץ…" : "התחל מושב רכש"}
         </button>
       ) : null}
     </div>

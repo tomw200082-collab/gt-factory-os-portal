@@ -56,7 +56,11 @@ export function RoleGate(props: RoleGateProps) {
     blockedLabel = CAPABILITY_LABELS[props.minimum] ?? props.minimum;
   } else if ("allow" in props && props.allow !== undefined) {
     granted = props.allow.includes(session.role);
-    blockedLabel = props.allow.join(", ");
+    // COPY-049: same rule as the `minimum` branch — don't join raw role
+    // enum values verbatim into the blocked-access message.
+    blockedLabel = props.allow
+      .map((r) => r.charAt(0).toUpperCase() + r.slice(1))
+      .join(" or ");
   } else {
     // Neither supplied — fail closed.
     granted = false;
@@ -68,9 +72,14 @@ export function RoleGate(props: RoleGateProps) {
       <div className="card mx-auto mt-8 max-w-lg p-6 text-center">
         <div className="text-sm font-semibold text-fg">Access restricted</div>
         <div className="mt-2 text-xs text-fg-muted">
+          {/* ux-release-gate 2026-07-23 COPY-049: this component is shared
+              by every gated page in the portal, not just this corridor —
+              it previously showed the raw internal role enum (e.g.
+              "viewer") in monospace, which reads as developer output. The
+              operator needs to know what to do, not their internal role
+              code. */}
           {blockedLabel} is required to view this page.
           <br />
-          Your current role is <span className="font-mono text-fg">{session.role}</span>.
           Contact your administrator to request access.
         </div>
       </div>

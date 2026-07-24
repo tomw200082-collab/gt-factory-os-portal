@@ -1,6 +1,6 @@
 # Tranche 140 — Procurement corridor: 5-round /ux-release-gate audit-and-fix loop
 
-**Status:** in progress
+**Status:** closed after Round 3 (Tom-directed scope cut, 2026-07-23 — see Round 3 log below; the "5-round" title is now historical, actual run was 3 rounds)
 **Origin:** Tom-directed (2026-07-23 chat, after tranche-134-follow-on base-batch work): `/ux-release-gate` + `/frontend-design` + `/ui-ux-pro-max` — "תעבור שוב על הדף הזה ועל כל התהליך ותשפר כל מה שאתה מוצא לנכון. תעשה 5 איטרציות כאלה על כל תהליך הרכש מקצה לקצה" (go over this again and improve whatever you see fit; do 5 such iterations across the entire procurement process end to end).
 **Scope:** the full procurement corridor — recommendation → weekly purchase session → PO approval → office-manager placement:
 - `/planning/procurement` + `[session_po_id]/sheet` (`_components/*`, `_lib/*`)
@@ -285,10 +285,111 @@ dropped:**
   rather than committed (ad hoc verification harness, not a reviewed
   addition to the tracked test suite).
 
+### Round 3 — visual-polish audit (partial) + lean fix pass (closes the tranche)
+
+Dispatched the same five agents, this round weighted toward visual
+(explicit `frontend-design`/`ui-ux-pro-max` brief, carrying forward
+Round 2's deferred visual items) with the other four doing lighter
+fresh re-audits. Mid-round, Tom reviewed progress and directed cutting
+the run short: apply what's already landed, skip the two remaining
+planned rounds (4: edge cases, 5: final release-gate verdict) rather
+than chase further iterations.
+
+**What actually came back before the cut:** only the `ux-content-state-designer`
+(copy) report — 12 findings (5 P1, 0 P0). The `visual-system-designer`,
+`ux-flow-architect`, `interaction-design-specialist`, and
+`accessibility-usability-auditor` dispatches for this round never
+returned a result (an earlier status message in this doc's session
+incorrectly claimed the visual report had landed — it had not; corrected
+before any fix work was based on it). `TaskStop`/`TaskOutput` did not
+recognize the dispatched agent IDs, so they could not be explicitly
+cancelled either — Tom's direction was interpreted as "stop waiting on
+them," not "confirm they're dead," and no fix work depends on their
+(unknown, possibly still-forthcoming) findings.
+
+**Fixed, all 12 copy findings (all real, none skipped — small enough to
+just do rather than triage down further):**
+- `src/lib/auth/role-gate.tsx` — **shared component, portal-wide impact**:
+  the access-restricted message rendered the operator's raw internal
+  role enum (e.g. "viewer") in monospace, reading as developer output;
+  removed. The legacy `allow=` prop path had the same class of issue
+  (raw role values joined verbatim) — given a light parallel fix.
+- `src/components/purchase-orders/PoLineEditor.tsx` — the English
+  parallel to Round 2's `AddLineForm.tsx` UOM-label fix (COPY-035) was
+  missed at the time; `PoLineEditor` (used by `/purchase-orders/new`)
+  still showed raw UOM codes. Same label map, English strings.
+- `purchase-orders/[po_id]/page.tsx` — raw `item_type` (FG/RM/PKG) in
+  the attached-GR lines table now labeled; the line-cancel mutation's
+  `onError` had no pattern-match guard at all (the PO-level cancel does)
+  and could surface a raw backend message — now a fixed string; the
+  PO-level cancel's own catch-all fallback tightened the same way;
+  `fmtDate`/`fmtDateTime` now pass explicit `"en-US"` instead of the
+  browser's default locale (matches `/purchase-orders/page.tsx` — a
+  Hebrew-locale browser previously rendered different month formats on
+  the same PO between list and detail); "line item" → "PO line" and
+  "received"/"posted" → Title Case for consistency with this page's own
+  column headers; the history tab's unrecognized-action fallback no
+  longer shows the raw action code, and status-field diff rows now
+  resolve through the same labels as the status badge instead of
+  showing `APPROVED_TO_ORDER` etc. raw.
+- `procurement/[session_po_id]/sheet/page.tsx` — the error state said
+  "try again" with nothing to click; now a real retry button wired to
+  `refetch()`.
+- `procurement/page.tsx` — the empty-state start button's Hebrew
+  pending label ("מתחיל…") didn't match the header button's for the
+  same mutation ("מריץ…"); unified.
+- `purchase-orders/new/page.tsx` — page title "New manual order" vs.
+  its own submit button "Create purchase order"; unified to "New
+  purchase order".
+
+**Explicitly not chased this round** (would need the visual/flow/
+interaction/a11y reports that never arrived): the Round 2 visual
+backlog (zero-value stat tiles, mobile stat-tile grid orphan,
+provenance-chip weight, expected-date chip urgency tone, duplicated
+cost-strip figure, missing `<bdi>` wrap, sidebar "LINKED" eyebrow
+duplication, `DetailPage` mobile tab-wrap, PO detail mobile
+lines-table overflow) and the systemic `.btn-sm` touch-target token
+question all remain open, undone, logged here rather than silently
+dropped. If this corridor gets picked up again, start there.
+
+**Evidence:**
+- `npx tsc --noEmit` — clean, 0 errors.
+- `npx eslint` on every changed file — 0 errors; same 3 pre-existing
+  `react-hooks/exhaustive-deps` warnings as Rounds 1-2.
+- `npx vitest run` — 123 files / 1006 tests, all passing, no test
+  changes needed this round.
+
 ## Files
 
-(finalized at tranche close — every source file touched across all 5 rounds)
+Every source file touched across all 3 rounds (tranche doc itself excluded):
+
+- `src/app/(planning)/planning/procurement/page.tsx`
+- `src/app/(planning)/planning/procurement/[session_po_id]/sheet/page.tsx`
+- `src/app/(planning)/planning/procurement/_components/ActionList.tsx`
+- `src/app/(planning)/planning/procurement/_components/AddLineForm.tsx` (+ `.test.tsx`)
+- `src/app/(planning)/planning/procurement/_components/CalendarView.tsx` (+ `.test.tsx`)
+- `src/app/(planning)/planning/procurement/_components/FocusCard.tsx`
+- `src/app/(planning)/planning/procurement/_components/FocusMode.tsx`
+- `src/app/(planning)/planning/procurement/_components/IntegrityStrip.tsx`
+- `src/app/(planning)/planning/procurement/_components/RecommendationsToConvert.tsx`
+- `src/app/(planning)/planning/procurement/_lib/session-warnings.ts`
+- `src/app/(po)/purchase-orders/page.tsx`
+- `src/app/(po)/purchase-orders/new/page.tsx`
+- `src/app/(po)/purchase-orders/[po_id]/page.tsx`
+- `src/app/(po)/purchase-orders/placement-queue/page.tsx`
+- `src/app/(po)/purchase-orders/placement-queue/_components/PlacementRow.tsx`
+- `src/components/fields/SearchableSelect.tsx`
+- `src/components/purchase-orders/PoLineEditor.tsx`
+- `src/lib/auth/role-gate.tsx` (shared, beyond this corridor)
+- `tests/unit/features/procurement-calendar-mobile.test.tsx`
 
 ## Evidence
 
-(finalized at tranche close — tsc/eslint/vitest/playwright per round + cumulative)
+Cumulative, all 3 rounds: `npx tsc --noEmit` clean at every commit;
+`npx eslint` 0 errors at every commit (3 pre-existing
+`react-hooks/exhaustive-deps` warnings, confirmed present before Round
+1, unrelated, left as-is); `npx vitest run` 123 files / 1006 tests
+green at every commit. Full per-round breakdown is in the Round log
+above. Render evidence (screenshots) under
+`/tmp/.../scratchpad/ux-shots-r2/` and `ux-shots-r3/` (session-local,
+not committed — this doc is the durable record).

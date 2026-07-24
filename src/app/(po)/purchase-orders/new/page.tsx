@@ -491,7 +491,7 @@ function ManualPoFormInner(): JSX.Element {
   if (phase === "success" || phase === "idempotent") {
     return (
       <>
-        <WorkflowHeader size="section" eyebrow="Purchase Orders" title="New manual order" />
+        <WorkflowHeader size="section" eyebrow="Purchase Orders" title="New purchase order" />
         <SectionCard>
           <div
             className="px-6 py-10 text-center space-y-3"
@@ -582,7 +582,7 @@ function ManualPoFormInner(): JSX.Element {
       <WorkflowHeader
         size="section"
         eyebrow="Purchase Orders"
-        title="New manual order"
+        title="New purchase order"
         description="Manual purchase orders are not reviewed by the planning engine. Use this only for urgent or exceptional needs not covered by a planning recommendation. Providing a reason is optional but recommended for audit traceability."
         meta={
           <span className="inline-flex items-center gap-1.5 rounded-full border border-warning/40 bg-warning/5 px-2.5 py-0.5 text-3xs font-semibold uppercase tracking-sops text-warning-fg">

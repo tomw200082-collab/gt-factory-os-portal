@@ -40,7 +40,7 @@ function AssetChips({ line }: { line: SheetLine }) {
 export default function OrderSheetPage() {
   const params = useParams<{ session_po_id: string }>();
   const sessionPoId = params.session_po_id;
-  const { data, isLoading, isError } = useCurrentSession();
+  const { data, isLoading, isError, refetch } = useCurrentSession();
 
   const po = useMemo(
     () => data?.session?.pos.find((p) => p.session_po_id === sessionPoId) ?? null,
@@ -90,7 +90,15 @@ export default function OrderSheetPage() {
           className="no-print rounded-md border border-danger/40 bg-danger-softer px-4 py-3 text-sm text-danger-fg"
         >
           <div className="font-medium">שגיאה בטעינת גיליון ההזמנה</div>
-          <div className="mt-1 text-xs opacity-90">נסה שוב, או חזור לדף הרכש.</div>
+          {/* COPY-044: was static "try again" instruction text with nothing
+              to actually click — added a real retry action. */}
+          <button
+            type="button"
+            onClick={() => void refetch()}
+            className="mt-2 text-xs font-medium underline hover:no-underline"
+          >
+            נסה שוב
+          </button>
         </div>
       )}
       {!isLoading && !isError && !po && (
