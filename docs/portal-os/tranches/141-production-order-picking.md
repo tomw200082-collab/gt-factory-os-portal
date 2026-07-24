@@ -31,6 +31,7 @@ manifest:
 - src/app/(production)/production/_lib/runs.ts
 - src/app/(production)/production/_lib/runs.test.ts
 - src/app/(production)/production/_lib/types.ts
+- src/app/(production)/production/_lib/use-dialog-a11y.ts
 - src/app/(production)/production/_components/RunList.tsx
 - src/app/(production)/production/_components/RunCard.tsx
 - src/app/(production)/production/_components/UnplannedRunDialog.tsx
@@ -53,6 +54,15 @@ manifest:
 - src/middleware.ts
 - tests/unit/nav/manifest-visibility.test.ts
 - tests/e2e/production-picking.spec.ts
+
+## UX/UI review fixes (post-9136b13)
+A consolidated set of four-auditor UX/UI fixes was applied to `/production`
+(crash guard on unknown stage, dialog focus-trap/restore, empty-state + cancelled
+copy, mobile RunCard reflow, aria state, copy `run`→`job`, etc.). One NEW shared
+file was added and is in-manifest above:
+- `src/app/(production)/production/_lib/use-dialog-a11y.ts` — small dialog focus
+  + Escape + trap + restore hook (composes the shared `@/components/a11y/useFocusTrap`),
+  wired into the DoneBar confirm, EditQtySheet, and UnplannedRunDialog.
 
 ## Out-of-scope
 - End-of-run report reshape (output + scrap + QC) → tranche 142.

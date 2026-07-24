@@ -14,6 +14,7 @@ import { CheckCheck, Loader2 } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { t } from "../../../_lib/copy";
+import { useDialogA11y } from "../../../_lib/use-dialog-a11y";
 
 export function DoneBar({
   total,
@@ -79,6 +80,7 @@ export function DoneBar({
         <button
           type="button"
           onClick={() => allDone && !pending && setConfirmOpen(true)}
+          disabled={pending}
           aria-disabled={!allDone || pending}
           aria-describedby={!allDone ? "done-blocked-reason" : undefined}
           data-testid="done-collecting"
@@ -89,8 +91,17 @@ export function DoneBar({
               : "cursor-not-allowed border-border bg-bg-subtle text-fg-subtle hover:bg-bg-subtle",
           )}
         >
-          <CheckCheck className="h-5 w-5" strokeWidth={2.5} aria-hidden />
-          {t("pick_done_button")}
+          {pending ? (
+            <>
+              <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
+              {t("pick_done_saving")}
+            </>
+          ) : (
+            <>
+              <CheckCheck className="h-5 w-5" strokeWidth={2.5} aria-hidden />
+              {t("pick_done_button")}
+            </>
+          )}
         </button>
         {!allDone ? (
           <p
@@ -105,59 +116,94 @@ export function DoneBar({
 
       {/* Confirm dialog */}
       {confirmOpen ? (
-        <div
-          className="fixed inset-0 z-50 flex items-end justify-center bg-fg/40 backdrop-blur-sm sm:items-center sm:p-4"
-          onClick={() => !pending && setConfirmOpen(false)}
-          data-testid="done-confirm-backdrop"
-        >
-          <div
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="done-confirm-title"
-            className="reveal w-full max-w-sm rounded-t-2xl border border-border bg-bg p-6 text-center shadow-xl sm:rounded-2xl"
-            onClick={(e) => e.stopPropagation()}
-            data-testid="done-confirm"
-          >
-            <span className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-accent-soft text-accent">
-              <CheckCheck className="h-7 w-7" strokeWidth={2} aria-hidden />
-            </span>
-            <h2 id="done-confirm-title" className="text-lg font-bold text-fg-strong">
-              {t("pick_done_confirm_title")}
-            </h2>
-            <p className="mt-1 text-sm text-fg-muted">{t("pick_done_confirm_body")}</p>
-            <div className="mt-5 flex flex-col gap-2">
-              <button
-                type="button"
-                className="btn btn-primary btn-lg w-full gap-2"
-                onClick={() => {
-                  setConfirmOpen(false);
-                  onConfirm();
-                }}
-                disabled={pending}
-                data-testid="done-confirm-yes"
-              >
-                {pending ? (
-                  <>
-                    <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
-                    {t("pick_done_saving")}
-                  </>
-                ) : (
-                  t("pick_done_confirm_yes")
-                )}
-              </button>
-              <button
-                type="button"
-                className="btn btn-ghost btn-lg w-full"
-                onClick={() => setConfirmOpen(false)}
-                disabled={pending}
-                data-testid="done-confirm-no"
-              >
-                {t("pick_done_confirm_no")}
-              </button>
-            </div>
-          </div>
-        </div>
+        <DoneConfirmDialog
+          pending={pending}
+          onCancel={() => setConfirmOpen(false)}
+          onConfirm={() => {
+            setConfirmOpen(false);
+            onConfirm();
+          }}
+        />
       ) : null}
     </>
+  );
+}
+
+/** The "Take these from stock?" confirm. Its own component so useDialogA11y
+ *  mounts/unmounts with the dialog — focus captures the Done button on open and
+ *  restores to it on close (A11Y-001/002/003). */
+function DoneConfirmDialog({
+  pending,
+  onCancel,
+  onConfirm,
+}: {
+  pending: boolean;
+  onCancel: () => void;
+  onConfirm: () => void;
+}) {
+  const a11y = useDialogA11y({
+    active: true,
+    onClose: onCancel,
+    closeDisabled: pending,
+  });
+  return (
+    <div
+      className="fixed inset-0 z-50 flex items-end justify-center bg-fg/40 backdrop-blur-sm sm:items-center sm:p-4"
+      onClick={() => !pending && onCancel()}
+      data-testid="done-confirm-backdrop"
+    >
+      <div
+        ref={a11y.dialogRef}
+        onKeyDown={a11y.onKeyDown}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="done-confirm-title"
+        className="reveal w-full max-w-sm rounded-t-2xl border border-border bg-bg p-6 text-center shadow-pop outline-none sm:rounded-2xl"
+        onClick={(e) => e.stopPropagation()}
+        data-testid="done-confirm"
+      >
+        <span className="mx-auto mb-3 flex h-14 w-14 items-center justify-center rounded-full bg-accent-soft text-accent">
+          <CheckCheck className="h-7 w-7" strokeWidth={2} aria-hidden />
+        </span>
+        <h2
+          id="done-confirm-title"
+          ref={(el) => {
+            a11y.initialFocusRef.current = el;
+          }}
+          tabIndex={-1}
+          className="text-lg font-bold text-fg-strong outline-none"
+        >
+          {t("pick_done_confirm_title")}
+        </h2>
+        <p className="mt-1 text-sm text-fg-muted">{t("pick_done_confirm_body")}</p>
+        <div className="mt-5 flex flex-col gap-2">
+          <button
+            type="button"
+            className="btn btn-primary btn-lg w-full gap-2"
+            onClick={onConfirm}
+            disabled={pending}
+            data-testid="done-confirm-yes"
+          >
+            {pending ? (
+              <>
+                <Loader2 className="h-4 w-4 animate-spin" aria-hidden />
+                {t("pick_done_saving")}
+              </>
+            ) : (
+              t("pick_done_confirm_yes")
+            )}
+          </button>
+          <button
+            type="button"
+            className="btn btn-ghost btn-lg w-full"
+            onClick={onCancel}
+            disabled={pending}
+            data-testid="done-confirm-no"
+          >
+            {t("pick_done_confirm_no")}
+          </button>
+        </div>
+      </div>
+    </div>
   );
 }

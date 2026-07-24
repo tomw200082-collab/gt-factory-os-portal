@@ -7,12 +7,13 @@
 // nothing here blocks. Full focus + Escape handling.
 // ---------------------------------------------------------------------------
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Minus, Plus } from "lucide-react";
 
 import { cn } from "@/lib/cn";
 import { fmtNumStr } from "@/lib/utils/format-quantity";
 import { t } from "../../../_lib/copy";
+import { useDialogA11y } from "../../../_lib/use-dialog-a11y";
 import { type PickResolution } from "../_lib/pick";
 import type { PickListLine } from "../../../_lib/types";
 
@@ -29,7 +30,6 @@ export function EditQtySheet({
   onNotTaken: () => void;
   onClose: () => void;
 }) {
-  const inputRef = useRef<HTMLInputElement>(null);
   const initial = useMemo(() => {
     if (!line) return "";
     if (resolution && resolution.state !== "NOT_COLLECTED") {
@@ -39,26 +39,14 @@ export function EditQtySheet({
   }, [line, resolution]);
 
   const [value, setValue] = useState(initial);
+  const a11y = useDialogA11y({ active: line != null, onClose });
 
   useEffect(() => {
-    if (line) {
-      setValue(initial);
-      const id = window.setTimeout(() => {
-        inputRef.current?.focus();
-        inputRef.current?.select();
-      }, 30);
-      return () => window.clearTimeout(id);
-    }
+    if (line) setValue(initial);
   }, [line, initial]);
 
-  useEffect(() => {
-    if (!line) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [line, onClose]);
+  const parsed = Number(value);
+  const positive = Number.isFinite(parsed) && parsed > 0;
 
   if (!line) return null;
 
@@ -70,7 +58,7 @@ export function EditQtySheet({
 
   function handleSave() {
     const n = Number(value);
-    onSave(Number.isFinite(n) && n > 0 ? n : 0);
+    if (Number.isFinite(n) && n > 0) onSave(n);
   }
 
   return (
@@ -80,10 +68,13 @@ export function EditQtySheet({
       data-testid="edit-qty-backdrop"
     >
       <div
+        ref={a11y.dialogRef}
+        onKeyDown={a11y.onKeyDown}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="edit-qty-title"
-        className="reveal w-full max-w-md rounded-t-2xl border border-border bg-bg p-5 shadow-xl sm:rounded-2xl"
+        className="reveal w-full max-w-md rounded-t-2xl border border-border bg-bg p-5 shadow-pop outline-none sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
         data-testid="edit-qty-sheet"
       >
@@ -111,12 +102,14 @@ export function EditQtySheet({
             type="button"
             className="btn h-16 rounded-r-none border-r-0 px-5"
             onClick={() => step(-1)}
-            aria-label="Less"
+            aria-label="Decrease quantity"
           >
             <Minus className="h-6 w-6" strokeWidth={2.5} aria-hidden />
           </button>
           <input
-            ref={inputRef}
+            ref={(el) => {
+              a11y.initialFocusRef.current = el;
+            }}
             type="number"
             inputMode="decimal"
             step="any"
@@ -125,12 +118,13 @@ export function EditQtySheet({
             value={value}
             onChange={(e) => setValue(e.target.value)}
             data-testid="edit-qty-input"
+            aria-describedby={!positive ? "edit-qty-hint" : undefined}
           />
           <button
             type="button"
             className="btn h-16 rounded-l-none border-l-0 px-5"
             onClick={() => step(1)}
-            aria-label="More"
+            aria-label="Increase quantity"
           >
             <Plus className="h-6 w-6" strokeWidth={2.5} aria-hidden />
           </button>
@@ -139,12 +133,25 @@ export function EditQtySheet({
           {line.uom}
         </div>
 
+        {/* 0 / empty is a valid "did not take it" — but say so, and route it
+            through the explicit button below rather than a silent Save. */}
+        {!positive ? (
+          <p
+            id="edit-qty-hint"
+            className="mt-2 text-center text-xs font-medium text-fg-muted"
+            data-testid="edit-qty-hint"
+          >
+            {t("pick_not_taken_hint")}
+          </p>
+        ) : null}
+
         {/* Actions */}
         <div className="mt-5 flex flex-col gap-2">
           <button
             type="button"
             className="btn btn-primary btn-lg w-full"
             onClick={handleSave}
+            disabled={!positive}
             data-testid="edit-qty-save"
           >
             {t("pick_save")}

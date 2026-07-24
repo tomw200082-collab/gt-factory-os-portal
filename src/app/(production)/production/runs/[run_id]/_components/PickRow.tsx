@@ -15,6 +15,7 @@
 
 import { AlertTriangle, Check, CircleSlash, Pencil, TrendingUp } from "lucide-react";
 
+import { Badge } from "@/components/ui/Badge";
 import { cn } from "@/lib/cn";
 import { fmtNumStr } from "@/lib/utils/format-quantity";
 import { t } from "../../../_lib/copy";
@@ -44,6 +45,25 @@ export function PickRow({
   // The big number: what they took once resolved, else the prefilled requirement.
   const shownQty = resolved ? resolution!.picked_qty : requiredNum(line);
 
+  // State-sensitive action name for AT (A11Y-005) — the visible inner text of
+  // the confirm button is decorative under an explicit aria-label, so the
+  // label must carry the current resolution AND the shortage/excess flags
+  // (A11Y-004: the flags used to live inside the button and were ignored).
+  const statePhrase = confirmed
+    ? t("pick_row_ok")
+    : edited
+      ? `${t("pick_row_changed_to")} ${fmtNumStr(String(shownQty))} ${line.uom}`
+      : notTaken
+        ? t("pick_row_not_collected")
+        : t("pick_row_confirm");
+  const confirmAriaLabel = [
+    `${line.component_name} — ${statePhrase}`,
+    shortage ? t("pick_row_missing") : null,
+    excess ? t("pick_row_extra") : null,
+  ]
+    .filter(Boolean)
+    .join(", ");
+
   return (
     <div
       data-testid={`pick-row-${line.source}-${line.component_id}`}
@@ -60,8 +80,8 @@ export function PickRow({
         type="button"
         onClick={onConfirm}
         disabled={disabled}
-        aria-pressed={confirmed}
-        aria-label={`${line.component_name} — ${t("pick_row_confirm")}`}
+        aria-pressed={confirmed ? true : undefined}
+        aria-label={confirmAriaLabel}
         data-testid={`pick-confirm-${line.source}-${line.component_id}`}
         className={cn(
           "flex min-w-0 flex-1 items-center gap-3 px-4 py-4 text-left transition-colors motion-reduce:transition-none",
@@ -94,8 +114,8 @@ export function PickRow({
             {line.component_name}
           </span>
           {line.name_he ? (
-            <span className="block truncate text-xs text-fg-muted" dir="rtl">
-              {line.name_he}
+            <span className="block truncate text-xs text-fg-muted">
+              <bdi>{line.name_he}</bdi>
             </span>
           ) : null}
 
@@ -120,16 +140,22 @@ export function PickRow({
               </span>
             )}
             {shortage ? (
-              <span className="inline-flex items-center gap-1 rounded-sm bg-warning-softer px-1.5 py-0.5 font-semibold text-warning-fg">
-                <AlertTriangle className="h-3 w-3" strokeWidth={2.5} aria-hidden />
+              <Badge
+                tone="warning"
+                size="xs"
+                icon={<AlertTriangle className="h-3 w-3" strokeWidth={2.5} />}
+              >
                 {t("pick_row_missing")}
-              </span>
+              </Badge>
             ) : null}
             {excess ? (
-              <span className="inline-flex items-center gap-1 rounded-sm bg-info-softer px-1.5 py-0.5 font-semibold text-info-fg">
-                <TrendingUp className="h-3 w-3" strokeWidth={2.5} aria-hidden />
+              <Badge
+                tone="info"
+                size="xs"
+                icon={<TrendingUp className="h-3 w-3" strokeWidth={2.5} />}
+              >
                 {t("pick_row_extra")}
-              </span>
+              </Badge>
             ) : null}
           </span>
         </span>
@@ -157,10 +183,10 @@ export function PickRow({
         >
           {fmtNumStr(String(shownQty))}
         </span>
-        <span className="mt-0.5 text-2xs font-medium text-fg-subtle">{line.uom}</span>
+        <span className="mt-0.5 text-2xs font-medium text-fg-muted">{line.uom}</span>
         {!disabled ? (
-          <span className="mt-1 inline-flex items-center gap-0.5 text-3xs font-medium text-accent">
-            <Pencil className="h-2.5 w-2.5" strokeWidth={2.5} aria-hidden />
+          <span className="mt-1 inline-flex items-center gap-1 text-2xs font-semibold text-accent">
+            <Pencil className="h-3 w-3" strokeWidth={2.5} aria-hidden />
             {t("pick_change")}
           </span>
         ) : null}

@@ -48,7 +48,7 @@ export function AddMaterialControl({
 
   const mutation = useMutation<void, Error>({
     mutationFn: async () => {
-      if (!selectedLine) throw new Error(t("active_pick_item"));
+      if (!selectedLine) throw new Error(t("active_need_item"));
       const n = Number(qty);
       if (!Number.isFinite(n) || n <= 0) throw new Error(t("unplanned_need_qty"));
       const body: MaterialDeltaBody = {
@@ -138,6 +138,10 @@ export function AddMaterialControl({
               value={componentKey}
               onChange={(e) => setComponentKey(e.target.value)}
               data-testid="active-material"
+              required
+              aria-describedby={
+                mutation.isError ? "active-delta-error" : undefined
+              }
             >
               <option value="">—</option>
               {lines.map((l) => (
@@ -166,7 +170,7 @@ export function AddMaterialControl({
                 type="button"
                 className="btn h-14 rounded-r-none border-r-0 px-4"
                 onClick={() => step(-1)}
-                aria-label="Less"
+                aria-label="Decrease quantity"
               >
                 <Minus className="h-5 w-5" strokeWidth={2.5} aria-hidden />
               </button>
@@ -180,12 +184,16 @@ export function AddMaterialControl({
                 value={qty}
                 onChange={(e) => setQty(e.target.value)}
                 data-testid="active-qty"
+                required
+                aria-describedby={
+                  mutation.isError ? "active-delta-error" : undefined
+                }
               />
               <button
                 type="button"
                 className="btn h-14 rounded-l-none border-l-0 px-4"
                 onClick={() => step(1)}
-                aria-label="More"
+                aria-label="Increase quantity"
               >
                 <Plus className="h-5 w-5" strokeWidth={2.5} aria-hidden />
               </button>
@@ -212,6 +220,7 @@ export function AddMaterialControl({
 
           {mutation.isError ? (
             <p
+              id="active-delta-error"
               className="rounded-md border border-danger/40 bg-danger-softer px-3 py-2 text-sm text-danger-fg"
               role="alert"
               data-testid="active-delta-error"

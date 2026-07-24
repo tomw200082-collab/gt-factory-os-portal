@@ -33,9 +33,7 @@ async function fetchTodayRuns(date: string): Promise<ProductionRunsTodayResponse
     { headers: { Accept: "application/json" } },
   );
   if (!res.ok) {
-    throw new Error(
-      `Could not load today's runs (HTTP ${res.status}). Check your connection and try again.`,
-    );
+    throw new Error(t("error_load_runs"));
   }
   return (await res.json()) as ProductionRunsTodayResponse;
 }
@@ -72,9 +70,19 @@ export function RunList() {
         }
       />
 
+      {/* Persistent SR status — always mounted so its text update is announced
+          even after the ephemeral skeleton unmounts (A11Y-009). */}
+      <span className="sr-only" aria-live="polite" data-testid="production-today-live">
+        {query.isLoading
+          ? t("loading")
+          : query.isError
+            ? t("error_load_runs")
+            : t("today_subtitle")}
+      </span>
+
       {/* Loading */}
       {query.isLoading ? (
-        <div className="space-y-3" aria-busy="true" aria-live="polite">
+        <div className="space-y-3" aria-busy="true">
           {[0, 1, 2].map((i) => (
             <div
               key={i}
@@ -108,7 +116,7 @@ export function RunList() {
           className="card flex flex-col items-center gap-3 px-6 py-12 text-center"
           data-testid="production-today-empty"
         >
-          <span className="flex h-14 w-14 items-center justify-center rounded-full bg-accent-soft text-accent">
+          <span className="flex h-16 w-16 items-center justify-center rounded-full bg-accent-soft text-accent">
             <CalendarClock className="h-7 w-7" strokeWidth={1.75} aria-hidden />
           </span>
           <div className="text-lg font-bold text-fg-strong">

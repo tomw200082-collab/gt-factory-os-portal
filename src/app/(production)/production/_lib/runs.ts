@@ -29,7 +29,10 @@ export function stepNumber(index: number): number {
   return index + 1;
 }
 
-/** Copy key for the stage's short kind label (Make tank / Fill / Make & fill). */
+/** Copy key for the stage's short kind label (Make tank / Fill / Make & fill).
+ *  An unexpected stage falls back to the "both" kind so a bad value never
+ *  produces `t(undefined)` → a thrown render (A11Y-006). The `never` assertion
+ *  makes a future stage a compile error, not a runtime crash. */
 export function stageKindKey(stage: ProductionStage): PickingDictKey {
   switch (stage) {
     case "TANK":
@@ -38,10 +41,17 @@ export function stageKindKey(stage: ProductionStage): PickingDictKey {
       return "run_fill_kind";
     case "SINGLE":
       return "run_single_kind";
+    default: {
+      const _exhaustive: never = stage;
+      void _exhaustive;
+      return "run_single_kind";
+    }
   }
 }
 
-/** Copy key for the picking-screen heading, driven by stage. */
+/** Copy key for the picking-screen heading, driven by stage. Same safe-default
+ *  discipline as stageKindKey — an unknown stage yields the "both" heading
+ *  rather than crashing the picking screen. */
 export function stageHeadingKey(stage: ProductionStage): PickingDictKey {
   switch (stage) {
     case "TANK":
@@ -50,6 +60,11 @@ export function stageHeadingKey(stage: ProductionStage): PickingDictKey {
       return "pick_pack_heading";
     case "SINGLE":
       return "pick_both_heading";
+    default: {
+      const _exhaustive: never = stage;
+      void _exhaustive;
+      return "pick_both_heading";
+    }
   }
 }
 

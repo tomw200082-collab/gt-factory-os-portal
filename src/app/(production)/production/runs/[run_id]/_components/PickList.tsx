@@ -58,9 +58,7 @@ async function fetchPickList(runId: string): Promise<PickListResponse> {
     { headers: { Accept: "application/json" } },
   );
   if (!res.ok) {
-    throw new Error(
-      `Could not load the material list (HTTP ${res.status}). Check your connection and try again.`,
-    );
+    throw new Error(t("error_load_pick_list"));
   }
   return (await res.json()) as PickListResponse;
 }
@@ -129,12 +127,27 @@ export function PickList({ runId }: { runId: string }) {
 
   const isStale = confirm.error?.message === STALE;
 
+  // Persistent SR status line — one always-mounted region so load-complete and
+  // state changes are announced even as the ephemeral skeleton unmounts
+  // (A11Y-009).
+  const liveMessage = query.isLoading
+    ? t("loading")
+    : query.isError || !data
+      ? t("error_load_pick_list")
+      : t(runStatusMeta(data.status).labelKey);
+  const liveRegion = (
+    <span className="sr-only" aria-live="polite" data-testid="pick-list-live">
+      {liveMessage}
+    </span>
+  );
+
   // ── loading ────────────────────────────────────────────────────────────
   if (query.isLoading) {
     return (
       <div className="mx-auto max-w-2xl">
+        {liveRegion}
         <div className="mb-6 h-8 w-48 animate-pulse rounded bg-bg-subtle" />
-        <div className="space-y-3" aria-busy="true" aria-live="polite">
+        <div className="space-y-3" aria-busy="true">
           {[0, 1, 2, 3].map((i) => (
             <div key={i} className="h-20 w-full animate-pulse rounded-md bg-bg-subtle" />
           ))}
@@ -147,6 +160,7 @@ export function PickList({ runId }: { runId: string }) {
   if (query.isError || !data) {
     return (
       <div className="mx-auto max-w-2xl">
+        {liveRegion}
         <div className="mb-4">
           <Link href="/production" className="btn btn-sm gap-1.5">
             ← {t("pick_done_back_to_runs")}
@@ -177,12 +191,15 @@ export function PickList({ runId }: { runId: string }) {
   const status = runStatusMeta(data.status);
   const terminal = isRunTerminal(data.status);
   const active = isRunActive(data.status);
+  const committed = data.status === "IN_PRODUCTION"; // collecting already done
+  const cancelled = data.status === "CANCELLED";
   const name = runDisplayName(data);
 
   // ── success ──────────────────────────────────────────────────────────────
   if (done) {
     return (
       <div className="mx-auto max-w-2xl">
+        {liveRegion}
         <div
           className="reveal card flex flex-col items-center gap-3 px-6 py-12 text-center"
           role="status"
@@ -217,9 +234,7 @@ export function PickList({ runId }: { runId: string }) {
         {showHeading ? (
           <div className="flex items-center gap-2 px-1 pt-2">
             {icon}
-            <span className="text-2xs font-semibold uppercase tracking-sops text-fg-subtle">
-              {label}
-            </span>
+            <span className="eyebrow-strong">{label}</span>
             <span className="text-2xs text-fg-faint">({groupLines.length})</span>
           </div>
         ) : null}
@@ -244,6 +259,7 @@ export function PickList({ runId }: { runId: string }) {
 
   return (
     <div className="mx-auto max-w-2xl pb-4">
+      {liveRegion}
       <WorkflowHeader
         size="section"
         backHref="/production"
@@ -258,8 +274,8 @@ export function PickList({ runId }: { runId: string }) {
             <span className="text-sm text-fg-muted">
               {name}
               {data.name_he ? (
-                <span className="ml-1.5 text-fg-subtle" dir="rtl">
-                  {data.name_he}
+                <span className="ml-1.5 text-fg-subtle">
+                  <bdi>{data.name_he}</bdi>
                 </span>
               ) : null}
             </span>
@@ -273,14 +289,27 @@ export function PickList({ runId }: { runId: string }) {
         }
       />
 
-      {/* Terminal run — read-only notice */}
+      {/* Terminal run — read-only notice, with the right message per outcome
+          (REPORTED = materials taken; CANCELLED = nothing taken). */}
       {terminal ? (
         <div
           className="mb-4 rounded-md border border-border/70 bg-bg-subtle/50 px-4 py-3 text-sm text-fg-muted"
           role="status"
           data-testid="pick-terminal-banner"
         >
-          {t(status.labelKey)} · {t("pick_done_success")}
+          {cancelled
+            ? t("pick_terminal_cancelled")
+            : `${t(status.labelKey)} · ${t("pick_terminal_done")}`}
+        </div>
+      ) : committed ? (
+        /* Re-entry after collecting is committed and production has started —
+           read-only; the picks are already in the ledger. */
+        <div
+          className="mb-4 rounded-md border border-warning/40 bg-warning-softer px-4 py-3 text-sm text-warning-fg"
+          role="status"
+          data-testid="pick-in-production-banner"
+        >
+          {t("pick_in_production_banner")}
         </div>
       ) : null}
 
@@ -292,9 +321,10 @@ export function PickList({ runId }: { runId: string }) {
           data-testid="pick-stale-banner"
         >
           <div className="font-semibold">{t("error_stale_bom")}</div>
+          <p className="mt-1 text-xs opacity-90">{t("error_stale_bom_warn")}</p>
           <button
             type="button"
-            className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold underline hover:no-underline"
+            className="mt-2 inline-flex items-center gap-1.5 rounded-sm text-xs font-semibold underline hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
             onClick={() => {
               confirm.reset();
               setResolutions({});
@@ -312,17 +342,35 @@ export function PickList({ runId }: { runId: string }) {
           role="alert"
           data-testid="pick-confirm-error"
         >
-          {confirm.error.message}
+          <div>{confirm.error.message}</div>
+          <button
+            type="button"
+            className="mt-2 inline-flex items-center gap-1.5 rounded-sm text-xs font-semibold underline hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+            onClick={() => confirm.mutate()}
+            data-testid="pick-confirm-retry"
+          >
+            <RotateCw className="h-3.5 w-3.5" strokeWidth={2.5} aria-hidden />
+            {t("error_retry")}
+          </button>
         </div>
       ) : null}
 
       {/* Rows */}
       {lines.length === 0 ? (
         <div
-          className="card px-6 py-10 text-center text-sm text-fg-muted"
+          className="card flex flex-col items-center gap-3 px-6 py-10 text-center"
+          role="status"
           data-testid="pick-list-empty"
         >
-          —
+          <Package className="h-8 w-8 text-fg-subtle" strokeWidth={1.75} aria-hidden />
+          <p className="max-w-xs text-sm text-fg-muted">{t("pick_list_empty")}</p>
+          <Link
+            href="/production"
+            className="btn btn-primary btn-sm mt-1"
+            data-testid="pick-list-empty-back"
+          >
+            {t("pick_done_back_to_runs")}
+          </Link>
         </div>
       ) : (
         <div className="space-y-4" data-testid="pick-list">
@@ -350,8 +398,8 @@ export function PickList({ runId }: { runId: string }) {
         </div>
       ) : null}
 
-      {/* Done bar — hidden on a terminal run */}
-      {!terminal && lines.length > 0 ? (
+      {/* Done bar — hidden on a terminal run and once collecting is committed */}
+      {!terminal && !committed && lines.length > 0 ? (
         <DoneBar
           total={lines.length}
           resolved={resolved}

@@ -7,13 +7,14 @@
 // focus handling. On success it jumps straight into the run's picking screen.
 // ---------------------------------------------------------------------------
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
 import { Loader2, Minus, Plus, Search, X } from "lucide-react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { cn } from "@/lib/cn";
 import { t } from "../_lib/copy";
+import { useDialogA11y } from "../_lib/use-dialog-a11y";
 import type {
   CreateUnplannedRunResponse,
   PickerItemRow,
@@ -26,7 +27,7 @@ async function fetchProducibleItems(): Promise<ItemsEnvelope> {
     headers: { Accept: "application/json" },
   });
   if (!res.ok) {
-    throw new Error(`Could not load products (HTTP ${res.status}).`);
+    throw new Error(t("error_load_products"));
   }
   const body = (await res.json()) as ItemsEnvelope;
   const rows = (body.rows ?? []).filter(
@@ -46,7 +47,6 @@ export function UnplannedRunDialog({
 }) {
   const router = useRouter();
   const qc = useQueryClient();
-  const searchRef = useRef<HTMLInputElement>(null);
 
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<PickerItemRow | null>(null);
@@ -60,27 +60,15 @@ export function UnplannedRunDialog({
     staleTime: 60_000,
   });
 
-  // Reset + focus on open.
+  // Reset field state on open (focus + Escape + trap come from useDialogA11y).
   useEffect(() => {
     if (open) {
       setSearch("");
       setSelected(null);
       setQty("");
       setValidationMsg(null);
-      const id = window.setTimeout(() => searchRef.current?.focus(), 30);
-      return () => window.clearTimeout(id);
     }
   }, [open]);
-
-  // Escape to close.
-  useEffect(() => {
-    if (!open) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
-    };
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [open, onClose]);
 
   const filtered = useMemo(() => {
     const rows = itemsQuery.data?.rows ?? [];
@@ -124,6 +112,12 @@ export function UnplannedRunDialog({
     },
   });
 
+  const a11y = useDialogA11y({
+    active: open,
+    onClose,
+    closeDisabled: mutation.isPending,
+  });
+
   if (!open) return null;
 
   function stepQty(delta: number) {
@@ -150,14 +144,17 @@ export function UnplannedRunDialog({
   return (
     <div
       className="fixed inset-0 z-50 flex items-end justify-center bg-fg/40 p-0 backdrop-blur-sm sm:items-center sm:p-4"
-      onClick={onClose}
+      onClick={() => !mutation.isPending && onClose()}
       data-testid="unplanned-run-dialog-backdrop"
     >
       <div
+        ref={a11y.dialogRef}
+        onKeyDown={a11y.onKeyDown}
+        tabIndex={-1}
         role="dialog"
         aria-modal="true"
         aria-labelledby="unplanned-run-title"
-        className="reveal flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl border border-border bg-bg shadow-xl sm:rounded-2xl"
+        className="reveal flex max-h-[90vh] w-full max-w-lg flex-col overflow-hidden rounded-t-2xl border border-border bg-bg shadow-pop outline-none sm:rounded-2xl"
         onClick={(e) => e.stopPropagation()}
         data-testid="unplanned-run-dialog"
       >
@@ -173,7 +170,7 @@ export function UnplannedRunDialog({
             type="button"
             className="btn btn-ghost btn-sm -mr-2 -mt-1 h-11 w-11 shrink-0 p-0"
             onClick={onClose}
-            aria-label={t("unplanned_cancel")}
+            aria-label={t("close_dialog")}
           >
             <X className="h-5 w-5" strokeWidth={2} aria-hidden />
           </button>
@@ -197,7 +194,9 @@ export function UnplannedRunDialog({
               />
               <input
                 id="unplanned-item-search"
-                ref={searchRef}
+                ref={(el) => {
+                  a11y.initialFocusRef.current = el;
+                }}
                 type="text"
                 className="input h-12 pl-9"
                 placeholder={t("unplanned_pick_item_ph")}
@@ -205,6 +204,9 @@ export function UnplannedRunDialog({
                 onChange={(e) => setSearch(e.target.value)}
                 data-testid="unplanned-item-search"
                 autoComplete="off"
+                aria-describedby={
+                  validationMsg && !selected ? "unplanned-validation" : undefined
+                }
               />
             </div>
 
@@ -277,7 +279,7 @@ export function UnplannedRunDialog({
                 type="button"
                 className="btn h-14 rounded-r-none border-r-0 px-4"
                 onClick={() => stepQty(-1)}
-                aria-label="Less"
+                aria-label="Decrease quantity"
               >
                 <Minus className="h-5 w-5" strokeWidth={2.5} aria-hidden />
               </button>
@@ -294,12 +296,20 @@ export function UnplannedRunDialog({
                   setValidationMsg(null);
                 }}
                 data-testid="unplanned-qty"
+                aria-describedby={
+                  [
+                    validationMsg && selected ? "unplanned-validation" : null,
+                    mutation.isError ? "unplanned-run-error" : null,
+                  ]
+                    .filter(Boolean)
+                    .join(" ") || undefined
+                }
               />
               <button
                 type="button"
                 className="btn h-14 rounded-l-none border-l-0 px-4"
                 onClick={() => stepQty(1)}
-                aria-label="More"
+                aria-label="Increase quantity"
               >
                 <Plus className="h-5 w-5" strokeWidth={2.5} aria-hidden />
               </button>
@@ -307,12 +317,17 @@ export function UnplannedRunDialog({
           </div>
 
           {validationMsg ? (
-            <p className="text-sm font-medium text-danger-fg" role="alert">
+            <p
+              id="unplanned-validation"
+              className="text-sm font-medium text-danger-fg"
+              role="alert"
+            >
               {validationMsg}
             </p>
           ) : null}
           {mutation.isError ? (
             <p
+              id="unplanned-run-error"
               className="rounded-md border border-danger/40 bg-danger-softer px-3 py-2 text-sm text-danger-fg"
               role="alert"
               data-testid="unplanned-run-error"
