@@ -379,6 +379,11 @@ function ItemsPageInner(): JSX.Element {
         }.`,
       });
       void queryClient.invalidateQueries({ queryKey: ["admin", "items"] });
+      // Tranche 144 — a deactivate/reactivate here moves the item between
+      // the Active list and the Archive tab; keep both, and the admin
+      // health summary, in sync without a reload.
+      void queryClient.invalidateQueries({ queryKey: ["admin", "archive", "items"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin", "health"] });
     },
     onError: (err: Error, vars) => {
       const msg =

@@ -436,6 +436,10 @@ export default function AdminItemDetailPage({
       setShowStatusDrawer(false);
       void queryClient.invalidateQueries({ queryKey: ["admin", "masters", "item", item_id] });
       void queryClient.invalidateQueries({ queryKey: ["admin", "items"] });
+      // Tranche 144 — keep the Archive tab and admin health summary in sync
+      // with this status change too (mirrors the items-list statusMutation).
+      void queryClient.invalidateQueries({ queryKey: ["admin", "archive", "items"] });
+      void queryClient.invalidateQueries({ queryKey: ["admin", "health"] });
     },
   });
 

@@ -323,6 +323,11 @@ export default function WasteAdjustmentPage() {
     }>("/api/waste-adjustments", envelope);
     switch (result.kind) {
       case "posted":
+        // Tranche 144 — a direct-posted waste adjustment changes real
+        // on-hand quantities immediately; refresh the Inventory dashboard
+        // and ledger view so they don't keep showing pre-adjustment balances.
+        void queryClient.invalidateQueries({ queryKey: ["stock"] });
+        void queryClient.invalidateQueries({ queryKey: ["stock-ledger"] });
         setDone({
           kind: "success",
           message: result.idempotentReplay

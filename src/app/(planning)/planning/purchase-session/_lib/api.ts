@@ -153,13 +153,16 @@ export function usePlacePo() {
     },
     // Tranche 042 — a placed PO becomes visible to the PO list
     // (["planner","purchase-orders",…] in (po)/purchase-orders/page.tsx),
-    // the PO detail surfaces (["purchase-orders",…]), and the goods-receipt
-    // open-PO dropdown (["ops","receipts","open-pos"]). Invalidate all three
+    // the PO detail surfaces (["purchase-orders",…]), the goods-receipt
+    // open-PO dropdown (["ops","receipts","open-pos"]), and the office
+    // manager's placement queue (["po-placement-queue"], where the newly
+    // placed order actually needs to be actioned next). Invalidate all four
     // so they refresh without a manual reload.
     [
       ["planner", "purchase-orders"],
       ["purchase-orders"],
       ["ops", "receipts", "open-pos"],
+      ["po-placement-queue"],
     ],
   );
 }
