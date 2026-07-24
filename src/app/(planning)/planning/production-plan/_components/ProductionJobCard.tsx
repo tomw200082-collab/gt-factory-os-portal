@@ -100,11 +100,10 @@ export function ProductionJobCard({
   // COPY-018 — "Open Production Report" read like opening an existing
   // document; the operator is creating one. Base batches say "products"
   // (plural) to signal the multi-SKU flow.
-  const reportLabel = plan.is_base_batch
-    ? "Report products"
-    : isToday
-      ? "Report production"
-      : "Report actual";
+  // One action, one name (tranche 147). The label used to change to "Report
+  // actual" off-today, which named the same journey two ways depending on the
+  // date and leaned on "actual" — a word the portal standard avoids.
+  const reportLabel = plan.is_base_batch ? "Report products" : "Report production";
 
   const [impactOpen, setImpactOpen] = useState(false);
 

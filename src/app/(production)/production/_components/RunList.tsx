@@ -20,6 +20,10 @@ import type { ProductionRunsTodayResponse } from "../_lib/types";
 import { RunCard } from "./RunCard";
 import { UnplannedRunDialog } from "./UnplannedRunDialog";
 
+/** Earliest day worth browsing — the factory has no production data before
+ *  the system was in use. */
+const SYSTEM_START_DATE = "2026-04-01";
+
 /** Local calendar date as YYYY-MM-DD (the backend keys "today" on the operator
  *  timezone, not UTC). */
 function todayYmd(): string {
@@ -69,9 +73,11 @@ export function RunList() {
   const forwardTo = wantsReport && planId ? autoForwardRunId(rows) : null;
   useEffect(() => {
     if (forwardTo) {
-      router.replace(`/production/runs/${encodeURIComponent(forwardTo)}/report`);
+      router.replace(
+        `/production/runs/${encodeURIComponent(forwardTo)}/report${date !== today ? `?date=${encodeURIComponent(date)}` : ""}`,
+      );
     }
-  }, [forwardTo, router]);
+  }, [forwardTo, router, date, today]);
 
   const isBackDated = date !== today;
 
@@ -107,12 +113,16 @@ export function RunList() {
         <input
           id="production-day"
           type="date"
-          className="input h-11"
+          className="input h-14 min-w-[9rem]"
           value={date}
           // Today is the practical ceiling for browsing, but a plan made ahead
           // of its date links here with a future date — accept the value it
           // arrived with rather than rendering the field out of range.
           max={date > today ? date : today}
+          // Nothing was produced before the system existed; without a floor the
+          // picker happily scrolls to 1999 and lands on an empty state that
+          // reads like a data problem rather than an out-of-range date.
+          min={SYSTEM_START_DATE}
           onChange={(e) => {
             const next = e.target.value || today;
             // Changing the day drops the plan scope — it belongs to one date.
@@ -123,7 +133,7 @@ export function RunList() {
         {isBackDated ? (
           <button
             type="button"
-            className="btn btn-sm"
+            className="btn h-14"
             onClick={() => router.replace("/production")}
             data-testid="production-day-today"
           >
@@ -140,7 +150,7 @@ export function RunList() {
           <span className="text-fg-muted">{t("day_plan_scope")}</span>
           <button
             type="button"
-            className="btn btn-sm"
+            className="btn h-11"
             onClick={() =>
               router.replace(date === today ? "/production" : `/production?date=${date}`)
             }
@@ -160,7 +170,9 @@ export function RunList() {
             ? t("loading")
             : query.isError
               ? t("error_load_runs")
-              : t("today_subtitle")}
+              : isBackDated
+                ? t("day_subtitle_past")
+                : t("today_subtitle")}
       </span>
 
       {/* Loading */}
@@ -182,7 +194,7 @@ export function RunList() {
           {[0, 1, 2].map((i) => (
             <div
               key={i}
-              className="h-24 w-full animate-pulse rounded-md bg-bg-subtle"
+              className="h-24 w-full animate-pulse rounded-md bg-bg-subtle motion-reduce:animate-none"
             />
           ))}
         </div>
@@ -244,7 +256,7 @@ export function RunList() {
         <ul className="space-y-3" data-testid="run-list">
           {rows.map((run, index) => (
             <li key={run.run_id}>
-              <RunCard run={run} index={index} />
+              <RunCard run={run} index={index} date={isBackDated ? date : undefined} />
             </li>
           ))}
         </ul>

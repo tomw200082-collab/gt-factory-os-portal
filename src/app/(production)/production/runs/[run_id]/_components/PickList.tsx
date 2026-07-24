@@ -3,7 +3,8 @@
 // ---------------------------------------------------------------------------
 // PickList — the stage-aware picking screen orchestrator. Loads the run's
 // BOM-exploded pick list, owns the per-row resolution map + the resolve-gate,
-// and fires the stock-decrementing pick-confirm. Liquids are grouped above
+// and fires the pick-confirm, which records the picks without moving stock
+// (the report consumes them — 0297). Liquids are grouped above
 // packaging. Physical truth wins: shortage/excess flag but never block.
 //
 // All display copy comes from _lib/copy (simple English). All gate math +
@@ -29,6 +30,7 @@ import { fmtNumStr } from "@/lib/utils/format-quantity";
 import { t } from "../../../_lib/copy";
 import {
   isRunActive,
+  isRunReportable,
   isRunTerminal,
   runDisplayName,
   runStatusMeta,
@@ -157,10 +159,10 @@ export function PickList({ runId }: { runId: string }) {
     return (
       <div className="mx-auto max-w-2xl">
         {liveRegion}
-        <div className="mb-6 h-8 w-48 animate-pulse rounded bg-bg-subtle" />
+        <div className="mb-6 h-8 w-48 animate-pulse rounded bg-bg-subtle motion-reduce:animate-none" />
         <div className="space-y-3" aria-busy="true">
           {[0, 1, 2, 3].map((i) => (
-            <div key={i} className="h-20 w-full animate-pulse rounded-md bg-bg-subtle" />
+            <div key={i} className="h-20 w-full animate-pulse rounded-md bg-bg-subtle motion-reduce:animate-none" />
           ))}
         </div>
       </div>
@@ -203,6 +205,10 @@ export function PickList({ runId }: { runId: string }) {
   const terminal = isRunTerminal(data.status);
   const active = isRunActive(data.status);
   const committed = data.status === "IN_PRODUCTION"; // collecting already done
+  // A TANK run makes liquid for the packing runs; it has no product of its own,
+  // so offering "Report production" here sends the operator into a 409 they
+  // cannot escape. Point at the packing runs instead (FLOW-002).
+  const reportable = isRunReportable(data);
   const cancelled = data.status === "CANCELLED";
   const name = runDisplayName(data);
 
@@ -226,14 +232,20 @@ export function PickList({ runId }: { runId: string }) {
             {name} · {fmtNumStr(data.target_qty)} {data.uom}
           </p>
           <div className="mt-2 flex flex-col items-center gap-2">
-            <Link
-              href={`/production/runs/${encodeURIComponent(runId)}/report`}
-              className="btn btn-primary btn-lg gap-1.5"
-              data-testid="pick-done-report"
-            >
-              {t("report_cta")}
-              <ArrowRight className="h-4 w-4" strokeWidth={2.5} aria-hidden />
-            </Link>
+            {reportable ? (
+              <Link
+                href={`/production/runs/${encodeURIComponent(runId)}/report`}
+                className="btn btn-primary btn-lg gap-1.5"
+                data-testid="pick-done-report"
+              >
+                {t("report_cta")}
+                <ArrowRight className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+              </Link>
+            ) : (
+              <p className="max-w-xs text-sm text-fg-muted" data-testid="pick-done-tank-note">
+                {t("pick_tank_no_report")}
+              </p>
+            )}
             <Link
               href="/production"
               className="btn btn-ghost btn-sm"
@@ -313,13 +325,13 @@ export function PickList({ runId }: { runId: string }) {
       {/* When materials actually leave stock. Stated up front, because the
           answer changed in tranche 147 and the whole screen reads differently
           depending on it: collecting records, reporting is what moves stock. */}
-      {!terminal ? (
-        <p
+      {!terminal && !committed ? (
+        <div
           className="mb-4 rounded-md border border-border/70 bg-bg-subtle/50 px-4 py-3 text-sm text-fg-muted"
           data-testid="pick-stock-timing-note"
         >
           {t("pick_stock_timing_note")}
-        </p>
+        </div>
       ) : null}
 
       {/* Terminal run — read-only notice, with the right message per outcome
@@ -342,15 +354,19 @@ export function PickList({ runId }: { runId: string }) {
           role="status"
           data-testid="pick-in-production-banner"
         >
-          <span>{t("pick_in_production_banner")}</span>
-          <Link
-            href={`/production/runs/${encodeURIComponent(runId)}/report`}
-            className="btn btn-primary btn-sm gap-1.5 shrink-0"
-            data-testid="pick-in-production-report"
-          >
-            {t("report_cta")}
-            <ArrowRight className="h-4 w-4" strokeWidth={2.5} aria-hidden />
-          </Link>
+          <span>
+            {reportable ? t("pick_in_production_banner") : t("pick_tank_no_report")}
+          </span>
+          {reportable ? (
+            <Link
+              href={`/production/runs/${encodeURIComponent(runId)}/report`}
+              className="btn btn-primary btn-sm gap-1.5 shrink-0"
+              data-testid="pick-in-production-report"
+            >
+              {t("report_cta")}
+              <ArrowRight className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+            </Link>
+          ) : null}
         </div>
       ) : null}
 

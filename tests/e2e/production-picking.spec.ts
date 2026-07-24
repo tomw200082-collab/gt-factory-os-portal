@@ -173,14 +173,26 @@ test.describe("@mocked production picking", () => {
 
     await expect(page.getByTestId("report-form")).toBeVisible();
 
+    // Tranche 147 — the form opens pre-filled with the planned quantity, so
+    // the usual case ("we made what we planned") is a confirm, not a
+    // transcription. It is labelled as the plan, not as a measurement.
+    const output = page.getByTestId("report-output-qty");
+    await expect(output).toHaveValue(PICK_LIST.target_qty);
+    await expect(page.getByTestId("report-output-prefilled")).toBeVisible();
+
     // QC fields are optional — the whole QC block starts collapsed and does
-    // NOT gate submit. Submit is blocked only until output is a positive number.
+    // NOT gate submit. Submit is blocked only when output is not a positive
+    // number, which now means only after the operator clears the pre-fill.
     const submit = page.getByTestId("report-submit");
+    await expect(submit).toHaveAttribute("aria-disabled", "false");
+    await output.fill("");
     await expect(submit).toHaveAttribute("aria-disabled", "true");
 
-    // Type good units only. Leave scrap at its default, QC untouched.
-    await page.getByTestId("report-output-qty").fill("150");
+    // Type the real good units. Leave scrap at its default, QC untouched.
+    await output.fill("150");
     await expect(submit).toHaveAttribute("aria-disabled", "false");
+    // Once edited, the value is the operator's — the plan hint is gone.
+    await expect(page.getByTestId("report-output-prefilled")).toHaveCount(0);
 
     // Prove QC is reachable but never required — open it, leave it empty.
     await page.getByTestId("report-qc-toggle").click();
@@ -206,6 +218,22 @@ test.describe("@mocked production picking", () => {
       }),
     );
 
+    // Finishing the run is the one action that moves stock, and it cannot be
+    // undone — so it takes two deliberate taps. The first shows the figure
+    // being committed; only the second posts.
+    await submit.click();
+    await expect(page.getByTestId("report-confirm")).toBeVisible();
+    await expect(page.getByTestId("report-confirm")).toContainText("150");
+    await expect(page.getByTestId("report-confirm-no")).toBeVisible();
+
+    // Changing the number backs out of the confirm — the operator is no longer
+    // agreeing to the figure they were shown.
+    await output.fill("151");
+    await expect(page.getByTestId("report-confirm")).toHaveCount(0);
+    await output.fill("150");
+
+    await submit.click();
+    await expect(page.getByTestId("report-confirm")).toBeVisible();
     await submit.click();
     const successCard = page.getByTestId("report-success");
     await expect(successCard).toBeVisible();

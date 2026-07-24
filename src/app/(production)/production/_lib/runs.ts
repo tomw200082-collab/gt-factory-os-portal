@@ -5,7 +5,7 @@
 // the RunList component stays a thin renderer over these helpers.
 // ---------------------------------------------------------------------------
 
-import type { PickingDictKey } from "./copy";
+import { t, type PickingDictKey } from "./copy";
 import type {
   ProductionRunStatus,
   ProductionRunTodayRow,
@@ -140,10 +140,13 @@ export function isRunTerminal(status: ProductionRunStatus): boolean {
 }
 
 /** Big display name for a run: floor name if the backend has one yet, else the
- *  item name (tranche-142 forward-compat — see types.ts). */
+ *  item name (tranche-142 forward-compat — see types.ts).
+ *
+ *  A TANK run has no item, so both can be absent; falling through to the raw
+ *  value would print "null" on the operator's screen. */
 export function runDisplayName(row: {
   floor_name?: string | null;
-  item_name: string;
+  item_name?: string | null;
 }): string {
-  return row.floor_name?.trim() || row.item_name;
+  return row.floor_name?.trim() || row.item_name?.trim() || t("run_base_batch_name");
 }

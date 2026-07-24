@@ -14,7 +14,7 @@
 export const pickingDict = {
   // ── /production — today's run list (operator landing) ────────────────────
   today_title: { en: "Today", ru: "" },
-  today_subtitle: { en: "Collect materials, then report what you made", ru: "" },
+  today_subtitle: { en: "Collect materials, and report what you made", ru: "" },
   today_empty_title: { en: "No production today.", ru: "" },
   today_empty_body: { en: "When a job is planned for today, it shows up here.", ru: "" },
   today_eyebrow: { en: "Production", ru: "" },
@@ -27,7 +27,7 @@ export const pickingDict = {
   day_subtitle_past: { en: "You can report a job you made earlier.", ru: "" },
   day_empty_past_title: { en: "No production on this day.", ru: "" },
   day_empty_past_body: { en: "Pick another day, or start an extra job.", ru: "" },
-  day_plan_scope: { en: "Showing one planned job.", ru: "" },
+  day_plan_scope: { en: "Showing this plan's jobs.", ru: "" },
   day_plan_scope_clear: { en: "Show all", ru: "" },
   day_empty_plan_title: { en: "This job is not on this day.", ru: "" },
   day_empty_plan_body: { en: "Check the day above, or show all jobs.", ru: "" },
@@ -41,6 +41,8 @@ export const pickingDict = {
   run_status_done: { en: "Done", ru: "" },
   run_status_cancelled: { en: "Cancelled", ru: "" },
   run_unplanned_tag: { en: "Extra job", ru: "" },
+  // A TANK run has no product of its own to name.
+  run_base_batch_name: { en: "Base batch", ru: "" },
   run_open: { en: "Open", ru: "" },
 
   // ── unplanned run ────────────────────────────────────────────────────────
@@ -100,7 +102,7 @@ export const pickingDict = {
   pick_done_confirm_yes: { en: "Yes, save it", ru: "" },
   pick_done_saving: { en: "Saving…", ru: "" },
   pick_done_confirm_no: { en: "Not yet", ru: "" },
-  pick_done_success: { en: "Saved. You can start making.", ru: "" },
+  pick_done_success: { en: "Saved. Report here when you are done making.", ru: "" },
   pick_terminal_done: { en: "This job is finished. Stock is updated.", ru: "" },
   pick_terminal_cancelled: {
     en: "This job was cancelled. Nothing came off stock.",
@@ -112,6 +114,13 @@ export const pickingDict = {
   },
   pick_stock_timing_note: {
     en: "Materials come off stock when you report what you made — not now. If the job is cancelled, put them back and nothing changes.",
+    ru: "",
+  },
+  // A TANK run makes the liquid; the packing runs turn it into product. There
+  // is nothing to report on the tank itself, so say where to go instead of
+  // offering a button that fails.
+  pick_tank_no_report: {
+    en: "This tank makes the liquid. Report the filling jobs for it.",
     ru: "",
   },
   pick_done_back_to_runs: { en: "Back to today", ru: "" },
@@ -175,18 +184,33 @@ export const pickingDict = {
   report_need_output: { en: "Type the good units first.", ru: "" },
   report_success: { en: "Run finished. Good job.", ru: "" },
   report_cta: { en: "Report production", ru: "" },
+  report_back_to_plan: { en: "See it on the plan", ru: "" },
+  report_shortfall_note: {
+    en: "Some materials showed less in stock than you took. The planner will check it.",
+    ru: "",
+  },
   report_output_prefilled: {
     en: "This is the planned amount. Change it to what you really made.",
     ru: "",
   },
+  // "any materials" — a run reported after the fact may have no collected
+  // materials at all, and then nothing comes off stock. The unhedged wording
+  // promised something that is not always true.
   report_stock_note: {
-    en: "Finishing the run adds the good units to stock and takes off the materials you collected.",
+    en: "Finishing the run adds the good units to stock and takes off any materials you collected.",
     ru: "",
   },
+  // Two-step confirm on the one action that moves stock. Tranche 146 deferred
+  // a confirm here because the empty output field was itself a pause; tranche
+  // 147 pre-fills that field, so the pause is gone and the guard is not.
+  report_confirm_ask: { en: "Add to stock?", ru: "" },
+  report_confirm_yes: { en: "Yes, finish the run", ru: "" },
+  report_confirm_no: { en: "Not yet", ru: "" },
+  report_confirm_undo: { en: "You cannot undo this.", ru: "" },
   report_already_title: { en: "This run is already finished.", ru: "" },
   report_already_body: { en: "The work was saved. Nothing to add.", ru: "" },
   report_err_not_reportable: {
-    en: "This run is not ready to finish. Ask the planner.",
+    en: "This job makes liquid for other jobs. Report the filling jobs instead.",
     ru: "",
   },
   report_err_already: { en: "This run was already finished.", ru: "" },
