@@ -26,7 +26,19 @@ import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { UOMS, type Uom } from "@/lib/contracts/enums";
 import { friendlyCountError } from "@/lib/copy/physical-count-errors";
+import { fmtNumStr } from "@/lib/utils/format-quantity";
 import { cn } from "@/lib/cn";
+
+/** Format a signed delta string ("+5.00000000" / "-3.00") to the portal's
+ *  4dp display rule while preserving the leading sign — fmtNumStr() alone
+ *  would parse away a "+" prefix via Number(), losing the gain/loss cue. */
+function fmtSignedDelta(delta: string | undefined): string {
+  if (!delta) return delta ?? "";
+  const trimmed = delta.trim();
+  const sign = trimmed.startsWith("-") ? "-" : trimmed.startsWith("+") ? "+" : "";
+  const rest = sign ? trimmed.slice(1) : trimmed;
+  return sign + fmtNumStr(rest);
+}
 
 // ---------------------------------------------------------------------------
 // Physical Count contract — inlined.
@@ -130,6 +142,30 @@ function formatRelative(isoString: string): string {
   return `${diffHr}h ago`;
 }
 
+// FLOW-003: the snapshot expires 60 minutes after opening (contract §2.1).
+// Escalate the pill's tone as the deadline approaches so an interrupted
+// operator sees it coming instead of losing a typed count to a surprise
+// SNAPSHOT_EXPIRED on submit.
+const SNAPSHOT_EXPIRY_MIN = 60;
+const SNAPSHOT_WARN_MIN = 45;
+const SNAPSHOT_DANGER_MIN = 55;
+function snapshotExpiryState(openedAt: string): {
+  tone: "normal" | "warning" | "danger";
+  label: string | null;
+} {
+  const elapsedMin = (Date.now() - new Date(openedAt).getTime()) / 60_000;
+  if (elapsedMin >= SNAPSHOT_EXPIRY_MIN) {
+    return { tone: "danger", label: "Snapshot expired — start count again" };
+  }
+  if (elapsedMin >= SNAPSHOT_DANGER_MIN) {
+    return { tone: "danger", label: `Expires in ~${Math.max(0, Math.round(SNAPSHOT_EXPIRY_MIN - elapsedMin))}m` };
+  }
+  if (elapsedMin >= SNAPSHOT_WARN_MIN) {
+    return { tone: "warning", label: `Expires in ~${Math.round(SNAPSHOT_EXPIRY_MIN - elapsedMin)}m` };
+  }
+  return { tone: "normal", label: null };
+}
+
 /** Format event_at datetime-local string as relative time. */
 function formatEventAtRelative(localDT: string): string {
   const d = new Date(localDT);
@@ -158,6 +194,27 @@ interface DoneState {
   /** UX-flow audit (FLOW-006): item the count posted against, so the
    *  "view ledger" link can filter to it instead of the unfiltered log. */
   itemId?: string;
+  /** FLOW-001: true when the snapshot itself is unrecoverable (expired /
+   *  not found / owned by someone else) — retrying the same submit will
+   *  always re-fail, so the error action must start a fresh count instead
+   *  of resubmitting. */
+  terminal?: boolean;
+}
+
+// FLOW-001: reason codes where the open snapshot can never be resubmitted
+// against successfully — the operator must open a new one.
+const TERMINAL_COUNT_ERROR_REASONS = new Set([
+  "SNAPSHOT_EXPIRED",
+  "SNAPSHOT_NOT_FOUND",
+  "SNAPSHOT_OWNER_MISMATCH",
+  "SNAPSHOT_ALREADY_CONSUMED",
+]);
+function isTerminalCountError(body: unknown): boolean {
+  const reason =
+    body && typeof body === "object" && "reason_code" in body
+      ? String((body as { reason_code: unknown }).reason_code)
+      : undefined;
+  return reason != null && TERMINAL_COUNT_ERROR_REASONS.has(reason);
 }
 
 // ---------------------------------------------------------------------------
@@ -237,7 +294,7 @@ function StepIndicator({ step }: { step: 1 | 2 }) {
 function BlindCountBanner({ compact = false }: { compact?: boolean }) {
   if (compact) {
     return (
-      <div className="inline-flex items-center gap-2 rounded-full border border-border/60 bg-bg-raised/70 px-3 py-1 text-xs font-semibold text-fg-muted">
+      <div className="inline-flex items-center gap-2 rounded-full border border-info/40 bg-info-softer px-3 py-1 text-xs font-semibold text-info-fg">
         <svg className="h-3.5 w-3.5 shrink-0" viewBox="0 0 20 20" fill="none" aria-hidden="true">
           <path d="M2.5 2.5l15 15M8.34 8.34A2.5 2.5 0 0013.66 11.66M6.25 6.25C4.7 7.26 3.5 8.5 2.5 10c1.5 2.5 4.5 5 7.5 5a7.4 7.4 0 003.25-.75M10 5c.84 0 1.65.14 2.41.4C14.1 6.2 15.6 7.9 17.5 10c-.5.83-1.1 1.6-1.75 2.25" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
@@ -246,8 +303,8 @@ function BlindCountBanner({ compact = false }: { compact?: boolean }) {
     );
   }
   return (
-    <div className="mb-6 flex items-center gap-3 rounded-xl border border-border/60 bg-bg-raised/60 px-4 py-3">
-      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-bg-subtle text-fg-muted">
+    <div className="mb-6 flex items-center gap-3 rounded-xl border border-info/40 bg-info-softer px-4 py-3">
+      <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-bg text-info-fg">
         <svg className="h-5 w-5" viewBox="0 0 20 20" fill="none" aria-hidden="true">
           <path d="M2.5 2.5l15 15M8.34 8.34A2.5 2.5 0 0013.66 11.66M6.25 6.25C4.7 7.26 3.5 8.5 2.5 10c1.5 2.5 4.5 5 7.5 5a7.4 7.4 0 003.25-.75M10 5c.84 0 1.65.14 2.41.4C14.1 6.2 15.6 7.9 17.5 10c-.5.83-1.1 1.6-1.75 2.25" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
         </svg>
@@ -373,10 +430,44 @@ export default function PhysicalCountPage() {
   const [eventAt, setEventAt] = useState<string>(nowLocalDateTime());
   const [notes, setNotes] = useState<string>("");
   const [done, setDone] = useState<DoneState | null>(null);
+  // INTER-002: the top-page result banner is off-screen on mobile once the
+  // operator has scrolled to the hero qty input — mirror qty-submit errors
+  // inline, right under the input, so they're visible without scrolling up.
+  const [countedQtyError, setCountedQtyError] = useState<string | null>(null);
 
   // New UI-only states
   const [advancedOpen, setAdvancedOpen] = useState(false);
   const [cancelConfirm, setCancelConfirm] = useState(false);
+  // A11Y-003: focus trap + Escape-to-dismiss for the cancel-confirm
+  // alertdialog — Tab/Shift-Tab cycles only between its two buttons, and
+  // Escape dismisses without cancelling the count.
+  const cancelConfirmRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!cancelConfirm) return;
+    function onKeyDown(e: KeyboardEvent) {
+      if (e.key === "Escape") {
+        e.preventDefault();
+        setCancelConfirm(false);
+        return;
+      }
+      if (e.key !== "Tab") return;
+      const container = cancelConfirmRef.current;
+      if (!container) return;
+      const focusables = container.querySelectorAll<HTMLElement>("button:not(:disabled)");
+      if (focusables.length === 0) return;
+      const first = focusables[0];
+      const last = focusables[focusables.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, [cancelConfirm]);
   // Relative time ticker — refreshes every 30s
   const [, setTick] = useState(0);
   useEffect(() => {
@@ -488,12 +579,10 @@ export default function PhysicalCountPage() {
     e.preventDefault();
     if (!snapshot) return;
     setDone(null);
+    setCountedQtyError(null);
     const qtyNum = Number(countedQty);
     if (!Number.isFinite(qtyNum) || qtyNum < 0) {
-      setDone({
-        kind: "error",
-        message: "Counted quantity must be a non-negative number.",
-      });
+      setCountedQtyError("Enter a number 0 or higher.");
       return;
     }
     if (!idemKeyRef.current) idemKeyRef.current = newIdempotencyKey();
@@ -557,6 +646,7 @@ export default function PhysicalCountPage() {
           kind: "error",
           message: "Could not submit the count.",
           detail: friendlyCountError(result.body, result.status),
+          terminal: isTerminalCountError(result.body),
         });
         setPhase("counting");
         break;
@@ -651,6 +741,12 @@ export default function PhysicalCountPage() {
         title="Physical Count"
         description="Pick an item, count what you see, submit."
       />
+      <p className="-mt-4 mb-6 text-sm text-fg-muted">
+        Counting many items at once?{" "}
+        <Link href="/inventory/bulk-count" className="underline underline-offset-2 hover:text-fg">
+          Use Bulk Count →
+        </Link>
+      </p>
 
       {/* Result banner — unified layout across success / pending / error.
           A 14x14 colored icon badge anchors the eye; an outcome title
@@ -678,7 +774,7 @@ export default function PhysicalCountPage() {
             ? "Count not submitted"
             : done.message;
         const sub = isPending
-          ? <>Large variance vs the snapshot. <strong>Stock has not changed yet</strong> — the new anchor is applied only after approval.</>
+          ? <>Your count is well above or below what was last recorded. <strong>Stock has not changed yet</strong> — it will only update once a planner approves.</>
           : isError
             ? done.message
             : done.itemName;
@@ -735,7 +831,7 @@ export default function PhysicalCountPage() {
                     <span className="text-xs font-semibold uppercase tracking-sops opacity-75">
                       Adjustment
                     </span>
-                    <span>{done.delta}</span>
+                    <span>{fmtSignedDelta(done.delta)}</span>
                   </div>
                 ) : null}
               </div>
@@ -750,7 +846,7 @@ export default function PhysicalCountPage() {
                       ? `/stock/movement-log?item_id=${encodeURIComponent(done.itemId)}`
                       : "/stock/movement-log"
                   }
-                  className="btn btn-primary btn-sm"
+                  className="btn btn-primary"
                   data-testid="physical-count-success-movement-log"
                 >
                   View posted ledger →
@@ -759,7 +855,7 @@ export default function PhysicalCountPage() {
               {isPending && done.href && (
                 <Link
                   href={done.href}
-                  className="btn btn-primary btn-sm"
+                  className="btn btn-primary"
                   data-testid="physical-count-banner-link"
                 >
                   {done.hrefLabel ?? "Open approval"}
@@ -768,18 +864,22 @@ export default function PhysicalCountPage() {
               {isError && snapshot && (
                 <button
                   type="button"
-                  onClick={() => void handleSubmit({ preventDefault: () => {} } as React.FormEvent)}
-                  className="btn btn-primary btn-sm"
+                  onClick={() =>
+                    done.terminal
+                      ? resetFlow()
+                      : void handleSubmit({ preventDefault: () => {} } as React.FormEvent)
+                  }
+                  className="btn btn-primary"
                   data-testid="physical-count-error-retry"
                 >
-                  Try again
+                  {done.terminal ? "Start count again" : "Try again"}
                 </button>
               )}
               {!isError && (
                 <button
                   type="button"
                   onClick={() => setDone(null)}
-                  className="btn btn-ghost btn-sm"
+                  className="btn btn-ghost"
                 >
                   Count another item
                 </button>
@@ -788,7 +888,7 @@ export default function PhysicalCountPage() {
                 <button
                   type="button"
                   onClick={() => setDone(null)}
-                  className="btn btn-ghost btn-sm"
+                  className="btn btn-ghost"
                 >
                   Dismiss
                 </button>
@@ -796,12 +896,9 @@ export default function PhysicalCountPage() {
 
               {/* ref + snapshot trailer — faint mono so it doesn't
                   compete; on mobile it stacks under the action buttons. */}
-              {(done.detail || done.snapshotIdShort) ? (
+              {done.detail ? (
                 <div className="ml-auto font-mono text-3xs opacity-60">
                   {done.detail}
-                  {done.snapshotIdShort ? (
-                    <span className="ml-2 opacity-80">· snapshot {done.snapshotIdShort}…</span>
-                  ) : null}
                 </div>
               ) : null}
             </div>
@@ -813,7 +910,7 @@ export default function PhysicalCountPage() {
           Loading / error skeleton
           ---------------------------------------------------------------- */}
       {loading ? (
-        <SectionCard title="Loading masters…">
+        <SectionCard title="Loading items…">
           <div className="space-y-3" aria-busy="true" aria-live="polite">
             <div className="h-9 w-full animate-pulse rounded bg-bg-subtle" />
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
@@ -825,16 +922,21 @@ export default function PhysicalCountPage() {
         </SectionCard>
       ) : loadErr ? (
         <SectionCard title="Could not load items and components">
-          <div className="rounded border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg">
-            <div className="font-semibold">Could not load masters</div>
-            <div className="mt-1 text-xs">{(loadErr as Error).message}</div>
+          <div
+            className="rounded border border-danger/40 bg-danger-softer p-3 text-sm text-danger-fg"
+            role="alert"
+          >
+            <div className="font-semibold">Could not load the item list</div>
+            <div className="mt-1 text-xs">
+              Try refreshing the page. If it keeps failing, contact the system administrator.
+            </div>
             <button
               type="button"
               onClick={() => {
                 void itemsQuery.refetch();
                 void componentsQuery.refetch();
               }}
-              className="btn btn-sm mt-2"
+              className="btn mt-2"
             >
               Retry
             </button>
@@ -880,7 +982,7 @@ export default function PhysicalCountPage() {
                   </span>
                   <button
                     type="button"
-                    className="btn btn-ghost btn-sm shrink-0 transition-all duration-150"
+                    className="btn btn-ghost shrink-0 transition-all duration-150"
                     onClick={() => {
                       setSelKey("");
                       setComboOpen(true);
@@ -931,7 +1033,7 @@ export default function PhysicalCountPage() {
                     {searchQuery ? (
                       <button
                         type="button"
-                        className="absolute right-3 flex h-7 w-7 items-center justify-center rounded-full text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors duration-150"
+                        className="absolute right-3 flex h-9 w-9 items-center justify-center rounded-full text-fg-muted hover:bg-bg-subtle hover:text-fg transition-colors duration-150"
                         onClick={() => {
                           setSearchQuery("");
                           searchInputRef.current?.focus();
@@ -946,11 +1048,21 @@ export default function PhysicalCountPage() {
                     ) : null}
                   </div>
 
-                  {/* Result count */}
+                  {/* Result count — an always-mounted sr-only live region
+                      announces the count on the very first keystroke (a
+                      conditionally-mounted aria-live region misses that
+                      announcement in most screen readers); the visible
+                      paragraph below stays conditional for sighted users. */}
+                  <span className="sr-only" aria-live="polite" aria-atomic="true">
+                    {searchQuery.trim()
+                      ? filteredCountable.length > 0
+                        ? `${filteredCountable.length} item${filteredCountable.length === 1 ? "" : "s"} found`
+                        : "No items match your search."
+                      : ""}
+                  </span>
                   {searchQuery.trim() ? (
                     <p
                       className="mt-2 text-xs text-fg-muted"
-                      aria-live="polite"
                       data-testid="physical-count-search-result-count"
                     >
                       {filteredCountable.length > 0
@@ -1091,8 +1203,10 @@ export default function PhysicalCountPage() {
             <div className="mt-2 border-t border-border/40 pt-3">
               <button
                 type="button"
-                className="flex items-center gap-1.5 text-xs text-fg-muted hover:text-fg transition-all duration-150"
+                className="flex min-h-[32px] items-center gap-1.5 py-1 text-xs text-fg-muted hover:text-fg transition-all duration-150"
                 onClick={() => setAdvancedOpen((v) => !v)}
+                aria-expanded={advancedOpen}
+                aria-controls="physical-count-advanced-panel"
               >
                 <svg
                   className={cn("h-3.5 w-3.5 transition-transform duration-150", advancedOpen && "rotate-90")}
@@ -1103,10 +1217,10 @@ export default function PhysicalCountPage() {
                 Advanced
               </button>
               {advancedOpen && (
-                <div className="mt-3">
+                <div className="mt-3" id="physical-count-advanced-panel">
                   <label className="block min-w-0">
                     <span className="mb-2 block text-sm font-semibold text-fg">
-                      Item type override (optional)
+                      Classify as (optional)
                     </span>
                     <select
                       className="input"
@@ -1117,7 +1231,7 @@ export default function PhysicalCountPage() {
                         )
                       }
                     >
-                      <option value="">(use default based on picker)</option>
+                      <option value="">Use item&apos;s default type</option>
                       {PHYSICAL_COUNT_ITEM_TYPES.map((t) => (
                         <option key={t} value={t}>
                           {t}
@@ -1145,7 +1259,7 @@ export default function PhysicalCountPage() {
                     <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
                     <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
                   </svg>
-                  Opening snapshot…
+                  Starting count…
                 </>
               ) : (
                 <>
@@ -1199,6 +1313,24 @@ export default function PhysicalCountPage() {
                       <span className="text-warning-fg font-medium">resumed</span>
                     </>
                   ) : null}
+                  {(() => {
+                    const expiry = snapshotExpiryState(snapshot.opened_at);
+                    if (!expiry.label) return null;
+                    return (
+                      <>
+                        <span aria-hidden>·</span>
+                        <span
+                          className={cn(
+                            "font-semibold",
+                            expiry.tone === "danger" ? "text-danger-fg" : "text-warning-fg",
+                          )}
+                          role="status"
+                        >
+                          {expiry.label}
+                        </span>
+                      </>
+                    );
+                  })()}
                 </div>
               </div>
               <button
@@ -1231,7 +1363,7 @@ export default function PhysicalCountPage() {
                 className="btn flex h-16 w-16 items-center justify-center rounded-full text-3xl font-bold leading-none transition-all duration-150 sm:h-20 sm:w-20 sm:text-4xl"
                 onClick={() => {
                   const n = parseFloat(countedQty) || 0;
-                  setCountedQty(String(Math.max(0, n - 1)));
+                  setCountedQty(fmtNumStr(String(Math.max(0, n - 1))));
                 }}
                 aria-label="Decrease quantity"
                 disabled={phase === "submitting"}
@@ -1245,19 +1377,21 @@ export default function PhysicalCountPage() {
                 step="any"
                 min="0"
                 placeholder="0"
-                className="input h-20 w-44 text-center text-5xl font-mono font-bold tabular-nums placeholder:text-fg-faint/40 sm:h-24 sm:w-56 sm:text-6xl"
+                className="input h-20 w-44 text-center text-4xl font-mono font-bold tabular-nums placeholder:text-fg-faint/40 sm:h-24 sm:w-56 sm:text-4xl"
                 value={countedQty}
                 onChange={(e) => setCountedQty(e.target.value)}
                 required
                 disabled={phase === "submitting"}
                 aria-label="Counted quantity"
+                aria-describedby={countedQtyError ? "physical-count-qty-error" : undefined}
+                onFocus={() => setCountedQtyError(null)}
               />
               <button
                 type="button"
                 className="btn flex h-16 w-16 items-center justify-center rounded-full text-3xl font-bold leading-none transition-all duration-150 sm:h-20 sm:w-20 sm:text-4xl"
                 onClick={() => {
                   const n = parseFloat(countedQty) || 0;
-                  setCountedQty(String(n + 1));
+                  setCountedQty(fmtNumStr(String(n + 1)));
                 }}
                 aria-label="Increase quantity"
                 disabled={phase === "submitting"}
@@ -1265,6 +1399,15 @@ export default function PhysicalCountPage() {
                 +
               </button>
             </div>
+            {countedQtyError ? (
+              <p
+                id="physical-count-qty-error"
+                role="alert"
+                className="mt-3 text-center text-sm font-semibold text-danger-fg"
+              >
+                {countedQtyError}
+              </p>
+            ) : null}
 
             {/* Unit chips — centered under the hero. Once a snapshot is open
                 the unit is locked to the item master's counting unit: the
@@ -1378,7 +1521,7 @@ export default function PhysicalCountPage() {
                 <path d="M12 8h.01M11 12h1v5h1" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
               </svg>
               <span className="leading-snug">
-                Small variance posts now and replaces the stock anchor for <strong className="text-fg">{snapshot.item_display_name}</strong>. Large variance is held for planner approval — stock will not change until approved.
+                Small variance updates the stock balance for <strong className="text-fg">{snapshot.item_display_name}</strong> right away. Large variance is held for planner approval — stock will not change until approved.
               </span>
             </div>
           ) : null}
@@ -1388,11 +1531,17 @@ export default function PhysicalCountPage() {
               destructive path is the rarer intent. */}
           {cancelConfirm ? (
             <div
+              ref={cancelConfirmRef}
               className="rounded-xl border border-danger/40 bg-danger-softer px-5 py-4 transition-all duration-150"
               data-testid="physical-count-cancel-confirm"
               role="alertdialog"
+              aria-modal="true"
+              aria-labelledby="physical-count-cancel-confirm-title"
             >
-              <div className="text-base font-bold text-danger-fg leading-tight">
+              <div
+                id="physical-count-cancel-confirm-title"
+                className="text-base font-bold text-danger-fg leading-tight"
+              >
                 Cancel this count?
               </div>
               <div className="mt-1 text-sm text-danger-fg/90 leading-snug">
@@ -1401,7 +1550,7 @@ export default function PhysicalCountPage() {
               <div className="mt-4 flex items-center gap-2">
                 <button
                   type="button"
-                  className="btn btn-sm btn-primary"
+                  className="btn btn-primary"
                   onClick={() => setCancelConfirm(false)}
                   autoFocus
                 >
@@ -1409,7 +1558,7 @@ export default function PhysicalCountPage() {
                 </button>
                 <button
                   type="button"
-                  className="btn btn-sm btn-danger"
+                  className="btn btn-danger"
                   onClick={() => void handleCancel()}
                   disabled={phase === "submitting"}
                   data-testid="physical-count-cancel-proceed"
@@ -1434,15 +1583,15 @@ export default function PhysicalCountPage() {
               link-style button so it doesn't compete visually, but
               uses danger tone on the confirm step so the destructive
               action is clearly marked. */}
-          <div className="sticky bottom-0 z-10 -mx-4 flex items-center justify-between gap-3 border-t border-border bg-bg-raised/95 px-4 py-4 backdrop-blur-md sm:-mx-6 sm:px-6">
+          <div className="sticky bottom-0 z-10 -mx-4 flex items-center justify-between gap-3 border-t border-border bg-bg-raised/95 px-4 pb-[max(1rem,env(safe-area-inset-bottom,0px))] pt-4 backdrop-blur-md sm:-mx-6 sm:px-6">
             <button
               type="button"
-              title="This releases the open snapshot. You will start over."
-              className="btn btn-ghost btn-sm text-fg-muted hover:text-danger-fg transition-colors duration-150"
+              title="This cancels your count. You will need to start over."
+              className="btn btn-ghost text-fg-muted hover:text-danger-fg transition-colors duration-150"
               onClick={() => setCancelConfirm(true)}
               disabled={phase === "submitting" || cancelConfirm}
             >
-              Cancel snapshot
+              Cancel this count
             </button>
 
             <button

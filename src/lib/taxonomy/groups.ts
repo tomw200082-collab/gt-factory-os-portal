@@ -67,8 +67,12 @@ export interface GroupLike {
  *  outside that namespace). */
 export const NO_GROUP = "__no_group__" as const;
 
-/** Operator-facing label for the NO_GROUP bucket. */
+/** Operator-facing label for the NO_GROUP bucket, on the Hebrew-whitelisted
+ *  surfaces (per gt-factory-os-portal/CLAUDE.md's UI language exception). */
 export const NO_GROUP_LABEL = "ללא קבוצה";
+/** Same bucket, English — for surfaces not on the Hebrew whitelist (e.g.
+ *  /inventory/bulk-count). Pass preferEnglish=true to groupLabel/groupKeyLabel. */
+export const NO_GROUP_LABEL_EN = "No area assigned";
 
 // ---------------------------------------------------------------------------
 // Pure helpers
@@ -77,14 +81,21 @@ export const NO_GROUP_LABEL = "ללא קבוצה";
 /**
  * Operator-facing label for a group: name_he first (these are Hebrew
  * operator labels per the tranche contract), falling back to name_en,
- * then the raw key.
+ * then the raw key. Pass preferEnglish=true on surfaces that are NOT on
+ * the Hebrew whitelist (gt-factory-os-portal/CLAUDE.md) — e.g.
+ * /inventory/bulk-count — to flip the preference order without touching
+ * the default (Hebrew-first) behavior every other existing call site
+ * already relies on.
  */
-export function groupLabel(g: GroupLike | null | undefined): string {
-  if (!g) return NO_GROUP_LABEL;
-  const he = g.name_he?.trim();
-  if (he) return he;
-  const en = g.name_en?.trim();
-  if (en) return en;
+export function groupLabel(
+  g: GroupLike | null | undefined,
+  preferEnglish = false,
+): string {
+  if (!g) return preferEnglish ? NO_GROUP_LABEL_EN : NO_GROUP_LABEL;
+  const first = preferEnglish ? g.name_en?.trim() : g.name_he?.trim();
+  if (first) return first;
+  const second = preferEnglish ? g.name_he?.trim() : g.name_en?.trim();
+  if (second) return second;
   return g.key;
 }
 
@@ -149,10 +160,11 @@ export function stockRowGroupKey(row: GroupableStockRow): string {
 export function groupKeyLabel(
   key: string,
   byKey: ReadonlyMap<string, GroupLike>,
+  preferEnglish = false,
 ): string {
-  if (key === NO_GROUP) return NO_GROUP_LABEL;
+  if (key === NO_GROUP) return preferEnglish ? NO_GROUP_LABEL_EN : NO_GROUP_LABEL;
   const g = byKey.get(key);
-  return g ? groupLabel(g) : key;
+  return g ? groupLabel(g, preferEnglish) : key;
 }
 
 /** Build a key→group map from any group list. */
