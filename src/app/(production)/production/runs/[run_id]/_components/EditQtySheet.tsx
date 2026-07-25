@@ -85,18 +85,16 @@ export function EditQtySheet({
         <h2 id="edit-qty-title" className="text-lg font-bold text-fg-strong">
           {t("pick_edit_title")}
         </h2>
-        <p className="mt-0.5 truncate text-sm text-fg-muted">
-          {displayName}
-          <span className="ml-2 text-fg-muted">
-            {t("pick_need")}{" "}
-            <span className="font-mono tabular-nums">
-              {fmtNumStr(line.required_qty)} {line.uom}
-            </span>
-            {" · "}
-            {t("pick_on_hand")}{" "}
-            <span className="font-mono tabular-nums">
-              {fmtNumStr(line.on_hand)} {line.uom}
-            </span>
+        <p className="mt-0.5 truncate text-sm text-fg-muted">{displayName}</p>
+        <p className="mt-0.5 text-sm text-fg-muted">
+          {t("pick_need")}{" "}
+          <span className="font-mono tabular-nums">
+            {fmtNumStr(line.required_qty)} {line.uom}
+          </span>
+          {" · "}
+          {t("pick_on_hand")}{" "}
+          <span className="font-mono tabular-nums">
+            {fmtNumStr(line.on_hand)} {line.uom}
           </span>
         </p>
 

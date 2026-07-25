@@ -110,6 +110,54 @@ test.describe("@mocked production picking", () => {
     await expect(page.getByTestId("pick-edit-base-C2")).toContainText("8");
   });
 
+  test("a long-precision qty_8dp value doesn't get clipped by the number button (Tom, 2026-07-25)", async ({
+    page,
+  }) => {
+    await setFakeRole(page, "operator");
+    await stubToday(page, [todayRow()]);
+    await page.route("**/api/production-runs/*/pick-list**", (route) =>
+      route.fulfill({
+        json: {
+          ...PICK_LIST,
+          lines: [
+            // Unrounded 8dp value — fmtNumStr must round to 4dp (12.3457),
+            // not render all 8 digits, which used to overflow the fixed
+            // w-24/w-28 number button and get clipped by the row's
+            // overflow-hidden.
+            { ...PICK_LIST.lines[0], required_qty: "12.34567891" },
+            // Large integer part — the number button must grow (min-w, not
+            // w) to fit it rather than clip it.
+            { ...PICK_LIST.lines[1], required_qty: "144000.5", uom: "L" },
+          ],
+        },
+      }),
+    );
+
+    await page.goto("/production");
+    await page.getByTestId("run-card-RUN1").click();
+    await expect(page.getByTestId("pick-row-base-C1")).toBeVisible();
+
+    const rounded = page.getByTestId("pick-edit-base-C1");
+    await expect(rounded).toContainText("12.3457");
+    await expect(rounded).not.toContainText("12.34567891");
+
+    const large = page.getByTestId("pick-edit-base-C2");
+    await expect(large).toContainText("144000.5");
+
+    // The full text must actually be present in the DOM and un-clipped —
+    // the number button's rendered box must be wide enough to contain it
+    // (no CSS-driven visual truncation of the digits themselves).
+    const box = await large.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.width).toBeGreaterThan(90); // wider than the old fixed w-24 (96px) floor would allow to clip
+
+    // No page-level horizontal scroll trap at the default (desktop) viewport.
+    const hasHScroll = await page.evaluate(
+      () => document.documentElement.scrollWidth > document.documentElement.clientWidth,
+    );
+    expect(hasHScroll).toBe(false);
+  });
+
   test("Done stays disabled until every row is resolved, then enables", async ({ page }) => {
     await setFakeRole(page, "operator");
     await stubToday(page, [todayRow()]);

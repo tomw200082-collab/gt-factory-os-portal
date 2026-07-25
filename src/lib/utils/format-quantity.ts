@@ -8,15 +8,22 @@ function stripTrailingZeros(s: string): string {
 }
 
 /**
- * Strip trailing decimal zeros from a raw numeric string (or number).
- * Use for quantities that come back from the API as NUMERIC strings like
- * "440.00000000" → "440", "1.50000000" → "1.5", "0.12340000" → "0.1234".
- * Safe for null/undefined (returns "").
+ * Format a raw numeric string (or number) for display, rounded to the
+ * portal's 4-decimal hard rule, trailing zeros stripped. Use for quantities
+ * that come back from the API as 8-dp NUMERIC strings like
+ * "440.00000000" → "440", "1.50000000" → "1.5", "0.12340000" → "0.1234",
+ * "12.34567891" → "12.3457". Without the round-to-4dp step, an unrounded
+ * 8-dp value renders at full precision and can overflow fixed-width qty
+ * displays (e.g. PickRow's number button) — the box then clips it, which
+ * reads to the operator as a cut-off number rather than a wrong one.
+ * Safe for null/undefined (returns "") and non-numeric input (returned as-is).
  */
 export function fmtNumStr(value: string | number | null | undefined): string {
   if (value == null || value === "") return "";
   const s = String(value).trim();
-  return s.includes('.') ? s.replace(/\.?0+$/, '') : s;
+  const n = Number(s);
+  if (!Number.isFinite(n)) return s;
+  return stripTrailingZeros(n.toFixed(4));
 }
 
 export function formatQty(value: number, uom: string): string {
