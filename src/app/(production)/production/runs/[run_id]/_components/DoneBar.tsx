@@ -5,8 +5,9 @@
 // drives toward the "Done collecting" moment. The button enables ONLY when
 // every row is resolved; while blocked it carries aria-disabled +
 // aria-describedby naming exactly how many lines are still unchecked. Pressing
-// it opens a plain-English confirm ("Take these from stock?") before the
-// stock-decrementing pick-confirm fires.
+// it opens a plain-English confirm ("Save what you took?") before the
+// pick-confirm fires. That confirm records the picks; stock does not move
+// until the run is reported (0297).
 // ---------------------------------------------------------------------------
 
 import { useState } from "react";
@@ -130,7 +131,7 @@ export function DoneBar({
   );
 }
 
-/** The "Take these from stock?" confirm. Its own component so useDialogA11y
+/** The "Save what you took?" confirm. Its own component so useDialogA11y
  *  mounts/unmounts with the dialog — focus captures the Done button on open and
  *  restores to it on close (A11Y-001/002/003). */
 function DoneConfirmDialog({

@@ -5,10 +5,15 @@
 // query params (a base-batch row has item_id = null, so a naive link would
 // have pre-filled the wrong quantity and no product).
 //
-// Tranche 143 cut this link over to /production (the picking flow's Today
-// list), which does not read any of those deep-link params — the operator
-// finds the run in the list instead. Both base-batch and single-item cards
-// now link to a plain "/production" with no query string.
+// Tranche 143 cut this link over to a plain "/production" — the Today list —
+// which meant a plan card could not actually reach a report: the list is
+// today-only, so a past plan dead-ended, and even today's plan made the
+// operator hunt for the right run.
+//
+// Tranche 147 re-attaches the context the link needs. The href carries the
+// plan's own date (past days included) plus its plan_id and report=1, so
+// /production scopes to that plan and forwards a single-run plan straight to
+// its pre-filled report form.
 
 import { describe, expect, it, afterEach } from "vitest";
 import { render, screen, cleanup } from "@testing-library/react";
@@ -81,9 +86,24 @@ function reportHref(plan: ProductionPlanRow, isToday = false): string {
 afterEach(() => cleanup());
 
 describe("ProductionJobCard production-report link", () => {
-  it("base-batch card links to /production with no query params", () => {
+  it("base-batch card carries the plan's date, plan_id and report intent", () => {
     const href = reportHref(row({ is_base_batch: true, item_id: null }));
-    expect(href).toBe("/production");
+    expect(href).toBe("/production?date=2026-06-17&plan=p-1&report=1");
+  });
+
+  it("uses the PLAN's date, not today — a past plan must still be reportable", () => {
+    const href = reportHref(
+      row({ plan_id: "p-past", plan_date: "2026-05-04", is_base_batch: false, item_id: "FG-1" }),
+    );
+    expect(href).toContain("date=2026-05-04");
+    expect(href).toContain("plan=p-past");
+  });
+
+  it("does not depend on isToday — the same href reports today or after the fact", () => {
+    const plan = row({ is_base_batch: false, item_id: "FG-1", item_name: "DETOX 1L" });
+    const asToday = reportHref(plan, true);
+    cleanup(); // reportHref renders; a second render would double the testid
+    expect(reportHref(plan, false)).toBe(asToday);
   });
 
   it("base-batch report CTA reads 'Report products' (plural, multi-SKU)", () => {
@@ -104,7 +124,7 @@ describe("ProductionJobCard production-report link", () => {
     );
   });
 
-  it("single-item card also links to /production with no query params", () => {
+  it("single-item card links to its own plan, scoped and asking for the report", () => {
     const href = reportHref(
       row({
         is_base_batch: false,
@@ -115,7 +135,7 @@ describe("ProductionJobCard production-report link", () => {
         pack_manifest: [],
       }),
     );
-    expect(href).toBe("/production");
+    expect(href).toBe("/production?date=2026-06-17&plan=p-1&report=1");
   });
 
   it("single-item CTA label reflects today vs past", () => {

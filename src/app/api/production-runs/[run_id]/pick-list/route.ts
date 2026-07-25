@@ -15,9 +15,12 @@ export async function GET(
   { params }: { params: Promise<{ run_id: string }> },
 ): Promise<Response> {
   const { run_id } = await params;
+  // ?intent=report is forwarded so opening the report screen for a run nobody
+  // collected for does not flip it to "Collecting" as a side effect of a read.
+  const intent = new URL(req.url).searchParams.get("intent") === "report" ? "?intent=report" : "";
   return proxyRequest(req, {
     method: "GET",
-    upstreamPath: `/api/v1/queries/production-runs/${encodeURIComponent(run_id)}/pick-list`,
+    upstreamPath: `/api/v1/queries/production-runs/${encodeURIComponent(run_id)}/pick-list${intent}`,
     errorLabel: "production run pick-list",
   });
 }

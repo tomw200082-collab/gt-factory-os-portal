@@ -43,6 +43,18 @@ export interface ReportSuccess {
   output_uom: string;
   run_status: string;
   linked_plan_id: string | null;
+  // Components whose net collected quantity exceeded on-hand, so only part of
+  // it could come off stock (0297). The backend never blocks on this — it is a
+  // signal that the projection is behind reality, and the operator is the only
+  // person present who can say so while the memory is fresh.
+  shortfalls?: Array<{
+    component_id: string;
+    component_name: string | null;
+    picked_qty: string;
+    available_qty: string;
+    consumed_qty: string;
+    shortfall_qty: string;
+  }>;
   idempotent_replay: boolean;
 }
 

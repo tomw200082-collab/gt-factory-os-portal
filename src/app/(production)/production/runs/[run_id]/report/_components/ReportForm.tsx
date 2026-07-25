@@ -15,6 +15,7 @@
 
 import { useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   CheckCircle2,
   ClipboardCheck,
@@ -49,7 +50,7 @@ function newKey(): string {
 
 async function fetchRun(runId: string): Promise<PickListResponse> {
   const res = await fetch(
-    `/api/production-runs/${encodeURIComponent(runId)}/pick-list`,
+    `/api/production-runs/${encodeURIComponent(runId)}/pick-list?intent=report`,
     { headers: { Accept: "application/json" } },
   );
   if (!res.ok) {
@@ -59,6 +60,14 @@ async function fetchRun(runId: string): Promise<PickListResponse> {
 }
 
 const STALE = "__STALE__";
+
+/** The planned quantity to pre-fill the output field with, as a plain string.
+ *  Empty when the run has not loaded or carries no usable target, so the field
+ *  falls back to blank rather than showing "0" or "NaN". */
+function plannedOutput(data: PickListResponse | null): string {
+  const n = Number(data?.target_qty ?? "");
+  return Number.isFinite(n) && n > 0 ? String(n) : "";
+}
 
 /** Clamp-at-zero stepper. Keeps whole numbers whole; otherwise 2dp. */
 function step(value: string, delta: number, set: (v: string) => void): void {
@@ -70,6 +79,15 @@ function step(value: string, delta: number, set: (v: string) => void): void {
 
 export function ReportForm({ runId }: { runId: string }) {
   const qc = useQueryClient();
+  const params = useSearchParams();
+
+  // Reporting an earlier day is a run of several reports, not one — a base
+  // batch is a tank plus one pack run per product. Carrying ?date= through
+  // means "back" returns to that day's list instead of dumping the operator
+  // on today after every single report (tranche 147).
+  const backDate = params.get("date");
+  const backHref = backDate ? `/production?date=${encodeURIComponent(backDate)}` : "/production";
+  const backLabel = backDate ? t("day_back_to_that_day") : t("pick_done_back_to_runs");
 
   const query = useQuery<PickListResponse>({
     queryKey: ["production-runs", "pick-list", runId],
@@ -79,7 +97,13 @@ export function ReportForm({ runId }: { runId: string }) {
   const data = query.data ?? null;
 
   // ── form state ─────────────────────────────────────────────────────────
-  const [output, setOutput] = useState("");
+  // Output shows the planned quantity until the operator types (tranche 147):
+  // the usual case is "we made what we planned", so this is a confirm, not a
+  // transcription. `null` means untouched — deriving the shown value instead
+  // of seeding state keeps a cleared field cleared, and never overwrites an
+  // edit when the run query refetches. It is a starting point, never an
+  // assumption: what the operator submits is what actually came out.
+  const [outputEdit, setOutput] = useState<string | null>(null);
   const [scrap, setScrap] = useState("0");
   const [qcOpen, setQcOpen] = useState(false);
   const [qcBrix, setQcBrix] = useState("");
@@ -88,8 +112,21 @@ export function ReportForm({ runId }: { runId: string }) {
   const [qcNote, setQcNote] = useState("");
   const [notes, setNotes] = useState("");
   const [done, setDone] = useState(false);
+  // Two-step confirm on the only action that moves stock. Not a modal — Denis
+  // works one-handed on a phone and a dialog here would be one more thing to
+  // dismiss; the submit bar itself becomes the question.
+  const [confirming, setConfirming] = useState(false);
 
+  const output = outputEdit ?? plannedOutput(data);
   const outputOk = isOutputValid(output);
+  const isPlannedValue = outputEdit === null && output !== "";
+
+  /** Changing the number drops out of the confirm — the operator is no longer
+   *  agreeing to the figure they were shown. */
+  function changeOutput(v: string): void {
+    setOutput(v);
+    setConfirming(false);
+  }
 
   const report = useMutation<ReportSuccess, Error>({
     mutationFn: async () => {
@@ -150,11 +187,13 @@ export function ReportForm({ runId }: { runId: string }) {
     ? t("report_success")
     : report.isPending
       ? t("report_saving")
-      : query.isLoading
-        ? t("loading")
-        : query.isError || !data
-          ? t("error_load_pick_list")
-          : t(runStatusMeta(data.status).labelKey);
+      : confirming
+        ? `${t("report_confirm_ask")} ${output} ${data?.uom ?? ""} — ${t("report_confirm_undo")}`
+        : query.isLoading
+          ? t("loading")
+          : query.isError || !data
+            ? t("error_load_pick_list")
+            : t(runStatusMeta(data.status).labelKey);
   const liveRegion = (
     <span className="sr-only" aria-live="polite" data-testid="report-live">
       {liveMessage}
@@ -166,10 +205,10 @@ export function ReportForm({ runId }: { runId: string }) {
     return (
       <div className="mx-auto max-w-2xl">
         {liveRegion}
-        <div className="mb-6 h-8 w-48 animate-pulse rounded bg-bg-subtle" />
+        <div className="mb-6 h-8 w-48 animate-pulse rounded bg-bg-subtle motion-reduce:animate-none" />
         <div className="space-y-3" aria-busy="true">
           {[0, 1, 2].map((i) => (
-            <div key={i} className="h-24 w-full animate-pulse rounded-md bg-bg-subtle" />
+            <div key={i} className="h-24 w-full animate-pulse rounded-md bg-bg-subtle motion-reduce:animate-none" />
           ))}
         </div>
       </div>
@@ -182,8 +221,8 @@ export function ReportForm({ runId }: { runId: string }) {
       <div className="mx-auto max-w-2xl">
         {liveRegion}
         <div className="mb-4">
-          <Link href="/production" className="btn btn-sm gap-1.5">
-            ← {t("pick_done_back_to_runs")}
+          <Link href={backHref} className="btn btn-sm gap-1.5">
+            ← {backLabel}
           </Link>
         </div>
         <div
@@ -236,13 +275,39 @@ export function ReportForm({ runId }: { runId: string }) {
             {fmtNumStr(String(report.data?.output_qty ?? output))}{" "}
             {report.data?.output_uom ?? data.uom}
           </p>
-          <Link
-            href="/production"
-            className="btn btn-primary btn-lg mt-2"
-            data-testid="report-back"
-          >
-            {t("pick_done_back_to_runs")}
-          </Link>
+          {/* Stale-projection signal. Not an error — the report succeeded —
+              but the operator is the only person here who can tell the planner
+              the shelf did not match the system. */}
+          {report.data?.shortfalls?.length ? (
+            <div
+              className="mt-2 w-full rounded-md border border-warning/50 bg-warning-softer px-4 py-3 text-sm text-warning-fg"
+              data-testid="report-shortfalls"
+            >
+              {t("report_shortfall_note")}
+            </div>
+          ) : null}
+
+          <div className="mt-2 flex flex-col items-center gap-2">
+            <Link
+              href={backHref}
+              className="btn btn-primary btn-lg"
+              data-testid="report-back"
+            >
+              {t("pick_done_back_to_runs")}
+            </Link>
+            {/* Closes the loop Tom described: the plan card is where this
+                journey started, and it is where the reported quantity and the
+                variance against plan now show. */}
+            {report.data?.linked_plan_id ? (
+              <Link
+                href={`/planning/production-plan?focus_plan=${encodeURIComponent(report.data.linked_plan_id)}`}
+                className="btn btn-ghost btn-sm"
+                data-testid="report-back-to-plan"
+              >
+                {t("report_back_to_plan")}
+              </Link>
+            ) : null}
+          </div>
         </div>
       </div>
     );
@@ -255,8 +320,8 @@ export function ReportForm({ runId }: { runId: string }) {
         {liveRegion}
         <WorkflowHeader
           size="section"
-          backHref="/production"
-          backLabel={t("pick_done_back_to_runs")}
+          backHref={backHref}
+          backLabel={backLabel}
           eyebrow={t("report_eyebrow")}
           title={t("report_title")}
         />
@@ -272,11 +337,11 @@ export function ReportForm({ runId }: { runId: string }) {
             {cancelled ? t("pick_terminal_cancelled") : t("report_already_body")}
           </p>
           <Link
-            href="/production"
+            href={backHref}
             className="btn btn-primary btn-sm mt-3"
             data-testid="report-already-back"
           >
-            {t("pick_done_back_to_runs")}
+            {backLabel}
           </Link>
         </div>
       </div>
@@ -290,8 +355,8 @@ export function ReportForm({ runId }: { runId: string }) {
       {liveRegion}
       <WorkflowHeader
         size="section"
-        backHref="/production"
-        backLabel={t("pick_done_back_to_runs")}
+        backHref={backHref}
+        backLabel={backLabel}
         eyebrow={t("report_eyebrow")}
         title={t("report_title")}
         meta={
@@ -361,7 +426,13 @@ export function ReportForm({ runId }: { runId: string }) {
         data-testid="report-form"
         onSubmit={(e) => {
           e.preventDefault();
-          if (outputOk && !report.isPending) report.mutate();
+          if (!outputOk || report.isPending) return;
+          // First submit asks; only the explicit second one posts.
+          if (!confirming) {
+            setConfirming(true);
+            return;
+          }
+          report.mutate();
         }}
         className="space-y-4"
       >
@@ -377,8 +448,8 @@ export function ReportForm({ runId }: { runId: string }) {
             <div className="flex items-stretch gap-0">
               <button
                 type="button"
-                className="btn h-14 min-w-[3rem] rounded-r-none border-r-0 px-4"
-                onClick={() => step(output, -1, setOutput)}
+                className="btn h-14 min-w-12 rounded-r-none border-r-0 px-4"
+                onClick={() => step(output, -1, changeOutput)}
                 disabled={disableForm}
                 aria-label="Less good units"
                 data-testid="report-output-minus"
@@ -393,15 +464,21 @@ export function ReportForm({ runId }: { runId: string }) {
                 min="0"
                 className="input h-14 min-w-0 flex-1 rounded-none text-center font-mono text-4xl font-bold tabular-nums"
                 value={output}
-                onChange={(e) => setOutput(e.target.value)}
+                onChange={(e) => changeOutput(e.target.value)}
                 disabled={disableForm}
                 data-testid="report-output-qty"
-                aria-describedby={outputOk ? undefined : "report-output-hint"}
+                aria-describedby={
+                !outputOk
+                  ? "report-output-hint"
+                  : isPlannedValue
+                    ? "report-output-prefilled"
+                    : undefined
+              }
               />
               <button
                 type="button"
-                className="btn h-14 min-w-[3rem] rounded-l-none border-l-0 px-4"
-                onClick={() => step(output, 1, setOutput)}
+                className="btn h-14 min-w-12 rounded-l-none border-l-0 px-4"
+                onClick={() => step(output, 1, changeOutput)}
                 disabled={disableForm}
                 aria-label="More good units"
                 data-testid="report-output-plus"
@@ -415,10 +492,20 @@ export function ReportForm({ runId }: { runId: string }) {
             {!outputOk ? (
               <p
                 id="report-output-hint"
-                className="mt-2 text-xs text-fg-muted"
+                className="mt-2 text-center text-xs text-fg-muted"
                 data-testid="report-output-hint"
               >
                 {t("report_need_output")}
+              </p>
+            ) : isPlannedValue ? (
+              /* Say plainly that this number is the plan, not a measurement —
+                 an unlabelled pre-filled figure invites a blind confirm. */
+              <p
+                id="report-output-prefilled"
+                className="mt-2 text-center text-xs text-fg-muted"
+                data-testid="report-output-prefilled"
+              >
+                {t("report_output_prefilled")}
               </p>
             ) : null}
           </div>
@@ -434,7 +521,7 @@ export function ReportForm({ runId }: { runId: string }) {
             <div className="flex items-stretch gap-0">
               <button
                 type="button"
-                className="btn h-12 min-w-[2.75rem] rounded-r-none border-r-0 px-3"
+                className="btn h-12 min-w-11 rounded-r-none border-r-0 px-3"
                 onClick={() => step(scrap, -1, setScrap)}
                 disabled={disableForm}
                 aria-label="Less bad units"
@@ -456,7 +543,7 @@ export function ReportForm({ runId }: { runId: string }) {
               />
               <button
                 type="button"
-                className="btn h-12 min-w-[2.75rem] rounded-l-none border-l-0 px-3"
+                className="btn h-12 min-w-11 rounded-l-none border-l-0 px-3"
                 onClick={() => step(scrap, 1, setScrap)}
                 disabled={disableForm}
                 aria-label="More bad units"
@@ -595,11 +682,34 @@ export function ReportForm({ runId }: { runId: string }) {
           className="sticky bottom-0 left-0 right-0 z-30 -mx-4 mt-6 border-t border-border bg-bg/95 px-4 pb-[max(0.75rem,env(safe-area-inset-bottom))] pt-3 backdrop-blur-sm sm:-mx-6 sm:px-6"
           data-testid="report-bar"
         >
+          {/* The confirm names the product and the number, so the operator
+              checks the figure rather than the sentence. */}
+          {confirming && !report.isPending ? (
+            <div
+              className="mb-2 rounded-md border border-warning/50 bg-warning-softer px-4 py-3 text-center"
+              role="status"
+              data-testid="report-confirm"
+            >
+              <div className="text-sm font-semibold text-warning-fg">
+                {t("report_confirm_ask")}
+              </div>
+              <div className="mt-1 font-mono text-lg font-bold tabular-nums text-fg-strong">
+                {fmtNumStr(output)} {data.uom}
+                <span className="ml-1.5 font-sans text-sm font-medium text-fg-muted">
+                  {name}
+                </span>
+              </div>
+              <div className="mt-0.5 text-xs text-warning-fg">
+                {t("report_confirm_undo")}
+              </div>
+            </div>
+          ) : null}
+
           <button
             type="submit"
             disabled={!outputOk || report.isPending}
             aria-disabled={!outputOk || report.isPending}
-            aria-describedby={!outputOk ? "report-output-hint" : undefined}
+            aria-describedby={!outputOk ? "report-output-hint" : "report-stock-note"}
             title={!outputOk ? t("report_need_output") : undefined}
             data-testid="report-submit"
             className={cn(
@@ -617,15 +727,23 @@ export function ReportForm({ runId }: { runId: string }) {
             ) : (
               <>
                 <CheckCircle2 className="h-5 w-5" strokeWidth={2.5} aria-hidden />
-                {t("report_submit")}
+                {confirming ? t("report_confirm_yes") : t("report_submit")}
               </>
             )}
           </button>
-          {!outputOk ? (
-            <p className="mt-1.5 text-center text-xs text-fg-muted">
-              {t("report_need_output")}
-            </p>
+          {confirming && !report.isPending ? (
+            <button
+              type="button"
+              className="btn btn-lg mt-2 w-full"
+              onClick={() => setConfirming(false)}
+              data-testid="report-confirm-no"
+            >
+              {t("report_confirm_no")}
+            </button>
           ) : null}
+          <p id="report-stock-note" className="mt-1.5 text-center text-xs text-fg-muted">
+            {!outputOk ? t("report_need_output") : t("report_stock_note")}
+          </p>
         </div>
       </form>
     </div>
