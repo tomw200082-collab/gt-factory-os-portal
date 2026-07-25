@@ -19,10 +19,10 @@ import { setFakeRole } from "./helpers";
 // This is a layout / visibility smoke under real mobile WebKit.
 
 const ROUTES = [
-  { path: "/ops/stock/waste-adjustments", title: "Waste / Adjustment" },
-  { path: "/ops/stock/physical-count",   title: "Physical Count" },
-  { path: "/ops/stock/production-actual", title: "Production" },
-  { path: "/ops/stock/receipts",         title: "Receipt" },
+  { path: "/stock/waste-adjustments", title: "Waste / Adjustment" },
+  { path: "/stock/physical-count",   title: "Physical Count" },
+  { path: "/stock/production-actual", title: "Production" },
+  { path: "/stock/receipts",         title: "Receipt" },
 ];
 
 test.describe("mobile WebKit (iPhone 14, 390px) — operator forms smoke", () => {

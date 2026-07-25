@@ -164,7 +164,7 @@ function CountRow({
   error: string | undefined;
   /** True when the session role may open the planner approval surface. */
   canReview: boolean;
-  onSubmit: (row: BulkCountRow, qty: string) => void;
+  onSubmit: (row: BulkCountRow, qty: string, idemKey: string) => void;
   onRecount: (rowKey: string) => void;
   registerInput: (rowKey: string, el: HTMLInputElement | null) => void;
 }) {
@@ -180,13 +180,23 @@ function CountRow({
   useEffect(() => {
     if (phase !== "saving") inFlightRef.current = false;
   }, [phase]);
-  // FLOW-203 — clear the stale qty when the row returns to the count queue
-  // (Recount pressed, or the planner rejected the previous count). The old
-  // number must never silently pre-fill a correction.
+  // FLOW-015 (P0, data integrity): a stable idempotency key for THIS count
+  // attempt, generated lazily and REUSED across retries — mirrors
+  // /stock/physical-count's idemKeyRef. Without this, a network drop after
+  // the server had already processed the POST would post a second count on
+  // retry (the old code generated a fresh key inside submitRow on every
+  // call). Cleared only when a new logical attempt begins (below).
+  const idemKeyRef = useRef<string | null>(null);
+  // FLOW-203 — clear the stale qty (and the idempotency key, for FLOW-015)
+  // when the row returns to the count queue (Recount pressed, or the
+  // planner rejected the previous count). The old number must never
+  // silently pre-fill a correction, and a genuinely new attempt must never
+  // reuse a key from a different (already-resolved) attempt.
   useEffect(() => {
     if (!counted || counted.status === "rejected") {
       setQty("");
       setConfirmZero(false);
+      idemKeyRef.current = null;
     }
   }, [counted]);
   const qtyNum = Number(qty);
@@ -204,7 +214,8 @@ function CountRow({
     }
     setConfirmZero(false);
     inFlightRef.current = true;
-    onSubmit(row, qty);
+    if (!idemKeyRef.current) idemKeyRef.current = newIdempotencyKey();
+    onSubmit(row, qty, idemKeyRef.current);
   }
 
   return (
@@ -285,9 +296,10 @@ function CountRow({
           ) : null}
           <button
             type="button"
-            className="btn btn-ghost btn-sm ml-auto text-fg-muted sm:ml-0"
+            className="btn btn-ghost ml-auto text-fg-muted sm:ml-0"
             onClick={() => onRecount(row.key)}
             disabled={saving}
+            aria-label={`Recount ${row.name}`}
             data-testid="bulk-count-recount"
           >
             Recount
@@ -333,7 +345,7 @@ function CountRow({
                 /* UX-flow audit (FLOW-005): a zero count is a legitimate
                    operational entry, not a destructive action — drop the red
                    danger tone that made operators hesitate on correct zeros. */
-                className="btn btn-primary btn-sm h-11 sm:h-10"
+                className="btn btn-primary h-11 sm:h-10"
                 onClick={trySubmit}
                 disabled={saving}
                 aria-label={`Confirm zero count for ${row.name}`}
@@ -343,7 +355,7 @@ function CountRow({
               </button>
               <button
                 type="button"
-                className="btn btn-ghost btn-sm h-11 sm:h-10"
+                className="btn btn-ghost h-11 sm:h-10"
                 onClick={() => setConfirmZero(false)}
                 disabled={saving}
               >
@@ -353,7 +365,7 @@ function CountRow({
           ) : (
             <button
               type="button"
-              className="btn btn-primary btn-sm h-11 sm:h-10"
+              className="btn btn-primary h-11 sm:h-10"
               onClick={trySubmit}
               disabled={!qtyValid || saving}
               aria-label={`Save count for ${row.name}`}
@@ -385,6 +397,7 @@ function CountRow({
       {rejected && counted ? (
         <div
           className="basis-full text-2xs text-danger-fg"
+          role="alert"
           data-testid="bulk-count-rejected-note"
         >
           Previous count ({counted.qty} {counted.unit} at {timeLabel(counted.at)}) was
@@ -535,11 +548,15 @@ export default function BulkCountPage() {
     [visibleRows, orderOf, sort],
   );
 
+  // COPY-005: /inventory/bulk-count is not on the Hebrew whitelist
+  // (gt-factory-os-portal/CLAUDE.md) — section headings must read English
+  // first, unlike groupKeyLabel's Hebrew-first default used elsewhere.
   const sectionLabel = useCallback(
     (s: BulkSection): string =>
       groupKeyLabel(
         s.group_key,
         s.vocab === "pg" ? productGroupsByKey : materialGroupsByKey,
+        true,
       ),
     [productGroupsByKey, materialGroupsByKey],
   );
@@ -676,7 +693,7 @@ export default function BulkCountPage() {
   );
 
   const submitRow = useCallback(
-    async (row: BulkCountRow, qtyStr: string) => {
+    async (row: BulkCountRow, qtyStr: string, idemKey: string) => {
       const qty = Number(qtyStr);
       if (!Number.isFinite(qty) || qty < 0) {
         setRowError((e) => ({ ...e, [row.key]: "Quantity must be a non-negative number." }));
@@ -713,7 +730,7 @@ export default function BulkCountPage() {
           method: "POST",
           headers: { "Content-Type": "application/json", Accept: "application/json" },
           body: JSON.stringify({
-            idempotency_key: newIdempotencyKey(),
+            idempotency_key: idemKey,
             snapshot_id: openBody.snapshot_id,
             event_at: new Date().toISOString(),
             counted_quantity: qty,
@@ -747,13 +764,10 @@ export default function BulkCountPage() {
             [row.key]: `${friendlyCountError(body, res.status)} The count was not saved.`,
           }));
         }
-      } catch (err) {
+      } catch {
         setRowError((e) => ({
           ...e,
-          [row.key]:
-            err instanceof Error
-              ? `Network error — the count was not saved. (${err.message})`
-              : "Network error — the count was not saved.",
+          [row.key]: "Connection problem — the count was not saved. Check your internet and try again.",
         }));
       } finally {
         if (unconsumedSnapshotId) {
@@ -857,7 +871,13 @@ export default function BulkCountPage() {
         backLabel="Inventory"
         description="Walk the factory and count everything, area by area. Pick an area below, type what you see, press Enter — the cursor jumps to the next item."
       >
-        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border border-border/60 bg-bg-raised/60 px-3 py-2 text-2xs text-fg-muted">
+        <p className="mb-2 text-sm text-fg-muted">
+          Counting one specific item?{" "}
+          <Link href="/stock/physical-count" className="underline underline-offset-2 hover:text-fg">
+            Use the single-item count form →
+          </Link>
+        </p>
+        <div className="flex flex-wrap items-center gap-x-4 gap-y-1 rounded-md border border-info/40 bg-info-softer px-3 py-2 text-2xs text-info-fg">
           <span className="inline-flex items-center gap-1.5 font-semibold text-fg">
             <svg className="h-3.5 w-3.5" viewBox="0 0 20 20" fill="none" aria-hidden="true">
               <path d="M2.5 2.5l15 15M8.34 8.34A2.5 2.5 0 0013.66 11.66M6.25 6.25C4.7 7.26 3.5 8.5 2.5 10c1.5 2.5 4.5 5 7.5 5a7.4 7.4 0 003.25-.75M10 5c.84 0 1.65.14 2.41.4C14.1 6.2 15.6 7.9 17.5 10c-.5.83-1.1 1.6-1.75 2.25" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" strokeLinejoin="round" />
@@ -875,7 +895,7 @@ export default function BulkCountPage() {
             view at all times: progress + search + the filter-tray toggle.
             Sticky offset top-16 matches the TopBar height (UI-301). ===== */}
       <div
-        className="sticky top-16 z-20 rounded-lg border border-border/60 bg-bg/95 px-3 py-2 shadow-sm backdrop-blur-md sm:px-4"
+        className="sticky top-[calc(4rem+env(safe-area-inset-top,0px))] z-20 rounded-lg border border-border/60 bg-bg/95 px-3 py-2 shadow-sm backdrop-blur-md sm:px-4"
         data-testid="bulk-count-progress"
       >
         <div className="flex items-center gap-3">
@@ -910,7 +930,11 @@ export default function BulkCountPage() {
               className="shrink-0 rounded-full border border-warning/30 bg-warning-softer px-2 py-0.5 text-2xs font-medium text-warning-fg"
               title={`${pendingCount} count(s) awaiting planner approval`}
             >
-              <span aria-hidden>⏳</span> {pendingCount}
+              <svg className="h-3 w-3" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+                <circle cx="8" cy="8" r="6" stroke="currentColor" strokeWidth="1.75" />
+                <path d="M8 5v3l2 2" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+              </svg>{" "}
+              {pendingCount}
               <span className="hidden sm:inline"> awaiting approval</span>
             </span>
           ) : null}
@@ -956,12 +980,15 @@ export default function BulkCountPage() {
               aria-label="Search items"
               data-testid="bulk-count-search"
             />
-            <span
-              className="pointer-events-none absolute inset-y-0 left-2.5 flex items-center text-fg-subtle"
-              aria-hidden
+            <svg
+              className="pointer-events-none absolute inset-y-0 left-2.5 my-auto h-4 w-4 text-fg-subtle"
+              viewBox="0 0 24 24"
+              fill="none"
+              aria-hidden="true"
             >
-              ⌕
-            </span>
+              <circle cx="11" cy="11" r="7" stroke="currentColor" strokeWidth="2" />
+              <path d="m20 20-3.5-3.5" stroke="currentColor" strokeWidth="2" strokeLinecap="round" />
+            </svg>
           </div>
           <button
             type="button"
@@ -1002,9 +1029,13 @@ export default function BulkCountPage() {
         <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
           <div
             className="flex max-w-full items-center gap-1 overflow-x-auto rounded-md bg-bg-subtle/60 p-0.5"
-            role="tablist"
             aria-label="Item type"
           >
+            {/* A11Y-006: plain aria-pressed toggle buttons, not role="tab" —
+                these were marked up as an ARIA tablist (which requires
+                arrow-key navigation between tabs) but behaved like a normal
+                Tab-reachable button group. A toggle-button group is the
+                correct, simpler pattern for this interaction. */}
             {(
               [
                 ["", `All (${rows.length})`],
@@ -1016,11 +1047,10 @@ export default function BulkCountPage() {
               <button
                 key={value || "all"}
                 type="button"
-                role="tab"
-                aria-selected={filters.type === value}
+                aria-pressed={filters.type === value}
                 onClick={() => patch({ type: value as BulkFilters["type"], usedBy: value === "FG" ? "" : filters.usedBy })}
                 className={cn(
-                  "shrink-0 whitespace-nowrap rounded px-2.5 py-1.5 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
+                  "min-h-[32px] shrink-0 whitespace-nowrap rounded px-2.5 py-2 text-xs font-medium transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
                   filters.type === value
                     ? "bg-bg text-fg shadow-sm"
                     : "text-fg-muted hover:text-fg",
@@ -1134,7 +1164,7 @@ export default function BulkCountPage() {
             )}
             data-testid="bulk-count-nevercounted"
           >
-            ∅ Never counted
+            Never counted
           </button>
           <button
             type="button"
@@ -1147,7 +1177,7 @@ export default function BulkCountPage() {
             title={`Last movement ${STALE_DAYS}+ days ago`}
             data-testid="bulk-count-stale"
           >
-            ⏱ Stale ({STALE_DAYS}d+)
+            Not moved {STALE_DAYS}+ days
           </button>
         </div>
       </div>
@@ -1162,7 +1192,7 @@ export default function BulkCountPage() {
           <button
             type="button"
             onClick={() => setFilters(EMPTY_FILTERS)}
-            className="shrink-0 font-medium text-accent underline hover:text-accent-hover hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
+            className="min-h-[32px] shrink-0 rounded px-2 py-1.5 font-medium text-accent underline hover:text-accent-hover hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"
             data-testid="bulk-count-clear-filters"
           >
             Clear all filters
@@ -1206,7 +1236,9 @@ export default function BulkCountPage() {
       ) : loadError ? (
         <div className="rounded-lg border border-danger/40 bg-danger-softer p-4 text-sm text-danger-fg" role="alert">
           <div className="font-semibold">Could not load the item list</div>
-          <div className="mt-1 text-xs">{(loadError as Error).message}</div>
+          <div className="mt-1 text-xs">
+            Try refreshing the page. If it keeps failing, contact the system administrator.
+          </div>
           <button
             type="button"
             onClick={() => {
@@ -1234,7 +1266,7 @@ export default function BulkCountPage() {
               onClick={() => setFilters(EMPTY_FILTERS)}
               className="mt-3 text-xs font-medium text-accent underline hover:text-accent-hover hover:no-underline"
             >
-              Reset filters
+              Try clearing a filter
             </button>
           ) : null}
         </div>
@@ -1259,7 +1291,7 @@ export default function BulkCountPage() {
                     // search) owns the pinned zone; pinned section headers
                     // would stack against its variable height (FLOW-116 /
                     // UI-301). Done state at full opacity (UI-304).
-                    "flex min-h-[44px] w-full items-center gap-2.5 border-b border-border/50 px-3 py-2.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 sm:px-4",
+                    "flex min-h-11 w-full items-center gap-2.5 border-b border-border/50 px-3 py-2.5 text-left transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50 sm:px-4",
                     done ? "bg-success-softer" : "bg-bg-raised/95 hover:bg-bg-subtle/80",
                   )}
                 >
@@ -1312,7 +1344,7 @@ export default function BulkCountPage() {
                         phase={rowPhase[row.key]}
                         error={rowError[row.key]}
                         canReview={canReview}
-                        onSubmit={(r, q) => void submitRow(r, q)}
+                        onSubmit={(r, q, k) => void submitRow(r, q, k)}
                         onRecount={recountRow}
                         registerInput={registerInput}
                       />
@@ -1324,7 +1356,7 @@ export default function BulkCountPage() {
           })}
 
           <p className="px-1 text-2xs leading-relaxed text-fg-subtle">
-            Every saved row replaces the stock balance anchor for that item (or
+            Every saved row updates the stock balance for that item (or
             holds for planner approval on large variance) — identical to{" "}
             <Link href="/stock/physical-count" className="underline hover:no-underline">
               the single-item count form
@@ -1333,11 +1365,11 @@ export default function BulkCountPage() {
             <Link href="/inventory" className="underline hover:no-underline">
               Inventory
             </Link>
-            . &quot;Recount&quot; only clears the local tick so you can submit a
+            . &quot;Recount&quot; only clears the checkmark so you can submit a
             corrected count; previous submissions stay on the audit trail.
-            Tick marks reset automatically each day and are saved on this
-            device only — switching devices mid-walk resets the ticks, but
-            every submitted count is already safe in the system.
+            Checkmarks reset automatically each day and are saved on this
+            device only — switching devices mid-walk resets the checkmarks,
+            but every submitted count is already safe in the system.
           </p>
         </div>
       )}

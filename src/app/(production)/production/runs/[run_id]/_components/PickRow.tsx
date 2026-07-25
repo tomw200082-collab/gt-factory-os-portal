@@ -176,7 +176,7 @@ export function PickRow({
         aria-label={`${t("pick_edit_title")} ${displayName}`}
         data-testid={`pick-edit-${line.source}-${line.component_id}`}
         className={cn(
-          "flex w-24 shrink-0 flex-col items-center justify-center border-l border-border/70 px-1 py-2 transition-colors motion-reduce:transition-none sm:w-28",
+          "flex min-w-24 shrink-0 flex-col items-center justify-center border-l border-border/70 px-2 py-2 transition-colors motion-reduce:transition-none sm:min-w-28",
           "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent/50",
           !disabled && "hover:bg-accent-soft/60",
           disabled && "cursor-default",

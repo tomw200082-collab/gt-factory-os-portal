@@ -24,7 +24,7 @@ export default defineConfig({
     {
       name: "chromium",
       use: { ...devices["Desktop Chrome"] },
-      testIgnore: /mobile-.*\.spec\.ts$/,
+      testIgnore: /(mobile|tablet)-.*\.spec\.ts$/,
     },
     {
       // Mobile WebKit emulation — used by tests/e2e/mobile-input-zoom.spec.ts
@@ -34,6 +34,15 @@ export default defineConfig({
       name: "mobile-safari",
       use: { ...devices["iPhone 14"] },
       testMatch: /mobile-.*\.spec\.ts$/,
+    },
+    {
+      // Tablet WebKit emulation (iPad Mini, 768x1024 portrait) — 768px is
+      // Tailwind's md breakpoint, the exact mobile->tablet transition zone
+      // where responsive classes are most likely to break. Used by
+      // tablet-*.spec.ts screenshot passes.
+      name: "tablet",
+      use: { ...devices["iPad Mini"] },
+      testMatch: /tablet-.*\.spec\.ts$/,
     },
   ],
   webServer: {
