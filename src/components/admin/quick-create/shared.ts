@@ -23,6 +23,25 @@ export interface QuickCreatePostOptions {
   body: unknown;
   /** Field on the success response whose value is the new entity id. */
   idField?: string;
+  /**
+   * Idempotency key, merged into the posted body. Required by mutation
+   * endpoints that carry a form-submission envelope (suppliers does; the
+   * component / item / supplier-item creates do not). Omitting it where the
+   * server requires it is a guaranteed 422 — see tranche 151.
+   */
+  idempotencyKey?: string;
+}
+
+/** Turn the server's Zod `issues` array into one operator-readable line, so a
+ *  422 names the offending field instead of dead-ending on a bare
+ *  "Validation failed." (tranche 151). */
+function firstIssueMessage(issues: unknown): string | null {
+  if (!Array.isArray(issues) || issues.length === 0) return null;
+  const first = issues[0] as { path?: unknown; message?: unknown };
+  const message = typeof first?.message === "string" ? first.message : null;
+  if (!message) return null;
+  const path = Array.isArray(first.path) ? first.path.join(".") : null;
+  return path ? `${path}: ${message}` : message;
 }
 
 export async function quickCreatePost<TId extends string | number = string>(
@@ -34,7 +53,14 @@ export async function quickCreatePost<TId extends string | number = string>(
     res = await fetch(opts.url, {
       method: "POST",
       headers: { "Content-Type": "application/json", Accept: "application/json" },
-      body: JSON.stringify(opts.body),
+      body: JSON.stringify(
+        opts.idempotencyKey
+          ? {
+              ...(opts.body as Record<string, unknown>),
+              idempotency_key: opts.idempotencyKey,
+            }
+          : opts.body,
+      ),
     });
   } catch (err) {
     return {
@@ -77,12 +103,15 @@ export async function quickCreatePost<TId extends string | number = string>(
   }
 
   if (res.status === 422) {
+    const issues = (body as { issues?: unknown } | null)?.issues ?? null;
     return {
       kind: "validation",
       status: 422,
       message:
-        (body as { message?: string } | null)?.message ?? "Validation failed.",
-      issues: (body as { issues?: unknown } | null)?.issues ?? null,
+        (body as { message?: string } | null)?.message ??
+        firstIssueMessage(issues) ??
+        "Validation failed.",
+      issues,
     };
   }
 
