@@ -5,7 +5,7 @@
 // Fields use product-first labels (not DB column names).
 // ---------------------------------------------------------------------------
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { z } from "zod";
@@ -13,7 +13,12 @@ import { useQueryClient } from "@tanstack/react-query";
 import { Drawer } from "@/components/overlays/Drawer";
 import { quickCreatePost, QK } from "./shared";
 
-const SUPPLIER_STATUS = ["ACTIVE", "INACTIVE"] as const;
+function newIdempotencyKey(): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `qcs_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+}
 
 const QuickCreateSupplierSchema = z.object({
   supplier_id: z
@@ -26,7 +31,6 @@ const QuickCreateSupplierSchema = z.object({
     .trim()
     .min(1, "Official name is required")
     .max(256, "Official name too long"),
-  status: z.enum(SUPPLIER_STATUS),
 });
 
 export type QuickCreateSupplierValues = z.infer<
@@ -57,9 +61,15 @@ export function QuickCreateSupplier({
     defaultValues: {
       supplier_id: "",
       supplier_name_official: "",
-      status: "ACTIVE",
     },
   });
+
+  // The suppliers create endpoint carries a form-submission envelope and
+  // REQUIRES idempotency_key — without one every submit 422s (tranche 151).
+  // Held in a ref, not regenerated per render, so retrying after a network
+  // error is a genuine retry rather than a second create. Rotated only once a
+  // create has actually succeeded.
+  const idemKeyRef = useRef<string>(newIdempotencyKey());
 
   const onSubmit = form.handleSubmit(async (values) => {
     setBanner(null);
@@ -68,11 +78,13 @@ export function QuickCreateSupplier({
       url: "/api/suppliers",
       body: values,
       idField: "supplier_id",
+      idempotencyKey: idemKeyRef.current,
     });
     setSubmitting(false);
 
     if (result.kind === "ok") {
       await queryClient.invalidateQueries({ queryKey: QK.suppliers });
+      idemKeyRef.current = newIdempotencyKey();
       form.reset();
       onCreated(result.id);
       onClose();
@@ -139,15 +151,14 @@ export function QuickCreateSupplier({
           ) : null}
         </label>
 
-        <label className="block">
-          <span className="mb-1 block text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
-            Status
-          </span>
-          <select className="input" {...form.register("status")}>
-            <option value="ACTIVE">Active</option>
-            <option value="INACTIVE">Inactive</option>
-          </select>
-        </label>
+        {/* The create endpoint has no `status` field and the non-strict schema
+            strips it, so a picker here could never do anything — every supplier
+            created from this dialog is Active. Say so instead of offering a
+            control that lies (tranche 151). */}
+        <p className="text-xs text-fg-muted" data-testid="quick-create-supplier-status-note">
+          New suppliers are created <span className="font-medium text-fg">Active</span>.
+          Change the status from the supplier&apos;s own page.
+        </p>
 
         <div className="flex items-center justify-end gap-2 border-t border-border/70 pt-4">
           <button
