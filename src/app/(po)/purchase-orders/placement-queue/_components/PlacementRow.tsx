@@ -43,6 +43,20 @@ const CANCEL_REASONS = [
   "מחיר/תנאים לא מתאימים",
 ] as const;
 
+// Tranche 150 — why the supplier could not supply part of the order. These are
+// about the SUPPLIER's inability, which is a different question from the
+// discard reasons above (those are about us no longer wanting it).
+const SPLIT_REASONS = [
+  "אין במלאי אצל הספק",
+  "הספק לא מספק את הכמות המלאה",
+  "מחיר גבוה מדי לשורה הזו",
+  "זמן אספקה ארוך מדי",
+] as const;
+
+/** Per-line supply outcome. `full` is the default so the common case — the
+ *  supplier had everything — costs the office manager nothing. */
+type LineState = "full" | "partial" | "none";
+
 function lineName(l: QueuePoLine): string {
   return (
     l.component_name ?? l.item_name ?? l.component_id ?? l.item_id ?? "פריט"
@@ -57,7 +71,9 @@ export function PlacementRow({
   po: QueuePo;
   // Called after a successful place so the page can show a durable success
   // banner — the row itself unmounts when the queue refetch drops this PO.
-  onPlaced?: (po: QueuePo) => void;
+  // Tranche 150: `splitPoId` is the sibling PO holding the remainder on a
+  // partial placement (null on a full one) so the banner can name it.
+  onPlaced?: (po: QueuePo, splitPoId?: string | null) => void;
   // Called after a successful discard (cancel-with-reason) for the same
   // durable-banner reason — the row unmounts when the queue refetch drops it.
   onCancelled?: (po: QueuePo, reason: string) => void;
@@ -127,6 +143,95 @@ export function PlacementRow({
     return l.unit_price_net != null ? fmtNumStr(l.unit_price_net) : "";
   }
 
+  // ── Tranche 150: partial placement ──────────────────────────────────────
+  const [lineStates, setLineStates] = useState<Record<string, LineState>>({});
+  const [partialQtys, setPartialQtys] = useState<Record<string, string>>({});
+  const [splitPreset, setSplitPreset] = useState<string>("");
+  const [splitFreeText, setSplitFreeText] = useState<string>("");
+
+  function stateFor(l: QueuePoLine): LineState {
+    return lineStates[l.po_line_id] ?? "full";
+  }
+  /** The amount the supplier DID supply, for the placed side of the split. */
+  function suppliedQty(l: QueuePoLine): number {
+    const ordered = Number(l.ordered_qty);
+    const st = stateFor(l);
+    if (st === "none") return 0;
+    if (st === "full") return ordered;
+    const partial = Number(partialQtys[l.po_line_id]);
+    return Number.isFinite(partial) ? partial : NaN;
+  }
+  function partialInvalid(l: QueuePoLine): boolean {
+    if (stateFor(l) !== "partial") return false;
+    const q = suppliedQty(l);
+    const ordered = Number(l.ordered_qty);
+    return !Number.isFinite(q) || q <= 0 || q >= ordered;
+  }
+
+  function setLineState(l: QueuePoLine, next: LineState): void {
+    setLineStates((prev) => ({ ...prev, [l.po_line_id]: next }));
+    // Seed the partial box with the full amount so the office manager edits a
+    // number down rather than typing one from scratch.
+    if (next === "partial" && !(l.po_line_id in partialQtys)) {
+      setPartialQtys((prev) => ({
+        ...prev,
+        [l.po_line_id]: fmtNumStr(l.ordered_qty),
+      }));
+    }
+  }
+
+  const splitReason =
+    splitPreset === "אחר" ? splitFreeText.trim() : splitPreset.trim();
+
+  /** What the supplier could NOT supply, in the backend's payload shape. */
+  const unplacedLines = useMemo(() => {
+    const out: { po_line_id: string; unplaced_qty: number }[] = [];
+    for (const l of lines) {
+      const ordered = Number(l.ordered_qty);
+      const st = stateFor(l);
+      if (st === "full") continue;
+      if (st === "none") {
+        out.push({ po_line_id: l.po_line_id, unplaced_qty: ordered });
+        continue;
+      }
+      const supplied = suppliedQty(l);
+      if (Number.isFinite(supplied) && supplied > 0 && supplied < ordered) {
+        out.push({ po_line_id: l.po_line_id, unplaced_qty: ordered - supplied });
+      }
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lines, lineStates, partialQtys]);
+
+  const hasSplit = unplacedLines.length > 0;
+  // Nothing left to place is a CANCELLATION, not a partial placement — the
+  // backend refuses it (NOTHING_PLACED) and the right path is the existing
+  // discard-with-reason. Caught here so the office manager is told, not 409'd.
+  const nothingPlaced =
+    lines.length > 0 && lines.every((l) => stateFor(l) === "none");
+  const anyPartialInvalid = lines.some((l) => partialInvalid(l));
+
+  /** Lines still being placed, for the itemised confirm (DR-019 P0). */
+  const placedSummary = useMemo(
+    () =>
+      lines
+        .filter((l) => stateFor(l) !== "none")
+        .map(
+          (l) =>
+            `${lineName(l)} ${fmtNumStr(String(suppliedQty(l)))} ${l.uom}`,
+        ),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [lines, lineStates, partialQtys],
+  );
+  const splitSummary = useMemo(
+    () =>
+      unplacedLines.map((u) => {
+        const l = lines.find((x) => x.po_line_id === u.po_line_id);
+        return `${l ? lineName(l) : "פריט"} ${fmtNumStr(String(u.unplaced_qty))} ${l?.uom ?? ""}`;
+      }),
+    [unplacedLines, lines],
+  );
+
   const term = termCode === "custom" ? null : paymentTermByCode(termCode);
   const termLabel = termCode === "custom" ? customTerm.trim() : term?.label ?? "";
 
@@ -136,7 +241,24 @@ export function PlacementRow({
   const canPlace =
     lines.length > 0 &&
     !!termLabel &&
-    lines.every((l) => Number(priceFor(l)) > 0);
+    lines.every((l) => Number(priceFor(l)) > 0) &&
+    // Tranche 150: a split needs a reason and a sane partial quantity, and
+    // "nothing placed at all" is a discard rather than a placement.
+    !nothingPlaced &&
+    !anyPartialInvalid &&
+    (!hasSplit || !!splitReason);
+
+  /** Why `בצע הזמנה` is blocked, for the disabled-button tooltip. */
+  const blockedReason = nothingPlaced
+    ? "כל השורות מסומנות כ-לא הוזמן — זהו ביטול הזמנה, השתמשי ב״בטל הזמנה״."
+    : anyPartialInvalid
+      ? "יש להזין כמות חלקית גדולה מאפס וקטנה מהכמות שהוזמנה."
+      : hasSplit && !splitReason
+        ? "יש לבחור סיבה לביצוע החלקי."
+        // The price/terms wording is the DR-018 INTER-003 contract — it names
+        // both requirements at once, and a test pins it. Only the tranche-150
+        // gates above get their own, more specific message.
+        : "יש להזין מחיר לכל השורות ולבחור תנאי תשלום";
 
   const totalPreview = useMemo(() => {
     let sum = 0;
@@ -172,19 +294,44 @@ export function PlacementRow({
       }
       line_prices.push({ po_line_id: l.po_line_id, unit_price_net: p });
     }
+    // Tranche 150 backstops, mirroring the disabled-button gate above.
+    if (nothingPlaced) {
+      setErrorMsg(
+        "כל השורות מסומנות כ-לא הוזמן. זהו ביטול הזמנה — השתמשי ב״בטל הזמנה״ עם סיבה.",
+      );
+      return;
+    }
+    if (anyPartialInvalid) {
+      setErrorMsg(
+        "כמות חלקית חייבת להיות גדולה מאפס וקטנה מהכמות שהוזמנה.",
+      );
+      return;
+    }
+    if (hasSplit && !splitReason) {
+      setErrorMsg("יש לבחור סיבה לביצוע החלקי.");
+      return;
+    }
     // DR-018 INTER-005 (Tranche 124) — a blank confirmedDate was silently
     // omitted from the confirm dialog, reopening the no-ETA double-order
     // trap at the human step. Surface it explicitly instead.
+    // DR-019 P0: the confirm must itemise exactly what is being placed and,
+    // on a partial placement, exactly what splits off — the previous attempt
+    // at this UI hid quantity overrides behind a generic sentence.
+    const splitBlock = hasSplit
+      ? `\n\nמבוצע כעת (${placedSummary.length}): ${placedSummary.join(" · ")}\nלא סופק — יעבור להזמנה חדשה (${splitSummary.length}): ${splitSummary.join(" · ")}\nסיבה: ${splitReason}\n\nהיתרה תיפתח כהזמנה נפרדת הממתינה לביצוע, ותוכלי להפנות אותה לספק אחר מתוך התור. עד שתבוצע היא לא נחשבת כסחורה בדרך.`
+      : "";
     const ok = await confirm({
-      title: `לבצע את ההזמנה ${po.po_number}?`,
+      title: hasSplit
+        ? `לבצע חלקית את ההזמנה ${po.po_number}?`
+        : `לבצע את ההזמנה ${po.po_number}?`,
       description: `ההזמנה תבוצע מול הספק עם תנאי תשלום "${termLabel}"${
         totalPreview != null ? ` · ${formatIls(totalPreview)}` : ""
       }${confirmedDate ? ` · צפי הגעה ${confirmedDate}` : ""}. לאחר הביצוע ההזמנה תהיה פתוחה ומוכנה לקבלת סחורה — לא ניתן לבטל הזמנה שבוצעה דרך המערכת, ושינויים בכמויות יחייבו תיאום מול הספק.${
         !confirmedDate
           ? " לא הוזן תאריך אספקה — ההזמנה תיפתח ללא צפי הגעה, ויש להוסיף אותו ידנית אחר כך."
           : ""
-      }`,
-      confirmLabel: "בצע הזמנה",
+      }${splitBlock}`,
+      confirmLabel: hasSplit ? "בצע חלקית" : "בצע הזמנה",
       cancelLabel: "ביטול",
       srFallbackDescription: "אשר/י פעולה זו.",
     });
@@ -198,14 +345,17 @@ export function PlacementRow({
         line_prices,
         confirm_price_update: true,
         expected_receive_date: confirmedDate || null,
+        // Tranche 150: omitted entirely on a full placement.
+        unplaced_lines: hasSplit ? unplacedLines : undefined,
+        split_reason: hasSplit ? splitReason : undefined,
       },
       {
         // On success the queue refetch drops this PO (no longer
         // APPROVED_TO_ORDER), so the row unmounts. Collapse defensively and
         // hand the success up to the page for a durable confirmation banner.
-        onSuccess: () => {
+        onSuccess: (result) => {
           setOpen(false);
-          onPlaced?.(po);
+          onPlaced?.(po, result?.split_po_id ?? null);
         },
         onError: (e: Error) => setErrorMsg(e.message),
       },
@@ -495,9 +645,154 @@ export function PlacementRow({
                         aria-label={`מחיר ליחידה עבור ${lineName(l)}`}
                       />
                     </label>
+
+                    {/* Tranche 150 — what the supplier actually supplied.
+                        Defaults to "במלואו", so the common case adds no work. */}
+                    <div
+                      className="flex w-full flex-wrap items-center gap-1.5 sm:w-auto"
+                      role="group"
+                      aria-label={`מה סופק עבור ${lineName(l)}`}
+                    >
+                      {(
+                        [
+                          ["full", "במלואו"],
+                          ["partial", "חלקית"],
+                          ["none", "לא הוזמן"],
+                        ] as const
+                      ).map(([value, label]) => {
+                        const active = stateFor(l) === value;
+                        return (
+                          <button
+                            key={value}
+                            type="button"
+                            onClick={() => setLineState(l, value)}
+                            aria-pressed={active}
+                            disabled={placeMut.isPending}
+                            data-testid={`placement-supply-${value}-${l.po_line_id}`}
+                            className={
+                              active
+                                ? value === "full"
+                                  ? "btn btn-xs border-success/50 bg-success-softer text-success-fg"
+                                  : value === "partial"
+                                    ? "btn btn-xs border-warning/50 bg-warning-softer text-warning-fg"
+                                    : "btn btn-xs border-danger/50 bg-danger-softer text-danger-fg"
+                                : "btn btn-ghost btn-xs text-fg-muted"
+                            }
+                          >
+                            {label}
+                          </button>
+                        );
+                      })}
+                      {stateFor(l) === "partial" ? (
+                        <label className="flex items-center gap-1.5">
+                          <span className="text-xs text-fg-muted">סופק</span>
+                          <input
+                            type="number"
+                            inputMode="decimal"
+                            min="0"
+                            step="any"
+                            className="input w-24 text-left tabular-nums"
+                            value={partialQtys[l.po_line_id] ?? ""}
+                            onChange={(e) =>
+                              setPartialQtys((prev) => ({
+                                ...prev,
+                                [l.po_line_id]: e.target.value,
+                              }))
+                            }
+                            disabled={placeMut.isPending}
+                            data-testid={`placement-supplied-${l.po_line_id}`}
+                            aria-label={`כמות שסופקה עבור ${lineName(l)}`}
+                            aria-invalid={partialInvalid(l) || undefined}
+                          />
+                          <span className="text-xs text-fg-muted">{l.uom}</span>
+                        </label>
+                      ) : null}
+                    </div>
+                    {partialInvalid(l) ? (
+                      <p
+                        className="w-full text-xs font-medium text-danger-fg"
+                        role="alert"
+                        data-testid={`placement-supplied-error-${l.po_line_id}`}
+                      >
+                        הכמות שסופקה חייבת להיות גדולה מאפס וקטנה מ-
+                        {fmtNumStr(l.ordered_qty)} {l.uom}. אם סופק הכול — בחרי
+                        ״במלואו״; אם כלום — ״לא הוזמן״.
+                      </p>
+                    ) : null}
                   </li>
                 ))}
               </ul>
+
+              {/* Tranche 150 — one reason for the whole split (a split is one
+                  supplier conversation, not a per-component fact). */}
+              {hasSplit ? (
+                <div
+                  className="rounded-md border border-warning/40 bg-warning-softer/40 p-3"
+                  data-testid="placement-split-panel"
+                >
+                  <div className="mb-1.5 flex items-start gap-1.5">
+                    <AlertTriangle
+                      className="mt-0.5 h-4 w-4 shrink-0 text-warning-fg"
+                      strokeWidth={2}
+                      aria-hidden
+                    />
+                    <p className="text-xs text-warning-fg">
+                      {splitSummary.length === 1
+                        ? "פריט אחד לא סופק ויעבור להזמנה חדשה: "
+                        : `${splitSummary.length} פריטים לא סופקו ויעברו להזמנה חדשה: `}
+                      <span className="font-medium">
+                        {splitSummary.join(" · ")}
+                      </span>
+                    </p>
+                  </div>
+                  <label
+                    htmlFor={`split-reason-${po.po_id}`}
+                    className="mb-1 block text-xs font-medium text-fg"
+                  >
+                    סיבה לביצוע החלקי (חובה)
+                  </label>
+                  <select
+                    id={`split-reason-${po.po_id}`}
+                    className="input h-10 w-full"
+                    value={splitPreset}
+                    onChange={(e) => setSplitPreset(e.target.value)}
+                    disabled={placeMut.isPending}
+                    data-testid="placement-split-reason"
+                  >
+                    <option value="">— בחרי סיבה —</option>
+                    {SPLIT_REASONS.map((r) => (
+                      <option key={r} value={r}>
+                        {r}
+                      </option>
+                    ))}
+                    <option value="אחר">אחר (פירוט חופשי)</option>
+                  </select>
+                  {splitPreset === "אחר" ? (
+                    <input
+                      type="text"
+                      className="input mt-1.5 h-10 w-full"
+                      value={splitFreeText}
+                      onChange={(e) => setSplitFreeText(e.target.value)}
+                      placeholder="פירוט הסיבה"
+                      disabled={placeMut.isPending}
+                      data-testid="placement-split-reason-text"
+                      aria-label="פירוט הסיבה לביצוע החלקי"
+                    />
+                  ) : null}
+                </div>
+              ) : null}
+
+              {/* All lines marked not-supplied is a discard, not a placement. */}
+              {nothingPlaced ? (
+                <p
+                  className="rounded-md border border-danger/40 bg-danger-softer px-3 py-2 text-xs text-danger-fg"
+                  role="alert"
+                  data-testid="placement-nothing-placed"
+                >
+                  כל השורות מסומנות כ״לא הוזמן״ — זהו ביטול הזמנה ולא ביצוע
+                  חלקי. השתמשי ב״בטל הזמנה״ עם סיבה.
+                </p>
+              ) : null}
 
               {/* Paste-ready Hebrew order message (from the originating session PO) */}
               {po.order_document_text ? (
@@ -618,7 +913,7 @@ export function PlacementRow({
                   type="button"
                   onClick={() => void handlePlace()}
                   disabled={!canPlace || placeMut.isPending}
-                  title={!canPlace ? "יש להזין מחיר לכל השורות ולבחור תנאי תשלום" : undefined}
+                  title={!canPlace ? blockedReason : undefined}
                   className="btn btn-primary"
                   data-testid={`placement-submit-${po.po_id}`}
                 >
@@ -627,7 +922,7 @@ export function PlacementRow({
                   ) : (
                     <PackageCheck className="h-4 w-4" aria-hidden />
                   )}
-                  בצע הזמנה
+                  {hasSplit ? "בצע חלקית" : "בצע הזמנה"}
                 </button>
               </div>
             </div>

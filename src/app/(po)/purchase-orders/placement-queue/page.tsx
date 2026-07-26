@@ -69,6 +69,9 @@ function QueueInner(): JSX.Element {
   const [placed, setPlaced] = useState<{
     po_id: string;
     po_number: string;
+    // Tranche 150: the sibling PO created for the part the supplier could not
+    // supply. Named in the banner so the remainder never goes unnoticed.
+    split_po_id?: string | null;
   } | null>(null);
   // Durable discard confirmation — the cancelled row unmounts on refetch, so
   // the page owns the "order removed from queue" banner (Tom-directed).
@@ -115,6 +118,22 @@ function QueueInner(): JSX.Element {
             >
               קבלת סחורה ←
             </Link>
+            {placed.split_po_id ? (
+              <>
+                {" · "}
+                <span data-testid="placement-queue-success-split">
+                  היתרה שלא סופקה נפתחה כהזמנה{" "}
+                  <Link
+                    href={`/purchase-orders/${encodeURIComponent(placed.split_po_id)}`}
+                    className="font-medium underline-offset-2 hover:underline"
+                    data-testid="placement-queue-success-split-link"
+                  >
+                    {placed.split_po_id}
+                  </Link>{" "}
+                  וממתינה לביצוע — אפשר להפנות אותה לספק אחר מהתור.
+                </span>
+              </>
+            ) : null}
           </span>
           <button
             type="button"
@@ -304,9 +323,13 @@ function QueueInner(): JSX.Element {
               <PlacementRow
                 key={po.po_id}
                 po={po}
-                onPlaced={(p) => {
+                onPlaced={(p, splitPoId) => {
                   setCancelled(null);
-                  setPlaced({ po_id: p.po_id, po_number: p.po_number });
+                  setPlaced({
+                    po_id: p.po_id,
+                    po_number: p.po_number,
+                    split_po_id: splitPoId ?? null,
+                  });
                 }}
                 onCancelled={(p, reason) => {
                   setPlaced(null);
