@@ -83,6 +83,23 @@ export interface PlaceArgs {
   // placement (ISO YYYY-MM-DD). Optional per-line qty adjustments too.
   expected_receive_date?: string | null;
   line_qty_overrides?: { po_line_id: string; ordered_qty: number }[];
+  // 0298 partial placement: what the supplier could NOT supply. The backend
+  // reduces (partial qty) or CANCELs (whole line) each of these on this PO and
+  // re-creates the quantity on a new sibling PO in APPROVED_TO_ORDER, so it
+  // re-enters this queue for a different supplier instead of being placed as
+  // supply that never existed. `split_reason` is required whenever this is
+  // non-empty (the backend 422s / 409s otherwise).
+  unplaced_lines?: { po_line_id: string; unplaced_qty: number }[];
+  split_reason?: string | null;
+}
+
+/** 0298: the place response. `split_po_id` is the sibling PO holding the
+ *  remainder — null on an ordinary full placement. */
+export interface PlaceResult {
+  po_id: string;
+  po_number: string;
+  status: string;
+  split_po_id: string | null;
 }
 
 const QUEUE_KEY = ["po-placement-queue"] as const;
@@ -293,10 +310,20 @@ export function usePlaceOrder() {
             confirm_price_update: args.confirm_price_update ?? true,
             expected_receive_date: args.expected_receive_date ?? null,
             line_qty_overrides: args.line_qty_overrides ?? undefined,
+            // Omitted entirely when nothing was left unplaced, so a full
+            // placement is byte-identical to the pre-0298 request.
+            unplaced_lines:
+              args.unplaced_lines && args.unplaced_lines.length > 0
+                ? args.unplaced_lines
+                : undefined,
+            split_reason:
+              args.unplaced_lines && args.unplaced_lines.length > 0
+                ? args.split_reason
+                : undefined,
           }),
         },
       );
-      return jsonOrThrow(res, "ביצוע ההזמנה נכשל.");
+      return (await jsonOrThrow(res, "ביצוע ההזמנה נכשל.")) as PlaceResult;
     },
     onSuccess: () => {
       // A placed PO leaves the queue and becomes a real OPEN order visible to

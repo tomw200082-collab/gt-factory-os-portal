@@ -5,7 +5,7 @@
 // place-contract tests; this pins the client-side guard + line rendering.)
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { PlacementRow } from "./PlacementRow";
@@ -58,6 +58,26 @@ const LINES = {
       component_id: "c1",
       item_id: null,
       ordered_qty: "5",
+      uom: "UNIT",
+      line_status: "OPEN",
+      unit_price_net: null,
+    },
+  ],
+};
+
+// Tranche 150: two lines, so a whole-line split still leaves something to
+// place (one line + "not supplied" would be a discard, not a partial).
+const LINES_TWO = {
+  rows: [
+    LINES.rows[0],
+    {
+      po_line_id: "l2",
+      line_number: 2,
+      component_name: "רכיב ב",
+      item_name: null,
+      component_id: "c2",
+      item_id: null,
+      ordered_qty: "8",
       uom: "UNIT",
       line_status: "OPEN",
       unit_price_net: null,
@@ -242,5 +262,122 @@ describe("PlacementRow", () => {
     expect(expandToggle.getAttribute("aria-expanded")).toBe("true");
     expect(cancelToggle.getAttribute("aria-expanded")).toBe("false");
     expect(screen.queryByTestId("placement-cancel-panel-po1")).toBeNull();
+  });
+  // -------------------------------------------------------------------------
+  // Tranche 150 — partial placement (backend 0298)
+  // -------------------------------------------------------------------------
+  async function openWithLines(payload: unknown) {
+    const fetchMock = vi
+      .spyOn(globalThis, "fetch")
+      .mockImplementation(async (input: RequestInfo | URL) => {
+        const url = String(input);
+        if (url.includes("/api/purchase-order-lines")) {
+          return new Response(JSON.stringify(payload), { status: 200 });
+        }
+        return new Response(
+          JSON.stringify({ po_id: "po1", po_number: "PO-2026-00001", status: "OPEN", split_po_id: "PO-2026-00042" }),
+          { status: 200 },
+        );
+      });
+    renderRow();
+    await userEvent.click(screen.getByTestId("placement-row-toggle-po1"));
+    await screen.findByTestId("placement-price-l1");
+    return fetchMock;
+  }
+
+  it("defaults every line to fully supplied — no split panel, and the action stays 'בצע הזמנה'", async () => {
+    await openWithLines(LINES);
+    expect(screen.queryByTestId("placement-split-panel")).toBeNull();
+    expect(screen.getByTestId("placement-supply-full-l1").getAttribute("aria-pressed")).toBe("true");
+    expect(screen.getByTestId("placement-submit-po1").textContent).toContain("בצע הזמנה");
+  });
+
+  it("a partial quantity opens the split panel and blocks placing until a reason is chosen", async () => {
+    await openWithLines(LINES);
+    await userEvent.type(screen.getByTestId("placement-price-l1"), "10");
+    await userEvent.selectOptions(screen.getByTestId("placement-terms-po1"), "EOM_30");
+
+    // Supplier only had 3 of the 5.
+    await userEvent.click(screen.getByTestId("placement-supply-partial-l1"));
+    const suppliedInput = screen.getByTestId("placement-supplied-l1");
+    await userEvent.clear(suppliedInput);
+    await userEvent.type(suppliedInput, "3");
+
+    expect(screen.queryByTestId("placement-split-panel")).not.toBeNull();
+    const submit = screen.getByTestId("placement-submit-po1") as HTMLButtonElement;
+    await waitFor(() => expect(submit.disabled).toBe(true));
+    expect(submit.getAttribute("title")).toContain("סיבה");
+
+    await userEvent.selectOptions(
+      screen.getByTestId("placement-split-reason"),
+      "אין במלאי אצל הספק",
+    );
+    await waitFor(() => expect(submit.disabled).toBe(false));
+    // The action renames itself so it can never be mistaken for a full order.
+    expect(submit.textContent).toContain("בצע חלקית");
+  });
+
+  it("rejects a partial quantity that is not strictly between zero and the ordered amount", async () => {
+    await openWithLines(LINES);
+    await userEvent.type(screen.getByTestId("placement-price-l1"), "10");
+    await userEvent.selectOptions(screen.getByTestId("placement-terms-po1"), "EOM_30");
+    await userEvent.click(screen.getByTestId("placement-supply-partial-l1"));
+
+    const suppliedInput = screen.getByTestId("placement-supplied-l1");
+    await userEvent.clear(suppliedInput);
+    await userEvent.type(suppliedInput, "5"); // == ordered_qty
+
+    expect(screen.queryByTestId("placement-supplied-error-l1")).not.toBeNull();
+    const submit = screen.getByTestId("placement-submit-po1") as HTMLButtonElement;
+    await waitFor(() => expect(submit.disabled).toBe(true));
+  });
+
+  it("refuses a placement where nothing is supplied and points at the discard path (backend NOTHING_PLACED)", async () => {
+    const fetchMock = await openWithLines(LINES);
+    await userEvent.type(screen.getByTestId("placement-price-l1"), "10");
+    await userEvent.selectOptions(screen.getByTestId("placement-terms-po1"), "EOM_30");
+    await userEvent.click(screen.getByTestId("placement-supply-none-l1"));
+
+    expect(screen.queryByTestId("placement-nothing-placed")).not.toBeNull();
+    const submit = screen.getByTestId("placement-submit-po1") as HTMLButtonElement;
+    await waitFor(() => expect(submit.disabled).toBe(true));
+    expect(submit.getAttribute("title")).toContain("בטל הזמנה");
+
+    // And it must never reach the place endpoint.
+    await userEvent.click(submit);
+    expect(
+      fetchMock.mock.calls.filter((c) => String(c[0]).includes("/place")).length,
+    ).toBe(0);
+  });
+
+  it("sends unplaced_lines + split_reason, and omits both on a full placement", async () => {
+    const fetchMock = await openWithLines(LINES_TWO);
+    await userEvent.type(screen.getByTestId("placement-price-l1"), "10");
+    await userEvent.type(screen.getByTestId("placement-price-l2"), "20");
+    await userEvent.selectOptions(screen.getByTestId("placement-terms-po1"), "EOM_30");
+
+    // Line 2 not supplied at all → whole line splits off; line 1 still placed.
+    await userEvent.click(screen.getByTestId("placement-supply-none-l2"));
+    await userEvent.selectOptions(
+      screen.getByTestId("placement-split-reason"),
+      "אין במלאי אצל הספק",
+    );
+
+    await userEvent.click(screen.getByTestId("placement-submit-po1"));
+    // Confirm the itemised dialog.
+    const dialog = await screen.findByRole("alertdialog");
+    await userEvent.click(within(dialog).getByRole("button", { name: "בצע חלקית" }));
+
+    const placeCalls = fetchMock.mock.calls.filter((c) =>
+      String(c[0]).includes("/place"),
+    );
+    await waitFor(() => expect(placeCalls.length).toBe(1));
+    const body = JSON.parse(String((placeCalls[0][1] as RequestInit).body));
+    expect(body.unplaced_lines).toEqual([{ po_line_id: "l2", unplaced_qty: 8 }]);
+    expect(body.split_reason).toBe("אין במלאי אצל הספק");
+    // The placed side keeps its own line untouched.
+    expect(body.line_prices).toEqual(
+      expect.arrayContaining([{ po_line_id: "l1", unit_price_net: 10 }]),
+    );
   });
 });

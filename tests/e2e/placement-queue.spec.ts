@@ -145,4 +145,91 @@ test.describe("@mocked placement queue", () => {
       page.getByText(/Cannot read properties of undefined/i),
     ).toHaveCount(0);
   });
+  // -------------------------------------------------------------------------
+  // Tranche 150 — partial placement end to end (backend 0298)
+  // -------------------------------------------------------------------------
+  const LINE2 = {
+    ...LINE,
+    po_line_id: "L2",
+    line_number: 2,
+    component_name: "רכיב שני",
+    component_id: "C2",
+    ordered_qty: "4",
+  };
+
+  test("tranche 150: places only what the supplier confirmed and splits the rest onto a sibling PO", async ({
+    page,
+  }) => {
+    await setFakeRole(page, "planner");
+    await page.route("**/api/purchase-orders?status=APPROVED_TO_ORDER**", (route) =>
+      route.fulfill({ json: { rows: [po()], count: 1 } }),
+    );
+    await page.route("**/api/purchase-order-lines**", (route) =>
+      route.fulfill({ json: { rows: [LINE, LINE2] } }),
+    );
+
+    let placeBody: any = null;
+    await page.route("**/api/purchase-orders/*/place", async (route) => {
+      placeBody = JSON.parse(route.request().postData() ?? "{}");
+      await route.fulfill({
+        json: {
+          po_id: "PO1",
+          po_number: "PO-2026-00001",
+          status: "OPEN",
+          split_po_id: "PO-2026-00099",
+          lines: [],
+        },
+      });
+    });
+
+    await page.goto("/purchase-orders/placement-queue");
+    await page.getByTestId("placement-row-toggle-PO1").click();
+
+    await page.getByTestId("placement-price-L1").fill("12.5");
+    await page.getByTestId("placement-price-L2").fill("30");
+    await page.getByTestId("placement-terms-PO1").selectOption({ index: 1 });
+
+    const submit = page.getByTestId("placement-submit-PO1");
+    await expect(submit).toBeEnabled();
+    // Nothing marked yet → a full placement, no split panel.
+    await expect(page.getByTestId("placement-split-panel")).toHaveCount(0);
+
+    // Supplier had 6 of the 10 on line 1, and none of line 2.
+    await page.getByTestId("placement-supply-partial-L1").click();
+    await page.getByTestId("placement-supplied-L1").fill("6");
+    await page.getByTestId("placement-supply-none-L2").click();
+
+    // Split panel appears and the action is blocked until a reason is given.
+    await expect(page.getByTestId("placement-split-panel")).toBeVisible();
+    await expect(submit).toBeDisabled();
+    await expect(submit).toHaveAttribute("title", /סיבה/);
+
+    await page
+      .getByTestId("placement-split-reason")
+      .selectOption("אין במלאי אצל הספק");
+    await expect(submit).toBeEnabled();
+    await expect(submit).toContainText("בצע חלקית");
+
+    await submit.click();
+
+    // The confirm must itemise both sides — DR-019's P0 was hiding exactly this.
+    const dialog = page.getByRole("alertdialog");
+    await expect(dialog).toContainText("מבוצע כעת");
+    await expect(dialog).toContainText("לא סופק");
+    await expect(dialog).toContainText("אין במלאי אצל הספק");
+    await dialog.getByRole("button", { name: "בצע חלקית" }).click();
+
+    // Payload: only the unsupplied amounts, plus the reason.
+    await expect(page.getByTestId("placement-queue-success-split")).toBeVisible();
+    expect(placeBody.split_reason).toBe("אין במלאי אצל הספק");
+    expect(placeBody.unplaced_lines).toEqual([
+      { po_line_id: "L1", unplaced_qty: 4 },
+      { po_line_id: "L2", unplaced_qty: 4 },
+    ]);
+
+    // And the banner names the sibling order so the remainder is never lost.
+    await expect(
+      page.getByTestId("placement-queue-success-split-link"),
+    ).toContainText("PO-2026-00099");
+  });
 });
