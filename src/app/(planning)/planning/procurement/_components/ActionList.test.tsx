@@ -258,7 +258,7 @@ describe("ActionList", () => {
       />,
     );
     const chip = screen.getByTestId("procurement-recount-stale");
-    // Tranche 152: re-pointed from /stock/physical-count. That screen counts a
+    // Tranche 153: re-pointed from /stock/physical-count. That screen counts a
     // single item and received no parameters, so the chip dead-ended on a blank
     // form; bulk-count is where the Thursday walk and the manual marks live.
     expect(chip.getAttribute("href")).toBe("/inventory/bulk-count");

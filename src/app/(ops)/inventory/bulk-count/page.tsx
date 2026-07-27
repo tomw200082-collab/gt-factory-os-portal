@@ -52,6 +52,7 @@ import { cn } from "@/lib/cn";
 import {
   EMPTY_FILTERS,
   STALE_DAYS,
+  activeFilterCount,
   anyFilterActive,
   buildSections,
   isStale,
@@ -93,7 +94,7 @@ async function fetchStock(itemType: "FG" | "RM_PKG"): Promise<BulkStockRow[]> {
   return Array.isArray(data) ? data : (data.rows ?? []);
 }
 
-/** component_ids with an open manual count mark (tranche 152). Drives the
+/** component_ids with an open manual count mark (tranche 153). Drives the
  *  Thursday-list filter: FG is always counted in full, RM/PKG only where the
  *  owner marked it on the purchasing page. Marks self-clear server-side once
  *  the component is counted, so this shrinks as the walk progresses. */
@@ -172,6 +173,7 @@ function CountRow({
   phase,
   error,
   canReview,
+  marked,
   onSubmit,
   onRecount,
   registerInput,
@@ -182,6 +184,10 @@ function CountRow({
   error: string | undefined;
   /** True when the session role may open the planner approval surface. */
   canReview: boolean;
+  /** This component carries an open manual count mark. Shown on every view,
+   *  not just inside the Thursday list, so "why is this here / did my mark
+   *  land" is answerable without toggling the mode. */
+  marked: boolean;
   onSubmit: (row: BulkCountRow, qty: string, idemKey: string) => void;
   onRecount: (rowKey: string) => void;
   registerInput: (rowKey: string, el: HTMLInputElement | null) => void;
@@ -257,6 +263,15 @@ function CountRow({
           </div>
           <div className="mt-0.5 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-2xs text-fg-subtle">
             <span className="truncate font-mono">{row.item_id}</span>
+            {marked ? (
+              <span
+                className="inline-flex items-center gap-1 rounded-full bg-accent-softer px-1.5 font-medium text-accent"
+                title="Marked for counting on the purchasing page. The mark clears itself once this is counted."
+                data-testid={`bulk-count-marked-${row.key}`}
+              >
+                marked
+              </span>
+            ) : null}
             {row.never_counted ? (
               <span className="italic text-warning-fg">never counted</span>
             ) : (
@@ -516,16 +531,10 @@ export default function BulkCountPage() {
   const [filtersOpen, setFiltersOpen] = useState(false);
   const searchRef = useRef<HTMLInputElement>(null);
 
-  // Number of active filter dimensions (search excluded — it is always
-  // visible in the sticky header). Drives the badge on the Filters button.
-  const activeFilterCount =
-    (filters.type ? 1 : 0) +
-    (filters.productGroups.length > 0 ? 1 : 0) +
-    (filters.materialGroups.length > 0 ? 1 : 0) +
-    (filters.usedBy ? 1 : 0) +
-    (filters.view ? 1 : 0) +
-    (filters.neverCountedOnly ? 1 : 0) +
-    (filters.staleOnly ? 1 : 0);
+  // Badge on the Filters button. Pure — and therefore unit-tested — in
+  // _lib/bulk-count.ts, so a newly added dimension cannot silently go
+  // uncounted here.
+  const activeFilters = activeFilterCount(filters);
 
   useEffect(() => {
     function onKey(e: KeyboardEvent) {
@@ -597,14 +606,19 @@ export default function BulkCountPage() {
     return rows.filter((r) => rowMatches(r, f, counted, Date.now(), markedIds));
   }, [rows, filters, counted, markedIds]);
 
-  // Size of the Thursday walk, independent of every other filter — the chip
-  // has to answer "how long is this going to take" before it is switched on.
-  const thursdayCount = useMemo(
-    () =>
-      rows.filter((r) => r.item_type === "FG" || markedIds.has(r.item_id))
-        .length,
-    [rows, markedIds],
-  );
+  // Size and composition of the Thursday walk, independent of every other
+  // filter. The control has to answer "how long is this going to take" and
+  // "did the marks actually arrive" BEFORE it is switched on — a single total
+  // hides the case where zero components were marked this week.
+  const thursday = useMemo(() => {
+    let fg = 0;
+    let marked = 0;
+    for (const r of rows) {
+      if (r.item_type === "FG") fg += 1;
+      else if (markedIds.has(r.item_id)) marked += 1;
+    }
+    return { fg, marked, total: fg + marked };
+  }, [rows, markedIds]);
 
   const pgCounts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -1034,7 +1048,7 @@ export default function BulkCountPage() {
             aria-controls="bulk-count-filter-tray"
             className={cn(
               "btn h-11 shrink-0 sm:h-10",
-              (filtersOpen || activeFilterCount > 0) && "border-accent/50",
+              (filtersOpen || activeFilters > 0) && "border-accent/50",
             )}
             data-testid="bulk-count-filters-toggle"
           >
@@ -1043,13 +1057,78 @@ export default function BulkCountPage() {
                 <path d="M2 4h12M4.5 8h7M7 12h2" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
               </svg>
               Filters
-              {activeFilterCount > 0 ? (
+              {activeFilters > 0 ? (
                 <span className="rounded-full bg-accent-softer px-1.5 py-0 text-2xs font-semibold tabular-nums text-accent">
-                  {activeFilterCount}
+                  {activeFilters}
                 </span>
               ) : null}
             </span>
           </button>
+        </div>
+
+        {/* ===== Thursday count — the week's actual walk, one tap.
+              Lives in the ALWAYS-VISIBLE sticky header rather than the
+              collapsed filter tray: on Thursday morning this is the first and
+              usually only control the operator touches, and a preset hidden
+              behind a disclosure may as well not exist. Everything else in the
+              tray still composes on top of it (type, areas, sort, remaining).
+
+              It states its own composition — finished goods are counted in
+              full by policy, components only where the owner marked them — so
+              "0 marked" is visible BEFORE the walk starts rather than being
+              discovered as a suspiciously short list. ===== */}
+        <div className="mt-2 flex flex-wrap items-center gap-x-2 gap-y-1">
+          <button
+            type="button"
+            aria-pressed={filters.thursdayList}
+            onClick={() => patch({ thursdayList: !filters.thursdayList })}
+            className={cn(
+              "inline-flex min-h-[2.25rem] items-center gap-1.5 rounded-full border px-3 text-xs font-semibold transition",
+              "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
+              filters.thursdayList
+                ? "border-accent bg-accent text-accent-fg shadow-sm"
+                : "border-border bg-bg text-fg-muted hover:border-accent/50 hover:text-fg",
+            )}
+            data-testid="bulk-count-thursday"
+          >
+            <svg className="h-3.5 w-3.5" viewBox="0 0 16 16" fill="none" aria-hidden="true">
+              <rect x="2" y="3" width="12" height="11" rx="2" stroke="currentColor" strokeWidth="1.6" />
+              <path d="M2 6.5h12M5.5 2v2M10.5 2v2" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+            </svg>
+            Thursday count
+            <span className="tabular-nums opacity-80">{thursday.total}</span>
+          </button>
+
+          {marksQuery.isError ? (
+            <span
+              className="text-2xs font-medium text-warning-fg"
+              role="status"
+              data-testid="bulk-count-thursday-marks-error"
+            >
+              Marked components unavailable — showing finished goods only.{" "}
+              <button
+                type="button"
+                onClick={() => void marksQuery.refetch()}
+                className="underline hover:no-underline"
+              >
+                Retry
+              </button>
+            </span>
+          ) : (
+            <span className="text-2xs text-fg-subtle" data-testid="bulk-count-thursday-breakdown">
+              {thursday.fg} finished goods
+              <span className="text-fg-faint"> + </span>
+              <span className={cn(thursday.marked === 0 && "text-warning-fg")}>
+                {thursday.marked} marked
+              </span>
+              {thursday.marked === 0 ? (
+                <span className="text-fg-faint">
+                  {" "}
+                  — nothing marked on the purchasing page yet
+                </span>
+              ) : null}
+            </span>
+          )}
         </div>
       </div>
 
@@ -1190,31 +1269,6 @@ export default function BulkCountPage() {
               {label}
             </button>
           ))}
-          <span className="mx-1 h-4 w-px bg-border" aria-hidden />
-          {/* Tranche 152 — the Thursday walk in one control. FG in full plus
-              only the RM/PKG the owner marked on the purchasing page; the
-              marks self-clear as each component is counted. Accent, not
-              warning: this is the normal weekly routine, not an alarm. */}
-          <button
-            type="button"
-            aria-pressed={filters.thursdayList}
-            onClick={() => patch({ thursdayList: !filters.thursdayList })}
-            className={cn(
-              "chip transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
-              filters.thursdayList && "chip-accent",
-            )}
-            title={
-              marksQuery.isError
-                ? "Thursday count: all finished goods, plus the raw materials and packaging marked on the purchasing page. The marked list could not be loaded, so only finished goods are shown."
-                : `Thursday count: all finished goods, plus the ${markedIds.size} raw material/packaging item${markedIds.size === 1 ? "" : "s"} marked on the purchasing page.`
-            }
-            data-testid="bulk-count-thursday"
-          >
-            Thursday count
-            <span className="ms-1 tabular-nums opacity-70">
-              {thursdayCount}
-            </span>
-          </button>
           <span className="mx-1 h-4 w-px bg-border" aria-hidden />
           <button
             type="button"
@@ -1406,6 +1460,7 @@ export default function BulkCountPage() {
                         phase={rowPhase[row.key]}
                         error={rowError[row.key]}
                         canReview={canReview}
+                        marked={markedIds.has(row.item_id)}
                         onSubmit={(r, q, k) => void submitRow(r, q, k)}
                         onRecount={recountRow}
                         registerInput={registerInput}

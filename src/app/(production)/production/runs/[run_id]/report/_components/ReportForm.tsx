@@ -36,10 +36,16 @@ import { t } from "../../../../_lib/copy";
 import { isRunTerminal, runDisplayName, runStatusMeta } from "../../../../_lib/runs";
 import type { PickListResponse } from "../../../../_lib/types";
 import {
+  buildConsumptionDecisions,
   buildReportBody,
+  explanationsSatisfied,
   isOutputValid,
   type ReportSuccess,
 } from "../_lib/report";
+import {
+  ConsumptionSummary,
+  useConsumptionPreview,
+} from "./ConsumptionSummary";
 
 function newKey(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -116,6 +122,9 @@ export function ReportForm({ runId }: { runId: string }) {
   // works one-handed on a phone and a dialog here would be one more thing to
   // dismiss; the submit bar itself becomes the question.
   const [confirming, setConfirming] = useState(false);
+  // Decisions taken on the summary step, keyed "source:component_id".
+  const [confirmedNegatives, setConfirmedNegatives] = useState<Record<string, boolean>>({});
+  const [explanations, setExplanations] = useState<Record<string, string>>({});
 
   const output = outputEdit ?? plannedOutput(data);
   const outputOk = isOutputValid(output);
@@ -126,7 +135,17 @@ export function ReportForm({ runId }: { runId: string }) {
   function changeOutput(v: string): void {
     setOutput(v);
     setConfirming(false);
+    // The summary was computed for the old number, so the decisions taken on it
+    // no longer describe anything. Keeping them would carry a confirmation the
+    // operator gave about a different quantity.
+    setConfirmedNegatives({});
+    setExplanations({});
   }
+
+  // Only fetched once the operator has asked to finish — this is the confirm
+  // step, not something to compute on every keystroke.
+  const preview = useConsumptionPreview(runId, output, confirming && outputOk);
+  const canPost = explanationsSatisfied(preview.data?.lines, explanations);
 
   const report = useMutation<ReportSuccess, Error>({
     mutationFn: async () => {
@@ -134,6 +153,11 @@ export function ReportForm({ runId }: { runId: string }) {
       const body = buildReportBody({
         output,
         scrap,
+        consumptionDecisions: buildConsumptionDecisions(
+          preview.data?.lines ?? [],
+          confirmedNegatives,
+          explanations,
+        ),
         outputUom: data.uom,
         qcBrix,
         qcPh,
@@ -432,6 +456,9 @@ export function ReportForm({ runId }: { runId: string }) {
             setConfirming(true);
             return;
           }
+          // A far-off collected quantity has to be explained before the run
+          // closes. Going below zero does not block — it has a safe default.
+          if (!canPost) return;
           report.mutate();
         }}
         className="space-y-4"
@@ -685,6 +712,20 @@ export function ReportForm({ runId }: { runId: string }) {
           {/* The confirm names the product and the number, so the operator
               checks the figure rather than the sentence. */}
           {confirming && !report.isPending ? (
+            <ConsumptionSummary
+              preview={preview.data}
+              isLoading={preview.isLoading}
+              isError={preview.isError}
+              confirmedNegatives={confirmedNegatives}
+              explanations={explanations}
+              onConfirmNegative={(k, v) =>
+                setConfirmedNegatives((prev) => ({ ...prev, [k]: v }))
+              }
+              onExplain={(k, v) => setExplanations((prev) => ({ ...prev, [k]: v }))}
+            />
+          ) : null}
+
+          {confirming && !report.isPending ? (
             <div
               className="mb-2 rounded-md border border-warning/50 bg-warning-softer px-4 py-3 text-center"
               role="status"
@@ -707,14 +748,20 @@ export function ReportForm({ runId }: { runId: string }) {
 
           <button
             type="submit"
-            disabled={!outputOk || report.isPending}
-            aria-disabled={!outputOk || report.isPending}
+            disabled={!outputOk || report.isPending || !canPost}
+            aria-disabled={!outputOk || report.isPending || !canPost}
             aria-describedby={!outputOk ? "report-output-hint" : "report-stock-note"}
-            title={!outputOk ? t("report_need_output") : undefined}
+            title={
+              !outputOk
+                ? t("report_need_output")
+                : !canPost
+                  ? t("summary_explain_blocked")
+                  : undefined
+            }
             data-testid="report-submit"
             className={cn(
               "btn btn-lg w-full gap-2 text-base",
-              outputOk
+              outputOk && canPost
                 ? "btn-primary"
                 : "cursor-not-allowed border-border bg-bg-subtle text-fg-subtle hover:bg-bg-subtle",
             )}
@@ -727,7 +774,11 @@ export function ReportForm({ runId }: { runId: string }) {
             ) : (
               <>
                 <CheckCircle2 className="h-5 w-5" strokeWidth={2.5} aria-hidden />
-                {confirming ? t("report_confirm_yes") : t("report_submit")}
+                {!canPost
+                  ? t("summary_explain_blocked")
+                  : confirming
+                    ? t("report_confirm_yes")
+                    : t("report_submit")}
               </>
             )}
           </button>

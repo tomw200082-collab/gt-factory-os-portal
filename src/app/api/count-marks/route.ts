@@ -1,7 +1,7 @@
 import { proxyRequest } from "@/lib/api-proxy";
 
 // ---------------------------------------------------------------------------
-// /api/count-marks — proxy to Fastify (migration 0299, tranche 152)
+// /api/count-marks — proxy to Fastify (migration 0299, tranche 153)
 //   GET  /api/v1/queries/stock/count-marks    — open manual RM/PKG count marks
 //   POST /api/v1/mutations/stock/count-marks  — set/clear one component's mark
 //

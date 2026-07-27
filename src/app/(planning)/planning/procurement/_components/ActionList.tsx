@@ -74,13 +74,13 @@ import {
 // /planning/procurement since Tranche 045, so link there directly.
 const FALLBACK_OPEN_HREF = "/planning/procurement";
 
-// The counting surface a "לספור קודם" chip hands off to. Tranche 152 re-pointed
+// The counting surface a "לספור קודם" chip hands off to. Tranche 153 re-pointed
 // this from /stock/physical-count (single-item, and it carried no parameters, so
 // the operator landed on a blank screen with nothing to act on) to the bulk
 // surface that actually holds the Thursday walk and the manual marks.
 const COUNT_HREF = "/inventory/bulk-count";
 
-// --- manual count marks (tranche 152, migration 0299) ----------------------
+// --- manual count marks (tranche 153, migration 0299) ----------------------
 // The auto "לספור קודם" flag is only a hint about what DESERVES counting. What
 // actually reaches the operator's Thursday list is what gets marked here by
 // hand — policy per Tom 2026-07-27: FG is counted in full and needs no mark,
@@ -535,7 +535,7 @@ function ProcurementRow({
                   </div>
                   <CoverageCaption trace={l.coverage_trace} />
                   <LineTrustCaption line={l} today={today} />
-                  {/* Tranche 152 — RM/PKG only. An FG line has no
+                  {/* Tranche 153 — RM/PKG only. An FG line has no
                       component_id and needs no mark: finished goods are
                       counted in full every Thursday regardless. */}
                   {l.component_id && (

@@ -1,4 +1,4 @@
-# Tranche 152 — Thursday count list: manual RM/PKG marks reach BULK COUNT
+# Tranche 153 — Thursday count list: manual RM/PKG marks reach BULK COUNT
 
 **Status:** built — all gates green
 **Origin:** Tom, 2026-07-27, while revising the meeting deck: "אמנם יש לי איפה לסמן את זה בדף הרכש אבל איך זה בא לידי ביטוי בספירה? אני רוצה שזה ייכנס לדף של BULK COUNT."
@@ -65,6 +65,15 @@ stays unwired — out of scope here, still worth a decision later.
 - **P4 — nothing about stock truth changes.** No ledger write, no projection, no anchor.
   A mark is a planning-side sticky note.
 
+## Renumbered 152 → 153
+
+Opened as 152; while this branch was in review a **different** tranche also numbered 152
+(`152-consumption-summary-before-finish`) merged to `main`, colliding on the number, on
+`registry.md`, and on `_active.txt`. Resolved by renumbering **this** tranche to 153 (the
+merged one keeps 152, since it landed first): file renamed, `_active.txt` → 153, both
+registry entries kept, and the `tranche 152` markers in this tranche's own source comments
+and tests updated — leaving the other tranche's `copy.ts` markers untouched.
+
 ## Manifest (files that may be touched)
 manifest:
 - src/app/api/count-marks/route.ts
@@ -109,8 +118,36 @@ still safe because nothing else reads them and no ledger state depends on them.
 - `bulk-count.ts` — new `thursdayList` filter. FG always passes; RM/PKG passes only
   when its `component_id` has an open mark. Composes with every existing filter.
 - `bulk-count/page.tsx` — fetches the marks (`["count-marks"]`, shared cache) and
-  adds a **"Thursday count · N"** chip carrying the whole walk. English, per COPY-005 —
+  adds a **"Thursday count · N"** control carrying the whole walk. English, per COPY-005 —
   this surface is not on the Hebrew whitelist.
+
+### UX pass on the Thursday list (Tom, same session: "תוודא שהUX בספירה של חמישי מושלם")
+
+The first cut put the control in the filter tray and stopped there. Reviewing it against the
+rest of the page turned up four real gaps, all fixed before merge:
+
+1. **The control was invisible.** The filter tray is collapsed by default (`filtersOpen`
+   starts `false`), so on Thursday morning the operator would have had to open *Filters*
+   before finding the one control the whole day is about. Moved into the **always-visible
+   sticky header**, below search — a preset hidden behind a disclosure may as well not exist.
+   Everything in the tray (type, areas, used-by, sort, remaining/counted) still composes on
+   top of it.
+2. **It did not count as an active filter.** `activeFilterCount` never registered
+   `thursdayList`, so the mode narrowed the walk while the Filters button showed **no badge**
+   — the list silently lied about being complete. Fixed, and the whole function was moved out
+   of the page into `_lib/bulk-count.ts` so every dimension is now unit-tested; a future
+   filter that forgets to register there fails a test instead of shipping.
+3. **"0 marked" was undetectable.** A single total hid the case where nothing was marked that
+   week — the operator would only discover it as a suspiciously short list mid-walk. The
+   control now states its composition (`N finished goods + M marked`) and calls out
+   *"nothing marked on the purchasing page yet"* in warning tone **before** the walk starts.
+4. **A failed marks fetch was silent.** The FG-only degradation was correct but invisible
+   (tooltip only). Now an inline `role="status"` line — *"Marked components unavailable —
+   showing finished goods only"* — with a **Retry**.
+
+Also: marked components now carry a small **`marked`** badge on their row in *every* view,
+not just inside the Thursday list, so "did my mark land?" is answerable from the purchasing
+page's own surface without toggling the mode.
 - `ActionList.tsx` — per-line **"סמן לספירה" / "מסומן לספירה"** toggle on every line
   with a `component_id` (Hebrew: `/planning/procurement` is whitelisted). FG lines get
   no toggle — nothing to mark.
@@ -123,10 +160,13 @@ Actual evidence, run 2026-07-27:
 
 - **Portal** `npx tsc --noEmit` → **0 errors**.
 - **Portal** `npx eslint` over the three changed source paths → **clean**.
-- **Portal** `npx vitest run` → **131 files / 1104 tests green** (was 1098 at tranche 151;
-  +6 new `thursdayList` cases: FG always kept, marked RM/PKG kept, unmarked dropped,
-  FG-only fallback when the marks fetch fails, composition with type/search, and
-  `anyFilterActive`).
+- **Portal** `npx vitest run` → **131 files / 1115 tests green**. New here: 6 `thursdayList`
+  cases (FG always kept, marked RM/PKG kept, unmarked dropped, FG-only fallback when the
+  marks fetch fails, composition with type/search, counted as active) plus 2
+  `activeFilterCount` cases (zero-and-search-excluded; every non-search dimension counted
+  exactly once and additively) — the latter a direct regression guard on gap 2 above.
+  The remaining delta over tranche 151's 1098 comes from tranche 152, merged into this
+  branch during conflict resolution.
 - **Portal** `ActionList.test.tsx` L9 updated to assert the new `COUNT_HREF` — it had
   pinned the dead-end destination this tranche removes.
 - **Backend** `npx tsc --noEmit` → **0 errors** repo-wide.

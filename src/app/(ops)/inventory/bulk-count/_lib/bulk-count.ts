@@ -142,7 +142,7 @@ export interface BulkFilters {
   neverCountedOnly: boolean;
   /** Keep only items whose last movement is ≥ STALE_DAYS old. */
   staleOnly: boolean;
-  /** The Thursday count list (tranche 152): every FG item, plus only those
+  /** The Thursday count list (tranche 153): every FG item, plus only those
    *  RM/PKG components the owner marked by hand on the purchasing page.
    *  Encodes the counting policy itself, so the operator gets the whole walk
    *  from one control instead of assembling it out of type + group filters. */
@@ -172,6 +172,29 @@ export function anyFilterActive(f: BulkFilters): boolean {
     f.neverCountedOnly ||
     f.staleOnly ||
     f.thursdayList
+  );
+}
+
+/**
+ * Number of active filter DIMENSIONS, for the badge on the Filters button.
+ * Search is excluded — it lives in the sticky header and is always visible,
+ * so counting it would double-report something the operator can already see.
+ *
+ * Lives here rather than inline in the page so every dimension is covered by a
+ * test: a new filter that forgets to register here silently under-reports, and
+ * the operator sees an unbadged Filters button while a filter is quietly
+ * narrowing their list.
+ */
+export function activeFilterCount(f: BulkFilters): number {
+  return (
+    (f.type ? 1 : 0) +
+    (f.productGroups.length > 0 ? 1 : 0) +
+    (f.materialGroups.length > 0 ? 1 : 0) +
+    (f.usedBy ? 1 : 0) +
+    (f.view ? 1 : 0) +
+    (f.neverCountedOnly ? 1 : 0) +
+    (f.staleOnly ? 1 : 0) +
+    (f.thursdayList ? 1 : 0)
   );
 }
 

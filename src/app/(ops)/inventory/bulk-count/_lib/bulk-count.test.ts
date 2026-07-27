@@ -4,6 +4,7 @@ import {
   EMPTY_FILTERS,
   STALE_DAYS,
   STORAGE_PREFIX,
+  activeFilterCount,
   anyFilterActive,
   buildSections,
   compareRows,
@@ -90,7 +91,7 @@ describe("rowMatches", () => {
     expect(rowMatches(bulkRow(), EMPTY_FILTERS, {}, NOW)).toBe(true);
   });
 
-  // --- Thursday count list (tranche 152) ------------------------------------
+  // --- Thursday count list (tranche 153) ------------------------------------
   // Policy (Tom 2026-07-27): FG in full every week, RM/PKG only where marked.
   describe("thursdayList", () => {
     const f = { ...EMPTY_FILTERS, thursdayList: true };
@@ -133,6 +134,41 @@ describe("rowMatches", () => {
     it("counts as an active filter", () => {
       expect(anyFilterActive(f)).toBe(true);
       expect(anyFilterActive(EMPTY_FILTERS)).toBe(false);
+      // ...and is badged. Regression guard: the Thursday list was initially
+      // added to rowMatches without registering here, so the mode narrowed the
+      // walk while the Filters button showed no badge at all.
+      expect(activeFilterCount(f)).toBe(1);
+    });
+  });
+
+  describe("activeFilterCount", () => {
+    it("is zero for empty filters and excludes search", () => {
+      expect(activeFilterCount(EMPTY_FILTERS)).toBe(0);
+      // Search lives in the always-visible sticky header, so badging it would
+      // double-report something the operator can already see.
+      expect(activeFilterCount({ ...EMPTY_FILTERS, search: "mint" })).toBe(0);
+    });
+
+    it("counts every non-search dimension exactly once", () => {
+      const each: Array<Partial<BulkFilters>> = [
+        { type: "FG" },
+        { productGroups: ["teas"] },
+        { materialGroups: ["syrups"] },
+        { usedBy: "cocktails" },
+        { view: "remaining" },
+        { neverCountedOnly: true },
+        { staleOnly: true },
+        { thursdayList: true },
+      ];
+      for (const dim of each) {
+        expect(activeFilterCount({ ...EMPTY_FILTERS, ...dim })).toBe(1);
+      }
+      // And they add up rather than saturating.
+      expect(
+        activeFilterCount(
+          each.reduce<BulkFilters>((acc, d) => ({ ...acc, ...d }), EMPTY_FILTERS),
+        ),
+      ).toBe(each.length);
     });
   });
 
