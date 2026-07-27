@@ -4,6 +4,7 @@ import {
   EMPTY_FILTERS,
   STALE_DAYS,
   STORAGE_PREFIX,
+  activeFilterCount,
   anyFilterActive,
   buildSections,
   compareRows,
@@ -88,6 +89,87 @@ describe("rowMatches", () => {
 
   it("passes everything with empty filters", () => {
     expect(rowMatches(bulkRow(), EMPTY_FILTERS, {}, NOW)).toBe(true);
+  });
+
+  // --- Thursday count list (tranche 153) ------------------------------------
+  // Policy (Tom 2026-07-27): FG in full every week, RM/PKG only where marked.
+  describe("thursdayList", () => {
+    const f = { ...EMPTY_FILTERS, thursdayList: true };
+    const fg = bulkRow({ item_type: "FG", item_id: "FG-mojito" });
+    const markedRm = bulkRow({ item_type: "RM", item_id: "RM-mint" });
+    const unmarkedRm = bulkRow({ item_type: "RM", item_id: "RM-sugar" });
+    const markedPkg = bulkRow({ item_type: "PKG", item_id: "PKG-bottle" });
+    const marks = new Set(["RM-mint", "PKG-bottle"]);
+
+    it("keeps every FG row regardless of marks", () => {
+      expect(rowMatches(fg, f, {}, NOW, marks)).toBe(true);
+      expect(rowMatches(fg, f, {}, NOW, new Set())).toBe(true);
+    });
+
+    it("keeps marked RM and PKG rows", () => {
+      expect(rowMatches(markedRm, f, {}, NOW, marks)).toBe(true);
+      expect(rowMatches(markedPkg, f, {}, NOW, marks)).toBe(true);
+    });
+
+    it("drops unmarked RM/PKG rows", () => {
+      expect(rowMatches(unmarkedRm, f, {}, NOW, marks)).toBe(false);
+    });
+
+    it("falls back to FG-only when no marks are supplied", () => {
+      // The marks fetch failing must never silently widen the list back to
+      // every component — it degrades to the FG half, which is still correct.
+      expect(rowMatches(markedRm, f, {}, NOW)).toBe(false);
+      expect(rowMatches(fg, f, {}, NOW)).toBe(true);
+    });
+
+    it("still composes with the other filters", () => {
+      const narrowed = { ...f, type: "RM" as const };
+      expect(rowMatches(fg, narrowed, {}, NOW, marks)).toBe(false);
+      expect(rowMatches(markedRm, narrowed, {}, NOW, marks)).toBe(true);
+      expect(
+        rowMatches(markedRm, { ...f, search: "sugar" }, {}, NOW, marks),
+      ).toBe(false);
+    });
+
+    it("counts as an active filter", () => {
+      expect(anyFilterActive(f)).toBe(true);
+      expect(anyFilterActive(EMPTY_FILTERS)).toBe(false);
+      // ...and is badged. Regression guard: the Thursday list was initially
+      // added to rowMatches without registering here, so the mode narrowed the
+      // walk while the Filters button showed no badge at all.
+      expect(activeFilterCount(f)).toBe(1);
+    });
+  });
+
+  describe("activeFilterCount", () => {
+    it("is zero for empty filters and excludes search", () => {
+      expect(activeFilterCount(EMPTY_FILTERS)).toBe(0);
+      // Search lives in the always-visible sticky header, so badging it would
+      // double-report something the operator can already see.
+      expect(activeFilterCount({ ...EMPTY_FILTERS, search: "mint" })).toBe(0);
+    });
+
+    it("counts every non-search dimension exactly once", () => {
+      const each: Array<Partial<BulkFilters>> = [
+        { type: "FG" },
+        { productGroups: ["teas"] },
+        { materialGroups: ["syrups"] },
+        { usedBy: "cocktails" },
+        { view: "remaining" },
+        { neverCountedOnly: true },
+        { staleOnly: true },
+        { thursdayList: true },
+      ];
+      for (const dim of each) {
+        expect(activeFilterCount({ ...EMPTY_FILTERS, ...dim })).toBe(1);
+      }
+      // And they add up rather than saturating.
+      expect(
+        activeFilterCount(
+          each.reduce<BulkFilters>((acc, d) => ({ ...acc, ...d }), EMPTY_FILTERS),
+        ),
+      ).toBe(each.length);
+    });
   });
 
   it("filters by item type", () => {

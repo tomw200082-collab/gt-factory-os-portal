@@ -142,6 +142,11 @@ export interface BulkFilters {
   neverCountedOnly: boolean;
   /** Keep only items whose last movement is ≥ STALE_DAYS old. */
   staleOnly: boolean;
+  /** The Thursday count list (tranche 153): every FG item, plus only those
+   *  RM/PKG components the owner marked by hand on the purchasing page.
+   *  Encodes the counting policy itself, so the operator gets the whole walk
+   *  from one control instead of assembling it out of type + group filters. */
+  thursdayList: boolean;
 }
 
 export const EMPTY_FILTERS: BulkFilters = {
@@ -153,6 +158,7 @@ export const EMPTY_FILTERS: BulkFilters = {
   view: "",
   neverCountedOnly: false,
   staleOnly: false,
+  thursdayList: false,
 };
 
 export function anyFilterActive(f: BulkFilters): boolean {
@@ -164,9 +170,37 @@ export function anyFilterActive(f: BulkFilters): boolean {
     f.usedBy !== "" ||
     f.view !== "" ||
     f.neverCountedOnly ||
-    f.staleOnly
+    f.staleOnly ||
+    f.thursdayList
   );
 }
+
+/**
+ * Number of active filter DIMENSIONS, for the badge on the Filters button.
+ * Search is excluded — it lives in the sticky header and is always visible,
+ * so counting it would double-report something the operator can already see.
+ *
+ * Lives here rather than inline in the page so every dimension is covered by a
+ * test: a new filter that forgets to register here silently under-reports, and
+ * the operator sees an unbadged Filters button while a filter is quietly
+ * narrowing their list.
+ */
+export function activeFilterCount(f: BulkFilters): number {
+  return (
+    (f.type ? 1 : 0) +
+    (f.productGroups.length > 0 ? 1 : 0) +
+    (f.materialGroups.length > 0 ? 1 : 0) +
+    (f.usedBy ? 1 : 0) +
+    (f.view ? 1 : 0) +
+    (f.neverCountedOnly ? 1 : 0) +
+    (f.staleOnly ? 1 : 0) +
+    (f.thursdayList ? 1 : 0)
+  );
+}
+
+/** Empty marked-component set — module-level so the `rowMatches` default does
+ *  not allocate a new Set per row. */
+const NO_MARKS: ReadonlySet<string> = new Set<string>();
 
 /**
  * Group-selection semantics: the two chip rows form ONE selection. While
@@ -179,8 +213,18 @@ export function rowMatches(
   f: BulkFilters,
   counted: CountedMap,
   nowMs: number = Date.now(),
+  /** component_ids with an open manual count mark (`/api/count-marks`). Only
+   *  consulted by the `thursdayList` filter. */
+  marked: ReadonlySet<string> = NO_MARKS,
 ): boolean {
   if (f.type && row.item_type !== f.type) return false;
+
+  // Thursday list: FG is counted in full (no mark exists or is needed), RM/PKG
+  // only where the owner marked it. Applied before the group/search filters so
+  // narrowing still works on top of the policy list.
+  if (f.thursdayList && row.item_type !== "FG" && !marked.has(row.item_id)) {
+    return false;
+  }
 
   const anyGroupSelected =
     f.productGroups.length > 0 || f.materialGroups.length > 0;

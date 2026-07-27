@@ -26,6 +26,7 @@
 // ---------------------------------------------------------------------------
 
 import { useMemo, useState } from "react";
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import Link from "next/link";
 import * as Tooltip from "@radix-ui/react-tooltip";
 import {
@@ -73,8 +74,115 @@ import {
 // /planning/procurement since Tranche 045, so link there directly.
 const FALLBACK_OPEN_HREF = "/planning/procurement";
 
-// The counting surface a "לספור קודם" chip hands off to.
-const COUNT_HREF = "/stock/physical-count";
+// The counting surface a "לספור קודם" chip hands off to. Tranche 153 re-pointed
+// this from /stock/physical-count (single-item, and it carried no parameters, so
+// the operator landed on a blank screen with nothing to act on) to the bulk
+// surface that actually holds the Thursday walk and the manual marks.
+const COUNT_HREF = "/inventory/bulk-count";
+
+// --- manual count marks (tranche 153, migration 0299) ----------------------
+// The auto "לספור קודם" flag is only a hint about what DESERVES counting. What
+// actually reaches the operator's Thursday list is what gets marked here by
+// hand — policy per Tom 2026-07-27: FG is counted in full and needs no mark,
+// RM/PKG is counted only where it was marked.
+//
+// Marks self-clear server-side once the component is counted, so there is
+// nothing to un-tick afterwards.
+
+async function fetchOpenMarks(): Promise<Set<string>> {
+  const res = await fetch("/api/count-marks", {
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) throw new Error(`COUNT_MARKS_${res.status}`);
+  const data = await res.json();
+  const marks = Array.isArray(data) ? data : (data.marks ?? []);
+  return new Set<string>(
+    marks
+      .map((m: { component_id?: unknown }) =>
+        typeof m?.component_id === "string" ? m.component_id : null,
+      )
+      .filter((id: string | null): id is string => id !== null),
+  );
+}
+
+/** Per-line "mark this for Thursday's count" toggle. Rendered only for lines
+ *  that carry a component_id — an FG line has nothing to mark, since finished
+ *  goods are counted in full every week regardless. */
+function CountMarkToggle({
+  componentId,
+  lineLabel,
+}: {
+  componentId: string;
+  lineLabel: string;
+}): JSX.Element {
+  const queryClient = useQueryClient();
+  // Same query key as the bulk-count surface: one fetch, shared cache.
+  const marksQuery = useQuery({
+    queryKey: ["count-marks"],
+    queryFn: fetchOpenMarks,
+    staleTime: 60_000,
+  });
+  const isMarked = marksQuery.data?.has(componentId) ?? false;
+
+  const mutation = useMutation({
+    mutationFn: async (next: boolean) => {
+      const res = await fetch("/api/count-marks", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Accept: "application/json",
+        },
+        body: JSON.stringify({ component_id: componentId, marked: next }),
+      });
+      if (!res.ok) throw new Error(`COUNT_MARK_SAVE_${res.status}`);
+      return res.json();
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["count-marks"] });
+    },
+  });
+
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        aria-pressed={isMarked}
+        disabled={mutation.isPending || marksQuery.isLoading}
+        onClick={() => mutation.mutate(!isMarked)}
+        title={
+          isMarked
+            ? `${lineLabel} מסומן לספירה של יום חמישי. לחיצה מבטלת את הסימון.`
+            : `סמן את ${lineLabel} לספירה של יום חמישי. הסימון יורד מעצמו אחרי שהפריט נספר.`
+        }
+        className={cn(
+          "inline-flex min-h-[1.75rem] items-center gap-1 rounded-md px-2 text-3xs font-semibold transition",
+          "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
+          "disabled:opacity-60",
+          isMarked
+            ? "bg-accent/10 text-accent"
+            : "text-fg-faint hover:text-accent",
+        )}
+        data-testid={`procurement-count-mark-${componentId}`}
+      >
+        {isMarked ? (
+          <CheckCircle2 className="h-3 w-3" aria-hidden />
+        ) : (
+          <ClipboardList className="h-3 w-3" aria-hidden />
+        )}
+        {mutation.isPending
+          ? "שומר…"
+          : isMarked
+            ? "מסומן לספירה"
+            : "סמן לספירה"}
+      </button>
+      {mutation.isError && (
+        <span className="text-3xs text-danger-fg">
+          הסימון לא נשמר. נסה שוב.
+        </span>
+      )}
+    </div>
+  );
+}
 
 const STATUS_LABEL: Record<PoStatus, string> = {
   proposed: "מוצע",
@@ -427,6 +535,15 @@ function ProcurementRow({
                   </div>
                   <CoverageCaption trace={l.coverage_trace} />
                   <LineTrustCaption line={l} today={today} />
+                  {/* Tranche 153 — RM/PKG only. An FG line has no
+                      component_id and needs no mark: finished goods are
+                      counted in full every Thursday regardless. */}
+                  {l.component_id && (
+                    <CountMarkToggle
+                      componentId={l.component_id}
+                      lineLabel={l.line_label}
+                    />
+                  )}
                 </div>
               ))
           )}
