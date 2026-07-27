@@ -93,6 +93,24 @@ async function fetchStock(itemType: "FG" | "RM_PKG"): Promise<BulkStockRow[]> {
   return Array.isArray(data) ? data : (data.rows ?? []);
 }
 
+/** component_ids with an open manual count mark (tranche 152). Drives the
+ *  Thursday-list filter: FG is always counted in full, RM/PKG only where the
+ *  owner marked it on the purchasing page. Marks self-clear server-side once
+ *  the component is counted, so this shrinks as the walk progresses. */
+async function fetchCountMarks(): Promise<string[]> {
+  const res = await fetch("/api/count-marks", {
+    headers: { Accept: "application/json" },
+  });
+  if (!res.ok) throw new Error(`COUNT_MARKS_FETCH_${res.status}`);
+  const data = await res.json();
+  const marks = Array.isArray(data) ? data : (data.marks ?? []);
+  return marks
+    .map((m: { component_id?: unknown }) =>
+      typeof m?.component_id === "string" ? m.component_id : null,
+    )
+    .filter((id: string | null): id is string => id !== null);
+}
+
 function newIdempotencyKey(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
     return crypto.randomUUID();
@@ -439,6 +457,16 @@ export default function BulkCountPage() {
     queryFn: () => fetchStock("RM_PKG"),
     staleTime: 60_000,
   });
+  const marksQuery = useQuery({
+    queryKey: ["count-marks"],
+    queryFn: fetchCountMarks,
+    staleTime: 60_000,
+  });
+  const markedIds = useMemo<ReadonlySet<string>>(
+    () => new Set(marksQuery.data ?? []),
+    [marksQuery.data],
+  );
+
   const { data: groupsData } = useGroups();
 
   const rows = useMemo<BulkCountRow[]>(() => {
@@ -522,8 +550,8 @@ export default function BulkCountPage() {
 
   // --- derived rows / sections -------------------------------------------------
   const visibleRows = useMemo(
-    () => rows.filter((r) => rowMatches(r, filters, counted)),
-    [rows, filters, counted],
+    () => rows.filter((r) => rowMatches(r, filters, counted, Date.now(), markedIds)),
+    [rows, filters, counted, markedIds],
   );
 
   // Section order: the curated display_order IS the factory walk order.
@@ -566,8 +594,17 @@ export default function BulkCountPage() {
   // chip numbers answer "how many items are on this shelf in the current view".
   const chipBase = useMemo(() => {
     const f: BulkFilters = { ...filters, productGroups: [], materialGroups: [] };
-    return rows.filter((r) => rowMatches(r, f, counted));
-  }, [rows, filters, counted]);
+    return rows.filter((r) => rowMatches(r, f, counted, Date.now(), markedIds));
+  }, [rows, filters, counted, markedIds]);
+
+  // Size of the Thursday walk, independent of every other filter — the chip
+  // has to answer "how long is this going to take" before it is switched on.
+  const thursdayCount = useMemo(
+    () =>
+      rows.filter((r) => r.item_type === "FG" || markedIds.has(r.item_id))
+        .length,
+    [rows, markedIds],
+  );
 
   const pgCounts = useMemo(() => {
     const c: Record<string, number> = {};
@@ -1153,6 +1190,31 @@ export default function BulkCountPage() {
               {label}
             </button>
           ))}
+          <span className="mx-1 h-4 w-px bg-border" aria-hidden />
+          {/* Tranche 152 — the Thursday walk in one control. FG in full plus
+              only the RM/PKG the owner marked on the purchasing page; the
+              marks self-clear as each component is counted. Accent, not
+              warning: this is the normal weekly routine, not an alarm. */}
+          <button
+            type="button"
+            aria-pressed={filters.thursdayList}
+            onClick={() => patch({ thursdayList: !filters.thursdayList })}
+            className={cn(
+              "chip transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50",
+              filters.thursdayList && "chip-accent",
+            )}
+            title={
+              marksQuery.isError
+                ? "Thursday count: all finished goods, plus the raw materials and packaging marked on the purchasing page. The marked list could not be loaded, so only finished goods are shown."
+                : `Thursday count: all finished goods, plus the ${markedIds.size} raw material/packaging item${markedIds.size === 1 ? "" : "s"} marked on the purchasing page.`
+            }
+            data-testid="bulk-count-thursday"
+          >
+            Thursday count
+            <span className="ms-1 tabular-nums opacity-70">
+              {thursdayCount}
+            </span>
+          </button>
           <span className="mx-1 h-4 w-px bg-border" aria-hidden />
           <button
             type="button"
