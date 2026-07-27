@@ -199,10 +199,45 @@ export const pickingDict = {
   // "any materials" — a run reported after the fact may have no collected
   // materials at all, and then nothing comes off stock. The unhedged wording
   // promised something that is not always true.
+  // Tranche 152: materials now come off whether or not they were collected, so
+  // the hedge ("any materials you collected") is no longer true — and the
+  // summary below the button says exactly what will move.
   report_stock_note: {
-    en: "Finishing the run adds the good units to stock and takes off any materials you collected.",
+    en: "Finishing the run adds the good units to stock and takes off the materials it used.",
     ru: "",
   },
+  // The summary step (tranche 152). Not a new screen and not an extra tap: the
+  // confirm that was already here now shows what is about to leave stock.
+  summary_title: { en: "What comes off stock", ru: "" },
+  summary_loading: { en: "Working out what was used…", ru: "" },
+  summary_error: { en: "Could not work out the materials. You can still finish the run.", ru: "" },
+  summary_empty: { en: "No materials come off for this run.", ru: "" },
+  summary_col_material: { en: "Material", ru: "" },
+  summary_col_comes_off: { en: "Comes off", ru: "" },
+  summary_col_left: { en: "Left after", ru: "" },
+  // Where each number came from. A derived number must never read as a
+  // measured one.
+  summary_basis_picked: { en: "Collected", ru: "" },
+  summary_basis_recipe: { en: "From recipe", ru: "" },
+  summary_collected_vs: { en: "collected", ru: "" },
+  summary_recipe_vs: { en: "recipe says", ru: "" },
+  // Going below zero is a real state, not an error: units can be made before
+  // the packaging for them has been booked in.
+  summary_negative_title: { en: "Stock says there is none left", ru: "" },
+  summary_negative_ask: { en: "Yes, it really was used", ru: "" },
+  summary_negative_help: {
+    en: "Tick this if you used it anyway. Stock goes below zero and comes back up when the delivery is booked in.",
+    ru: "",
+  },
+  summary_negative_skip: {
+    en: "Leave unticked and stock stops at zero.",
+    ru: "",
+  },
+  // A factor-of-two gap is more often a typed digit than a real one.
+  summary_explain_title: { en: "That is far off the recipe", ru: "" },
+  summary_explain_ask: { en: "What happened?", ru: "" },
+  summary_explain_placeholder: { en: "e.g. spillage, double batch, miscount", ru: "" },
+  summary_explain_blocked: { en: "Say what happened first", ru: "" },
   // Two-step confirm on the one action that moves stock. Tranche 146 deferred
   // a confirm here because the empty output field was itself a pause; tranche
   // 147 pre-fills that field, so the pause is gone and the guard is not.

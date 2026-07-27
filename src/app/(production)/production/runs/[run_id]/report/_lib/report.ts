@@ -20,6 +20,48 @@
 // blank.
 // ---------------------------------------------------------------------------
 
+/** One reconciled material on the summary step: what was collected, what the
+ *  recipe expects for the reported output, and what that does to the balance.
+ *  Mirror of ConsumptionPreviewLine in api/src/production-runs/schemas.ts. */
+export interface ConsumptionPreviewLine {
+  component_id: string;
+  component_name: string | null;
+  source: "base" | "pack";
+  item_type: "RM" | "PKG";
+  uom: string;
+  /** Net collected. Null = never collected, so the recipe supplied the number. */
+  picked_qty: string | null;
+  /** Recipe at the reported output. Null = collected but off-recipe. */
+  required_qty: string | null;
+  basis: "PICKED" | "RECIPE";
+  wanted_qty: string;
+  on_hand_qty: string;
+  on_hand_after_qty: string;
+  /** What posts if the operator leaves the on-hand cap in force. */
+  capped_qty: string;
+  would_go_negative: boolean;
+  variance_ratio: string | null;
+  needs_explanation: boolean;
+}
+
+export interface ConsumptionPreview {
+  run_id: string;
+  item_id: string | null;
+  output_qty: string;
+  variance_explanation_factor: number;
+  lines: ConsumptionPreviewLine[];
+  requires_explanation_count: number;
+  would_go_negative_count: number;
+}
+
+/** An operator decision carried back with the report, per material. */
+export interface ConsumptionDecision {
+  component_id: string;
+  source: "base" | "pack";
+  confirm_negative: boolean;
+  explanation: string | null;
+}
+
 export interface ReportSubmitBody {
   idempotency_key: string;
   event_at: string;
@@ -31,6 +73,7 @@ export interface ReportSubmitBody {
   qc_sample_taken: boolean | null;
   qc_note: string | null;
   notes: string | null;
+  consumption_decisions: ConsumptionDecision[];
 }
 
 export interface ReportSuccess {
@@ -110,6 +153,7 @@ export interface BuildReportArgs {
   qcSampleTaken: boolean;
   qcNote: string;
   notes: string;
+  consumptionDecisions?: ConsumptionDecision[];
   idempotencyKey: string;
   eventAt: string;
 }
@@ -130,5 +174,54 @@ export function buildReportBody(args: BuildReportArgs): ReportSubmitBody {
     qc_sample_taken: args.qcSampleTaken ? true : null,
     qc_note: coerceOptionalText(args.qcNote),
     notes: coerceOptionalText(args.notes),
+    consumption_decisions: args.consumptionDecisions ?? [],
   };
+}
+
+// ---------------------------------------------------------------------------
+// The summary step's gate
+// ---------------------------------------------------------------------------
+
+/** Only the lines the operator actually decided something about travel back.
+ *  A line nobody touched carries no decision, so the backend applies the
+ *  on-hand cap exactly as it did before this step existed. */
+export function buildConsumptionDecisions(
+  lines: readonly ConsumptionPreviewLine[],
+  confirmedNegatives: Readonly<Record<string, boolean>>,
+  explanations: Readonly<Record<string, string>>,
+): ConsumptionDecision[] {
+  const out: ConsumptionDecision[] = [];
+  for (const line of lines) {
+    const key = `${line.source}:${line.component_id}`;
+    const confirmNegative = confirmedNegatives[key] === true;
+    const explanation = (explanations[key] ?? "").trim();
+    if (!confirmNegative && explanation === "") continue;
+    out.push({
+      component_id: line.component_id,
+      source: line.source,
+      confirm_negative: confirmNegative,
+      explanation: explanation === "" ? null : explanation,
+    });
+  }
+  return out;
+}
+
+/** A factor-of-two gap between what was collected and what the finished
+ *  product says was needed is more often a typed digit than a real over-take,
+ *  so the run does not close until the operator says which.
+ *
+ *  Going below zero deliberately does NOT block: it is a real state — units get
+ *  made before the packaging for them is booked in — and the untick simply
+ *  stops the take at zero. Blocking there would strand the operator on the
+ *  floor over a decision that has a safe default. */
+export function explanationsSatisfied(
+  lines: readonly ConsumptionPreviewLine[] | undefined,
+  explanations: Readonly<Record<string, string>>,
+): boolean {
+  if (!lines) return true;
+  return lines.every(
+    (l) =>
+      !l.needs_explanation ||
+      (explanations[`${l.source}:${l.component_id}`] ?? "").trim() !== "",
+  );
 }
