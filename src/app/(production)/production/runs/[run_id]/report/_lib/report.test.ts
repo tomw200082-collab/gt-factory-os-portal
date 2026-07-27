@@ -1,13 +1,16 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildConsumptionDecisions,
   buildReportBody,
   coerceOptionalNumber,
   coerceOptionalText,
   coerceScrap,
+  explanationsSatisfied,
   isOutputValid,
   parseQty,
   type BuildReportArgs,
+  type ConsumptionPreviewLine,
 } from "./report";
 
 const baseArgs: BuildReportArgs = {
@@ -97,6 +100,9 @@ describe("buildReportBody", () => {
       qc_sample_taken: null,
       qc_note: null,
       notes: null,
+      // Nothing was flagged on the summary step, so no decision travels back
+      // and the backend applies the on-hand cap exactly as before.
+      consumption_decisions: [],
     });
   });
 
@@ -121,5 +127,97 @@ describe("buildReportBody", () => {
   it("omits output_uom when none is supplied", () => {
     const body = buildReportBody({ ...baseArgs, outputUom: null });
     expect("output_uom" in body).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// The summary step's gate
+// ---------------------------------------------------------------------------
+
+function line(
+  overrides: Partial<ConsumptionPreviewLine> = {},
+): ConsumptionPreviewLine {
+  return {
+    component_id: "PKG-BOTTLE-500ML",
+    component_name: "Dark Glass Bottle (500ml)",
+    source: "pack",
+    item_type: "PKG",
+    uom: "UNIT",
+    picked_qty: null,
+    required_qty: "143",
+    basis: "RECIPE",
+    wanted_qty: "143",
+    on_hand_qty: "450",
+    on_hand_after_qty: "307",
+    capped_qty: "143",
+    would_go_negative: false,
+    variance_ratio: null,
+    needs_explanation: false,
+    ...overrides,
+  };
+}
+
+describe("buildConsumptionDecisions", () => {
+  it("sends nothing when the operator touched nothing", () => {
+    // An untouched summary must leave behaviour exactly as it was before the
+    // step existed — the cap still applies.
+    expect(buildConsumptionDecisions([line(), line({ component_id: "RM-TEA" })], {}, {})).toEqual([]);
+  });
+
+  it("carries a confirmed below-zero take", () => {
+    const l = line({ component_id: "PKG-LABEL", would_go_negative: true });
+    const out = buildConsumptionDecisions([l], { "pack:PKG-LABEL": true }, {});
+    expect(out).toEqual([
+      {
+        component_id: "PKG-LABEL",
+        source: "pack",
+        confirm_negative: true,
+        explanation: null,
+      },
+    ]);
+  });
+
+  it("carries an explanation and trims it", () => {
+    const l = line({ component_id: "RM-TEA", source: "base", needs_explanation: true });
+    const out = buildConsumptionDecisions([l], {}, { "base:RM-TEA": "  double batch  " });
+    expect(out[0].explanation).toBe("double batch");
+    expect(out[0].confirm_negative).toBe(false);
+  });
+
+  it("ignores a whitespace-only explanation", () => {
+    const l = line({ component_id: "RM-TEA", source: "base", needs_explanation: true });
+    expect(buildConsumptionDecisions([l], {}, { "base:RM-TEA": "   " })).toEqual([]);
+  });
+
+  it("keys on source as well as component, so the base and pack sides stay apart", () => {
+    const base = line({ component_id: "RM-DUAL", source: "base", would_go_negative: true });
+    const pack = line({ component_id: "RM-DUAL", source: "pack", would_go_negative: true });
+    const out = buildConsumptionDecisions([base, pack], { "base:RM-DUAL": true }, {});
+    expect(out).toHaveLength(1);
+    expect(out[0].source).toBe("base");
+  });
+});
+
+describe("explanationsSatisfied", () => {
+  it("passes when no line asks for one", () => {
+    expect(explanationsSatisfied([line(), line({ component_id: "RM-TEA" })], {})).toBe(true);
+  });
+
+  it("blocks while a far-off line is unexplained", () => {
+    const l = line({ component_id: "RM-TEA", source: "base", needs_explanation: true });
+    expect(explanationsSatisfied([l], {})).toBe(false);
+    expect(explanationsSatisfied([l], { "base:RM-TEA": "  " })).toBe(false);
+    expect(explanationsSatisfied([l], { "base:RM-TEA": "spillage" })).toBe(true);
+  });
+
+  it("never blocks on a below-zero line — that decision has a safe default", () => {
+    // Blocking here would strand the operator on the floor; leaving the tick
+    // off simply stops the take at zero.
+    const l = line({ would_go_negative: true });
+    expect(explanationsSatisfied([l], {})).toBe(true);
+  });
+
+  it("does not block while the preview is still loading", () => {
+    expect(explanationsSatisfied(undefined, {})).toBe(true);
   });
 });
