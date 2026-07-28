@@ -18,7 +18,7 @@ import { Badge } from "@/components/badges/StatusBadge";
 import { QueryCountChip } from "@/components/feedback/QueryCountChip";
 import { useConfirm } from "@/components/overlays/ConfirmDialog";
 import { useSession } from "@/lib/auth/session-provider";
-import { Users, X } from "lucide-react";
+import { Users, X, Eye, EyeOff, Copy, KeyRound } from "lucide-react";
 import { cn } from "@/lib/cn";
 
 interface AppUser {
@@ -30,6 +30,7 @@ interface AppUser {
   site_id: string | null;
   created_at: string;
   updated_at: string;
+  has_password: boolean;
 }
 
 const ROLES = ["admin", "planner", "operator", "viewer"] as const;
@@ -96,6 +97,12 @@ interface RowState {
   statusError: string | null;
   rolePending: boolean;
   statusPending: boolean;
+  passwordError: string | null;
+  passwordPending: boolean;
+  // Plaintext, held only in memory for this row until the admin hides it or
+  // navigates away — never persisted client-side, never included in the
+  // users list payload.
+  revealedPassword: string | null;
 }
 
 const DEFAULT_ROW_STATE: RowState = {
@@ -103,6 +110,9 @@ const DEFAULT_ROW_STATE: RowState = {
   statusError: null,
   rolePending: false,
   statusPending: false,
+  passwordError: null,
+  passwordPending: false,
+  revealedPassword: null,
 };
 
 async function patchUser(
@@ -125,6 +135,37 @@ async function patchUser(
     );
   }
   return data as AppUser;
+}
+
+interface PasswordOpResponse {
+  user_id: string;
+  password: string;
+}
+
+async function setUserPassword(user_id: string): Promise<PasswordOpResponse> {
+  const res = await fetch(`/api/users/${encodeURIComponent(user_id)}/password`, {
+    method: "POST",
+  });
+  const data = (await res.json()) as PasswordOpResponse & { detail?: string; error?: string };
+  if (!res.ok) {
+    throw new Error(
+      data?.detail ?? data?.error ??
+        "Could not set a new password. Check your connection and try again.",
+    );
+  }
+  return data;
+}
+
+async function revealUserPassword(user_id: string): Promise<PasswordOpResponse> {
+  const res = await fetch(`/api/users/${encodeURIComponent(user_id)}/password`);
+  const data = (await res.json()) as PasswordOpResponse & { detail?: string; error?: string };
+  if (!res.ok) {
+    throw new Error(
+      data?.detail ?? data?.error ??
+        "Could not load the password. Try generating a new one.",
+    );
+  }
+  return data;
 }
 
 const ROLE_DESCRIPTIONS: Record<Role, string> = {
@@ -212,6 +253,49 @@ export default function AdminUsersPage() {
     onError: (err, { user_id }) => {
       setRowField(user_id, { statusPending: false, statusError: err.message });
       setBanner({ kind: "error", message: err.message });
+    },
+  });
+
+  const setPasswordMutation = useMutation<
+    PasswordOpResponse,
+    Error,
+    { user_id: string }
+  >({
+    mutationFn: ({ user_id }) => setUserPassword(user_id),
+    onMutate: ({ user_id }) => {
+      setRowField(user_id, { passwordPending: true, passwordError: null });
+    },
+    onSuccess: (data, { user_id }) => {
+      setRowField(user_id, {
+        passwordPending: false,
+        passwordError: null,
+        revealedPassword: data.password,
+      });
+      void qc.invalidateQueries({ queryKey: ["admin-users"] });
+    },
+    onError: (err, { user_id }) => {
+      setRowField(user_id, { passwordPending: false, passwordError: err.message });
+    },
+  });
+
+  const revealPasswordMutation = useMutation<
+    PasswordOpResponse,
+    Error,
+    { user_id: string }
+  >({
+    mutationFn: ({ user_id }) => revealUserPassword(user_id),
+    onMutate: ({ user_id }) => {
+      setRowField(user_id, { passwordPending: true, passwordError: null });
+    },
+    onSuccess: (data, { user_id }) => {
+      setRowField(user_id, {
+        passwordPending: false,
+        passwordError: null,
+        revealedPassword: data.password,
+      });
+    },
+    onError: (err, { user_id }) => {
+      setRowField(user_id, { passwordPending: false, passwordError: err.message });
     },
   });
 
@@ -389,6 +473,9 @@ export default function AdminUsersPage() {
                   <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Status
                   </th>
+                  <th scope="col" className="px-3 py-2 text-left text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+                    Password
+                  </th>
                   <th scope="col" className="px-3 py-2 text-right text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
                     Actions
                   </th>
@@ -482,6 +569,76 @@ export default function AdminUsersPage() {
                       </td>
                       <td className="px-3 py-2">
                         <StatusBadgeDot status={u.status} />
+                      </td>
+                      <td className="px-3 py-2">
+                        <div className="flex flex-col items-start gap-1">
+                          {rs.revealedPassword ? (
+                            <div className="flex items-center gap-1.5">
+                              <span
+                                className="font-mono text-xs text-fg-strong"
+                                data-testid={`password-value-${u.user_id}`}
+                              >
+                                {rs.revealedPassword}
+                              </span>
+                              <button
+                                type="button"
+                                aria-label={`Copy password for ${u.display_name}`}
+                                className="btn btn-ghost btn-sm"
+                                onClick={() => {
+                                  void navigator.clipboard.writeText(rs.revealedPassword!);
+                                }}
+                              >
+                                <Copy className="h-3.5 w-3.5" strokeWidth={2} />
+                              </button>
+                              <button
+                                type="button"
+                                aria-label={`Hide password for ${u.display_name}`}
+                                className="btn btn-ghost btn-sm"
+                                onClick={() => setRowField(u.user_id, { revealedPassword: null })}
+                              >
+                                <EyeOff className="h-3.5 w-3.5" strokeWidth={2} />
+                              </button>
+                            </div>
+                          ) : u.has_password ? (
+                            <button
+                              type="button"
+                              className="btn btn-ghost btn-sm w-fit"
+                              disabled={rs.passwordPending}
+                              aria-label={`Show password for ${u.display_name}`}
+                              onClick={() => revealPasswordMutation.mutate({ user_id: u.user_id })}
+                            >
+                              <Eye className="mr-1 h-3.5 w-3.5" strokeWidth={2} />
+                              {rs.passwordPending ? "…" : "••••••••"}
+                            </button>
+                          ) : (
+                            <span className="text-2xs text-fg-faint">No password set</span>
+                          )}
+                          <button
+                            type="button"
+                            className="w-fit text-2xs text-accent underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-60 disabled:no-underline"
+                            disabled={rs.passwordPending}
+                            onClick={async () => {
+                              const ok = await confirm({
+                                title: u.has_password
+                                  ? `Reset ${u.display_name}'s password?`
+                                  : `Set a password for ${u.display_name}?`,
+                                description: u.has_password
+                                  ? "Generates a brand-new password and immediately replaces their current one — their old password stops working right away."
+                                  : "Generates a new sign-in password they can use immediately, alongside the magic-link.",
+                                confirmLabel: u.has_password ? "Reset password" : "Set password",
+                                tone: u.has_password ? "danger" : undefined,
+                              });
+                              if (!ok) return;
+                              setPasswordMutation.mutate({ user_id: u.user_id });
+                            }}
+                          >
+                            <KeyRound className="mr-1 inline h-3 w-3" strokeWidth={2} />
+                            {rs.passwordPending ? "…" : u.has_password ? "Regenerate" : "Generate"}
+                          </button>
+                          {rs.passwordError && (
+                            <span className="text-2xs text-danger-fg">{rs.passwordError}</span>
+                          )}
+                        </div>
                       </td>
                       <td className="px-3 py-2 text-right">
                         <div className="flex flex-col items-end gap-1">
