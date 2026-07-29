@@ -261,7 +261,9 @@ describe("ActionList", () => {
     // Tranche 153: re-pointed from /stock/physical-count. That screen counts a
     // single item and received no parameters, so the chip dead-ended on a blank
     // form; bulk-count is where the Thursday walk and the manual marks live.
-    expect(chip.getAttribute("href")).toBe("/inventory/bulk-count");
+    expect(chip.getAttribute("href")).toBe(
+      "/inventory/bulk-count?source=procurement&session_po_id=stale&focus_component_id=c1",
+    );
     expect(chip.textContent).toContain("לספור קודם");
     expect(chip.textContent).toContain("45");
     // ux-release-gate A11Y-002: the rationale rides on the link's accessible

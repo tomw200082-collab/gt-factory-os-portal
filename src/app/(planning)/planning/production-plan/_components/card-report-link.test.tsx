@@ -160,4 +160,56 @@ describe("ProductionJobCard production-report link", () => {
       "Report production",
     );
   });
+
+  it("allows stock operators to report without exposing planner controls", () => {
+    renderWithQuery(
+      <ProductionJobCard
+        plan={row({
+          is_base_batch: false,
+          base_bom_head_id: null,
+          item_id: "FG-DET-1L",
+          item_name: "DETOX 1L",
+        })}
+        canAct={false}
+        canReport
+        isToday
+        isPast={false}
+        onEdit={noop}
+        onCancel={noop}
+        onDelete={noop}
+        onAdjustRecipe={noop}
+      />,
+    );
+
+    expect(screen.getByTestId("plan-row-report").getAttribute("href")).toBe(
+      "/production?date=2026-06-17&plan=p-1&report=1",
+    );
+    expect(screen.queryByTestId("plan-row-edit")).toBeNull();
+    expect(screen.queryByTestId("plan-row-cancel")).toBeNull();
+    expect(screen.queryByTestId("plan-row-delete")).toBeNull();
+  });
+
+  it("keeps report hidden for read-only viewers", () => {
+    renderWithQuery(
+      <ProductionJobCard
+        plan={row({
+          is_base_batch: false,
+          base_bom_head_id: null,
+          item_id: "FG-DET-1L",
+          item_name: "DETOX 1L",
+        })}
+        canAct={false}
+        canReport={false}
+        isToday
+        isPast={false}
+        onEdit={noop}
+        onCancel={noop}
+        onDelete={noop}
+        onAdjustRecipe={noop}
+      />,
+    );
+
+    expect(screen.queryByTestId("plan-row-report")).toBeNull();
+    expect(screen.queryByTestId("plan-row-edit")).toBeNull();
+  });
 });

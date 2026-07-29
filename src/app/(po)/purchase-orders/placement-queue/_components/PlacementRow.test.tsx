@@ -43,6 +43,18 @@ const PO: QueuePo = {
   expected_receive_date: "2026-06-30",
   currency: "ILS",
   total_net: "0",
+  scheduled_order_date: "2026-06-25",
+  latest_safe_order_date: "2026-06-25",
+  planned_receive_date: "2026-06-30",
+  as_of_date: "2026-06-25",
+  due_state: "today",
+  risk_state: "ok",
+  priority_bucket: 2,
+  line_count: 1,
+  total_ordered_qty: "5",
+  total_received_qty: "0",
+  total_open_qty: "5",
+  updated_at: "2026-06-25T08:00:00.000Z",
   order_by_date: "2026-06-25",
   tier: "must",
   order_document_text: null,
@@ -91,6 +103,15 @@ afterEach(() => {
 });
 
 function renderRow() {
+  if (!vi.isMockFunction(globalThis.fetch)) {
+    vi.spyOn(globalThis, "fetch").mockImplementation(async (input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("/api/purchase-order-lines")) {
+        return new Response(JSON.stringify(LINES), { status: 200 });
+      }
+      return new Response(JSON.stringify({ row: {} }), { status: 200 });
+    });
+  }
   const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
   render(
     <QueryClientProvider client={qc}>

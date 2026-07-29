@@ -40,17 +40,38 @@ export interface QueuePo {
   expected_receive_date: string | null;
   currency: string;
   total_net: string;
-  // 0261 enrichment from the originating session PO (null for manual POs):
-  // order_by_date drives the urgency sort; order_document_text is the
-  // paste-ready Hebrew supplier message.
-  order_by_date: string | null;
-  tier: string | null;
+  scheduled_order_date: string | null;
+  latest_safe_order_date: string | null;
+  planned_receive_date: string | null;
+  as_of_date: string;
+  due_state: "needs_schedule" | "overdue" | "today" | "next_7_days" | "later";
+  risk_state: "needs_schedule" | "after_safe_date" | "safe_date_passed" | "ok";
+  priority_bucket: number;
+  line_count: number;
+  total_ordered_qty: string;
+  total_received_qty: string;
+  total_open_qty: string;
+  updated_at: string;
+  // Legacy/list endpoint compatibility; the new queue does not sort by this.
+  order_by_date?: string | null;
+  tier?: string | null;
   order_document_text: string | null;
 }
 
 interface QueueResponse {
   rows: QueuePo[];
   count: number;
+  total_count?: number;
+  as_of_date?: string;
+  next_cursor?: string | null;
+  counts?: {
+    needs_schedule: number;
+    overdue: number;
+    today: number;
+    next_7_days: number;
+    later: number;
+    now: number;
+  };
 }
 
 export interface QueuePoLine {
@@ -103,6 +124,7 @@ export interface PlaceResult {
 }
 
 const QUEUE_KEY = ["po-placement-queue"] as const;
+export type QueueScope = "now" | "7d" | "all";
 
 // Marks an error whose .message is operator-safe (Hebrew, or backend-provided
 // detail) — thrown only by jsonOrThrow below. Any other error (network
@@ -140,12 +162,12 @@ async function jsonOrThrow(res: Response, fallback: string): Promise<unknown> {
   return body;
 }
 
-export function usePlacementQueue() {
+export function usePlacementQueue(scope: QueueScope = "now") {
   return useQuery({
-    queryKey: QUEUE_KEY,
+    queryKey: [...QUEUE_KEY, scope],
     queryFn: async (): Promise<QueueResponse> => {
       const res = await fetch(
-        "/api/purchase-orders?status=APPROVED_TO_ORDER&limit=200",
+        `/api/purchase-orders/placement-queue?scope=${encodeURIComponent(scope)}&limit=500`,
         { headers: { Accept: "application/json" } },
       );
       const data = (await jsonOrThrow(
@@ -158,9 +180,17 @@ export function usePlacementQueue() {
       // FLOW-005: most-urgent-first. Sort by order-by date asc (nulls last —
       // manual POs without a session origin), then po_number for stability.
       rows.sort((a, b) => {
-        const ax = a.order_by_date ?? "9999-12-31";
-        const bx = b.order_by_date ?? "9999-12-31";
-        return ax < bx ? -1 : ax > bx ? 1 : a.po_number.localeCompare(b.po_number);
+        if (a.priority_bucket !== b.priority_bucket) {
+          return a.priority_bucket - b.priority_bucket;
+        }
+        const ax = a.scheduled_order_date ?? "0000-00-00";
+        const bx = b.scheduled_order_date ?? "0000-00-00";
+        return ax < bx
+          ? -1
+          : ax > bx
+            ? 1
+            : (a.supplier_name ?? "").localeCompare(b.supplier_name ?? "", "he") ||
+              a.po_number.localeCompare(b.po_number);
       });
       return { ...data, rows };
     },
@@ -187,6 +217,53 @@ export function usePoLines(poId: string, enabled: boolean) {
     },
     enabled,
     staleTime: 30_000,
+  });
+}
+
+export interface ScheduleArgs {
+  poId: string;
+  scheduled_order_date: string;
+  planned_receive_date?: string | null;
+  expected_updated_at?: string;
+  risk_override_ack?: boolean;
+  risk_reason?:
+    | "PLANNER_ACCEPTED_RISK"
+    | "SUPPLIER_CONSTRAINT"
+    | "CASHFLOW"
+    | "STORAGE_CONSTRAINT"
+    | "OTHER";
+  risk_note?: string;
+}
+
+export function useScheduleOrder() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async (args: ScheduleArgs) => {
+      const res = await fetch(
+        `/api/purchase-orders/${encodeURIComponent(args.poId)}/schedule`,
+        {
+          method: "PATCH",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({
+            idempotency_key: newIdempotencyKey(),
+            scheduled_order_date: args.scheduled_order_date,
+            planned_receive_date: args.planned_receive_date ?? null,
+            expected_updated_at: args.expected_updated_at,
+            risk_override_ack: args.risk_override_ack ?? false,
+            risk_reason: args.risk_reason,
+            risk_note: args.risk_note,
+          }),
+        },
+      );
+      return jsonOrThrow(res, "שינוי מועד ההזמנה נכשל.");
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: QUEUE_KEY });
+      void qc.invalidateQueries({ queryKey: ["procurement", "work-queue"] });
+      void qc.invalidateQueries({ queryKey: ["procurement", "calendar"] });
+      void qc.invalidateQueries({ queryKey: ["purchase-orders"] });
+      void qc.invalidateQueries({ queryKey: ["planner", "purchase-orders"] });
+    },
   });
 }
 
@@ -253,6 +330,8 @@ export function useCancelOrder() {
       void qc.invalidateQueries({ queryKey: QUEUE_KEY });
       void qc.invalidateQueries({ queryKey: ["planner", "purchase-orders"] });
       void qc.invalidateQueries({ queryKey: ["purchase-orders"] });
+      void qc.invalidateQueries({ queryKey: ["procurement", "work-queue"] });
+      void qc.invalidateQueries({ queryKey: ["procurement", "calendar"] });
     },
   });
 }
@@ -288,6 +367,8 @@ export function useSwitchSupplier() {
       void qc.invalidateQueries({ queryKey: QUEUE_KEY });
       void qc.invalidateQueries({ queryKey: ["purchase-orders"] });
       void qc.invalidateQueries({ queryKey: ["planner", "purchase-orders"] });
+      void qc.invalidateQueries({ queryKey: ["procurement", "work-queue"] });
+      void qc.invalidateQueries({ queryKey: ["procurement", "calendar"] });
     },
   });
 }
@@ -333,6 +414,8 @@ export function usePlaceOrder() {
       // query on the PO list regardless of its status-filter suffix.
       void qc.invalidateQueries({ queryKey: ["planner", "purchase-orders"] });
       void qc.invalidateQueries({ queryKey: ["purchase-orders"] });
+      void qc.invalidateQueries({ queryKey: ["procurement", "work-queue"] });
+      void qc.invalidateQueries({ queryKey: ["procurement", "calendar"] });
       void qc.invalidateQueries({ queryKey: ["ops", "receipts", "open-pos"] });
     },
   });

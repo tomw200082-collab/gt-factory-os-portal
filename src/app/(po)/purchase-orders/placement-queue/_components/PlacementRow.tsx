@@ -30,6 +30,7 @@ import {
   usePlaceOrder,
   useCancelOrder,
   useSwitchSupplier,
+  useScheduleOrder,
   type QueuePo,
   type QueuePoLine,
 } from "../_lib/api";
@@ -55,12 +56,67 @@ const SPLIT_REASONS = [
 
 /** Per-line supply outcome. `full` is the default so the common case — the
  *  supplier had everything — costs the office manager nothing. */
+type ScheduleRiskReason =
+  | "PLANNER_ACCEPTED_RISK"
+  | "SUPPLIER_CONSTRAINT"
+  | "CASHFLOW"
+  | "STORAGE_CONSTRAINT"
+  | "OTHER";
+
+const SCHEDULE_RISK_REASONS: Array<{ value: ScheduleRiskReason; label: string }> = [
+  { value: "PLANNER_ACCEPTED_RISK", label: "אישור סיכון של מתכנן" },
+  { value: "SUPPLIER_CONSTRAINT", label: "אילוץ ספק" },
+  { value: "CASHFLOW", label: "תזרים מזומנים" },
+  { value: "STORAGE_CONSTRAINT", label: "מגבלת אחסון" },
+  { value: "OTHER", label: "אחר" },
+];
+
+function nextProcurementWorkdayIso(fromIso: string): string {
+  const d = new Date(`${fromIso}T12:00:00Z`);
+  for (let i = 0; i < 10; i += 1) {
+    d.setUTCDate(d.getUTCDate() + 1);
+    const dow = d.getUTCDay();
+    if (dow >= 0 && dow <= 4) return d.toISOString().slice(0, 10);
+  }
+  return fromIso;
+}
+
 type LineState = "full" | "partial" | "none";
 
 function lineName(l: QueuePoLine): string {
   return (
     l.component_name ?? l.item_name ?? l.component_id ?? l.item_id ?? "פריט"
   );
+}
+
+function dueLabel(po: QueuePo): string {
+  switch (po.due_state) {
+    case "needs_schedule":
+      return "דורש תזמון";
+    case "overdue":
+      return "באיחור";
+    case "today":
+      return "לביצוע היום";
+    case "next_7_days":
+      return "ב-7 ימים הקרובים";
+    case "later":
+      return "עתידי";
+    default:
+      return "מתוזמן";
+  }
+}
+
+function riskLabel(po: QueuePo): string | null {
+  switch (po.risk_state) {
+    case "needs_schedule":
+      return "אין תאריך ביצוע";
+    case "after_safe_date":
+      return "אחרי המועד הבטוח";
+    case "safe_date_passed":
+      return "המועד הבטוח עבר";
+    default:
+      return null;
+  }
 }
 
 export function PlacementRow({
@@ -84,6 +140,7 @@ export function PlacementRow({
   const placeMut = usePlaceOrder();
   const cancelMut = useCancelOrder();
   const switchMut = useSwitchSupplier();
+  const scheduleMut = useScheduleOrder();
   const [switchError, setSwitchError] = useState<string | null>(null);
 
   // Cancel-with-reason (Tom-directed 2026-07-16). Opens inline (not the lines
@@ -122,6 +179,40 @@ export function PlacementRow({
     );
   }
 
+  function handleSchedule(): void {
+    setScheduleError(null);
+    if (!scheduleDate) {
+      setScheduleError("יש לבחור תאריך ביצוע.");
+      return;
+    }
+    if (scheduleDate < todayIso) {
+      setScheduleError("לא ניתן לתזמן לעבר.");
+      return;
+    }
+    if (scheduleDateAfterSafe && !scheduleNote.trim()) {
+      setScheduleError("תזמון אחרי המועד הבטוח דורש סיבת חריגה.");
+      return;
+    }
+    scheduleMut.mutate(
+      {
+        poId: po.po_id,
+        scheduled_order_date: scheduleDate,
+        planned_receive_date: plannedDate || null,
+        expected_updated_at: po.updated_at,
+        risk_override_ack: scheduleDateAfterSafe,
+        risk_reason: scheduleDateAfterSafe ? scheduleRiskReason : undefined,
+        risk_note: scheduleDateAfterSafe ? scheduleNote.trim() : undefined,
+      },
+      {
+        onSuccess: () => {
+          setScheduling(false);
+          setScheduleError(null);
+        },
+        onError: (e: Error) => setScheduleError(e.message),
+      },
+    );
+  }
+
   const [termCode, setTermCode] = useState<string>("");
   const [customTerm, setCustomTerm] = useState<string>("");
   const [prices, setPrices] = useState<Record<string, string>>({});
@@ -129,10 +220,30 @@ export function PlacementRow({
   // FLOW-003: supplier-confirmed arrival date (prefilled with the planner's
   // planned date; the office manager confirms/overrides it with the supplier).
   const [confirmedDate, setConfirmedDate] = useState<string>(
-    po.expected_receive_date ?? "",
+    po.expected_receive_date ?? po.planned_receive_date ?? "",
   );
   const [copied, setCopied] = useState(false);
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const todayIso = po.as_of_date || new Date().toISOString().slice(0, 10);
+  const [scheduling, setScheduling] = useState(
+    po.due_state === "needs_schedule" || po.risk_state !== "ok",
+  );
+  const [scheduleDate, setScheduleDate] = useState<string>(
+    po.scheduled_order_date ?? todayIso,
+  );
+  const [plannedDate, setPlannedDate] = useState<string>(
+    po.planned_receive_date ?? "",
+  );
+  const [scheduleNote, setScheduleNote] = useState("");
+  const [scheduleRiskReason, setScheduleRiskReason] = useState<ScheduleRiskReason>(
+    "PLANNER_ACCEPTED_RISK",
+  );
+  const [scheduleError, setScheduleError] = useState<string | null>(null);
+  const scheduleRiskLabel = riskLabel(po);
+  const needsSchedule = po.due_state === "needs_schedule" || !po.scheduled_order_date;
+  const futureSchedule = !!po.scheduled_order_date && po.scheduled_order_date > todayIso;
+  const scheduleDateAfterSafe =
+    !!scheduleDate && !!po.latest_safe_order_date && scheduleDate > po.latest_safe_order_date;
+  const canAttemptPlacementToday = !needsSchedule && !futureSchedule;
 
   const lines = (linesQuery.data?.rows ?? []).filter(
     (l) => l.line_status === "OPEN" || l.line_status === "PARTIAL",
@@ -239,8 +350,10 @@ export function PlacementRow({
   // prices/terms; validation only fired post-click (handlePlace below stays
   // as a backstop for any state this misses).
   const canPlace =
+    canAttemptPlacementToday &&
     lines.length > 0 &&
     !!termLabel &&
+    !!confirmedDate &&
     lines.every((l) => Number(priceFor(l)) > 0) &&
     // Tranche 150: a split needs a reason and a sane partial quantity, and
     // "nothing placed at all" is a discard rather than a placement.
@@ -249,7 +362,13 @@ export function PlacementRow({
     (!hasSplit || !!splitReason);
 
   /** Why `בצע הזמנה` is blocked, for the disabled-button tooltip. */
-  const blockedReason = nothingPlaced
+  const blockedReason = needsSchedule
+    ? "יש לתזמן את ההזמנה לפני ביצוע."
+    : futureSchedule
+      ? "ההזמנה מתוזמנת לעתיד. כדי לבצע מוקדם יש לשנות את המועד להיום."
+      : !confirmedDate
+        ? "יש להזין תאריך אספקה מאושר מהספק."
+      : nothingPlaced
     ? "כל השורות מסומנות כ-לא הוזמן — זהו ביטול הזמנה, השתמשי ב״בטל הזמנה״."
     : anyPartialInvalid
       ? "יש להזין כמות חלקית גדולה מאפס וקטנה מהכמות שהוזמנה."
@@ -265,7 +384,7 @@ export function PlacementRow({
     let any = false;
     for (const l of lines) {
       const p = Number(priceFor(l));
-      const q = Number(l.ordered_qty);
+      const q = suppliedQty(l);
       if (Number.isFinite(p) && p > 0 && Number.isFinite(q)) {
         sum += p * q;
         any = true;
@@ -273,12 +392,26 @@ export function PlacementRow({
     }
     return any ? sum : null;
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [lines, prices]);
+  }, [lines, prices, lineStates, partialQtys]);
 
   async function handlePlace(): Promise<void> {
     setErrorMsg(null);
+    if (needsSchedule) {
+      setErrorMsg("יש לתזמן את ההזמנה לפני ביצוע מול הספק.");
+      setScheduling(true);
+      return;
+    }
+    if (futureSchedule) {
+      setErrorMsg("ההזמנה מתוזמנת לעתיד. כדי לבצע אותה עכשיו יש לשנות את המועד להיום.");
+      setScheduling(true);
+      return;
+    }
     if (!termLabel) {
       setErrorMsg("יש לבחור תנאי תשלום.");
+      return;
+    }
+    if (!confirmedDate) {
+      setErrorMsg("יש להזין תאריך אספקה מאושר מהספק לפני ביצוע ההזמנה.");
       return;
     }
     if (lines.length === 0) {
@@ -344,7 +477,7 @@ export function PlacementRow({
         payment_terms_eom: term?.eom ?? null,
         line_prices,
         confirm_price_update: true,
-        expected_receive_date: confirmedDate || null,
+        expected_receive_date: confirmedDate,
         // Tranche 150: omitted entirely on a full placement.
         unplaced_lines: hasSplit ? unplacedLines : undefined,
         split_reason: hasSplit ? splitReason : undefined,
@@ -376,6 +509,7 @@ export function PlacementRow({
           // stacked in the same row.
           setOpen((v) => !v);
           setCancelling(false);
+          setScheduling(false);
           setCancelError(null);
         }}
         aria-expanded={open}
@@ -391,20 +525,24 @@ export function PlacementRow({
             <span className="font-mono tabular-nums text-fg">
               {formatIls(Number(po.total_net))}
             </span>
-            {po.order_by_date ? (
-              <span
-                className={
-                  po.order_by_date < todayIso
-                    ? "font-semibold text-danger-fg"
-                    : "font-medium text-fg"
-                }
-              >
-                · להזמין עד {po.order_by_date}
-                {po.order_by_date < todayIso ? " (באיחור)" : ""}
-              </span>
+            <span
+              className={
+                po.due_state === "overdue" || po.risk_state !== "ok"
+                  ? "font-semibold text-danger-fg"
+                  : "font-medium text-fg"
+              }
+            >
+              · {dueLabel(po)}
+              {po.scheduled_order_date ? ` · ${po.scheduled_order_date}` : ""}
+            </span>
+            {po.latest_safe_order_date ? (
+              <span>· מועד בטוח אחרון {po.latest_safe_order_date}</span>
             ) : null}
-            {po.expected_receive_date ? (
-              <span>· צפי הגעה {po.expected_receive_date}</span>
+            {scheduleRiskLabel ? (
+              <span className="font-semibold text-danger-fg">· {scheduleRiskLabel}</span>
+            ) : null}
+            {po.planned_receive_date ? (
+              <span>· הגעה מתוכננת {po.planned_receive_date}</span>
             ) : null}
           </div>
         </div>
@@ -417,8 +555,25 @@ export function PlacementRow({
       <button
         type="button"
         onClick={() => {
+          setScheduling((v) => !v);
+          setScheduleError(null);
+          setOpen(false);
+          setCancelling(false);
+        }}
+        aria-expanded={scheduling}
+        aria-label={`שנה מועד להזמנה ${po.po_number}`}
+        title="שנה מועד"
+        className="flex shrink-0 items-center gap-1.5 border-r border-border/60 px-3 text-fg-muted transition-colors hover:bg-accent-softer hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        data-testid={`placement-schedule-toggle-${po.po_id}`}
+      >
+        <span className="text-xs font-medium">שנה מועד</span>
+      </button>
+      <button
+        type="button"
+        onClick={() => {
           setCancelling((v) => !v);
           setCancelError(null);
+          setScheduling(false);
           // INT-102: see the expand toggle — the two panels never co-exist.
           setOpen(false);
         }}
@@ -436,6 +591,149 @@ export function PlacementRow({
         </span>
       </button>
       </div>
+
+      {scheduling ? (
+        <div
+          className="space-y-3 border-t border-accent/30 bg-accent-softer/30 p-4"
+          data-testid={`placement-schedule-panel-${po.po_id}`}
+        >
+          <div className="flex flex-wrap items-end gap-3">
+            <button
+              type="button"
+              className="btn btn-sm min-h-[44px]"
+              onClick={() => {
+                setScheduleDate(nextProcurementWorkdayIso(todayIso));
+                setScheduleError(null);
+              }}
+            >
+              יום עבודה הבא
+            </button>
+            <label className="flex flex-col gap-1 text-sm font-medium text-fg">
+              תאריך ביצוע מתוכנן
+              <input
+                type="date"
+                className="input w-44"
+                min={todayIso}
+                value={scheduleDate}
+                onChange={(e) => {
+                  setScheduleDate(e.target.value);
+                  setScheduleError(null);
+                }}
+                data-testid={`placement-schedule-date-${po.po_id}`}
+              />
+            </label>
+            <label className="flex flex-col gap-1 text-sm font-medium text-fg">
+              הגעה מתוכננת פנימית
+              <input
+                type="date"
+                className="input w-44"
+                value={plannedDate}
+                onChange={(e) => setPlannedDate(e.target.value)}
+                data-testid={`placement-planned-receive-date-${po.po_id}`}
+              />
+            </label>
+            <button
+              type="button"
+              className="btn btn-sm min-h-[44px]"
+              onClick={() => {
+                setScheduleDate(todayIso);
+                setScheduleError(null);
+              }}
+            >
+              העבר להיום
+            </button>
+            {po.latest_safe_order_date ? (
+              <button
+                type="button"
+                className="btn btn-sm min-h-[44px]"
+                onClick={() => {
+                  setScheduleDate(po.latest_safe_order_date ?? todayIso);
+                  setScheduleError(null);
+                }}
+              >
+                המועד הבטוח
+              </button>
+            ) : null}
+          </div>
+
+          <p className="text-xs text-fg-muted">
+            המועד הבטוח האחרון הוא מידע נעול מהשרת:{" "}
+            <span className="font-semibold text-fg">
+              {po.latest_safe_order_date ?? "לא ידוע"}
+            </span>
+            . הזמנה עתידית לא תבוצע עד שמעבירים אותה להיום.
+          </p>
+
+          {scheduleDateAfterSafe ? (
+            <div className="space-y-2">
+            <label className="block text-sm font-medium text-danger-fg">
+              סיבת סיכון
+              <select
+                className="input mt-1 w-full"
+                value={scheduleRiskReason}
+                onChange={(e) => {
+                  setScheduleRiskReason(e.target.value as ScheduleRiskReason);
+                  setScheduleError(null);
+                }}
+                data-testid={`placement-schedule-risk-reason-${po.po_id}`}
+              >
+                {SCHEDULE_RISK_REASONS.map((reason) => (
+                  <option key={reason.value} value={reason.value}>
+                    {reason.label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <label className="block text-sm font-medium text-danger-fg">
+              סיבת חריגה מתאריך בטוח
+              <textarea
+                className="input mt-1 min-h-20 w-full"
+                value={scheduleNote}
+                onChange={(e) => {
+                  setScheduleNote(e.target.value);
+                  setScheduleError(null);
+                }}
+                placeholder="למשל: תיאום מול ספק, מגבלת אחסון, או החלטת מנהל."
+                data-testid={`placement-schedule-risk-note-${po.po_id}`}
+              />
+            </label>
+            </div>
+          ) : null}
+
+          {scheduleError ? (
+            <div
+              role="alert"
+              className="rounded-md border border-danger/40 bg-danger-softer px-3 py-2 text-sm text-danger-fg"
+              data-testid={`placement-schedule-error-${po.po_id}`}
+            >
+              {scheduleError}
+            </div>
+          ) : null}
+
+          <div className="flex flex-wrap items-center justify-end gap-2">
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              onClick={() => setScheduling(false)}
+              disabled={scheduleMut.isPending}
+            >
+              חזרה
+            </button>
+            <button
+              type="button"
+              className="btn btn-primary btn-sm"
+              onClick={handleSchedule}
+              disabled={scheduleMut.isPending || !scheduleDate}
+              data-testid={`placement-schedule-submit-${po.po_id}`}
+            >
+              {scheduleMut.isPending ? (
+                <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />
+              ) : null}
+              שמור מועד
+            </button>
+          </div>
+        </div>
+      ) : null}
 
       {/* Cancel-with-reason panel */}
       {cancelling ? (
@@ -836,6 +1134,7 @@ export function PlacementRow({
                   id={`placement-eta-${po.po_id}`}
                   type="date"
                   className="input w-44"
+                  required
                   value={confirmedDate}
                   min={todayIso}
                   onChange={(e) => setConfirmedDate(e.target.value)}

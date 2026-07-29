@@ -53,6 +53,7 @@ export function ProductionDayLane({
   dateLabel,
   plans,
   canAct,
+  canReport,
   isToday,
   isPast,
   isOverdue,
@@ -72,6 +73,7 @@ export function ProductionDayLane({
   dateLabel: string;
   plans: ProductionPlanRow[];
   canAct: boolean;
+  canReport?: boolean;
   isToday: boolean;
   isPast: boolean;
   isOverdue: boolean;
@@ -235,6 +237,7 @@ export function ProductionDayLane({
                 key={p.plan_id}
                 plan={p}
                 canAct={canAct}
+                canReport={canReport}
                 isToday={isToday}
                 isPast={isPast}
                 highlighted={p.plan_id === highlightPlanId}

@@ -73,6 +73,18 @@ import { FilePen, Lightbulb, ArrowDown, Lock, PackageCheck } from "lucide-react"
 // ---------------------------------------------------------------------------
 
 type ItemType = "FG" | "RM" | "PKG";
+type FinalDeliveryReason =
+  | "PACK_SIZE_ROUNDING"
+  | "SUPPLIER_SHORT_DELIVERY"
+  | "AGREED_FINAL_QUANTITY"
+  | "OTHER";
+
+const FINAL_DELIVERY_REASONS: Array<[FinalDeliveryReason, string]> = [
+  ["PACK_SIZE_ROUNDING", "Pack-size rounding"],
+  ["SUPPLIER_SHORT_DELIVERY", "Supplier short delivery"],
+  ["AGREED_FINAL_QUANTITY", "Agreed final quantity"],
+  ["OTHER", "Other"],
+];
 
 interface GoodsReceiptLine {
   item_type: ItemType;
@@ -90,6 +102,11 @@ interface GoodsReceiptRequest {
   po_id: string | null;
   notes: string | null;
   lines: GoodsReceiptLine[];
+  final_delivery?: {
+    close_remaining_short: true;
+    reason_code: FinalDeliveryReason;
+    note?: string | null;
+  };
 }
 
 interface GoodsReceiptCommittedResponse {
@@ -107,6 +124,7 @@ interface GoodsReceiptCommittedResponse {
     unit: string;
     stock_ledger_movement_id: string;
   }>;
+  final_delivery_closed_short_count?: number;
   idempotent_replay: boolean;
 }
 
@@ -629,6 +647,12 @@ export default function GoodsReceiptPage() {
   // is selected (lines prefill to full open qty) and a one-tap confirm banner
   // replaces the need to scroll the editable form. Cleared on un-link / post.
   const [fullReceiveRequested, setFullReceiveRequested] = useState(false);
+  const [finalDelivery, setFinalDelivery] = useState(false);
+  const [finalDeliveryReason, setFinalDeliveryReason] =
+    useState<FinalDeliveryReason>("PACK_SIZE_ROUNDING");
+  const [finalDeliveryNote, setFinalDeliveryNote] = useState("");
+  const canDeclareFinalDelivery =
+    session.role === "planner" || session.role === "admin";
 
   // Cycle 16: when prefill is driven by the URL we lock the supplier picker
   // per W4 spec §3.4 step 1. The operator MUST NOT change supplier in this
@@ -763,6 +787,8 @@ export default function GoodsReceiptPage() {
   // still change it; the API will 409 SUPPLIER_MISMATCH if so.
   function handlePoChange(nextPoId: string): void {
     setPoId(nextPoId);
+    setFinalDelivery(false);
+    setFinalDeliveryNote("");
     // Tranche 020 — reset prefill flag so the new PO's lines can seed
     // the receipt drafts (Smart Landing path mirrors the URL-driven
     // path's prefill behavior). The guard in the effect still prevents
@@ -817,6 +843,30 @@ export default function GoodsReceiptPage() {
       setDone({ kind: "error", message: "At least one line is required." });
       return;
     }
+    if (finalDelivery) {
+      if (!poId) {
+        setDone({ kind: "error", message: "Final delivery can only be used with a linked PO." });
+        return;
+      }
+      if (!canDeclareFinalDelivery) {
+        setDone({
+          kind: "error",
+          message: "Only planner/admin can close the remaining PO commitment.",
+        });
+        return;
+      }
+      if (shortReceiptCount === 0) {
+        setDone({
+          kind: "error",
+          message: "Final delivery is only relevant when this receipt is short vs the PO open quantity.",
+        });
+        return;
+      }
+      if (finalDeliveryReason === "OTHER" && !finalDeliveryNote.trim()) {
+        setDone({ kind: "error", message: "Final delivery reason OTHER requires a note." });
+        return;
+      }
+    }
 
     const envelopeLines: GoodsReceiptLine[] = [];
     for (let i = 0; i < lines.length; i++) {
@@ -867,6 +917,13 @@ export default function GoodsReceiptPage() {
       po_id: poId ? poId : null,
       notes: notes ? notes : null,
       lines: envelopeLines,
+      final_delivery: finalDelivery
+        ? {
+            close_remaining_short: true,
+            reason_code: finalDeliveryReason,
+            note: finalDeliveryNote.trim() || null,
+          }
+        : undefined,
     };
 
     // Tranche 065 (FLOW-R01) — over-receipts post to stock and create an
@@ -943,7 +1000,11 @@ export default function GoodsReceiptPage() {
             ? "Already posted earlier — no duplicate created."
             : "Receipt posted successfully.",
           itemSummary,
-          detail: `ref: ${committed.submission_id} · ${committed.lines.length} line${committed.lines.length !== 1 ? "s" : ""}`,
+          detail: `ref: ${committed.submission_id} · ${committed.lines.length} line${committed.lines.length !== 1 ? "s" : ""}${
+            committed.final_delivery_closed_short_count
+              ? ` · ${committed.final_delivery_closed_short_count} line(s) closed short`
+              : ""
+          }`,
           // Cycle 16: carry PO context through to the success panel so the
           // operator can verify status flip + ledger movement without
           // re-navigating manually.
@@ -973,9 +1034,13 @@ export default function GoodsReceiptPage() {
         void queryClient.invalidateQueries({
           queryKey: ["ops", "receipts", "open-pos"],
         });
+        void queryClient.invalidateQueries({ queryKey: ["procurement", "work-queue"] });
+        void queryClient.invalidateQueries({ queryKey: ["procurement", "calendar"] });
         // Reset form for a fresh submission
         setLines([emptyLine()]);
         setNotes("");
+        setFinalDelivery(false);
+        setFinalDeliveryNote("");
         // The receipt posted — the next submission is a NEW operation, so issue
         // a fresh idempotency key (lazily, on the next submit).
         idemKeyRef.current = null;
@@ -1501,6 +1566,8 @@ export default function GoodsReceiptPage() {
                         setPrefillApplied(false);
                       } else {
                         setPoId("");
+                        setFinalDelivery(false);
+                        setFinalDeliveryNote("");
                         setSupplierId("");
                       }
                       // Tranche 020 — also reset the track so the operator
@@ -2285,6 +2352,66 @@ export default function GoodsReceiptPage() {
                       </li>
                     ))}
                   </ul>
+                  {poId ? (
+                    <div
+                      className="mt-3 rounded-md border border-warning/40 bg-bg px-3 py-2"
+                      data-testid="receipt-final-delivery-panel"
+                    >
+                      <label className="flex items-start gap-2 text-sm font-semibold text-fg">
+                        <input
+                          type="checkbox"
+                          className="mt-1 h-4 w-4"
+                          checked={finalDelivery}
+                          disabled={!canDeclareFinalDelivery || phase === "submitting"}
+                          onChange={(e) => setFinalDelivery(e.target.checked)}
+                          data-testid="receipt-final-delivery-checkbox"
+                        />
+                        <span>
+                          זו האספקה הסופית — סגור את היתרה שלא התקבלה
+                          <span className="mt-0.5 block text-xs font-normal text-fg-muted">
+                            אם לא מסמנים, ה-PO נשאר פתוח להמשך אספקות.
+                          </span>
+                        </span>
+                      </label>
+                      {!canDeclareFinalDelivery ? (
+                        <p className="mt-2 text-xs text-fg-muted">
+                          עובד קבלה יכול לפרסם קבלה חלקית, אבל רק planner/admin יכול
+                          להכריז שההתחייבות מול הספק הסתיימה.
+                        </p>
+                      ) : null}
+                      {finalDelivery ? (
+                        <div className="mt-3 grid gap-2 sm:grid-cols-[14rem_1fr]">
+                          <label className="flex flex-col gap-1 text-xs font-medium text-fg">
+                            Reason
+                            <select
+                              className="input h-10"
+                              value={finalDeliveryReason}
+                              onChange={(e) =>
+                                setFinalDeliveryReason(e.target.value as FinalDeliveryReason)
+                              }
+                              data-testid="receipt-final-delivery-reason"
+                            >
+                              {FINAL_DELIVERY_REASONS.map(([value, label]) => (
+                                <option key={value} value={value}>
+                                  {label}
+                                </option>
+                              ))}
+                            </select>
+                          </label>
+                          <label className="flex flex-col gap-1 text-xs font-medium text-fg">
+                            Note {finalDeliveryReason === "OTHER" ? "(required)" : "(optional)"}
+                            <input
+                              className="input h-10"
+                              value={finalDeliveryNote}
+                              onChange={(e) => setFinalDeliveryNote(e.target.value)}
+                              placeholder="Explain why the remaining quantity is closed."
+                              data-testid="receipt-final-delivery-note"
+                            />
+                          </label>
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : null}
                 </div>
               ) : null}
 
@@ -2302,6 +2429,8 @@ export default function GoodsReceiptPage() {
                       setLines([emptyLine()]);
                       setNotes("");
                       setPoId("");
+                      setFinalDelivery(false);
+                      setFinalDeliveryNote("");
                       setManualConfirmed(false);
                       setDone(null);
                       // Abandoning this receipt — next submit is a new op.
@@ -2320,6 +2449,8 @@ export default function GoodsReceiptPage() {
                     setLines([emptyLine()]);
                     setNotes("");
                     setPoId("");
+                    setFinalDelivery(false);
+                    setFinalDeliveryNote("");
                     // Tranche 020 — also unwind the track so reset takes
                     // the operator back to the Smart Picker (unless
                     // URL-locked).

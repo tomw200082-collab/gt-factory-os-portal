@@ -19,6 +19,22 @@ export const GoodsReceiptLineSchema = z.object({
   notes: z.string().max(2000).nullable().optional(),
 });
 
+export const FinalDeliverySchema = z
+  .object({
+    close_remaining_short: z.literal(true),
+    reason_code: z.enum([
+      "PACK_SIZE_ROUNDING",
+      "SUPPLIER_SHORT_DELIVERY",
+      "AGREED_FINAL_QUANTITY",
+      "OTHER",
+    ]),
+    note: z.string().max(2000).nullable().optional(),
+  })
+  .refine((v) => v.reason_code !== "OTHER" || !!v.note?.trim(), {
+    path: ["note"],
+    message: "note is required when reason_code is OTHER",
+  });
+
 export const GoodsReceiptRequestSchema = z.object({
   idempotency_key: z.string().min(1).max(255),
   event_at: z.string().datetime(),
@@ -26,6 +42,7 @@ export const GoodsReceiptRequestSchema = z.object({
   po_id: z.string().nullable().optional(),
   notes: z.string().max(2000).nullable().optional(),
   lines: z.array(GoodsReceiptLineSchema).min(1),
+  final_delivery: FinalDeliverySchema.optional(),
 });
 
 export type GoodsReceiptLine = z.infer<typeof GoodsReceiptLineSchema>;
@@ -49,6 +66,7 @@ export interface GoodsReceiptCommittedResponse {
     unit: string;
     stock_ledger_movement_id: string;
   }>;
+  final_delivery_closed_short_count?: number;
   idempotent_replay: boolean;
 }
 
