@@ -37,6 +37,7 @@ import { InventoryImpactPanel } from "./InventoryImpactPanel";
 export function ProductionJobCard({
   plan,
   canAct,
+  canReport,
   isToday,
   isPast,
   highlighted,
@@ -47,6 +48,7 @@ export function ProductionJobCard({
 }: {
   plan: ProductionPlanRow;
   canAct: boolean;
+  canReport?: boolean;
   isToday: boolean;
   isPast: boolean;
   /** Tranche 134 — transient return-focus ring after coming back from the
@@ -68,6 +70,8 @@ export function ProductionJobCard({
   // surfaces untouched.
   const isDraft = plan.status === "draft";
   const isInProduction = plan.status === "in_production";
+  const canReportProduction = canReport ?? canAct;
+  const showLiveActions = isLive && (canAct || (canReportProduction && !isDraft));
 
   // Delete is only for not-yet-produced rows. A done row (item-linked actual),
   // an in-flight run, or a closed base batch (status 'completed' with no
@@ -292,13 +296,15 @@ export function ProductionJobCard({
               >
                 Draft — not yet locked
               </span>
-              <Link
-                href={`/planning/meeting?step=firm&week=${toIsoDate(startOfWeek(new Date(`${plan.plan_date}T00:00:00`)))}`}
-                className="text-[10px] text-accent hover:underline"
-                data-testid="plan-card-draft-confirm-link"
-              >
-                Lock it in Weekly Meeting →
-              </Link>
+              {canAct ? (
+                <Link
+                  href={`/planning/meeting?step=firm&week=${toIsoDate(startOfWeek(new Date(`${plan.plan_date}T00:00:00`)))}`}
+                  className="text-[10px] text-accent hover:underline"
+                  data-testid="plan-card-draft-confirm-link"
+                >
+                  Lock it in Weekly Meeting →
+                </Link>
+              ) : null}
               {/* DR-018 INTER-002 — the plan was hand-edited after the
                   engine drafted it; is_user_modified is optional so this
                   degrades gracefully until the backend PR deploys. */}
@@ -421,10 +427,10 @@ export function ProductionJobCard({
       {/* Action strip — always-on for live plans. B4: drafts keep edit /
           cancel but get NO Report CTA — a draft is not firmed and must not
           be reported against. */}
-      {canAct && isLive && (
+      {showLiveActions && (
         <div className="flex items-center justify-between gap-1.5 px-3 pb-2.5 border-t border-border/20 pt-2">
           {/* Report button — primary for today; hidden on drafts */}
-          {!isDraft ? (
+          {!isDraft && canReportProduction ? (
             <Link
               href={reportHref}
               className={cn(
@@ -441,7 +447,7 @@ export function ProductionJobCard({
               <Factory className="h-2.5 w-2.5" strokeWidth={2.5} />
               {reportLabel}
             </Link>
-          ) : (
+          ) : isDraft && canAct ? (
             // COPY-006 (2026-07-23 gate): "Not reportable yet" stated an
             // absence with no way forward; the link IS the direction.
             <Link
@@ -451,10 +457,11 @@ export function ProductionJobCard({
             >
               Lock in Weekly Meeting to report →
             </Link>
-          )}
+          ) : null}
 
           {/* Edit + cancel. INTER-010 (Tranche 048): min 32×32px touch
               targets via padding only — the icon size is unchanged. */}
+          {canAct ? (
           <div className="flex items-center gap-1">
             {/* Tranche 052 — adjust the liquid recipe for this run. Only on
                 live (unreported) MANUFACTURED plans; the strip itself already
@@ -507,6 +514,7 @@ export function ProductionJobCard({
               </button>
             )}
           </div>
+          ) : null}
         </div>
       )}
 

@@ -37,6 +37,7 @@ import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
 import { EmptyState } from "@/components/feedback/states";
 import { useConfirm } from "@/components/overlays/ConfirmDialog";
+import { authorizeCapability } from "@/lib/auth/authorize";
 import { useSession } from "@/lib/auth/session-provider";
 import { cn } from "@/lib/cn";
 import {
@@ -1591,7 +1592,8 @@ function Toast({
 
 export default function ProductionPlanPage() {
   const { session } = useSession();
-  const canAct = session.role === "planner" || session.role === "admin";
+  const canManagePlan = session.role === "planner" || session.role === "admin";
+  const canReportProduction = authorizeCapability(session.role, "stock:execute");
   const { confirm, dialog: confirmDialog } = useConfirm();
 
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
@@ -2130,7 +2132,7 @@ export default function ProductionPlanPage() {
         description="Plan production for the week."
         actions={
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
-            {canAct && (
+            {canManagePlan && (
               <>
                 <button
                   type="button"
@@ -2466,7 +2468,7 @@ export default function ProductionPlanPage() {
               </span>
             </span>
           </div>
-          {canAct && todaySummary.unreportedTodayPlans.length > 0 ? (
+          {canManagePlan && todaySummary.unreportedTodayPlans.length > 0 ? (
             <div className="mt-2 space-y-1" data-testid="today-strip-unreported">
               {todaySummary.unreportedTodayPlans.map((p) => (
                 <div
@@ -2598,7 +2600,7 @@ export default function ProductionPlanPage() {
           description="Add a plan manually or pull one from approved production recommendations. Inventory will not change until actual production is reported."
           icon={<Calendar className="h-5 w-5 text-fg-faint" strokeWidth={1.5} />}
           action={
-            canAct ? (
+            canManagePlan ? (
               <>
                 <button
                   type="button"
@@ -2668,7 +2670,8 @@ export default function ProductionPlanPage() {
                       dayName={dayName}
                       dateLabel={dateLabel}
                       plans={plans}
-                      canAct={canAct}
+                      canAct={canManagePlan}
+                      canReport={canReportProduction}
                       isToday={isToday}
                       isPast={isPast}
                       isOverdue={isOverdue}

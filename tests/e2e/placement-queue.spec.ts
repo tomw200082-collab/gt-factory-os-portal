@@ -20,6 +20,18 @@ function po(overrides: Record<string, unknown> = {}) {
     expected_receive_date: null,
     currency: "ILS",
     total_net: "125.00",
+    scheduled_order_date: "2026-07-10",
+    latest_safe_order_date: "2026-07-10",
+    planned_receive_date: "2026-07-17",
+    as_of_date: "2026-07-29",
+    due_state: "overdue",
+    risk_state: "ok",
+    priority_bucket: 1,
+    line_count: 1,
+    total_ordered_qty: "10",
+    total_received_qty: "0",
+    total_open_qty: "10",
+    updated_at: "2026-07-29T08:00:00Z",
     order_by_date: "2026-07-10",
     tier: "must",
     order_document_text: null,
@@ -45,7 +57,7 @@ test.describe("@mocked placement queue", () => {
     page,
   }) => {
     await setFakeRole(page, "planner");
-    await page.route("**/api/purchase-orders?status=APPROVED_TO_ORDER**", (route) =>
+    await page.route("**/api/purchase-orders/placement-queue**", (route) =>
       route.fulfill({ json: { rows: [po()], count: 1 } }),
     );
     await page.route("**/api/purchase-order-lines**", (route) =>
@@ -69,11 +81,11 @@ test.describe("@mocked placement queue", () => {
     await expect(submit).toBeEnabled();
   });
 
-  test("INTER-005: a blank confirmed date adds an ETA warning to the confirm dialog", async ({
+  test("INTER-005: a blank confirmed date blocks submit with a clear ETA tooltip", async ({
     page,
   }) => {
     await setFakeRole(page, "planner");
-    await page.route("**/api/purchase-orders?status=APPROVED_TO_ORDER**", (route) =>
+    await page.route("**/api/purchase-orders/placement-queue**", (route) =>
       route.fulfill({ json: { rows: [po({ expected_receive_date: null })], count: 1 } }),
     );
     await page.route("**/api/purchase-order-lines**", (route) =>
@@ -85,16 +97,21 @@ test.describe("@mocked placement queue", () => {
     await page.getByTestId("placement-price-L1").fill("12.5");
     await page.getByTestId("placement-terms-PO1").selectOption({ index: 1 });
 
-    // Clear the (empty-by-default here) ETA field explicitly, then submit.
+    // Clear the (empty-by-default here) ETA field explicitly: the redesigned
+    // flow blocks placement until the supplier-confirmed ETA is present, so
+    // there is no ambiguous "place anyway" dialog.
     await page.getByTestId("placement-eta-PO1").fill("");
-    await page.getByTestId("placement-submit-PO1").click();
+    const submit = page.getByTestId("placement-submit-PO1");
+    await expect(submit).toBeDisabled();
+    await expect(submit).toHaveAttribute("title", /תאריך אספקה/);
 
-    await expect(page.getByText(/לא הוזן תאריך אספקה/)).toBeVisible();
+    await page.getByTestId("placement-eta-PO1").fill("2026-08-03");
+    await expect(submit).toBeEnabled();
   });
 
   test("FLOW-004: empty queue shows the upstream-honesty line", async ({ page }) => {
     await setFakeRole(page, "planner");
-    await page.route("**/api/purchase-orders?status=APPROVED_TO_ORDER**", (route) =>
+    await page.route("**/api/purchase-orders/placement-queue**", (route) =>
       route.fulfill({ json: { rows: [], count: 0 } }),
     );
 
@@ -105,12 +122,28 @@ test.describe("@mocked placement queue", () => {
 
   test("FLOW-006: an overdue order shows the aging banner", async ({ page }) => {
     await setFakeRole(page, "planner");
-    await page.route("**/api/purchase-orders?status=APPROVED_TO_ORDER**", (route) =>
+    await page.route("**/api/purchase-orders/placement-queue**", (route) =>
       route.fulfill({
         json: {
           rows: [
-            po({ po_id: "PO1", po_number: "PO-1", order_by_date: "2020-01-01" }),
-            po({ po_id: "PO2", po_number: "PO-2", order_by_date: "2099-01-01" }),
+            po({
+              po_id: "PO1",
+              po_number: "PO-1",
+              scheduled_order_date: "2020-01-01",
+              latest_safe_order_date: "2020-01-01",
+              due_state: "overdue",
+              priority_bucket: 1,
+              order_by_date: "2020-01-01",
+            }),
+            po({
+              po_id: "PO2",
+              po_number: "PO-2",
+              scheduled_order_date: "2099-01-01",
+              latest_safe_order_date: "2099-01-01",
+              due_state: "later",
+              priority_bucket: 4,
+              order_by_date: "2099-01-01",
+            }),
           ],
           count: 2,
         },
@@ -135,7 +168,7 @@ test.describe("@mocked placement queue", () => {
     // verbatim on this Hebrew-only bookkeeper surface. The guarded queryFn now
     // treats a missing `rows` field as an empty list, so the page degrades to
     // its normal empty state instead of crashing.
-    await page.route("**/api/purchase-orders?status=APPROVED_TO_ORDER**", (route) =>
+    await page.route("**/api/purchase-orders/placement-queue**", (route) =>
       route.fulfill({ json: {} }),
     );
 
@@ -161,7 +194,7 @@ test.describe("@mocked placement queue", () => {
     page,
   }) => {
     await setFakeRole(page, "planner");
-    await page.route("**/api/purchase-orders?status=APPROVED_TO_ORDER**", (route) =>
+    await page.route("**/api/purchase-orders/placement-queue**", (route) =>
       route.fulfill({ json: { rows: [po()], count: 1 } }),
     );
     await page.route("**/api/purchase-order-lines**", (route) =>

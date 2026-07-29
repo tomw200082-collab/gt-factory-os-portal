@@ -80,6 +80,19 @@ const FALLBACK_OPEN_HREF = "/planning/procurement";
 // surface that actually holds the Thursday walk and the manual marks.
 const COUNT_HREF = "/inventory/bulk-count";
 
+function countHrefForPo(po: PurchaseSessionPo, label: string): string {
+  const params = new URLSearchParams({
+    source: "procurement",
+    session_po_id: po.session_po_id,
+  });
+  const line =
+    po.lines.find((l) => !l.is_dropped && l.line_label === label) ??
+    po.lines.find((l) => !l.is_dropped && (l.component_id || l.item_id));
+  if (line?.component_id) params.set("focus_component_id", line.component_id);
+  if (line?.item_id) params.set("focus_item_id", line.item_id);
+  return `${COUNT_HREF}?${params.toString()}`;
+}
+
 // --- manual count marks (tranche 153, migration 0299) ----------------------
 // The auto "לספור קודם" flag is only a hint about what DESERVES counting. What
 // actually reaches the operator's Thursday list is what gets marked here by
@@ -474,7 +487,7 @@ function ProcurementRow({
               // span). hover:underline + focus ring make it read as a link,
               // not a static chip.
               <Link
-                href={COUNT_HREF}
+                href={countHrefForPo(po, recount.label)}
                 aria-label={`לספור קודם — ${recount.label}${recount.worstAgeDays != null ? `, נספר לפני ${recount.worstAgeDays} ימים` : ", לא נספר מעולם"}. ספירה קצרה לפני ההזמנה תמנע קנייה מיותרת. פותח את מסך הספירה.`}
                 title={`ההמלצה נשענת על מלאי שלא אומת (${recount.label}${recount.worstAgeDays != null ? ` — נספר לפני ${recount.worstAgeDays} ימים` : " — לא נספר מעולם"}). ספירה קצרה לפני ההזמנה תמנע קנייה מיותרת.`}
                 className="inline-flex rounded-md decoration-dotted underline-offset-2 hover:underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent/50"

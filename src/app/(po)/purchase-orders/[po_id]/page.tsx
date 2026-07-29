@@ -185,6 +185,20 @@ function fmtMoney(value: string | null | undefined, currency: string): string {
   }
 }
 
+function newIdempotencyKey(prefix: string): string {
+  if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
+    return crypto.randomUUID();
+  }
+  return `${prefix}_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+}
+
+const CLOSE_SHORT_REASONS = [
+  ["PACK_SIZE_ROUNDING", "Pack-size rounding"],
+  ["SUPPLIER_SHORT_DELIVERY", "Supplier short delivery"],
+  ["AGREED_FINAL_QUANTITY", "Agreed final quantity"],
+  ["OTHER", "Other"],
+] as const;
+
 function fmtQty(value: string | null | undefined): string {
   if (value === null || value === undefined) return "—";
   const n = Number(value);
@@ -677,6 +691,55 @@ export default function PurchaseOrderDetailPage({
   const canEditLines =
     session.role === "planner" || session.role === "admin";
 
+  const [closeShortReason, setCloseShortReason] =
+    useState<(typeof CLOSE_SHORT_REASONS)[number][0]>("PACK_SIZE_ROUNDING");
+  const [closeShortNote, setCloseShortNote] = useState("");
+  const [closeShortError, setCloseShortError] = useState<string | null>(null);
+  const [closeShortSuccess, setCloseShortSuccess] = useState(false);
+
+  const closeAtReceivedMut = useMutation({
+    mutationFn: async () => {
+      if (closeShortReason === "OTHER" && !closeShortNote.trim()) {
+        throw new Error("OTHER requires a short explanation.");
+      }
+      const res = await fetch(
+        `/api/purchase-orders/${encodeURIComponent(po_id)}/close-at-received`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            idempotency_key: newIdempotencyKey("po_close_short"),
+            reason_code: closeShortReason,
+            note: closeShortNote.trim() || null,
+          }),
+        },
+      );
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(
+          (errBody as { detail?: string; error?: string }).detail ??
+            (errBody as { detail?: string; error?: string }).error ??
+            "Could not close the PO at received quantity.",
+        );
+      }
+      return res.json();
+    },
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: ["purchase-order-lines", po_id] });
+      void queryClient.invalidateQueries({ queryKey: ["purchase-orders", "detail", po_id] });
+      void queryClient.invalidateQueries({ queryKey: ["purchase-orders", "history", po_id] });
+      void queryClient.invalidateQueries({ queryKey: ["purchase-orders"] });
+      void queryClient.invalidateQueries({ queryKey: ["procurement", "work-queue"] });
+      void queryClient.invalidateQueries({ queryKey: ["procurement", "calendar"] });
+      setCloseShortError(null);
+      setCloseShortSuccess(true);
+    },
+    onError: (err: unknown) => {
+      setCloseShortSuccess(false);
+      setCloseShortError((err as Error).message ?? "Close-short failed. Try again.");
+    },
+  });
+
   const openLineEdit = useCallback(
     (line: PurchaseOrderLineRow) => {
       setLineEditingId(line.po_line_id);
@@ -779,6 +842,8 @@ export default function PurchaseOrderDetailPage({
       const awaitingLines = lineRows.filter(
         (l) => (l.line_status === "OPEN" || l.line_status === "PARTIAL") && Number(l.open_qty) > 0,
       );
+      const canCloseAtReceived =
+        canEditLines && po?.status === "PARTIAL" && awaitingLines.length > 0;
       const allSettled = lineRows.every(
         (l) => l.line_status === "CLOSED" || l.line_status === "CANCELLED",
       );
@@ -883,11 +948,84 @@ export default function PurchaseOrderDetailPage({
           </div>
         ) : null}
         {hasPartialLines && (
-          <div className="rounded-md border border-warning/40 bg-warning/5 px-4 py-3 text-xs text-warning-fg" role="note">
-            <span className="font-semibold">Partial receipt in progress.</span>{" "}
-            Lines showing <span className="font-mono">Partial</span> status have receipts posted and cannot be cancelled.
-            To close out remaining quantities, post a compensating receipt to each partial line.
-            Open lines (no receipts) can be cancelled individually.
+          <div
+            className="space-y-3 rounded-md border border-warning/40 bg-warning/5 px-4 py-3 text-xs text-warning-fg"
+            role="note"
+            data-testid="po-partial-close-panel"
+          >
+            <div>
+              <span className="font-semibold">Partial receipt in progress.</span>{" "}
+              This PO can stay open for additional deliveries. If this was the final
+              delivery, close the remaining short quantity without creating a fake
+              receipt.
+            </div>
+            {canCloseAtReceived ? (
+              <div className="flex flex-wrap items-end gap-2">
+                <label className="flex flex-col gap-1">
+                  Final-delivery reason
+                  <select
+                    className="input h-10 w-56"
+                    value={closeShortReason}
+                    onChange={(e) => {
+                      setCloseShortReason(e.target.value as typeof closeShortReason);
+                      setCloseShortError(null);
+                    }}
+                    data-testid="po-close-short-reason"
+                  >
+                    {CLOSE_SHORT_REASONS.map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="flex min-w-[16rem] flex-1 flex-col gap-1">
+                  Note {closeShortReason === "OTHER" ? "(required)" : "(optional)"}
+                  <input
+                    className="input h-10"
+                    value={closeShortNote}
+                    onChange={(e) => {
+                      setCloseShortNote(e.target.value);
+                      setCloseShortError(null);
+                    }}
+                    placeholder="Why is the remaining quantity being closed?"
+                    data-testid="po-close-short-note"
+                  />
+                </label>
+                <button
+                  type="button"
+                  className="btn btn-sm border border-warning/50 bg-warning-softer text-warning-fg hover:bg-warning/10"
+                  disabled={closeAtReceivedMut.isPending}
+                  onClick={() => closeAtReceivedMut.mutate()}
+                  data-testid="po-close-at-received-submit"
+                >
+                  Close PO at received quantity
+                </button>
+              </div>
+            ) : (
+              <div className="text-fg-muted">
+                Only planner/admin can declare the supplier commitment complete.
+              </div>
+            )}
+            {closeShortError ? (
+              <div
+                className="rounded-md border border-danger/40 bg-danger/5 px-3 py-2 text-danger-fg"
+                role="alert"
+                data-testid="po-close-short-error"
+              >
+                {closeShortError}
+              </div>
+            ) : null}
+            {closeShortSuccess ? (
+              <div
+                className="rounded-md border border-success/40 bg-success/5 px-3 py-2 text-success-fg"
+                role="status"
+                data-testid="po-close-short-success"
+              >
+                The PO was closed at the quantity actually received. No inventory was
+                added for the short quantity.
+              </div>
+            ) : null}
           </div>
         )}
         {lineCancelError && (

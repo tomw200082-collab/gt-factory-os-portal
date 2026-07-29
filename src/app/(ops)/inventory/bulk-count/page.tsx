@@ -36,6 +36,7 @@
 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import { useQuery } from "@tanstack/react-query";
 import { useSession } from "@/lib/auth/session-provider";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
@@ -160,6 +161,69 @@ function TypeChip({ type }: { type: BulkItemType }) {
     >
       {type}
     </span>
+  );
+}
+
+function FocusBucket({
+  title,
+  rows,
+  counted,
+}: {
+  title: string;
+  rows: BulkCountRow[];
+  counted: CountedMap;
+}) {
+  return (
+    <section className="rounded-lg border border-border/60 bg-bg/70 p-3">
+      <div className="mb-2 flex items-center justify-between gap-3">
+        <h3 className="text-sm font-semibold text-fg">{title}</h3>
+        <span className="rounded-full bg-bg-subtle px-2 py-0.5 text-2xs font-semibold tabular-nums text-fg-muted">
+          {rows.length}
+        </span>
+      </div>
+      {rows.length === 0 ? (
+        <p className="text-xs text-fg-muted">No focused items in this group.</p>
+      ) : (
+        <ul className="space-y-1.5">
+          {rows.map((row) => {
+            const entry = counted[row.key];
+            const label =
+              entry?.status === "posted"
+                ? "Posted"
+                : entry?.status === "pending"
+                  ? "Awaiting approval"
+                  : entry?.status === "rejected"
+                    ? "Rejected - recount"
+                    : "Ready to count";
+            return (
+              <li
+                key={row.key}
+                className="flex min-h-[44px] items-center justify-between gap-3 rounded-md border border-border/40 bg-bg-subtle/35 px-3 py-2"
+              >
+                <span className="flex min-w-0 items-center gap-2">
+                  <TypeChip type={row.item_type} />
+                  <span className="truncate text-sm font-medium text-fg">{row.name}</span>
+                </span>
+                <span
+                  className={cn(
+                    "shrink-0 rounded-full px-2 py-0.5 text-2xs font-semibold",
+                    entry?.status === "posted"
+                      ? "bg-success-softer text-success-fg"
+                      : entry?.status === "pending"
+                        ? "bg-warning-softer text-warning-fg"
+                        : entry?.status === "rejected"
+                          ? "bg-danger-softer text-danger-fg"
+                          : "bg-accent-softer text-accent",
+                  )}
+                >
+                  {label}
+                </span>
+              </li>
+            );
+          })}
+        </ul>
+      )}
+    </section>
   );
 }
 
@@ -457,6 +521,11 @@ function CountRow({
 
 export default function BulkCountPage() {
   const { session } = useSession();
+  const searchParams = useSearchParams();
+  const procurementSource = searchParams.get("source") === "procurement";
+  const procurementSessionPoId = searchParams.get("session_po_id");
+  const focusComponentId = searchParams.get("focus_component_id");
+  const focusItemId = searchParams.get("focus_item_id");
   // Planner approval surface is planner/admin-gated (middleware + layout);
   // operators get a non-linked status label instead of a dead-end link.
   const canReview = session.role === "planner" || session.role === "admin";
@@ -526,6 +595,7 @@ export default function BulkCountPage() {
   const [filters, setFilters] = useState<BulkFilters>(EMPTY_FILTERS);
   const [sort, setSort] = useState<BulkSortKey>("name");
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
+  const [showAllInventory, setShowAllInventory] = useState(false);
   // Mobile-first: the full filter panel is collapsed by default so the count
   // rows own the screen; the sticky header keeps only progress + search.
   const [filtersOpen, setFiltersOpen] = useState(false);
@@ -557,10 +627,40 @@ export default function BulkCountPage() {
     [],
   );
 
+  const loading = fgQuery.isLoading || rmQuery.isLoading;
+  const loadError = fgQuery.error || rmQuery.error;
+
   // --- derived rows / sections -------------------------------------------------
+  const procurementFocusActive =
+    procurementSource && (!!focusComponentId || !!focusItemId) && !showAllInventory;
+  const focusRows = useMemo(
+    () =>
+      rows.filter((r) => {
+        if (focusItemId && r.item_type === "FG" && r.item_id === focusItemId) return true;
+        if (focusComponentId && r.item_type !== "FG" && r.item_id === focusComponentId) return true;
+        return false;
+      }),
+    [rows, focusComponentId, focusItemId],
+  );
+  const focusRmPkgRows = useMemo(
+    () => focusRows.filter((r) => r.item_type === "RM" || r.item_type === "PKG"),
+    [focusRows],
+  );
+  const focusFgRows = useMemo(
+    () => focusRows.filter((r) => r.item_type === "FG"),
+    [focusRows],
+  );
+  const focusMissing =
+    procurementSource &&
+    (!!focusComponentId || !!focusItemId) &&
+    !loading &&
+    focusRows.length === 0;
   const visibleRows = useMemo(
-    () => rows.filter((r) => rowMatches(r, filters, counted, Date.now(), markedIds)),
-    [rows, filters, counted, markedIds],
+    () =>
+      procurementFocusActive
+        ? focusRows
+        : rows.filter((r) => rowMatches(r, filters, counted, Date.now(), markedIds)),
+    [rows, filters, counted, markedIds, procurementFocusActive, focusRows],
   );
 
   // Section order: the curated display_order IS the factory walk order.
@@ -904,12 +1004,26 @@ export default function BulkCountPage() {
     });
   }
 
-  const loading = fgQuery.isLoading || rmQuery.isLoading;
-  const loadError = fgQuery.error || rmQuery.error;
   const pendingCount = useMemo(
     () => Object.values(counted).filter((e) => e.status === "pending").length,
     [counted],
   );
+  const focusPosted = useMemo(
+    () => focusRows.filter((row) => counted[row.key]?.status === "posted").length,
+    [focusRows, counted],
+  );
+  const focusPending = useMemo(
+    () => focusRows.filter((row) => counted[row.key]?.status === "pending").length,
+    [focusRows, counted],
+  );
+  const procurementReturnHref = procurementSessionPoId
+    ? `/planning/procurement?session_po_id=${encodeURIComponent(procurementSessionPoId)}`
+    : "/planning/procurement";
+  const procurementFocusComplete =
+    procurementSource &&
+    focusRows.length > 0 &&
+    focusPosted === focusRows.length &&
+    focusPending === 0;
 
   // ---------------------------------------------------------------------------
   return (
@@ -941,6 +1055,106 @@ export default function BulkCountPage() {
           </span>
         </div>
       </WorkflowHeader>
+
+      {procurementSource ? (
+        <section
+          className="rounded-xl border border-accent/35 bg-accent-softer/45 p-4 shadow-sm"
+          data-testid="bulk-count-procurement-focus"
+        >
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div className="min-w-0">
+              <p className="text-2xs font-bold uppercase tracking-sops text-accent">
+                Procurement focus
+              </p>
+              <h2 className="mt-1 text-lg font-semibold text-fg">
+                Count only the items that block this purchase decision
+              </h2>
+              <p className="mt-1 max-w-3xl text-sm text-fg-muted">
+                This is a temporary focused list from procurement. Raw materials and
+                packaging stay separated from finished goods so the operator does not
+                start a full inventory walk by mistake.
+              </p>
+            </div>
+            <div className="flex flex-wrap items-center gap-2">
+              {focusRows.length > 0 ? (
+                <span className="rounded-full border border-border/60 bg-bg px-2.5 py-1 text-xs font-semibold tabular-nums text-fg">
+                  {focusPosted}/{focusRows.length} posted
+                  {focusPending > 0 ? ` · ${focusPending} pending` : ""}
+                </span>
+              ) : null}
+              {procurementFocusActive ? (
+                <button
+                  type="button"
+                  onClick={() => setShowAllInventory(true)}
+                  className="btn btn-sm min-h-[44px]"
+                  data-testid="bulk-count-show-all-inventory"
+                >
+                  Show all inventory
+                </button>
+              ) : null}
+              <Link
+                href={procurementReturnHref}
+                aria-disabled={!procurementFocusComplete}
+                tabIndex={procurementFocusComplete ? undefined : -1}
+                onClick={(event) => {
+                  if (!procurementFocusComplete) event.preventDefault();
+                }}
+                className={cn(
+                  "btn btn-sm min-h-[44px]",
+                  procurementFocusComplete
+                    ? "btn-primary"
+                    : "pointer-events-none cursor-not-allowed border-warning/35 bg-warning-softer text-warning-fg opacity-80",
+                )}
+                title={
+                  procurementFocusComplete
+                    ? "Return to procurement and refresh the purchase recommendation"
+                    : "Post every focused count before returning to procurement"
+                }
+                data-testid="bulk-count-return-procurement"
+              >
+                {procurementFocusComplete
+                  ? "Back to procurement and refresh recommendation"
+                  : "Post focused counts first"}
+              </Link>
+            </div>
+          </div>
+
+          {focusMissing ? (
+            <div
+              className="mt-3 rounded-lg border border-warning/35 bg-warning-softer px-3 py-2 text-sm text-warning-fg"
+              role="status"
+            >
+              The requested procurement count target was not found. It may be archived
+              or no longer present in the stock read model. The full inventory list is
+              still hidden until you explicitly choose to show it.
+            </div>
+          ) : null}
+
+          {focusPending > 0 ? (
+            <div
+              className="mt-3 rounded-lg border border-warning/35 bg-warning-softer px-3 py-2 text-sm text-warning-fg"
+              role="status"
+              aria-live="polite"
+            >
+              One or more focused counts are awaiting planner approval. Procurement
+              should remain blocked until those counts are posted.
+            </div>
+          ) : null}
+
+          <div className="mt-4 grid gap-3 lg:grid-cols-2">
+            <FocusBucket
+              title="Raw materials & packaging to count"
+              rows={focusRmPkgRows}
+              counted={counted}
+            />
+            <FocusBucket
+              title="Finished goods to count"
+              rows={focusFgRows}
+              counted={counted}
+            />
+          </div>
+        </section>
+      ) : null}
 
       {/* ===== Sticky header — mobile-first. Only what the walk needs in
             view at all times: progress + search + the filter-tray toggle.

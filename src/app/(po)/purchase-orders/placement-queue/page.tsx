@@ -25,18 +25,22 @@ import {
 } from "lucide-react";
 import { RoleGate } from "@/lib/auth/role-gate";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
-import { ApiError, usePlacementQueue, type QueuePo } from "./_lib/api";
+import { formatIls } from "@/lib/utils/format-money";
+import { ApiError, usePlacementQueue, type QueuePo, type QueueScope } from "./_lib/api";
 import { PlacementRow } from "./_components/PlacementRow";
 
 // Filter/sort (Tom-directed 2026-07-16 — every corridor page needs them).
 // Client-side over the already-fetched queue; the default order-by-date sort
 // (urgency-first, set by usePlacementQueue) stays the default sort key here.
-type SortKey = "order_by_date" | "amount_desc" | "supplier";
+type SortKey = "scheduled_order_date" | "amount_desc" | "supplier";
 
 const SORTERS: Record<SortKey, (a: QueuePo, b: QueuePo) => number> = {
-  order_by_date: (a, b) => {
-    const ax = a.order_by_date ?? "9999-12-31";
-    const bx = b.order_by_date ?? "9999-12-31";
+  scheduled_order_date: (a, b) => {
+    if (a.priority_bucket !== b.priority_bucket) {
+      return a.priority_bucket - b.priority_bucket;
+    }
+    const ax = a.scheduled_order_date ?? "0000-00-00";
+    const bx = b.scheduled_order_date ?? "0000-00-00";
     return ax < bx ? -1 : ax > bx ? 1 : a.po_number.localeCompare(b.po_number);
   },
   amount_desc: (a, b) => Number(b.total_net) - Number(a.total_net),
@@ -45,18 +49,17 @@ const SORTERS: Record<SortKey, (a: QueuePo, b: QueuePo) => number> = {
 };
 
 function QueueInner(): JSX.Element {
-  const { data, isLoading, isError, error, refetch } = usePlacementQueue();
-  const rows = data?.rows ?? [];
-  const todayIso = new Date().toISOString().slice(0, 10);
+  const [scope, setScope] = useState<QueueScope>("now");
+  const { data, isLoading, isError, error, refetch } = usePlacementQueue(scope);
+  const rows = useMemo(() => data?.rows ?? [], [data?.rows]);
   // Always computed from the FULL queue — a supplier filter must never shrink
   // the reported overdue count, or it would hide real exposure behind an
   // active filter (same correctness rule as the procurement ActionList).
-  const overdueCount = rows.filter(
-    (po) => !!po.order_by_date && po.order_by_date < todayIso,
-  ).length;
+  const overdueCount =
+    data?.counts?.overdue ?? rows.filter((po) => po.due_state === "overdue").length;
 
   const [supplierQuery, setSupplierQuery] = useState("");
-  const [sortKey, setSortKey] = useState<SortKey>("order_by_date");
+  const [sortKey, setSortKey] = useState<SortKey>("scheduled_order_date");
   const isFiltered = supplierQuery.trim() !== "";
   const visibleRows = useMemo(() => {
     const q = supplierQuery.trim().toLowerCase();
@@ -64,6 +67,27 @@ function QueueInner(): JSX.Element {
       .filter((po) => !q || (po.supplier_name ?? "").toLowerCase().includes(q))
       .sort(SORTERS[sortKey]);
   }, [rows, supplierQuery, sortKey]);
+  const groupedVisibleRows = useMemo(() => {
+    const groups = new Map<
+      string,
+      { supplierId: string; supplierName: string; rows: QueuePo[]; total: number }
+    >();
+    for (const po of visibleRows) {
+      const key = po.supplier_id || po.supplier_name || "unknown";
+      const current =
+        groups.get(key) ??
+        {
+          supplierId: key,
+          supplierName: po.supplier_name ?? "ספק לא ידוע",
+          rows: [],
+          total: 0,
+        };
+      current.rows.push(po);
+      current.total += Number(po.total_net);
+      groups.set(key, current);
+    }
+    return Array.from(groups.values());
+  }, [visibleRows]);
   // Durable success confirmation: a placed PO's row unmounts (it leaves the
   // queue), so the page owns the "order placed" banner.
   const [placed, setPlaced] = useState<{
@@ -252,6 +276,37 @@ function QueueInner(): JSX.Element {
             </div>
           )}
 
+          <div
+            className="flex flex-wrap items-center gap-2 rounded-md border border-border/60 bg-bg px-3 py-2 text-sm"
+            data-testid="placement-queue-scope-bar"
+          >
+            {(
+              [
+                ["now", `עכשיו · ${data?.counts?.now ?? rows.length}`],
+                ["7d", `7 ימים · ${data?.counts?.next_7_days ?? 0}`],
+                ["all", `הכול · ${data?.total_count ?? rows.length}`],
+              ] as const
+            ).map(([value, label]) => (
+              <button
+                key={value}
+                type="button"
+                onClick={() => setScope(value)}
+                aria-pressed={scope === value}
+                className={
+                  scope === value
+                    ? "btn btn-sm btn-primary min-h-[44px]"
+                    : "btn btn-sm min-h-[44px]"
+                }
+                data-testid={`placement-queue-scope-${value}`}
+              >
+                {label}
+              </button>
+            ))}
+            <span className="text-xs text-fg-muted">
+              תור “עכשיו” מציג ללא תאריך, באיחור והיום בלבד.
+            </span>
+          </div>
+
           {/* Filter + sort (Tom-directed 2026-07-16) */}
           <div
             className="flex flex-wrap items-center gap-2 rounded-md border border-border/60 bg-bg-subtle/20 px-3 py-2"
@@ -279,7 +334,7 @@ function QueueInner(): JSX.Element {
               className="input w-40 py-1.5 text-xs"
               data-testid="placement-queue-sort"
             >
-              <option value="order_by_date">מיין: דחיפות (ברירת מחדל)</option>
+              <option value="scheduled_order_date">מיין: תאריך ביצוע</option>
               <option value="amount_desc">מיין: סכום (גבוה תחילה)</option>
               <option value="supplier">מיין: ספק (א-ת)</option>
             </select>
@@ -318,30 +373,51 @@ function QueueInner(): JSX.Element {
             </div>
           )}
 
-          <ul className="space-y-3" data-testid="placement-queue-list">
-            {visibleRows.map((po) => (
-              <PlacementRow
-                key={po.po_id}
-                po={po}
-                onPlaced={(p, splitPoId) => {
-                  setCancelled(null);
-                  setPlaced({
-                    po_id: p.po_id,
-                    po_number: p.po_number,
-                    split_po_id: splitPoId ?? null,
-                  });
-                }}
-                onCancelled={(p, reason) => {
-                  setPlaced(null);
-                  setCancelled({
-                    po_id: p.po_id,
-                    po_number: p.po_number,
-                    reason,
-                  });
-                }}
-              />
+          <div className="space-y-4" data-testid="placement-queue-list">
+            {groupedVisibleRows.map((group) => (
+              <section
+                key={group.supplierId}
+                className="rounded-xl border border-border/60 bg-bg-subtle/20 p-3"
+                data-testid={`placement-queue-supplier-${group.supplierId}`}
+              >
+                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
+                  <div>
+                    <h2 className="text-sm font-semibold text-fg">{group.supplierName}</h2>
+                    <p className="text-xs text-fg-muted">
+                      {group.rows.length} הזמנות · {formatIls(group.total)}
+                    </p>
+                  </div>
+                  <span className="rounded-full bg-accent-softer px-2.5 py-1 text-xs font-semibold text-accent">
+                    התחל עבודה מול הספק · {group.rows.length}
+                  </span>
+                </div>
+                <ul className="space-y-3">
+                  {group.rows.map((po) => (
+                    <PlacementRow
+                      key={po.po_id}
+                      po={po}
+                      onPlaced={(p, splitPoId) => {
+                        setCancelled(null);
+                        setPlaced({
+                          po_id: p.po_id,
+                          po_number: p.po_number,
+                          split_po_id: splitPoId ?? null,
+                        });
+                      }}
+                      onCancelled={(p, reason) => {
+                        setPlaced(null);
+                        setCancelled({
+                          po_id: p.po_id,
+                          po_number: p.po_number,
+                          reason,
+                        });
+                      }}
+                    />
+                  ))}
+                </ul>
+              </section>
             ))}
-          </ul>
+          </div>
         </>
       )}
     </div>

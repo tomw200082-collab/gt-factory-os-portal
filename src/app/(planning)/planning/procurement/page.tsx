@@ -47,6 +47,7 @@ import { IntegrityStrip } from "./_components/IntegrityStrip";
 import { CalendarView } from "./_components/CalendarView";
 import { RecommendationsToConvert } from "./_components/RecommendationsToConvert";
 import { FocusMode } from "./_components/FocusMode";
+import { ProcurementWorkQueue } from "./_components/ProcurementWorkQueue";
 import { buildFocusQueue } from "./_lib/focus-queue";
 import { fmtDateHe } from "./_lib/decision";
 import { useRovingTabList } from "@/components/a11y/useRovingTabList";
@@ -157,7 +158,7 @@ export default function ProcurementPage(): JSX.Element {
               type="button"
               onClick={handleStart}
               disabled={startMut.isPending}
-              className="btn btn-primary btn-sm"
+              className="btn btn-sm"
               data-testid="procurement-start"
             >
               {startMut.isPending
@@ -207,6 +208,8 @@ export default function ProcurementPage(): JSX.Element {
         </div>
       )}
 
+      <ProcurementWorkQueue />
+
       {/* Input-trustworthiness strip (Tranche 132) — one compact line: stock
           verification, count freshness, forecast age, firmed-plan window and
           the engine's structural warnings as chips. Replaces the previous
@@ -241,9 +244,7 @@ export default function ProcurementPage(): JSX.Element {
           message={(error as Error)?.message ?? "לא ניתן לטעון את מושב הרכש."}
           onRetry={() => void refetch()}
         />
-      ) : !session ? (
-        <EmptyNoSession onStart={handleStart} starting={startMut.isPending} />
-      ) : (
+      ) : !session ? null : (
         <SessionView
           pos={session.pos}
           warnings={session.warnings}
@@ -499,40 +500,6 @@ function LoadingState(): JSX.Element {
           </div>
         ))}
       </div>
-    </div>
-  );
-}
-
-function EmptyNoSession({
-  onStart,
-  starting,
-}: {
-  onStart?: () => void;
-  starting?: boolean;
-}): JSX.Element {
-  return (
-    <div
-      className="card flex flex-col items-center gap-3 p-8 text-center"
-      data-testid="procurement-no-session"
-    >
-      <div className="text-sm font-semibold text-fg">אין מושב רכש פעיל</div>
-      <div className="max-w-md text-xs text-fg-muted">
-        התחילו מושב רכש שבועי כדי לראות את כל ההזמנות המוצעות, מסודרות לפי מה
-        שחייב לצאת היום ומה יכול לחכות.
-      </div>
-      {/* FLOW-007 — the empty state carries its own primary action so the
-          planner never has to scroll back up to the header to start. */}
-      {onStart ? (
-        <button
-          type="button"
-          className="btn btn-primary mt-1"
-          onClick={onStart}
-          disabled={starting}
-          data-testid="procurement-no-session-start"
-        >
-          {starting ? "מתחיל…" : "התחל מושב רכש"}
-        </button>
-      ) : null}
     </div>
   );
 }

@@ -13,7 +13,7 @@
 // the original grid unchanged. CSS-breakpoint switch — no JS media query.
 // ---------------------------------------------------------------------------
 
-import { useMemo } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { formatIls } from "@/lib/utils/format-money";
 import { cn } from "@/lib/cn";
 import type { PurchaseSessionPo } from "../../purchase-session/_lib/types";
@@ -27,6 +27,38 @@ import {
   type GridDay,
 } from "../_lib/calendar-grid";
 import { todayISO } from "../_lib/decision";
+
+interface ProcurementCalendarEvent {
+  event_id: string;
+  layer: "actions" | "deliveries";
+  event_date: string;
+  event_type: string;
+  purchase_session_po_id: string | null;
+  po_id: string | null;
+  po_number: string | null;
+  supplier_id: string | null;
+  supplier_name: string | null;
+  amount_net: string | null;
+  currency: string | null;
+  status: string | null;
+  due_state: string;
+  risk_state: string;
+  title: string;
+  subtitle: string | null;
+  metadata: unknown;
+}
+
+interface ProcurementCalendarResponse {
+  rows: ProcurementCalendarEvent[];
+}
+
+type RichCalEntry = CalEntry & {
+  po_id?: string | null;
+  layer?: "actions" | "deliveries";
+  event_type?: string;
+  risk_state?: string;
+  title?: string;
+};
 
 const DOW_HE = ["א", "ב", "ג", "ד", "ה", "ו", "ש"];
 const MONTH_HE = [
@@ -63,7 +95,24 @@ function hebDate(g: GridDay): string {
 interface WeekGroup {
   start: GridDay;
   end: GridDay;
-  rows: { entry: CalEntry; day: GridDay; dow: string }[];
+  rows: { entry: RichCalEntry; day: GridDay; dow: string }[];
+}
+
+function eventTier(e: ProcurementCalendarEvent): PoTierLike {
+  if (e.risk_state !== "ok" || e.due_state === "overdue") return "urgent";
+  if (e.due_state === "today" || e.due_state === "next_7_days") return "must";
+  return "recommended";
+}
+
+function eventStatus(e: ProcurementCalendarEvent): CalEntry["status"] {
+  if (e.layer === "deliveries") return "placed";
+  return e.event_type === "recommendation" ? "proposed" : "approved";
+}
+
+function eventLineCount(e: ProcurementCalendarEvent): number {
+  const meta = e.metadata as { line_count?: unknown } | null;
+  const n = Number(meta?.line_count ?? 1);
+  return Number.isFinite(n) && n > 0 ? n : 1;
 }
 
 export function CalendarView({
@@ -72,10 +121,65 @@ export function CalendarView({
   today,
 }: CalendarViewProps): JSX.Element {
   const day = today ?? todayISO();
-  const entries = useMemo(() => posToCalEntries(pos), [pos]);
-  const grid = useMemo(() => buildGrid(day, 10), [day]);
+  const grid = useMemo(() => buildGrid(day, 6), [day]);
+  const rangeFrom = grid[0]?.iso ?? day;
+  const rangeTo = grid[grid.length - 1]?.iso ?? day;
+  const [calendarData, setCalendarData] = useState<ProcurementCalendarResponse | null>(null);
+  useEffect(() => {
+    let cancelled = false;
+    setCalendarData(null);
+    if (typeof fetch !== "function") return () => {
+      cancelled = true;
+    };
+    void fetch(
+      `/api/procurement/calendar?from=${encodeURIComponent(rangeFrom)}&to=${encodeURIComponent(rangeTo)}&layer=all`,
+      { headers: { Accept: "application/json" } },
+    )
+      .then((res) => (res.ok ? res.json() : null))
+      .then((body) => {
+        if (!cancelled && body && typeof body === "object") {
+          setCalendarData(body as ProcurementCalendarResponse);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) setCalendarData(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [rangeFrom, rangeTo]);
+  const sessionEntries = useMemo<RichCalEntry[]>(
+    () => posToCalEntries(pos),
+    [pos],
+  );
+  const serverEntries = useMemo<RichCalEntry[]>(
+    () =>
+      (calendarData?.rows ?? []).map((e) => ({
+        session_po_id: e.purchase_session_po_id ?? e.event_id,
+        po_id: e.po_id,
+        supplier_snapshot: e.supplier_name ?? e.supplier_id ?? e.title,
+        tier: eventTier(e),
+        status: eventStatus(e),
+        total_cost: Number(e.amount_net ?? 0),
+        line_count: eventLineCount(e),
+        order_by_date: e.event_date,
+        layer: e.layer,
+        event_type: e.event_type,
+        risk_state: e.risk_state,
+        title: e.title,
+      })),
+    [calendarData],
+  );
+  const entries = calendarData ? serverEntries : sessionEntries;
   const byDay = useMemo(() => groupByDay(entries), [entries]);
   const totals = useMemo(() => calTotals(entries), [entries]);
+  function openEntry(e: RichCalEntry): void {
+    if (e.po_id) {
+      window.location.assign(`/purchase-orders/${encodeURIComponent(e.po_id)}`);
+      return;
+    }
+    onOpen?.(e.session_po_id);
+  }
 
   // FLOW-004: chunk the Sunday-aligned grid into weeks; keep only weeks that
   // actually carry orders. Same single source of truth (byDay) as the grid.
@@ -85,7 +189,7 @@ export function CalendarView({
       const chunk = grid.slice(w, w + 7);
       const rows = chunk.flatMap((g, i) =>
         (byDay.get(g.iso) ?? []).map((entry) => ({
-          entry,
+          entry: entry as RichCalEntry,
           day: g,
           dow: DOW_HE[i]!,
         })),
@@ -146,7 +250,7 @@ export function CalendarView({
                   <button
                     key={e.session_po_id}
                     type="button"
-                    onClick={() => onOpen?.(e.session_po_id)}
+                    onClick={() => openEntry(e)}
                     className={cn(
                       "flex min-h-[44px] w-full items-center gap-2.5 px-3 py-2 text-right transition-colors hover:bg-bg-muted",
                       e.status === "placed" || e.status === "skipped"
@@ -234,7 +338,7 @@ export function CalendarView({
                     <button
                       key={e.session_po_id}
                       type="button"
-                      onClick={() => onOpen?.(e.session_po_id)}
+                      onClick={() => openEntry(e as RichCalEntry)}
                       className={cn(
                         "block w-full rounded border px-1.5 py-0.5 text-right text-3xs transition-colors hover:brightness-105",
                         tierChip(e.tier),

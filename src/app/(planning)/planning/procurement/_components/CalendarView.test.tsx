@@ -6,7 +6,7 @@
 // (Grid math + grouping are covered by calendar-grid.test.ts.)
 // ---------------------------------------------------------------------------
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { CalendarView } from "./CalendarView";
@@ -14,7 +14,15 @@ import type { PurchaseSessionPo } from "../../purchase-session/_lib/types";
 
 const TODAY = "2026-05-29";
 
-afterEach(() => cleanup());
+afterEach(() => {
+  cleanup();
+  vi.restoreAllMocks();
+});
+beforeEach(() => {
+  vi.spyOn(globalThis, "fetch").mockRejectedValue(
+    new Error("calendar API intentionally unavailable in this unit test"),
+  );
+});
 
 function po(id: string, over: Partial<PurchaseSessionPo> = {}): PurchaseSessionPo {
   return {
