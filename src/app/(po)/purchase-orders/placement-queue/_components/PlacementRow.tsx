@@ -29,6 +29,10 @@ import { formatIls } from "@/lib/utils/format-money";
 import { formatIsraeliDate } from "@/lib/utils/format-date";
 import { fmtNumStr, uomLabelHe } from "@/lib/utils/format-quantity";
 import { PAYMENT_TERMS, paymentTermByCode } from "@/lib/payment-terms";
+import {
+  PLACEMENT_CANCEL_REASONS,
+  CANCEL_REASON_OTHER,
+} from "@/lib/purchase/cancel-reasons";
 import { SupplierCallLink } from "@/components/purchase/SupplierCallLink";
 import { SwitchSupplierControl } from "@/components/purchase/SwitchSupplierControl";
 import {
@@ -42,13 +46,10 @@ import {
 } from "../_lib/api";
 
 // Preset discard reasons (Tom-directed 2026-07-16). "אחר" requires free text.
-const CANCEL_REASONS = [
-  "כבר לא נדרש",
-  "כפילות",
-  "הוזמן בערוץ אחר",
-  "הספק לא זמין",
-  "מחיר/תנאים לא מתאימים",
-] as const;
+// Tranche 156 (COPY-110): the list moved to src/lib/purchase/cancel-reasons.ts
+// so this surface and the planner's FocusCard stop inventing their own wording
+// for the same reasons. See that file for why they are two subsets, not one list.
+const CANCEL_REASONS = PLACEMENT_CANCEL_REASONS;
 
 // Tranche 150 — why the supplier could not supply part of the order. These are
 // about the SUPPLIER's inability, which is a different question from the
@@ -253,7 +254,7 @@ export function PlacementRow({
   const [cancelDetail, setCancelDetail] = useState("");
   const [cancelError, setCancelError] = useState<string | null>(null);
   const composedReason =
-    cancelReason === "אחר" ? cancelDetail.trim() : cancelReason;
+    cancelReason === CANCEL_REASON_OTHER ? cancelDetail.trim() : cancelReason;
 
   async function handleCancel(): Promise<void> {
     setCancelError(null);
@@ -406,17 +407,36 @@ export function PlacementRow({
     const partial = Number(partialQtys[l.po_line_id]);
     return Number.isFinite(partial) ? partial : NaN;
   }
+  /**
+   * Tranche 156 (Tom, 2026-07-30): "there must be an option to cancel, and to
+   * enter an order of more than what was set — up to 15% more than what the
+   * procurement page set."
+   *
+   * So the middle state is no longer "less than ordered" — it is "whatever the
+   * supplier actually confirmed", anywhere in (0, ordered × 1.15]. One input,
+   * one number, no new mode to learn: below the ordered amount the remainder
+   * splits onto a sibling PO exactly as before; above it, the line's quantity
+   * is raised via the existing line_qty_overrides contract (0261). Past +15%
+   * the money and stock impact stops being a placement decision, so it is
+   * refused and pointed at the planner rather than silently accepted.
+   */
+  const OVER_SUPPLY_LIMIT = 1.15;
+
+  function maxSuppliedQty(l: QueuePoLine): number {
+    return Number(l.ordered_qty) * OVER_SUPPLY_LIMIT;
+  }
+
   function partialInvalid(l: QueuePoLine): boolean {
     if (stateFor(l) !== "partial") return false;
     const q = suppliedQty(l);
-    const ordered = Number(l.ordered_qty);
-    return !Number.isFinite(q) || q <= 0 || q >= ordered;
+    // Float tolerance: 15% of a 3-decimal quantity is not always exact.
+    return !Number.isFinite(q) || q <= 0 || q > maxSuppliedQty(l) + 1e-6;
   }
 
   function setLineState(l: QueuePoLine, next: LineState): void {
     setLineStates((prev) => ({ ...prev, [l.po_line_id]: next }));
-    // Seed the partial box with the full amount so the office manager edits a
-    // number down rather than typing one from scratch.
+    // Seed the box with the full amount so the office manager edits a number
+    // up or down rather than typing one from scratch.
     if (next === "partial" && !(l.po_line_id in partialQtys)) {
       setPartialQtys((prev) => ({
         ...prev,
@@ -448,6 +468,26 @@ export function PlacementRow({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lines, lineStates, partialQtys]);
 
+  /** Lines the supplier over-delivered, as the backend's qty-override shape. */
+  const qtyOverrides = useMemo(() => {
+    const out: { po_line_id: string; ordered_qty: number }[] = [];
+    for (const l of lines) {
+      if (stateFor(l) !== "partial") continue;
+      const supplied = suppliedQty(l);
+      const ordered = Number(l.ordered_qty);
+      if (
+        Number.isFinite(supplied) &&
+        supplied > ordered &&
+        supplied <= maxSuppliedQty(l) + 1e-6
+      ) {
+        out.push({ po_line_id: l.po_line_id, ordered_qty: supplied });
+      }
+    }
+    return out;
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lines, lineStates, partialQtys]);
+
+  const hasOverSupply = qtyOverrides.length > 0;
   const hasSplit = unplacedLines.length > 0;
   // Nothing left to place is a CANCELLATION, not a partial placement — the
   // backend refuses it (NOTHING_PLACED) and the right path is the existing
@@ -502,7 +542,7 @@ export function PlacementRow({
       : nothingPlaced
     ? "כל השורות מסומנות כ״לא יסופק״ — זהו ביטול הזמנה, השתמשי ב״בטל עם סיבה״."
     : anyPartialInvalid
-      ? "יש להזין כמות חלקית גדולה מאפס וקטנה מהכמות שהוזמנה."
+      ? "הכמות שהספק אישר חייבת להיות גדולה מאפס, ולא יותר מ-15% מעל הכמות שאושרה בדף הרכש."
       : hasSplit && !splitReason
         ? "יש לבחור סיבה לביצוע החלקי."
         // The price/terms wording is the DR-018 INTER-003 contract — it names
@@ -567,7 +607,7 @@ export function PlacementRow({
     }
     if (anyPartialInvalid) {
       setErrorMsg(
-        "כמות חלקית חייבת להיות גדולה מאפס וקטנה מהכמות שהוזמנה.",
+        "הכמות שהספק אישר חייבת להיות גדולה מאפס, ולא יותר מ-15% מעל הכמות שאושרה בדף הרכש. אם הספק שינה יותר מזה — פנו למנהל התכנון.",
       );
       return;
     }
@@ -583,6 +623,19 @@ export function PlacementRow({
     // at this UI hid quantity overrides behind a generic sentence.
     const splitBlock = hasSplit
       ? `\n\nמבוצע כעת (${placedSummary.length}): ${placedSummary.join(" · ")}\nלא סופק — יעבור להזמנה חדשה (${splitSummary.length}): ${splitSummary.join(" · ")}\nסיבה: ${splitReason}\n\nהיתרה תיפתח כהזמנה נפרדת הממתינה לביצוע, ותוכלי להפנות אותה לספק אחר מתוך התור. עד שתבוצע היא לא נחשבת כסחורה בדרך.`
+      : "";
+    // Tranche 156: DR-019's rule applies to over-supply exactly as it does to a
+    // split — a confirm dialog that hides a quantity change is the bug that
+    // sank PR #164. Name each raised line and by how much.
+    const overBlock = hasOverSupply
+      ? `\n\nמעל הכמות שאושרה (${qtyOverrides.length}): ${qtyOverrides
+          .map((o) => {
+            const l = lines.find((x) => x.po_line_id === o.po_line_id);
+            const ordered = Number(l?.ordered_qty ?? 0);
+            const pct = ordered > 0 ? Math.round(((o.ordered_qty - ordered) / ordered) * 100) : 0;
+            return `${l ? lineName(l) : "פריט"} ${qtyLabel(o.ordered_qty, l?.uom)} (+${pct}% מול ${qtyLabel(ordered, l?.uom)})`;
+          })
+          .join(" · ")}\nההזמנה תעודכן לכמות שהספק אישר, והעלות תגדל בהתאם.`
       : "";
     const ok = await confirm({
       // ux-release-gate 2026-07-30 INTER-103: a terminal money action must name
@@ -603,7 +656,7 @@ export function PlacementRow({
         !confirmedDate
           ? " לא הוזן תאריך אספקה — ההזמנה תיפתח ללא צפי הגעה, ויש להוסיף אותו ידנית אחר כך."
           : ""
-      }${splitBlock}`,
+      }${overBlock}${splitBlock}`,
       confirmLabel: hasSplit ? "בצע חלקית" : "בצע הזמנה",
       cancelLabel: "ביטול",
       srFallbackDescription: "אשר/י פעולה זו.",
@@ -621,6 +674,8 @@ export function PlacementRow({
         // Tranche 150: omitted entirely on a full placement.
         unplaced_lines: hasSplit ? unplacedLines : undefined,
         split_reason: hasSplit ? splitReason : undefined,
+        // Tranche 156: the supplier sent more than approved (≤ +15%).
+        line_qty_overrides: hasOverSupply ? qtyOverrides : undefined,
       },
       {
         // On success the queue refetch drops this PO (no longer
@@ -1281,7 +1336,7 @@ export function PlacementRow({
                       {(
                         [
                           ["full", "סופק במלואו"],
-                          ["partial", "סופק חלקית"],
+                          ["partial", "כמות אחרת"],
                           // COPY-105 — was "לא הוזמן", which contradicted the
                           // question: the order WAS placed; this line is the one
                           // the supplier cannot supply.
@@ -1332,6 +1387,7 @@ export function PlacementRow({
                             inputMode="decimal"
                             min="0"
                             step="any"
+                            max={fmtNumStr(maxSuppliedQty(l))}
                             className="input w-24 text-left tabular-nums"
                             value={partialQtys[l.po_line_id] ?? ""}
                             onChange={(e) =>
@@ -1352,6 +1408,13 @@ export function PlacementRow({
                           <span className="text-xs text-fg-muted">
                             {uomLabelHe(l.uom)}
                           </span>
+                          {/* Tranche 156: the ceiling is stated where the number
+                              is typed, so she never discovers it by being
+                              refused after the fact. */}
+                          <span className="text-2xs text-fg-muted">
+                            עד {qtyLabel(maxSuppliedQty(l), l.uom)} (15% מעל
+                            המאושר)
+                          </span>
                         </label>
                       ) : null}
                     </fieldset>
@@ -1362,9 +1425,11 @@ export function PlacementRow({
                         role="alert"
                         data-testid={errorId}
                       >
-                        הכמות שסופקה חייבת להיות גדולה מאפס וקטנה מ-
-                        {qtyLabel(l.ordered_qty, l.uom)}. אם סופק הכול — בחרי
-                        ״סופק במלואו״; אם כלום — ״לא יסופק״.
+                        הכמות חייבת להיות גדולה מאפס ולא יותר מ-
+                        {qtyLabel(maxSuppliedQty(l), l.uom)} — 15% מעל הכמות
+                        שאושרה בדף הרכש ({qtyLabel(l.ordered_qty, l.uom)}). אם
+                        הספק שינה יותר מזה, פנו למנהל התכנון. אם סופק בדיוק
+                        המאושר — בחרי ״סופק במלואו״; אם כלום — ״לא יסופק״.
                       </p>
                     ) : null}
                   </li>

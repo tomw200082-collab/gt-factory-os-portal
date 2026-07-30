@@ -17,6 +17,7 @@
 // ---------------------------------------------------------------------------
 
 import { Fragment, useEffect, useRef, useState } from "react";
+import { SESSION_CANCEL_REASONS } from "@/lib/purchase/cancel-reasons";
 import Link from "next/link";
 import {
   AlertTriangle,
@@ -60,12 +61,9 @@ const STATUS_LABEL: Record<PoStatus, string> = {
 
 // Preset cancel reasons (Tom-directed 2026-07-16 — same catalogue as the
 // placement-queue discard panel, tranche 130, for corridor-wide consistency).
-const CANCEL_REASONS = [
-  "כבר לא נדרש",
-  "כפילות",
-  "המלצת המנוע שגויה",
-  "לבחון שוב בסבב הבא",
-] as const;
+// Tranche 156 (COPY-110): shared vocabulary — see
+// src/lib/purchase/cancel-reasons.ts for why this is a subset, not the union.
+const CANCEL_REASONS = SESSION_CANCEL_REASONS;
 const STATUS_TONE: Record<PoStatus, BadgeTone> = {
   proposed: "neutral",
   approved: "info",
