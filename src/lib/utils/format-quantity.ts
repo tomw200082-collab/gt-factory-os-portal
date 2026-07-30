@@ -39,6 +39,37 @@ export function formatQty(value: number, uom: string): string {
   return stripTrailingZeros(value.toFixed(4))
 }
 
+/**
+ * Hebrew display label for a unit of measure.
+ *
+ * Tranche 154 (ux-release-gate 2026-07-30, COPY-108): UOM codes arrive from the
+ * API as English abbreviations ("KG", "L") and were printed verbatim inside
+ * Hebrew sentences on the placement queue. Unknown codes are returned as-is so
+ * a new unit shows something truthful rather than nothing.
+ */
+const UOM_HE: Record<string, string> = {
+  KG: 'ק״ג',
+  G: "גר'",
+  MG: 'מ״ג',
+  TON: 'טון',
+  L: "ליטר",
+  ML: 'מ״ל',
+  UNIT: "יח'",
+  PCS: "יח'",
+  BAG: 'שקים',
+  CASE: 'ארגזים',
+  BOX: 'קרטונים',
+  BOTTLE: 'בקבוקים',
+  TIN: 'פחיות',
+}
+
+export function uomLabelHe(uom: string | null | undefined): string {
+  if (uom == null) return ''
+  const raw = String(uom).trim()
+  if (raw === '') return ''
+  return UOM_HE[raw.toUpperCase()] ?? raw
+}
+
 export function formatPrice(value: number): string {
   return `₪${value.toFixed(2)}`
 }

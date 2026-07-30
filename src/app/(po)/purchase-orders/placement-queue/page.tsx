@@ -10,6 +10,13 @@
 //
 // Gate: planning:execute (planner + admin). There is no separate bookkeeper
 // role in the locked role lattice; the office manager signs in as planner.
+//
+// Tranche 154 (ux-release-gate 2026-07-30) — the organizing unit of this page
+// is THE PHONE CALL. One supplier group = one call. Groups are therefore kept
+// but ordered by their most urgent member, and each group header carries that
+// urgency, so scanning top-to-bottom is scanning calls by priority. Inside a
+// group the row is deliberately quieter than its header: the supplier name
+// appears exactly once (the P0 fix), and the row leads with a status chip.
 // ---------------------------------------------------------------------------
 
 import { useMemo, useState } from "react";
@@ -22,12 +29,13 @@ import {
   X,
   Ban,
   Search,
+  Phone,
 } from "lucide-react";
 import { RoleGate } from "@/lib/auth/role-gate";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { formatIls } from "@/lib/utils/format-money";
 import { ApiError, usePlacementQueue, type QueuePo, type QueueScope } from "./_lib/api";
-import { PlacementRow } from "./_components/PlacementRow";
+import { PlacementRow, StatusChip, poUrgencyRank } from "./_components/PlacementRow";
 
 // Filter/sort (Tom-directed 2026-07-16 — every corridor page needs them).
 // Client-side over the already-fetched queue; the default order-by-date sort
@@ -48,6 +56,33 @@ const SORTERS: Record<SortKey, (a: QueuePo, b: QueuePo) => number> = {
     (a.supplier_name ?? "").localeCompare(b.supplier_name ?? "", "he"),
 };
 
+const SCOPE_HELP: Record<QueueScope, string> = {
+  now: "הזמנות ללא תאריך ביצוע, הזמנות באיחור, והזמנות לביצוע היום.",
+  "7d": "הזמנות שתאריך הביצוע שלהן חל בשבעת הימים הקרובים.",
+  all: "כל ההזמנות שממתינות לביצוע, כולל עתידיות.",
+};
+
+// ux-release-gate 2026-07-30 COPY-101 (downgraded to P2 on backend evidence):
+// `split_po_id` is a friendly PO number today — migration 0298 mints the
+// sibling via fn_allocate_po_number, and po_id == po_number in v1. The portal
+// depends on that identity silently, so guard it: if the backend ever returns
+// an opaque identifier, the operator gets a readable label instead of a UUID.
+const UUID_RE =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function splitPoLabel(id: string): string {
+  return UUID_RE.test(id) ? "הזמנה חדשה" : id;
+}
+
+interface SupplierGroup {
+  supplierId: string;
+  supplierName: string;
+  rows: QueuePo[];
+  total: number;
+  /** The group's worst member — the reason to call this supplier first. */
+  lead: QueuePo;
+}
+
 function QueueInner(): JSX.Element {
   const [scope, setScope] = useState<QueueScope>("now");
   const { data, isLoading, isError, error, refetch } = usePlacementQueue(scope);
@@ -67,11 +102,9 @@ function QueueInner(): JSX.Element {
       .filter((po) => !q || (po.supplier_name ?? "").toLowerCase().includes(q))
       .sort(SORTERS[sortKey]);
   }, [rows, supplierQuery, sortKey]);
+
   const groupedVisibleRows = useMemo(() => {
-    const groups = new Map<
-      string,
-      { supplierId: string; supplierName: string; rows: QueuePo[]; total: number }
-    >();
+    const groups = new Map<string, SupplierGroup>();
     for (const po of visibleRows) {
       const key = po.supplier_id || po.supplier_name || "unknown";
       const current =
@@ -81,13 +114,35 @@ function QueueInner(): JSX.Element {
           supplierName: po.supplier_name ?? "ספק לא ידוע",
           rows: [],
           total: 0,
+          lead: po,
         };
       current.rows.push(po);
       current.total += Number(po.total_net);
+      // The group inherits its most urgent member — that member is why this
+      // call happens now (tranche 154 decision 1; gate FLOW-110).
+      if (poUrgencyRank(po) < poUrgencyRank(current.lead)) current.lead = po;
       groups.set(key, current);
     }
-    return Array.from(groups.values());
-  }, [visibleRows]);
+    const out = Array.from(groups.values());
+    // Group order follows the operator's explicit sort choice; only the
+    // default (by-date) sort is re-expressed as "most urgent call first".
+    if (sortKey === "supplier") {
+      out.sort((a, b) => a.supplierName.localeCompare(b.supplierName, "he"));
+    } else if (sortKey === "amount_desc") {
+      out.sort((a, b) => b.total - a.total);
+    } else {
+      out.sort(
+        (a, b) =>
+          poUrgencyRank(a.lead) - poUrgencyRank(b.lead) ||
+          (a.lead.scheduled_order_date ?? "9999-99-99").localeCompare(
+            b.lead.scheduled_order_date ?? "9999-99-99",
+          ) ||
+          a.supplierName.localeCompare(b.supplierName, "he"),
+      );
+    }
+    return out;
+  }, [visibleRows, sortKey]);
+
   // Durable success confirmation: a placed PO's row unmounts (it leaves the
   // queue), so the page owns the "order placed" banner.
   const [placed, setPlaced] = useState<{
@@ -107,13 +162,126 @@ function QueueInner(): JSX.Element {
     reason: string;
   } | null>(null);
 
+  // Scope counts, used both on the tabs and by the scope-aware empty state.
+  const scopeCounts: Record<QueueScope, number> = {
+    now: data?.counts?.now ?? rows.length,
+    "7d": data?.counts?.next_7_days ?? 0,
+    all: data?.total_count ?? rows.length,
+  };
+  // ux-release-gate 2026-07-30 FLOW-111: when the selected scope is empty but
+  // another one is not, "אין הזמנות לביצוע" is a false dead-end. Name the
+  // scope that does have work and offer one tap to get there.
+  const fallbackScope: QueueScope | null =
+    rows.length > 0
+      ? null
+      : scope !== "all" && scopeCounts.all > 0
+        ? "all"
+        : scope === "now" && scopeCounts["7d"] > 0
+          ? "7d"
+          : null;
+
+  const controlBar = (
+    <div
+      className="flex flex-col gap-2.5 rounded-lg border border-border/60 bg-bg-subtle/25 p-3"
+      data-testid="placement-queue-controls"
+    >
+      {/* FLOW-111 / COPY-112: what each tab means is stated BEFORE the choice,
+          not in a muted line underneath it. */}
+      <div
+        className="flex flex-wrap items-center gap-x-3 gap-y-2"
+        data-testid="placement-queue-scope-bar"
+      >
+        <span className="eyebrow-strong shrink-0">מה להציג</span>
+        <div className="segmented" role="group" aria-label="טווח ההזמנות המוצג">
+          {(
+            [
+              ["now", "עכשיו"],
+              ["7d", "7 ימים"],
+              ["all", "הכול"],
+            ] as const
+          ).map(([value, label]) => (
+            <button
+              key={value}
+              type="button"
+              onClick={() => setScope(value)}
+              data-active={scope === value}
+              aria-pressed={scope === value}
+              title={SCOPE_HELP[value]}
+              className="segmented-option min-h-[44px]"
+              data-testid={`placement-queue-scope-${value}`}
+            >
+              {label}
+              <span className="font-mono tabular-nums opacity-70">
+                {scopeCounts[value]}
+              </span>
+            </button>
+          ))}
+        </div>
+        {/* Full width on a phone — squeezed beside the tabs it collapsed into
+            a one-word-per-line column. */}
+        <p className="w-full min-w-0 text-xs text-fg-muted sm:w-auto sm:flex-1">
+          {SCOPE_HELP[scope]}
+        </p>
+      </div>
+
+      {/* Filter + sort (Tom-directed 2026-07-16). VIS-107: one control zone,
+          one border — these were two stacked bordered bars. */}
+      <div
+        className="flex flex-wrap items-center gap-2 border-t border-border/50 pt-2.5"
+        data-testid="placement-queue-filter-bar"
+      >
+        <div className="relative min-w-[10rem] flex-1">
+          <Search
+            className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-muted"
+            aria-hidden
+          />
+          <input
+            type="search"
+            value={supplierQuery}
+            onChange={(e) => setSupplierQuery(e.target.value)}
+            placeholder="סינון לפי ספק…"
+            aria-label="סינון לפי ספק"
+            className="input w-full py-1.5 pr-8 text-xs"
+            data-testid="placement-queue-filter-supplier"
+          />
+        </div>
+        <select
+          value={sortKey}
+          onChange={(e) => setSortKey(e.target.value as SortKey)}
+          aria-label="מיון"
+          className="input w-44 py-1.5 text-xs"
+          data-testid="placement-queue-sort"
+        >
+          <option value="scheduled_order_date">מיין: הכי דחוף קודם</option>
+          <option value="amount_desc">מיין: סכום (גבוה תחילה)</option>
+          <option value="supplier">מיין: ספק (א-ת)</option>
+        </select>
+        {isFiltered && (
+          <button
+            type="button"
+            onClick={() => setSupplierQuery("")}
+            // ux-release-gate 2026-07-21 INT-103: real touch target,
+            // matching the ActionList twin (INTER-204 pattern).
+            className="inline-flex min-h-[2rem] items-center px-2 text-3xs font-medium text-accent hover:underline"
+            data-testid="placement-queue-filter-clear"
+          >
+            נקה סינון
+          </button>
+        )}
+      </div>
+    </div>
+  );
+
   return (
-    <div dir="rtl" className="flex flex-col gap-5">
+    // VIS-102: `lang="he"` makes Chromium render every descendant
+    // <input type="date"> as DD/MM/YYYY instead of the browser-UI-locale
+    // mm/dd/yyyy that was appearing inside this Hebrew page.
+    <div dir="rtl" lang="he" className="flex flex-col gap-5">
       <WorkflowHeader
         size="section"
         eyebrow="רכש"
         title="הזמנות לביצוע"
-        description="הזמנות שאושרו וממתינות לביצוע מול הספק. הזינו מחיר ותנאי תשלום לכל הזמנה, ובצעו אותה — היא תיפתח ותעבור לקבלת סחורה."
+        description="כל שורה כאן היא הזמנה שאושרה וממתינה לשיחה עם הספק. ההזמנות מקובצות לפי ספק — קבוצה אחת = שיחה אחת — והדחופות ביותר מופיעות למעלה."
       />
 
       {placed ? (
@@ -152,7 +320,7 @@ function QueueInner(): JSX.Element {
                     className="font-medium underline-offset-2 hover:underline"
                     data-testid="placement-queue-success-split-link"
                   >
-                    {placed.split_po_id}
+                    {splitPoLabel(placed.split_po_id)}
                   </Link>{" "}
                   וממתינה לביצוע — אפשר להפנות אותה לספק אחר מהתור.
                 </span>
@@ -207,9 +375,11 @@ function QueueInner(): JSX.Element {
       {isLoading ? (
         <div
           className="space-y-3"
+          role="status"
           aria-busy="true"
           data-testid="placement-queue-loading"
         >
+          <span className="sr-only">טוען את תור ההזמנות…</span>
           {Array.from({ length: 3 }).map((_, i) => (
             <div
               key={i}
@@ -238,119 +408,36 @@ function QueueInner(): JSX.Element {
             נסה שוב
           </button>
         </div>
-      ) : rows.length === 0 ? (
-        <div
-          className="card flex flex-col items-center gap-2 p-8 text-center"
-          data-testid="placement-queue-empty"
-        >
-          <ClipboardCheck className="h-6 w-6 text-fg-muted" aria-hidden />
-          <div className="text-sm font-semibold text-fg">אין הזמנות לביצוע</div>
-          <div className="max-w-md text-xs text-fg-muted">
-            כשתאושר הזמנת רכש היא תופיע כאן, ותוכלי להזין מחיר ותנאי תשלום ולבצע
-            אותה מול הספק.
-          </div>
-          {/* DR-018 FLOW-004 (Tranche 124) — this empty state was
-              indistinguishable from an upstream-bug state (it masked the
-              live trigger bug on 2026-07-03 until someone thought to ask).
-              Give the office manager an explicit "this might be a bug, not
-              a real empty queue" escape hatch. */}
-          <div className="max-w-md text-xs text-fg-faint">
-            אם ידוע לך שאושרו הזמנות ואינן מופיעות כאן, פנו למנהל התכנון.
-          </div>
-        </div>
       ) : (
         <>
           {/* DR-018 FLOW-006 (Tranche 124) — no aging/overdue signal at the
               page level; an office manager had to open every row to notice
-              a missed order_by_date. */}
+              a missed order_by_date.
+              VIS-110: this is a business heads-up, not a system fault. Danger
+              tokens are reserved here for API/validation failures (the error
+              banner above) and for destructive confirmations; a full-width
+              summary banner uses warning so the two never read alike. Per-row
+              status chips keep danger for the single worst state — a chip is
+              never mistaken for an error banner. */}
           {overdueCount > 0 && (
             <div
               role="status"
-              className="flex items-center gap-2 rounded-md border border-danger/40 bg-danger-softer px-4 py-3 text-sm text-danger-fg"
+              className="flex items-center gap-2 rounded-md border border-warning/40 bg-warning-softer px-4 py-3 text-sm text-warning-fg"
               data-testid="placement-queue-overdue-banner"
             >
               <AlertTriangle className="h-4 w-4 shrink-0" aria-hidden />
               <span>
-                {rows.length} הזמנות ממתינות — {overdueCount} באיחור
+                {rows.length} הזמנות ממתינות לביצוע — {overdueCount} כבר באיחור.
+                התחילי מהן.
               </span>
             </div>
           )}
 
-          <div
-            className="flex flex-wrap items-center gap-2 rounded-md border border-border/60 bg-bg px-3 py-2 text-sm"
-            data-testid="placement-queue-scope-bar"
-          >
-            {(
-              [
-                ["now", `עכשיו · ${data?.counts?.now ?? rows.length}`],
-                ["7d", `7 ימים · ${data?.counts?.next_7_days ?? 0}`],
-                ["all", `הכול · ${data?.total_count ?? rows.length}`],
-              ] as const
-            ).map(([value, label]) => (
-              <button
-                key={value}
-                type="button"
-                onClick={() => setScope(value)}
-                aria-pressed={scope === value}
-                className={
-                  scope === value
-                    ? "btn btn-sm btn-primary min-h-[44px]"
-                    : "btn btn-sm min-h-[44px]"
-                }
-                data-testid={`placement-queue-scope-${value}`}
-              >
-                {label}
-              </button>
-            ))}
-            <span className="text-xs text-fg-muted">
-              תור “עכשיו” מציג ללא תאריך, באיחור והיום בלבד.
-            </span>
-          </div>
-
-          {/* Filter + sort (Tom-directed 2026-07-16) */}
-          <div
-            className="flex flex-wrap items-center gap-2 rounded-md border border-border/60 bg-bg-subtle/20 px-3 py-2"
-            data-testid="placement-queue-filter-bar"
-          >
-            <div className="relative flex-1 min-w-[10rem]">
-              <Search
-                className="pointer-events-none absolute right-2.5 top-1/2 h-3.5 w-3.5 -translate-y-1/2 text-fg-faint"
-                aria-hidden
-              />
-              <input
-                type="search"
-                value={supplierQuery}
-                onChange={(e) => setSupplierQuery(e.target.value)}
-                placeholder="סינון לפי ספק…"
-                aria-label="סינון לפי ספק"
-                className="input w-full py-1.5 pr-8 text-xs"
-                data-testid="placement-queue-filter-supplier"
-              />
-            </div>
-            <select
-              value={sortKey}
-              onChange={(e) => setSortKey(e.target.value as SortKey)}
-              aria-label="מיון"
-              className="input w-40 py-1.5 text-xs"
-              data-testid="placement-queue-sort"
-            >
-              <option value="scheduled_order_date">מיין: תאריך ביצוע</option>
-              <option value="amount_desc">מיין: סכום (גבוה תחילה)</option>
-              <option value="supplier">מיין: ספק (א-ת)</option>
-            </select>
-            {isFiltered && (
-              <button
-                type="button"
-                onClick={() => setSupplierQuery("")}
-                // ux-release-gate 2026-07-21 INT-103: real touch target,
-                // matching the ActionList twin (INTER-204 pattern).
-                className="inline-flex min-h-[2rem] items-center px-2 text-3xs font-medium text-accent hover:underline"
-                data-testid="placement-queue-filter-clear"
-              >
-                נקה סינון
-              </button>
-            )}
-          </div>
+          {/* The control bar renders even when the current scope is empty —
+              previously the tabs disappeared behind the empty state, so an
+              operator whose "עכשיו" was empty could not discover that "7 ימים"
+              had work (FLOW-111). */}
+          {controlBar}
 
           {/* ux-release-gate 2026-07-21 A11Y-103: announce filter results —
               mirrors the ActionList A11Y-005 region. */}
@@ -367,57 +454,122 @@ function QueueInner(): JSX.Element {
               : ""}
           </div>
 
-          {isFiltered && visibleRows.length === 0 && (
+          {rows.length === 0 ? (
+            <div
+              className="card flex flex-col items-center gap-2 p-8 text-center"
+              data-testid="placement-queue-empty"
+            >
+              <ClipboardCheck className="h-6 w-6 text-fg-muted" aria-hidden />
+              <div className="text-sm font-semibold text-fg">
+                {fallbackScope
+                  ? "אין הזמנות לביצוע בטווח הזה"
+                  : "אין הזמנות לביצוע"}
+              </div>
+              {fallbackScope ? (
+                <>
+                  <div className="max-w-md text-xs text-fg-muted">
+                    {fallbackScope === "7d"
+                      ? `יש ${scopeCounts["7d"]} הזמנות שתאריך הביצוע שלהן בשבוע הקרוב.`
+                      : `יש ${scopeCounts.all} הזמנות שממתינות לביצוע בטווחים אחרים.`}
+                  </div>
+                  <button
+                    type="button"
+                    onClick={() => setScope(fallbackScope)}
+                    className="btn btn-sm btn-primary min-h-[44px]"
+                    data-testid="placement-queue-empty-jump"
+                  >
+                    {fallbackScope === "7d"
+                      ? "הצג את 7 הימים הקרובים"
+                      : "הצג את כל ההזמנות"}
+                  </button>
+                </>
+              ) : (
+                <>
+                  <div className="max-w-md text-xs text-fg-muted">
+                    כשתאושר הזמנת רכש היא תופיע כאן, ותוכלי להזין מחיר ותנאי
+                    תשלום ולבצע אותה מול הספק.
+                  </div>
+                  {/* DR-018 FLOW-004 (Tranche 124) — this empty state was
+                      indistinguishable from an upstream-bug state (it masked the
+                      live trigger bug on 2026-07-03 until someone thought to ask).
+                      Give the office manager an explicit "this might be a bug, not
+                      a real empty queue" escape hatch. */}
+                  <div className="max-w-md text-xs text-fg-muted">
+                    אם ידוע לך שאושרו הזמנות ואינן מופיעות כאן, פנו למנהל התכנון.
+                  </div>
+                </>
+              )}
+            </div>
+          ) : isFiltered && visibleRows.length === 0 ? (
             <div className="rounded-md border border-border/60 bg-bg-subtle/30 px-4 py-6 text-center text-xs text-fg-muted">
               אין הזמנות התואמות את הסינון.
             </div>
-          )}
-
-          <div className="space-y-4" data-testid="placement-queue-list">
-            {groupedVisibleRows.map((group) => (
-              <section
-                key={group.supplierId}
-                className="rounded-xl border border-border/60 bg-bg-subtle/20 p-3"
-                data-testid={`placement-queue-supplier-${group.supplierId}`}
-              >
-                <div className="mb-3 flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <h2 className="text-sm font-semibold text-fg">{group.supplierName}</h2>
-                    <p className="text-xs text-fg-muted">
-                      {group.rows.length} הזמנות · {formatIls(group.total)}
+          ) : (
+            <div className="space-y-5" data-testid="placement-queue-list">
+              {groupedVisibleRows.map((group) => (
+                <section
+                  key={group.supplierId}
+                  aria-labelledby={`supplier-heading-${group.supplierId}`}
+                  data-testid={`placement-queue-supplier-${group.supplierId}`}
+                >
+                  {/* VIS-101 / VIS-106 — the supplier name lives HERE and
+                      nowhere else on the page. It is the call target, so it is
+                      the strongest label in the group; the rows below are
+                      deliberately quieter. */}
+                  <div className="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1 border-b border-border/50 pb-2">
+                    <div className="flex min-w-0 items-baseline gap-2">
+                      <Phone
+                        className="h-3.5 w-3.5 shrink-0 self-center text-fg-muted"
+                        aria-hidden
+                      />
+                      <h2
+                        id={`supplier-heading-${group.supplierId}`}
+                        className="truncate text-base font-semibold text-fg-strong"
+                      >
+                        {group.supplierName}
+                      </h2>
+                      {/* VIS-108 (merged ×5): the accent pill that used to sit
+                          here was a non-interactive span dressed as a CTA. It
+                          is replaced by real information — the reason this
+                          call is ranked where it is. */}
+                      <StatusChip po={group.lead} />
+                    </div>
+                    <p className="eyebrow-strong shrink-0">
+                      {group.rows.length}{" "}
+                      {group.rows.length === 1 ? "הזמנה" : "הזמנות"} ·{" "}
+                      <span className="font-mono tabular-nums normal-case">
+                        {formatIls(group.total)}
+                      </span>
                     </p>
                   </div>
-                  <span className="rounded-full bg-accent-softer px-2.5 py-1 text-xs font-semibold text-accent">
-                    התחל עבודה מול הספק · {group.rows.length}
-                  </span>
-                </div>
-                <ul className="space-y-3">
-                  {group.rows.map((po) => (
-                    <PlacementRow
-                      key={po.po_id}
-                      po={po}
-                      onPlaced={(p, splitPoId) => {
-                        setCancelled(null);
-                        setPlaced({
-                          po_id: p.po_id,
-                          po_number: p.po_number,
-                          split_po_id: splitPoId ?? null,
-                        });
-                      }}
-                      onCancelled={(p, reason) => {
-                        setPlaced(null);
-                        setCancelled({
-                          po_id: p.po_id,
-                          po_number: p.po_number,
-                          reason,
-                        });
-                      }}
-                    />
-                  ))}
-                </ul>
-              </section>
-            ))}
-          </div>
+                  <ul className="space-y-2.5">
+                    {group.rows.map((po) => (
+                      <PlacementRow
+                        key={po.po_id}
+                        po={po}
+                        onPlaced={(p, splitPoId) => {
+                          setCancelled(null);
+                          setPlaced({
+                            po_id: p.po_id,
+                            po_number: p.po_number,
+                            split_po_id: splitPoId ?? null,
+                          });
+                        }}
+                        onCancelled={(p, reason) => {
+                          setPlaced(null);
+                          setCancelled({
+                            po_id: p.po_id,
+                            po_number: p.po_number,
+                            reason,
+                          });
+                        }}
+                      />
+                    ))}
+                  </ul>
+                </section>
+              ))}
+            </div>
+          )}
         </>
       )}
     </div>
