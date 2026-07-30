@@ -91,6 +91,18 @@ function ctaFor(row: WorkRow): { href: string; label: string } {
     return { href: "/purchase-orders/placement-queue?scope=all", label: "תזמן" };
   }
   if (row.primary_cta === "place") {
+    // Tranche 155 (PROC-301, P0): only an order the planner already approved
+    // into APPROVED_TO_ORDER is actually waiting to be placed. Before that the
+    // same supplier also sits in the session's ActionList needing approval, and
+    // showing "בצע מול ספק" here made the two look like alternatives — a
+    // planner could press this, believe the order was handled, and never
+    // approve it. Send her to the approval step instead, and say so.
+    if (row.po_status !== "APPROVED_TO_ORDER") {
+      return {
+        href: "/planning/procurement",
+        label: "צריך אישור קודם",
+      };
+    }
     return { href: "/purchase-orders/placement-queue", label: "בצע מול ספק" };
   }
   if (row.po_id) {
@@ -162,7 +174,15 @@ export function ProcurementWorkQueue(): JSX.Element {
         <div className="flex items-center gap-2">
           <ClipboardList className="h-5 w-5 text-accent" aria-hidden />
           <div>
-            <div className="text-sm font-semibold text-fg-strong">תור עבודה לרכש</div>
+            {/* Tranche 155 (PROC-305): "תור עבודה לרכש" was indistinguishable
+                from the session below it, so a planner could work this list and
+                leave without ever opening the session. Name the scope. */}
+            <div className="text-sm font-semibold text-fg-strong">
+              מעקב הזמנות בדרך ובעיכוב
+            </div>
+            <div className="text-2xs text-fg-muted">
+              כולל הזמנות מסבבים קודמים — לא רק מהמושב הנוכחי
+            </div>
             <div className="text-xs text-fg-muted">
               {nowCount > 0
                 ? `${todayCount} פעולות היום · ${supplierCount} ספקים · ${formatIls(todayAmount)}`

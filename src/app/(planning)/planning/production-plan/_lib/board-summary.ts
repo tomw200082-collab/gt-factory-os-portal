@@ -76,7 +76,14 @@ export function computeTodaySummary(
   );
   const today = production.filter((r) => r.plan_date === todayIso);
   const reported = today.filter((r) => r.rendered_state === "done");
-  const unreported = today.filter((r) => r.rendered_state === "planned");
+  // Tranche 155 (PLAN-306): a draft row also carries rendered_state 'planned',
+  // so drafts were counted as "unreported" and offered "Move to tomorrow" —
+  // directly contradicting the draft banner above the strip, which says the
+  // same rows are not locked and cannot be reported against yet. Drafts belong
+  // to the lock flow; the today strip is only about locked work.
+  const unreported = today.filter(
+    (r) => r.rendered_state === "planned" && r.status !== "draft",
+  );
 
   const tomorrow = production.filter(
     (r) => r.plan_date === tomorrowIso && r.rendered_state === "planned",

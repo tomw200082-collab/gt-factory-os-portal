@@ -447,17 +447,11 @@ export function ProductionJobCard({
               <Factory className="h-2.5 w-2.5" strokeWidth={2.5} />
               {reportLabel}
             </Link>
-          ) : isDraft && canAct ? (
-            // COPY-006 (2026-07-23 gate): "Not reportable yet" stated an
-            // absence with no way forward; the link IS the direction.
-            <Link
-              href={`/planning/meeting?step=firm&week=${toIsoDate(startOfWeek(new Date(`${plan.plan_date}T00:00:00`)))}`}
-              className="text-[10px] text-accent hover:underline"
-              data-testid="plan-row-lock-to-report"
-            >
-              Lock in Weekly Meeting to report →
-            </Link>
           ) : null}
+          {/* Tranche 155 (PLAN-305): a draft card carried this same link twice
+              — once in the chip area above ("Lock it in Weekly Meeting →") and
+              once here, worded differently, pointing at the same route. The
+              chip-area one stays; this duplicate is gone. */}
 
           {/* Edit + cancel. INTER-010 (Tranche 048): min 32×32px touch
               targets via padding only — the icon size is unchanged. */}

@@ -737,9 +737,9 @@ export function ActionList({
               </span>
             </>
           )}
-          <span className="text-fg-muted">
-            · {fullGroups.can_wait.length} יכולות לחכות
-          </span>
+          {/* Tranche 155 (PROC-306): the can-wait count also sits on its own
+              section header a few rows down. One number, one place — the strip
+              carries only the at-risk signal. */}
           {recountCount > 0 && (
             <span
               className="inline-flex items-center gap-1 text-info-fg"
@@ -751,9 +751,16 @@ export function ActionList({
           )}
         </div>
 
-        {/* Search + filter + sort */}
+        {/* Search + filter + sort. Tranche 155 (PROC-307): on a normal session
+            (a handful of orders) the three bucket headers ARE the filter, and
+            these controls only pushed the first decision further down the
+            page. They appear once the list is long enough to need them.
+            ponytail: threshold, not a settings toggle. */}
         <div
-          className="flex flex-wrap items-center gap-2 rounded-md border border-border/60 bg-bg-subtle/20 px-3 py-2"
+          className={cn(
+            "flex-wrap items-center gap-2 rounded-md border border-border/60 bg-bg-subtle/20 px-3 py-2",
+            pos.length > 8 ? "flex" : "hidden",
+          )}
           data-testid="procurement-filter-bar"
         >
           <div className="relative min-w-[11rem] flex-1">

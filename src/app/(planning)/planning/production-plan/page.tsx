@@ -30,6 +30,7 @@ import {
   Trash2,
   Info,
   AlertTriangle,
+  CalendarCheck,
 } from "lucide-react";
 import { useDialogA11y } from "./_lib/useDialogA11y";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
@@ -2129,7 +2130,15 @@ export default function ProductionPlanPage() {
       <WorkflowHeader
         eyebrow="Planning workspace"
         title="Production plan"
-        description="Plan production for the week."
+        description={
+          draftCount > 0
+            ? "Review the engine's drafts below, then lock the week in the Weekly Meeting."
+            : horizonDraftCount > 0
+              ? "This week is settled. Drafts are waiting in an upcoming week — lock them in the Weekly Meeting."
+              : hasData
+                ? "Week is locked. Report each batch as it comes off the floor."
+                : "Nothing planned for this week yet — add production manually or from recommendations."
+        }
         actions={
           <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
             {canManagePlan && (
@@ -2156,13 +2165,37 @@ export default function ProductionPlanPage() {
                 </button>
                 <button
                   type="button"
-                  className="btn btn-primary btn-sm gap-1.5"
+                  // Tranche 155 (PLAN-301 + corridor FLOW-201): on a morning
+                  // with drafts on the board, "Add production" was the loudest
+                  // thing on the page and pointed away from the actual job,
+                  // while the only correctly-aimed CTA was an underline inside
+                  // the banner. With drafts present this drops to secondary and
+                  // the review link below takes primary weight.
+                  className={cn(
+                    "btn btn-sm gap-1.5",
+                    draftCount + horizonDraftCount === 0 && "btn-primary",
+                  )}
                   onClick={() => setShowManualAdd({ defaultDate: toIsoDate(new Date()) })}
                   data-testid="header-add-manual"
                 >
                   <Plus className="h-3 w-3" strokeWidth={2.5} />
                   Add production
                 </button>
+                {draftCount + horizonDraftCount > 0 && (
+                  <Link
+                    href={`/planning/meeting?step=firm&week=${
+                      draftCount > 0
+                        ? toIsoDate(weekStart)
+                        : horizonDraftWeekStart ?? toIsoDate(weekStart)
+                    }`}
+                    className="btn btn-primary btn-sm gap-1.5"
+                    data-testid="header-review-drafts"
+                  >
+                    <CalendarCheck className="h-3 w-3" strokeWidth={2.5} />
+                    Review {draftCount + horizonDraftCount} draft
+                    {draftCount + horizonDraftCount === 1 ? "" : "s"} in Weekly Meeting
+                  </Link>
+                )}
               </>
             )}
           </div>
@@ -2182,15 +2215,13 @@ export default function ProductionPlanPage() {
         >
           <Info className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={2} aria-hidden="true" />
           <span className="min-w-0 flex-1">
-            Engine drafts below are waiting for your review. When
-            you&apos;re done, go to{" "}
-            <Link
-              href="/planning"
-              className="font-medium underline underline-offset-2 hover:no-underline"
-            >
-              Planning Overview
-            </Link>{" "}
-            — or open Weekly Meeting to lock the week.
+            {/* Tranche 155 (PLAN-302): this sent the planner to Planning
+                Overview OR the Weekly Meeting with no guidance, and "when
+                you're done" was undefined. One road: review here, lock there. */}
+            {draftCount} engine draft{draftCount === 1 ? "" : "s"} on this week&apos;s
+            board {draftCount === 1 ? "is" : "are"} not locked yet. Review them
+            below, then lock the week in the Weekly Meeting — production cannot be
+            reported against a draft.
           </span>
           <Link
             href={`/planning/meeting?step=firm&week=${toIsoDate(weekStart)}`}
@@ -2244,13 +2275,16 @@ export default function ProductionPlanPage() {
           <span className="h-4 w-64 animate-pulse rounded bg-bg-subtle motion-reduce:animate-none" aria-hidden="true" />
         ) : (
           <>
-            <span className="text-fg-muted">
+            {/* Tranche 155 (PLAN-303): the disclaimer, the metrics and the
+                nav links all ran together in one middot chain, so the eye had
+                to read the sentence to find the numbers. The disclaimer takes
+                its own line; the counts stay a dense metric row. */}
+            <span className="basis-full text-fg-muted">
               <span className="font-medium text-fg-strong">Planned only.</span>{" "}
               Inventory updates only after actual production is reported.
             </span>
             {hasData && (
               <>
-                <span className="text-fg-faint" aria-hidden>·</span>
                 <span className="font-mono font-semibold tabular-nums text-fg-strong">{plannedCount}</span>
                 <span className="text-fg-muted">planned</span>
                 {draftCount > 0 && (
@@ -2280,7 +2314,13 @@ export default function ProductionPlanPage() {
                 </span>
                 <span className="text-fg-faint" aria-hidden>·</span>
                 <span className="font-mono font-semibold tabular-nums text-fg-strong">{completionPct}%</span>
-                <span className="text-fg-muted">complete</span>
+                <span className="text-fg-muted">
+                  complete
+                  {/* Tranche 155 (PLAN-309): drafts are excluded from both
+                      sides of this ratio, which does not match counting the
+                      cards on screen. Say so where the number is. */}
+                  {draftCount > 0 ? " (drafts excluded)" : ""}
+                </span>
               </>
             )}
           </>
@@ -2404,9 +2444,26 @@ export default function ProductionPlanPage() {
         ) : null}
       </div>
 
-      {/* ── Layer 2: Week Timeline Rail ── */}
+      {/* ── Layer 2: Week Timeline Rail ──
+          Tranche 155 (PLAN-310): on a 390px phone this sat between the planner
+          and the board along with everything else above it — the first plan
+          card started ~660px down. Useful orientation on a desktop, so it stays
+          there; on mobile it folds behind a disclosure and the board comes up
+          in the first swipe. ponytail: <details>, not a state machine. */}
       {hasData && (
-        <WeekTimelineRail days={railDays} weekMax={weekMaxVolume} />
+        <>
+          <div className="hidden sm:block">
+            <WeekTimelineRail days={railDays} weekMax={weekMaxVolume} />
+          </div>
+          <details className="mb-4 sm:hidden" data-testid="week-rail-mobile-disclosure">
+            <summary className="cursor-pointer list-none rounded-md border border-border/50 bg-bg-raised px-3 py-2 text-xs font-medium text-fg-muted">
+              Show the week at a glance
+            </summary>
+            <div className="mt-2">
+              <WeekTimelineRail days={railDays} weekMax={weekMaxVolume} />
+            </div>
+          </details>
+        </>
       )}
 
       {/* D13 Tier 1 (Tranche 048) — compact "Today" strip: today's lane
@@ -2478,7 +2535,11 @@ export default function ProductionPlanPage() {
                   data-plan-id={p.plan_id}
                 >
                   <span className="min-w-0 truncate text-fg">
-                    {p.item_name ?? "Unnamed product"}{" "}
+                    {/* Tranche 155 (PLAN-304): a base batch has no item_name, so
+                        this printed "Unnamed product" while the card beside it
+                        correctly said "base batch (N products)". Same helper the
+                        rest of the page uses. */}
+                    {planLabel(p) ?? "Unnamed item"}{" "}
                     <span className="font-mono tabular-nums text-fg-muted">
                       {fmtQty(p.planned_qty ?? "0", p.uom ?? "")}
                     </span>

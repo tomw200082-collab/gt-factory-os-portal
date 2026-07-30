@@ -3,9 +3,13 @@
 // Weekly Cadence cockpit — shared types, date logic, and data hooks.
 //
 // The cockpit is the single day-aware surface that drives the operator rhythm:
-//   • Thursday — FIRM: review the draft week (~2 weeks out) and lock it.
-//   • Sunday   — PROCURE: buy against the firmed week (existing purchase-session).
-//   • Daily    — EXECUTE: make today's batch, report the actual.
+//   • Wednesday — FIRM: the meeting. Review the draft week (~2 weeks out) and lock it.
+//   • Thursday  — PROCURE: buy against the firmed week (existing purchase-session).
+//   • Daily     — EXECUTE: make today's batch, report the actual.
+//
+// Tom moved the cadence on 2026-07-30 (was Thursday meeting / Sunday procurement).
+// CADENCE_DAYS below is the only place a day name is written — copy imports it
+// rather than spelling the day out, so the next move is one edit here.
 //
 // Backend contracts mirrored here (drift is a bug):
 //   GET  /api/planning/draft-week?week_start=  → DraftWeekResponse
@@ -208,23 +212,33 @@ export function fmtWeekRange(startIso: string): string {
 // ---------------------------------------------------------------------------
 // Cadence logic
 // ---------------------------------------------------------------------------
-// Which step is "today"? Thursday is the firm meeting, Sunday the procurement
-// meeting; every other day the rhythm is execution.
+/**
+ * Day-of-week for each cadence step, and the day name copy shows for it.
+ * Single source of truth: `stepForToday` reads `dow`, operator copy reads
+ * `label`. Nothing else in the app should spell a cadence day out.
+ */
+export const CADENCE_DAYS = {
+  /** The meeting: production planning, lock, procurement planning. */
+  firm: { dow: 3, label: "Wednesday" },
+  /** Procurement execution against the locked week. */
+  procure: { dow: 4, label: "Thursday" },
+} as const;
+
+// Which step is "today"? The meeting day firms, the day after procures; every
+// other day the rhythm is execution.
 export function stepForToday(today = nowInIsrael()): CadenceStep {
-  const dow = today.getDay(); // 0=Sun … 4=Thu
-  if (dow === 4) return "firm";
-  if (dow === 0) return "procure";
+  const dow = today.getDay(); // 0=Sun … 6=Sat
+  if (dow === CADENCE_DAYS.firm.dow) return "firm";
+  if (dow === CADENCE_DAYS.procure.dow) return "procure";
   return "execute";
 }
 
-// The week we firm on Thursday: the Sunday that opens the week starting ~2
-// weeks out. On Thursday that is ~10 days ahead, giving the Sunday procurement
-// session a full week of lead before production begins. Anchored to the
-// current week's Sunday + 14 so it is stable across the Thu→Sun handoff.
-// Sunday of the week `weeks` weeks ahead of `today`, ISO date. The cadence is
-// a rolling two-week-ahead commit: weeks=2 is the Thursday firm target (the new
-// week entering the plan), weeks=1 is the "near" week — fine-tuned on Thursday
-// and bought on the Sunday that starts it.
+// Sunday of the week `weeks` weeks ahead of `today`, ISO date. (Sunday here is
+// the factory's week boundary, not a cadence day.) The cadence is a rolling
+// two-week-ahead commit: weeks=2 is the meeting's firm target — the new week
+// entering the plan — and weeks=1 is the "near" week, fine-tuned at the same
+// meeting and bought the next day. Anchored to the current week's Sunday + 14
+// so it stays stable across the meeting→procurement handoff.
 export function weekStartInWeeks(weeks: number, today = nowInIsrael()): string {
   return toIsoDate(addDays(startOfWeek(today), weeks * 7));
 }

@@ -476,7 +476,7 @@ function DoneSummary({
             ? "אין הזמנות שדורשות פעולה"
             : hasRemaining
               ? "עברת על כל ההזמנות"
-              : "סיימת את מושב הרכש 🎉"}
+              : "סיימת את מושב הרכש"}
         </div>
         <div className="text-sm text-fg-muted">
           {total === 0

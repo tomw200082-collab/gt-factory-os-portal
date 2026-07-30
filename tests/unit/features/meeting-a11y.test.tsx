@@ -68,11 +68,12 @@ vi.mock("@/app/(planning)/planning/production-plan/_lib/usePlans", () => ({
 
 import PlanningMeetingPage from "@/app/(planning)/planning/meeting/page";
 
-// The cockpit opens on TODAY's cadence step, which is only "firm" on Thursdays.
+// The cockpit opens on TODAY's cadence step, which is only "firm" on the
+// meeting day (Wednesday since tranche 155).
 // For the firm-panel assertions, explicitly navigate to the Firm step first so
 // the suite is deterministic regardless of the day it runs.
 function openFirmPanel() {
-  fireEvent.click(screen.getByRole("button", { name: /Lock — Thursday/i }));
+  fireEvent.click(screen.getByRole("button", { name: /Lock — Wednesday/i }));
 }
 
 function teaRow(over: Partial<DraftWeekRow> = {}): DraftWeekRow {
@@ -139,7 +140,7 @@ describe("weekly-meeting cockpit — cadence rail semantics", () => {
 
   it("switches the active step (and aria-pressed) on click", () => {
     render(<PlanningMeetingPage />);
-    const procure = screen.getByRole("button", { name: /Procure — Sunday/i });
+    const procure = screen.getByRole("button", { name: /Procure — Thursday/i });
     fireEvent.click(procure);
     expect(procure.getAttribute("aria-pressed")).toBe("true");
   });
@@ -243,10 +244,18 @@ describe("weekly-meeting cockpit — focus visibility", () => {
 
   it("gives every Procure navigation card a focus ring", () => {
     render(<PlanningMeetingPage />);
-    fireEvent.click(screen.getByRole("button", { name: /Procure — Sunday/i }));
+    fireEvent.click(screen.getByRole("button", { name: /Procure — Thursday/i }));
     const cards = screen.getAllByRole("link").filter((a) => /\bgroup\b/.test(a.className));
-    expect(cards.length).toBeGreaterThanOrEqual(4);
+    // Tranche 155 (MEET-307): "Order calendar" was a fourth card of equal
+    // weight beside "Open Procurement", reading as a choice between two places
+    // to go. It is now a subordinate link, so the Procure step has 3 cards —
+    // and the link is asserted separately below.
+    expect(cards.length).toBeGreaterThanOrEqual(3);
     cards.forEach((a) => expect(RING.test(a.className)).toBe(true));
+    const calendarLink = screen.getByRole("link", {
+      name: /order calendar view/i,
+    });
+    expect(RING.test(calendarLink.className)).toBe(true);
   });
 
   it("gives every Execute navigation card a focus ring", () => {

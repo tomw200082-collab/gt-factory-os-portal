@@ -128,9 +128,31 @@ export default function ProcurementPage(): JSX.Element {
               />
               <span className="text-xs text-warning-fg">
                 {/* DR-018 INTER-006 (Tranche 124) — the warning didn't say
-                    HOW MUCH would be lost; add the concrete count. */}
-                קיים מושב רכש פתוח עם {session?.pos.length ?? 0} הזמנות. מושב
-                חדש יחליף אותו, ואישורים שלא נשמרו יאבדו.
+                    HOW MUCH would be lost; add the concrete count.
+                    Tranche 155 (FLOW-202, open since the 2026-07-16 gate):
+                    "אישורים שלא נשמרו יאבדו" lumped two very different things
+                    together. An order already handed to the placement queue is
+                    safe whatever happens here; only in-session approvals die.
+                    Say which is which so the planner can judge the real cost. */}
+                קיים מושב רכש פתוח עם {session?.pos.length ?? 0} הזמנות.{" "}
+                {(() => {
+                  const placed =
+                    session?.pos.filter((p) => p.status === "placed").length ?? 0;
+                  const losing = (session?.pos.length ?? 0) - placed;
+                  return (
+                    <>
+                      {placed > 0 ? (
+                        <>
+                          <span className="font-semibold">{placed}</span> כבר
+                          הועברו לביצוע ולא יאבדו.{" "}
+                        </>
+                      ) : null}
+                      מושב חדש יחליף את המושב הנוכחי —{" "}
+                      <span className="font-semibold">{losing}</span> הזמנות
+                      שטרם הועברו לביצוע יימחקו, כולל אישורים שנתת להן.
+                    </>
+                  );
+                })()}
               </span>
               <div className="flex items-center gap-1.5">
                 <button
@@ -208,8 +230,6 @@ export default function ProcurementPage(): JSX.Element {
         </div>
       )}
 
-      <ProcurementWorkQueue />
-
       {/* Input-trustworthiness strip (Tranche 132) — one compact line: stock
           verification, count freshness, forecast age, firmed-plan window and
           the engine's structural warnings as chips. Replaces the previous
@@ -244,7 +264,21 @@ export default function ProcurementPage(): JSX.Element {
           message={(error as Error)?.message ?? "לא ניתן לטעון את מושב הרכש."}
           onRetry={() => void refetch()}
         />
-      ) : !session ? null : (
+      ) : !session ? (
+        /* Tranche 155 (FLOW-204): this rendered nothing. A planner arriving the
+           day after the meeting saw an empty page and no hint that the work
+           starts by running a session against the week just locked. */
+        <div
+          className="card flex flex-col items-center gap-2 p-6 text-center"
+          data-testid="procurement-no-session"
+        >
+          <div className="text-sm font-semibold text-fg">אין מושב רכש פעיל</div>
+          <div className="max-w-md text-xs text-fg-muted">
+            מושב רכש בונה המלצות הזמנה לפי השבוע שנעל בפגישה ולפי המלאי הנוכחי.
+            להתחיל — ״הרצת מושב חדש״ בראש הדף.
+          </div>
+        </div>
+      ) : (
         <SessionView
           pos={session.pos}
           warnings={session.warnings}
@@ -255,6 +289,12 @@ export default function ProcurementPage(): JSX.Element {
           onOpenById={openFocus}
         />
       )}
+
+      {/* Tranche 155 (PROC-302): this used to be the FIRST thing on the page,
+          so the session's own "התחל מיקוד" — the planner's actual work — was
+          the sixth element and below the fold on a phone. Cross-session order
+          tracking is context; it sits after the session it supports. */}
+      <ProcurementWorkQueue />
 
       {focusOpen && session && (
         <FocusMode
@@ -303,6 +343,11 @@ function SessionView({
   // office-manager placement queue (APPROVED_TO_ORDER). Surface a bridge so the
   // planner has a forward path after finishing.
   const placedCount = pos.filter((p) => p.status === "placed").length;
+  // Tranche 155 (PROC-303): the page had no progress spine. After approving
+  // two of five orders the planner had nothing telling her where she was —
+  // only FocusMode showed progress, and that vanished when it closed.
+  const approvedCount = pos.filter((p) => p.status === "approved").length;
+  const toReviewCount = pos.length - placedCount - approvedCount;
 
   if (pos.length === 0) {
     return (
@@ -327,6 +372,9 @@ function SessionView({
         data-testid="procurement-summary"
       >
         <div className="flex flex-col gap-0.5">
+          {/* PROC-305: name this block so it cannot be confused with the
+              order-tracking queue further down the page. */}
+          <div className="eyebrow-strong">מושב רכש</div>
           <div className="text-sm text-fg">
             מושב מתאריך <span className="font-semibold">{sessionDate}</span>
           </div>
@@ -334,6 +382,32 @@ function SessionView({
             סה״כ:{" "}
             <span className="font-mono tabular-nums text-fg">
               {formatIls(totalCost)}
+            </span>
+          </div>
+          {/* PROC-303 — the progress spine. */}
+          <div
+            className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-fg-muted"
+            data-testid="procurement-session-progress"
+          >
+            <span>
+              <span className="font-mono tabular-nums font-semibold text-fg">
+                {placedCount}
+              </span>{" "}
+              הועברו לביצוע
+            </span>
+            <span>·</span>
+            <span>
+              <span className="font-mono tabular-nums font-semibold text-fg">
+                {approvedCount}
+              </span>{" "}
+              ממתינים לשליחה
+            </span>
+            <span>·</span>
+            <span>
+              <span className="font-mono tabular-nums font-semibold text-fg">
+                {toReviewCount}
+              </span>{" "}
+              לסקירה
             </span>
           </div>
         </div>
