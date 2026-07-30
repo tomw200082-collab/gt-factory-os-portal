@@ -344,6 +344,74 @@ describe("PlacementRow", () => {
     expect(screen.getByTestId("placement-submit-po1").textContent).toContain("בצע הזמנה");
   });
 
+  // Tranche 156 (Tom, 2026-07-30): "there must be an option to cancel, and to
+  // enter an order of more than what was set — up to 15% more."
+  it("accepts a quantity above the approved amount, up to +15%, as a qty override not a split", async () => {
+    const fetchMock = await openWithLines(LINES); // l1 ordered_qty = 5
+    await userEvent.type(screen.getByTestId("placement-price-l1"), "10");
+    await userEvent.selectOptions(screen.getByTestId("placement-terms-po1"), "EOM_30");
+    await userEvent.click(screen.getByTestId("placement-supply-partial-l1"));
+
+    const supplied = screen.getByTestId("placement-supplied-l1");
+    await userEvent.clear(supplied);
+    await userEvent.type(supplied, "5.75"); // exactly +15% of 5
+
+    // Over-supply is not a split — nothing goes to a sibling PO, so no reason
+    // is required and placement is not blocked.
+    expect(screen.queryByTestId("placement-split-panel")).toBeNull();
+    expect(screen.queryByTestId("placement-supplied-error-l1")).toBeNull();
+    const submit = screen.getByTestId("placement-submit-po1") as HTMLButtonElement;
+    await waitFor(() => expect(submit.getAttribute("aria-disabled")).toBeNull());
+
+    await userEvent.click(submit);
+    const dialog = await screen.findByRole("alertdialog");
+    // DR-019 discipline: the raised quantity must be disclosed before commit.
+    expect(dialog.textContent).toContain("מעל הכמות שאושרה");
+    await userEvent.click(within(dialog).getByRole("button", { name: "בצע הזמנה" }));
+
+    const placeCalls = fetchMock.mock.calls.filter((c) =>
+      String(c[0]).includes("/place"),
+    );
+    await waitFor(() => expect(placeCalls.length).toBe(1));
+    const body = JSON.parse(String((placeCalls[0][1] as RequestInit).body));
+    expect(body.line_qty_overrides).toEqual([
+      { po_line_id: "l1", ordered_qty: 5.75 },
+    ]);
+    expect(body.unplaced_lines).toBeUndefined();
+    expect(body.split_reason).toBeUndefined();
+  });
+
+  it("refuses a quantity more than 15% above the approved amount and points at the planner", async () => {
+    await openWithLines(LINES);
+    await userEvent.type(screen.getByTestId("placement-price-l1"), "10");
+    await userEvent.selectOptions(screen.getByTestId("placement-terms-po1"), "EOM_30");
+    await userEvent.click(screen.getByTestId("placement-supply-partial-l1"));
+
+    const supplied = screen.getByTestId("placement-supplied-l1");
+    await userEvent.clear(supplied);
+    await userEvent.type(supplied, "6"); // +20% — past the ceiling
+
+    const err = screen.getByTestId("placement-supplied-error-l1");
+    expect(err.textContent).toContain("15%");
+    expect(err.textContent).toContain("מנהל התכנון");
+    const submit = screen.getByTestId("placement-submit-po1") as HTMLButtonElement;
+    await waitFor(() =>
+      expect(submit.getAttribute("aria-disabled")).toBe("true"),
+    );
+  });
+
+  it("still splits the remainder when the supplier confirmed less than approved", async () => {
+    await openWithLines(LINES);
+    await userEvent.type(screen.getByTestId("placement-price-l1"), "10");
+    await userEvent.selectOptions(screen.getByTestId("placement-terms-po1"), "EOM_30");
+    await userEvent.click(screen.getByTestId("placement-supply-partial-l1"));
+    const supplied = screen.getByTestId("placement-supplied-l1");
+    await userEvent.clear(supplied);
+    await userEvent.type(supplied, "3");
+    // The under-supply path is untouched by the +15% change.
+    expect(screen.queryByTestId("placement-split-panel")).not.toBeNull();
+  });
+
   it("names the third supply outcome 'לא יסופק' — the order was placed, this line just is not coming (COPY-105)", async () => {
     await openWithLines(LINES);
     const group = screen.getByRole("group", { name: /מה סופק עבור רכיב א/ });
@@ -380,8 +448,11 @@ describe("PlacementRow", () => {
     expect(submit.textContent).toContain("בצע חלקית");
   });
 
-  it("rejects a partial quantity that is not strictly between zero and the ordered amount", async () => {
-    await openWithLines(LINES);
+  // Tranche 156 replaced the old rule (0 < q < ordered) with (0 < q ≤ ordered
+  // × 1.15), so a quantity equal to the approved amount is now simply valid —
+  // it just means the supplier delivered exactly what was approved.
+  it("accepts a quantity equal to the approved amount without splitting or overriding", async () => {
+    const fetchMock = await openWithLines(LINES);
     await userEvent.type(screen.getByTestId("placement-price-l1"), "10");
     await userEvent.selectOptions(screen.getByTestId("placement-terms-po1"), "EOM_30");
     await userEvent.click(screen.getByTestId("placement-supply-partial-l1"));
@@ -390,12 +461,38 @@ describe("PlacementRow", () => {
     await userEvent.clear(suppliedInput);
     await userEvent.type(suppliedInput, "5"); // == ordered_qty
 
+    expect(screen.queryByTestId("placement-supplied-error-l1")).toBeNull();
+    expect(screen.queryByTestId("placement-split-panel")).toBeNull();
+    const submit = screen.getByTestId("placement-submit-po1") as HTMLButtonElement;
+    await waitFor(() => expect(submit.getAttribute("aria-disabled")).toBeNull());
+
+    await userEvent.click(submit);
+    const dialog = await screen.findByRole("alertdialog");
+    await userEvent.click(within(dialog).getByRole("button", { name: "בצע הזמנה" }));
+    const placeCalls = fetchMock.mock.calls.filter((c) =>
+      String(c[0]).includes("/place"),
+    );
+    await waitFor(() => expect(placeCalls.length).toBe(1));
+    const body = JSON.parse(String((placeCalls[0][1] as RequestInit).body));
+    expect(body.unplaced_lines).toBeUndefined();
+    expect(body.line_qty_overrides).toBeUndefined();
+  });
+
+  it("rejects a zero quantity and associates the error with the field (A11Y-103)", async () => {
+    await openWithLines(LINES);
+    await userEvent.type(screen.getByTestId("placement-price-l1"), "10");
+    await userEvent.selectOptions(screen.getByTestId("placement-terms-po1"), "EOM_30");
+    await userEvent.click(screen.getByTestId("placement-supply-partial-l1"));
+
+    const suppliedInput = screen.getByTestId("placement-supplied-l1");
+    await userEvent.clear(suppliedInput);
+    await userEvent.type(suppliedInput, "0");
+
     expect(screen.queryByTestId("placement-supplied-error-l1")).not.toBeNull();
     const submit = screen.getByTestId("placement-submit-po1") as HTMLButtonElement;
     await waitFor(() =>
       expect(submit.getAttribute("aria-disabled")).toBe("true"),
     );
-    // A11Y-103: the flagged input points at the error text that explains it.
     expect(
       screen
         .getByTestId("placement-supplied-l1")
