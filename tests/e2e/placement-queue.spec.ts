@@ -154,7 +154,11 @@ test.describe("@mocked placement queue", () => {
     const banner = page.getByTestId("placement-queue-overdue-banner");
     await expect(banner).toBeVisible();
     await expect(banner).toContainText("2 הזמנות ממתינות");
-    await expect(banner).toContainText("1 באיחור");
+    // Tranche 154 VIS-110: the summary banner moved to warning tones (danger
+    // is reserved for the API-failure banner, so the two stop reading alike)
+    // and now says what to do about it, not just that it happened.
+    await expect(banner).toContainText("1 כבר באיחור");
+    await expect(banner).toContainText("התחילי מהן");
   });
 
   test("DR-018 ux-release-gate: a malformed 200 response (no rows field) never shows raw JS error text", async ({

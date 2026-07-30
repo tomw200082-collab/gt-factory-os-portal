@@ -9,7 +9,7 @@
 // Hebrew + RTL operator surface (authorized in CLAUDE.md for this route).
 // ---------------------------------------------------------------------------
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   Loader2,
   PackageCheck,
@@ -18,10 +18,16 @@ import {
   AlertTriangle,
   XCircle,
   Ban,
+  Calendar,
+  CalendarClock,
+  CalendarX,
+  CheckCircle2,
+  PhoneCall,
 } from "lucide-react";
 import { useConfirm } from "@/components/overlays/ConfirmDialog";
 import { formatIls } from "@/lib/utils/format-money";
-import { fmtNumStr } from "@/lib/utils/format-quantity";
+import { formatIsraeliDate } from "@/lib/utils/format-date";
+import { fmtNumStr, uomLabelHe } from "@/lib/utils/format-quantity";
 import { PAYMENT_TERMS, paymentTermByCode } from "@/lib/payment-terms";
 import { SupplierCallLink } from "@/components/purchase/SupplierCallLink";
 import { SwitchSupplierControl } from "@/components/purchase/SwitchSupplierControl";
@@ -83,40 +89,137 @@ function nextProcurementWorkdayIso(fromIso: string): string {
 
 type LineState = "full" | "partial" | "none";
 
+// ux-release-gate 2026-07-30 COPY-109: internal identifiers must never stand in
+// for an item name — they used to leak into the placement confirm dialog
+// whenever both human names were null (carried from DR-018 COPY-008).
 function lineName(l: QueuePoLine): string {
+  return l.component_name ?? l.item_name ?? "פריט";
+}
+
+/** Quantity + unit, in Hebrew (COPY-108: "KG" no longer leaks into the copy). */
+function qtyLabel(qty: string | number, uom: string | null | undefined): string {
+  const unit = uomLabelHe(uom);
+  return unit ? `${fmtNumStr(qty)} ${unit}` : fmtNumStr(qty);
+}
+
+/**
+ * How urgent this order is, lowest = most urgent. One ordering used by three
+ * things that must agree: the row's own status chip, the supplier group's
+ * headline state, and the order the groups appear in (tranche 154 decision 1).
+ */
+export function poUrgencyRank(po: QueuePo): number {
+  if (po.due_state === "overdue" || po.risk_state === "safe_date_passed") return 0;
+  if (po.risk_state === "after_safe_date") return 1;
+  if (po.due_state === "needs_schedule" || po.risk_state === "needs_schedule") return 2;
+  if (po.due_state === "today") return 3;
+  if (po.due_state === "next_7_days") return 4;
+  return 5;
+}
+
+interface StatusPresentation {
+  label: string;
+  /** Tone classes over the base `.chip`. */
+  tone: string;
+  Icon: typeof AlertTriangle;
+  /** The inline-start rail on the row — urgency readable before any text. */
+  rail: string;
+}
+
+// ux-release-gate 2026-07-30 VIS-104: urgency used to be the third or fourth
+// token in a six-part dot-separated string. It is now the first thing in the
+// row, as a chip — colour plus an icon plus a word, never colour alone.
+function statusPresentation(po: QueuePo): StatusPresentation {
+  switch (poUrgencyRank(po)) {
+    case 0:
+      return {
+        label: "באיחור",
+        tone: "chip-danger",
+        Icon: AlertTriangle,
+        rail: "border-s-danger/70",
+      };
+    case 1:
+      return {
+        label: "אחרי המועד האחרון",
+        tone: "chip-danger",
+        Icon: CalendarX,
+        rail: "border-s-danger/70",
+      };
+    case 2:
+      return {
+        label: "חסר תאריך ביצוע",
+        tone: "chip-warning",
+        Icon: CalendarClock,
+        rail: "border-s-warning/70",
+      };
+    case 3:
+      return {
+        label: "לביצוע היום",
+        tone: "chip-accent",
+        Icon: PhoneCall,
+        rail: "border-s-accent/70",
+      };
+    case 4:
+      return {
+        label: "בשבוע הקרוב",
+        tone: "",
+        Icon: Calendar,
+        rail: "border-s-border",
+      };
+    default:
+      return {
+        label: "בהמשך",
+        tone: "",
+        Icon: Calendar,
+        rail: "border-s-border",
+      };
+  }
+}
+
+/**
+ * The chosen date, echoed in Israeli DD/MM/YYYY next to a native date input.
+ *
+ * ux-release-gate 2026-07-30 VIS-102 proposed `lang="he"` on the RTL root to
+ * make `<input type="date">` render DD/MM/YYYY. It does not: Chromium formats
+ * date inputs from the BROWSER's locale and ignores the document language, so
+ * on an en-US browser the widget still shows 08/09/2026 for the 9th of August
+ * — the exact ambiguity the finding was about. The `lang` attribute is correct
+ * and stays, but the guarantee has to come from us. This echo is unambiguous
+ * whatever the widget does. `aria-hidden` because the input already announces
+ * its own value.
+ */
+function DateEcho({ value }: { value: string }): JSX.Element | null {
+  if (!value) return null;
   return (
-    l.component_name ?? l.item_name ?? l.component_id ?? l.item_id ?? "פריט"
+    <span
+      className="font-mono text-xs tabular-nums text-fg-muted"
+      aria-hidden
+      data-testid="date-echo"
+    >
+      {formatIsraeliDate(value)}
+    </span>
   );
 }
 
-function dueLabel(po: QueuePo): string {
-  switch (po.due_state) {
-    case "needs_schedule":
-      return "דורש תזמון";
-    case "overdue":
-      return "באיחור";
-    case "today":
-      return "לביצוע היום";
-    case "next_7_days":
-      return "ב-7 ימים הקרובים";
-    case "later":
-      return "עתידי";
-    default:
-      return "מתוזמן";
-  }
-}
-
-function riskLabel(po: QueuePo): string | null {
-  switch (po.risk_state) {
-    case "needs_schedule":
-      return "אין תאריך ביצוע";
-    case "after_safe_date":
-      return "אחרי המועד הבטוח";
-    case "safe_date_passed":
-      return "המועד הבטוח עבר";
-    default:
-      return null;
-  }
+/**
+ * The order's state, as one readable badge. Exported because the supplier
+ * group header shows its most urgent member's state — that is the reason the
+ * call is ranked where it is.
+ *
+ * `.chip` is authored for English (uppercase + tracking); Hebrew takes neither,
+ * so the tone classes are composed with `normal-case tracking-normal` rather
+ * than by touching the frozen stylesheet.
+ */
+export function StatusChip({ po }: { po: QueuePo }): JSX.Element {
+  const { label, tone, Icon } = statusPresentation(po);
+  return (
+    <span
+      className={`chip ${tone} shrink-0 gap-1 whitespace-nowrap normal-case tracking-normal`}
+      data-testid={`placement-status-chip-${po.po_id}`}
+    >
+      <Icon className="h-3 w-3 shrink-0" aria-hidden />
+      {label}
+    </span>
+  );
 }
 
 export function PlacementRow({
@@ -207,6 +310,14 @@ export function PlacementRow({
         onSuccess: () => {
           setScheduling(false);
           setScheduleError(null);
+          // INTER-102: acknowledge the save, visibly and for screen readers.
+          setJustScheduled(true);
+          if (scheduledTimer.current) clearTimeout(scheduledTimer.current);
+          scheduledTimer.current = setTimeout(() => setJustScheduled(false), 6000);
+          // INTER-106: scheduling was a dead end — the panel closed and nothing
+          // pointed at the next step. Advance straight into the pricing panel,
+          // which is what the operator opened the row to reach.
+          setOpen(true);
         },
         onError: (e: Error) => setScheduleError(e.message),
       },
@@ -224,8 +335,21 @@ export function PlacementRow({
   );
   const [copied, setCopied] = useState(false);
   const todayIso = po.as_of_date || new Date().toISOString().slice(0, 10);
-  const [scheduling, setScheduling] = useState(
-    po.due_state === "needs_schedule" || po.risk_state !== "ok",
+  // ux-release-gate 2026-07-30 VIS-109: this used to open on mount for every
+  // unscheduled / at-risk order. With two such orders in a queue, the two open
+  // panels pushed the remaining rows below the fold on a phone and the queue
+  // could not be scanned at all. The row now advertises its state in the
+  // collapsed header instead, and the operator opens the panel when she means to.
+  const [scheduling, setScheduling] = useState(false);
+  // INTER-102: saving a date used to close the panel with no acknowledgement —
+  // indistinguishable from pressing "חזרה" and discarding the edit.
+  const [justScheduled, setJustScheduled] = useState(false);
+  const scheduledTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (scheduledTimer.current) clearTimeout(scheduledTimer.current);
+    },
+    [],
   );
   const [scheduleDate, setScheduleDate] = useState<string>(
     po.scheduled_order_date ?? todayIso,
@@ -238,11 +362,21 @@ export function PlacementRow({
     "PLANNER_ACCEPTED_RISK",
   );
   const [scheduleError, setScheduleError] = useState<string | null>(null);
-  const scheduleRiskLabel = riskLabel(po);
+  const supplierName = po.supplier_name ?? "הספק";
+  const status = statusPresentation(po);
+  const panelId = `placement-panel-${po.po_id}`;
   const needsSchedule = po.due_state === "needs_schedule" || !po.scheduled_order_date;
   const futureSchedule = !!po.scheduled_order_date && po.scheduled_order_date > todayIso;
   const scheduleDateAfterSafe =
     !!scheduleDate && !!po.latest_safe_order_date && scheduleDate > po.latest_safe_order_date;
+  /** Why "שמור מועד" is blocked — shown as text, not only as a title. */
+  const scheduleBlockedReason = !scheduleDate
+    ? "יש לבחור תאריך ביצוע."
+    : scheduleDate < todayIso
+      ? "לא ניתן לתזמן לתאריך שכבר עבר."
+      : scheduleDateAfterSafe && !scheduleNote.trim()
+        ? "יש לרשום הסבר קצר לביצוע אחרי המועד האחרון."
+        : null;
   const canAttemptPlacementToday = !needsSchedule && !futureSchedule;
 
   const lines = (linesQuery.data?.rows ?? []).filter(
@@ -327,10 +461,7 @@ export function PlacementRow({
     () =>
       lines
         .filter((l) => stateFor(l) !== "none")
-        .map(
-          (l) =>
-            `${lineName(l)} ${fmtNumStr(String(suppliedQty(l)))} ${l.uom}`,
-        ),
+        .map((l) => `${lineName(l)} ${qtyLabel(suppliedQty(l), l.uom)}`),
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [lines, lineStates, partialQtys],
   );
@@ -338,7 +469,7 @@ export function PlacementRow({
     () =>
       unplacedLines.map((u) => {
         const l = lines.find((x) => x.po_line_id === u.po_line_id);
-        return `${l ? lineName(l) : "פריט"} ${fmtNumStr(String(u.unplaced_qty))} ${l?.uom ?? ""}`;
+        return `${l ? lineName(l) : "פריט"} ${qtyLabel(u.unplaced_qty, l?.uom)}`;
       }),
     [unplacedLines, lines],
   );
@@ -369,7 +500,7 @@ export function PlacementRow({
       : !confirmedDate
         ? "יש להזין תאריך אספקה מאושר מהספק."
       : nothingPlaced
-    ? "כל השורות מסומנות כ-לא הוזמן — זהו ביטול הזמנה, השתמשי ב״בטל הזמנה״."
+    ? "כל השורות מסומנות כ״לא יסופק״ — זהו ביטול הזמנה, השתמשי ב״בטל עם סיבה״."
     : anyPartialInvalid
       ? "יש להזין כמות חלקית גדולה מאפס וקטנה מהכמות שהוזמנה."
       : hasSplit && !splitReason
@@ -430,7 +561,7 @@ export function PlacementRow({
     // Tranche 150 backstops, mirroring the disabled-button gate above.
     if (nothingPlaced) {
       setErrorMsg(
-        "כל השורות מסומנות כ-לא הוזמן. זהו ביטול הזמנה — השתמשי ב״בטל הזמנה״ עם סיבה.",
+        "כל השורות מסומנות כ״לא יסופק״. זהו ביטול הזמנה — השתמשי ב״בטל עם סיבה״.",
       );
       return;
     }
@@ -454,12 +585,21 @@ export function PlacementRow({
       ? `\n\nמבוצע כעת (${placedSummary.length}): ${placedSummary.join(" · ")}\nלא סופק — יעבור להזמנה חדשה (${splitSummary.length}): ${splitSummary.join(" · ")}\nסיבה: ${splitReason}\n\nהיתרה תיפתח כהזמנה נפרדת הממתינה לביצוע, ותוכלי להפנות אותה לספק אחר מתוך התור. עד שתבוצע היא לא נחשבת כסחורה בדרך.`
       : "";
     const ok = await confirm({
+      // ux-release-gate 2026-07-30 INTER-103: a terminal money action must name
+      // the supplier it commits to, not only the PO number — the operator is
+      // working several grouped orders in one sitting.
       title: hasSplit
-        ? `לבצע חלקית את ההזמנה ${po.po_number}?`
-        : `לבצע את ההזמנה ${po.po_number}?`,
-      description: `ההזמנה תבוצע מול הספק עם תנאי תשלום "${termLabel}"${
+        ? `לבצע חלקית את ההזמנה ${po.po_number} מול ${supplierName}?`
+        : `לבצע את ההזמנה ${po.po_number} מול ${supplierName}?`,
+      // COPY-111 (prior COPY-205): the old text claimed "לא ניתן לבטל הזמנה
+      // שבוצעה דרך המערכת". That is false — the backend cancels OPEN orders —
+      // and a safe-direction lie is still a lie: it made operators hesitate to
+      // place orders they were unsure about. State the real cost instead.
+      description: `ההזמנה תבוצע מול ${supplierName} בתנאי תשלום "${termLabel}"${
         totalPreview != null ? ` · ${formatIls(totalPreview)}` : ""
-      }${confirmedDate ? ` · צפי הגעה ${confirmedDate}` : ""}. לאחר הביצוע ההזמנה תהיה פתוחה ומוכנה לקבלת סחורה — לא ניתן לבטל הזמנה שבוצעה דרך המערכת, ושינויים בכמויות יחייבו תיאום מול הספק.${
+      }${
+        confirmedDate ? ` · צפי הגעה ${formatIsraeliDate(confirmedDate)}` : ""
+      }. לאחר הביצוע ההזמנה תהיה פתוחה וממתינה לקבלת סחורה. שינוי כמויות או ביטול בשלב הזה אפשריים, אך מחייבים תיאום מול הספק ומול מנהל התכנון.${
         !confirmedDate
           ? " לא הוזן תאריך אספקה — ההזמנה תיפתח ללא צפי הגעה, ויש להוסיף אותו ידנית אחר כך."
           : ""
@@ -496,10 +636,16 @@ export function PlacementRow({
   }
 
   return (
-    <li className="card overflow-hidden" data-testid={`placement-row-${po.po_id}`}>
+    <li
+      // The rail carries the row's urgency at the RTL start edge, so a queue is
+      // scannable by colour band before a single word is read. It is never the
+      // only signal — the same state is a chip with an icon and a word below.
+      className={`card overflow-hidden border-s-[3px] ${status.rail}`}
+      data-testid={`placement-row-${po.po_id}`}
+    >
       {dialog}
-      {/* Header — expand (tap) + discard (cancel-with-reason). Two sibling
-          buttons, never nested, so both stay keyboard-reachable. */}
+      {/* Header — expand (tap) + reschedule + discard. Sibling buttons, never
+          nested, so all three stay keyboard-reachable. */}
       <div className="flex items-stretch">
       <button
         type="button"
@@ -513,38 +659,77 @@ export function PlacementRow({
           setCancelError(null);
         }}
         aria-expanded={open}
-        className="flex min-h-[56px] flex-1 items-center justify-between gap-3 px-4 py-3 text-right transition-colors hover:bg-bg-subtle/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        // A11Y-109: name the region this disclosure controls.
+        aria-controls={panelId}
+        disabled={placeMut.isPending}
+        className="flex min-h-[56px] flex-1 items-center justify-between gap-3 px-4 py-3 text-right transition-colors hover:bg-bg-subtle/40 focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:pointer-events-none"
         data-testid={`placement-row-toggle-${po.po_id}`}
       >
         <div className="min-w-0 flex-1">
-          <div className="truncate text-sm font-semibold text-fg-strong">
-            {po.supplier_name ?? "ספק לא ידוע"}
-          </div>
-          <div className="mt-0.5 flex flex-wrap items-center gap-x-2 text-xs text-fg-muted">
-            <span className="font-mono">{po.po_number}</span>
-            <span className="font-mono tabular-nums text-fg">
+          {/* VIS-101 (P0) — the supplier name is NOT repeated here. It is the
+              group heading directly above this row; printing it twice at the
+              same weight was what made the page unreadable.
+              VIS-104 — three zones: state, then identity, then dates. */}
+          <div className="flex flex-wrap items-center gap-x-2 gap-y-1">
+            <StatusChip po={po} />
+            <span className="font-mono text-sm font-semibold tabular-nums text-fg-strong">
+              {po.po_number}
+            </span>
+            <span className="font-mono text-sm tabular-nums text-fg">
               {formatIls(Number(po.total_net))}
             </span>
-            <span
-              className={
-                po.due_state === "overdue" || po.risk_state !== "ok"
-                  ? "font-semibold text-danger-fg"
-                  : "font-medium text-fg"
-              }
-            >
-              · {dueLabel(po)}
-              {po.scheduled_order_date ? ` · ${po.scheduled_order_date}` : ""}
-            </span>
-            {po.latest_safe_order_date ? (
-              <span>· מועד בטוח אחרון {po.latest_safe_order_date}</span>
-            ) : null}
-            {scheduleRiskLabel ? (
-              <span className="font-semibold text-danger-fg">· {scheduleRiskLabel}</span>
-            ) : null}
-            {po.planned_receive_date ? (
-              <span>· הגעה מתוכננת {po.planned_receive_date}</span>
+            {justScheduled ? (
+              <span
+                className="chip chip-success gap-1 normal-case tracking-normal"
+                data-testid={`placement-schedule-saved-${po.po_id}`}
+              >
+                <CheckCircle2 className="h-3 w-3 shrink-0" aria-hidden />
+                המועד נשמר
+              </span>
             ) : null}
           </div>
+          <div className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-0.5 text-xs text-fg-muted">
+            {po.scheduled_order_date ? (
+              <span>
+                להזמין עד{" "}
+                <span className="font-mono tabular-nums">
+                  {formatIsraeliDate(po.scheduled_order_date)}
+                </span>
+              </span>
+            ) : null}
+            {po.latest_safe_order_date ? (
+              <span>
+                · מועד אחרון{" "}
+                <span className="font-mono tabular-nums">
+                  {formatIsraeliDate(po.latest_safe_order_date)}
+                </span>
+              </span>
+            ) : null}
+            {po.planned_receive_date ? (
+              <span>
+                · הגעה מתוכננת{" "}
+                <span className="font-mono tabular-nums">
+                  {formatIsraeliDate(po.planned_receive_date)}
+                </span>
+              </span>
+            ) : null}
+          </div>
+          {/* FLOW-112 / USBL-102 — the three header buttons used to be equal
+              peers on every row, so a row that needs scheduling looked exactly
+              like one ready to place, and the prerequisite was only discovered
+              after entering prices. Say the next step on the row itself. */}
+          {!open && !scheduling && !cancelling ? (
+            <p
+              className="mt-1 text-xs font-medium text-fg"
+              data-testid={`placement-row-hint-${po.po_id}`}
+            >
+              {needsSchedule
+                ? "← קודם קבעי תאריך ביצוע (״שנה מועד״)"
+                : futureSchedule
+                  ? "← מתוזמנת לתאריך עתידי. להזמין מוקדם — ״שנה מועד״"
+                  : "← פתחי להזנת מחיר ותנאי תשלום"}
+            </p>
+          ) : null}
         </div>
         {open ? (
           <ChevronUp className="h-4 w-4 shrink-0 text-fg-muted" aria-hidden />
@@ -563,10 +748,14 @@ export function PlacementRow({
         aria-expanded={scheduling}
         aria-label={`שנה מועד להזמנה ${po.po_number}`}
         title="שנה מועד"
-        className="flex shrink-0 items-center gap-1.5 border-r border-border/60 px-3 text-fg-muted transition-colors hover:bg-accent-softer hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+        // INTER-105: locked while a placement is in flight, matching the
+        // per-line supply controls — a mid-mutation panel switch was possible.
+        disabled={placeMut.isPending}
+        className="flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center gap-1.5 border-r border-border/60 px-3 text-fg-muted transition-colors hover:bg-accent-softer hover:text-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:pointer-events-none disabled:opacity-45"
         data-testid={`placement-schedule-toggle-${po.po_id}`}
       >
-        <span className="text-xs font-medium">שנה מועד</span>
+        <CalendarClock className="h-4 w-4 shrink-0" aria-hidden />
+        <span className="hidden text-xs font-medium sm:inline">שנה מועד</span>
       </button>
       <button
         type="button"
@@ -580,10 +769,19 @@ export function PlacementRow({
         aria-expanded={cancelling}
         aria-label={`בטל את ההזמנה ${po.po_number}`}
         title="בטל הזמנה"
-        className="flex shrink-0 items-center gap-1.5 border-r border-border/60 px-3 text-fg-muted transition-colors hover:bg-danger-softer hover:text-danger-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-danger"
+        disabled={placeMut.isPending}
+        // USBL-101: this opens the destructive path and used to look exactly
+        // like its two neutral neighbours. The icon carries the danger signal
+        // so the trigger is distinguishable at a glance, while the label stays
+        // muted — differentiated, but still secondary to placing the order.
+        // A11Y-108: 44px wide even in the icon-only mobile state.
+        className="group/cancel flex min-h-[44px] min-w-[44px] shrink-0 items-center justify-center gap-1.5 border-r border-border/60 px-3 text-fg-muted transition-colors hover:bg-danger-softer hover:text-danger-fg focus:outline-none focus-visible:ring-2 focus-visible:ring-danger disabled:pointer-events-none disabled:opacity-45"
         data-testid={`placement-cancel-toggle-${po.po_id}`}
       >
-        <XCircle className="h-4 w-4" aria-hidden />
+        <XCircle
+          className="h-4 w-4 shrink-0 text-danger-fg/75 transition-colors group-hover/cancel:text-danger-fg"
+          aria-hidden
+        />
         {/* ux-release-gate 2026-07-21 VIS-101: same trigger grammar as the
             FocusCard cancel — visible label where there is room. */}
         <span className="hidden text-xs font-medium sm:inline">
@@ -597,23 +795,26 @@ export function PlacementRow({
           className="space-y-3 border-t border-accent/30 bg-accent-softer/30 p-4"
           data-testid={`placement-schedule-panel-${po.po_id}`}
         >
-          <div className="flex flex-wrap items-end gap-3">
-            <button
-              type="button"
-              className="btn btn-sm min-h-[44px]"
-              onClick={() => {
-                setScheduleDate(nextProcurementWorkdayIso(todayIso));
-                setScheduleError(null);
-              }}
-            >
-              יום עבודה הבא
-            </button>
-            <label className="flex flex-col gap-1 text-sm font-medium text-fg">
-              תאריך ביצוע מתוכנן
+          {/* VIS-105 — this was one flex-wrap row that interleaved quick-fill
+              buttons between two unrelated date fields; in RTL the reading
+              order came out as button → field → field → button, with nothing
+              tying a button to the field it fills. Two fieldsets, each with
+              its own shortcuts. */}
+          <fieldset className="space-y-2">
+            <legend className="text-sm font-medium text-fg">
+              מתי מזמינים מהספק{" "}
+              <span className="text-danger-fg" aria-hidden>
+                *
+              </span>
+              <span className="sr-only">(שדה חובה)</span>
+            </legend>
+            <div className="flex flex-wrap items-center gap-2">
               <input
                 type="date"
                 className="input w-44"
                 min={todayIso}
+                required
+                aria-label="תאריך ביצוע ההזמנה"
                 value={scheduleDate}
                 onChange={(e) => {
                   setScheduleDate(e.target.value);
@@ -621,82 +822,128 @@ export function PlacementRow({
                 }}
                 data-testid={`placement-schedule-date-${po.po_id}`}
               />
-            </label>
-            <label className="flex flex-col gap-1 text-sm font-medium text-fg">
-              הגעה מתוכננת פנימית
-              <input
-                type="date"
-                className="input w-44"
-                value={plannedDate}
-                onChange={(e) => setPlannedDate(e.target.value)}
-                data-testid={`placement-planned-receive-date-${po.po_id}`}
-              />
-            </label>
-            <button
-              type="button"
-              className="btn btn-sm min-h-[44px]"
-              onClick={() => {
-                setScheduleDate(todayIso);
-                setScheduleError(null);
-              }}
-            >
-              העבר להיום
-            </button>
-            {po.latest_safe_order_date ? (
+              <DateEcho value={scheduleDate} />
               <button
                 type="button"
                 className="btn btn-sm min-h-[44px]"
                 onClick={() => {
-                  setScheduleDate(po.latest_safe_order_date ?? todayIso);
+                  setScheduleDate(todayIso);
                   setScheduleError(null);
                 }}
               >
-                המועד הבטוח
+                היום
               </button>
-            ) : null}
-          </div>
+              <button
+                type="button"
+                className="btn btn-sm min-h-[44px]"
+                onClick={() => {
+                  setScheduleDate(nextProcurementWorkdayIso(todayIso));
+                  setScheduleError(null);
+                }}
+              >
+                יום עבודה הבא
+              </button>
+              {po.latest_safe_order_date ? (
+                <button
+                  type="button"
+                  className="btn btn-sm min-h-[44px]"
+                  onClick={() => {
+                    setScheduleDate(po.latest_safe_order_date ?? todayIso);
+                    setScheduleError(null);
+                  }}
+                >
+                  המועד האחרון
+                </button>
+              ) : null}
+            </div>
+            {/* COPY-102 — was "המועד הבטוח האחרון הוא מידע נעול מהשרת". */}
+            <p className="text-xs text-fg-muted">
+              המועד האחרון להזמנה לפי התכנון:{" "}
+              <span className="font-mono font-semibold tabular-nums text-fg">
+                {po.latest_safe_order_date
+                  ? formatIsraeliDate(po.latest_safe_order_date)
+                  : "לא ידוע"}
+              </span>
+              . הזמנה שמתוזמנת לתאריך עתידי לא תבוצע עד שמעבירים אותה להיום.
+            </p>
+          </fieldset>
 
-          <p className="text-xs text-fg-muted">
-            המועד הבטוח האחרון הוא מידע נעול מהשרת:{" "}
-            <span className="font-semibold text-fg">
-              {po.latest_safe_order_date ?? "לא ידוע"}
-            </span>
-            . הזמנה עתידית לא תבוצע עד שמעבירים אותה להיום.
-          </p>
+          <fieldset className="space-y-2">
+            {/* COPY-104 — was "הגעה מתוכננת פנימית"; "פנימית" meant nothing to
+                the operator, and this field is the planner's estimate, not the
+                supplier's commitment (that one is entered at placement). */}
+            <legend className="text-sm font-medium text-fg">
+              הגעה צפויה לפי התכנון
+              <span className="mr-1 text-xs font-normal text-fg-muted">
+                (לא חובה — הספק מאשר תאריך בעת ביצוע ההזמנה)
+              </span>
+            </legend>
+            <div className="flex flex-wrap items-center gap-2">
+              <input
+                type="date"
+                className="input w-44"
+                aria-label="הגעה צפויה לפי התכנון"
+                value={plannedDate}
+                onChange={(e) => setPlannedDate(e.target.value)}
+                data-testid={`placement-planned-receive-date-${po.po_id}`}
+              />
+              <DateEcho value={plannedDate} />
+            </div>
+          </fieldset>
 
           {scheduleDateAfterSafe ? (
-            <div className="space-y-2">
-            <label className="block text-sm font-medium text-danger-fg">
-              סיבת סיכון
-              <select
-                className="input mt-1 w-full"
-                value={scheduleRiskReason}
-                onChange={(e) => {
-                  setScheduleRiskReason(e.target.value as ScheduleRiskReason);
-                  setScheduleError(null);
-                }}
-                data-testid={`placement-schedule-risk-reason-${po.po_id}`}
+            <div className="space-y-2 rounded-md border border-warning/40 bg-warning-softer/50 p-3">
+              <p className="flex items-start gap-1.5 text-xs font-medium text-warning-fg">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden />
+                התאריך שבחרת מאוחר מהמועד האחרון לפי התכנון. אפשר להמשיך, אבל צריך
+                לרשום למה.
+              </p>
+              {/* COPY-106 — was "סיבת סיכון". */}
+              <label
+                htmlFor={`placement-schedule-risk-reason-${po.po_id}`}
+                className="block text-sm font-medium text-fg"
               >
-                {SCHEDULE_RISK_REASONS.map((reason) => (
-                  <option key={reason.value} value={reason.value}>
-                    {reason.label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <label className="block text-sm font-medium text-danger-fg">
-              סיבת חריגה מתאריך בטוח
-              <textarea
-                className="input mt-1 min-h-20 w-full"
-                value={scheduleNote}
-                onChange={(e) => {
-                  setScheduleNote(e.target.value);
-                  setScheduleError(null);
-                }}
-                placeholder="למשל: תיאום מול ספק, מגבלת אחסון, או החלטת מנהל."
-                data-testid={`placement-schedule-risk-note-${po.po_id}`}
-              />
-            </label>
+                מדוע מזמינים אחרי המועד האחרון?
+                <select
+                  id={`placement-schedule-risk-reason-${po.po_id}`}
+                  className="input mt-1 w-full"
+                  value={scheduleRiskReason}
+                  onChange={(e) => {
+                    setScheduleRiskReason(e.target.value as ScheduleRiskReason);
+                    setScheduleError(null);
+                  }}
+                  data-testid={`placement-schedule-risk-reason-${po.po_id}`}
+                >
+                  {SCHEDULE_RISK_REASONS.map((reason) => (
+                    <option key={reason.value} value={reason.value}>
+                      {reason.label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              {/* COPY-107 — was "סיבת חריגה מתאריך בטוח". */}
+              <label
+                htmlFor={`placement-schedule-risk-note-${po.po_id}`}
+                className="block text-sm font-medium text-fg"
+              >
+                הסבר קצר{" "}
+                <span className="text-danger-fg" aria-hidden>
+                  *
+                </span>
+                <span className="sr-only">(שדה חובה)</span>
+                <textarea
+                  id={`placement-schedule-risk-note-${po.po_id}`}
+                  className="input mt-1 min-h-20 w-full"
+                  required
+                  value={scheduleNote}
+                  onChange={(e) => {
+                    setScheduleNote(e.target.value);
+                    setScheduleError(null);
+                  }}
+                  placeholder="למשל: תיאום מול ספק, מגבלת אחסון, או החלטת מנהל."
+                  data-testid={`placement-schedule-risk-note-${po.po_id}`}
+                />
+              </label>
             </div>
           ) : null}
 
@@ -710,28 +957,47 @@ export function PlacementRow({
             </div>
           ) : null}
 
+          {/* A11Y-105 — primary first in the DOM. Under `dir="rtl"` the first
+              child renders at the right (start) edge, so visual order and tab
+              order now agree, and Tab no longer lands on "חזרה" first. */}
           <div className="flex flex-wrap items-center justify-end gap-2">
             <button
               type="button"
-              className="btn btn-ghost btn-sm"
+              className="btn btn-primary btn-sm min-h-[44px]"
+              onClick={handleSchedule}
+              // INTER-104 — the late-reason requirement used to fire only after
+              // the click, unlike every other gate on this surface.
+              disabled={scheduleMut.isPending || !!scheduleBlockedReason}
+              title={scheduleBlockedReason ?? undefined}
+              data-testid={`placement-schedule-submit-${po.po_id}`}
+            >
+              {scheduleMut.isPending ? (
+                <>
+                  <Loader2
+                    className="h-4 w-4 animate-spin motion-reduce:animate-none"
+                    aria-hidden
+                  />
+                  <span className="sr-only">שומר…</span>
+                </>
+              ) : null}
+              שמור מועד
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm min-h-[44px]"
               onClick={() => setScheduling(false)}
               disabled={scheduleMut.isPending}
             >
               חזרה
             </button>
-            <button
-              type="button"
-              className="btn btn-primary btn-sm"
-              onClick={handleSchedule}
-              disabled={scheduleMut.isPending || !scheduleDate}
-              data-testid={`placement-schedule-submit-${po.po_id}`}
-            >
-              {scheduleMut.isPending ? (
-                <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />
-              ) : null}
-              שמור מועד
-            </button>
           </div>
+          {scheduleBlockedReason ? (
+            // A11Y-101 pattern: a disabled button cannot hold focus, so the
+            // reason must be readable without hovering it.
+            <p className="text-xs text-fg-muted" aria-live="polite">
+              {scheduleBlockedReason}
+            </p>
+          ) : null}
         </div>
       ) : null}
 
@@ -800,6 +1066,11 @@ export function PlacementRow({
             ) : null}
           </div>
 
+          {/* A11Y-105 asked for primary-first ordering in both panel footers.
+              Applied to the schedule panel; deliberately NOT applied here. The
+              primary action in this panel is destructive, and having Tab and
+              the RTL start edge both land on "חזרה" first is the guard, not an
+              oversight. Interaction + a11y agreed on the split. */}
           <div className="flex items-center justify-end gap-2">
             <button
               type="button"
@@ -808,7 +1079,7 @@ export function PlacementRow({
                 setCancelError(null);
               }}
               disabled={cancelMut.isPending}
-              className="btn btn-ghost btn-sm"
+              className="btn btn-ghost btn-sm min-h-[44px]"
             >
               חזרה
             </button>
@@ -835,15 +1106,19 @@ export function PlacementRow({
       ) : null}
 
       {open ? (
-        <div className="border-t border-border/60 p-4">
+        <div id={panelId} className="border-t border-border/60 p-4">
           {linesQuery.isLoading ? (
+            // A11Y-104: aria-busy on a bare div announces nothing. Give the
+            // region a status role and a sentence to announce.
             <div
               className="space-y-2"
+              role="status"
               aria-busy="true"
               data-testid={`placement-lines-loading-${po.po_id}`}
             >
-              <div className="h-10 w-full animate-pulse rounded bg-bg-subtle" />
-              <div className="h-10 w-2/3 animate-pulse rounded bg-bg-subtle" />
+              <span className="sr-only">טוען את שורות ההזמנה…</span>
+              <div className="h-10 w-full animate-pulse rounded bg-bg-subtle motion-reduce:animate-none" />
+              <div className="h-10 w-2/3 animate-pulse rounded bg-bg-subtle motion-reduce:animate-none" />
             </div>
           ) : linesQuery.isError ? (
             <div
@@ -905,26 +1180,76 @@ export function PlacementRow({
                 />
               </div>
 
-              {/* Lines + per-line price */}
-              <ul className="space-y-2">
-                {lines.map((l) => (
+              {/* INTER-101 — the paste-ready order message used to sit BELOW
+                  the price fields. That inverts a real supplier call: this is
+                  what she sends to open the conversation; the prices below are
+                  what she writes down from the answer. Opener first. */}
+              {po.order_document_text ? (
+                <div className="rounded-md border border-border/60 bg-bg-subtle/40 p-2">
+                  <div className="mb-1 flex items-center justify-between gap-2">
+                    <span className="text-xs font-medium text-fg">
+                      1 · שלחי לספק את ההזמנה
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        void navigator.clipboard
+                          ?.writeText(po.order_document_text ?? "")
+                          .then(() => {
+                            setCopied(true);
+                            setTimeout(() => setCopied(false), 1500);
+                          });
+                      }}
+                      className="inline-flex min-h-[44px] items-center gap-1 rounded px-2 text-xs font-medium underline hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
+                      data-testid={`placement-copy-doc-${po.po_id}`}
+                    >
+                      <span aria-live="polite">
+                        {copied ? "הועתק" : "העתק הודעה"}
+                      </span>
+                      {copied ? <span aria-hidden>✓</span> : null}
+                    </button>
+                  </div>
+                  <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-words text-xs text-fg">
+                    {po.order_document_text}
+                  </pre>
+                </div>
+              ) : null}
+
+              {/* Lines + per-line price — what the supplier answered. */}
+              <div className="space-y-2">
+                <p className="text-xs font-medium text-fg">
+                  {po.order_document_text ? "2 · " : ""}רשמי מה הספק אישר
+                </p>
+                <ul className="space-y-2">
+                {lines.map((l) => {
+                  const errorId = `placement-supplied-error-${l.po_line_id}`;
+                  const invalid = partialInvalid(l);
+                  return (
                   <li
                     key={l.po_line_id}
-                    className="flex flex-wrap items-center gap-2"
+                    className="flex flex-wrap items-center gap-2 rounded-md border border-border/50 bg-bg-subtle/20 p-2"
                   >
                     <div className="min-w-0 flex-1">
-                      <div className="truncate text-sm text-fg-strong">
+                      <div className="truncate text-sm font-medium text-fg-strong">
                         {lineName(l)}
                       </div>
                       <div className="text-xs text-fg-muted">
-                        כמות:{" "}
+                        הוזמן:{" "}
                         <span className="font-mono tabular-nums">
-                          {fmtNumStr(l.ordered_qty)} {l.uom}
+                          {qtyLabel(l.ordered_qty, l.uom)}
                         </span>
                       </div>
                     </div>
                     <label className="flex items-center gap-1.5">
-                      <span className="text-xs text-fg-muted">מחיר ליח׳ ₪</span>
+                      {/* USBL-103 — `required` drove no visible marker, so the
+                          operator learned which fields were mandatory only by
+                          the submit button staying disabled. */}
+                      <span className="text-xs text-fg-muted">
+                        מחיר ליח׳ ₪
+                        <span className="text-danger-fg" aria-hidden>
+                          {" *"}
+                        </span>
+                      </span>
                       <input
                         type="number"
                         inputMode="decimal"
@@ -940,45 +1265,63 @@ export function PlacementRow({
                           }))
                         }
                         data-testid={`placement-price-${l.po_line_id}`}
-                        aria-label={`מחיר ליחידה עבור ${lineName(l)}`}
+                        aria-label={`מחיר ליחידה עבור ${lineName(l)} (שדה חובה)`}
                       />
                     </label>
 
                     {/* Tranche 150 — what the supplier actually supplied.
-                        Defaults to "במלואו", so the common case adds no work. */}
-                    <div
-                      className="flex w-full flex-wrap items-center gap-1.5 sm:w-auto"
-                      role="group"
-                      aria-label={`מה סופק עבור ${lineName(l)}`}
-                    >
+                        Defaults to "סופק במלואו", so the common case adds no work.
+                        A11Y-102 — these were three `aria-pressed` buttons in a
+                        `role="group"`, which a screen reader announces as three
+                        independent toggles with no hint that choosing one clears
+                        the others. Real radios in a fieldset: native semantics,
+                        native arrow-key behaviour, no roving tabindex to maintain. */}
+                    <fieldset className="flex w-full flex-wrap items-center gap-1.5 sm:w-auto">
+                      <legend className="sr-only">{`מה סופק עבור ${lineName(l)}`}</legend>
                       {(
                         [
-                          ["full", "במלואו"],
-                          ["partial", "חלקית"],
-                          ["none", "לא הוזמן"],
+                          ["full", "סופק במלואו"],
+                          ["partial", "סופק חלקית"],
+                          // COPY-105 — was "לא הוזמן", which contradicted the
+                          // question: the order WAS placed; this line is the one
+                          // the supplier cannot supply.
+                          ["none", "לא יסופק"],
                         ] as const
                       ).map(([value, label]) => {
                         const active = stateFor(l) === value;
                         return (
-                          <button
+                          // The testid sits on the label, not the visually
+                          // hidden input, so a click driver targets something
+                          // that is actually on screen.
+                          <label
                             key={value}
-                            type="button"
-                            onClick={() => setLineState(l, value)}
-                            aria-pressed={active}
-                            disabled={placeMut.isPending}
+                            className="cursor-pointer"
                             data-testid={`placement-supply-${value}-${l.po_line_id}`}
-                            className={
-                              active
-                                ? value === "full"
-                                  ? "btn btn-xs border-success/50 bg-success-softer text-success-fg"
-                                  : value === "partial"
-                                    ? "btn btn-xs border-warning/50 bg-warning-softer text-warning-fg"
-                                    : "btn btn-xs border-danger/50 bg-danger-softer text-danger-fg"
-                                : "btn btn-ghost btn-xs text-fg-muted"
-                            }
                           >
-                            {label}
-                          </button>
+                            <input
+                              type="radio"
+                              name={`placement-supply-${l.po_line_id}`}
+                              value={value}
+                              checked={active}
+                              onChange={() => setLineState(l, value)}
+                              disabled={placeMut.isPending}
+                              className="peer sr-only"
+                              data-testid={`placement-supply-input-${value}-${l.po_line_id}`}
+                            />
+                            <span
+                              className={`${
+                                active
+                                  ? value === "full"
+                                    ? "btn btn-xs border-success/50 bg-success-softer text-success-fg"
+                                    : value === "partial"
+                                      ? "btn btn-xs border-warning/50 bg-warning-softer text-warning-fg"
+                                      : "btn btn-xs border-danger/50 bg-danger-softer text-danger-fg"
+                                  : "btn btn-ghost btn-xs text-fg-muted"
+                              } peer-focus-visible:ring-2 peer-focus-visible:ring-accent/55 peer-focus-visible:ring-offset-1 peer-disabled:opacity-45`}
+                            >
+                              {label}
+                            </span>
+                          </label>
                         );
                       })}
                       {stateFor(l) === "partial" ? (
@@ -1000,26 +1343,35 @@ export function PlacementRow({
                             disabled={placeMut.isPending}
                             data-testid={`placement-supplied-${l.po_line_id}`}
                             aria-label={`כמות שסופקה עבור ${lineName(l)}`}
-                            aria-invalid={partialInvalid(l) || undefined}
+                            aria-invalid={invalid || undefined}
+                            // A11Y-103 — the error text existed but was never
+                            // tied to the field, so tabbing back to a flagged
+                            // input announced nothing.
+                            aria-describedby={invalid ? errorId : undefined}
                           />
-                          <span className="text-xs text-fg-muted">{l.uom}</span>
+                          <span className="text-xs text-fg-muted">
+                            {uomLabelHe(l.uom)}
+                          </span>
                         </label>
                       ) : null}
-                    </div>
-                    {partialInvalid(l) ? (
+                    </fieldset>
+                    {invalid ? (
                       <p
+                        id={errorId}
                         className="w-full text-xs font-medium text-danger-fg"
                         role="alert"
-                        data-testid={`placement-supplied-error-${l.po_line_id}`}
+                        data-testid={errorId}
                       >
                         הכמות שסופקה חייבת להיות גדולה מאפס וקטנה מ-
-                        {fmtNumStr(l.ordered_qty)} {l.uom}. אם סופק הכול — בחרי
-                        ״במלואו״; אם כלום — ״לא הוזמן״.
+                        {qtyLabel(l.ordered_qty, l.uom)}. אם סופק הכול — בחרי
+                        ״סופק במלואו״; אם כלום — ״לא יסופק״.
                       </p>
                     ) : null}
                   </li>
-                ))}
-              </ul>
+                  );
+                })}
+                </ul>
+              </div>
 
               {/* Tranche 150 — one reason for the whole split (a split is one
                   supplier conversation, not a per-component fact). */}
@@ -1087,39 +1439,9 @@ export function PlacementRow({
                   role="alert"
                   data-testid="placement-nothing-placed"
                 >
-                  כל השורות מסומנות כ״לא הוזמן״ — זהו ביטול הזמנה ולא ביצוע
-                  חלקי. השתמשי ב״בטל הזמנה״ עם סיבה.
+                  כל השורות מסומנות כ״לא יסופק״ — זהו ביטול הזמנה ולא ביצוע
+                  חלקי. השתמשי ב״בטל עם סיבה״.
                 </p>
-              ) : null}
-
-              {/* Paste-ready Hebrew order message (from the originating session PO) */}
-              {po.order_document_text ? (
-                <div className="rounded-md border border-border/60 bg-bg-subtle/40 p-2">
-                  <div className="mb-1 flex items-center justify-between">
-                    <span className="text-xs font-medium text-fg-muted">
-                      הודעת הזמנה לספק
-                    </span>
-                    <button
-                      type="button"
-                      onClick={() => {
-                        void navigator.clipboard
-                          ?.writeText(po.order_document_text ?? "")
-                          .then(() => {
-                            setCopied(true);
-                            setTimeout(() => setCopied(false), 1500);
-                          });
-                      }}
-                      className="inline-flex min-h-[44px] items-center gap-1 rounded px-2 text-xs font-medium underline hover:no-underline focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent"
-                      data-testid={`placement-copy-doc-${po.po_id}`}
-                    >
-                      <span aria-live="polite">{copied ? "הועתק" : "העתק"}</span>
-                      {copied ? <span aria-hidden>✓</span> : null}
-                    </button>
-                  </div>
-                  <pre className="max-h-32 overflow-auto whitespace-pre-wrap break-words text-xs text-fg">
-                    {po.order_document_text}
-                  </pre>
-                </div>
               ) : null}
 
               {/* FLOW-003: supplier-confirmed arrival date */}
@@ -1128,7 +1450,11 @@ export function PlacementRow({
                   htmlFor={`placement-eta-${po.po_id}`}
                   className="text-sm font-medium text-fg"
                 >
-                  תאריך אספקה מאושר
+                  תאריך אספקה שהספק אישר
+                  <span className="text-danger-fg" aria-hidden>
+                    {" *"}
+                  </span>
+                  <span className="sr-only">(שדה חובה)</span>
                 </label>
                 <input
                   id={`placement-eta-${po.po_id}`}
@@ -1140,6 +1466,17 @@ export function PlacementRow({
                   onChange={(e) => setConfirmedDate(e.target.value)}
                   data-testid={`placement-eta-${po.po_id}`}
                 />
+                <DateEcho value={confirmedDate} />
+                {/* FLOW-116 — this field is pre-filled from the planner's
+                    estimate, so it is never blank and the "confirm it with the
+                    supplier" step could be skipped without noticing. Name the
+                    source of the value that is sitting there. */}
+                {po.planned_receive_date &&
+                confirmedDate === po.planned_receive_date ? (
+                  <span className="text-xs text-fg-muted">
+                    זהו התאריך המתוכנן — עדכני לפי מה שהספק אישר בשיחה.
+                  </span>
+                ) : null}
               </div>
 
               {/* Payment terms */}
@@ -1149,6 +1486,10 @@ export function PlacementRow({
                   className="text-sm font-medium text-fg"
                 >
                   תנאי תשלום
+                  <span className="text-danger-fg" aria-hidden>
+                    {" *"}
+                  </span>
+                  <span className="sr-only">(שדה חובה)</span>
                 </label>
                 <select
                   id={`placement-terms-${po.po_id}`}
@@ -1207,17 +1548,49 @@ export function PlacementRow({
                 ) : null}
               </div>
 
-              <div className="flex items-center justify-end gap-2">
+              {/* A11Y-101 — the blocking reason used to live only in a `title`
+                  on a `disabled` button. A disabled button is removed from the
+                  tab sequence, so neither a keyboard user nor a screen reader
+                  could ever reach the one sentence explaining what was missing.
+                  The button now stays focusable via `aria-disabled` (with a
+                  click guard), and the reason is on-screen text. */}
+              <div className="flex flex-wrap items-center justify-end gap-x-3 gap-y-2">
+                {!canPlace && !placeMut.isPending ? (
+                  <p
+                    id={`placement-blocked-${po.po_id}`}
+                    className="flex-1 text-xs text-fg-muted"
+                    data-testid={`placement-blocked-${po.po_id}`}
+                  >
+                    {blockedReason}
+                  </p>
+                ) : null}
                 <button
                   type="button"
-                  onClick={() => void handlePlace()}
-                  disabled={!canPlace || placeMut.isPending}
+                  onClick={() => {
+                    if (!canPlace) return;
+                    void handlePlace();
+                  }}
+                  aria-disabled={!canPlace || undefined}
+                  disabled={placeMut.isPending}
+                  aria-describedby={
+                    !canPlace ? `placement-blocked-${po.po_id}` : undefined
+                  }
                   title={!canPlace ? blockedReason : undefined}
-                  className="btn btn-primary"
+                  className={`btn btn-primary min-h-[44px] ${
+                    !canPlace ? "opacity-45" : ""
+                  }`}
                   data-testid={`placement-submit-${po.po_id}`}
                 >
                   {placeMut.isPending ? (
-                    <Loader2 className="h-4 w-4 animate-spin motion-reduce:animate-none" aria-hidden />
+                    <>
+                      <Loader2
+                        className="h-4 w-4 animate-spin motion-reduce:animate-none"
+                        aria-hidden
+                      />
+                      {/* A11Y-107 — the spinner is aria-hidden and the label
+                          does not change, so pressing gave AT no confirmation. */}
+                      <span className="sr-only">מבצע…</span>
+                    </>
                   ) : (
                     <PackageCheck className="h-4 w-4" aria-hidden />
                   )}

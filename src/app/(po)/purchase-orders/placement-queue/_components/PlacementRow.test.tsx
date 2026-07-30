@@ -5,7 +5,14 @@
 // place-contract tests; this pins the client-side guard + line rendering.)
 
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { cleanup, render, screen, waitFor, within } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { PlacementRow } from "./PlacementRow";
@@ -160,7 +167,7 @@ describe("PlacementRow", () => {
     expect(body.target_supplier_id).toBe("sup2");
   });
 
-  it("blocks placing without a payment term — submit stays disabled with an explanatory title (DR-018 INTER-003)", async () => {
+  it("blocks placing without a payment term — submit stays blocked and says why (DR-018 INTER-003, A11Y-101)", async () => {
     const fetchMock = vi
       .spyOn(globalThis, "fetch")
       .mockImplementation(async (input: RequestInfo | URL) => {
@@ -179,22 +186,32 @@ describe("PlacementRow", () => {
     const priceInput = await screen.findByTestId("placement-price-l1");
     expect(priceInput).toBeTruthy();
 
-    // Before a price is entered, the submit button is already disabled.
+    // Before a price is entered, the submit button is already blocked.
+    // ux-release-gate 2026-07-30 A11Y-101: the block is `aria-disabled`, not
+    // `disabled` — a `disabled` button leaves the tab sequence, so the one
+    // sentence explaining what is missing became unreachable by keyboard and
+    // screen reader. The button stays focusable; a click guard does the work.
     const submitBtn = screen.getByTestId(
       "placement-submit-po1",
     ) as HTMLButtonElement;
-    expect(submitBtn.disabled).toBe(true);
+    expect(submitBtn.getAttribute("aria-disabled")).toBe("true");
+    expect(submitBtn.disabled).toBe(false);
 
-    // Enter a price but choose NO term — still disabled, with a Hebrew
-    // tooltip explaining why (INTER-003: this used to be clickable and only
-    // validated post-click).
+    // Enter a price but choose NO term — still blocked, with the reason in
+    // both the tooltip and on-screen text (INTER-003: this used to be
+    // clickable and only validated post-click).
     await userEvent.type(priceInput, "12.5");
-    expect(submitBtn.disabled).toBe(true);
+    expect(submitBtn.getAttribute("aria-disabled")).toBe("true");
     expect(submitBtn.getAttribute("title")).toContain("מחיר");
     expect(submitBtn.getAttribute("title")).toContain("תנאי תשלום");
+    const blocked = screen.getByTestId("placement-blocked-po1");
+    expect(blocked.textContent).toContain("תנאי תשלום");
+    expect(submitBtn.getAttribute("aria-describedby")).toBe(
+      "placement-blocked-po1",
+    );
 
-    // A disabled button does not fire clicks — the place mutation endpoint
-    // must never be reached from this state.
+    // The click guard replaces `disabled`: the place endpoint must never be
+    // reached from this state.
     await userEvent.click(submitBtn);
     const placeCalls = fetchMock.mock.calls.filter((c) =>
       String(c[0]).includes("/place"),
@@ -226,7 +243,10 @@ describe("PlacementRow", () => {
     const submitBtn = screen.getByTestId(
       "placement-submit-po1",
     ) as HTMLButtonElement;
-    await waitFor(() => expect(submitBtn.disabled).toBe(false));
+    await waitFor(() =>
+      expect(submitBtn.getAttribute("aria-disabled")).toBeNull(),
+    );
+    expect(screen.queryByTestId("placement-blocked-po1")).toBeNull();
   });
 
   it("cancel-with-reason: discard stays disabled until a reason is chosen (Tom-directed 2026-07-16)", async () => {
@@ -309,8 +329,26 @@ describe("PlacementRow", () => {
   it("defaults every line to fully supplied — no split panel, and the action stays 'בצע הזמנה'", async () => {
     await openWithLines(LINES);
     expect(screen.queryByTestId("placement-split-panel")).toBeNull();
-    expect(screen.getByTestId("placement-supply-full-l1").getAttribute("aria-pressed")).toBe("true");
+    // ux-release-gate 2026-07-30 A11Y-102: the supply outcome is a native
+    // radio group, not three `aria-pressed` toggles — a screen reader must
+    // hear that picking one clears the others.
+    const full = screen.getByTestId(
+      "placement-supply-input-full-l1",
+    ) as HTMLInputElement;
+    expect(full.type).toBe("radio");
+    expect(full.checked).toBe(true);
+    expect(
+      (screen.getByTestId("placement-supply-input-none-l1") as HTMLInputElement)
+        .checked,
+    ).toBe(false);
     expect(screen.getByTestId("placement-submit-po1").textContent).toContain("בצע הזמנה");
+  });
+
+  it("names the third supply outcome 'לא יסופק' — the order was placed, this line just is not coming (COPY-105)", async () => {
+    await openWithLines(LINES);
+    const group = screen.getByRole("group", { name: /מה סופק עבור רכיב א/ });
+    expect(within(group).getByText("לא יסופק")).toBeTruthy();
+    expect(within(group).queryByText("לא הוזמן")).toBeNull();
   });
 
   it("a partial quantity opens the split panel and blocks placing until a reason is chosen", async () => {
@@ -326,14 +364,18 @@ describe("PlacementRow", () => {
 
     expect(screen.queryByTestId("placement-split-panel")).not.toBeNull();
     const submit = screen.getByTestId("placement-submit-po1") as HTMLButtonElement;
-    await waitFor(() => expect(submit.disabled).toBe(true));
+    await waitFor(() =>
+      expect(submit.getAttribute("aria-disabled")).toBe("true"),
+    );
     expect(submit.getAttribute("title")).toContain("סיבה");
 
     await userEvent.selectOptions(
       screen.getByTestId("placement-split-reason"),
       "אין במלאי אצל הספק",
     );
-    await waitFor(() => expect(submit.disabled).toBe(false));
+    await waitFor(() =>
+      expect(submit.getAttribute("aria-disabled")).toBeNull(),
+    );
     // The action renames itself so it can never be mistaken for a full order.
     expect(submit.textContent).toContain("בצע חלקית");
   });
@@ -350,7 +392,15 @@ describe("PlacementRow", () => {
 
     expect(screen.queryByTestId("placement-supplied-error-l1")).not.toBeNull();
     const submit = screen.getByTestId("placement-submit-po1") as HTMLButtonElement;
-    await waitFor(() => expect(submit.disabled).toBe(true));
+    await waitFor(() =>
+      expect(submit.getAttribute("aria-disabled")).toBe("true"),
+    );
+    // A11Y-103: the flagged input points at the error text that explains it.
+    expect(
+      screen
+        .getByTestId("placement-supplied-l1")
+        .getAttribute("aria-describedby"),
+    ).toBe("placement-supplied-error-l1");
   });
 
   it("refuses a placement where nothing is supplied and points at the discard path (backend NOTHING_PLACED)", async () => {
@@ -361,8 +411,10 @@ describe("PlacementRow", () => {
 
     expect(screen.queryByTestId("placement-nothing-placed")).not.toBeNull();
     const submit = screen.getByTestId("placement-submit-po1") as HTMLButtonElement;
-    await waitFor(() => expect(submit.disabled).toBe(true));
-    expect(submit.getAttribute("title")).toContain("בטל הזמנה");
+    await waitFor(() =>
+      expect(submit.getAttribute("aria-disabled")).toBe("true"),
+    );
+    expect(submit.getAttribute("title")).toContain("בטל עם סיבה");
 
     // And it must never reach the place endpoint.
     await userEvent.click(submit);
@@ -400,5 +452,96 @@ describe("PlacementRow", () => {
     expect(body.line_prices).toEqual(
       expect.arrayContaining([{ po_line_id: "l1", unit_price_net: 10 }]),
     );
+  });
+
+  // -------------------------------------------------------------------------
+  // Tranche 154 — clarity rebuild (ux-release-gate 2026-07-30)
+  // -------------------------------------------------------------------------
+
+  function renderPo(overrides: Partial<QueuePo>) {
+    if (!vi.isMockFunction(globalThis.fetch)) {
+      vi.spyOn(globalThis, "fetch").mockImplementation(async () =>
+        new Response(JSON.stringify(LINES), { status: 200 }),
+      );
+    }
+    const qc = new QueryClient({ defaultOptions: { queries: { retry: false } } });
+    render(
+      <QueryClientProvider client={qc}>
+        <PlacementRow po={{ ...PO, ...overrides }} />
+      </QueryClientProvider>,
+    );
+  }
+
+  it("collapsed row never repeats the supplier name — it belongs to the group heading (P0 VIS-101)", () => {
+    renderPo({});
+    // The name that used to print twice per row (group heading + row label,
+    // same size and weight, ~10px apart) appears zero times in the row itself.
+    expect(screen.queryByText("אקמה")).toBeNull();
+    // What the row leads with instead: state, then identity.
+    expect(screen.getByTestId("placement-status-chip-po1").textContent).toContain(
+      "לביצוע היום",
+    );
+    expect(screen.getByText("PO-2026-00001")).toBeTruthy();
+  });
+
+  it("renders dates the Israeli way, not ISO (COPY-103)", () => {
+    // The fixture's order date and planning deadline are the same day, so this
+    // value legitimately appears more than once in the row.
+    renderPo({ scheduled_order_date: "2026-06-25" });
+    expect(screen.getAllByText("25/06/2026").length).toBeGreaterThan(0);
+    expect(screen.getByText("30/06/2026")).toBeTruthy(); // planned arrival
+    expect(screen.queryByText("2026-06-25")).toBeNull();
+    expect(screen.queryByText("2026-06-30")).toBeNull();
+  });
+
+  it("does not auto-open the schedule panel, and tells the row what its next step is (VIS-109, FLOW-112)", () => {
+    renderPo({ due_state: "needs_schedule", scheduled_order_date: null });
+    // Auto-opening this panel for every unscheduled order pushed the rest of
+    // the queue below the fold on a phone.
+    expect(screen.queryByTestId("placement-schedule-panel-po1")).toBeNull();
+    expect(screen.getByTestId("placement-schedule-toggle-po1").getAttribute("aria-expanded")).toBe(
+      "false",
+    );
+    // The row says which of its three buttons is the one to press.
+    expect(screen.getByTestId("placement-row-hint-po1").textContent).toContain(
+      "שנה מועד",
+    );
+    expect(screen.getByTestId("placement-status-chip-po1").textContent).toContain(
+      "חסר תאריך ביצוע",
+    );
+  });
+
+  it("blocks saving a date past the planning deadline until a reason is written, before the click (INTER-104)", async () => {
+    renderPo({});
+    await userEvent.click(screen.getByTestId("placement-schedule-toggle-po1"));
+
+    const dateInput = screen.getByTestId("placement-schedule-date-po1");
+    fireEvent.change(dateInput, { target: { value: "2026-06-30" } });
+
+    const save = screen.getByTestId(
+      "placement-schedule-submit-po1",
+    ) as HTMLButtonElement;
+    // The late-reason requirement used to fire only after the click.
+    await waitFor(() => expect(save.disabled).toBe(true));
+    expect(save.getAttribute("title")).toContain("הסבר");
+
+    fireEvent.change(screen.getByTestId("placement-schedule-risk-note-po1"), {
+      target: { value: "הספק סוגר מחר" },
+    });
+    await waitFor(() => expect(save.disabled).toBe(false));
+  });
+
+  it("keeps the planner's jargon off the schedule panel (COPY-102, COPY-104, COPY-106, COPY-107)", async () => {
+    renderPo({});
+    await userEvent.click(screen.getByTestId("placement-schedule-toggle-po1"));
+    for (const jargon of [
+      "מידע נעול מהשרת",
+      "הגעה מתוכננת פנימית",
+      "סיבת סיכון",
+      "סיבת חריגה מתאריך בטוח",
+    ]) {
+      expect(screen.queryByText(new RegExp(jargon))).toBeNull();
+    }
+    expect(screen.getByText(/המועד האחרון להזמנה לפי התכנון/)).toBeTruthy();
   });
 });
