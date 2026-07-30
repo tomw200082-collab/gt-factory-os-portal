@@ -1,6 +1,6 @@
 # Tranche 154 — placement queue clarity + visual rebuild (הזמנות לביצוע)
 
-**Status:** in progress
+**Status:** built — all gates green (`portal-pr-guard` run #338 success on `42129e2`); awaiting Tom's visual review + merge of `gt-factory-os-portal` PR #198
 **Origin:** Tom, 2026-07-30: "חייבים לשפר את דף ביצוע הרכש שדורין עובדת עליו… הוא לא מובן ולא מספיק ברור לשימוש. חייבים לשפר בו גם את העיצוב וגם את חוויית המשתמש." Approved as tranche 154 after the full `/ux-release-gate` run.
 sizing: M
 scorecard_target_category: ops_surface
