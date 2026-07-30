@@ -109,7 +109,7 @@ function draftResponse(rows: DraftWeekRow[]): DraftWeekResponse {
 }
 
 function openFirmPanel() {
-  fireEvent.click(screen.getByRole("button", { name: /Lock — Thursday/i }));
+  fireEvent.click(screen.getByRole("button", { name: /Lock — Wednesday/i }));
 }
 
 afterEach(() => {
@@ -189,7 +189,7 @@ describe("weekly-meeting cockpit — cadence rail one-row mobile (FLOW-008, T053
 });
 
 describe("weekly-meeting cockpit — firm week selector fits 390px (FLOW-007, T053)", () => {
-  it("drops the 14rem floor: min-w-0 wrapper + truncating week label", () => {
+  it("drops the 14rem floor and shows the whole week range at 390px", () => {
     render(<PlanningMeetingPage />);
     openFirmPanel();
     const eyebrow = screen.getByText(/Target week to lock/i);
@@ -197,8 +197,14 @@ describe("weekly-meeting cockpit — firm week selector fits 390px (FLOW-007, T0
     const cls = labelWrap.getAttribute("class") ?? "";
     expect(cls.includes("min-w-0")).toBe(true);
     expect(cls.includes("min-w-[14rem]")).toBe(false);
+    // Tranche 155 (MEET-309): the label used to `truncate`, which at 390px cut
+    // "Week of Aug 9–15, 2026" down to "Week of …" — the planner could not see
+    // which week they were about to commit. It now steps down a size instead.
     const weekLabel = labelWrap.firstElementChild!;
-    expect((weekLabel.getAttribute("class") ?? "").includes("truncate")).toBe(true);
+    const labelCls = weekLabel.getAttribute("class") ?? "";
+    expect(labelCls.includes("truncate")).toBe(false);
+    expect(labelCls.includes("text-base")).toBe(true);
+    expect(weekLabel.textContent).toMatch(/Week of .+\d{4}/);
   });
 
   it("moves Generate / refresh drafts to its own right-aligned row below the week nav", () => {

@@ -358,6 +358,17 @@ function QueueInner(): JSX.Element {
               data-testid="placement-queue-cancelled-po-link"
             >
               צפה בהזמנה
+            </Link>{" "}
+            ·{" "}
+            {/* Tranche 155 (FLOW-203): the placement banner routes onward to
+                goods receipt; this one ended at the banner, even though a
+                discarded order usually means going back to re-plan it. */}
+            <Link
+              href="/planning/procurement"
+              className="font-medium underline-offset-2 hover:underline"
+              data-testid="placement-queue-cancelled-procurement-link"
+            >
+              חזרה לרכש ←
             </Link>
           </span>
           <button

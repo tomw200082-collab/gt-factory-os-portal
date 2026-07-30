@@ -3,15 +3,18 @@
 // /planning/meeting — Weekly Cadence cockpit.
 //
 // One day-aware surface that drives the operator rhythm. It opens on the step
-// that matches today (Thursday → Firm, Sunday → Procure, otherwise → Execute)
-// but the cadence rail lets you move between steps at any time.
+// that matches today (meeting day → Firm, next day → Procure, otherwise →
+// Execute) but the cadence rail lets you move between steps at any time.
 //
-//   • FIRM (Thursday): review the engine's draft week (~2 weeks out) and lock
-//     it. Locking promotes draft → planned; the Sunday session then buys
-//     against the committed week. Reversible via the production-plan workflow.
-//   • PROCURE (Sunday): buy for the firmed week — handled by the merged
-//     Procurement surface (Tranche 045); the cockpit routes you there.
+//   • FIRM (the meeting): review the engine's draft week (~2 weeks out) and
+//     lock it. Locking promotes draft → planned; the procurement session then
+//     buys against the committed week. Reversible via the production plan.
+//   • PROCURE (day after the meeting): buy for the locked week — handled by the
+//     merged Procurement surface (Tranche 045); the cockpit routes you there.
 //   • EXECUTE (daily): make today's batch and report the actual.
+//
+// Day names live in CADENCE_DAYS (_lib/cadence.ts) — never spelled out here.
+// Tom moved the cadence 2026-07-30: meeting Thu→Wed, procurement Sun→Thu.
 
 import Link from "next/link";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
@@ -48,6 +51,7 @@ import {
   defaultFirmWeekStart,
   weekStartInWeeks,
   stepForToday,
+  CADENCE_DAYS,
   fmtWeekRange,
   fmtDayHeader,
   workingDaysOf,
@@ -107,8 +111,8 @@ const focusRing =
 // Cadence rail — the three-step rhythm, with today highlighted.
 // ---------------------------------------------------------------------------
 const STEPS: { key: CadenceStep; label: string; sub: string; icon: typeof Lock }[] = [
-  { key: "firm", label: "Lock", sub: "Thursday", icon: CalendarCheck },
-  { key: "procure", label: "Procure", sub: "Sunday", icon: ShoppingCart },
+  { key: "firm", label: "Lock", sub: CADENCE_DAYS.firm.label, icon: CalendarCheck },
+  { key: "procure", label: "Procure", sub: CADENCE_DAYS.procure.label, icon: ShoppingCart },
   { key: "execute", label: "Execute", sub: "Daily", icon: Factory },
 ];
 
@@ -117,14 +121,18 @@ function CadenceRail({
   today,
   onSelect,
   pendingCount,
+  firmDone,
 }: {
   active: CadenceStep;
   today: CadenceStep;
   onSelect: (s: CadenceStep) => void;
   // INT-04 (DR-019) — unfirmed drafts were invisible on the Lock step for
-  // days at a stretch outside Thursday; a count on the step itself closes
+  // days at a stretch outside the meeting day; a count on the step itself closes
   // that gap without requiring a visit to Execute's banner first.
   pendingCount?: number;
+  // Tranche 155 (MEET-303): after locking, the rail looked identical to before
+  // locking, so returning to the page gave no sign the day's job was done.
+  firmDone?: boolean;
 }) {
   return (
     <nav
@@ -136,6 +144,7 @@ function CadenceRail({
         const isToday = s.key === today;
         const Icon = s.icon;
         const showPending = s.key === "firm" && (pendingCount ?? 0) > 0;
+        const showDone = s.key === "firm" && !showPending && firmDone === true;
         return (
           <div key={s.key} className="flex flex-1 items-center">
             <button
@@ -143,7 +152,7 @@ function CadenceRail({
               onClick={() => onSelect(s.key)}
               aria-pressed={isActive}
               aria-current={isToday ? "step" : undefined}
-              aria-label={`${s.label} — ${s.sub}${isToday ? " (today)" : ""}${showPending ? ` — ${pendingCount} draft batch${pendingCount === 1 ? "" : "es"} waiting to be locked` : ""}`}
+              aria-label={`${s.label} — ${s.sub}${isToday ? " (today)" : ""}${showPending ? ` — ${pendingCount} draft batch${pendingCount === 1 ? "" : "es"} waiting to be locked` : ""}${showDone ? " — done, the week is locked" : ""}`}
               className={cn(
                 // FLOW-008 (Tranche 053): <sm stacks icon above label so all
                 // three steps fit one row at 390px; sm+ is the original row.
@@ -169,7 +178,7 @@ function CadenceRail({
               ) : null}
               {/* VIS-04 (DR-019) — the rail read as three unordered tiles
                   with no sense of sequence; a numbered badge makes the
-                  Thursday-Sunday-daily order legible at a glance. */}
+                  meeting-procurement-daily order legible at a glance. */}
               <span className="relative shrink-0">
                 <Icon className={cn("h-5 w-5", isActive ? "opacity-100" : "opacity-70")} />
                 <span
@@ -196,6 +205,14 @@ function CadenceRail({
                     <span data-testid="cadence-firm-pending-badge">
                       <Badge tone={isActive ? "neutral" : "warning"} variant="soft" size="xs">
                         {pendingCount}
+                      </Badge>
+                    </span>
+                  ) : null}
+                  {showDone ? (
+                    <span data-testid="cadence-firm-done-badge">
+                      <Badge tone={isActive ? "neutral" : "success"} variant="soft" size="xs">
+                        <CheckCircle2 className="h-3 w-3" aria-hidden="true" />
+                        Done
                       </Badge>
                     </span>
                   ) : null}
@@ -623,7 +640,7 @@ function FirmPanel({ canAct, initialWeekStart }: { canAct: boolean; initialWeekS
   );
 
   // FG commitment: pre-firm preview from the drafts in hand; once firmed (no
-  // drafts left, but locked rows exist) fetch the committed demand the Sunday
+  // drafts left, but locked rows exist) fetch the committed demand the procurement
   // session buys against.
   const draftRollup = useMemo(() => rollupDraftFgUnits(rows), [rows]);
   const firmedDemand = useFirmedWeekDemand(weekStart, batchCount === 0 && firmedCount > 0);
@@ -649,8 +666,8 @@ function FirmPanel({ canAct, initialWeekStart }: { canAct: boolean; initialWeekS
     return days;
   }, [rows, weekPlans.data]);
 
-  // Two-touch Thursday: the firm panel above targets W2 (the new week entering
-  // the plan); this is the near week W1 — already firmed last Thursday, here for
+  // Two-touch meeting: the firm panel above targets W2 (the new week entering
+  // the plan); this is the near week W1 — locked at the previous meeting, here for
   // a final review/tweak before it produces.
   const nearWeek = useMemo(() => weekStartInWeeks(1), []);
   const nearDemand = useFirmedWeekDemand(nearWeek, true);
@@ -696,7 +713,9 @@ function FirmPanel({ canAct, initialWeekStart }: { canAct: boolean; initialWeekS
               <ChevronLeft className="h-4 w-4" />
             </button>
             <div className="min-w-0 text-center">
-              <div className="truncate text-lg font-semibold tracking-tight">{fmtWeekRange(weekStart)}</div>
+              <div className="text-base font-semibold leading-tight tracking-tight sm:text-lg">
+                {fmtWeekRange(weekStart)}
+              </div>
               <div className="text-2xs uppercase tracking-ops text-fg-subtle">Target week to lock</div>
             </div>
             <button
@@ -766,15 +785,37 @@ function FirmPanel({ canAct, initialWeekStart }: { canAct: boolean; initialWeekS
                 type="button"
                 onClick={() => setConfirmingGen(true)}
                 className={cn(
-                  "inline-flex items-center gap-2 rounded-md border border-border bg-bg-raised px-3 py-2 text-sm font-medium text-fg shadow-hairline transition-colors hover:bg-bg-muted disabled:opacity-60",
+                  // Tranche 155 (MEET-301): with drafts already on the board,
+                  // regenerating is an optional escape hatch, not step one —
+                  // but it looked like a peer of "Lock week" and read as a
+                  // required first move. It only earns button weight on the
+                  // first run, when there is nothing to lock yet.
+                  // MEET-304: and when hand edits exist, regenerating destroys
+                  // them, so the trigger says so before the confirm does.
+                  batchCount === 0
+                    ? "inline-flex items-center gap-2 rounded-md border border-border bg-bg-raised px-3 py-2 text-sm font-medium text-fg shadow-hairline transition-colors hover:bg-bg-muted disabled:opacity-60"
+                    : editedDraftCount > 0
+                      ? "inline-flex items-center gap-1.5 rounded px-1 py-1 text-xs font-medium text-warning-fg underline decoration-warning/50 underline-offset-2 hover:decoration-warning"
+                      : "inline-flex items-center gap-1.5 rounded px-1 py-1 text-xs font-medium text-fg-muted underline decoration-border underline-offset-2 hover:text-fg",
                   focusRing,
                 )}
                 title="Runs the tea + matcha draft engines. If drafts already exist, this replaces them — hand edits included."
                 data-testid="meeting-gen-trigger"
               >
-                <RefreshCw className="h-4 w-4" aria-hidden="true" />
+                {batchCount > 0 && editedDraftCount > 0 ? (
+                  <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+                ) : (
+                  <RefreshCw
+                    className={batchCount === 0 ? "h-4 w-4" : "h-3.5 w-3.5"}
+                    aria-hidden="true"
+                  />
+                )}
                 {/* COPY-012 — one unambiguous verb per state. */}
-                {batchCount > 0 ? "Regenerate drafts" : "Generate drafts"}
+                {batchCount === 0
+                  ? "Generate drafts"
+                  : editedDraftCount > 0
+                    ? `Regenerate drafts — discards ${editedDraftCount} hand edit${editedDraftCount === 1 ? "" : "s"}`
+                    : "Regenerate drafts"}
               </button>
             )}
           </div>
@@ -856,15 +897,22 @@ function FirmPanel({ canAct, initialWeekStart }: { canAct: boolean; initialWeekS
           meta={tankDaysUsed >= 5 ? "Full week" : "Sun–Thu capacity"}
           tone={tankDaysUsed > 5 ? "warning" : "neutral"}
         />
-        <Link href="/planning/inventory-flow" className="block">
-          <StatTile
-            icon={AlertTriangle}
-            label="At-risk check"
-            value="Flow"
-            meta="Open Inventory Flow →"
-          />
-        </Link>
       </div>
+
+      {/* Tranche 155 (MEET-302): this was a third KPI tile reading
+          "At-risk check: Flow" — a surface name where the two tiles beside it
+          give numbers, so it scanned as an unresolved warning blocking the
+          lock. It is a link, so it looks like one. */}
+      <Link
+        href="/planning/inventory-flow"
+        className={cn(
+          "inline-flex items-center gap-1.5 text-xs font-medium text-fg-muted underline decoration-border underline-offset-2 hover:text-fg",
+          focusRing,
+        )}
+      >
+        <AlertTriangle className="h-3.5 w-3.5" aria-hidden="true" />
+        Check stock cover in Inventory Flow →
+      </Link>
 
       {/* VIS-01 (DR-019, 2026-07-04) — the lock CTA used to render after the
           full day-by-day board, off-screen on a normal viewport. It now
@@ -943,7 +991,7 @@ function FirmPanel({ canAct, initialWeekStart }: { canAct: boolean; initialWeekS
           return (
             <CommitmentPanel
               title="If you lock this week"
-              note="These finished goods get committed to production when you lock — exactly what the Sunday procurement session buys components for."
+              note={`These finished goods get committed to production when you lock — exactly what the ${CADENCE_DAYS.procure.label} procurement session buys components for.`}
               totalUnits={draftRollup.reduce((a, r) => a + r.units, 0)}
               entries={draftRollup.map((r) => ({
                 item_id: r.item_id,
@@ -960,7 +1008,7 @@ function FirmPanel({ canAct, initialWeekStart }: { canAct: boolean; initialWeekS
           return (
             <CommitmentPanel
               title="Committed this week"
-              note="What this firmed week will produce — the demand Sunday procurement buys components against."
+              note={`What this locked week will produce — the demand ${CADENCE_DAYS.procure.label} procurement buys components against.`}
               totalUnits={firmedDemand.data?.total_fg_units ?? 0}
               entries={(firmedDemand.data?.rows ?? []).map((r) => ({
                 item_id: r.item_id,
@@ -995,10 +1043,10 @@ function FirmPanel({ canAct, initialWeekStart }: { canAct: boolean; initialWeekS
                 : `${result.newly_firmed_count} batch${result.newly_firmed_count === 1 ? "" : "es"} locked`}
             </div>
             <div className="mt-0.5 text-xs text-fg-muted">
-              {result.week_firmed_total} batch{result.week_firmed_total === 1 ? "" : "es"} now committed for {fmtWeekRange(result.week_start)}. The Sunday session will buy against this week. To undo, cancel batches one at a time from the production plan, or unlock the whole week below.
+              {result.week_firmed_total} batch{result.week_firmed_total === 1 ? "" : "es"} now committed for {fmtWeekRange(result.week_start)}. The {CADENCE_DAYS.procure.label} session will buy against this week. To undo, cancel batches one at a time from the production plan, or unlock the whole week below.
             </div>
-            {/* FLOW-009 (2026-07-23 gate) — Thursday's real next step is
-                verifying the locked week on the board; procurement is Sunday's.
+            {/* FLOW-009 (2026-07-23 gate) — the meeting's real next step is
+                verifying the locked week on the board; procurement is the day after.
                 Both links stay, correctly ranked and labeled. */}
             <div className="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1">
               <Link
@@ -1021,7 +1069,7 @@ function FirmPanel({ canAct, initialWeekStart }: { canAct: boolean; initialWeekS
                 data-testid="meeting-firm-success-go-procurement"
               >
                 <ShoppingCart className="h-3.5 w-3.5" aria-hidden="true" />
-                For Sunday: open Procurement
+                For {CADENCE_DAYS.procure.label}: open Procurement
               </Link>
             </div>
           </div>
@@ -1141,7 +1189,7 @@ function FirmPanel({ canAct, initialWeekStart }: { canAct: boolean; initialWeekS
                         <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" aria-hidden="true" />
                         <span>
                           Unlocking cancels all {firmedCount} locked batch{firmedCount === 1 ? "" : "es"}.
-                          The Sunday procurement session will no longer buy materials for this week —
+                          The {CADENCE_DAYS.procure.label} procurement session will no longer buy materials for this week —
                           regenerate and re-lock a week to resume production.
                         </span>
                       </div>
@@ -1301,7 +1349,7 @@ function FirmPanel({ canAct, initialWeekStart }: { canAct: boolean; initialWeekS
           >
             <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             {nearDraft.data!.batch_count} draft batch{nearDraft.data!.batch_count === 1 ? "" : "es"} here{" "}
-            {nearDraft.data!.batch_count === 1 ? "was" : "were"} never locked — won&apos;t produce unless firmed.
+            {nearDraft.data!.batch_count === 1 ? "was" : "were"} never locked — won&apos;t produce unless you lock them from the Lock step above.
           </div>
         )}
         {nearPlans.isLoading ? (
@@ -1411,8 +1459,9 @@ function FirmPanel({ canAct, initialWeekStart }: { canAct: boolean; initialWeekS
 // PROCURE panel — routes to the existing purchase surfaces (no rebuild here).
 // ---------------------------------------------------------------------------
 function ProcurePanel() {
-  // Two-touch Sunday: ORDER for next week (the week starting next Sunday, which
-  // was firmed last Thursday) and VERIFY arrivals for the week now producing.
+  // Two-touch procurement day: ORDER for next week (the week starting the
+  // coming Sunday, locked at the last meeting) and VERIFY arrivals for the
+  // week now producing.
   const nextWeek = useMemo(() => weekStartInWeeks(1), []);
   const demand = useFirmedWeekDemand(nextWeek, true);
   const entries = (demand.data?.rows ?? []).map((r) => ({
@@ -1455,20 +1504,20 @@ function ProcurePanel() {
             </span>
             <ArrowRight className="h-4 w-4 text-accent transition-transform group-hover:translate-x-0.5" />
           </Link>
-          <Link
-            href="/planning/procurement?view=calendar"
-            className={cn("group flex items-center justify-between rounded-lg border border-border bg-bg-raised p-4 shadow-hairline transition-colors hover:bg-bg-muted", focusRing)}
-          >
-            <span className="flex items-center gap-3">
-              <CalendarCheck className="h-5 w-5 text-fg-subtle" />
-              <span>
-                <span className="block text-sm font-semibold">Order calendar</span>
-                <span className="block text-xs text-fg-muted">Calendar view inside Procurement</span>
-              </span>
-            </span>
-            <ArrowRight className="h-4 w-4 text-fg-faint transition-transform group-hover:translate-x-0.5" />
-          </Link>
         </div>
+        {/* Tranche 155 (MEET-307): this was a tile of equal weight beside
+            "Open Procurement", which read as a choice between two places to
+            go. It is one view inside the page that tile already opens. */}
+        <Link
+          href="/planning/procurement?view=calendar"
+          className={cn(
+            "mt-2 inline-flex items-center gap-1.5 text-xs font-medium text-fg-muted underline decoration-border underline-offset-2 hover:text-fg",
+            focusRing,
+          )}
+        >
+          <CalendarCheck className="h-3.5 w-3.5" aria-hidden="true" />
+          or open the order calendar view →
+        </Link>
       </SectionCard>
 
       {/* Second touch: verify arrivals for the week now in production */}
@@ -1617,13 +1666,22 @@ export default function PlanningMeetingPage() {
   const pendingDraftCount = (horizon.data?.rows ?? []).filter(
     (r) => r.plan_type === "production" && r.status === "draft",
   ).length;
+  // Tranche 155 (MEET-303): "the meeting's job is done" = the horizon has
+  // loaded, nothing is left in draft, and there is committed production to
+  // show for it. Derived from the query already on the page — no new call.
+  const firmDone =
+    horizon.isSuccess &&
+    pendingDraftCount === 0 &&
+    (horizon.data?.rows ?? []).some(
+      (r) => r.plan_type === "production" && r.status !== "draft",
+    );
 
   return (
     <div className="mx-auto max-w-6xl space-y-6 px-4 py-6 sm:px-6">
       <WorkflowHeader
         eyebrow="Weekly cadence"
         title="Weekly meeting"
-        description="The factory rhythm in one place: lock next week's production on Thursday, buy for it on Sunday, build it daily."
+        description={`The factory rhythm in one place: lock next week's production on ${CADENCE_DAYS.firm.label}, buy for it on ${CADENCE_DAYS.procure.label}, build it daily.`}
         meta={
           <>
             <Badge tone="neutral" variant="outline" size="sm">{todayLabel}</Badge>
@@ -1634,7 +1692,13 @@ export default function PlanningMeetingPage() {
         }
       />
 
-      <CadenceRail active={step} today={today} onSelect={setStep} pendingCount={pendingDraftCount} />
+      <CadenceRail
+        active={step}
+        today={today}
+        onSelect={setStep}
+        pendingCount={pendingDraftCount}
+        firmDone={firmDone}
+      />
 
       {step === "firm" ? (
         <FirmPanel canAct={canAct} initialWeekStart={initialWeekStart} />

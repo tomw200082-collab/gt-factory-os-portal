@@ -7,6 +7,7 @@ import {
   fmtWeekRange,
   fmtDayHeader,
   stepForToday,
+  CADENCE_DAYS,
   defaultFirmWeekStart,
   workingDaysOf,
   familyTintVar,
@@ -77,21 +78,34 @@ describe("fmtWeekRange", () => {
   });
 });
 
+// Tranche 155 (Tom, 2026-07-30): the meeting moved Thursday → Wednesday and
+// procurement Sunday → Thursday. These cases pin the new cadence.
 describe("stepForToday", () => {
-  it("Thursday → firm", () => {
+  it("Wednesday (the meeting) → firm", () => {
+    const wed = new Date(2026, 0, 7);
+    expect(wed.getDay()).toBe(3);
+    expect(stepForToday(wed)).toBe("firm");
+  });
+  it("Thursday (procurement day) → procure", () => {
     const thu = new Date(2026, 0, 8);
     expect(thu.getDay()).toBe(4);
-    expect(stepForToday(thu)).toBe("firm");
+    expect(stepForToday(thu)).toBe("procure");
   });
-  it("Sunday → procure", () => {
+  it("Sunday is no longer the procurement day → execute", () => {
     const sun = new Date(2026, 0, 4);
     expect(sun.getDay()).toBe(0);
-    expect(stepForToday(sun)).toBe("procure");
+    expect(stepForToday(sun)).toBe("execute");
   });
   it("any other day → execute", () => {
     const tue = new Date(2026, 0, 6);
     expect(tue.getDay()).toBe(2);
     expect(stepForToday(tue)).toBe("execute");
+  });
+  it("CADENCE_DAYS is the only place a cadence day name is written", () => {
+    expect(CADENCE_DAYS.firm.label).toBe("Wednesday");
+    expect(CADENCE_DAYS.procure.label).toBe("Thursday");
+    expect(CADENCE_DAYS.firm.dow).toBe(3);
+    expect(CADENCE_DAYS.procure.dow).toBe(4);
   });
 });
 

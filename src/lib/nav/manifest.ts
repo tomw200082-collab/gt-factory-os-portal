@@ -319,6 +319,19 @@ export const NAV_MANIFEST: NavGroup[] = [
         required_capability: "planning:read",
       },
       {
+        // Tranche 155 (INTER-201) — the corridor's last leg. The same route
+        // also lives in the Purchase Orders group, but that group is collapsed
+        // by default and does not auto-expand while the planner is working in
+        // Planning, so the step after "approve" was invisible in the sidebar.
+        // Listed here too, right after Procurement, in corridor order. Same
+        // capability guard as the Purchase Orders entry — no access change.
+        href: "/purchase-orders/placement-queue",
+        label: "Orders to Place",
+        icon: ClipboardCheck,
+        min_role: "planner",
+        required_capability: "planning:execute",
+      },
+      {
         // 2026-05-12 — widened from cycle-16 admin-only to planner+admin per
         // Tom's request ("add access also for planner"). Cycle-16 had pinned
         // this surface to admin because the page is IDB-backed and can

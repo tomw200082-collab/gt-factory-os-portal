@@ -86,6 +86,25 @@ describe("computeTodaySummary", () => {
     expect(s.unreportedTodayPlans.map((p) => p.plan_id)).toEqual(["a"]);
   });
 
+  // Tranche 155 (PLAN-306)
+  it("does not count draft rows as unreported — they belong to the lock flow", () => {
+    const rows = [
+      row({ plan_id: "locked", plan_date: TODAY, rendered_state: "planned" }),
+      row({
+        plan_id: "draft",
+        plan_date: TODAY,
+        rendered_state: "planned",
+        status: "draft",
+      }),
+    ];
+    const s = computeTodaySummary(rows, TODAY, TOMORROW);
+    // A draft carries rendered_state 'planned' too, so it used to show up here
+    // as "unreported" with a "Move to tomorrow" button — contradicting the
+    // draft banner that says the same row is not locked yet.
+    expect(s.todayUnreported).toBe(1);
+    expect(s.unreportedTodayPlans.map((p) => p.plan_id)).toEqual(["locked"]);
+  });
+
   it("excludes note rows from every count", () => {
     const rows = [
       row({ plan_id: "n", plan_type: "note", plan_date: TODAY, planned_qty: null, uom: null }),
