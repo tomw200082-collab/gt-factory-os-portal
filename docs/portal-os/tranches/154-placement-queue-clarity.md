@@ -75,6 +75,7 @@ manifest:
 - tests/e2e/placement-queue.spec.ts
 - docs/portal-os/tranches/154-placement-queue-clarity.md
 - docs/portal-os/tranches/_active.txt
+- docs/portal-os/registry.md
 
 ## Out-of-scope
 - `globals.css` / `tailwind.config.ts` / design tokens (frozen).
