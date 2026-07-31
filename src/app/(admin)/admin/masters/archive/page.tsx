@@ -16,7 +16,7 @@ import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
 import { useSession } from "@/lib/auth/session-provider";
-import { AdminMutationError, patchEntity } from "@/lib/admin/mutations";
+import { AdminMutationError, patchEntity, postStatus } from "@/lib/admin/mutations";
 import { formatIls } from "@/lib/utils/format-money";
 import { fmtNumStr } from "@/lib/utils/format-quantity";
 
@@ -76,20 +76,15 @@ async function fetchJson<T>(url: string): Promise<T> {
   return (await res.json()) as T;
 }
 
-async function patchStatus(
-  url: string,
-  newStatus: string,
-  ifMatchUpdatedAt: string,
-): Promise<void> {
-  const res = await fetch(url, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({ status: newStatus, if_match_updated_at: ifMatchUpdatedAt }),
-  });
-  if (!res.ok) {
-    const json = await res.json().catch(() => null);
-    throw new Error((json as { message?: string } | null)?.message ?? `HTTP ${res.status}`);
-  }
+// Restore = status change, which is its own endpoint (POST .../:id/status).
+// This used to PATCH the entity with { status, if_match_updated_at }, but the
+// PATCH schema has no `status` field (zod strips it) and requires an
+// idempotency_key it was never sent — so every Restore button on this page
+// returned 422 and nothing was ever restored. postStatus hits the right
+// endpoint with the right body and mints the key, the same way
+// /admin/items does it.
+async function restoreToActive(baseUrl: string, ifMatchUpdatedAt: string): Promise<void> {
+  await postStatus({ url: `${baseUrl}/status`, status: "ACTIVE", ifMatchUpdatedAt });
 }
 
 // 0302 — inline expiry edit. patchEntity mints the idempotency_key and folds in
@@ -289,7 +284,7 @@ export default function AdminMastersArchivePage(): JSX.Element {
   // Iter 6 -- restore mutations
   const restoreItemMutation = useMutation({
     mutationFn: (args: { item_id: string; updated_at: string }) =>
-      patchStatus(`/api/items/${encodeURIComponent(args.item_id)}`, "ACTIVE", args.updated_at),
+      restoreToActive(`/api/items/${encodeURIComponent(args.item_id)}`, args.updated_at),
     onSuccess: () => {
       setConfirmId(null);
       setBanner({ kind: "success", message: "Item restored and set to Active." });
@@ -307,7 +302,7 @@ export default function AdminMastersArchivePage(): JSX.Element {
 
   const restoreComponentMutation = useMutation({
     mutationFn: (args: { component_id: string; updated_at: string }) =>
-      patchStatus(`/api/components/${encodeURIComponent(args.component_id)}`, "ACTIVE", args.updated_at),
+      restoreToActive(`/api/components/${encodeURIComponent(args.component_id)}`, args.updated_at),
     onSuccess: () => {
       setConfirmId(null);
       setBanner({ kind: "success", message: "Component restored and set to Active." });
@@ -325,7 +320,7 @@ export default function AdminMastersArchivePage(): JSX.Element {
 
   const restoreSupplierMutation = useMutation({
     mutationFn: (args: { supplier_id: string; updated_at: string }) =>
-      patchStatus(`/api/suppliers/${encodeURIComponent(args.supplier_id)}`, "ACTIVE", args.updated_at),
+      restoreToActive(`/api/suppliers/${encodeURIComponent(args.supplier_id)}`, args.updated_at),
     onSuccess: () => {
       setConfirmId(null);
       setBanner({ kind: "success", message: "Supplier restored and set to Active." });
