@@ -1,81 +1,60 @@
 # GT Factory OS Portal — Improvement OS
 
-> Thin pointer. Do not inline prose. Authority is distributed across the files below.
+> Thin pointer. ⊥ inline prose. Authority lives in the files below.
 
-## UI language exception (Recipe-Readiness corridor, 2026-04-25)
+## Read at session start, in order
 
-The durable contract states "English-first UI with plain, accessible English labels; Hebrew appears only in data values." The Recipe-Health surface (`/admin/masters/items/[item_id]` for MANUFACTURED items, plus the BOM draft editor at `/admin/masters/boms/[bom_head_id]/[version_id]/edit` and the quick-fix drawer) uses Hebrew operator labels (e.g., "מתכון ייצור", "מוכן לייצור עם אזהרות", "אני מאשר את האזהרות הללו") per Tom's UX target. This is an explicit, scoped deviation from English-first, not a general policy change.
+1. `docs/portal-os/registry.md` — index of OS artifacts.
+2. `docs/portal-os/scorecard.md` — current readiness.
+3. `docs/portal-os/tranches/_active.txt` — active tranche number (may be empty).
+4. If active: `docs/portal-os/tranches/<NNN>-*.md` — manifest + checklist.
 
-### Extension (2026-06-17, authorized by Tom via `/ux-release-gate`)
+## What this is
 
-The exception now also covers two operator-facing surfaces that are Hebrew + `dir="rtl"` by Tom's UX target:
+Canonical production-target Window 2 portal for GT Everyday. Next.js 15 App Router · React 18 · TanStack Query · shadcn/ui · Supabase SSR auth · Zod · Playwright · Vitest.
+The Improvement OS = GitHub-first, mobile-driveable layer for making it production-grade through bounded, verified tranches.
 
-- **`/planning/procurement`** — the weekly "what to order" purchase-session flow, including its `FocusCard` and `ActionList` components (status/tier labels, action buttons, banners).
-- **`/credit-tracking`** — the picking-shortage tracking surface for the bookkeeper (KPIs, status pills, filters, error/empty copy).
+- **Commands:** `/portal-audit` · `/portal-scorecard` · `/portal-tranche-plan` · `/portal-tranche-fix` · `/portal-regression-guard` · `/portal-readiness`
+- **Agents:** `portal-route-auditor` · `portal-admin-surface-auditor` · `portal-flow-continuity-auditor` · `portal-tranche-verifier` · `portal-regression-sentinel`
+- **Hooks:** session_start · pre_tool_use (tranche-scope) · subagent_stop (evidence required) · stop (no dead air)
+- **Actions:** `claude.yml` (@claude) · `portal-pr-guard.yml` (every PR) · `portal-drift-weekly.yml` (weekly `/portal-readiness`)
 
-These were flagged by the UX content auditor as English-first violations because they were not previously listed here; Tom confirmed the Hebrew is intentional. English remains the default for all other operator surfaces; this list is the complete set of authorized Hebrew-operator-label surfaces.
+Drive it by PR comment: `@claude /portal-audit`, `/portal-scorecard`, `/portal-tranche-plan <focus>`, `/portal-tranche-fix NNN`.
 
-### Extension (2026-06-20, authorized by Tom — procurement placement queue)
+## UI language
 
-The exception also covers the office-manager (bookkeeping) **placement queue**, Hebrew + `dir="rtl"` by Tom's explicit UX target (Tom 2026-06-20: "keep everything English; only the bookkeeper's page stays Hebrew"):
+**English-first.** Plain, accessible English labels; Hebrew only in data values.
 
-- **`/purchase-orders/placement-queue`** — the office manager's "orders to place" surface (tranche 086): lists POs the planner approved into `APPROVED_TO_ORDER`, where she enters supplier-confirmed price + payment terms and places the order (`בצע הזמנה`). Includes its `PlacementRow` component (status/term labels, price/terms inputs, action buttons, banners).
+**Exception — these surfaces are Hebrew + `dir="rtl"` by Tom's explicit UX target.** This list is complete; anything ∉ it stays English.
 
-The goods-receipt surface (`/stock/receipts`) and all other operator surfaces remain English. This and the two lists above are the complete set of authorized Hebrew-operator-label surfaces.
+| Surface | Scope | Authorized |
+|---|---|---|
+| `/admin/masters/items/[item_id]` (MANUFACTURED), `/admin/masters/boms/[bom_head_id]/[version_id]/edit`, quick-fix drawer | Recipe-Health corridor | 2026-04-25 |
+| `/planning/procurement` + `FocusCard`, `ActionList` | weekly purchase-session flow | 2026-06-17 |
+| `/credit-tracking` | picking-shortage tracking (bookkeeper) | 2026-06-17 |
+| `/purchase-orders/placement-queue` + `PlacementRow` | office-manager order placement | 2026-06-20 |
+| `/home` — **viewer role only** (strings in `src/features/home/cockpit.ts` `he` field) | bookkeeper cockpit; admin/planner/operator views stay English | 2026-06-26 |
 
-### Extension (2026-06-26, authorized by Tom — card-home bookkeeper cockpit)
+`/stock/receipts` and all other operator surfaces: English.
 
-The exception also covers the **bookkeeper/office cockpit of the card-home** (tranche 090, Slice B / Phase 2), Hebrew + `dir="rtl"` by Tom's explicit UX target (Tom 2026-06-26: bookkeeper lands in Hebrew, owner + production operator stay English):
+## Lane boundary
 
-- **`/home`** — only the **viewer-role (bookkeeper/office) view** of the role-tailored landing renders Hebrew operator labels + `dir="rtl"` (greeting, tile labels/blurbs, group headings — e.g. "מעקב זיכויים", "הזמנות רכש", "תיבה נכנסת", "לוח בקרה"). The owner/planner (admin + planner) and production-operator views of the same `/home` remain English-first. The Hebrew strings live in `src/features/home/cockpit.ts` (`he` field per tile).
+Portal-only. ⊥ author backend contracts, schema, or integrations — those are W1/W4, governed by `gt-factory-os-production-brain/`. W2 Mode A/B semantics honored via `docs/portal-os/runtime_ready.snapshot.json` (manually synced).
 
-The owner/operator `/home` views and all other operator surfaces remain English. This and the lists above are the complete set of authorized Hebrew-operator-label surfaces.
+## Invariants
 
-## Read these, in order, at the start of any portal session
-1. `docs/portal-os/registry.md` — index of all OS artifacts (≤1 line per entry).
-2. `docs/portal-os/scorecard.md` — current readiness, last updated.
-3. `docs/portal-os/tranches/_active.txt` — the active tranche number (may be empty).
-4. If a tranche is active: `docs/portal-os/tranches/<NNN>-*.md` — its manifest + checklist.
-
-## What this repo is
-The canonical, production-target Window 2 portal for GT Everyday. Next.js 15 App Router, React 18, TanStack Query, shadcn/ui primitives, Supabase SSR auth, Zod, Playwright, Vitest.
-
-## What the Portal Improvement OS is
-A GitHub-first, mobile-driveable operating layer for making this portal production-grade through bounded, verified tranches.
-- Commands: `/portal-audit`, `/portal-scorecard`, `/portal-tranche-plan`, `/portal-tranche-fix`, `/portal-regression-guard`, `/portal-readiness`.
-- Agents: `portal-route-auditor`, `portal-admin-surface-auditor`, `portal-flow-continuity-auditor`, `portal-tranche-verifier`, `portal-regression-sentinel`.
-- Hooks: session_start, pre_tool_use (tranche-scope enforcement), subagent_stop (evidence required), stop (no dead air).
-- GitHub Actions: `claude.yml` (@claude trigger), `portal-pr-guard.yml`, `portal-drift-weekly.yml`.
-
-## Relationship to the PRODUCTION multi-lane harness
-This portal repo and its `.claude/` config is **portal-only**. It does NOT author backend contracts, schema, or integrations. Those lanes (W1 / W4) remain governed by the PRODUCTION harness at `PRODUCTION/.claude/`. The Portal OS honors W2 Mode A / Mode B semantics via a manually-synced snapshot in `docs/portal-os/runtime_ready.snapshot.json`.
-
-## The six ways to use this OS
-- Open a PR comment `@claude /portal-audit` — mobile-friendly, CI-driven.
-- Open a PR comment `@claude /portal-scorecard` — refresh readiness.
-- Open a PR comment `@claude /portal-tranche-plan <focus>` — propose next batch.
-- Open a PR comment `@claude /portal-tranche-fix NNN` — execute approved tranche.
-- Every PR auto-runs `/portal-regression-guard` via `portal-pr-guard.yml`.
-- Weekly cron runs `/portal-readiness` via `portal-drift-weekly.yml`.
-
-## Invariants this OS enforces
-1. Every portal change is scoped to exactly one tranche (PreToolUse hook).
+1. Every change scoped to exactly one tranche (PreToolUse hook).
 2. Every "done" claim carries an evidence path (SubagentStop hook).
-3. Dead / quarantined / fake-session surfaces never re-enter primary nav (regression-sentinel + PR gate).
-4. Scorecard is a versioned JSON file; drift is detectable by diff.
-5. No destructive operations run without explicit human merge approval.
-6. Every response ends with "Next action: …" (Stop hook).
+3. Dead / quarantined / fake-session surfaces ⊥ re-enter primary nav.
+4. Scorecard is versioned JSON — drift detectable by diff.
+5. ⊥ destructive operations without human merge approval.
+6. Every response ends "Next action: …" (Stop hook).
 
-## What Claude must not do in this repo
-- Do not author backend contracts or schema (wrong lane).
-- Do not promote files from `window2-portal-sandbox/` sandbox paths into `gt-factory-os/` canonical paths.
-- Do not touch `.env*`, `.vercel/`, or any secret path.
-- Do not edit files outside the active tranche manifest.
-- Do not reintroduce `X-Fake-Session` or `X-Test-Session` patterns to previously-cleaned files.
-- Do not bypass `portal-pr-guard` via `--no-verify`, `skip ci`, or similar.
+## ⊥ do
 
-## Escalation
-If a request conflicts with these invariants, stop and propose a tranche plan instead.
+⊥ author backend contracts or schema · ⊥ promote `window2-portal-sandbox/` paths into `gt-factory-os/` canonical paths · ⊥ touch `.env*`, `.vercel/`, any secret path · ⊥ edit files outside the active tranche manifest · ⊥ reintroduce `X-Fake-Session` / `X-Test-Session` to cleaned files · ⊥ bypass `portal-pr-guard` via `--no-verify` / `skip ci`.
+
+**Escalation:** request conflicts with an invariant → stop, propose a tranche plan instead.
 
 ---
-last_reviewed: 2026-04-22
+last_reviewed: 2026-07-31 · pre-lean original: `gt-factory-os-production-brain/docs/archive/portal-CLAUDE.pre-lean-2026-07-31.md`
