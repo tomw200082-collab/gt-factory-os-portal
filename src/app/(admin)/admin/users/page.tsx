@@ -18,8 +18,12 @@ import { Badge } from "@/components/badges/StatusBadge";
 import { QueryCountChip } from "@/components/feedback/QueryCountChip";
 import { useConfirm } from "@/components/overlays/ConfirmDialog";
 import { useSession } from "@/lib/auth/session-provider";
-import { Users, X, Eye, EyeOff, Copy, KeyRound } from "lucide-react";
+import { Users, X, Eye, EyeOff, Copy, KeyRound, Pencil } from "lucide-react";
 import { cn } from "@/lib/cn";
+import {
+  MAX_PASSWORD_LENGTH,
+  localPasswordError,
+} from "./_lib/password-rules";
 
 interface AppUser {
   user_id: string;
@@ -103,6 +107,10 @@ interface RowState {
   // navigates away — never persisted client-side, never included in the
   // users list payload.
   revealedPassword: string | null;
+  // The "type your own password" editor: null = closed, string = open with
+  // this much typed. Empty string is a legitimate open-but-blank state, which
+  // is why this is not just a boolean plus a value.
+  draftPassword: string | null;
 }
 
 const DEFAULT_ROW_STATE: RowState = {
@@ -113,6 +121,7 @@ const DEFAULT_ROW_STATE: RowState = {
   passwordError: null,
   passwordPending: false,
   revealedPassword: null,
+  draftPassword: null,
 };
 
 async function patchUser(
@@ -142,14 +151,27 @@ interface PasswordOpResponse {
   password: string;
 }
 
-async function setUserPassword(user_id: string): Promise<PasswordOpResponse> {
+// `password` omitted -> the API generates one. Passed -> that exact value is
+// set, so what the admin typed is what the user signs in with.
+async function setUserPassword(
+  user_id: string,
+  password?: string,
+): Promise<PasswordOpResponse> {
   const res = await fetch(`/api/users/${encodeURIComponent(user_id)}/password`, {
     method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(password === undefined ? {} : { password }),
   });
-  const data = (await res.json()) as PasswordOpResponse & { detail?: string; error?: string };
+  const data = (await res.json()) as PasswordOpResponse & {
+    detail?: string;
+    error?: string;
+    validation_errors?: { message: string }[];
+  };
   if (!res.ok) {
     throw new Error(
-      data?.detail ?? data?.error ??
+      data?.validation_errors?.[0]?.message ??
+        data?.detail ??
+        data?.error ??
         "Could not set a new password. Check your connection and try again.",
     );
   }
@@ -166,6 +188,164 @@ async function revealUserPassword(user_id: string): Promise<PasswordOpResponse> 
     );
   }
   return data;
+}
+
+// ---------------------------------------------------------------------------
+// Password cell — the whole per-user credential control in one place:
+// show/hide the current value, copy it, generate a fresh one, or type a
+// specific one. Extracted from the table body because the row markup was
+// already dense and this is the part an admin actually operates.
+// ---------------------------------------------------------------------------
+
+interface PasswordCellProps {
+  user: AppUser;
+  state: RowState;
+  onReveal: () => void;
+  onHide: () => void;
+  onGenerate: () => void;
+  onSaveDraft: (value: string) => void;
+  onDraftChange: (value: string | null) => void;
+}
+
+function PasswordCell({
+  user,
+  state,
+  onReveal,
+  onHide,
+  onGenerate,
+  onSaveDraft,
+  onDraftChange,
+}: PasswordCellProps): JSX.Element {
+  const draft = state.draftPassword;
+  const draftError = draft !== null && draft.length > 0 ? localPasswordError(draft) : null;
+  const canSave = draft !== null && draft.length > 0 && draftError === null;
+
+  return (
+    <div className="flex flex-col items-start gap-1.5">
+      {state.revealedPassword ? (
+        <div className="flex items-center gap-1.5">
+          <span
+            className="select-all font-mono text-xs text-fg-strong"
+            data-testid={`password-value-${user.user_id}`}
+          >
+            {state.revealedPassword}
+          </span>
+          <button
+            type="button"
+            aria-label={`Copy password for ${user.display_name}`}
+            className="btn btn-ghost btn-sm"
+            onClick={() => {
+              void navigator.clipboard.writeText(state.revealedPassword!);
+            }}
+          >
+            <Copy className="h-3.5 w-3.5" strokeWidth={2} />
+          </button>
+          <button
+            type="button"
+            aria-label={`Hide password for ${user.display_name}`}
+            className="btn btn-ghost btn-sm"
+            onClick={onHide}
+          >
+            <EyeOff className="h-3.5 w-3.5" strokeWidth={2} />
+          </button>
+        </div>
+      ) : user.has_password ? (
+        <button
+          type="button"
+          className="btn btn-ghost btn-sm w-fit"
+          disabled={state.passwordPending}
+          aria-label={`Show password for ${user.display_name}`}
+          onClick={onReveal}
+        >
+          <Eye className="mr-1 h-3.5 w-3.5" strokeWidth={2} />
+          {state.passwordPending ? "…" : "••••••••"}
+        </button>
+      ) : (
+        <span className="text-2xs text-fg-faint">No password set</span>
+      )}
+
+      {draft === null ? (
+        <div className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+          <button
+            type="button"
+            className="text-2xs text-accent underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-60 disabled:no-underline"
+            disabled={state.passwordPending}
+            onClick={onGenerate}
+          >
+            <KeyRound className="mr-1 inline h-3 w-3" strokeWidth={2} />
+            {state.passwordPending ? "…" : user.has_password ? "Regenerate" : "Generate"}
+          </button>
+          <button
+            type="button"
+            className="text-2xs text-accent underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-60 disabled:no-underline"
+            disabled={state.passwordPending}
+            aria-label={`Type a password for ${user.display_name}`}
+            onClick={() => onDraftChange("")}
+          >
+            <Pencil className="mr-1 inline h-3 w-3" strokeWidth={2} />
+            Type one
+          </button>
+        </div>
+      ) : (
+        <form
+          className="flex flex-col items-start gap-1"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (canSave) onSaveDraft(draft);
+          }}
+        >
+          <div className="flex items-center gap-1.5">
+            {/* Deliberately type="text": the admin is choosing a value they
+                are about to read out or hand over, so masking it here would
+                only invite typos. */}
+            <input
+              type="text"
+              autoFocus
+              autoComplete="off"
+              spellCheck={false}
+              className="input h-7 w-40 py-0 font-mono text-xs"
+              value={draft}
+              maxLength={MAX_PASSWORD_LENGTH}
+              placeholder="new password"
+              aria-label={`New password for ${user.display_name}`}
+              aria-invalid={draftError !== null}
+              disabled={state.passwordPending}
+              onChange={(e) => onDraftChange(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Escape") onDraftChange(null);
+              }}
+            />
+            <button
+              type="submit"
+              className="btn btn-sm"
+              disabled={!canSave || state.passwordPending}
+            >
+              {state.passwordPending ? "…" : "Save"}
+            </button>
+            <button
+              type="button"
+              className="btn btn-ghost btn-sm"
+              disabled={state.passwordPending}
+              onClick={() => onDraftChange(null)}
+            >
+              Cancel
+            </button>
+          </div>
+          {draftError ? (
+            <span className="text-2xs text-danger-fg">{draftError}</span>
+          ) : (
+            <span className="text-2xs text-fg-faint">
+              Replaces their current password immediately.
+            </span>
+          )}
+        </form>
+      )}
+
+      {state.passwordError && (
+        <span className="text-2xs text-danger-fg">{state.passwordError}</span>
+      )}
+    </div>
+  );
 }
 
 const ROLE_DESCRIPTIONS: Record<Role, string> = {
@@ -259,9 +439,9 @@ export default function AdminUsersPage() {
   const setPasswordMutation = useMutation<
     PasswordOpResponse,
     Error,
-    { user_id: string }
+    { user_id: string; password?: string }
   >({
-    mutationFn: ({ user_id }) => setUserPassword(user_id),
+    mutationFn: ({ user_id, password }) => setUserPassword(user_id, password),
     onMutate: ({ user_id }) => {
       setRowField(user_id, { passwordPending: true, passwordError: null });
     },
@@ -270,6 +450,8 @@ export default function AdminUsersPage() {
         passwordPending: false,
         passwordError: null,
         revealedPassword: data.password,
+        // Close the editor — the value is now live and shown above it.
+        draftPassword: null,
       });
       void qc.invalidateQueries({ queryKey: ["admin-users"] });
     },
@@ -299,6 +481,83 @@ export default function AdminUsersPage() {
     },
   });
 
+  // -------------------------------------------------------------------------
+  // Bulk actions.
+  //
+  // Both walk the listed users one at a time rather than firing everything at
+  // once: it keeps the change_log in a sensible order, keeps Supabase Auth
+  // from being hit with a burst, and lets a single failure be reported against
+  // the row it belongs to while the rest still complete.
+  // -------------------------------------------------------------------------
+  const [bulk, setBulk] = useState<{
+    label: string;
+    done: number;
+    total: number;
+  } | null>(null);
+
+  const runBulk = async (
+    label: string,
+    targets: AppUser[],
+    step: (u: AppUser) => Promise<void>,
+    describe: (ok: number) => string,
+  ): Promise<void> => {
+    setBulk({ label, done: 0, total: targets.length });
+    const failed: string[] = [];
+    for (const u of targets) {
+      setRowField(u.user_id, { passwordPending: true, passwordError: null });
+      try {
+        await step(u);
+        setRowField(u.user_id, { passwordPending: false, passwordError: null });
+      } catch (err) {
+        failed.push(u.display_name);
+        setRowField(u.user_id, {
+          passwordPending: false,
+          passwordError: (err as Error).message,
+        });
+      }
+      setBulk((b) => (b ? { ...b, done: b.done + 1 } : b));
+    }
+    setBulk(null);
+    void qc.invalidateQueries({ queryKey: ["admin-users"] });
+    const ok = targets.length - failed.length;
+    setBanner(
+      failed.length === 0
+        ? { kind: "success", message: describe(ok) }
+        : {
+            kind: "error",
+            message: `${describe(ok)} ${failed.length} failed: ${failed.join(", ")}. See the rows below.`,
+          },
+    );
+  };
+
+  const generateForAll = (targets: AppUser[]): Promise<void> =>
+    runBulk(
+      "Setting passwords",
+      targets,
+      async (u) => {
+        const res = await setUserPassword(u.user_id);
+        // Reveal as we go, so the page ends up showing every new password —
+        // there is no second chance to read a value nobody wrote down.
+        setRowField(u.user_id, { revealedPassword: res.password, draftPassword: null });
+      },
+      (ok) => `Set a new password for ${ok} ${ok === 1 ? "user" : "users"}.`,
+    );
+
+  const revealAll = (targets: AppUser[]): Promise<void> =>
+    runBulk(
+      "Showing passwords",
+      targets,
+      async (u) => {
+        const res = await revealUserPassword(u.user_id);
+        setRowField(u.user_id, { revealedPassword: res.password });
+      },
+      (ok) => `Showing ${ok} ${ok === 1 ? "password" : "passwords"}.`,
+    );
+
+  const hideAll = (targets: AppUser[]): void => {
+    for (const u of targets) setRowField(u.user_id, { revealedPassword: null });
+  };
+
   const currentUserId: string =
     (session as { user_id?: string }).user_id ?? "";
 
@@ -308,13 +567,22 @@ export default function AdminUsersPage() {
     : allRows.filter((u) => u.status === "active");
   const inactiveCount = allRows.length - allRows.filter((u) => u.status === "active").length;
 
+  // Bulk-action targets, always scoped to what is actually on screen — an
+  // action offered above a list must not reach rows the list is hiding.
+  const withoutPassword = visibleRows.filter((u) => !u.has_password);
+  const revealable = visibleRows.filter((u) => u.has_password);
+  const revealed = visibleRows.filter(
+    (u) => getRowState(u.user_id).revealedPassword !== null,
+  );
+  const bulkBusy = bulk !== null;
+
   return (
     <>
       {confirmDialog}
       <WorkflowHeader
         eyebrow="Admin · users"
         title="Users"
-        description="App users and role assignments. New users appear automatically after their first sign-in via Supabase magic-link."
+        description="App users, role assignments, and sign-in passwords. New users appear automatically after their first sign-in via Supabase magic-link; give anyone a password here and they can sign in with it straight away."
         meta={
           <>
             <QueryCountChip
@@ -457,6 +725,75 @@ export default function AdminUsersPage() {
         )}
 
         {data && visibleRows.length > 0 && (
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 border-b border-border/70 bg-bg-subtle/30 px-3 py-2">
+            <span className="text-3xs font-semibold uppercase tracking-sops text-fg-subtle">
+              All passwords
+            </span>
+
+            <button
+              type="button"
+              className="text-xs font-medium text-accent underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-60 disabled:no-underline"
+              disabled={bulkBusy || withoutPassword.length === 0}
+              onClick={async () => {
+                const n = withoutPassword.length;
+                const ok = await confirm({
+                  title: `Set a password for ${n} ${n === 1 ? "user" : "users"}?`,
+                  description:
+                    "Each user without a password gets their own newly generated one, shown here so you can hand it over. Users who already have a password are left alone.",
+                  confirmLabel: "Set passwords",
+                });
+                if (!ok) return;
+                await generateForAll(withoutPassword);
+              }}
+            >
+              <KeyRound className="mr-1 inline h-3 w-3" strokeWidth={2} />
+              {withoutPassword.length === 0
+                ? "Everyone has a password"
+                : `Set for the ${withoutPassword.length} without one`}
+            </button>
+
+            {revealed.length < revealable.length ? (
+              <button
+                type="button"
+                className="text-xs font-medium text-accent underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-60 disabled:no-underline"
+                disabled={bulkBusy || revealable.length === 0}
+                onClick={() =>
+                  void revealAll(
+                    revealable.filter(
+                      (u) => getRowState(u.user_id).revealedPassword === null,
+                    ),
+                  )
+                }
+              >
+                <Eye className="mr-1 inline h-3 w-3" strokeWidth={2} />
+                Show all
+              </button>
+            ) : (
+              <button
+                type="button"
+                className="text-xs font-medium text-accent underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-60 disabled:no-underline"
+                disabled={bulkBusy || revealed.length === 0}
+                onClick={() => hideAll(revealed)}
+              >
+                <EyeOff className="mr-1 inline h-3 w-3" strokeWidth={2} />
+                Hide all
+              </button>
+            )}
+
+            {bulk ? (
+              <span
+                className="text-xs text-fg-muted"
+                role="status"
+                aria-live="polite"
+                aria-atomic="true"
+              >
+                {bulk.label} — {bulk.done}/{bulk.total}…
+              </span>
+            ) : null}
+          </div>
+        )}
+
+        {data && visibleRows.length > 0 && (
           <div className="overflow-x-auto">
             <table className="w-full border-collapse text-sm">
               <thead>
@@ -571,74 +908,51 @@ export default function AdminUsersPage() {
                         <StatusBadgeDot status={u.status} />
                       </td>
                       <td className="px-3 py-2">
-                        <div className="flex flex-col items-start gap-1">
-                          {rs.revealedPassword ? (
-                            <div className="flex items-center gap-1.5">
-                              <span
-                                className="font-mono text-xs text-fg-strong"
-                                data-testid={`password-value-${u.user_id}`}
-                              >
-                                {rs.revealedPassword}
-                              </span>
-                              <button
-                                type="button"
-                                aria-label={`Copy password for ${u.display_name}`}
-                                className="btn btn-ghost btn-sm"
-                                onClick={() => {
-                                  void navigator.clipboard.writeText(rs.revealedPassword!);
-                                }}
-                              >
-                                <Copy className="h-3.5 w-3.5" strokeWidth={2} />
-                              </button>
-                              <button
-                                type="button"
-                                aria-label={`Hide password for ${u.display_name}`}
-                                className="btn btn-ghost btn-sm"
-                                onClick={() => setRowField(u.user_id, { revealedPassword: null })}
-                              >
-                                <EyeOff className="h-3.5 w-3.5" strokeWidth={2} />
-                              </button>
-                            </div>
-                          ) : u.has_password ? (
-                            <button
-                              type="button"
-                              className="btn btn-ghost btn-sm w-fit"
-                              disabled={rs.passwordPending}
-                              aria-label={`Show password for ${u.display_name}`}
-                              onClick={() => revealPasswordMutation.mutate({ user_id: u.user_id })}
-                            >
-                              <Eye className="mr-1 h-3.5 w-3.5" strokeWidth={2} />
-                              {rs.passwordPending ? "…" : "••••••••"}
-                            </button>
-                          ) : (
-                            <span className="text-2xs text-fg-faint">No password set</span>
-                          )}
-                          <button
-                            type="button"
-                            className="w-fit text-2xs text-accent underline-offset-2 hover:underline disabled:cursor-not-allowed disabled:opacity-60 disabled:no-underline"
-                            disabled={rs.passwordPending}
-                            onClick={async () => {
-                              const ok = await confirm({
-                                title: u.has_password
-                                  ? `Reset ${u.display_name}'s password?`
-                                  : `Set a password for ${u.display_name}?`,
-                                description: u.has_password
-                                  ? "Generates a brand-new password and immediately replaces their current one — their old password stops working right away."
-                                  : "Generates a new sign-in password they can use immediately, alongside the magic-link.",
-                                confirmLabel: u.has_password ? "Reset password" : "Set password",
-                                tone: u.has_password ? "danger" : undefined,
-                              });
-                              if (!ok) return;
-                              setPasswordMutation.mutate({ user_id: u.user_id });
-                            }}
-                          >
-                            <KeyRound className="mr-1 inline h-3 w-3" strokeWidth={2} />
-                            {rs.passwordPending ? "…" : u.has_password ? "Regenerate" : "Generate"}
-                          </button>
-                          {rs.passwordError && (
-                            <span className="text-2xs text-danger-fg">{rs.passwordError}</span>
-                          )}
-                        </div>
+                        <PasswordCell
+                          user={u}
+                          state={rs}
+                          onReveal={() =>
+                            revealPasswordMutation.mutate({ user_id: u.user_id })
+                          }
+                          onHide={() =>
+                            setRowField(u.user_id, { revealedPassword: null })
+                          }
+                          onDraftChange={(value) =>
+                            setRowField(u.user_id, {
+                              draftPassword: value,
+                              passwordError: null,
+                            })
+                          }
+                          onSaveDraft={async (value) => {
+                            const ok = await confirm({
+                              title: `Set ${u.display_name}'s password to "${value}"?`,
+                              description: u.has_password
+                                ? "This replaces their current password immediately — the old one stops working right away."
+                                : "They can sign in with this straight away, alongside the magic-link.",
+                              confirmLabel: "Set password",
+                              tone: u.has_password ? "danger" : undefined,
+                            });
+                            if (!ok) return;
+                            setPasswordMutation.mutate({
+                              user_id: u.user_id,
+                              password: value,
+                            });
+                          }}
+                          onGenerate={async () => {
+                            const ok = await confirm({
+                              title: u.has_password
+                                ? `Reset ${u.display_name}'s password?`
+                                : `Set a password for ${u.display_name}?`,
+                              description: u.has_password
+                                ? "Generates a brand-new password and immediately replaces their current one — their old password stops working right away."
+                                : "Generates a new sign-in password they can use immediately, alongside the magic-link.",
+                              confirmLabel: u.has_password ? "Reset password" : "Set password",
+                              tone: u.has_password ? "danger" : undefined,
+                            });
+                            if (!ok) return;
+                            setPasswordMutation.mutate({ user_id: u.user_id });
+                          }}
+                        />
                       </td>
                       <td className="px-3 py-2 text-right">
                         <div className="flex flex-col items-end gap-1">
