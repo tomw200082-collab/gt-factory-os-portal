@@ -23,6 +23,8 @@ import { cn } from "@/lib/cn";
 import {
   MAX_PASSWORD_LENGTH,
   localPasswordError,
+  passwordOpErrorMessage,
+  type PasswordOpFailure,
 } from "./_lib/password-rules";
 
 interface AppUser {
@@ -162,17 +164,13 @@ async function setUserPassword(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(password === undefined ? {} : { password }),
   });
-  const data = (await res.json()) as PasswordOpResponse & {
-    detail?: string;
-    error?: string;
-    validation_errors?: { message: string }[];
-  };
+  const data = (await res.json()) as PasswordOpResponse & PasswordOpFailure;
   if (!res.ok) {
     throw new Error(
-      data?.validation_errors?.[0]?.message ??
-        data?.detail ??
-        data?.error ??
+      passwordOpErrorMessage(
+        data,
         "Could not set a new password. Check your connection and try again.",
+      ),
     );
   }
   return data;
@@ -180,11 +178,13 @@ async function setUserPassword(
 
 async function revealUserPassword(user_id: string): Promise<PasswordOpResponse> {
   const res = await fetch(`/api/users/${encodeURIComponent(user_id)}/password`);
-  const data = (await res.json()) as PasswordOpResponse & { detail?: string; error?: string };
+  const data = (await res.json()) as PasswordOpResponse & PasswordOpFailure;
   if (!res.ok) {
     throw new Error(
-      data?.detail ?? data?.error ??
+      passwordOpErrorMessage(
+        data,
         "Could not load the password. Try generating a new one.",
+      ),
     );
   }
   return data;

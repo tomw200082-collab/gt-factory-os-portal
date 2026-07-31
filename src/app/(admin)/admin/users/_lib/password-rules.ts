@@ -1,4 +1,8 @@
-// Client-side mirror of AdminSetPasswordSchema on the API
+// What the Users page knows about passwords on its own: the validation rules
+// it mirrors from the API, and how it words a failure the API sends back.
+//
+// ---------------------------------------------------------------------------
+// Part 1 — validation, mirrored from AdminSetPasswordSchema on the API
 // (gt-factory-os/api/src/users/schemas.ts).
 //
 // This exists so an admin typing a password in the Users page gets the answer
@@ -26,4 +30,46 @@ export function localPasswordError(value: string): string | null {
   }
   if (value !== value.trim()) return "Cannot start or end with a space.";
   return null;
+}
+
+// ---------------------------------------------------------------------------
+// Part 2 — wording a failure the API sends back.
+//
+// The API's `detail` is written for whoever is reading a log: on
+// NOT_CONFIGURED it names the environment variables that are absent. That
+// string reached this page verbatim and an admin was shown
+// "(SUPABASE_SERVICE_ROLE_KEY / ADMIN_PASSWORD_DISPLAY_KEY missing)" while
+// trying to give a warehouse operator a password — a sentence that is both
+// unactionable for them and, because they cannot tell a missing variable from
+// a stale deployment, actively misleading about what to do next.
+//
+// So: reason codes the admin can act on get operator wording here. Everything
+// else keeps the server's own text, which for REJECTED_BY_AUTH is exactly
+// right ("Password is known to be weak", "Password is too short") and for
+// anything unforeseen is better than a shrug.
+// ---------------------------------------------------------------------------
+
+export interface PasswordOpFailure {
+  reason_code?: string;
+  detail?: string;
+  error?: string;
+  validation_errors?: { message: string }[];
+}
+
+export function passwordOpErrorMessage(
+  data: PasswordOpFailure | null | undefined,
+  fallback: string,
+): string {
+  if (data?.reason_code === "NOT_CONFIGURED") {
+    // Deliberately says nothing about which secret: from here the two causes
+    // are indistinguishable, and "ask for a redeploy" is the right next step
+    // for both. The precise diagnosis stays in the server log where it helps.
+    return "Passwords can't be set right now — the server needs its API redeployed. Nothing to fix on this page; ask for a deploy and try again.";
+  }
+  return (
+    data?.validation_errors?.[0]?.message ??
+    data?.detail ??
+    data?.error ??
+    fallback
+  );
 }

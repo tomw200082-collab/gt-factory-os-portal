@@ -1,6 +1,6 @@
 # Tranche 157 — the Users page can actually hand out passwords
 
-**Status:** built — tsc 0, eslint 0, vitest 1143/1143 (was 1137/1137; +6 new)
+**Status:** built — tsc 0, eslint 0, vitest 1148/1148 (was 1137/1137; +11 new)
 **Origin:** Tom, 2026-07-31, in writing, with a screenshot of `/admin/users` showing every row reading
 *"No password set"* under a red *"Password control is not configured on this deployment
 (SUPABASE_SERVICE_ROLE_KEY / ADMIN_PASSWORD_DISPLAY_KEY missing)"*:
@@ -72,6 +72,29 @@ a second click per row to see what it just created.
 **Why the walk is sequential.** Ordered `change_log`, no burst against Supabase Auth, and one row's
 failure is reported against that row while the rest still complete.
 
+## 3b. Follow-up in the same tranche — the page stopped speaking in environment variables
+
+After the portal shipped and the API had not yet been redeployed, Tom hit `Type one`, typed a
+password, pressed Save, and the row answered:
+
+> Password control is not configured on this deployment (SUPABASE_SERVICE_ROLE_KEY /
+> ADMIN_PASSWORD_DISPLAY_KEY missing).
+
+That is the API's `detail` reaching the page verbatim. It is the right sentence for a log line and
+the wrong one for the person trying to give a warehouse operator a password: they cannot act on it,
+and — worse — they cannot tell a *missing variable* from a *stale deployment*, so it points at the
+wrong fix. It also breaks the operator-language rule the rest of the portal holds to.
+
+`passwordOpErrorMessage()` now maps `NOT_CONFIGURED` to operator wording that names the actual next
+step ("the server needs its API redeployed… ask for a deploy"), and deliberately says nothing about
+which secret — from the page the two causes are indistinguishable and the remedy is the same either
+way. Every other reason code keeps the server's own text, because for `REJECTED_BY_AUTH` that text
+*is* the answer ("Password is known to be weak and easy to guess") and replacing it would lose
+information.
+
+Kept in `_lib/password-rules.ts` next to the validation mirror: both are "what this page knows about
+passwords without asking the server", and both are pure and tested.
+
 ## 4. Scope
 
 Portal (this repo):
@@ -79,7 +102,7 @@ Portal (this repo):
   bulk set / show all / hide all; progress + summary banner.
 - `src/app/(admin)/admin/users/_lib/password-rules.ts` (+ `.test.ts`) — the client-side mirror of the
   API schema, extracted so the rule that must not drift from the backend is a tested pure function
-  rather than a closure inside a page component.
+  rather than a closure inside a page component; plus `passwordOpErrorMessage()` (§3b).
 
 API (`gt-factory-os`, same branch, separate PR):
 - `api/src/users/password_crypto.ts` — derived-key fallback + `getPasswordDisplayKeySource()`.
@@ -107,7 +130,8 @@ No schema change. Migration 0300 is already applied in production.
       is in no automatic gate**, which is also how a feature that was dead on the deployment shipped
       green. The API repo's only automatic PR check, `typecheck.yml`, runs the *root* tsconfig, whose
       `include` is `scripts/**/*.ts` — it does not compile `api/` at all.
-- [x] portal vitest 1143/1143 (was 1137/1137; the 6 new cover `password-rules`)
+- [x] portal vitest 1148/1148 (was 1137/1137; the 11 new cover `password-rules` —
+      validation mirror and error wording)
 - [ ] verified on the deployment after the API PR merges and Railway redeploys
 
 ## 6. Known, out of scope
