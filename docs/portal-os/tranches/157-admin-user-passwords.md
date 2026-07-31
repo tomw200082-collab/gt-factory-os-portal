@@ -96,10 +96,17 @@ No schema change. Migration 0300 is already applied in production.
 - [x] tsc 0 (portal)
 - [x] eslint 0 (portal, changed dir)
 - [x] API unit tests — `password_crypto` 13/13, `supabase_auth_admin` 6/6
-- [ ] API route tests (`admin_user_password_set`, T1–T10) — **cannot run in this session.** The suite
-      refuses to run against the production Supabase project by design, and production is the only
-      database reachable here. The override is gated on Tom's written approval and was not used. CI
-      (`phase10-node-tests.yml`) runs it against an ephemeral local Postgres.
+- [x] API route tests — `admin_user_password_set` 11/11, and 39/39 with `admin_user_update`,
+      `password_crypto`, `supabase_auth_admin`, `shared_change_log`. Run against a **throwaway local
+      Postgres 16** stood up in the session (migration chain applied, CD-test fixture users seeded),
+      not production — the suite refuses production by design and the override was not used.
+      **The suite was red on the original 0300 commit** (5 of 6, confirmed at `HEAD~1`): every call
+      sent `content-type: application/json` with no body, which Fastify rejects at the content-type
+      parser before any handler runs. Fixed in the API PR. It stayed invisible because
+      `phase10-node-tests.yml` is `workflow_dispatch`-only and names three cogs files — **this suite
+      is in no automatic gate**, which is also how a feature that was dead on the deployment shipped
+      green. The API repo's only automatic PR check, `typecheck.yml`, runs the *root* tsconfig, whose
+      `include` is `scripts/**/*.ts` — it does not compile `api/` at all.
 - [x] portal vitest 1143/1143 (was 1137/1137; the 6 new cover `password-rules`)
 - [ ] verified on the deployment after the API PR merges and Railway redeploys
 
