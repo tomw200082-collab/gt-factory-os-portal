@@ -203,7 +203,7 @@ export default function AdminMastersBomVersionDetailPage({
 
   // --- Data: head ---
   const headsQuery = useQuery<ListEnvelope<BomHeadRow>>({
-    queryKey: ["admin", "masters", "bom_head", "all"],
+    queryKey: ["admin", "masters", "bom_head", "all", "incl-archived"],
     // include_archived=true: both lists hide archived items by default. This is
     // a by-id detail page — reaching it means the recipe was deliberately looked
     // up — and recipes stay readable forever, so it opts back in.

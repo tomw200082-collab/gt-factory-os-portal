@@ -8,7 +8,7 @@
 //   9. Per-tab empty state with Archive icon + better messaging
 // ---------------------------------------------------------------------------
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import Link from "next/link";
 import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { Archive, RotateCcw, X } from "lucide-react";
@@ -16,6 +16,9 @@ import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { Badge } from "@/components/badges/StatusBadge";
 import { useSession } from "@/lib/auth/session-provider";
+import { AdminMutationError, patchEntity } from "@/lib/admin/mutations";
+import { formatIls } from "@/lib/utils/format-money";
+import { fmtNumStr } from "@/lib/utils/format-quantity";
 
 // --- Types ------------------------------------------------------------------
 
@@ -89,40 +92,19 @@ async function patchStatus(
   }
 }
 
-// 0302 — inline expiry edit. Keeps the optimistic-lock contract: the row's
-// updated_at goes back as if_match_updated_at, so a concurrent edit 409s
-// rather than silently overwriting.
+// 0302 — inline expiry edit. patchEntity mints the idempotency_key and folds in
+// if_match_updated_at, and throws AdminMutationError carrying the server's
+// conflict code, so the caller can tell STALE_ROW from a network failure.
 async function patchExpiryDate(
   componentId: string,
   expiryDate: string | null,
   ifMatchUpdatedAt: string,
 ): Promise<void> {
-  const res = await fetch(`/api/components/${encodeURIComponent(componentId)}`, {
-    method: "PATCH",
-    headers: { "Content-Type": "application/json", Accept: "application/json" },
-    body: JSON.stringify({
-      idempotency_key: crypto.randomUUID(),
-      if_match_updated_at: ifMatchUpdatedAt,
-      expiry_date: expiryDate,
-    }),
+  await patchEntity({
+    url: `/api/components/${encodeURIComponent(componentId)}`,
+    fields: { expiry_date: expiryDate },
+    ifMatchUpdatedAt,
   });
-  if (!res.ok) {
-    const json = await res.json().catch(() => null);
-    throw new Error((json as { detail?: string } | null)?.detail ?? `HTTP ${res.status}`);
-  }
-}
-
-function fmtMoney(v: string): string {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "—";
-  return `₪${n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
-}
-
-function fmtQty(v: string): string {
-  const n = Number(v);
-  if (!Number.isFinite(n)) return "—";
-  // Trim the 8dp storage precision down to something an operator can read.
-  return n.toLocaleString(undefined, { maximumFractionDigits: 3 });
 }
 
 function fmtDate(iso: string): string {
@@ -213,11 +195,11 @@ function UnusedComponentRowView({
         <div className="font-mono text-3xs text-fg-subtle">{row.component_id}</div>
       </td>
       <td className="px-3 py-2 text-right text-xs tabular-nums text-fg">
-        {fmtQty(row.qty_on_hand)}
+        {fmtNumStr(row.qty_on_hand)}
         <span className="ml-1 text-3xs text-fg-subtle">{row.inventory_uom ?? ""}</span>
       </td>
       <td className="px-3 py-2 text-right text-xs font-medium tabular-nums text-fg">
-        {fmtMoney(row.est_value_ils)}
+        {formatIls(row.est_value_ils)}
       </td>
       <td className="px-3 py-2 text-xs text-fg-muted">
         {row.supplier_name ?? row.primary_supplier_id ?? "—"}
@@ -367,9 +349,12 @@ export default function AdminMastersArchivePage(): JSX.Element {
       void queryClient.invalidateQueries({ queryKey: ["admin", "archive", "unused"] });
     },
     onError: (err: Error) => {
+      const stale = err instanceof AdminMutationError && err.code === "STALE_ROW";
       setBanner({
         kind: "error",
-        message: `Could not save the expiry date (${err.message}). Refresh and try again.`,
+        message: stale
+          ? "Someone else changed this component while you were editing. Refresh to see their change, then set the expiry date again."
+          : `Could not save the expiry date (${err.message}). Refresh and try again.`,
       });
     },
   });
@@ -379,9 +364,9 @@ export default function AdminMastersArchivePage(): JSX.Element {
   const archivedSuppliers = suppliersQuery.data?.rows ?? [];
   const unusedComponents = unusedQuery.data?.rows ?? [];
 
-  const unusedTotalValue = unusedComponents.reduce(
-    (sum, r) => sum + (Number(r.est_value_ils) || 0),
-    0,
+  const unusedTotalValue = useMemo(
+    () => unusedComponents.reduce((sum, r) => sum + (Number(r.est_value_ils) || 0), 0),
+    [unusedComponents],
   );
 
   const tabs: { key: EntityTab; label: string; count: number }[] = [
@@ -542,7 +527,7 @@ export default function AdminMastersArchivePage(): JSX.Element {
             </tr>
           ))}
         </ArchiveSection>
-      ) : (
+      ) : activeTab === "suppliers" ? (
         <ArchiveSection
           isLoading={suppliersQuery.isLoading}
           isError={suppliersQuery.isError}
@@ -590,7 +575,7 @@ export default function AdminMastersArchivePage(): JSX.Element {
             </tr>
           ))}
         </ArchiveSection>
-      )}
+      ) : null}
 
       {activeTab === "unused" ? (
         <>
@@ -603,7 +588,7 @@ export default function AdminMastersArchivePage(): JSX.Element {
             {unusedComponents.length > 0 ? (
               <p className="text-xs font-medium text-fg">
                 Total tied up:{" "}
-                <span className="tabular-nums">{fmtMoney(String(unusedTotalValue))}</span>
+                <span className="tabular-nums">{formatIls(unusedTotalValue)}</span>
               </p>
             ) : null}
           </div>
