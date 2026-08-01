@@ -40,6 +40,13 @@ export interface ConfirmOptions {
   /** "danger" renders the confirm button as destructive (btn-danger). */
   tone?: "default" | "danger";
   /**
+   * FLOW-003 (Tranche 158) — optional third action, rendered as a secondary
+   * button between Cancel and Confirm. When clicked the promise resolves
+   * "extra". Callers not passing this keep the plain boolean contract
+   * (`if (!ok)` treats "extra" as truthy — only opt-in callers see it).
+   */
+  extraLabel?: string;
+  /**
    * DR-018 (Tranche 124) — Radix requires a Description for its a11y
    * contract; when the caller doesn't pass one this component renders a
    * visually-hidden English fallback ("Please confirm this action."). That
@@ -50,11 +57,17 @@ export interface ConfirmOptions {
   srFallbackDescription?: string;
 }
 
-type Pending = ConfirmOptions & { resolve: (ok: boolean) => void };
+/** Resolution: true = confirm, false = cancel, "extra" = the optional third action. */
+export type ConfirmResult = boolean | "extra";
+
+type Pending = ConfirmOptions & { resolve: (ok: ConfirmResult) => void };
 
 export interface UseConfirmResult {
-  /** Open the dialog; resolves true on confirm, false on cancel/escape/backdrop. */
-  confirm: (opts: ConfirmOptions) => Promise<boolean>;
+  /**
+   * Open the dialog; resolves true on confirm, false on cancel/escape/backdrop,
+   * and "extra" when the opt-in extraLabel button is clicked.
+   */
+  confirm: (opts: ConfirmOptions) => Promise<ConfirmResult>;
   /** Render this once in the calling component's JSX. */
   dialog: JSX.Element;
 }
@@ -64,7 +77,7 @@ export function useConfirm(): UseConfirmResult {
 
   const confirm = useCallback(
     (opts: ConfirmOptions) =>
-      new Promise<boolean>((resolve) => {
+      new Promise<ConfirmResult>((resolve) => {
         setPending({ ...opts, resolve });
       }),
     [],
@@ -72,7 +85,7 @@ export function useConfirm(): UseConfirmResult {
 
   // Settle the active promise and close. Resolving an already-settled promise
   // is a no-op, so React StrictMode's double-invoked updater is harmless.
-  const settle = useCallback((ok: boolean) => {
+  const settle = useCallback((ok: ConfirmResult) => {
     setPending((prev) => {
       prev?.resolve(ok);
       return null;
@@ -88,7 +101,7 @@ function ConfirmDialogView({
   onSettle,
 }: {
   pending: Pending | null;
-  onSettle: (ok: boolean) => void;
+  onSettle: (ok: ConfirmResult) => void;
 }): JSX.Element {
   const cancelRef = useRef<HTMLButtonElement>(null);
   const open = pending !== null;
@@ -147,6 +160,16 @@ function ConfirmDialogView({
             >
               {pending?.cancelLabel ?? "Cancel"}
             </button>
+            {pending?.extraLabel ? (
+              <button
+                type="button"
+                className="btn btn-sm"
+                onClick={() => onSettle("extra")}
+                data-testid="confirm-dialog-extra"
+              >
+                {pending.extraLabel}
+              </button>
+            ) : null}
             <button
               type="button"
               className={cn(
