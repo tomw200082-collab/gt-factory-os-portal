@@ -130,7 +130,43 @@ export type QueueScope = "now" | "7d" | "all";
 // detail) — thrown only by jsonOrThrow below. Any other error (network
 // failure, an unguarded runtime TypeError) must never have its raw .message
 // shown on this Hebrew-only surface — see DR-018 ux-release-gate INTER-002.
-export class ApiError extends Error {}
+export class ApiError extends Error {
+  /** The backend reason code, when it sent one — for callers that need to
+   *  react to a specific failure (never for display). */
+  code?: string;
+  constructor(message: string, code?: string) {
+    super(message);
+    this.code = code;
+  }
+}
+
+// Operator-facing Hebrew for every backend reason code this surface can hit.
+// The endpoints return `{ error: <CODE>, detail: <raw exception text> }`, and
+// the raw text contains the code too — so trusting `detail` to be human, as
+// this file used to, put PO_CHANGED_REVIEW_REQUIRED on the office manager's
+// screen with no idea what to do about it (Tom, 2026-07-30, with a screenshot).
+const REASON_TEXT: Record<string, string> = {
+  PO_CHANGED_REVIEW_REQUIRED:
+    "ההזמנה עודכנה מאז שהמסך נטען. רועננו הנתונים — בדקו את הפרטים ושמרו שוב.",
+  PO_NOT_AWAITING_PLACEMENT:
+    "ההזמנה כבר לא ממתינה לביצוע — ייתכן שבוצעה או בוטלה בינתיים. רועננו הנתונים.",
+  PO_NOT_FOUND: "ההזמנה לא נמצאה. רועננו הנתונים.",
+  NOTHING_PLACED:
+    "לא נשאר מה לבצע בהזמנה הזו — זהו ביטול. השתמשי ב״בטל עם סיבה״.",
+  SPLIT_REASON_REQUIRED: "יש לבחור סיבה לביצוע החלקי.",
+  INVALID_QTY: "אחת הכמויות שהוזנו אינה תקינה.",
+  SCHEDULE_DATE_IN_PAST: "לא ניתן לתזמן לתאריך שכבר עבר.",
+};
+
+/** The reason code the backend sent, if we recognise one. */
+function reasonCodeOf(b: {
+  reason_code?: string;
+  detail?: string;
+  error?: string;
+} | null): string | undefined {
+  const haystack = `${b?.reason_code ?? ""} ${b?.error ?? ""} ${b?.detail ?? ""}`;
+  return Object.keys(REASON_TEXT).find((c) => haystack.includes(c));
+}
 
 function newIdempotencyKey(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -155,9 +191,14 @@ async function jsonOrThrow(res: Response, fallback: string): Promise<unknown> {
       | { reason_code?: string; detail?: string; error?: string }
       | null;
     // Operator-facing: never surface a raw reason_code enum or HTTP status.
-    // Prefer the backend's human detail, else the Hebrew fallback sentence.
-    const msg = b?.detail ?? b?.error ?? fallback;
-    throw new ApiError(String(msg));
+    // A known code gets its Hebrew sentence; a bare SCREAMING_SNAKE string is a
+    // machine code whatever field it arrived in, so it degrades to the fallback
+    // rather than being shown; only genuinely human detail is passed through.
+    const code = reasonCodeOf(b);
+    if (code) throw new ApiError(REASON_TEXT[code], code);
+    const detail = (b?.detail ?? b?.error ?? "").trim();
+    const looksLikeCode = /^[A-Z][A-Z0-9_]*$/.test(detail);
+    throw new ApiError(!detail || looksLikeCode ? fallback : detail);
   }
   return body;
 }
@@ -256,6 +297,17 @@ export function useScheduleOrder() {
         },
       );
       return jsonOrThrow(res, "שינוי מועד ההזמנה נכשל.");
+    },
+    // The staleness guard is the one failure the operator can clear herself,
+    // and only if we hand her a fresh row: the queue is cached (staleTime 30s,
+    // and FLOW-001 deliberately stopped refetching on window focus so in-flight
+    // edits survive), so a row open for a few minutes carries an updated_at the
+    // backend will keep rejecting. Refetch on the conflict and her next save —
+    // same date, still in the panel — goes through. No re-typing, no dead end.
+    onError: (err: Error) => {
+      if (err instanceof ApiError && err.code === "PO_CHANGED_REVIEW_REQUIRED") {
+        void qc.invalidateQueries({ queryKey: QUEUE_KEY });
+      }
     },
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: QUEUE_KEY });

@@ -1,4 +1,4 @@
-# Tranche 158 — the finish-run confirm cannot be tapped past, and errors stop naming internals
+# Tranche 160 — the finish-run confirm cannot be tapped past, and errors stop naming internals
 
 **Status:** in progress
 **Origin:** Tom, 2026-08-02: *"תוודא שכל הזרימת עבודה של דניס במערכת היא טובה ואפשרית מקצה לקצה
@@ -56,6 +56,15 @@ is untouched — it drives its own banner with a reload action.
 
 `ConsumptionSummary` had the same class of leak in a quieter place: `line.component_name ?? line.component_id`
 printed `PKG-CAP-PLASTIC-28` as a material name whenever the name was null.
+
+**Sibling, landed the same day:** tranche 159 fixed the identical class of leak on
+`/purchase-orders/placement-queue`, where `jsonOrThrow` preferred the backend's `detail` and printed
+`PO_CHANGED_REVIEW_REQUIRED` verbatim. That surface degrades an unrecognised SCREAMING_SNAKE string to
+a fallback but still lets genuinely human `detail` through, because its backend sometimes writes one.
+This corridor is stricter — `detail` is never rendered at any code path — because none of the
+production-run conflicts carry operator-readable text: every one of them is assembled from a run id
+and a status. Two surfaces, one rule ("no machine strings on an operator's screen"), applied at the
+strictness each backend earns.
 
 ## 3. Two entry points were lying about when stock moves
 
@@ -119,7 +128,7 @@ manifest:
 - src/features/home/cockpit.ts
 - src/features/dashboard/quick-actions.ts
 - tests/e2e/production-picking.spec.ts
-- docs/portal-os/tranches/158-report-confirm-and-honest-errors.md
+- docs/portal-os/tranches/160-report-confirm-and-honest-errors.md
 - docs/portal-os/tranches/_active.txt
 - docs/portal-os/registry.md
 

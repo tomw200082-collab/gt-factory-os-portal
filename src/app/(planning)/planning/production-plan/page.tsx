@@ -12,6 +12,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useQuery } from "@tanstack/react-query";
 import {
   Plus,
+  Beaker,
   CheckCircle2,
   XCircle,
   Ban,
@@ -74,6 +75,7 @@ import { WeekTimelineRail } from "./_components/WeekTimelineRail";
 import { ProductionDayLane } from "./_components/ProductionDayLane";
 import { RecipeOverridePanel } from "./_components/RecipeOverridePanel";
 import { BatchTuneDialog, tunableFromPlanRow } from "./_components/BatchTuneDialog";
+import { AddBatchModal } from "./_components/AddBatchModal";
 import { ItemStockContext } from "./_components/ItemStockContext";
 import { usePrefetchInventoryFlow } from "../inventory-flow/_lib/useInventoryFlow";
 import type {
@@ -1641,6 +1643,10 @@ export default function ProductionPlanPage() {
 
   // Modal state
   const [showManualAdd, setShowManualAdd] = useState<{ defaultDate: string } | null>(null);
+  // FLOW-002 (2026-08-01 audit) — base-batch composer. The board could
+  // display batch rows but only the weekly-meeting engine could create them.
+  const [showAddBatch, setShowAddBatch] = useState<{ defaultDate: string } | null>(null);
+  const [addBatchError, setAddBatchError] = useState<string | null>(null);
   const [showAddFromRecs, setShowAddFromRecs] = useState<{ defaultDate: string } | null>(null);
   const [showAddNote, setShowAddNote] = useState<{ defaultDate: string } | null>(null);
   const [editingPlan, setEditingPlan] = useState<ProductionPlanRow | null>(null);
@@ -1955,19 +1961,37 @@ export default function ProductionPlanPage() {
     );
     if (sameDayBase) {
       const label = planLabel(sameDayBase) ?? "A base batch";
+      // FLOW-003 (2026-08-01 audit) — the incident-born guard offered only
+      // "Add anyway / Go back", leaving the planner with no path to the
+      // correct action. The third option opens the tune dialog for the
+      // existing batch instead of stacking a second plan on the day.
       const ok = await confirm({
         title: "This day already has a base batch",
         description: `${label} is already planned for ${req.plan_date}. Adding this on top of it may double up production intent for that day. Add anyway?`,
         confirmLabel: "Add anyway",
         cancelLabel: "Go back",
+        extraLabel: "Tune the batch instead",
       });
+      if (ok === "extra") {
+        setShowManualAdd(null);
+        setEditingPlan(sameDayBase);
+        return;
+      }
       if (!ok) return;
     }
 
     setManualAddErrors(null);
     createMut.mutate({ plan_type: "production", ...req }, {
       onSuccess: (resp) => {
-        flashToast("success", "Production added to the plan. Inventory has not changed.");
+        // FLOW-005 — confirm the identity of what was created, not just
+        // that something was; resp.echo carries the stored row.
+        const e = resp.echo;
+        flashToast(
+          "success",
+          e?.item_name && e?.planned_qty
+            ? `${e.item_name} · ${parseFloat(e.planned_qty)} ${e.uom ?? ""} added to ${e.plan_date}. Inventory unchanged.`
+            : "Production added to the plan. Inventory has not changed.",
+        );
         setShowManualAdd(null);
         // Tranche 052 — "Review recipe" path: the plan is created first,
         // then the recipe panel opens immediately for that plan.
@@ -1989,6 +2013,36 @@ export default function ProductionPlanPage() {
           return;
         }
         flashToast("error", err.message);
+      },
+    });
+  }
+
+  // FLOW-002 — base-batch creation from the board. Server derives uom='L',
+  // planned_qty = batch_size_l, and fg_share (contract §6.2b).
+  function handleAddBatch(req: {
+    plan_date: string;
+    base_bom_head_id: string;
+    batch_size_l: number;
+    pack_manifest: Array<{ item_id: string; qty: number }>;
+    notes?: string;
+  }) {
+    setAddBatchError(null);
+    createMut.mutate({ plan_type: "base_batch", ...req }, {
+      onSuccess: (resp) => {
+        const e = resp.echo;
+        const label = e ? planLabel(e) : null;
+        flashToast(
+          "success",
+          label
+            ? `Batch added — ${label} · ${req.batch_size_l} L on ${req.plan_date}. Inventory unchanged.`
+            : "Batch added to the plan. Inventory has not changed.",
+        );
+        setShowAddBatch(null);
+      },
+      onError: (err) => {
+        // The composer validates locally; anything surviving to the server
+        // (stale head, wrong-base item, 409) reads inline in the dialog.
+        setAddBatchError(err.message);
       },
     });
   }
@@ -2165,21 +2219,37 @@ export default function ProductionPlanPage() {
                 </button>
                 <button
                   type="button"
-                  // Tranche 155 (PLAN-301 + corridor FLOW-201): on a morning
-                  // with drafts on the board, "Add production" was the loudest
-                  // thing on the page and pointed away from the actual job,
-                  // while the only correctly-aimed CTA was an underline inside
-                  // the banner. With drafts present this drops to secondary and
-                  // the review link below takes primary weight.
+                  // Tranche 155 (PLAN-301): with drafts present the review
+                  // link takes primary weight. FLOW-002 (tranche 158): the
+                  // batch composer now holds the no-drafts primary slot —
+                  // batches are what the factory runs most days — so this
+                  // single-product path stays secondary always.
+                  className="btn btn-sm gap-1.5"
+                  onClick={() => setShowManualAdd({ defaultDate: toIsoDate(new Date()) })}
+                  data-testid="header-add-manual"
+                  title="Add a single product run"
+                >
+                  <Plus className="h-3 w-3" strokeWidth={2.5} />
+                  Add production
+                </button>
+                <button
+                  type="button"
+                  // FLOW-002 — the batch shape (one tank, split across
+                  // bottles) is what the factory runs most days; it now has
+                  // a first-class creation entry next to the per-item one.
                   className={cn(
                     "btn btn-sm gap-1.5",
                     draftCount + horizonDraftCount === 0 && "btn-primary",
                   )}
-                  onClick={() => setShowManualAdd({ defaultDate: toIsoDate(new Date()) })}
-                  data-testid="header-add-manual"
+                  onClick={() => {
+                    setAddBatchError(null);
+                    setShowAddBatch({ defaultDate: toIsoDate(new Date()) });
+                  }}
+                  title="Add a base batch — one tank run split across its bottles"
+                  data-testid="header-add-batch"
                 >
-                  <Plus className="h-3 w-3" strokeWidth={2.5} />
-                  Add production
+                  <Beaker className="h-3 w-3" strokeWidth={2.5} />
+                  Add batch
                 </button>
                 {draftCount + horizonDraftCount > 0 && (
                   <Link
@@ -2857,6 +2927,19 @@ export default function ProductionPlanPage() {
           isSubmitting={createMut.isPending}
           uomOptions={uomOptions}
           serverErrors={manualAddErrors}
+        />
+      ) : null}
+
+      {showAddBatch ? (
+        <AddBatchModal
+          defaultDate={showAddBatch.defaultDate}
+          onClose={() => {
+            setShowAddBatch(null);
+            setAddBatchError(null);
+          }}
+          onSubmit={handleAddBatch}
+          isSubmitting={createMut.isPending}
+          serverError={addBatchError}
         />
       ) : null}
 

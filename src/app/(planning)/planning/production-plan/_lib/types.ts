@@ -112,7 +112,24 @@ export interface CreateNoteRequest {
   notes: string;
 }
 
-export type CreatePlanOrNoteRequest = CreateProductionPlanRequest | CreateNoteRequest;
+// Base-batch creation (contract §6.2b, backend schemas.ts 'base_batch'
+// branch). Stored plan_type stays 'production'; 'base_batch' is a
+// request-level discriminator. The server derives uom='L' and
+// planned_qty = batch_size_l, and computes fg_share — never send it.
+export interface CreateBaseBatchRequest {
+  plan_type: "base_batch";
+  idempotency_key?: string;
+  plan_date: string;
+  base_bom_head_id: string;
+  batch_size_l: number;
+  pack_manifest: Array<{ item_id: string; qty: number }>;
+  notes?: string;
+}
+
+export type CreatePlanOrNoteRequest =
+  | CreateProductionPlanRequest
+  | CreateNoteRequest
+  | CreateBaseBatchRequest;
 
 export interface CreateProductionPlanResponse {
   plan_id: string;
