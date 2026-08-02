@@ -85,8 +85,11 @@ export const QUICK_ACTIONS: readonly QuickAction[] = [
   },
   {
     href: "/production",
-    label: "Production Actual",
-    blurb: "Output + scrap; BOM-derived consumption.",
+    // Same destination as the nav entry and the cockpit tile, so it carries
+    // the same name. "Production Actual" was a second name for one door, and
+    // its blurb was written in contract vocabulary.
+    label: "Today's runs",
+    blurb: "Collect today's materials, then report what you made.",
     icon: Factory,
     required: "stock:execute",
     category: "stock",

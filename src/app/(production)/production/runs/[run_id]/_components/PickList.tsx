@@ -28,6 +28,7 @@ import { Badge } from "@/components/ui/Badge";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { fmtNumStr } from "@/lib/utils/format-quantity";
 import { t } from "../../../_lib/copy";
+import { conflictCopyKey, isStaleCode } from "../../../_lib/errors";
 import {
   isRunActive,
   isRunReportable,
@@ -113,17 +114,15 @@ export function PickList({ runId }: { runId: string }) {
       if (res.status === 503) throw new Error(t("error_break_glass"));
       if (res.status === 409) {
         const b = (await res.json().catch(() => null)) as
-          | { reason_code?: string; detail?: string }
+          | { reason_code?: string }
           | null;
         const code = b?.reason_code ?? "";
-        if (code.includes("STALE")) throw new Error(STALE);
-        throw new Error(b?.detail ?? t("error_generic"));
+        if (isStaleCode(code)) throw new Error(STALE);
+        throw new Error(t(conflictCopyKey(code)));
       }
       if (!res.ok) {
-        const b = (await res.json().catch(() => null)) as
-          | { detail?: string; error?: string }
-          | null;
-        throw new Error(b?.detail ?? b?.error ?? t("error_generic"));
+        // Never `b.detail` / `b.error` — see _lib/errors.ts.
+        throw new Error(t("error_generic"));
       }
       return (await res.json()) as { run_status: string };
     },

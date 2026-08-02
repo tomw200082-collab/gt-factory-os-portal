@@ -252,7 +252,11 @@ export const HOME_TILES: readonly HomeTile[] = [
     // collect today's materials before production).
     href: "/production",
     label: "Today's runs",
-    blurb: "Collect materials for today's runs; confirm to update stock.",
+    // Tranche 147 moved the stock movement off the pick confirmation and onto
+    // the report; this tile kept promising the opposite for six weeks. It is
+    // the first sentence the operator reads each morning, and the pick screen
+    // contradicted it thirty seconds later.
+    blurb: "Collect today's materials, then report what you made.",
     icon: ListChecks,
     group: "stock",
     minRole: "viewer",
