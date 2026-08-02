@@ -1,6 +1,6 @@
 // Placement-queue data-layer tests.
 //
-// Tranche 157: Tom reported (with a screenshot) that scheduling a purchase
+// Tranche 159: Tom reported (with a screenshot) that scheduling a purchase
 // order did not work — the panel showed the bare string
 // PO_CHANGED_REVIEW_REQUIRED and the save never landed. Two defects, both
 // pinned here: a machine reason code reaching the operator at all, and the
