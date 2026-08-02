@@ -16,6 +16,7 @@
 // COMPLETE intended split (wholesale replace; backend recomputes fg_share).
 
 import { useMemo, useState } from "react";
+import { useQuery } from "@tanstack/react-query";
 import {
   Ban,
   Loader2,
@@ -53,6 +54,12 @@ export interface TunableBatch {
   uom: string | null;
   notes: string | null;
   packs: TunablePack[];
+  /**
+   * FLOW-004 (Tranche 158) — the batch's base head, needed to offer
+   * adding a member item that isn't in the split yet. Optional: callers
+   * that don't pass it simply don't get the add-item picker.
+   */
+  base_bom_head_id?: string | null;
 }
 
 export function tunableFromPlanRow(p: ProductionPlanRow): TunableBatch {
@@ -60,6 +67,7 @@ export function tunableFromPlanRow(p: ProductionPlanRow): TunableBatch {
     plan_id: p.plan_id,
     plan_date: p.plan_date,
     is_base_batch: p.is_base_batch,
+    base_bom_head_id: p.base_bom_head_id,
     title: p.is_base_batch
       ? (p.base_bom_head_id ?? "Base batch").replace(/^BOM-BASE-/, "").replace(/-/g, " ")
       : (p.item_name ?? "Unnamed item"),
@@ -131,6 +139,62 @@ export function BatchTuneDialog({
     batch.packs.map((p) => ({ ...p, qtyStr: String(p.qty), removed: false })),
   );
   const [error, setError] = useState<string | null>(null);
+
+  // FLOW-004 (Tranche 158) — items packing this base that are NOT in the
+  // split yet, offered via a compact picker. The backend PATCH validates
+  // membership (PACK_ITEM_WRONG_BASE) — this list mirrors it client-side.
+  // Same query key as the batch composer → shared 5-minute cache.
+  const memberItemsQuery = useQuery<{
+    rows: Array<{
+      item_id: string;
+      item_name: string;
+      status: string;
+      base_bom_head_id: string | null;
+      base_fill_qty_per_unit: string | null;
+    }>;
+  }>({
+    queryKey: ["master", "items", "ACTIVE", "for-batch-composer"],
+    queryFn: async () => {
+      const res = await fetch("/api/items?status=ACTIVE&limit=1000");
+      if (!res.ok) throw new Error("Could not load items");
+      return res.json();
+    },
+    staleTime: 5 * 60 * 1000,
+    enabled: batch.is_base_batch && !!batch.base_bom_head_id,
+  });
+  const addableItems = useMemo(() => {
+    if (!batch.is_base_batch || !batch.base_bom_head_id) return [];
+    const inSplit = new Set(lines.map((l) => l.item_id));
+    return (memberItemsQuery.data?.rows ?? [])
+      .filter(
+        (r) =>
+          r.base_bom_head_id === batch.base_bom_head_id &&
+          r.status === "ACTIVE" &&
+          !inSplit.has(r.item_id),
+      )
+      .sort((a, b) => a.item_name.localeCompare(b.item_name));
+  }, [memberItemsQuery.data, lines, batch.is_base_batch, batch.base_bom_head_id]);
+
+  function addItemToSplit(itemId: string) {
+    const item = addableItems.find((r) => r.item_id === itemId);
+    if (!item) return;
+    const fill =
+      item.base_fill_qty_per_unit != null &&
+      Number.isFinite(parseFloat(item.base_fill_qty_per_unit))
+        ? parseFloat(item.base_fill_qty_per_unit)
+        : null;
+    setLines((ls) => [
+      ...ls,
+      {
+        item_id: item.item_id,
+        item_name: item.item_name,
+        qty: 0, // new line — any positive input reads as dirty
+        fill_l_per_unit: fill,
+        qtyStr: "",
+        removed: false,
+      },
+    ]);
+  }
 
   // Danger zone (cancel batch)
   const [cancelOpen, setCancelOpen] = useState(false);
@@ -403,6 +467,26 @@ export function BatchTuneDialog({
                     </li>
                   ))}
                 </ul>
+                {addableItems.length > 0 ? (
+                  <label className="mt-2 block">
+                    <span className="sr-only">Add product to split</span>
+                    <select
+                      className="input text-fg-muted"
+                      value=""
+                      onChange={(e) => {
+                        if (e.target.value) addItemToSplit(e.target.value);
+                      }}
+                      data-testid="batch-tune-add-item"
+                    >
+                      <option value="">+ Add product to split…</option>
+                      {addableItems.map((r) => (
+                        <option key={r.item_id} value={r.item_id}>
+                          {r.item_name}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                ) : null}
                 <p className="mt-1 text-3xs text-fg-faint">
                   The split is the plan&apos;s quantity — procurement buys bottles, caps and labels
                   from these numbers.

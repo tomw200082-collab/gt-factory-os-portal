@@ -6,17 +6,18 @@
 //   P3 — Confirm resolves the promise true and closes
 //   P4 — Cancel resolves the promise false and closes
 //   P5 — default focus lands on Cancel (destructive-safe)
+//   P6 — extraLabel renders a third action that resolves "extra" (Tranche 158)
 
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useConfirm } from "./ConfirmDialog";
+import { useConfirm, type ConfirmResult } from "./ConfirmDialog";
 
 afterEach(() => {
   cleanup();
 });
 
-function Harness({ onResult }: { onResult: (v: boolean) => void }): JSX.Element {
+function Harness({ onResult }: { onResult: (v: ConfirmResult) => void }): JSX.Element {
   const { confirm, dialog } = useConfirm();
   return (
     <>
@@ -92,5 +93,54 @@ describe("useConfirm / ConfirmDialog", () => {
 
     const cancel = await screen.findByRole("button", { name: "Cancel" });
     await waitFor(() => expect(document.activeElement).toBe(cancel));
+  });
+
+  // P6 (Tranche 158 / FLOW-003) — opt-in third action.
+  it('renders extraLabel as a third action that resolves "extra"', async () => {
+    const user = userEvent.setup();
+    const onResult = vi.fn();
+
+    function ExtraHarness(): JSX.Element {
+      const { confirm, dialog } = useConfirm();
+      return (
+        <>
+          <button
+            type="button"
+            onClick={async () => {
+              onResult(
+                await confirm({
+                  title: "This day already has a base batch",
+                  confirmLabel: "Add anyway",
+                  cancelLabel: "Go back",
+                  extraLabel: "Tune the batch instead",
+                }),
+              );
+            }}
+          >
+            open
+          </button>
+          {dialog}
+        </>
+      );
+    }
+
+    render(<ExtraHarness />);
+    await user.click(screen.getByRole("button", { name: "open" }));
+    await user.click(
+      screen.getByRole("button", { name: "Tune the batch instead" }),
+    );
+
+    await waitFor(() => expect(onResult).toHaveBeenCalledWith("extra"));
+    await waitFor(() =>
+      expect(screen.queryByText("This day already has a base batch")).toBeNull(),
+    );
+  });
+
+  it("does not render a third button when extraLabel is not passed", async () => {
+    const user = userEvent.setup();
+    render(<Harness onResult={() => {}} />);
+    await user.click(screen.getByRole("button", { name: "open" }));
+    await screen.findByRole("button", { name: "Cancel" });
+    expect(screen.queryByTestId("confirm-dialog-extra")).toBeNull();
   });
 });
