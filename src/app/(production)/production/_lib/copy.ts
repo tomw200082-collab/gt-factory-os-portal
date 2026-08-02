@@ -145,15 +145,51 @@ export const pickingDict = {
 
   // ── shared: loading / error ──────────────────────────────────────────────
   loading: { en: "Loading…", ru: "" },
-  error_generic: { en: "Something went wrong. Try again.", ru: "" },
+  // Every error string in this corridor names a next step. "Try again" alone
+  // leaves the operator on the floor with nowhere to go when the retry also
+  // fails — and the retry failing is the case the message exists for.
+  error_generic: { en: "Something went wrong. Try again. If it keeps happening, tell the planner.", ru: "" },
   error_retry: { en: "Try again", ru: "" },
+
+  // ── conflict codes → operator language (tranche 158) ─────────────────────
+  // The backend's own `detail` text is never shown: it carries run ids and
+  // status names. These are what the operator sees instead. Mapping lives in
+  // _lib/errors.ts.
+  err_run_not_found: {
+    en: "This job is not in the system any more. Go back to today.",
+    ru: "",
+  },
+  err_run_not_pickable: {
+    en: "This job is past collecting. Reload the page to see where it is.",
+    ru: "",
+  },
+  err_run_cancelled: {
+    en: "This job was cancelled. Go back to today.",
+    ru: "",
+  },
+  err_recipe_missing: {
+    en: "This job has no recipe in the system. Tell the planner — you cannot fix it here.",
+    ru: "",
+  },
+  err_product_problem: {
+    en: "There is a problem with the product on this job. Tell the planner.",
+    ru: "",
+  },
+  err_material_missing: {
+    en: "A material on this job is not in the system. Tell the planner.",
+    ru: "",
+  },
+  err_already_sent: {
+    en: "This was already sent. Reload the page to see it.",
+    ru: "",
+  },
   error_stale_bom: { en: "The recipe changed. Tap to reload.", ru: "" },
   error_stale_bom_warn: {
     en: "Reloading clears your picks — you'll check them again.",
     ru: "",
   },
   error_break_glass: {
-    en: "The system is busy. Try again in a few minutes.",
+    en: "The system is busy. Wait a few minutes and try again. If it keeps happening, tell the planner.",
     ru: "",
   },
   error_load_runs: {
@@ -213,6 +249,12 @@ export const pickingDict = {
   summary_error: { en: "Could not work out the materials. You can still finish the run.", ru: "" },
   summary_empty: { en: "No materials come off for this run.", ru: "" },
   summary_col_material: { en: "Material", ru: "" },
+  // A component row whose name did not resolve. The raw component_id used to
+  // stand in here — an internal identifier printed as if it were a name.
+  summary_unknown_material: { en: "Material without a name", ru: "" },
+  // The preview has to have settled before the run can be finished: the tick
+  // that lets a material go below zero only exists once these lines render.
+  summary_wait: { en: "Wait for the list", ru: "" },
   summary_col_comes_off: { en: "Comes off", ru: "" },
   summary_col_left: { en: "Left after", ru: "" },
   // Where each number came from. A derived number must never read as a

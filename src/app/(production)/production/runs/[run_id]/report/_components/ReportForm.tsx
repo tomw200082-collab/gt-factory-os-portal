@@ -33,6 +33,7 @@ import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { cn } from "@/lib/cn";
 import { fmtNumStr } from "@/lib/utils/format-quantity";
 import { t } from "../../../../_lib/copy";
+import { conflictCopyKey, isStaleCode } from "../../../../_lib/errors";
 import { isRunTerminal, runDisplayName, runStatusMeta } from "../../../../_lib/runs";
 import type { PickListResponse } from "../../../../_lib/types";
 import {
@@ -146,6 +147,20 @@ export function ReportForm({ runId }: { runId: string }) {
   // step, not something to compute on every keystroke.
   const preview = useConsumptionPreview(runId, output, confirming && outputOk);
   const canPost = explanationsSatisfied(preview.data?.lines, explanations);
+  // The preview STARTS loading at the instant `confirming` flips, so the first
+  // frame of the confirm always has `preview.data === undefined` — and
+  // `explanationsSatisfied(undefined, …)` is `true` by design (a preview that
+  // cannot be reached must never strand the operator). That combination left
+  // the submit enabled underneath a spinner reading "Working out what was
+  // used…", so an ordinary double-tap posted the run having shown neither the
+  // quantity confirmation nor a single consumption line — and with no
+  // decisions, a material the projection reads as empty is clamped to zero and
+  // silently never comes off stock. Both live reports of 2026-07-30 went out
+  // that way. Nothing may fire until the summary has settled.
+  //
+  // A preview that ERRORED counts as settled: ConsumptionSummary says so on
+  // screen and the run stays finishable, which is the older rule and correct.
+  const summaryReady = !confirming || (!preview.isLoading && !preview.isFetching);
 
   const report = useMutation<ReportSuccess, Error>({
     mutationFn: async () => {
@@ -178,21 +193,16 @@ export function ReportForm({ runId }: { runId: string }) {
       if (res.status === 503) throw new Error(t("error_break_glass"));
       if (res.status === 409) {
         const b = (await res.json().catch(() => null)) as
-          | { reason_code?: string; detail?: string }
+          | { reason_code?: string }
           | null;
         const code = b?.reason_code ?? "";
-        if (code.includes("STALE")) throw new Error(STALE);
-        if (code === "RUN_ALREADY_REPORTED")
-          throw new Error(t("report_err_already"));
-        if (code === "RUN_NOT_REPORTABLE")
-          throw new Error(t("report_err_not_reportable"));
-        throw new Error(b?.detail ?? t("error_generic"));
+        if (isStaleCode(code)) throw new Error(STALE);
+        throw new Error(t(conflictCopyKey(code)));
       }
       if (!res.ok) {
-        const b = (await res.json().catch(() => null)) as
-          | { detail?: string; error?: string }
-          | null;
-        throw new Error(b?.detail ?? b?.error ?? t("error_generic"));
+        // Never `b.detail` / `b.error`: those are log strings carrying run ids
+        // and status enums (portal_ux_standard.md §1).
+        throw new Error(t("error_generic"));
       }
       return (await res.json()) as ReportSuccess;
     },
@@ -211,7 +221,9 @@ export function ReportForm({ runId }: { runId: string }) {
     ? t("report_success")
     : report.isPending
       ? t("report_saving")
-      : confirming
+      : confirming && !summaryReady
+        ? t("summary_loading")
+        : confirming
         ? `${t("report_confirm_ask")} ${output} ${data?.uom ?? ""} — ${t("report_confirm_undo")}`
         : query.isLoading
           ? t("loading")
@@ -456,6 +468,10 @@ export function ReportForm({ runId }: { runId: string }) {
             setConfirming(true);
             return;
           }
+          // Guarded here as well as on `disabled`: a second tap can land in
+          // the same frame the confirm rendered, before React has re-run the
+          // disabled prop.
+          if (!summaryReady) return;
           // A far-off collected quantity has to be explained before the run
           // closes. Going below zero does not block — it has a safe default.
           if (!canPost) return;
@@ -748,20 +764,22 @@ export function ReportForm({ runId }: { runId: string }) {
 
           <button
             type="submit"
-            disabled={!outputOk || report.isPending || !canPost}
-            aria-disabled={!outputOk || report.isPending || !canPost}
+            disabled={!outputOk || report.isPending || !canPost || !summaryReady}
+            aria-disabled={!outputOk || report.isPending || !canPost || !summaryReady}
             aria-describedby={!outputOk ? "report-output-hint" : "report-stock-note"}
             title={
               !outputOk
                 ? t("report_need_output")
-                : !canPost
-                  ? t("summary_explain_blocked")
-                  : undefined
+                : !summaryReady
+                  ? t("summary_loading")
+                  : !canPost
+                    ? t("summary_explain_blocked")
+                    : undefined
             }
             data-testid="report-submit"
             className={cn(
               "btn btn-lg w-full gap-2 text-base",
-              outputOk && canPost
+              outputOk && canPost && summaryReady
                 ? "btn-primary"
                 : "cursor-not-allowed border-border bg-bg-subtle text-fg-subtle hover:bg-bg-subtle",
             )}
@@ -770,6 +788,11 @@ export function ReportForm({ runId }: { runId: string }) {
               <>
                 <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
                 {t("report_saving")}
+              </>
+            ) : !summaryReady ? (
+              <>
+                <Loader2 className="h-5 w-5 animate-spin" aria-hidden />
+                {t("summary_wait")}
               </>
             ) : (
               <>

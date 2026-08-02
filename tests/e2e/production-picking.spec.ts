@@ -291,6 +291,124 @@ test.describe("@mocked production picking", () => {
     await expect(page.getByTestId("report-back")).toBeVisible();
   });
 
+  test("tranche 158: a double-tap cannot post the run before the consumption summary loads", async ({
+    page,
+  }) => {
+    await setFakeRole(page, "operator");
+    await page.route("**/api/production-runs/*/pick-list**", (route) =>
+      route.fulfill({ json: { ...PICK_LIST, stage: "SINGLE", status: "IN_PRODUCTION" } }),
+    );
+
+    // The preview only STARTS when the confirm appears, so its loading window
+    // is guaranteed. Hold it open long enough to tap through it.
+    let previewServed = 0;
+    await page.route("**/api/production-runs/*/consumption-preview**", async (route) => {
+      previewServed += 1;
+      await new Promise((r) => setTimeout(r, 2000));
+      await route.fulfill({
+        json: {
+          run_id: "RUN1",
+          output_qty: "200",
+          lines: [
+            {
+              component_id: "C1",
+              component_name: "Sugar",
+              source: "base",
+              item_type: "RM",
+              uom: "kg",
+              picked_qty: "14",
+              required_qty: "14",
+              basis: "PICKED",
+              wanted_qty: "14",
+              on_hand_qty: "50",
+              on_hand_after_qty: "36",
+              capped_qty: "14",
+              would_go_negative: false,
+              variance_ratio: "1",
+              needs_explanation: false,
+            },
+          ],
+        },
+      });
+    });
+
+    let reportPosts = 0;
+    await page.route("**/api/production-runs/*/report", (route) => {
+      reportPosts += 1;
+      return route.fulfill({
+        status: 201,
+        json: {
+          run_id: "RUN1",
+          submission_id: "RSUB1",
+          status: "posted",
+          item_id: "ITEM1",
+          output_qty: "200",
+          scrap_qty: "0",
+          output_uom: "L",
+          run_status: "REPORTED",
+          linked_plan_id: "PLAN1",
+          idempotent_replay: false,
+        },
+      });
+    });
+
+    await page.goto("/production/runs/RUN1/report");
+    const submit = page.getByTestId("report-submit");
+    await expect(submit).toBeVisible();
+
+    // Two taps as fast as the driver can issue them — the gloved-hand
+    // double-tap that used to post the run having shown nothing.
+    await submit.click();
+    await submit.click({ force: true });
+
+    // Still on the form, nothing posted, and the button says why.
+    await expect(page.getByTestId("report-success")).toHaveCount(0);
+    await expect(submit).toHaveAttribute("aria-disabled", "true");
+    expect(reportPosts).toBe(0);
+    expect(previewServed).toBeGreaterThan(0);
+
+    // Once the summary lands the confirm is real: the figure is on screen, the
+    // consumption line is on screen, and only now does a tap post.
+    await expect(page.getByTestId("report-confirm")).toBeVisible({ timeout: 10_000 });
+    await expect(page.getByTestId("report-confirm")).toContainText("200");
+    await expect(page.getByTestId("summary-row-C1")).toBeVisible();
+    await expect(submit).toHaveAttribute("aria-disabled", "false");
+
+    await submit.click();
+    await expect(page.getByTestId("report-success")).toBeVisible();
+    expect(reportPosts).toBe(1);
+  });
+
+  test("tranche 158: a conflict never shows the API's own detail string", async ({ page }) => {
+    await setFakeRole(page, "operator");
+    await page.route("**/api/production-runs/*/pick-list**", (route) =>
+      route.fulfill({ json: PICK_LIST }),
+    );
+    await page.route("**/api/production-runs/*/pick-confirm", (route) =>
+      route.fulfill({
+        status: 409,
+        json: {
+          reason_code: "RUN_NOT_PICKABLE",
+          detail:
+            "run 7d1dc63c-3d4c-449c-a794-8142aa02b870 status=IN_PRODUCTION is not pickable",
+        },
+      }),
+    );
+
+    await page.goto("/production/runs/RUN1");
+    await page.getByTestId("pick-confirm-base-C1").click();
+    await page.getByTestId("pick-confirm-base-C2").click();
+    await page.getByTestId("done-collecting").click();
+    await page.getByTestId("done-confirm-yes").click();
+
+    const banner = page.getByTestId("pick-confirm-error");
+    await expect(banner).toBeVisible();
+    await expect(banner).toContainText("This job is past collecting");
+    // The identifiers and the enum from `detail` never reach the screen.
+    await expect(banner).not.toContainText("7d1dc63c");
+    await expect(banner).not.toContainText("IN_PRODUCTION");
+  });
+
   test("pick-confirm success screen links to the report", async ({ page }) => {
     await setFakeRole(page, "operator");
     await stubToday(page, [todayRow()]);

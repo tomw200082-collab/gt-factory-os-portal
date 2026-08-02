@@ -2595,7 +2595,16 @@ export default function ProductionPlanPage() {
               </span>
             </span>
           </div>
-          {canManagePlan && todaySummary.unreportedTodayPlans.length > 0 ? (
+          {/* Tranche 158 — this list names the jobs planned for today that
+              still have no report, which makes it the operator's list before
+              it is anyone else's. It was gated on `canManagePlan`, so the one
+              person who does the reporting never saw it; presumably because
+              its only action ("Move to tomorrow") really is a planner action.
+              Split by capability instead of hiding the whole block: the list
+              shows to anyone who can report, the planner action stays with the
+              planner, and a Report link appears for whoever can report. */}
+          {(canManagePlan || canReportProduction) &&
+          todaySummary.unreportedTodayPlans.length > 0 ? (
             <div className="mt-2 space-y-1" data-testid="today-strip-unreported">
               {todaySummary.unreportedTodayPlans.map((p) => (
                 <div
@@ -2614,27 +2623,43 @@ export default function ProductionPlanPage() {
                       {fmtQty(p.planned_qty ?? "0", p.uom ?? "")}
                     </span>
                   </span>
-                  <button
-                    type="button"
-                    className="btn btn-xs shrink-0"
-                    onClick={() => handleMoveToTomorrow(p)}
-                    // INTER-003 (Tranche 079) — disable only the in-flight
-                    // plan's row, plus any row when another row is updating
-                    // (with a clear "wait" tooltip). Rows that are NOT the
-                    // pending one stay clickable when nothing is in flight.
-                    disabled={
-                      pendingPlanId === p.plan_id ||
-                      (pendingPlanId !== null && pendingPlanId !== p.plan_id)
-                    }
-                    title={
-                      pendingPlanId !== null && pendingPlanId !== p.plan_id
-                        ? "Another plan is updating — please wait"
-                        : "Move this plan to tomorrow's lane"
-                    }
-                    data-testid="today-strip-move-tomorrow"
-                  >
-                    Move to tomorrow
-                  </button>
+                  <div className="flex shrink-0 items-center gap-1.5">
+                    {canReportProduction ? (
+                      // Same destination the job card's CTA uses, so the two
+                      // routes into reporting cannot drift apart.
+                      <Link
+                        href={`/production?date=${encodeURIComponent(p.plan_date)}&plan=${encodeURIComponent(p.plan_id)}&report=1`}
+                        className="btn btn-xs shrink-0"
+                        title="Report what was actually made for this job"
+                        data-testid="today-strip-report"
+                      >
+                        Report
+                      </Link>
+                    ) : null}
+                    {canManagePlan ? (
+                      <button
+                        type="button"
+                        className="btn btn-xs shrink-0"
+                        onClick={() => handleMoveToTomorrow(p)}
+                        // INTER-003 (Tranche 079) — disable only the in-flight
+                        // plan's row, plus any row when another row is updating
+                        // (with a clear "wait" tooltip). Rows that are NOT the
+                        // pending one stay clickable when nothing is in flight.
+                        disabled={
+                          pendingPlanId === p.plan_id ||
+                          (pendingPlanId !== null && pendingPlanId !== p.plan_id)
+                        }
+                        title={
+                          pendingPlanId !== null && pendingPlanId !== p.plan_id
+                            ? "Another plan is updating — please wait"
+                            : "Move this plan to tomorrow's lane"
+                        }
+                        data-testid="today-strip-move-tomorrow"
+                      >
+                        Move to tomorrow
+                      </button>
+                    ) : null}
+                  </div>
                 </div>
               ))}
             </div>

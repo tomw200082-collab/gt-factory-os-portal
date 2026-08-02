@@ -14,6 +14,7 @@ import { useMutation, useQueryClient } from "@tanstack/react-query";
 import { SectionCard } from "@/components/workflow/SectionCard";
 import { cn } from "@/lib/cn";
 import { t } from "../../../_lib/copy";
+import { conflictCopyKey } from "../../../_lib/errors";
 import type { MaterialDeltaBody, PickListLine } from "../../../_lib/types";
 
 function newKey(): string {
@@ -78,10 +79,17 @@ export function AddMaterialControl({
       );
       if (res.status === 503) throw new Error(t("error_break_glass"));
       if (!res.ok) {
+        // `detail` / `error` are log strings carrying run ids and status
+        // enums — never rendered (portal_ux_standard.md §1). A 409 resolves
+        // through the shared conflict map; anything else is generic.
         const b = (await res.json().catch(() => null)) as
-          | { detail?: string; error?: string }
+          | { reason_code?: string }
           | null;
-        throw new Error(b?.detail ?? b?.error ?? t("error_generic"));
+        throw new Error(
+          res.status === 409
+            ? t(conflictCopyKey(b?.reason_code))
+            : t("error_generic"),
+        );
       }
     },
     onSuccess: () => {

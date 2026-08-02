@@ -88,7 +88,10 @@ function Row({
     <li className="px-3 py-2.5" data-testid={`summary-row-${line.component_id}`}>
       <div className="flex items-baseline justify-between gap-3">
         <span className="min-w-0 flex-1 truncate text-sm font-medium text-fg">
-          {line.component_name ?? line.component_id}
+          {/* Never the raw component_id — it is an internal identifier, and
+              printing it here presented `PKG-CAP-PLASTIC-28` to the operator
+              as if it were the material's name (portal_ux_standard.md §1). */}
+          {line.component_name ?? t("summary_unknown_material")}
         </span>
         <span className="shrink-0 font-mono text-sm font-semibold tabular-nums text-fg-strong">
           −{fmtNumStr(comesOff)}{" "}
