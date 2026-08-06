@@ -158,7 +158,12 @@ export function ReportForm({ runId }: { runId: string }) {
           confirmedNegatives,
           explanations,
         ),
-        outputUom: data.uom,
+        // No output_uom: `data.uom` is the *plan's* unit (often the generic
+        // "UNIT"), not the item's stock unit. The backend books FG in
+        // items.sales_uom, and rejects anything else with UOM_MISMATCH — so
+        // echoing the plan unit back blocked the report on every item whose
+        // sales_uom differs (e.g. REVIVE 1L, sold in BOTTLE). Omit it and let
+        // the backend use the item's own unit.
         qcBrix,
         qcPh,
         qcSampleTaken: qcSample,
