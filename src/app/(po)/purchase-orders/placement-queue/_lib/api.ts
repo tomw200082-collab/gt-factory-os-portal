@@ -155,7 +155,32 @@ const REASON_TEXT: Record<string, string> = {
     "לא נשאר מה לבצע בהזמנה הזו — זהו ביטול. השתמשי ב״בטל עם סיבה״.",
   SPLIT_REASON_REQUIRED: "יש לבחור סיבה לביצוע החלקי.",
   INVALID_QTY: "אחת הכמויות שהוזנו אינה תקינה.",
-  SCHEDULE_DATE_IN_PAST: "לא ניתן לתזמן לתאריך שכבר עבר.",
+  // Tranche 161 — the schedule and place endpoints emit these too, and every
+  // one of them used to fall through to the caller's generic sentence. The
+  // key was `SCHEDULE_DATE_IN_PAST`, which the backend never sends; the real
+  // code is INVALID_SCHEDULE_DATE_PAST, so even that one never matched.
+  INVALID_SCHEDULE_DATE_PAST: "לא ניתן לתזמן לתאריך שכבר עבר.",
+  INVALID_SCHEDULE_DATE_BLOCKED:
+    "התאריך שנבחר אינו יום עבודה של רכש. בחרו יום עבודה אחר.",
+  SCHEDULE_DATE_REQUIRED: "יש לבחור תאריך ביצוע.",
+  SAFE_DATE_OVERRIDE_NOTE_REQUIRED:
+    "ביצוע אחרי המועד האחרון מחייב הסבר קצר. רשמו למה, ושמרו שוב.",
+  SAFE_DATE_OVERRIDE_REQUIRED:
+    "התאריך שנבחר מאוחר מהמועד האחרון לפי התכנון. יש לבחור סיבה ולרשום הסבר קצר.",
+  INVALID_SCHEDULE_SOURCE: "מקור התזמון אינו תקין. רועננו הנתונים ונסו שוב.",
+  IDEMPOTENCY_KEY_REUSED:
+    "הפעולה כבר נשלחה. רועננו הנתונים ובדקו אם היא נקלטה לפני שתנסו שוב.",
+  SCHEDULE_PO_FAILED: "תזמון ההזמנה נכשל. רועננו הנתונים ונסו שוב.",
+  // Place-order sentinels.
+  PO_LINE_NOT_OPEN:
+    "אחת השורות כבר אינה פתוחה — ייתכן שבוטלה או סופקה בינתיים. רועננו הנתונים.",
+  PO_LINE_NOT_FOUND: "אחת השורות לא נמצאה. רועננו הנתונים.",
+  PO_LINE_FOREIGN: "אחת השורות אינה שייכת להזמנה הזו. רועננו הנתונים.",
+  INVALID_PO_LINE_ID: "אחת השורות אינה תקינה. רועננו הנתונים.",
+  INVALID_PRICE: "אחד המחירים שהוזנו אינו תקין.",
+  INVALID_EXPECTED_DATE: "תאריך האספקה שהוזן אינו תקין.",
+  EXPECTED_RECEIVE_DATE_REQUIRED: "יש להזין תאריך אספקה מאושר מהספק.",
+  PLACE_ORDER_FAILED: "ביצוע ההזמנה נכשל. רועננו הנתונים ונסו שוב.",
 };
 
 /** The reason code the backend sent, if we recognise one. */

@@ -408,6 +408,16 @@ export function PlacementRow({
     return Number.isFinite(partial) ? partial : NaN;
   }
   /**
+   * Tranche 161: a line marked `לא יסופק` is cancelled by
+   * `fn_place_purchase_order`, not placed — so it carries no price. Pricing it
+   * in the same call the backend cancels it raises PO_LINE_NOT_OPEN, which is
+   * what made partial placement impossible. Gate and payload both ask this,
+   * never "every line".
+   */
+  function isPlacedLine(l: QueuePoLine): boolean {
+    return stateFor(l) !== "none";
+  }
+  /**
    * Tranche 156 (Tom, 2026-07-30): "there must be an option to cancel, and to
    * enter an order of more than what was set — up to 15% more than what the
    * procurement page set."
@@ -525,7 +535,7 @@ export function PlacementRow({
     lines.length > 0 &&
     !!termLabel &&
     !!confirmedDate &&
-    lines.every((l) => Number(priceFor(l)) > 0) &&
+    lines.filter(isPlacedLine).every((l) => Number(priceFor(l)) > 0) &&
     // Tranche 150: a split needs a reason and a sane partial quantity, and
     // "nothing placed at all" is a discard rather than a placement.
     !nothingPlaced &&
@@ -590,7 +600,7 @@ export function PlacementRow({
       return;
     }
     const line_prices: { po_line_id: string; unit_price_net: number }[] = [];
-    for (const l of lines) {
+    for (const l of lines.filter(isPlacedLine)) {
       const p = Number(priceFor(l));
       if (!Number.isFinite(p) || p <= 0) {
         setErrorMsg(`יש להזין מחיר חיובי לכל השורות (חסר: ${lineName(l)}).`);
