@@ -545,10 +545,39 @@ describe("PlacementRow", () => {
     const body = JSON.parse(String((placeCalls[0][1] as RequestInit).body));
     expect(body.unplaced_lines).toEqual([{ po_line_id: "l2", unplaced_qty: 8 }]);
     expect(body.split_reason).toBe("אין במלאי אצל הספק");
-    // The placed side keeps its own line untouched.
-    expect(body.line_prices).toEqual(
-      expect.arrayContaining([{ po_line_id: "l1", unit_price_net: 10 }]),
+    // Tranche 161: exact, not arrayContaining. The unplaced line must be
+    // ABSENT — the backend cancels it in this same call and then raises
+    // PO_LINE_NOT_OPEN if it is also priced. arrayContaining passed either way,
+    // which is why partial placement shipped broken.
+    expect(body.line_prices).toEqual([{ po_line_id: "l1", unit_price_net: 10 }]);
+  });
+
+  it("places a split even when the unsupplied line has no price typed (tranche 161)", async () => {
+    const fetchMock = await openWithLines(LINES_TWO);
+    // Only the supplied line gets a price. l2 is not being placed, so the gate
+    // must not demand one — it used to, and the button stayed dead.
+    await userEvent.type(screen.getByTestId("placement-price-l1"), "10");
+    await userEvent.selectOptions(screen.getByTestId("placement-terms-po1"), "EOM_30");
+    await userEvent.click(screen.getByTestId("placement-supply-none-l2"));
+    await userEvent.selectOptions(
+      screen.getByTestId("placement-split-reason"),
+      "אין במלאי אצל הספק",
     );
+
+    const submit = screen.getByTestId("placement-submit-po1");
+    expect((submit as HTMLButtonElement).disabled).toBe(false);
+
+    await userEvent.click(submit);
+    const dialog = await screen.findByRole("alertdialog");
+    await userEvent.click(within(dialog).getByRole("button", { name: "בצע חלקית" }));
+
+    const placeCalls = fetchMock.mock.calls.filter((c) =>
+      String(c[0]).includes("/place"),
+    );
+    await waitFor(() => expect(placeCalls.length).toBe(1));
+    const body = JSON.parse(String((placeCalls[0][1] as RequestInit).body));
+    expect(body.line_prices).toEqual([{ po_line_id: "l1", unit_price_net: 10 }]);
+    expect(body.unplaced_lines).toEqual([{ po_line_id: "l2", unplaced_qty: 8 }]);
   });
 
   // -------------------------------------------------------------------------
