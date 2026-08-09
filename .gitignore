@@ -20,8 +20,12 @@ playwright-report/
 
 .vercel
 
-# Local design-intelligence tooling (ui-ux-pro-max skill installed via
-# `uipro init --ai claude` for design system queries). Skill artefacts
-# are local tooling, not portal source — don't ship them.
-.claude/skills/
+# Local design-intelligence tooling: `uipro init --ai claude` generates a
+# design-system/ query cache. That stays local — it is regenerated output,
+# not portal source.
+#
+# `.claude/skills/` used to be ignored here on the same grounds. It no longer
+# is: the skills under it are checked in on purpose (see
+# .claude/skills/VENDORED.md) and were already tracked despite the rule, so
+# the rule only meant new skills went missing from git in silence.
 design-system/
