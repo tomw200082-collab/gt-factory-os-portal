@@ -69,6 +69,43 @@ export function autoForwardRunId(
   return reportable.length === 1 ? reportable[0].run_id : null;
 }
 
+export interface TankFillProgress {
+  /** Filling runs of this tank's plan already reported. */
+  done: number;
+  /** Filling runs of this tank's plan that are not cancelled. */
+  total: number;
+  allDone: boolean;
+}
+
+/** How far a TANK run's plan has actually got — read off its sibling runs.
+ *
+ *  A tank is never reported: the backend answers RUN_NOT_REPORTABLE for it, and
+ *  the first PACK run of the plan that IS reported sweeps the tank's picks into
+ *  stock (`postRunConsumption`). That sweep never touches the tank's own status,
+ *  so a TANK row sits on PLANNED / PICKING / IN_PRODUCTION forever — including
+ *  long after every bottle it filled is booked in. There is no status it can
+ *  reach that means "accounted for", so the screen has to derive one.
+ *
+ *  Returns null when there is nothing truthful to say — not a tank, no plan, or
+ *  no filling runs in `rows` — and every caller falls back to the old copy
+ *  rather than guessing. Pure. */
+export function tankFillProgress(
+  rows: readonly ProductionRunTodayRow[],
+  run: { run_id: string; plan_id: string | null; stage: ProductionStage },
+): TankFillProgress | null {
+  if (run.stage !== "TANK" || !run.plan_id) return null;
+  const fills = rows.filter(
+    (r) =>
+      r.plan_id === run.plan_id &&
+      r.run_id !== run.run_id &&
+      r.stage !== "TANK" &&
+      r.status !== "CANCELLED",
+  );
+  if (fills.length === 0) return null;
+  const done = fills.filter((r) => r.status === "REPORTED").length;
+  return { done, total: fills.length, allDone: done === fills.length };
+}
+
 /** Copy key for the stage's short kind label (Make tank / Fill / Make & fill).
  *  An unexpected stage falls back to the "both" kind so a bad value never
  *  produces `t(undefined)` → a thrown render (A11Y-006). The `never` assertion

@@ -16,6 +16,7 @@ import { useRouter, useSearchParams } from "next/navigation";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
 import { t } from "../_lib/copy";
 import { autoForwardRunId, planRuns, sortRuns } from "../_lib/runs";
+import { fetchTodayRuns, todayRunsQueryKey, todayYmd } from "../_lib/today";
 import type { ProductionRunsTodayResponse } from "../_lib/types";
 import { RunCard } from "./RunCard";
 import { UnplannedRunDialog } from "./UnplannedRunDialog";
@@ -23,25 +24,6 @@ import { UnplannedRunDialog } from "./UnplannedRunDialog";
 /** Earliest day worth browsing — the factory has no production data before
  *  the system was in use. */
 const SYSTEM_START_DATE = "2026-04-01";
-
-/** Local calendar date as YYYY-MM-DD (the backend keys "today" on the operator
- *  timezone, not UTC). */
-function todayYmd(): string {
-  const d = new Date();
-  const pad = (n: number) => String(n).padStart(2, "0");
-  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
-}
-
-async function fetchTodayRuns(date: string): Promise<ProductionRunsTodayResponse> {
-  const res = await fetch(
-    `/api/production-runs/today?date=${encodeURIComponent(date)}`,
-    { headers: { Accept: "application/json" } },
-  );
-  if (!res.ok) {
-    throw new Error(t("error_load_runs"));
-  }
-  return (await res.json()) as ProductionRunsTodayResponse;
-}
 
 export function RunList() {
   const router = useRouter();
@@ -59,7 +41,7 @@ export function RunList() {
   const [dialogOpen, setDialogOpen] = useState(false);
 
   const query = useQuery<ProductionRunsTodayResponse>({
-    queryKey: ["production-runs", "today", date],
+    queryKey: todayRunsQueryKey(date),
     queryFn: () => fetchTodayRuns(date),
     staleTime: 15_000,
   });
@@ -256,7 +238,14 @@ export function RunList() {
         <ul className="space-y-3" data-testid="run-list">
           {rows.map((run, index) => (
             <li key={run.run_id}>
-              <RunCard run={run} index={index} date={isBackDated ? date : undefined} />
+              {/* `allRows`, not `rows`: a plan-scoped list still has to see the
+                  whole day to tell a tank whether its filling jobs are in. */}
+              <RunCard
+                run={run}
+                index={index}
+                date={isBackDated ? date : undefined}
+                siblings={allRows}
+              />
             </li>
           ))}
         </ul>
