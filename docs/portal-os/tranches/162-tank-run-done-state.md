@@ -64,6 +64,7 @@ manifest:
 - src/app/(production)/production/_components/RunCard.tsx
 - src/app/(production)/production/_components/RunList.tsx
 - src/app/(production)/production/runs/[run_id]/_components/PickList.tsx
+- tests/e2e/production-picking.spec.ts
 - docs/portal-os/tranches/162-tank-run-done-state.md
 - docs/portal-os/tranches/_active.txt
 - docs/portal-os/registry.md

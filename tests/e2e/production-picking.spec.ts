@@ -337,12 +337,49 @@ test.describe("@mocked production picking", () => {
       route.fulfill({ json: { ...PICK_LIST, status: "IN_PRODUCTION" } }),
     );
 
+    // Tranche 162: the tank note moved out of the in-production banner into a
+    // banner the tank owns at every status, and it reads the day's runs. None
+    // of this tank's filling runs are in yet, so it still says where to go.
+    await stubToday(page, [
+      todayRow({ run_id: "RUN1", stage: "TANK", status: "IN_PRODUCTION" }),
+      todayRow({ run_id: "RUN2", stage: "PACK", item_name: "Fill A", order_index: 1 }),
+    ]);
+
     await page.goto("/production/runs/RUN1");
-    await expect(page.getByTestId("pick-in-production-banner")).toBeVisible();
+    const banner = page.getByTestId("pick-tank-banner");
+    await expect(banner).toBeVisible();
     await expect(page.getByTestId("pick-in-production-report")).toHaveCount(0);
-    await expect(page.getByTestId("pick-in-production-banner")).toContainText(
-      "Report the filling jobs",
+    await expect(banner).toContainText("Report the filling jobs");
+    await expect(banner).toContainText("0 / 1");
+  });
+
+  test("tranche 162: once the filling jobs are reported, the tank says it is finished", async ({ page }) => {
+    await setFakeRole(page, "operator");
+    // A tank's own status never moves — the backend has no terminal state for
+    // it — so IN_PRODUCTION here is exactly what Tom saw on a finished batch.
+    await page.route("**/api/production-runs/*/pick-list**", (route) =>
+      route.fulfill({ json: { ...PICK_LIST, status: "IN_PRODUCTION" } }),
     );
+    await stubToday(page, [
+      todayRow({ run_id: "RUN1", stage: "TANK", status: "IN_PRODUCTION" }),
+      todayRow({ run_id: "RUN2", stage: "PACK", item_name: "Fill A", status: "REPORTED", order_index: 1 }),
+      todayRow({ run_id: "RUN3", stage: "PACK", item_name: "Fill B", status: "REPORTED", order_index: 2 }),
+    ]);
+
+    await page.goto("/production/runs/RUN1");
+    const banner = page.getByTestId("pick-tank-banner");
+    await expect(banner).toContainText("All filling jobs are reported");
+    await expect(banner).not.toContainText("Report the filling jobs");
+    // …and the tank can now reach the runs it names.
+    await expect(page.getByTestId("pick-tank-see-fills")).toHaveAttribute(
+      "href",
+      /\/production\?plan=PLAN1/,
+    );
+
+    // The card carries the same truth, instead of "In production" for good.
+    await page.goto("/production");
+    await expect(page.getByTestId("run-card-RUN1")).toContainText("Done");
+    await expect(page.getByTestId("run-fill-progress-RUN1")).toHaveCount(0);
   });
 
   test("IN_PRODUCTION run: pick rows are read-only (tranche 145 INTER-001/FLOW-001)", async ({ page }) => {
