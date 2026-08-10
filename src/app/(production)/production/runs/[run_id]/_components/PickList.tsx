@@ -14,6 +14,7 @@
 
 import { useMemo, useState } from "react";
 import Link from "next/link";
+import { useSearchParams } from "next/navigation";
 import {
   ArrowRight,
   CheckCircle2,
@@ -26,6 +27,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { Badge } from "@/components/ui/Badge";
 import { WorkflowHeader } from "@/components/workflow/WorkflowHeader";
+import { cn } from "@/lib/cn";
 import { fmtNumStr } from "@/lib/utils/format-quantity";
 import { t } from "../../../_lib/copy";
 import {
@@ -36,8 +38,17 @@ import {
   runStatusMeta,
   stageHeadingKey,
   stageKindKey,
+  tankFillProgress,
 } from "../../../_lib/runs";
-import type { PickListResponse } from "../../../_lib/types";
+import {
+  fetchTodayRuns,
+  todayRunsQueryKey,
+  todayYmd,
+} from "../../../_lib/today";
+import type {
+  PickListResponse,
+  ProductionRunsTodayResponse,
+} from "../../../_lib/types";
 import {
   buildConfirmBody,
   confirmResolution,
@@ -76,6 +87,11 @@ const STALE = "__STALE__";
 
 export function PickList({ runId }: { runId: string }) {
   const qc = useQueryClient();
+  const params = useSearchParams();
+  const today = useMemo(() => todayYmd(), []);
+  // Carried by the run card when the operator is working an earlier day, so a
+  // back-dated tank finds the filling runs it was brewed for.
+  const date = params.get("date") || today;
   const [resolutions, setResolutions] = useState<ResolutionMap>({});
   const [editingLine, setEditingLine] = useState<PickListLine | null>(null);
   const [done, setDone] = useState(false);
@@ -87,6 +103,23 @@ export function PickList({ runId }: { runId: string }) {
   });
 
   const data = query.data ?? null;
+
+  // A tank's own status never says "done" — only its plan's filling runs can.
+  // Same key as /production, so arriving from the list is a cache hit; only a
+  // TANK screen asks for it at all.
+  const dayRuns = useQuery<ProductionRunsTodayResponse>({
+    queryKey: todayRunsQueryKey(date),
+    queryFn: () => fetchTodayRuns(date),
+    staleTime: 15_000,
+    enabled: data?.stage === "TANK",
+  });
+  const fill = data
+    ? tankFillProgress(dayRuns.data?.rows ?? [], {
+        run_id: runId,
+        plan_id: data.plan_id,
+        stage: data.stage,
+      })
+    : null;
   const lines = useMemo(() => data?.lines ?? [], [data]);
   const grouped = useMemo(() => groupPickLines(lines), [lines]);
   const resolved = resolvedCount(lines, resolutions);
@@ -211,6 +244,43 @@ export function PickList({ runId }: { runId: string }) {
   const reportable = isRunReportable(data);
   const cancelled = data.status === "CANCELLED";
   const name = runDisplayName(data);
+  const isTank = data.stage === "TANK";
+
+  // What the tank says now: finished once its plan's filling runs are reported,
+  // a count while they are not, and — when the day's runs did not load — the
+  // old line. Never a guess: `fill` is null unless real siblings were read.
+  const tankText = fill?.allDone ? (
+    t("pick_tank_all_reported")
+  ) : fill ? (
+    <>
+      <span className="font-mono font-semibold tabular-nums">
+        {fill.done} / {fill.total}
+      </span>{" "}
+      {t("pick_tank_fill_progress")}. {t("pick_tank_no_report")}
+    </>
+  ) : (
+    t("pick_tank_no_report")
+  );
+  // The plan scope the run list already supports — the tank stops being a dead
+  // end that names the filling jobs without being able to reach them.
+  const tankFillsHref = data.plan_id
+    ? `/production?${date !== today ? `date=${encodeURIComponent(date)}&` : ""}plan=${encodeURIComponent(data.plan_id)}`
+    : null;
+  const tankNote = (
+    <div className="flex flex-wrap items-center justify-between gap-3">
+      <span>{tankText}</span>
+      {tankFillsHref ? (
+        <Link
+          href={tankFillsHref}
+          className="btn btn-sm shrink-0 gap-1.5"
+          data-testid="pick-tank-see-fills"
+        >
+          {t("pick_tank_see_fills")}
+          <ArrowRight className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+        </Link>
+      ) : null}
+    </div>
+  );
 
   // ── success ──────────────────────────────────────────────────────────────
   if (done) {
@@ -242,9 +312,9 @@ export function PickList({ runId }: { runId: string }) {
                 <ArrowRight className="h-4 w-4" strokeWidth={2.5} aria-hidden />
               </Link>
             ) : (
-              <p className="max-w-xs text-sm text-fg-muted" data-testid="pick-done-tank-note">
-                {t("pick_tank_no_report")}
-              </p>
+              <div className="max-w-xs text-sm text-fg-muted" data-testid="pick-done-tank-note">
+                {tankNote}
+              </div>
             )}
             <Link
               href="/production"
@@ -346,6 +416,23 @@ export function PickList({ runId }: { runId: string }) {
             ? t("pick_terminal_cancelled")
             : `${t(status.labelKey)} · ${t("pick_terminal_done")}`}
         </div>
+      ) : isTank ? (
+        /* A tank is never finished by anything on this screen — its plan's
+           filling runs finish it, and the first of them to be reported is what
+           takes the tank's materials off stock. Show which of them are in,
+           whatever this run's own status still says. */
+        <div
+          className={cn(
+            "mb-4 rounded-md border px-4 py-3 text-sm",
+            fill?.allDone
+              ? "border-success/40 bg-success-softer text-success-fg"
+              : "border-warning/40 bg-warning-softer text-warning-fg",
+          )}
+          role="status"
+          data-testid="pick-tank-banner"
+        >
+          {tankNote}
+        </div>
       ) : committed ? (
         /* Re-entry after collecting is committed and production has started —
            read-only; the picks are already in the ledger. */
@@ -354,19 +441,15 @@ export function PickList({ runId }: { runId: string }) {
           role="status"
           data-testid="pick-in-production-banner"
         >
-          <span>
-            {reportable ? t("pick_in_production_banner") : t("pick_tank_no_report")}
-          </span>
-          {reportable ? (
-            <Link
-              href={`/production/runs/${encodeURIComponent(runId)}/report`}
-              className="btn btn-primary btn-sm gap-1.5 shrink-0"
-              data-testid="pick-in-production-report"
-            >
-              {t("report_cta")}
-              <ArrowRight className="h-4 w-4" strokeWidth={2.5} aria-hidden />
-            </Link>
-          ) : null}
+          <span>{t("pick_in_production_banner")}</span>
+          <Link
+            href={`/production/runs/${encodeURIComponent(runId)}/report`}
+            className="btn btn-primary btn-sm gap-1.5 shrink-0"
+            data-testid="pick-in-production-report"
+          >
+            {t("report_cta")}
+            <ArrowRight className="h-4 w-4" strokeWidth={2.5} aria-hidden />
+          </Link>
         </div>
       ) : null}
 

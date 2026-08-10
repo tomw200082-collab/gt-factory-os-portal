@@ -126,6 +126,16 @@ export const pickingDict = {
     en: "This tank makes the liquid. Report the filling jobs for it.",
     ru: "",
   },
+  // A tank has no status of its own that ever reads "done" — it is finished
+  // when its plan's filling jobs are reported, so say that instead of leaving
+  // it on "In production" for good. Numbers first: "1 / 3 filling jobs
+  // reported."
+  pick_tank_fill_progress: { en: "filling jobs reported", ru: "" },
+  pick_tank_all_reported: {
+    en: "All filling jobs are reported. This tank is finished — its materials came off stock.",
+    ru: "",
+  },
+  pick_tank_see_fills: { en: "See the filling jobs", ru: "" },
   pick_done_back_to_runs: { en: "Back to today", ru: "" },
 
   // ── active run — corrections (Add / Return) ──────────────────────────────

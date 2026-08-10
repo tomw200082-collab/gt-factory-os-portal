@@ -30,6 +30,7 @@ import {
   runStatusMeta,
   stageKindKey,
   stepNumber,
+  tankFillProgress,
 } from "../_lib/runs";
 import type { ProductionRunTodayRow } from "../_lib/types";
 
@@ -67,6 +68,7 @@ export function RunCard({
   run,
   index,
   date,
+  siblings,
 }: {
   run: ProductionRunTodayRow;
   index: number;
@@ -74,11 +76,20 @@ export function RunCard({
    *  this day's list rather than to today — reporting an earlier day usually
    *  means reporting several runs of it. */
   date?: string;
+  /** The rest of the day's runs. Only a TANK card reads them: a tank never
+   *  reaches a status that says "done", so its real state is whether its plan's
+   *  filling runs are reported. */
+  siblings?: readonly ProductionRunTodayRow[];
 }) {
-  const status = runStatusMeta(run.status);
+  const fill = tankFillProgress(siblings ?? [], run);
+  // A tank whose filling jobs are all reported IS finished — its materials went
+  // off stock with the first of them — even though its own row still says
+  // otherwise. Reading `run.status` alone is what left a done base batch
+  // sitting on "In production" for good.
+  const status = runStatusMeta(fill?.allDone ? "REPORTED" : run.status);
   const terminal = isRunTerminal(run.status);
   const cancelled = run.status === "CANCELLED";
-  const done = run.status === "REPORTED";
+  const done = run.status === "REPORTED" || fill?.allDone === true;
   const name = runDisplayName(run);
 
   // Reporting never depends on having collected first — back-dated reporting
@@ -97,7 +108,9 @@ export function RunCard({
       )}
     >
     <Link
-      href={`/production/runs/${encodeURIComponent(run.run_id)}`}
+      // The day travels with the link: the picking screen reads it to find a
+      // tank's sibling filling runs on a back-dated day.
+      href={`/production/runs/${encodeURIComponent(run.run_id)}${date ? `?date=${encodeURIComponent(date)}` : ""}`}
       data-testid={`run-card-${run.run_id}`}
       data-status={run.status}
       aria-label={`${t("run_step_prefix")} ${stepNumber(index)} · ${name} · ${t(status.labelKey)}`}
@@ -153,6 +166,19 @@ export function RunCard({
               {fmtNumStr(run.target_qty)} {run.uom}
             </span>
           </div>
+          {/* A tank in progress: how many of its filling jobs are in. Numbers
+              first, same shape as the picking progress ("3 / 8 checked"). */}
+          {fill && !fill.allDone ? (
+            <div
+              className="mt-1 text-sm text-fg-muted"
+              data-testid={`run-fill-progress-${run.run_id}`}
+            >
+              <span className="font-mono font-semibold tabular-nums text-fg">
+                {fill.done} / {fill.total}
+              </span>{" "}
+              {t("pick_tank_fill_progress")}
+            </div>
+          ) : null}
           {/* Status inline on mobile — the right rail is too narrow at 390px,
               so the chip rides under the qty line there (VISUAL-141-01). */}
           <div className="mt-2 sm:hidden">

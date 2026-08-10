@@ -12,6 +12,7 @@ import {
   stageHeadingKey,
   stageKindKey,
   stepNumber,
+  tankFillProgress,
 } from "./runs";
 import type { ProductionRunTodayRow } from "./types";
 
@@ -209,5 +210,57 @@ describe("isRunReportable — a TANK run has no product of its own", () => {
       run({ run_id: "pack", stage: "PACK" }),
     ];
     expect(autoForwardRunId(rows)).toBe("pack");
+  });
+});
+
+describe("tankFillProgress — a tank's real state comes from its filling runs", () => {
+  const tank = run({ run_id: "tank", stage: "TANK", item_id: null, item_name: null });
+
+  it("is null for a non-tank run — a PACK run speaks for itself", () => {
+    const pack = run({ run_id: "fillA", stage: "PACK" });
+    expect(tankFillProgress([tank, pack], pack)).toBeNull();
+  });
+
+  it("is null for a tank with no plan — nothing to count against", () => {
+    const orphan = run({ run_id: "tank", stage: "TANK", plan_id: null });
+    expect(tankFillProgress([orphan], orphan)).toBeNull();
+  });
+
+  it("is null when the day's runs hold no filling run for the plan", () => {
+    expect(tankFillProgress([tank], tank)).toBeNull();
+  });
+
+  it("counts only this plan's filling runs, never the tank itself", () => {
+    const rows = [
+      tank,
+      run({ run_id: "fillA", stage: "PACK", status: "REPORTED" }),
+      run({ run_id: "fillB", stage: "PACK", status: "PLANNED" }),
+      run({ run_id: "otherTank", stage: "TANK", plan_id: "P1" }),
+      run({ run_id: "otherPlan", stage: "PACK", plan_id: "P2", status: "PLANNED" }),
+    ];
+    expect(tankFillProgress(rows, tank)).toEqual({ done: 1, total: 2, allDone: false });
+  });
+
+  it("ignores a cancelled filling run — it is never coming", () => {
+    const rows = [
+      tank,
+      run({ run_id: "fillA", stage: "PACK", status: "REPORTED" }),
+      run({ run_id: "fillB", stage: "PACK", status: "CANCELLED" }),
+    ];
+    expect(tankFillProgress(rows, tank)).toEqual({ done: 1, total: 1, allDone: true });
+  });
+
+  it("reports allDone once every filling run is in — the tank is finished even though its own status never says so", () => {
+    const rows = [
+      run({ run_id: "tank", stage: "TANK", status: "IN_PRODUCTION" }),
+      run({ run_id: "fillA", stage: "PACK", status: "REPORTED" }),
+      run({ run_id: "fillB", stage: "PACK", status: "REPORTED" }),
+    ];
+    expect(tankFillProgress(rows, rows[0])).toEqual({ done: 2, total: 2, allDone: true });
+  });
+
+  it("counts a SINGLE run of the plan as a filling run", () => {
+    const rows = [tank, run({ run_id: "both", stage: "SINGLE", status: "REPORTED" })];
+    expect(tankFillProgress(rows, tank)).toEqual({ done: 1, total: 1, allDone: true });
   });
 });
