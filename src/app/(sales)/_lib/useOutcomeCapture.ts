@@ -10,7 +10,7 @@
 // The armed intent survives in sessionStorage because leaving for the dialler
 // can tear down the page on mobile Safari; it must still be waiting on return.
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import type { OutreachChannel } from "./types";
 
 const STORAGE_KEY = "gt.sales.outreach";
@@ -76,18 +76,26 @@ export interface OutcomeCapture {
 
 export function useOutcomeCapture(): OutcomeCapture {
   const [pending, setPending] = useState<ArmedOutreach | null>(null);
+  // Set when the sheet is closed without an answer. The intent is still owed,
+  // but it must not spring straight back: the browser fires a window focus for
+  // an ordinary click, and re-raising the sheet on that would make dismissal
+  // feel broken. It returns after a real trip away from the app.
+  const dismissedRef = useRef(false);
 
   const arm = useCallback((leadId: string, channel: OutreachChannel) => {
     writeArmed({ leadId, channel, at: Date.now() });
+    dismissedRef.current = false;
     setPending(null);
   }, []);
 
   const clear = useCallback(() => {
     writeArmed(null);
+    dismissedRef.current = false;
     setPending(null);
   }, []);
 
   const dismiss = useCallback(() => {
+    dismissedRef.current = true;
     setPending(null);
   }, []);
 
@@ -95,7 +103,12 @@ export function useOutcomeCapture(): OutcomeCapture {
     if (typeof window === "undefined") return;
 
     const check = () => {
-      if (document.visibilityState === "hidden") return;
+      if (document.visibilityState === "hidden") {
+        // Leaving the app is what re-qualifies a dismissed intent.
+        dismissedRef.current = false;
+        return;
+      }
+      if (dismissedRef.current) return;
       const armed = readArmed();
       if (!armed) return;
       if (Date.now() - armed.at < returnDelayMs()) return;

@@ -13,26 +13,14 @@ import {
   useSetStatus,
   useSettings,
 } from "../../_lib/api";
-import { phoneSearchKey } from "../../_lib/format";
+import { matchesQuery } from "../../_lib/format";
 import { STATUS_LABELS, UI } from "../../_lib/labels";
-import type { LeadStatus, SalesLeadRow } from "../../_lib/types";
+import type { LeadStatus } from "../../_lib/types";
 import { ListEmpty, QueueError, QueueLoading } from "../../_components/EmptyStates";
 import { LeadsTable } from "../../_components/LeadsTable";
 import { LeadDrawer } from "../../_components/LeadDrawer";
 
 const TABS: LeadStatus[] = ["new", "working", "won", "lost"];
-
-/** Matches a lead against a typed query — name, business, or phone. */
-export function matchesQuery(row: SalesLeadRow, query: string): boolean {
-  const q = query.trim();
-  if (!q) return true;
-
-  const digits = phoneSearchKey(q);
-  if (digits.length >= 3 && phoneSearchKey(row.phone_e164).includes(digits)) return true;
-
-  const haystack = [row.org_name, row.contact_name, row.email].filter(Boolean).join(" ").toLowerCase();
-  return haystack.includes(q.toLowerCase());
-}
 
 function LeadsScreen() {
   const params = useSearchParams();

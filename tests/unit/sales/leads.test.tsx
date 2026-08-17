@@ -3,7 +3,7 @@ import { cleanup, fireEvent, render, screen, within } from "@testing-library/rea
 import { LeadsTable } from "@/app/(sales)/_components/LeadsTable";
 import { LeadDrawer } from "@/app/(sales)/_components/LeadDrawer";
 import { EventTimeline } from "@/app/(sales)/_components/EventTimeline";
-import { matchesQuery } from "@/app/(sales)/sales/leads/page";
+import { matchesQuery } from "@/app/(sales)/_lib/format";
 import { EVENT_LABELS, STATUS_LABELS, UI } from "@/app/(sales)/_lib/labels";
 import type { LeadEventRow, SalesLeadRow } from "@/app/(sales)/_lib/types";
 

@@ -2,7 +2,7 @@ import { describe, it, expect, vi, afterEach } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { OrgList } from "@/app/(sales)/_components/OrgList";
 import { OrgCard } from "@/app/(sales)/_components/OrgCard";
-import { matchesOrgQuery } from "@/app/(sales)/sales/orgs/page";
+import { matchesOrgQuery } from "@/app/(sales)/_lib/format";
 import { UI } from "@/app/(sales)/_lib/labels";
 import type { OrgRow, SalesLeadRow } from "@/app/(sales)/_lib/types";
 

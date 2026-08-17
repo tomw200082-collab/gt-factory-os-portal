@@ -117,3 +117,41 @@ export function phoneSearchKey(input: string | null | undefined): string {
   if (digits.startsWith("972")) return digits.slice(3).replace(/^0+/, "");
   return digits.replace(/^0+/, "");
 }
+
+// --- search predicates -------------------------------------------------------
+//
+// These live here rather than in the screens because a Next.js page module may
+// only export the fields the App Router recognises — exporting a helper from
+// page.tsx fails the build (and typecheck alone will not tell you).
+
+import type { OrgRow, SalesLeadRow } from "./types";
+
+/** Matches a lead against a typed query — name, business, email, or phone. */
+export function matchesQuery(row: SalesLeadRow, query: string): boolean {
+  const q = query.trim();
+  if (!q) return true;
+
+  const digits = phoneSearchKey(q);
+  if (digits.length >= 3 && phoneSearchKey(row.phone_e164).includes(digits)) return true;
+
+  return [row.org_name, row.contact_name, row.email]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+    .includes(q.toLowerCase());
+}
+
+/** The same, for a business. */
+export function matchesOrgQuery(org: OrgRow, query: string): boolean {
+  const q = query.trim();
+  if (!q) return true;
+
+  const digits = phoneSearchKey(q);
+  if (digits.length >= 3 && phoneSearchKey(org.phone_e164).includes(digits)) return true;
+
+  return [org.display_name, org.email]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase()
+    .includes(q.toLowerCase());
+}

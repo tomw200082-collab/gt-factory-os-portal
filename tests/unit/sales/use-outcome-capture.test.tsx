@@ -3,18 +3,27 @@ import { act, cleanup, render, screen } from "@testing-library/react";
 import { useOutcomeCapture } from "@/app/(sales)/_lib/useOutcomeCapture";
 
 function Probe() {
-  const { pending, arm, clear } = useOutcomeCapture();
+  const { pending, arm, clear, dismiss } = useOutcomeCapture();
   return (
     <div>
       <span data-testid="pending">{pending ? `${pending.leadId}:${pending.channel}` : "none"}</span>
       <button onClick={() => arm("L1", "call")}>arm</button>
       <button onClick={() => clear()}>clear</button>
+      <button onClick={() => dismiss()}>dismiss</button>
     </div>
   );
 }
 
+function setVisibility(state: "hidden" | "visible") {
+  Object.defineProperty(document, "visibilityState", { value: state, configurable: true });
+}
+
+/** A real trip away and back. */
 function returnToApp() {
   act(() => {
+    setVisibility("hidden");
+    document.dispatchEvent(new Event("visibilitychange"));
+    setVisibility("visible");
     document.dispatchEvent(new Event("visibilitychange"));
   });
 }
@@ -66,6 +75,35 @@ describe("outcome capture", () => {
     render(<Probe />);
     act(() => screen.getByText("arm").click());
     returnToApp();
+    expect(screen.getByTestId("pending").textContent).toBe("none");
+  });
+
+  it("asks again on the next trip back after a dismissal", () => {
+    render(<Probe />);
+    act(() => screen.getByText("arm").click());
+    returnToApp();
+    expect(screen.getByTestId("pending").textContent).toBe("L1:call");
+
+    act(() => screen.getByText("dismiss").click());
+    expect(screen.getByTestId("pending").textContent).toBe("none");
+    // Still owed — the intent stays in storage.
+    expect(window.sessionStorage.getItem("gt.sales.outreach")).not.toBeNull();
+
+    returnToApp();
+    expect(screen.getByTestId("pending").textContent).toBe("L1:call");
+  });
+
+  it("does not spring back on an ordinary focus after being dismissed", () => {
+    render(<Probe />);
+    act(() => screen.getByText("arm").click());
+    returnToApp();
+    act(() => screen.getByText("dismiss").click());
+
+    // A click anywhere in the page can raise a window focus event; that is not
+    // a return to the app and must not re-open the sheet.
+    act(() => {
+      window.dispatchEvent(new Event("focus"));
+    });
     expect(screen.getByTestId("pending").textContent).toBe("none");
   });
 

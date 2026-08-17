@@ -5,20 +5,11 @@
 import { Suspense, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import { useLeadEvents, useLeads, useOrgs } from "../../_lib/api";
-import { phoneSearchKey } from "../../_lib/format";
+import { matchesOrgQuery } from "../../_lib/format";
 import { UI } from "../../_lib/labels";
-import type { OrgRow } from "../../_lib/types";
 import { ListEmpty, QueueError, QueueLoading } from "../../_components/EmptyStates";
 import { OrgList } from "../../_components/OrgList";
 import { OrgCard } from "../../_components/OrgCard";
-
-export function matchesOrgQuery(org: OrgRow, query: string): boolean {
-  const q = query.trim();
-  if (!q) return true;
-  const digits = phoneSearchKey(q);
-  if (digits.length >= 3 && phoneSearchKey(org.phone_e164).includes(digits)) return true;
-  return [org.display_name, org.email].filter(Boolean).join(" ").toLowerCase().includes(q.toLowerCase());
-}
 
 function OrgsScreen() {
   const params = useSearchParams();
