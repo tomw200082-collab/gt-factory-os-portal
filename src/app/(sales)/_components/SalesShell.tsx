@@ -1,0 +1,161 @@
+"use client";
+
+// The workspace chrome: a phone-first bottom tab bar, a slim desktop rail, and
+// a header that stays out of the way.
+//
+// Deliberately not AppShellChrome. The factory shell is a wide LTR instrument
+// panel with its own nav manifest; this is a three-destination Hebrew app that
+// has to work one-handed. Sharing the chrome would mean bending both.
+
+import Link from "next/link";
+import { usePathname } from "next/navigation";
+import { ArrowLeftRight, Building2, CalendarCheck, Settings, Users } from "lucide-react";
+import type { ReactNode } from "react";
+import { NAV_LABELS, UI } from "../_lib/labels";
+
+interface Destination {
+  href: string;
+  label: string;
+  icon: typeof CalendarCheck;
+}
+
+const DESTINATIONS: Destination[] = [
+  { href: "/sales/today", label: NAV_LABELS.today, icon: CalendarCheck },
+  { href: "/sales/leads", label: NAV_LABELS.leads, icon: Users },
+  { href: "/sales/orgs", label: NAV_LABELS.orgs, icon: Building2 },
+];
+
+function isActive(pathname: string, href: string): boolean {
+  return pathname === href || pathname.startsWith(`${href}/`);
+}
+
+export function SalesShell({ children }: { children: ReactNode }) {
+  const pathname = usePathname() ?? "";
+
+  return (
+    <div data-app="sales" dir="rtl" lang="he" className="min-h-screen">
+      <a
+        href="#sales-main"
+        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:m-2 focus:rounded focus:px-3 focus:py-2"
+        style={{ background: "hsl(var(--s-surface))", color: "hsl(var(--s-fg))" }}
+      >
+        דלג לתוכן
+      </a>
+
+      <header
+        className="sticky top-0 z-30 border-b backdrop-blur-md"
+        style={{
+          borderColor: "hsl(var(--s-border))",
+          background: "hsl(var(--s-surface) / 0.85)",
+        }}
+      >
+        <div className="mx-auto flex h-14 max-w-5xl items-center gap-3 px-4">
+          <Link
+            href="/sales/today"
+            className="text-[15px] font-semibold tracking-tight"
+            style={{ color: "hsl(var(--s-fg))" }}
+          >
+            {UI.appName}
+          </Link>
+
+          <div className="flex-1" />
+
+          <Link
+            href="/sales/settings"
+            aria-label={NAV_LABELS.settings}
+            title={NAV_LABELS.settings}
+            className="grid h-10 w-10 place-items-center rounded-full"
+            style={{ color: "hsl(var(--s-fg-muted))" }}
+          >
+            <Settings size={18} aria-hidden />
+          </Link>
+
+          <Link
+            href="/home"
+            className="hidden items-center gap-1.5 text-[13px] sm:inline-flex"
+            style={{ color: "hsl(var(--s-fg-muted))" }}
+          >
+            <ArrowLeftRight size={15} aria-hidden />
+            {UI.switchToFactory}
+          </Link>
+        </div>
+      </header>
+
+      <div className="mx-auto flex max-w-5xl gap-6 px-4 pt-4">
+        {/* Desktop rail. Hidden on phones, where the tab bar takes over. */}
+        <nav
+          aria-label={UI.appName}
+          className="hidden w-44 shrink-0 flex-col gap-1 md:flex"
+        >
+          {DESTINATIONS.map((d) => {
+            const active = isActive(pathname, d.href);
+            const Icon = d.icon;
+            return (
+              <Link
+                key={d.href}
+                href={d.href}
+                aria-current={active ? "page" : undefined}
+                data-testid={`sales-rail-${d.href}`}
+                className={`s-tab justify-start ${active ? "s-tab-active" : ""}`}
+              >
+                <Icon size={17} aria-hidden />
+                {d.label}
+              </Link>
+            );
+          })}
+          <Link
+            href="/sales/settings"
+            aria-current={isActive(pathname, "/sales/settings") ? "page" : undefined}
+            className={`s-tab justify-start ${
+              isActive(pathname, "/sales/settings") ? "s-tab-active" : ""
+            }`}
+          >
+            <Settings size={17} aria-hidden />
+            {NAV_LABELS.settings}
+          </Link>
+        </nav>
+
+        <main
+          id="sales-main"
+          className="min-w-0 flex-1 pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] md:pb-10"
+        >
+          {children}
+        </main>
+      </div>
+
+      {/* Phone tab bar. Three destinations, thumb-height, safe-area aware. */}
+      <nav
+        aria-label={UI.appName}
+        className="fixed inset-x-0 bottom-0 z-30 border-t md:hidden"
+        style={{
+          borderColor: "hsl(var(--s-border))",
+          background: "hsl(var(--s-surface))",
+          paddingBottom: "env(safe-area-inset-bottom, 0px)",
+        }}
+      >
+        <ul className="mx-auto flex max-w-5xl">
+          {DESTINATIONS.map((d) => {
+            const active = isActive(pathname, d.href);
+            const Icon = d.icon;
+            return (
+              <li key={d.href} className="flex-1">
+                <Link
+                  href={d.href}
+                  aria-current={active ? "page" : undefined}
+                  data-testid={`sales-tab-${d.href}`}
+                  className="flex min-h-[56px] flex-col items-center justify-center gap-1 text-[11px] font-medium"
+                  style={{
+                    color: active ? "hsl(var(--s-accent))" : "hsl(var(--s-fg-muted))",
+                  }}
+                >
+                  <Icon size={20} aria-hidden />
+                  {d.label}
+                </Link>
+              </li>
+            );
+          })}
+        </ul>
+      </nav>
+    </div>
+  );
+}
