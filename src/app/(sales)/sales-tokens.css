@@ -204,6 +204,14 @@
   transform: scale(0.985);
 }
 
+/* A save in flight must look unavailable. Browser defaults for :disabled are
+   nearly invisible on iOS ghost buttons, which invites a second tap. */
+[data-app="sales"] .s-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
 [data-app="sales"] .s-btn-primary {
   background: hsl(var(--s-accent));
   color: hsl(var(--s-accent-fg));

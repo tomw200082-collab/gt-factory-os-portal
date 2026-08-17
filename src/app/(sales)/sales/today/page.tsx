@@ -2,7 +2,7 @@
 
 // The home of the workspace: what to do now, in order.
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   useOutcome,
   useOutreach,
@@ -41,6 +41,25 @@ export default function TodayPage() {
   const nextTouch = useSetNextTouch(postponing?.lead_id ?? "");
   const lostOutcome = useOutcome(losing?.lead_id ?? "");
 
+  // An intent can outlive its card: the lead may have been answered for in
+  // another session, or dropped out of the queue on a refetch. Without this the
+  // sheet never renders, the intent never clears, and every return to the app
+  // re-arms a dialog nobody can see — the call silently never gets logged.
+  useEffect(() => {
+    if (today.isSuccess && capture.pending && !pendingRow) {
+      capture.clear();
+    }
+  }, [today.isSuccess, capture, pendingRow]);
+
+  // Confirmation should not outstay its welcome above the tab bar.
+  useEffect(() => {
+    if (!toast) return;
+    const id = setTimeout(() => setToast(null), 4500);
+    return () => clearTimeout(id);
+  }, [toast]);
+
+  const anySheetOpen = Boolean((capture.pending && pendingRow) || postponing || losing);
+
   function arm(leadId: string, channel: "call" | "whatsapp") {
     capture.arm(leadId, channel);
     // Intent, not a touch: only an outcome, a note or a status change stops the
@@ -71,19 +90,24 @@ export default function TodayPage() {
         <StatsStrip stats={stats.data} />
       </header>
 
-      {today.isLoading ? <QueueLoading /> : null}
-      {today.isError ? <QueueError onRetry={() => void today.refetch()} /> : null}
-      {today.isSuccess && rows.length === 0 ? <QueueDone /> : null}
+      {/* While a sheet is open the queue behind it is unreachable by pointer;
+          hiding it from assistive technology keeps the two contexts from
+          being read as one. aria-modal alone is only partly honoured on iOS. */}
+      <div aria-hidden={anySheetOpen || undefined}>
+        {today.isLoading ? <QueueLoading /> : null}
+        {today.isError ? <QueueError onRetry={() => void today.refetch()} /> : null}
+        {today.isSuccess && rows.length === 0 ? <QueueDone /> : null}
 
-      {today.isSuccess && rows.length > 0 ? (
-        <TodayQueue
-          rows={rows}
-          templates={settings.data?.whatsapp_templates ?? null}
-          onArm={arm}
-          onPostpone={setPostponing}
-          onLost={setLosing}
-        />
-      ) : null}
+        {today.isSuccess && rows.length > 0 ? (
+          <TodayQueue
+            rows={rows}
+            templates={settings.data?.whatsapp_templates ?? null}
+            onArm={arm}
+            onPostpone={setPostponing}
+            onLost={setLosing}
+          />
+        ) : null}
+      </div>
 
       {capture.pending && pendingRow ? (
         <OutcomeSheet
@@ -146,8 +170,12 @@ export default function TodayPage() {
           role="status"
           aria-live="polite"
           data-testid="sales-toast"
-          className="fixed inset-x-0 bottom-24 mx-auto w-fit rounded-full px-4 py-2 text-[13px]"
-          style={{ background: "hsl(var(--s-fg))", color: "hsl(var(--s-bg))" }}
+          className="fixed inset-x-0 mx-auto w-fit rounded-full px-4 py-2 text-[13px]"
+          style={{
+            background: "hsl(var(--s-fg))",
+            color: "hsl(var(--s-bg))",
+            bottom: "calc(5.5rem + env(safe-area-inset-bottom, 0px))",
+          }}
         >
           {toast}
         </div>

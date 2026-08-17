@@ -20,10 +20,19 @@ export interface OrgCardProps {
   leads: SalesLeadRow[];
   events: LeadEventRow[];
   eventsLoading: boolean;
+  /** Which lead the timeline belongs to, when the business has more than one. */
+  timelineLeadName?: string | null;
   onClose: () => void;
 }
 
-export function OrgCard({ org, leads, events, eventsLoading, onClose }: OrgCardProps) {
+export function OrgCard({
+  org,
+  leads,
+  events,
+  eventsLoading,
+  timelineLeadName = null,
+  onClose,
+}: OrgCardProps) {
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
@@ -129,6 +138,18 @@ export function OrgCard({ org, leads, events, eventsLoading, onClose }: OrgCardP
 
         <section className="mt-5">
           <h3 className="s-eyebrow">{UI.timelineTitle}</h3>
+          {/* One lead's history, not a merge. Saying which one is cheaper than
+              a merged view and more honest than a partial history wearing the
+              business's name. */}
+          {timelineLeadName ? (
+            <p
+              data-testid="timeline-scope"
+              className="mt-0.5 text-[12px]"
+              style={{ color: "hsl(var(--s-fg-faint))" }}
+            >
+              {UI.timelineForLead(timelineLeadName)}
+            </p>
+          ) : null}
           <p className="mt-0.5 text-[12px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
             {org.last_activity_at
               ? `${UI.orgLastActivity}: ${fmtRelative(org.last_activity_at)}`

@@ -109,7 +109,54 @@ describe("outcome sheet", () => {
     render(<OutcomeSheet leadName="דנה" onSubmit={vi.fn()} onDismiss={vi.fn()} />);
     const dialog = screen.getByRole("dialog");
     expect(dialog.getAttribute("aria-modal")).toBe("true");
-    expect(dialog.getAttribute("aria-label")).toBe(UI.outcomeTitle);
+    expect(dialog.getAttribute("aria-labelledby")).toBe("outcome-sheet-title");
     expect(dialog.getAttribute("dir")).toBe("rtl");
+    expect(screen.getByRole("heading", { level: 2 }).textContent).toBe(UI.outcomeTitle);
+  });
+
+  it("lets a mis-tap go back instead of stranding the user", () => {
+    // Two large adjacent buttons; tapping the wrong one must not cost a trip
+    // to another app to re-raise the sheet.
+    render(<OutcomeSheet leadName="דנה" onSubmit={vi.fn()} onDismiss={vi.fn()} />);
+    fireEvent.click(screen.getByTestId("outcome-answered_progressing"));
+    expect(screen.queryByTestId("outcome-no_answer")).toBeNull();
+
+    fireEvent.click(screen.getByTestId("outcome-back"));
+    expect(screen.getByTestId("outcome-no_answer")).toBeTruthy();
+  });
+
+  it("offers no back button when a card opened the sheet directly", () => {
+    render(<OutcomeSheet mode="lost" leadName="דנה" onSubmit={vi.fn()} onDismiss={vi.fn()} />);
+    expect(screen.queryByTestId("outcome-back")).toBeNull();
+  });
+
+  it("will not let the next touch be scheduled in the past", () => {
+    render(<OutcomeSheet mode="next-touch" leadName="דנה" onSubmit={vi.fn()} onDismiss={vi.fn()} />);
+    const input = screen.getByLabelText(UI.pickDate) as HTMLInputElement;
+    const today = new Date();
+    const pad = (n: number) => String(n).padStart(2, "0");
+    expect(input.getAttribute("min")).toBe(
+      `${today.getFullYear()}-${pad(today.getMonth() + 1)}-${pad(today.getDate())}`,
+    );
+  });
+
+  it("presents the lost reasons as one choice, not five toggles", () => {
+    render(<OutcomeSheet mode="lost" leadName="דנה" onSubmit={vi.fn()} onDismiss={vi.fn()} />);
+    expect(screen.getByRole("radiogroup")).toBeTruthy();
+    const radios = screen.getAllByRole("radio");
+    expect(radios.length).toBe(5);
+    expect(radios.every((r) => r.getAttribute("aria-checked") === "false")).toBe(true);
+  });
+
+  it("names the free-text reason field for assistive technology", () => {
+    render(<OutcomeSheet mode="lost" leadName="דנה" onSubmit={vi.fn()} onDismiss={vi.fn()} />);
+    fireEvent.click(screen.getByTestId("lost-reason-אחר"));
+    expect(screen.getByLabelText(UI.lostReasonOtherLabel)).toBeTruthy();
+  });
+
+  it("gives the dismiss control a real touch target", () => {
+    render(<OutcomeSheet leadName="דנה" onSubmit={vi.fn()} onDismiss={vi.fn()} />);
+    // .s-btn carries min-height 44px; without it the control is ~18px tall.
+    expect(screen.getByTestId("outcome-dismiss").className).toContain("s-btn");
   });
 });

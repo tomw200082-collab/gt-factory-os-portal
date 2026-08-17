@@ -84,6 +84,8 @@ export const UI = {
     `השבוע: ${n} לידים · ${working} בטיפול · ${converted} הומרו`,
   queueDone: "סיימת להיום ✓",
   queueDoneHint: "אין לידים שדורשים טיפול כרגע.",
+  showMore: (n: number) => `הצג עוד ${n} לידים`,
+  showMoreDetail: (shown: number, remaining: number) => `עוד ${shown} · נותרו ${remaining}`,
   queueError: "לא הצלחנו לטעון את התור",
   queueErrorHint: "בדוק את החיבור ונסה שוב.",
   retry: "נסה שוב",
@@ -100,6 +102,8 @@ export const UI = {
   save: "שמור",
   cancel: "ביטול",
   close: "סגור",
+  back: "חזרה",
+  saving: "שומר…",
 
   // next touch
   nextTouchTitle: "מתי לחזור?",
@@ -115,6 +119,8 @@ export const UI = {
   outcomeSaved: "נרשם ✓",
   lostReasonTitle: "למה אבוד?",
   lostReasonOther: "פרט…",
+  lostReasonOtherLabel: "סיבה אחרת",
+  lostReasonGroupLabel: "סיבת אובדן",
   lostReasonRequired: "צריך לבחור סיבה",
 
   // leads
@@ -148,6 +154,7 @@ export const UI = {
   orgLastActivity: "פעילות אחרונה",
   orgNoActivity: "אין פעילות",
   orgLeadsTitle: "הלידים של העסק",
+  timelineForLead: (name: string) => `היסטוריה של הליד: ${name}`,
 
   // customer context
   customerBadge: "לקוח קיים",

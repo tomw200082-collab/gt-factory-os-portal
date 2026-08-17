@@ -8,7 +8,7 @@
 // already returns rows in this order; grouping here makes the reason legible.
 
 import { useState } from "react";
-import { TODAY_SECTION_LABELS } from "../_lib/labels";
+import { TODAY_SECTION_LABELS, UI } from "../_lib/labels";
 import type { TodayItemType, TodayRow, WhatsappTemplates } from "../_lib/types";
 import { TodayCard } from "./TodayCard";
 
@@ -48,9 +48,13 @@ function Section({
   const remaining = rows.length - visible.length;
 
   return (
-    <section data-testid={`today-section-${type}`} className="flex flex-col gap-2">
+    <section
+      data-testid={`today-section-${type}`}
+      aria-labelledby={`today-section-title-${type}`}
+      className="flex flex-col gap-2"
+    >
       <div className="flex items-baseline gap-2">
-        <h2 className="s-eyebrow" style={{ margin: 0 }}>
+        <h2 id={`today-section-title-${type}`} className="s-eyebrow" style={{ margin: 0 }}>
           {TODAY_SECTION_LABELS[type]}
         </h2>
         <span
@@ -78,9 +82,10 @@ function Section({
           type="button"
           data-testid="today-show-more"
           className="s-btn s-btn-ghost"
+          aria-label={UI.showMore(Math.min(remaining, PAGE))}
           onClick={() => setShown((n) => n + PAGE)}
         >
-          {`עוד ${Math.min(remaining, PAGE)} · נותרו ${remaining}`}
+          {UI.showMoreDetail(Math.min(remaining, PAGE), remaining)}
         </button>
       ) : null}
     </section>

@@ -125,6 +125,27 @@ describe("org card", () => {
     expect(closes).toEqual([1]);
   });
 
+  it("names the lead when the timeline cannot cover the whole business", () => {
+    render(
+      <OrgCard
+        org={{ ...org, lead_count: 2 }}
+        leads={[lead, { ...lead, id: "L2" }]}
+        events={[]}
+        eventsLoading={false}
+        timelineLeadName="בעל העסק"
+        onClose={() => {}}
+      />,
+    );
+    expect(screen.getByTestId("timeline-scope").textContent).toContain("בעל העסק");
+  });
+
+  it("does not qualify the timeline when the business has a single lead", () => {
+    render(
+      <OrgCard org={org} leads={[lead]} events={[]} eventsLoading={false} onClose={() => {}} />,
+    );
+    expect(screen.queryByTestId("timeline-scope")).toBeNull();
+  });
+
   it("shows no customer history for a business we have never sold to", () => {
     render(
       <OrgCard

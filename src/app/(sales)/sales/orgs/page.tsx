@@ -37,10 +37,11 @@ function OrgsScreen() {
     [leads.data, openId],
   );
 
-  // The org timeline is the merged history of its leads. With one lead per
-  // business in almost every case, fetching the first is the whole story; a
-  // true multi-lead merge is a backend view when a business earns one.
-  const events = useLeadEvents(orgLeads[0]?.id ?? null);
+  // The timeline covers one lead. Almost every business has exactly one, so
+  // that is the whole story; when it is not, the card names the lead it is
+  // showing rather than passing a partial history off as the business's.
+  const timelineLead = orgLeads[0] ?? null;
+  const events = useLeadEvents(timelineLead?.id ?? null);
 
   return (
     <div className="flex flex-col gap-4">
@@ -72,6 +73,11 @@ function OrgsScreen() {
           leads={orgLeads}
           events={events.data ?? []}
           eventsLoading={events.isLoading}
+          timelineLeadName={
+            orgLeads.length > 1
+              ? (timelineLead?.contact_name ?? openOrg.display_name)
+              : null
+          }
           onClose={() => setOpenId(null)}
         />
       ) : null}

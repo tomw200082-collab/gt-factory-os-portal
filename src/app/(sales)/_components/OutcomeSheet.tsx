@@ -112,12 +112,12 @@ export function OutcomeSheet({
         ref={panelRef}
         role="dialog"
         aria-modal="true"
-        aria-label={mode === "next-touch" ? UI.nextTouchTitle : mode === "lost" ? UI.lostReasonTitle : UI.outcomeTitle}
+        aria-labelledby="outcome-sheet-title"
         dir="rtl"
         className="s-sheet w-full max-w-md p-4 pb-[calc(1rem+env(safe-area-inset-bottom,0px))]"
       >
         <header className="mb-3">
-          <h2 className="text-base font-semibold" style={{ color: "hsl(var(--s-fg))" }}>
+          <h2 id="outcome-sheet-title" className="text-base font-semibold" style={{ color: "hsl(var(--s-fg))" }}>
             {mode === "next-touch"
               ? UI.nextTouchTitle
               : mode === "lost"
@@ -186,6 +186,16 @@ export function OutcomeSheet({
 
         {step === "next-touch" ? (
           <div className="flex flex-col gap-2">
+            {mode === "outcome" ? (
+              <button
+                type="button"
+                data-testid="outcome-back"
+                className="s-btn s-btn-ghost self-start"
+                onClick={() => setStep("root")}
+              >
+                {UI.back}
+              </button>
+            ) : null}
             <p className="s-eyebrow">{UI.nextTouchTitle}</p>
             <button
               type="button"
@@ -219,6 +229,9 @@ export function OutcomeSheet({
               <input
                 type="date"
                 className="s-input"
+                // A next touch in the past would land the lead straight back in
+                // the queue as overdue work that was already done.
+                min={toDateInputValue(new Date())}
                 value={customDate}
                 onChange={(e) => setCustomDate(e.target.value)}
               />
@@ -242,23 +255,38 @@ export function OutcomeSheet({
 
         {step === "lost-reason" ? (
           <div className="flex flex-col gap-2">
-            <p className="s-eyebrow">{UI.lostReasonTitle}</p>
-            {LOST_REASONS.map((r) => (
+            {mode === "outcome" ? (
               <button
-                key={r}
                 type="button"
-                data-testid={`lost-reason-${r}`}
-                disabled={busy}
-                className={`s-btn s-btn-ghost min-h-[48px] ${reason === r ? "s-tab-active" : ""}`}
-                onClick={() => setReason(r)}
-                aria-pressed={reason === r}
+                data-testid="outcome-back"
+                className="s-btn s-btn-ghost self-start"
+                onClick={() => setStep("root")}
               >
-                {r}
+                {UI.back}
               </button>
-            ))}
+            ) : null}
+            <p className="s-eyebrow">{UI.lostReasonTitle}</p>
+            {/* One reason, not five toggles — radio semantics say so. */}
+            <div role="radiogroup" aria-label={UI.lostReasonGroupLabel} className="flex flex-col gap-2">
+              {LOST_REASONS.map((r) => (
+                <button
+                  key={r}
+                  type="button"
+                  role="radio"
+                  data-testid={`lost-reason-${r}`}
+                  disabled={busy}
+                  className={`s-btn s-btn-ghost min-h-[48px] ${reason === r ? "s-tab-active" : ""}`}
+                  onClick={() => setReason(r)}
+                  aria-checked={reason === r}
+                >
+                  {r}
+                </button>
+              ))}
+            </div>
             {reason === "אחר" ? (
               <input
                 className="s-input"
+                aria-label={UI.lostReasonOtherLabel}
                 placeholder={UI.lostReasonOther}
                 value={otherReason}
                 onChange={(e) => setOtherReason(e.target.value)}
@@ -290,7 +318,7 @@ export function OutcomeSheet({
         <button
           type="button"
           data-testid="outcome-dismiss"
-          className="mt-3 w-full text-[13px]"
+          className="s-btn s-btn-ghost mt-3 w-full text-[13px]"
           style={{ color: "hsl(var(--s-fg-faint))" }}
           onClick={onDismiss}
         >

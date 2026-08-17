@@ -9,9 +9,12 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowLeftRight, Building2, CalendarCheck, Settings, Users } from "lucide-react";
-import type { ReactNode } from "react";
+import { ArrowLeftRight, Building2, CalendarCheck, Plus, Search, Settings, Users } from "lucide-react";
+import { useEffect, useState, type ReactNode } from "react";
 import { NAV_LABELS, UI } from "../_lib/labels";
+import { useLeads, useOrgs, useQuickAdd } from "../_lib/api";
+import { CommandK } from "./CommandK";
+import { QuickAddSheet } from "./QuickAddSheet";
 
 interface Destination {
   href: string;
@@ -31,6 +34,26 @@ function isActive(pathname: string, href: string): boolean {
 
 export function SalesShell({ children }: { children: ReactNode }) {
   const pathname = usePathname() ?? "";
+  const [searchOpen, setSearchOpen] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const [toast, setToast] = useState<string | null>(null);
+
+  // Both lists are already cached for the screens; the palette reuses them
+  // rather than adding a search endpoint.
+  const leads = useLeads();
+  const orgs = useOrgs();
+  const quickAdd = useQuickAdd();
+
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        setSearchOpen(true);
+      }
+    };
+    document.addEventListener("keydown", onKeyDown);
+    return () => document.removeEventListener("keydown", onKeyDown);
+  }, []);
 
   return (
     <div data-app="sales" dir="rtl" lang="he" className="min-h-screen">
@@ -59,6 +82,18 @@ export function SalesShell({ children }: { children: ReactNode }) {
           </Link>
 
           <div className="flex-1" />
+
+          <button
+            type="button"
+            aria-label={UI.commandTitle}
+            title={UI.commandTitle}
+            data-testid="sales-search-open"
+            onClick={() => setSearchOpen(true)}
+            className="grid h-10 w-10 place-items-center rounded-full"
+            style={{ color: "hsl(var(--s-fg-muted))" }}
+          >
+            <Search size={18} aria-hidden />
+          </button>
 
           <Link
             href="/sales/settings"
@@ -122,6 +157,59 @@ export function SalesShell({ children }: { children: ReactNode }) {
           {children}
         </main>
       </div>
+
+      {/* Quick add: reachable from every screen, because a lead that arrives by
+          phone must be as easy to capture as one Meta delivers. */}
+      <button
+        type="button"
+        data-testid="sales-quick-add"
+        onClick={() => setAddOpen(true)}
+        className="s-btn s-btn-primary fixed z-30 shadow-lg"
+        style={{
+          insetInlineEnd: 16,
+          bottom: "calc(5rem + env(safe-area-inset-bottom, 0px))",
+          borderRadius: "var(--s-radius-pill)",
+        }}
+      >
+        <Plus size={18} aria-hidden />
+        {UI.quickAdd}
+      </button>
+
+      {searchOpen ? (
+        <CommandK
+          leads={leads.data ?? []}
+          orgs={orgs.data ?? []}
+          onClose={() => setSearchOpen(false)}
+        />
+      ) : null}
+
+      {addOpen ? (
+        <QuickAddSheet
+          busy={quickAdd.isPending}
+          error={quickAdd.error?.message ?? null}
+          onSubmit={(vars) =>
+            quickAdd.mutate(vars, {
+              onSuccess: () => {
+                setAddOpen(false);
+                setToast(UI.quickAddSaved);
+              },
+            })
+          }
+          onDismiss={() => setAddOpen(false)}
+        />
+      ) : null}
+
+      {toast ? (
+        <div
+          role="status"
+          aria-live="polite"
+          data-testid="sales-shell-toast"
+          className="fixed inset-x-0 bottom-24 mx-auto w-fit rounded-full px-4 py-2 text-[13px]"
+          style={{ background: "hsl(var(--s-fg))", color: "hsl(var(--s-bg))" }}
+        >
+          {toast}
+        </div>
+      ) : null}
 
       {/* Phone tab bar. Three destinations, thumb-height, safe-area aware. */}
       <nav
