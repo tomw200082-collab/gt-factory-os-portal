@@ -23,5 +23,12 @@ playwright-report/
 # Local design-intelligence tooling (ui-ux-pro-max skill installed via
 # `uipro init --ai claude` for design system queries). Skill artefacts
 # are local tooling, not portal source — don't ship them.
-.claude/skills/
+#
+# Exception: the impeccable design skill is vendored deliberately (Apache-2.0,
+# tranche 162 / masterprompt 2026-08-17 §3.4) so every session shares one
+# pinned version. Contents are excluded with /* rather than the directory
+# itself, because git cannot re-include a path whose parent directory is
+# excluded.
+.claude/skills/*
+!.claude/skills/impeccable/
 design-system/
