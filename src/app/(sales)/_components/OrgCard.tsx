@@ -67,7 +67,7 @@ export function OrgCard({
   return (
     <div
       className="fixed inset-0 z-40 flex justify-start"
-      style={{ background: "hsl(220 15% 10% / 0.35)" }}
+      style={{ background: "hsl(var(--s-overlay))" }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}

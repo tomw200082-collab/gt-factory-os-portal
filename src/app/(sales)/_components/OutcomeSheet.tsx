@@ -103,7 +103,7 @@ export function OutcomeSheet({
     <div
       data-testid="outcome-sheet"
       className="fixed inset-0 z-50 flex items-end justify-center"
-      style={{ background: "hsl(220 15% 10% / 0.4)" }}
+      style={{ background: "hsl(var(--s-overlay))" }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onDismiss();
       }}

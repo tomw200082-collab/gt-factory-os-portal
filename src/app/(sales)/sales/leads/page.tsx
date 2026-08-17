@@ -2,17 +2,19 @@
 
 // The full table: every lead GT has ever received, in one place.
 
-import { Suspense, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   useAddNote,
   useAssign,
   useLeadEvents,
   useLeads,
+  useOutreach,
   useSetNextTouch,
   useSetStatus,
   useSettings,
 } from "../../_lib/api";
+import { useOutcomeCapture } from "../../_lib/useOutcomeCapture";
 import { matchesQuery } from "../../_lib/format";
 import { STATUS_LABELS, UI } from "../../_lib/labels";
 import type { LeadStatus } from "../../_lib/types";
@@ -51,14 +53,28 @@ function LeadsScreen() {
   const setNextTouch = useSetNextTouch(openId ?? "");
   const assign = useAssign(openId ?? "");
 
-  const busy =
-    setStatus.isPending || addNote.isPending || setNextTouch.isPending || assign.isPending;
+  // Arming from the drawer writes the same outreach event a Today card writes,
+  // and leaves the same owed intent. The outcome sheet stays owned by Today —
+  // one place asks "what happened", wherever the call was placed from.
+  const outreach = useOutreach();
+  const capture = useOutcomeCapture();
+  const [toast, setToast] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!toast) return;
+    const id = setTimeout(() => setToast(null), 4500);
+    return () => clearTimeout(id);
+  }, [toast]);
+
   const error =
     setStatus.error?.message ??
     addNote.error?.message ??
     setNextTouch.error?.message ??
     assign.error?.message ??
     null;
+
+  /** Every drawer write says so — silence reads the same as a dropped save. */
+  const saved = { onSuccess: () => setToast(UI.saved) };
 
   return (
     <div className="flex flex-col gap-4">
@@ -103,9 +119,14 @@ function LeadsScreen() {
               }}
             >
               {STATUS_LABELS[status]}
-              <span className="s-nums" style={{ color: "hsl(var(--s-fg-faint))" }}>
-                {counts[status]}
-              </span>
+              {/* A count only exists once the data does. Rendering "0" for
+                  every status while the table loads states four facts that
+                  are not yet known, then silently corrects them. */}
+              {leads.isSuccess ? (
+                <span className="s-nums" style={{ color: "hsl(var(--s-fg-faint))" }}>
+                  {counts[status]}
+                </span>
+              ) : null}
             </button>
           ))}
         </div>
@@ -130,14 +151,47 @@ function LeadsScreen() {
           events={events.data ?? []}
           eventsLoading={events.isLoading}
           templates={settings.data?.whatsapp_templates ?? null}
-          busy={busy}
+          savingStatus={setStatus.isPending}
+          savingNote={addNote.isPending}
+          savingNextTouch={setNextTouch.isPending}
+          savingAssignee={assign.isPending}
           error={error}
           onClose={() => setOpenId(null)}
-          onStatus={(status, reason) => setStatus.mutate({ status, reason })}
-          onNote={(note) => addNote.mutate({ note })}
-          onNextTouch={(at) => setNextTouch.mutate({ at })}
-          onAssign={(assignee) => assign.mutate({ assignee })}
+          onStatus={(status, reason) => setStatus.mutate({ status, reason }, saved)}
+          onNote={(note, done) =>
+            addNote.mutate(
+              { note },
+              {
+                onSuccess: () => {
+                  done();
+                  setToast(UI.saved);
+                },
+              },
+            )
+          }
+          onNextTouch={(at) => setNextTouch.mutate({ at }, saved)}
+          onAssign={(assignee) => assign.mutate({ assignee }, saved)}
+          onArm={(leadId, channel) => {
+            capture.arm(leadId, channel);
+            outreach.mutate({ leadId, channel });
+          }}
         />
+      ) : null}
+
+      {toast ? (
+        <div
+          role="status"
+          aria-live="polite"
+          data-testid="sales-toast"
+          className="fixed inset-x-0 mx-auto w-fit rounded-full px-4 py-2 text-[13px]"
+          style={{
+            background: "hsl(var(--s-fg))",
+            color: "hsl(var(--s-bg))",
+            bottom: "calc(5.5rem + env(safe-area-inset-bottom, 0px))",
+          }}
+        >
+          {toast}
+        </div>
       ) : null}
     </div>
   );

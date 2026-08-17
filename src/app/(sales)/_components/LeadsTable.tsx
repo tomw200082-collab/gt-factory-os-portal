@@ -81,16 +81,30 @@ export function LeadsTable({ rows, onOpen }: LeadsTableProps) {
       <div className="hidden overflow-x-auto md:block">
         <table className="w-full border-collapse text-[13px]">
           <thead>
+            {/* Every header sticks, and every one carries the surface colour.
+                Sticking one column left the other six scrolling away, and a
+                transparent sticky cell has 188 rows of text sliding under it. */}
             <tr style={{ color: "hsl(var(--s-fg-muted))" }}>
-              <th className="sticky top-0 z-10 px-2 py-2 text-start font-medium">
-                {UI.colBusiness}
-              </th>
-              <th className="px-2 py-2 text-start font-medium">{UI.colContact}</th>
-              <th className="px-2 py-2 text-start font-medium">{UI.colPhone}</th>
-              <th className="px-2 py-2 text-start font-medium">{UI.statusLabel}</th>
-              <th className="px-2 py-2 text-start font-medium">{UI.colCampaign}</th>
-              <th className="px-2 py-2 text-start font-medium">{UI.colAge}</th>
-              <th className="px-2 py-2 text-start font-medium">{UI.colNextTouch}</th>
+              {[
+                UI.colBusiness,
+                UI.colContact,
+                UI.colPhone,
+                UI.statusLabel,
+                UI.colCampaign,
+                UI.colAge,
+                UI.colNextTouch,
+              ].map((label) => (
+                <th
+                  key={label}
+                  className="sticky top-0 z-10 border-b px-2 py-2 text-start font-medium"
+                  style={{
+                    background: "hsl(var(--s-surface))",
+                    borderColor: "hsl(var(--s-border))",
+                  }}
+                >
+                  {label}
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>

@@ -21,13 +21,25 @@ export interface LeadDrawerProps {
   events: LeadEventRow[];
   eventsLoading: boolean;
   templates: WhatsappTemplates | null;
-  busy?: boolean;
+  /** Per-action, not one shared flag: saving a note must not freeze the date. */
+  savingNote?: boolean;
+  savingNextTouch?: boolean;
+  savingAssignee?: boolean;
+  savingStatus?: boolean;
   error?: string | null;
   onClose: () => void;
   onStatus: (status: "working" | "lost", reason?: string) => void;
-  onNote: (note: string) => void;
+  /** `done` runs only once the write lands, so a failed save keeps the text. */
+  onNote: (note: string, done: () => void) => void;
   onNextTouch: (at: string) => void;
   onAssign: (assignee: string) => void;
+  /**
+   * Recording an outreach intent, the same way a Today card does. Without it a
+   * call placed from here leaves no trace in the timeline and never raises the
+   * outcome sheet — the loop the product is built on would close on one surface
+   * and silently not on the other.
+   */
+  onArm?: (leadId: string, channel: "call" | "whatsapp") => void;
 }
 
 /**
@@ -53,13 +65,17 @@ export function LeadDrawer({
   events,
   eventsLoading,
   templates,
-  busy = false,
+  savingNote = false,
+  savingNextTouch = false,
+  savingAssignee = false,
+  savingStatus = false,
   error = null,
   onClose,
   onStatus,
   onNote,
   onNextTouch,
   onAssign,
+  onArm,
 }: LeadDrawerProps) {
   const [note, setNote] = useState("");
   const [assignee, setAssignee] = useState(lead.assignee ?? "");
@@ -123,7 +139,7 @@ export function LeadDrawer({
   return (
     <div
       className="fixed inset-0 z-40 flex justify-start"
-      style={{ background: "hsl(220 15% 10% / 0.35)" }}
+      style={{ background: "hsl(var(--s-overlay))" }}
       onClick={(e) => {
         if (e.target === e.currentTarget) onClose();
       }}
@@ -194,12 +210,24 @@ export function LeadDrawer({
         {/* contact */}
         <div className="mt-3 flex flex-wrap gap-2">
           {tel ? (
-            <a href={tel} className="s-btn s-btn-primary flex-1">
+            <a
+              href={tel}
+              data-testid="drawer-call"
+              className="s-btn s-btn-primary flex-1"
+              onClick={() => onArm?.(lead.id, "call")}
+            >
               {UI.call}
             </a>
           ) : null}
           {wa ? (
-            <a href={wa} target="_blank" rel="noopener noreferrer" className="s-btn s-btn-ghost flex-1">
+            <a
+              href={wa}
+              target="_blank"
+              rel="noopener noreferrer"
+              data-testid="drawer-whatsapp"
+              className="s-btn s-btn-ghost flex-1"
+              onClick={() => onArm?.(lead.id, "whatsapp")}
+            >
               {UI.whatsapp}
             </a>
           ) : null}
@@ -249,7 +277,7 @@ export function LeadDrawer({
                 <button
                   type="button"
                   data-testid="drawer-set-working"
-                  disabled={busy}
+                  disabled={savingStatus}
                   className="s-btn s-btn-ghost"
                   onClick={() => onStatus("working")}
                 >
@@ -259,7 +287,7 @@ export function LeadDrawer({
               <button
                 type="button"
                 data-testid="drawer-set-lost"
-                disabled={busy}
+                disabled={savingStatus}
                 className="s-btn s-btn-danger-quiet"
                 onClick={() => setLosing((v) => !v)}
                 aria-expanded={losing}
@@ -289,7 +317,7 @@ export function LeadDrawer({
                 <button
                   type="button"
                   data-testid="drawer-lost-confirm"
-                  disabled={busy || !lostReason}
+                  disabled={savingStatus || !lostReason}
                   className="s-btn s-btn-danger-quiet"
                   onClick={() => onStatus("lost", lostReason)}
                 >
@@ -313,12 +341,13 @@ export function LeadDrawer({
               <button
                 type="button"
                 data-testid="drawer-note-save"
-                disabled={busy || !note.trim()}
+                disabled={savingNote || !note.trim()}
                 className="s-btn s-btn-ghost"
-                onClick={() => {
-                  onNote(note.trim());
-                  setNote("");
-                }}
+                // Clears only once the write lands. Clearing on click looks
+                // tidier but throws the text away on a failed save, and the
+                // person retyping it is standing in a factory on one bar of
+                // signal.
+                onClick={() => onNote(note.trim(), () => setNote(""))}
               >
                 {UI.save}
               </button>
@@ -332,13 +361,17 @@ export function LeadDrawer({
                 id="drawer-next-touch"
                 type="date"
                 className="s-input"
+                // Same floor the outcome sheet enforces: a next touch in the
+                // past lands the lead straight back in the queue as overdue
+                // work that was already done.
+                min={toDateInputValue(new Date())}
                 value={date}
                 onChange={(e) => setDate(e.target.value)}
               />
               <button
                 type="button"
                 data-testid="drawer-next-touch-save"
-                disabled={busy || !date}
+                disabled={savingNextTouch || !date}
                 className="s-btn s-btn-ghost"
                 onClick={() => onNextTouch(new Date(`${date}T09:00:00`).toISOString())}
               >
@@ -361,7 +394,7 @@ export function LeadDrawer({
               <button
                 type="button"
                 data-testid="drawer-assign-save"
-                disabled={busy}
+                disabled={savingAssignee}
                 className="s-btn s-btn-ghost"
                 onClick={() => onAssign(assignee.trim())}
               >

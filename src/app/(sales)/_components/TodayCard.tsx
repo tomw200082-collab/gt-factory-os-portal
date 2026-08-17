@@ -70,9 +70,17 @@ export function TodayCard({ row, templates, onArm, onPostpone, onLost }: TodayCa
     <article
       data-testid={`today-card-${row.lead_id}`}
       className="s-card s-enter p-4"
+      // A returning customer is the most urgent card in the queue and has to
+      // read as different before anything is read at all. A 3px edge alone
+      // does not carry that across a scroll — and when no Shopify snapshot
+      // exists there is nothing else distinguishing it from a new lead.
       style={
         returning
-          ? { borderInlineStartWidth: 3, borderInlineStartColor: "hsl(var(--s-accent))" }
+          ? {
+              borderInlineStartWidth: 3,
+              borderInlineStartColor: "hsl(var(--s-accent))",
+              background: "hsl(var(--s-accent-soft))",
+            }
           : undefined
       }
     >
@@ -105,7 +113,9 @@ export function TodayCard({ row, templates, onArm, onPostpone, onLost }: TodayCa
         </div>
       ) : null}
 
-      <p className="mt-2 text-[12px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
+      {/* Muted, not faint: this line also sits on the returning-customer card's
+          tinted background, where faint ink drops below AA. */}
+      <p className="mt-2 text-[12px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
         {row.item_type === "due_follow_up" && row.next_touch_at
           ? UI.nextTouchOn(fmtRelative(row.next_touch_at))
           : fmtRelative(row.created_at)}

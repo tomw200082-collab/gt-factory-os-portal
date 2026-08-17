@@ -173,6 +173,47 @@ test("queue renders, an outcome is captured, and the card clears @mocked", async
   expect((outcome?.body as { next_touch_at: string }).next_touch_at).toBeTruthy();
 });
 
+test("a failed outcome keeps the sheet open instead of silently losing the call @mocked", async ({
+  page,
+}) => {
+  // The queue removes the card optimistically the instant an outcome is tapped.
+  // If the write then fails, the card comes back — and the sheet, the error and
+  // the armed intent must all still be there. Otherwise the sheet closes as
+  // though it saved, the card quietly reappears later, and the call was never
+  // logged. That is the one failure this screen must not have.
+  await page.route("**/api/sales/week-stats**", (r) =>
+    r.fulfill({ json: { stats: { week_new_leads: 1, working_now: 0, week_converted: 0 } } }),
+  );
+  await page.route("**/api/sales/settings**", (r) => r.fulfill({ json: SETTINGS }));
+  await page.route("**/api/sales/leads**", (r) => r.fulfill({ json: { rows: [] } }));
+  await page.route("**/api/sales/orgs**", (r) => r.fulfill({ json: { rows: [] } }));
+  await page.route("**/api/sales/today**", (r) => r.fulfill({ json: { rows: [newLead] } }));
+  await page.route("**/api/sales/leads/*/outreach", (r) =>
+    r.fulfill({ json: { lead_id: "L1", event_id: "E1" } }),
+  );
+  await page.route("**/api/sales/leads/*/outcome", (r) =>
+    r.fulfill({ status: 500, json: { message: "boom" } }),
+  );
+
+  await page.goto("/sales/today");
+  await page.getByTestId("today-card-L1").getByRole("link", { name: "התקשר" }).click();
+  await leaveAndReturn(page);
+  await expect(page.getByTestId("outcome-sheet")).toBeVisible();
+
+  // Same dispatched-click accommodation as the flow above: synthesised mouse
+  // input does not reach this overlay in this container.
+  await page.getByTestId("outcome-answered_progressing").dispatchEvent("click");
+  await page.getByTestId("next-touch-tomorrow").dispatchEvent("click");
+
+  // The write failed: the sheet stays, says so, and the card is back.
+  await expect(page.getByTestId("outcome-sheet")).toBeVisible();
+  await expect(page.getByTestId("today-card-L1")).toBeVisible();
+
+  // And the intent is still owed, so the outcome can still be recorded.
+  const stored = await page.evaluate(() => window.sessionStorage.getItem("gt.sales.outreach"));
+  expect(stored).not.toBeNull();
+});
+
 test("an empty queue is a finished day, not a blank screen @mocked", async ({ page }) => {
   await stubSales(page, []);
   await page.goto("/sales/today");

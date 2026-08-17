@@ -100,6 +100,7 @@ export const UI = {
   markLost: "אבוד",
   addNote: "הוסף הערה",
   save: "שמור",
+  saved: "נשמר ✓",
   cancel: "ביטול",
   close: "סגור",
   back: "חזרה",
@@ -126,7 +127,10 @@ export const UI = {
   // leads
   leadsTitle: "לידים",
   search: "חיפוש לפי שם, עסק או טלפון",
+  // "No results" answers a search. An empty collection is a different fact and
+  // needs its own sentence, or a fresh database reads as a failed query.
   searchEmpty: "לא נמצאו תוצאות",
+  orgsEmpty: "אין עסקים עדיין",
   colBusiness: "עסק",
   colContact: "איש קשר",
   colPhone: "טלפון",

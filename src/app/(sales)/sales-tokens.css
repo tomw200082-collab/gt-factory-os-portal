@@ -61,6 +61,10 @@
   --s-sla-overdue: 0 72% 46%;
   --s-sla-overdue-soft: 0 80% 96%;
 
+  /* The scrim behind a drawer or sheet. Dark-on-dark separates poorly, so the
+     dark theme deepens it rather than reusing this value. */
+  --s-overlay: 220 15% 10% / 0.35;
+
   /* form */
   --s-radius: 8px;
   --s-radius-sm: 6px;
@@ -109,6 +113,7 @@
   --s-sla-ok-soft: 152 35% 18%;
   --s-sla-overdue: 0 72% 69%;
   --s-sla-overdue-soft: 0 40% 22%;
+  --s-overlay: 0 0% 0% / 0.6;
   --s-shadow-card: 0 1px 2px hsl(0 0% 0% / 0.3);
   --s-shadow-sheet: 0 -8px 32px hsl(0 0% 0% / 0.5);
 }
@@ -254,6 +259,9 @@
   border-color: hsl(var(--s-border-field));
   color: hsl(var(--s-sla-overdue));
 }
+[data-app="sales"] .s-btn-danger-quiet:hover {
+  background: hsl(var(--s-sla-overdue-soft));
+}
 
 /* --- input ---------------------------------------------------------------- */
 
@@ -270,6 +278,9 @@
   /* 16px keeps iOS from zooming on focus; the portal enforces this globally
      too, restated here so the sales surface never depends on that ordering. */
   font-size: 16px;
+  /* Applies to the textareas that share this class. A horizontal drag handle
+     lets a user pull a field out of an RTL form's alignment for good. */
+  resize: vertical;
 }
 
 [data-app="sales"] .s-input::placeholder {

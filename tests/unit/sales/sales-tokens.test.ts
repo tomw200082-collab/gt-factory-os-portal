@@ -133,6 +133,9 @@ const PAIRS: Array<[string, string, string, number]> = [
   ["muted text on a card", "--s-fg-muted", "--s-surface", 4.5],
   ["muted text on the page", "--s-fg-muted", "--s-bg", 4.5],
   ["customer badge", "--s-fg-muted", "--s-surface-sunken", 4.5],
+  // The returning-customer card is tinted, so its text sits on accent-soft.
+  ["returning card: body", "--s-fg", "--s-accent-soft", 4.5],
+  ["returning card: meta", "--s-fg-muted", "--s-accent-soft", 4.5],
   ["faint text and placeholders", "--s-fg-faint", "--s-surface", 4.5],
   ["status pill: new", "--s-status-new", "--s-status-new-soft", 4.5],
   ["status pill: working", "--s-status-working", "--s-status-working-soft", 4.5],

@@ -38,6 +38,15 @@ export function SalesShell({ children }: { children: ReactNode }) {
   const [addOpen, setAddOpen] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
+  // Confirmation should not outstay its welcome above the tab bar. Without
+  // this the quick-add toast sits there for the rest of the session, still
+  // announcing a lead created ten minutes and three screens ago.
+  useEffect(() => {
+    if (!toast) return;
+    const id = setTimeout(() => setToast(null), 4500);
+    return () => clearTimeout(id);
+  }, [toast]);
+
   // Both lists are already cached for the screens; the palette reuses them
   // rather than adding a search endpoint.
   const leads = useLeads();

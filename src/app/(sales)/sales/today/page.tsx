@@ -41,15 +41,25 @@ export default function TodayPage() {
   const nextTouch = useSetNextTouch(postponing?.lead_id ?? "");
   const lostOutcome = useOutcome(losing?.lead_id ?? "");
 
-  // An intent can outlive its card: the lead may have been answered for in
-  // another session, or dropped out of the queue on a refetch. Without this the
-  // sheet never renders, the intent never clears, and every return to the app
-  // re-arms a dialog nobody can see — the call silently never gets logged.
+  // Answering for a lead takes its card out of the queue optimistically, which
+  // makes the lead look absent while the write is still in flight. That is not
+  // the lead leaving the queue — it is us answering for it — so the intent has
+  // to survive until the write settles, or a failed POST would clear the sheet
+  // and the stored intent while onError quietly puts the card back: the user
+  // taps an outcome, the sheet closes as though it saved, and nothing was ever
+  // logged. Both outcome writes remove a row this way.
+  const answering = outcome.isPending || lostOutcome.isPending;
+
+  // An intent can still genuinely outlive its card: the lead may have been
+  // answered for in another session, or dropped out of the queue on a refetch.
+  // Without this the sheet never renders, the intent never clears, and every
+  // return to the app re-arms a dialog nobody can see — the call silently never
+  // gets logged.
   useEffect(() => {
-    if (today.isSuccess && capture.pending && !pendingRow) {
+    if (today.isSuccess && capture.pending && !pendingRow && !answering) {
       capture.clear();
     }
-  }, [today.isSuccess, capture, pendingRow]);
+  }, [today.isSuccess, capture, pendingRow, answering]);
 
   // Confirmation should not outstay its welcome above the tab bar.
   useEffect(() => {

@@ -53,7 +53,9 @@ function OrgsScreen() {
 
       {orgs.isLoading ? <QueueLoading /> : null}
       {orgs.isError ? <QueueError onRetry={() => void orgs.refetch()} /> : null}
-      {orgs.isSuccess && visible.length === 0 ? <ListEmpty label={UI.searchEmpty} /> : null}
+      {orgs.isSuccess && visible.length === 0 ? (
+        <ListEmpty label={query ? UI.searchEmpty : UI.orgsEmpty} />
+      ) : null}
       {orgs.isSuccess && visible.length > 0 ? (
         <OrgList rows={visible} onOpen={(org) => setOpenId(org.id)} />
       ) : null}
