@@ -1,0 +1,321 @@
+/* ===========================================================================
+   GT Sales Workspace — scoped token layer
+   ===========================================================================
+   Imported only by the (sales) layout. Every rule is scoped to
+   [data-app="sales"], and every variable is prefixed --s-*, so this file can
+   never reach a factory surface: globals.css and tailwind.config.ts are not
+   touched by this tranche.
+
+   The identity, per masterprompt §5.8: monday.com's structure, GT's quieter
+   voice. White surfaces, hairline borders, an 8px grid, motion 150–200ms.
+   Colour is reserved for status pills, SLA badges and the single primary
+   action on a screen — nothing else earns chroma.
+
+   Colours are bare HSL triplets consumed as hsl(var(--x)), matching the
+   portal's existing convention.
+   =========================================================================== */
+
+[data-app="sales"] {
+  /* surfaces */
+  --s-bg: 40 20% 98%;
+  --s-surface: 0 0% 100%;
+  --s-surface-sunken: 40 16% 96%;
+
+  /* ink */
+  --s-fg: 220 15% 16%;
+  --s-fg-muted: 220 10% 42%;
+  --s-fg-faint: 220 8% 58%;
+
+  /* hairlines */
+  --s-border: 40 10% 90%;
+  --s-border-strong: 40 10% 82%;
+
+  /* the one action colour on any screen */
+  --s-accent: 186 42% 24%;
+  --s-accent-hover: 186 42% 19%;
+  --s-accent-fg: 0 0% 100%;
+  --s-accent-soft: 186 38% 94%;
+
+  /* status — the row's visual anchor */
+  --s-status-new: 217 85% 45%;
+  --s-status-new-soft: 217 90% 96%;
+  --s-status-working: 35 90% 42%;
+  --s-status-working-soft: 35 92% 95%;
+  --s-status-won: 152 55% 34%;
+  --s-status-won-soft: 152 50% 94%;
+  --s-status-lost: 220 8% 55%;
+  --s-status-lost-soft: 220 12% 95%;
+
+  /* SLA — the only other place colour is allowed */
+  --s-sla-ok: 152 55% 34%;
+  --s-sla-ok-soft: 152 50% 94%;
+  --s-sla-overdue: 0 72% 46%;
+  --s-sla-overdue-soft: 0 80% 96%;
+
+  /* form */
+  --s-radius: 8px;
+  --s-radius-sm: 6px;
+  --s-radius-pill: 999px;
+  --s-shadow-card: 0 1px 2px hsl(220 15% 16% / 0.04);
+  --s-shadow-sheet: 0 -8px 32px hsl(220 15% 16% / 0.12);
+  --s-motion: 170ms;
+  --s-ease: cubic-bezier(0.22, 1, 0.36, 1);
+
+  /* Rubik arrives from next/font in the (sales) layout. */
+  --s-font: var(--font-rubik), system-ui, sans-serif;
+
+  font-family: var(--s-font);
+  background: hsl(var(--s-bg));
+  color: hsl(var(--s-fg));
+}
+
+/* The portal's theme toggle is global. The sales surface is designed light, so
+   dark mode remaps its surfaces rather than inheriting a half-broken palette. */
+:root.dark [data-app="sales"] {
+  --s-bg: 220 16% 10%;
+  --s-surface: 220 14% 13%;
+  --s-surface-sunken: 220 16% 11%;
+  --s-fg: 40 20% 96%;
+  --s-fg-muted: 220 8% 68%;
+  --s-fg-faint: 220 8% 52%;
+  --s-border: 220 12% 22%;
+  --s-border-strong: 220 12% 30%;
+  --s-accent: 186 44% 46%;
+  --s-accent-hover: 186 44% 52%;
+  --s-accent-fg: 220 20% 10%;
+  --s-accent-soft: 186 30% 20%;
+  --s-status-new-soft: 217 40% 22%;
+  --s-status-working-soft: 35 45% 20%;
+  --s-status-won-soft: 152 35% 18%;
+  --s-status-lost-soft: 220 10% 22%;
+  --s-sla-ok-soft: 152 35% 18%;
+  --s-sla-overdue-soft: 0 40% 22%;
+  --s-shadow-card: 0 1px 2px hsl(0 0% 0% / 0.3);
+  --s-shadow-sheet: 0 -8px 32px hsl(0 0% 0% / 0.5);
+}
+
+/* --- surfaces ------------------------------------------------------------ */
+
+[data-app="sales"] .s-card {
+  background: hsl(var(--s-surface));
+  border: 1px solid hsl(var(--s-border));
+  border-radius: var(--s-radius);
+  box-shadow: var(--s-shadow-card);
+}
+
+[data-app="sales"] .s-sheet {
+  background: hsl(var(--s-surface));
+  border-start-start-radius: 16px;
+  border-start-end-radius: 16px;
+  box-shadow: var(--s-shadow-sheet);
+}
+
+/* --- numerals ------------------------------------------------------------- */
+
+[data-app="sales"] .s-nums {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* --- status pills — the row's anchor -------------------------------------- */
+
+[data-app="sales"] .s-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding-block: 3px;
+  padding-inline: 10px;
+  border-radius: var(--s-radius-pill);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 1.4;
+  white-space: nowrap;
+}
+
+[data-app="sales"] .s-pill-new {
+  background: hsl(var(--s-status-new-soft));
+  color: hsl(var(--s-status-new));
+}
+[data-app="sales"] .s-pill-working {
+  background: hsl(var(--s-status-working-soft));
+  color: hsl(var(--s-status-working));
+}
+[data-app="sales"] .s-pill-won {
+  background: hsl(var(--s-status-won-soft));
+  color: hsl(var(--s-status-won));
+}
+[data-app="sales"] .s-pill-lost {
+  background: hsl(var(--s-status-lost-soft));
+  color: hsl(var(--s-status-lost));
+}
+
+/* --- SLA + customer badges ------------------------------------------------ */
+
+[data-app="sales"] .s-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding-block: 2px;
+  padding-inline: 8px;
+  border-radius: var(--s-radius-pill);
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+[data-app="sales"] .s-badge-sla-ok {
+  background: hsl(var(--s-sla-ok-soft));
+  color: hsl(var(--s-sla-ok));
+}
+[data-app="sales"] .s-badge-sla-overdue {
+  background: hsl(var(--s-sla-overdue-soft));
+  color: hsl(var(--s-sla-overdue));
+}
+/* Deliberately neutral: an existing customer is context, not a status. */
+[data-app="sales"] .s-badge-customer {
+  background: hsl(var(--s-surface-sunken));
+  color: hsl(var(--s-fg-muted));
+  border: 1px solid hsl(var(--s-border));
+}
+
+/* --- actions -------------------------------------------------------------- */
+
+[data-app="sales"] .s-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  min-height: 44px;
+  padding-block: 10px;
+  padding-inline: 16px;
+  border-radius: var(--s-radius);
+  border: 1px solid transparent;
+  font-family: inherit;
+  font-size: 15px;
+  font-weight: 500;
+  cursor: pointer;
+  transition:
+    background var(--s-motion) var(--s-ease),
+    border-color var(--s-motion) var(--s-ease),
+    transform var(--s-motion) var(--s-ease);
+}
+
+[data-app="sales"] .s-btn:active {
+  transform: scale(0.985);
+}
+
+[data-app="sales"] .s-btn-primary {
+  background: hsl(var(--s-accent));
+  color: hsl(var(--s-accent-fg));
+}
+[data-app="sales"] .s-btn-primary:hover {
+  background: hsl(var(--s-accent-hover));
+}
+
+[data-app="sales"] .s-btn-ghost {
+  background: hsl(var(--s-surface));
+  border-color: hsl(var(--s-border));
+  color: hsl(var(--s-fg));
+}
+[data-app="sales"] .s-btn-ghost:hover {
+  border-color: hsl(var(--s-border-strong));
+  background: hsl(var(--s-surface-sunken));
+}
+
+[data-app="sales"] .s-btn-danger-quiet {
+  background: hsl(var(--s-surface));
+  border-color: hsl(var(--s-border));
+  color: hsl(var(--s-sla-overdue));
+}
+
+/* --- input ---------------------------------------------------------------- */
+
+[data-app="sales"] .s-input {
+  inline-size: 100%;
+  min-height: 44px;
+  padding-block: 10px;
+  padding-inline: 12px;
+  border: 1px solid hsl(var(--s-border));
+  border-radius: var(--s-radius);
+  background: hsl(var(--s-surface));
+  color: hsl(var(--s-fg));
+  font-family: inherit;
+  /* 16px keeps iOS from zooming on focus; the portal enforces this globally
+     too, restated here so the sales surface never depends on that ordering. */
+  font-size: 16px;
+}
+
+[data-app="sales"] .s-input::placeholder {
+  color: hsl(var(--s-fg-faint));
+}
+
+[data-app="sales"] .s-input:focus-visible,
+[data-app="sales"] .s-btn:focus-visible,
+[data-app="sales"] .s-tab:focus-visible {
+  outline: 2px solid hsl(var(--s-accent));
+  outline-offset: 2px;
+}
+
+/* --- tabs ----------------------------------------------------------------- */
+
+[data-app="sales"] .s-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 40px;
+  padding-block: 8px;
+  padding-inline: 14px;
+  border: 0;
+  border-radius: var(--s-radius-pill);
+  background: transparent;
+  color: hsl(var(--s-fg-muted));
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--s-motion) var(--s-ease);
+}
+
+[data-app="sales"] .s-tab:hover {
+  background: hsl(var(--s-surface-sunken));
+}
+
+[data-app="sales"] .s-tab-active {
+  background: hsl(var(--s-fg) / 0.06);
+  color: hsl(var(--s-fg));
+}
+
+/* --- section headings ----------------------------------------------------- */
+
+[data-app="sales"] .s-eyebrow {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: hsl(var(--s-fg-muted));
+}
+
+/* --- motion --------------------------------------------------------------- */
+
+[data-app="sales"] .s-enter {
+  animation: s-fade-up var(--s-motion) var(--s-ease) both;
+}
+
+@keyframes s-fade-up {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  [data-app="sales"] .s-enter {
+    animation: none;
+  }
+  [data-app="sales"] .s-btn {
+    transition: none;
+  }
+}
