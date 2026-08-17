@@ -144,7 +144,11 @@ export const UI = {
   assigneePlaceholder: "אימייל",
   notePlaceholder: "מה קרה?",
   statusLabel: "סטטוס",
-  wonBanner: (ref: string) => `הומר — הזמנה ${ref}`,
+  // The order ref is rendered as a separate node rather than interpolated, so
+  // it can sit in a <bdi dir="ltr"> — a Latin/numeric ref inside an RTL
+  // paragraph otherwise resolves its leading punctuation to the paragraph
+  // direction and renders on the wrong side.
+  wonBannerPrefix: "הומר — הזמנה",
   wonBannerHint: "סטטוס 'הומר' נכתב מהזמנה בשופיפיי, ולא ידנית.",
   lostReasonLabel: "סיבת אובדן",
 

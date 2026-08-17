@@ -139,7 +139,10 @@ export function CommandK({ leads, orgs, onClose }: CommandKProps) {
                     className="s-nums block truncate text-[12px]"
                     style={{ color: "hsl(var(--s-fg-muted))" }}
                   >
-                    {hit.subtitle}
+                    {/* Composed from a name and a phone, so it is isolated as a
+                        unit: dir="auto" picks RTL from the name when there is
+                        one and LTR for a bare number. */}
+                    <bdi>{hit.subtitle}</bdi>
                   </span>
                 </span>
                 <span className="s-badge s-badge-customer">

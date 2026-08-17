@@ -89,8 +89,13 @@ export function OrgCard({
               {org.display_name}
             </h2>
             <p className="s-nums text-[13px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
-              {fmtPhone(org.phone_e164)}
-              {org.email ? ` · ${org.email}` : ""}
+              <bdi dir="ltr">{fmtPhone(org.phone_e164)}</bdi>
+              {org.email ? (
+                <>
+                  {" · "}
+                  <bdi dir="ltr">{org.email}</bdi>
+                </>
+              ) : null}
             </p>
           </div>
           <button

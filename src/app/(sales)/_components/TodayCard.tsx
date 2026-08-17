@@ -36,7 +36,7 @@ function ConversionCard({ row }: { row: TodayRow }) {
           {row.org_name}
         </h3>
         <p className="mt-0.5 text-[13px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
-          {UI.wonBanner(row.converted_order_ref ?? "—")}
+          {UI.wonBannerPrefix} <bdi dir="ltr">{row.converted_order_ref ?? "—"}</bdi>
           {row.converted_amount ? (
             <>
               {" · "}
@@ -83,7 +83,14 @@ export function TodayCard({ row, templates, onArm, onPostpone, onLost }: TodayCa
           </h3>
           <p className="mt-0.5 truncate text-[13px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
             {row.contact_name ? `${row.contact_name} · ` : ""}
-            <span className="s-nums">{fmtPhone(row.phone_e164)}</span>
+            {/* A phone is the one string here that must never be reordered by
+                the bidi algorithm: fmtPhone falls through to raw E.164 for any
+                number it cannot parse, and a leading "+" in an RTL paragraph
+                lands on the wrong side. <bdi> makes that independent of which
+                branch fmtPhone took. Same at every other phone render site. */}
+            <bdi dir="ltr" className="s-nums">
+              {fmtPhone(row.phone_e164)}
+            </bdi>
           </p>
         </div>
         <div className="flex shrink-0 flex-wrap items-center justify-end gap-1">

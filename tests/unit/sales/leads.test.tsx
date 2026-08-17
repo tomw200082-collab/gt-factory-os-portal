@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { LeadsTable } from "@/app/(sales)/_components/LeadsTable";
 import { LeadDrawer } from "@/app/(sales)/_components/LeadDrawer";
 import { EventTimeline } from "@/app/(sales)/_components/EventTimeline";
@@ -97,6 +97,19 @@ describe("leads table", () => {
     fireEvent.keyDown(screen.getByTestId("lead-row-L1"), { key: "Enter" });
     expect(opened).toEqual(["L1"]);
   });
+
+  it("isolates every phone number from the surrounding RTL text", () => {
+    // fmtPhone returns raw E.164 for anything it cannot parse, and a leading
+    // "+" inside an RTL paragraph resolves to the paragraph direction and
+    // renders on the wrong side. <bdi dir="ltr"> makes the rendering correct
+    // whichever branch fmtPhone took — so it must wrap every phone, not just
+    // the pretty ones.
+    const { container } = render(
+      <LeadsTable rows={[lead({ phone_e164: "+12025550123" })]} onOpen={noop} />,
+    );
+    const isolated = [...container.querySelectorAll("bdi[dir='ltr']")].map((el) => el.textContent);
+    expect(isolated).toContain("+12025550123");
+  });
 });
 
 describe("lead drawer", () => {
@@ -157,7 +170,11 @@ describe("lead drawer", () => {
 
   it("shows a won lead as evidence and offers no status controls", () => {
     renderDrawer({ status: "won", converted_order_ref: "#1042" });
-    expect(screen.getByTestId("won-banner").textContent).toContain("#1042");
+    const banner = screen.getByTestId("won-banner");
+    expect(banner.textContent).toContain("#1042");
+    // The order ref is a Latin/numeric run inside a Hebrew sentence: isolated,
+    // or the leading "#" renders on the wrong side of the digits.
+    expect(banner.querySelector("bdi[dir='ltr']")?.textContent).toBe("#1042");
     expect(screen.queryByTestId("drawer-set-working")).toBeNull();
     expect(screen.queryByTestId("drawer-set-lost")).toBeNull();
     expect(screen.getByText(STATUS_LABELS.won)).toBeTruthy();

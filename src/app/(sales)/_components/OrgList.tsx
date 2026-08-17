@@ -31,7 +31,7 @@ export function OrgList({ rows, onOpen }: { rows: OrgRow[]; onOpen: (org: OrgRow
                   className="s-nums block truncate text-[13px]"
                   style={{ color: "hsl(var(--s-fg-muted))" }}
                 >
-                  {fmtPhone(org.phone_e164)}
+                  <bdi dir="ltr">{fmtPhone(org.phone_e164)}</bdi>
                 </span>
               </span>
               {org.is_existing_customer ? <CustomerBadge /> : null}

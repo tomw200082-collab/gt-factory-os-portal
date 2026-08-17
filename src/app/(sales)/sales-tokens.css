@@ -24,11 +24,17 @@
   /* ink */
   --s-fg: 220 15% 16%;
   --s-fg-muted: 220 10% 42%;
-  --s-fg-faint: 220 8% 58%;
+  --s-fg-faint: 220 8% 47%;
 
-  /* hairlines */
+  /* hairlines — grouping only. A card boundary is not a control boundary, so
+     it is exempt from WCAG 1.4.11 and stays a true hairline. */
   --s-border: 40 10% 90%;
   --s-border-strong: 40 10% 82%;
+
+  /* The boundary of anything you can type in or press. 1.4.11 asks 3:1 against
+     both the fill and the page, and a factory phone in daylight asks the same
+     thing louder. Deliberately heavier than the hairlines above. */
+  --s-border-field: 40 10% 54%;
 
   /* the one action colour on any screen */
   --s-accent: 186 42% 24%;
@@ -36,18 +42,21 @@
   --s-accent-fg: 0 0% 100%;
   --s-accent-soft: 186 38% 94%;
 
-  /* status — the row's visual anchor */
+  /* status — the row's visual anchor. Every foreground here is solved against
+     its own -soft fill at ≥4.5:1: these pills carry the only colour-coded
+     meaning in the product, so they are the last place that may go unreadable.
+     Enforced by tests/unit/sales/sales-tokens.test.ts. */
   --s-status-new: 217 85% 45%;
   --s-status-new-soft: 217 90% 96%;
-  --s-status-working: 35 90% 42%;
+  --s-status-working: 35 90% 33%;
   --s-status-working-soft: 35 92% 95%;
-  --s-status-won: 152 55% 34%;
+  --s-status-won: 152 55% 31%;
   --s-status-won-soft: 152 50% 94%;
-  --s-status-lost: 220 8% 55%;
+  --s-status-lost: 220 8% 44%;
   --s-status-lost-soft: 220 12% 95%;
 
   /* SLA — the only other place colour is allowed */
-  --s-sla-ok: 152 55% 34%;
+  --s-sla-ok: 152 55% 31%;
   --s-sla-ok-soft: 152 50% 94%;
   --s-sla-overdue: 0 72% 46%;
   --s-sla-overdue-soft: 0 80% 96%;
@@ -77,18 +86,28 @@
   --s-surface-sunken: 220 16% 11%;
   --s-fg: 40 20% 96%;
   --s-fg-muted: 220 8% 68%;
-  --s-fg-faint: 220 8% 52%;
+  --s-fg-faint: 220 8% 55%;
   --s-border: 220 12% 22%;
   --s-border-strong: 220 12% 30%;
+  --s-border-field: 220 12% 45%;
   --s-accent: 186 44% 46%;
   --s-accent-hover: 186 44% 52%;
   --s-accent-fg: 220 20% 10%;
   --s-accent-soft: 186 30% 20%;
+  /* Both halves of every pair are remapped. Re-tinting only the -soft fills
+     and keeping foregrounds tuned for near-white is what makes dark themes
+     unreadable; each value below is solved against its own dark fill. */
+  --s-status-new: 217 85% 68%;
   --s-status-new-soft: 217 40% 22%;
+  --s-status-working: 35 90% 49%;
   --s-status-working-soft: 35 45% 20%;
+  --s-status-won: 152 55% 47%;
   --s-status-won-soft: 152 35% 18%;
+  --s-status-lost: 220 8% 64%;
   --s-status-lost-soft: 220 10% 22%;
+  --s-sla-ok: 152 55% 47%;
   --s-sla-ok-soft: 152 35% 18%;
+  --s-sla-overdue: 0 72% 69%;
   --s-sla-overdue-soft: 0 40% 22%;
   --s-shadow-card: 0 1px 2px hsl(0 0% 0% / 0.3);
   --s-shadow-sheet: 0 -8px 32px hsl(0 0% 0% / 0.5);
@@ -222,17 +241,17 @@
 
 [data-app="sales"] .s-btn-ghost {
   background: hsl(var(--s-surface));
-  border-color: hsl(var(--s-border));
+  border-color: hsl(var(--s-border-field));
   color: hsl(var(--s-fg));
 }
 [data-app="sales"] .s-btn-ghost:hover {
-  border-color: hsl(var(--s-border-strong));
+  border-color: hsl(var(--s-fg-muted));
   background: hsl(var(--s-surface-sunken));
 }
 
 [data-app="sales"] .s-btn-danger-quiet {
   background: hsl(var(--s-surface));
-  border-color: hsl(var(--s-border));
+  border-color: hsl(var(--s-border-field));
   color: hsl(var(--s-sla-overdue));
 }
 
@@ -243,7 +262,7 @@
   min-height: 44px;
   padding-block: 10px;
   padding-inline: 12px;
-  border: 1px solid hsl(var(--s-border));
+  border: 1px solid hsl(var(--s-border-field));
   border-radius: var(--s-radius);
   background: hsl(var(--s-surface));
   color: hsl(var(--s-fg));
@@ -325,5 +344,12 @@
   }
   [data-app="sales"] .s-btn {
     transition: none;
+  }
+  /* The loading skeleton uses Tailwind's animate-pulse. This portal has no
+     global reduced-motion rule — it disables motion class by class — so
+     without this line the skeleton keeps pulsing at someone who asked it not
+     to. Repetitive background motion is exactly what the query is for. */
+  [data-app="sales"] .animate-pulse {
+    animation: none;
   }
 }

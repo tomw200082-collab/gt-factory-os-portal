@@ -30,14 +30,19 @@ export interface LeadDrawerProps {
   onAssign: (assignee: string) => void;
 }
 
-function Field({ label, value }: { label: string; value: string }) {
+/**
+ * A label/value row. `isolate` bidi-isolates the value for the Latin-and-digit
+ * ones (phone, email, order ref): inside an RTL paragraph their punctuation
+ * otherwise resolves to the paragraph direction and renders on the wrong side.
+ */
+function Field({ label, value, isolate }: { label: string; value: string; isolate?: boolean }) {
   return (
     <div className="flex items-baseline justify-between gap-3 py-1">
       <dt className="text-[12px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
         {label}
       </dt>
       <dd className="s-nums text-[13px]" style={{ color: "hsl(var(--s-fg))" }}>
-        {value}
+        {isolate ? <bdi dir="ltr">{value}</bdi> : value}
       </dd>
     </div>
   );
@@ -178,7 +183,7 @@ export function LeadDrawer({
             style={{ background: "hsl(var(--s-status-won-soft))" }}
           >
             <p className="text-[13px] font-medium" style={{ color: "hsl(var(--s-status-won))" }}>
-              {UI.wonBanner(lead.converted_order_ref ?? "—")}
+              {UI.wonBannerPrefix} <bdi dir="ltr">{lead.converted_order_ref ?? "—"}</bdi>
             </p>
             <p className="mt-0.5 text-[12px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
               {UI.wonBannerHint}
@@ -219,8 +224,8 @@ export function LeadDrawer({
           <h3 className="s-eyebrow">{UI.detailsTitle}</h3>
           <dl className="mt-1">
             <Field label={UI.contactName} value={lead.contact_name ?? "—"} />
-            <Field label={UI.colPhone} value={fmtPhone(lead.phone_e164)} />
-            <Field label={UI.email} value={lead.email ?? "—"} />
+            <Field label={UI.colPhone} value={fmtPhone(lead.phone_e164)} isolate />
+            <Field label={UI.email} value={lead.email ?? "—"} isolate />
             <Field label={UI.colCampaign} value={lead.campaign_name ?? lead.platform ?? "—"} />
             <Field label={UI.colAge} value={UI.ageDays(lead.age_days)} />
             <Field

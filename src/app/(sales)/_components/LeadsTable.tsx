@@ -59,7 +59,9 @@ export function LeadsTable({ rows, onOpen }: LeadsTableProps) {
                     style={{ color: "hsl(var(--s-fg-muted))" }}
                   >
                     {row.contact_name ? `${row.contact_name} · ` : ""}
-                    <span className="s-nums">{fmtPhone(row.phone_e164)}</span>
+                    <bdi dir="ltr" className="s-nums">
+                      {fmtPhone(row.phone_e164)}
+                    </bdi>
                   </span>
                 </span>
                 <StatusPill status={row.status} />
@@ -126,7 +128,7 @@ export function LeadsTable({ rows, onOpen }: LeadsTableProps) {
                   {row.contact_name ?? "—"}
                 </td>
                 <td className="s-nums px-2 py-2" style={{ color: "hsl(var(--s-fg-muted))" }}>
-                  {fmtPhone(row.phone_e164)}
+                  <bdi dir="ltr">{fmtPhone(row.phone_e164)}</bdi>
                 </td>
                 <td className="px-2 py-2">
                   <StatusPill status={row.status} />
