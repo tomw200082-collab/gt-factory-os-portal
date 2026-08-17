@@ -66,6 +66,12 @@ export interface OutcomeCapture {
   arm: (leadId: string, channel: OutreachChannel) => void;
   /** Only a captured outcome clears the intent. Dismissal does not. */
   clear: () => void;
+  /**
+   * Closes the sheet without answering it. The intent stays in storage, so the
+   * next return to the app asks again — which is the point: a queue item is
+   * cleared by an outcome, never by looking away.
+   */
+  dismiss: () => void;
 }
 
 export function useOutcomeCapture(): OutcomeCapture {
@@ -78,6 +84,10 @@ export function useOutcomeCapture(): OutcomeCapture {
 
   const clear = useCallback(() => {
     writeArmed(null);
+    setPending(null);
+  }, []);
+
+  const dismiss = useCallback(() => {
     setPending(null);
   }, []);
 
@@ -103,5 +113,5 @@ export function useOutcomeCapture(): OutcomeCapture {
     };
   }, []);
 
-  return { pending, arm, clear };
+  return { pending, arm, clear, dismiss };
 }
