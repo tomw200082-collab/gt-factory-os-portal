@@ -106,28 +106,41 @@ export function TodayCard({ row, templates, onArm, onPostpone, onLost }: TodayCa
       </p>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">
-        <a
-          href={tel ?? undefined}
-          aria-disabled={!tel}
-          onClick={() => tel && onArm(row.lead_id, "call")}
-          className="s-btn s-btn-primary flex-1"
-          style={!tel ? { opacity: 0.45, pointerEvents: "none" } : undefined}
-        >
-          <Phone size={16} aria-hidden />
-          {UI.call}
-        </a>
-        <a
-          href={wa ?? undefined}
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-disabled={!wa}
-          onClick={() => wa && onArm(row.lead_id, "whatsapp")}
-          className="s-btn s-btn-ghost flex-1"
-          style={!wa ? { opacity: 0.45, pointerEvents: "none" } : undefined}
-        >
-          <MessageCircle size={16} aria-hidden />
-          {UI.whatsapp}
-        </a>
+        {/* Without a phone number there is no call to make. A disabled button
+            says so honestly; an anchor with no href would look identical and
+            behave like text. */}
+        {tel ? (
+          <a
+            href={tel}
+            onClick={() => onArm(row.lead_id, "call")}
+            className="s-btn s-btn-primary flex-1"
+          >
+            <Phone size={16} aria-hidden />
+            {UI.call}
+          </a>
+        ) : (
+          <button type="button" disabled title={UI.noPhone} className="s-btn s-btn-primary flex-1" style={{ opacity: 0.45 }}>
+            <Phone size={16} aria-hidden />
+            {UI.call}
+          </button>
+        )}
+        {wa ? (
+          <a
+            href={wa}
+            target="_blank"
+            rel="noopener noreferrer"
+            onClick={() => onArm(row.lead_id, "whatsapp")}
+            className="s-btn s-btn-ghost flex-1"
+          >
+            <MessageCircle size={16} aria-hidden />
+            {UI.whatsapp}
+          </a>
+        ) : (
+          <button type="button" disabled title={UI.noPhone} className="s-btn s-btn-ghost flex-1" style={{ opacity: 0.45 }}>
+            <MessageCircle size={16} aria-hidden />
+            {UI.whatsapp}
+          </button>
+        )}
         <button type="button" className="s-btn s-btn-ghost" onClick={() => onPostpone(row)}>
           {UI.postpone}
         </button>

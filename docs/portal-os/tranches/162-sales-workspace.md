@@ -167,5 +167,30 @@ stays (additive, harmless). No data-layer destruction anywhere.
 - [x] Tom approved via the 2026-08-17 masterprompt paste (§3 authorizations) + the same-day
   UX-iteration addendum. Phase B may start when Tom says "execute the plan".
 
+## Deferred polish-later
+
+Logged, deliberately not built (per the 2026-08-17 UX-iteration addendum):
+
+- **Toast dwell.** The confirmation toast stays until the next render rather
+  than fading on a timer. It never blocks an action, so the timer is polish.
+- **Queue-change announcement.** The optimistic removal of a card is not
+  announced to a screen reader beyond the success toast's live region. A
+  per-removal announcement is a refinement, not a gap in the flow.
+- **Bulk multi-select on the leads table.** Decided OUT during planning
+  (selection state, a bulk bar, and partial-failure semantics are not
+  trivially cheap). Its own tranche if wanted.
+- **Section collapse on the Today queue.** With 185 untouched leads the
+  new-lead section is long; batched reveal solves usability, and collapsing is
+  a preference feature.
+
+## Open question for Tom (surfaced, not decided)
+
+The Today queue currently holds **188 items** — 185 untouched new leads plus 3
+returning customers — because every imported lead is genuinely untouched and
+past SLA. That is honest, and the batched reveal keeps it usable, but a queue
+the size of the whole table is not the "call these two, follow up on these
+three" shape the masterprompt describes. Working the backlog down, or a
+deliberate daily cap, is a product decision and was left alone.
+
 ## Actual evidence (filled in by the Phase B run)
-<pending Phase B>
+<pending Phase B completion>

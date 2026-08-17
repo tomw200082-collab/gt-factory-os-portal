@@ -180,9 +180,16 @@ export function useAssign(leadId: string) {
   );
 }
 
-export function useOutreach(leadId: string) {
-  return useSalesMutation<{ channel: OutreachChannel }, unknown>((vars) =>
-    request(`/api/sales/leads/${leadId}/outreach`, jsonBody(vars)),
+/**
+ * Records the intent to reach out.
+ *
+ * The lead id travels in the variables rather than being bound when the hook is
+ * created: this fires at the moment of the tap, before anything is "pending",
+ * so a hook bound to the pending lead would post to an empty id.
+ */
+export function useOutreach() {
+  return useSalesMutation<{ leadId: string; channel: OutreachChannel }, unknown>(({ leadId, channel }) =>
+    request(`/api/sales/leads/${leadId}/outreach`, jsonBody({ channel })),
   );
 }
 

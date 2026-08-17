@@ -94,6 +94,7 @@ export const UI = {
   whatsapp: "וואטסאפ",
   email: "אימייל",
   postpone: "דחה",
+  noPhone: "אין מספר טלפון לליד הזה",
   markLost: "אבוד",
   addNote: "הוסף הערה",
   save: "שמור",

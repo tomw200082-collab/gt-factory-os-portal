@@ -36,7 +36,7 @@ export default function TodayPage() {
     [rows, capture.pending],
   );
 
-  const outreach = useOutreach(capture.pending?.leadId ?? "");
+  const outreach = useOutreach();
   const outcome = useOutcome(capture.pending?.leadId ?? "");
   const nextTouch = useSetNextTouch(postponing?.lead_id ?? "");
   const lostOutcome = useOutcome(losing?.lead_id ?? "");
@@ -45,7 +45,8 @@ export default function TodayPage() {
     capture.arm(leadId, channel);
     // Intent, not a touch: only an outcome, a note or a status change stops the
     // SLA clock (§5.3), and record_outreach is written that way server-side.
-    outreach.mutate({ channel });
+    // The id travels in the vars — nothing is "pending" yet at this instant.
+    outreach.mutate({ leadId, channel });
   }
 
   function submitOutcome(vars: OutcomeSubmit) {
@@ -141,16 +142,15 @@ export default function TodayPage() {
       ) : null}
 
       {toast ? (
-        <button
-          type="button"
+        <div
           role="status"
+          aria-live="polite"
           data-testid="sales-toast"
           className="fixed inset-x-0 bottom-24 mx-auto w-fit rounded-full px-4 py-2 text-[13px]"
           style={{ background: "hsl(var(--s-fg))", color: "hsl(var(--s-bg))" }}
-          onClick={() => setToast(null)}
         >
           {toast}
-        </button>
+        </div>
       ) : null}
     </div>
   );

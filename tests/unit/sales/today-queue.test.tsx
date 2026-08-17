@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
-import { cleanup, render, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { TodayQueue } from "@/app/(sales)/_components/TodayQueue";
 import { TODAY_SECTION_LABELS, UI } from "@/app/(sales)/_lib/labels";
 import type { TodayRow } from "@/app/(sales)/_lib/types";
@@ -161,6 +161,32 @@ describe("today queue", () => {
     const card = screen.getByTestId("today-card-R");
     expect(card.textContent).not.toMatch(/נכון ל-/);
     expect(card.textContent).not.toContain("₪");
+  });
+
+  it("arms the card's own lead when an outreach starts", () => {
+    // Regression: the outreach mutation was once bound to the *pending* lead,
+    // which is null at the instant of the tap — every call posted to an empty
+    // lead id. The id must travel from the card.
+    const armed: Array<[string, string]> = [];
+    render(
+      <TodayQueue
+        rows={[row({ lead_id: "L7" })]}
+        templates={null}
+        onArm={(id, ch) => armed.push([id, ch])}
+        onPostpone={noop}
+        onLost={noop}
+      />,
+    );
+    fireEvent.click(within(screen.getByTestId("today-card-L7")).getByText(UI.call));
+    expect(armed).toEqual([["L7", "call"]]);
+  });
+
+  it("disables the call when the lead has no phone, rather than faking a link", () => {
+    renderQueue([row({ lead_id: "NP", phone_e164: null })]);
+    const card = screen.getByTestId("today-card-NP");
+    const call = within(card).getByText(UI.call).closest("button");
+    expect(call).not.toBeNull();
+    expect((call as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("reveals a long section in batches, always naming the true total", () => {
