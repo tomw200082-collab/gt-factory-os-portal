@@ -1,6 +1,6 @@
 # Tranche 162 — GT Sales Workspace: `/apps` switchboard + `(sales)` route group
 
-status: proposed (Phase A plan committed; Phase B executes)
+status: landed (Phase B executed 2026-08-17; evidence below)
 created: 2026-08-17
 scorecard_target_category: none — new module surface outside the 10-category factory rubric.
 expected_delta: +0 on every factory category. The factory scorecard must not regress; that IS the gate.
@@ -110,10 +110,17 @@ manifest:
 - docs/portal-os/scorecard.json
 - docs/portal-os/tranches/162-sales-workspace.md
 - docs/portal-os/tranches/_active.txt
+- tests/unit/middleware.test.ts
 
 (`.claude/skills/impeccable/**`, `tests/unit/sales/**`, `tests/e2e/sales-*.spec.ts`,
 `tests/e2e/mobile-sales-*.spec.ts` are hook-exempt path classes; they belong to this
 tranche all the same. Vitest files for this tranche live under `tests/unit/sales/`.)
+
+`tests/unit/middleware.test.ts` is listed explicitly because it falls outside those
+exempt classes: the two new `(sales)` role-gate rows needed covering assertions, so the
+file gained three cases. Purely additive — no existing assertion was weakened. It was
+added to this list after the regression sentinel correctly flagged it as an
+outside-the-manifest edit.
 
 ## Out-of-scope (adjacent, NOT here)
 
@@ -171,8 +178,10 @@ stays (additive, harmless). No data-layer destruction anywhere.
 
 Logged, deliberately not built (per the 2026-08-17 UX-iteration addendum):
 
-- **Toast dwell.** The confirmation toast stays until the next render rather
-  than fading on a timer. It never blocks an action, so the timer is polish.
+- ~~**Toast dwell.**~~ **Done, not deferred** — the confirmation toast now
+  clears itself on a 4.5s timer (`sales/today/page.tsx:57`) and is a
+  `role="status" aria-live="polite"` region. Struck rather than deleted so the
+  record shows it was reconsidered, not dropped.
 - **Queue-change announcement.** The optimistic removal of a card is not
   announced to a screen reader beyond the success toast's live region. A
   per-removal announcement is a refinement, not a gap in the flow.
@@ -182,6 +191,18 @@ Logged, deliberately not built (per the 2026-08-17 UX-iteration addendum):
 - **Section collapse on the Today queue.** With 185 untouched leads the
   new-lead section is long; batched reveal solves usability, and collapsing is
   a preference feature.
+- **CI does not run the phone spec, and never ran `lint:urls`.**
+  `tests/e2e/mobile-sales-today.spec.ts` needs WebKit, and `portal-pr-guard`
+  installs chromium only — so the phone-first product's phone spec sits outside
+  the gate, along with three sibling `mobile-*` specs that predate this
+  tranche. Separately the regression sentinel found `npm run lint:urls` is
+  defined in `package.json` but was never added to the workflow, so the guard
+  this tranche repaired still runs nowhere. Both are two lines in
+  `.github/workflows/portal-pr-guard.yml` — CI infrastructure, outside this
+  tranche's manifest, and worth one small follow-up tranche together with the
+  sentinel's `baseline.json` repair (stale `anchor_sha`, four authorised
+  nav/gate changes from tranches 139/141/143/155 never folded in, and four
+  pre-existing pages with no `route-manifest.json` row).
 
 ## Open question for Tom (surfaced, not decided)
 
