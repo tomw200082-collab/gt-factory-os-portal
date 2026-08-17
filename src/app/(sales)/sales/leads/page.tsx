@@ -95,10 +95,24 @@ function LeadsScreen() {
               key={status}
               role="tab"
               type="button"
+              id={`leads-tab-${status}`}
               aria-selected={tab === status}
+              aria-controls="leads-panel"
+              // Only the selected tab stays in the tab order; the arrow keys
+              // move between them, which is what the tab pattern promises.
+              tabIndex={tab === status ? 0 : -1}
               data-testid={`leads-tab-${status}`}
               className={`s-tab ${tab === status ? "s-tab-active" : ""}`}
               onClick={() => setTab(status)}
+              onKeyDown={(e) => {
+                if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+                e.preventDefault();
+                // RTL: ArrowLeft advances, ArrowRight goes back.
+                const step = e.key === "ArrowLeft" ? 1 : -1;
+                const next = TABS[(TABS.indexOf(status) + step + TABS.length) % TABS.length];
+                setTab(next);
+                document.getElementById(`leads-tab-${next}`)?.focus();
+              }}
             >
               {STATUS_LABELS[status]}
               <span className="s-nums" style={{ color: "hsl(var(--s-fg-faint))" }}>
@@ -109,16 +123,18 @@ function LeadsScreen() {
         </div>
       </header>
 
-      {leads.isLoading ? <QueueLoading /> : null}
-      {leads.isError ? <QueueError onRetry={() => void leads.refetch()} /> : null}
+      <div id="leads-panel" role="tabpanel" aria-labelledby={`leads-tab-${tab}`}>
+        {leads.isLoading ? <QueueLoading /> : null}
+        {leads.isError ? <QueueError onRetry={() => void leads.refetch()} /> : null}
 
-      {leads.isSuccess && visible.length === 0 ? (
-        <ListEmpty label={query ? UI.searchEmpty : UI.emptyForTab(STATUS_LABELS[tab])} />
-      ) : null}
+        {leads.isSuccess && visible.length === 0 ? (
+          <ListEmpty label={query ? UI.searchEmpty : UI.emptyForTab(STATUS_LABELS[tab])} />
+        ) : null}
 
-      {leads.isSuccess && visible.length > 0 ? (
-        <LeadsTable rows={visible} onOpen={(lead) => setOpenId(lead.id)} />
-      ) : null}
+        {leads.isSuccess && visible.length > 0 ? (
+          <LeadsTable rows={visible} onOpen={(lead) => setOpenId(lead.id)} />
+        ) : null}
+      </div>
 
       {openLead ? (
         <LeadDrawer

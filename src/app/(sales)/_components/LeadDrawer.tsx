@@ -65,12 +65,36 @@ export function LeadDrawer({
   const [lostReason, setLostReason] = useState("");
   const panelRef = useRef<HTMLDivElement>(null);
 
+  // Escape closes, and Tab stays inside: the drawer covers the list behind a
+  // backdrop, so focus escaping into unreachable rows would strand a keyboard
+  // or screen-reader user. Same trap MobileNav uses for its drawer.
   useEffect(() => {
+    const panel = panelRef.current;
+    panel?.focus();
+
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab" || !panel) return;
+      const focusable = Array.from(
+        panel.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), select:not([disabled]), textarea:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener("keydown", onKeyDown);
-    panelRef.current?.focus();
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onClose]);
 
