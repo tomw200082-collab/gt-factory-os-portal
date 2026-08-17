@@ -10,93 +10,925 @@
     "Tranche 045 (2026-06-11): planning consolidation — added status value 'redirect' (URL-preserved permanent redirect stub; _lib/_components siblings may remain imported elsewhere). purchase-session + purchase-calendar now redirect to /planning/procurement; weekly-outlook row added and redirects to /planning/inventory-flow; runs demoted to diagnostic-only.",
     "Tranche 046 (2026-06-11): full manifest regeneration — every src/app/**/page.tsx now has a row (41 → 77). Roles derived from the ACTUAL route-group layout gates + the role×capability lattice (src/lib/auth/authorize.ts): (ops) stock:execute = operator+planner+admin; (planning) and (planner) planning:read = all four roles; (po) and (shared) and (inbox) viewer:read = all four roles; (economics) planning:execute = planner+admin; (admin) admin:execute = admin only. T6 resolution: /admin/users, /admin/jobs, /admin/integrations reclassified quarantined → live. Redirect stubs marked: /admin, /admin/items/[item_id], /dashboard/v2, /stock/submissions, /exceptions (plus the three Tranche 045 planning redirects).",
     "Tranche 086 (2026-06-20): added /purchase-orders/placement-queue (live, planning:execute) — office-manager place-order queue for the two-stage PO handoff (APPROVED_TO_ORDER → OPEN).",
-    "Tranche 090 (2026-06-25): added three orphan rows surfaced by the /portal-audit route-auditor — /admin/decision-board (tranche 080, economics group planner+admin), /credit-tracking (CLAUDE.md-authorized bookkeeper surface, shared group all roles), /inbox/approvals/inventory-movement/[submission_id] (planner+admin approval). All three were live code + nav with no manifest row. No status changes; additive only."
+    "Tranche 090 (2026-06-25): added three orphan rows surfaced by the /portal-audit route-auditor — /admin/decision-board (tranche 080, economics group planner+admin), /credit-tracking (CLAUDE.md-authorized bookkeeper surface, shared group all roles), /inbox/approvals/inventory-movement/[submission_id] (planner+admin approval). All three were live code + nav with no manifest row. No status changes; additive only.",
+    "Tranche 162 (2026-08-17): the sales workspace enters the manifest — /apps plus the (sales) route group. Roles are admin-only in v1, enforced by the RoleGate in (sales)/layout.tsx and by every sales API endpoint server-side; the middleware ROLE_GATES rows are dormant like the rest of that table until app_users.role reaches the JWT."
   ],
   "generated_at": "2026-06-11T00:00:00Z",
   "anchor_sha_at_seed": "55682bb",
   "routes": [
-    { "path": "/", "status": "live", "roles": ["viewer"], "group": "root", "notes": "landing redirect" },
-    { "path": "/login", "status": "live", "roles": ["viewer"], "group": "auth" },
-    { "path": "/auth/callback", "status": "live", "roles": ["viewer"], "group": "auth", "notes": "public magic-link code exchange; added by tranche 046 manifest regeneration" },
-    { "path": "/auth/click-to-signin", "status": "live", "roles": ["viewer"], "group": "auth", "notes": "public sign-in helper surface; added by tranche 046 manifest regeneration" },
-    { "path": "/auth/signout", "status": "live", "roles": ["viewer"], "group": "auth", "notes": "sign-out surface; added by tranche 046 manifest regeneration" },
-    { "path": "/dashboard", "status": "live", "roles": ["operator", "planner", "admin", "viewer"], "group": "shared", "notes": "Tranche 003: roles widened to match (shared)/layout.tsx minimum='viewer:read'" },
-    { "path": "/dashboard/v2", "status": "redirect", "roles": ["operator", "planner", "admin", "viewer"], "group": "shared", "notes": "permanent redirect to /dashboard (Tom decision R0-1, 2026-05-08 graduation); added by tranche 046 manifest regeneration" },
-    { "path": "/profile", "status": "live", "roles": ["operator", "planner", "admin", "viewer"], "group": "shared" },
-    { "path": "/inventory", "status": "live", "roles": ["operator", "planner", "admin", "viewer"], "group": "shared", "notes": "added by tranche 046 manifest regeneration" },
-    { "path": "/credit-tracking", "status": "live", "roles": ["operator", "planner", "admin", "viewer"], "group": "shared", "notes": "Tranche 090: bookkeeper picking-shortage tracking surface (Hebrew/RTL, CLAUDE.md-authorized 2026-06-12); (shared) layout viewer:read admits all roles; was an orphan (live code + nav, no manifest row)" },
-    { "path": "/stock/movement-log", "status": "live", "roles": ["operator", "planner", "admin", "viewer"], "group": "shared", "notes": "read-only movement log lives in the (shared) group (viewer:read — all roles), NOT (ops); middleware carves it out before the /stock prefix; added by tranche 046 manifest regeneration" },
-    { "path": "/inbox", "status": "live", "roles": ["operator", "planner", "admin", "viewer"], "group": "inbox", "notes": "Tranche 014: federated triage queue backed by /api/exceptions" },
-    { "path": "/inbox/credit/[exception_id]", "status": "live", "roles": ["operator", "planner", "admin", "viewer"], "group": "inbox", "notes": "credit exception detail; (inbox) layout viewer:read admits all roles — per-action gating is server-side; added by tranche 046 manifest regeneration" },
-    { "path": "/inbox/approvals/waste/[submission_id]", "status": "live", "roles": ["planner", "admin"], "group": "inbox", "notes": "Tranche 003 child layout tightens to planner+admin" },
-    { "path": "/inbox/approvals/physical-count/[submission_id]", "status": "live", "roles": ["planner", "admin"], "group": "inbox", "notes": "Tranche 003 child layout tightens to planner+admin" },
-    { "path": "/inbox/approvals/inventory-movement/[submission_id]", "status": "live", "roles": ["planner", "admin"], "group": "inbox", "notes": "Tranche 090: inventory-movement approval (route-pack proposals); under (inbox)/inbox/approvals/layout.tsx planner+admin gate; reachable from /inbox; was an orphan (live code, no manifest row)" },
-    { "path": "/stock/receipts", "status": "live", "roles": ["operator", "planner", "admin"], "group": "ops", "form": "GoodsReceipt", "notes": "Tranche 013: optional PO linkage (po_id + po_line_id); tranche 046: roles refreshed to match (ops) layout stock:execute (lattice admits planner)" },
-    { "path": "/stock/waste-adjustments", "status": "live", "roles": ["operator", "planner", "admin"], "group": "ops", "form": "WasteAdjustment", "notes": "tranche 046: roles refreshed to match (ops) layout stock:execute (lattice admits planner)" },
-    { "path": "/stock/physical-count", "status": "live", "roles": ["operator", "planner", "admin"], "group": "ops", "form": "PhysicalCount", "notes": "tranche 046: roles refreshed to match (ops) layout stock:execute (lattice admits planner)" },
-    { "path": "/inventory/bulk-count", "status": "live", "roles": ["operator", "planner", "admin"], "group": "ops", "form": "PhysicalCount", "notes": "bulk physical-count walk surface (2026-06-12); lives in the (ops) group (stock:execute) under the /inventory URL prefix; submits through the same /api/physical-count pipeline as /stock/physical-count; middleware carves /inventory/bulk-count out explicitly" },
-    { "path": "/stock/production-actual", "status": "live", "roles": ["operator", "planner", "admin"], "group": "ops", "form": "ProductionActual", "notes": "tranche 046: roles refreshed to match (ops) layout stock:execute (lattice admits planner)" },
-    { "path": "/stock/submissions", "status": "redirect", "roles": ["operator", "planner", "admin"], "group": "ops", "notes": "redirect stub to /me/activity; added by tranche 046 manifest regeneration" },
-    { "path": "/me/activity", "status": "live", "roles": ["operator", "planner", "admin"], "group": "ops", "notes": "my-submissions activity feed; lives in the (ops) group (stock:execute); added by tranche 046 manifest regeneration" },
-    { "path": "/planning", "status": "live", "roles": ["operator", "planner", "admin", "viewer"], "group": "planning", "notes": "tranche 046: roles refreshed to match (planning) layout planning:read (all roles; writes gated server-side on planning:execute)" },
-    { "path": "/planning/forecast", "status": "live", "roles": ["operator", "planner", "admin", "viewer"], "group": "planning", "notes": "tranche 046: roles refreshed to match (planning) layout planning:read (all roles)" },
-    { "path": "/planning/forecast/new", "status": "live", "roles": ["operator", "planner", "admin", "viewer"], "group": "planning", "notes": "7-step draft-open wizard; tranche 046: roles refreshed to match (planning) layout planning:read (all roles)" },
-    { "path": "/planning/forecast/[version_id]", "status": "live", "roles": ["operator", "planner", "admin", "viewer"], "group": "planning", "notes": "per-version editor with Tranche 005 cache invalidation; tranche 046: roles refreshed to match (planning) layout planning:read (all roles)" },
-    { "path": "/planning/runs", "status": "live", "roles": ["operator", "planner", "admin", "viewer"], "group": "planning", "notes": "diagnostic-only — demoted from ordering (tranche 045); removed from primary nav + planning sub-nav, page kept (blockers + critical-today depend on runs); tranche 046: roles refreshed to match (planning) layout planning:read (all roles)" },
-    { "path": "/planning/runs/[run_id]", "status": "live", "roles": ["operator", "planner", "admin", "viewer"], "group": "planning", "notes": "Tranche 005 convert-to-PO link; Tranche 012 detail target; diagnostic-only banner (tranche 045); tranche 046: roles refreshed to match (planning) layout planning:read (all roles)" },
-    { "path": "/planning/runs/[run_id]/recommendations/[rec_id]", "status": "live", "roles": ["operator", "planner", "admin", "viewer"], "group": "planning", "notes": "recommendation detail under a run; added by tranche 046 manifest regeneration" },
-    { "path": "/planning/procurement", "status": "live", "roles": ["operator", "planner", "admin", "viewer"], "group": "planning", "notes": "Tranche 028: merged procurement front door; default view = action list grouped by decision (must-today/can-wait/handled) built from the open purchase session; entry point for focus mode (029); tranche 046: roles refreshed to match (planning) layout planning:read (all roles; nav entry stays planner-min)" },
-    { "path": "/planning/procurement/[session_po_id]/sheet", "status": "live", "roles": ["operator", "planner", "admin", "viewer"], "group": "planning", "notes": "Printable Hebrew order sheet for a single purchase-session PO draft (PO precision rework, 2026-06-14): item lines with supplier wording + spec, labels grouped by physical size (per-size total + per-design breakdown) with print-file/photo references, browser print-to-PDF. Reads the current session; no new API. Reachable from FocusCard." },
-    { "path": "/planning/production-plan", "status": "live", "roles": ["operator", "planner", "admin", "viewer"], "group": "planning", "notes": "added by tranche 046 manifest regeneration" },
-    { "path": "/planning/production-simulation", "status": "live", "roles": ["operator", "planner", "admin", "viewer"], "group": "planning", "notes": "nav entry is planner-min by deliberate containment decision (2026-05-12), but the (planning) layout planning:read admits all roles at the URL; added by tranche 046 manifest regeneration" },
-    { "path": "/planning/inventory-flow", "status": "live", "roles": ["operator", "planner", "admin", "viewer"], "group": "planning", "notes": "added by tranche 046 manifest regeneration" },
-    { "path": "/planning/inventory-flow/[itemId]", "status": "live", "roles": ["operator", "planner", "admin", "viewer"], "group": "planning", "notes": "added by tranche 046 manifest regeneration" },
-    { "path": "/planning/inventory-flow/supply", "status": "live", "roles": ["operator", "planner", "admin", "viewer"], "group": "planning", "notes": "added by tranche 046 manifest regeneration" },
-    { "path": "/planning/blockers", "status": "live", "roles": ["operator", "planner", "admin", "viewer"], "group": "planning", "notes": "added by tranche 046 manifest regeneration" },
-    { "path": "/planning/boms", "status": "live", "roles": ["operator", "planner", "admin", "viewer"], "group": "planning", "notes": "added by tranche 046 manifest regeneration" },
-    { "path": "/planning/meeting", "status": "live", "roles": ["operator", "planner", "admin", "viewer"], "group": "planning", "notes": "added by tranche 046 manifest regeneration" },
-    { "path": "/planning/purchase-session", "status": "redirect", "roles": ["operator", "planner", "admin", "viewer"], "group": "planning", "notes": "Tranche 045: redirect stub to /planning/procurement (focus mode superseded the per-PO session); _lib kept — imported by procurement + dashboard; tranche 046: roles refreshed to match (planning) layout planning:read (all roles)" },
-    { "path": "/planning/purchase-calendar", "status": "redirect", "roles": ["operator", "planner", "admin", "viewer"], "group": "planning", "notes": "Tranche 045: redirect stub to /planning/procurement (procurement carries its own calendar view via in-page toggle; toggle is not URL-controlled, so plain redirect); _lib kept; tranche 046: roles refreshed to match (planning) layout planning:read (all roles)" },
-    { "path": "/planning/weekly-outlook", "status": "redirect", "roles": ["operator", "planner", "admin", "viewer"], "group": "planning", "notes": "Tranche 045: redirect stub to /planning/inventory-flow (daily-granular replacement); row added in 045 — page predates it but was never enumerated here; tranche 046: roles refreshed to match (planning) layout planning:read (all roles)" },
-    { "path": "/exceptions", "status": "redirect", "roles": ["operator", "planner", "admin", "viewer"], "group": "planner", "notes": "Tranche 003: roles widened to match (planner)/layout.tsx allow list (planner+admin+viewer); per-row actions gated server-side by capability; tranche 046: status corrected to redirect — page has been a server redirect to /inbox?view=exceptions since Tranche B (deep-linked ?id forwarded per tranche 041); roles refreshed to match (planner) layout planning:read (operator admitted)" },
-    { "path": "/purchase-orders", "status": "live", "roles": ["operator", "planner", "admin", "viewer"], "group": "po", "notes": "tranche 046: roles refreshed to match (po) layout viewer:read (all roles; create/transition gated server-side on planning:execute)" },
-    { "path": "/purchase-orders/new", "status": "live", "roles": ["operator", "planner", "admin", "viewer"], "group": "po", "notes": "manual PO creation (tranche 043 price entry lives here); added by tranche 046 manifest regeneration" },
-    { "path": "/purchase-orders/[po_id]", "status": "live", "roles": ["operator", "planner", "admin", "viewer"], "group": "po", "notes": "Tranche 012: read-only PO detail; lines table degrades honestly when upstream omits lines[]; tranche 046: roles refreshed to match (po) layout viewer:read (all roles)" },
-    { "path": "/purchase-orders/placement-queue", "status": "live", "roles": ["planner", "admin"], "group": "po", "notes": "Tranche 086: office-manager placement queue — APPROVED_TO_ORDER POs awaiting price + payment terms; gated planning:execute; Hebrew/RTL page authorized in CLAUDE.md" },
-    { "path": "/admin/economics", "status": "live", "roles": ["planner", "admin"], "group": "economics", "notes": "URL keeps the /admin prefix but the page lives in the (economics) route group gated planning:execute (planner+admin, 2026-05-17 lift-out); middleware carves it out before the /admin prefix; added by tranche 046 manifest regeneration" },
-    { "path": "/admin/decision-board", "status": "live", "roles": ["planner", "admin"], "group": "economics", "notes": "Tranche 090: Product Decision Board (tranche 080); lives in the (economics) route group gated planning:execute (planner+admin); URL keeps /admin prefix, middleware carves it out before /admin; was an orphan (live code + nav, no manifest row)" },
-    { "path": "/admin", "status": "redirect", "roles": ["admin"], "group": "admin", "notes": "redirect stub to /admin/items (tranche 041 dead-end fix — bare bookmark lands on a real surface); added by tranche 046 manifest regeneration" },
-    { "path": "/admin/items", "status": "live", "roles": ["admin"], "group": "admin" },
-    { "path": "/admin/items/[item_id]", "status": "redirect", "roles": ["admin"], "group": "admin", "notes": "legacy redirect to /admin/products/[item_id]; tranche 046: status corrected to redirect (page is a server redirect, not a rendered surface)" },
-    { "path": "/admin/products/new", "status": "live", "roles": ["admin"], "group": "admin", "notes": "7-step create-product wizard" },
-    { "path": "/admin/products/[item_id]", "status": "live", "roles": ["admin"], "group": "admin", "notes": "Product 360 detail; InlineEditCell on 6 fields; detail redirect target from /admin/items/[item_id]" },
-    { "path": "/admin/components", "status": "live", "roles": ["admin"], "group": "admin" },
-    { "path": "/admin/components/[component_id]", "status": "live", "roles": ["admin"], "group": "admin", "notes": "InlineEditCell on 9 fields" },
-    { "path": "/admin/groups", "status": "live", "roles": ["admin"], "group": "admin", "notes": "Groups v1 taxonomy management (tranche 044); added by tranche 046 manifest regeneration" },
-    { "path": "/admin/cost-drafts", "status": "live", "roles": ["admin"], "group": "admin", "notes": "Price updates review queue (tranche 043); added by tranche 046 manifest regeneration" },
-    { "path": "/admin/holidays", "status": "live", "roles": ["admin"], "group": "admin", "notes": "added by tranche 046 manifest regeneration" },
-    { "path": "/admin/boms", "status": "live", "roles": ["admin"], "group": "admin" },
-    { "path": "/admin/boms/[head_id]", "status": "live", "roles": ["admin"], "group": "admin", "notes": "BOM head detail; versions list" },
-    { "path": "/admin/boms/[head_id]/versions/[version_id]", "status": "live", "roles": ["admin"], "group": "admin", "notes": "version editor (Slice 6)" },
-    { "path": "/admin/masters/boms", "status": "live", "roles": ["admin"], "group": "admin", "notes": "masters BOM list (nav 'BOMs' entry target); added by tranche 046 manifest regeneration" },
-    { "path": "/admin/masters/boms/[bom_head_id]", "status": "live", "roles": ["admin"], "group": "admin", "notes": "masters BOM head detail; added by tranche 046 manifest regeneration" },
-    { "path": "/admin/masters/boms/[bom_head_id]/[version_id]", "status": "live", "roles": ["admin"], "group": "admin", "notes": "masters BOM version detail; added by tranche 046 manifest regeneration" },
-    { "path": "/admin/masters/boms/[bom_head_id]/[version_id]/edit", "status": "live", "roles": ["admin"], "group": "admin", "notes": "BOM draft editor (Recipe-Readiness corridor, Hebrew operator labels per scoped UI-language exception); added by tranche 046 manifest regeneration" },
-    { "path": "/admin/masters/components/[component_id]", "status": "live", "roles": ["admin"], "group": "admin", "notes": "added by tranche 046 manifest regeneration" },
-    { "path": "/admin/masters/items/[item_id]", "status": "live", "roles": ["admin"], "group": "admin", "notes": "Recipe-Health item surface (Hebrew operator labels per scoped UI-language exception); added by tranche 046 manifest regeneration" },
-    { "path": "/admin/masters/suppliers/[supplier_id]", "status": "live", "roles": ["admin"], "group": "admin", "notes": "added by tranche 046 manifest regeneration" },
-    { "path": "/admin/masters/archive", "status": "live", "roles": ["admin"], "group": "admin", "notes": "added by tranche 046 manifest regeneration" },
-    { "path": "/admin/masters/health", "status": "live", "roles": ["admin"], "group": "admin", "notes": "Master Data Health; added by tranche 046 manifest regeneration" },
-    { "path": "/admin/purchase-orders/parity-check", "status": "live", "roles": ["admin"], "group": "admin", "notes": "PO parity-check diagnostic; added by tranche 046 manifest regeneration" },
-    { "path": "/admin/suppliers", "status": "live", "roles": ["admin"], "group": "admin" },
-    { "path": "/admin/suppliers/[supplier_id]", "status": "live", "roles": ["admin"], "group": "admin", "notes": "InlineEditCell on supplier fields" },
-    { "path": "/admin/supplier-items", "status": "live", "roles": ["admin"], "group": "admin", "notes": "InlineEditCell on lead_time_days/moq/pack_conversion on the list itself" },
-    { "path": "/admin/sku-aliases", "status": "live", "roles": ["admin"], "group": "admin" },
-    { "path": "/admin/sku-health", "status": "live", "roles": ["admin"], "group": "admin", "notes": "added by tranche 046 manifest regeneration" },
-    { "path": "/admin/sku-map", "status": "live", "roles": ["admin"], "group": "admin", "notes": "added by tranche 046 manifest regeneration" },
-    { "path": "/admin/planning-policy", "status": "live", "roles": ["admin"], "group": "admin" },
-    { "path": "/admin/integrations", "status": "live", "roles": ["admin"], "group": "admin", "notes": "Tranche 001 quarantined this as <QuarantinedPage>; the real Integration Health page has since landed (exception-derived cards + Shopify sync-status card). T6 resolution 2026-06-11 — accepted as live control surfaces" },
-    { "path": "/admin/jobs", "status": "live", "roles": ["admin"], "group": "admin", "notes": "Tranche 001 quarantined this as <QuarantinedPage>; the real Jobs Monitor (backed by /api/admin/jobs) has since landed. T6 resolution 2026-06-11 — accepted as live control surfaces" },
-    { "path": "/admin/users", "status": "live", "roles": ["admin"], "group": "admin", "notes": "Tranche 001 quarantined this as <QuarantinedPage>; the real Users surface (role select + status, backed by /api/admin/users proxy) has since landed. T6 resolution 2026-06-11 — accepted as live control surfaces" }
+    {
+      "path": "/",
+      "status": "live",
+      "roles": [
+        "viewer"
+      ],
+      "group": "root",
+      "notes": "landing redirect"
+    },
+    {
+      "path": "/login",
+      "status": "live",
+      "roles": [
+        "viewer"
+      ],
+      "group": "auth"
+    },
+    {
+      "path": "/auth/callback",
+      "status": "live",
+      "roles": [
+        "viewer"
+      ],
+      "group": "auth",
+      "notes": "public magic-link code exchange; added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/auth/click-to-signin",
+      "status": "live",
+      "roles": [
+        "viewer"
+      ],
+      "group": "auth",
+      "notes": "public sign-in helper surface; added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/auth/signout",
+      "status": "live",
+      "roles": [
+        "viewer"
+      ],
+      "group": "auth",
+      "notes": "sign-out surface; added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/dashboard",
+      "status": "live",
+      "roles": [
+        "operator",
+        "planner",
+        "admin",
+        "viewer"
+      ],
+      "group": "shared",
+      "notes": "Tranche 003: roles widened to match (shared)/layout.tsx minimum='viewer:read'"
+    },
+    {
+      "path": "/dashboard/v2",
+      "status": "redirect",
+      "roles": [
+        "operator",
+        "planner",
+        "admin",
+        "viewer"
+      ],
+      "group": "shared",
+      "notes": "permanent redirect to /dashboard (Tom decision R0-1, 2026-05-08 graduation); added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/profile",
+      "status": "live",
+      "roles": [
+        "operator",
+        "planner",
+        "admin",
+        "viewer"
+      ],
+      "group": "shared"
+    },
+    {
+      "path": "/inventory",
+      "status": "live",
+      "roles": [
+        "operator",
+        "planner",
+        "admin",
+        "viewer"
+      ],
+      "group": "shared",
+      "notes": "added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/credit-tracking",
+      "status": "live",
+      "roles": [
+        "operator",
+        "planner",
+        "admin",
+        "viewer"
+      ],
+      "group": "shared",
+      "notes": "Tranche 090: bookkeeper picking-shortage tracking surface (Hebrew/RTL, CLAUDE.md-authorized 2026-06-12); (shared) layout viewer:read admits all roles; was an orphan (live code + nav, no manifest row)"
+    },
+    {
+      "path": "/stock/movement-log",
+      "status": "live",
+      "roles": [
+        "operator",
+        "planner",
+        "admin",
+        "viewer"
+      ],
+      "group": "shared",
+      "notes": "read-only movement log lives in the (shared) group (viewer:read — all roles), NOT (ops); middleware carves it out before the /stock prefix; added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/inbox",
+      "status": "live",
+      "roles": [
+        "operator",
+        "planner",
+        "admin",
+        "viewer"
+      ],
+      "group": "inbox",
+      "notes": "Tranche 014: federated triage queue backed by /api/exceptions"
+    },
+    {
+      "path": "/inbox/credit/[exception_id]",
+      "status": "live",
+      "roles": [
+        "operator",
+        "planner",
+        "admin",
+        "viewer"
+      ],
+      "group": "inbox",
+      "notes": "credit exception detail; (inbox) layout viewer:read admits all roles — per-action gating is server-side; added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/inbox/approvals/waste/[submission_id]",
+      "status": "live",
+      "roles": [
+        "planner",
+        "admin"
+      ],
+      "group": "inbox",
+      "notes": "Tranche 003 child layout tightens to planner+admin"
+    },
+    {
+      "path": "/inbox/approvals/physical-count/[submission_id]",
+      "status": "live",
+      "roles": [
+        "planner",
+        "admin"
+      ],
+      "group": "inbox",
+      "notes": "Tranche 003 child layout tightens to planner+admin"
+    },
+    {
+      "path": "/inbox/approvals/inventory-movement/[submission_id]",
+      "status": "live",
+      "roles": [
+        "planner",
+        "admin"
+      ],
+      "group": "inbox",
+      "notes": "Tranche 090: inventory-movement approval (route-pack proposals); under (inbox)/inbox/approvals/layout.tsx planner+admin gate; reachable from /inbox; was an orphan (live code, no manifest row)"
+    },
+    {
+      "path": "/stock/receipts",
+      "status": "live",
+      "roles": [
+        "operator",
+        "planner",
+        "admin"
+      ],
+      "group": "ops",
+      "form": "GoodsReceipt",
+      "notes": "Tranche 013: optional PO linkage (po_id + po_line_id); tranche 046: roles refreshed to match (ops) layout stock:execute (lattice admits planner)"
+    },
+    {
+      "path": "/stock/waste-adjustments",
+      "status": "live",
+      "roles": [
+        "operator",
+        "planner",
+        "admin"
+      ],
+      "group": "ops",
+      "form": "WasteAdjustment",
+      "notes": "tranche 046: roles refreshed to match (ops) layout stock:execute (lattice admits planner)"
+    },
+    {
+      "path": "/stock/physical-count",
+      "status": "live",
+      "roles": [
+        "operator",
+        "planner",
+        "admin"
+      ],
+      "group": "ops",
+      "form": "PhysicalCount",
+      "notes": "tranche 046: roles refreshed to match (ops) layout stock:execute (lattice admits planner)"
+    },
+    {
+      "path": "/inventory/bulk-count",
+      "status": "live",
+      "roles": [
+        "operator",
+        "planner",
+        "admin"
+      ],
+      "group": "ops",
+      "form": "PhysicalCount",
+      "notes": "bulk physical-count walk surface (2026-06-12); lives in the (ops) group (stock:execute) under the /inventory URL prefix; submits through the same /api/physical-count pipeline as /stock/physical-count; middleware carves /inventory/bulk-count out explicitly"
+    },
+    {
+      "path": "/stock/production-actual",
+      "status": "live",
+      "roles": [
+        "operator",
+        "planner",
+        "admin"
+      ],
+      "group": "ops",
+      "form": "ProductionActual",
+      "notes": "tranche 046: roles refreshed to match (ops) layout stock:execute (lattice admits planner)"
+    },
+    {
+      "path": "/stock/submissions",
+      "status": "redirect",
+      "roles": [
+        "operator",
+        "planner",
+        "admin"
+      ],
+      "group": "ops",
+      "notes": "redirect stub to /me/activity; added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/me/activity",
+      "status": "live",
+      "roles": [
+        "operator",
+        "planner",
+        "admin"
+      ],
+      "group": "ops",
+      "notes": "my-submissions activity feed; lives in the (ops) group (stock:execute); added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/planning",
+      "status": "live",
+      "roles": [
+        "operator",
+        "planner",
+        "admin",
+        "viewer"
+      ],
+      "group": "planning",
+      "notes": "tranche 046: roles refreshed to match (planning) layout planning:read (all roles; writes gated server-side on planning:execute)"
+    },
+    {
+      "path": "/planning/forecast",
+      "status": "live",
+      "roles": [
+        "operator",
+        "planner",
+        "admin",
+        "viewer"
+      ],
+      "group": "planning",
+      "notes": "tranche 046: roles refreshed to match (planning) layout planning:read (all roles)"
+    },
+    {
+      "path": "/planning/forecast/new",
+      "status": "live",
+      "roles": [
+        "operator",
+        "planner",
+        "admin",
+        "viewer"
+      ],
+      "group": "planning",
+      "notes": "7-step draft-open wizard; tranche 046: roles refreshed to match (planning) layout planning:read (all roles)"
+    },
+    {
+      "path": "/planning/forecast/[version_id]",
+      "status": "live",
+      "roles": [
+        "operator",
+        "planner",
+        "admin",
+        "viewer"
+      ],
+      "group": "planning",
+      "notes": "per-version editor with Tranche 005 cache invalidation; tranche 046: roles refreshed to match (planning) layout planning:read (all roles)"
+    },
+    {
+      "path": "/planning/runs",
+      "status": "live",
+      "roles": [
+        "operator",
+        "planner",
+        "admin",
+        "viewer"
+      ],
+      "group": "planning",
+      "notes": "diagnostic-only — demoted from ordering (tranche 045); removed from primary nav + planning sub-nav, page kept (blockers + critical-today depend on runs); tranche 046: roles refreshed to match (planning) layout planning:read (all roles)"
+    },
+    {
+      "path": "/planning/runs/[run_id]",
+      "status": "live",
+      "roles": [
+        "operator",
+        "planner",
+        "admin",
+        "viewer"
+      ],
+      "group": "planning",
+      "notes": "Tranche 005 convert-to-PO link; Tranche 012 detail target; diagnostic-only banner (tranche 045); tranche 046: roles refreshed to match (planning) layout planning:read (all roles)"
+    },
+    {
+      "path": "/planning/runs/[run_id]/recommendations/[rec_id]",
+      "status": "live",
+      "roles": [
+        "operator",
+        "planner",
+        "admin",
+        "viewer"
+      ],
+      "group": "planning",
+      "notes": "recommendation detail under a run; added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/planning/procurement",
+      "status": "live",
+      "roles": [
+        "operator",
+        "planner",
+        "admin",
+        "viewer"
+      ],
+      "group": "planning",
+      "notes": "Tranche 028: merged procurement front door; default view = action list grouped by decision (must-today/can-wait/handled) built from the open purchase session; entry point for focus mode (029); tranche 046: roles refreshed to match (planning) layout planning:read (all roles; nav entry stays planner-min)"
+    },
+    {
+      "path": "/planning/procurement/[session_po_id]/sheet",
+      "status": "live",
+      "roles": [
+        "operator",
+        "planner",
+        "admin",
+        "viewer"
+      ],
+      "group": "planning",
+      "notes": "Printable Hebrew order sheet for a single purchase-session PO draft (PO precision rework, 2026-06-14): item lines with supplier wording + spec, labels grouped by physical size (per-size total + per-design breakdown) with print-file/photo references, browser print-to-PDF. Reads the current session; no new API. Reachable from FocusCard."
+    },
+    {
+      "path": "/planning/production-plan",
+      "status": "live",
+      "roles": [
+        "operator",
+        "planner",
+        "admin",
+        "viewer"
+      ],
+      "group": "planning",
+      "notes": "added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/planning/production-simulation",
+      "status": "live",
+      "roles": [
+        "operator",
+        "planner",
+        "admin",
+        "viewer"
+      ],
+      "group": "planning",
+      "notes": "nav entry is planner-min by deliberate containment decision (2026-05-12), but the (planning) layout planning:read admits all roles at the URL; added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/planning/inventory-flow",
+      "status": "live",
+      "roles": [
+        "operator",
+        "planner",
+        "admin",
+        "viewer"
+      ],
+      "group": "planning",
+      "notes": "added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/planning/inventory-flow/[itemId]",
+      "status": "live",
+      "roles": [
+        "operator",
+        "planner",
+        "admin",
+        "viewer"
+      ],
+      "group": "planning",
+      "notes": "added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/planning/inventory-flow/supply",
+      "status": "live",
+      "roles": [
+        "operator",
+        "planner",
+        "admin",
+        "viewer"
+      ],
+      "group": "planning",
+      "notes": "added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/planning/blockers",
+      "status": "live",
+      "roles": [
+        "operator",
+        "planner",
+        "admin",
+        "viewer"
+      ],
+      "group": "planning",
+      "notes": "added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/planning/boms",
+      "status": "live",
+      "roles": [
+        "operator",
+        "planner",
+        "admin",
+        "viewer"
+      ],
+      "group": "planning",
+      "notes": "added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/planning/meeting",
+      "status": "live",
+      "roles": [
+        "operator",
+        "planner",
+        "admin",
+        "viewer"
+      ],
+      "group": "planning",
+      "notes": "added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/planning/purchase-session",
+      "status": "redirect",
+      "roles": [
+        "operator",
+        "planner",
+        "admin",
+        "viewer"
+      ],
+      "group": "planning",
+      "notes": "Tranche 045: redirect stub to /planning/procurement (focus mode superseded the per-PO session); _lib kept — imported by procurement + dashboard; tranche 046: roles refreshed to match (planning) layout planning:read (all roles)"
+    },
+    {
+      "path": "/planning/purchase-calendar",
+      "status": "redirect",
+      "roles": [
+        "operator",
+        "planner",
+        "admin",
+        "viewer"
+      ],
+      "group": "planning",
+      "notes": "Tranche 045: redirect stub to /planning/procurement (procurement carries its own calendar view via in-page toggle; toggle is not URL-controlled, so plain redirect); _lib kept; tranche 046: roles refreshed to match (planning) layout planning:read (all roles)"
+    },
+    {
+      "path": "/planning/weekly-outlook",
+      "status": "redirect",
+      "roles": [
+        "operator",
+        "planner",
+        "admin",
+        "viewer"
+      ],
+      "group": "planning",
+      "notes": "Tranche 045: redirect stub to /planning/inventory-flow (daily-granular replacement); row added in 045 — page predates it but was never enumerated here; tranche 046: roles refreshed to match (planning) layout planning:read (all roles)"
+    },
+    {
+      "path": "/exceptions",
+      "status": "redirect",
+      "roles": [
+        "operator",
+        "planner",
+        "admin",
+        "viewer"
+      ],
+      "group": "planner",
+      "notes": "Tranche 003: roles widened to match (planner)/layout.tsx allow list (planner+admin+viewer); per-row actions gated server-side by capability; tranche 046: status corrected to redirect — page has been a server redirect to /inbox?view=exceptions since Tranche B (deep-linked ?id forwarded per tranche 041); roles refreshed to match (planner) layout planning:read (operator admitted)"
+    },
+    {
+      "path": "/purchase-orders",
+      "status": "live",
+      "roles": [
+        "operator",
+        "planner",
+        "admin",
+        "viewer"
+      ],
+      "group": "po",
+      "notes": "tranche 046: roles refreshed to match (po) layout viewer:read (all roles; create/transition gated server-side on planning:execute)"
+    },
+    {
+      "path": "/purchase-orders/new",
+      "status": "live",
+      "roles": [
+        "operator",
+        "planner",
+        "admin",
+        "viewer"
+      ],
+      "group": "po",
+      "notes": "manual PO creation (tranche 043 price entry lives here); added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/purchase-orders/[po_id]",
+      "status": "live",
+      "roles": [
+        "operator",
+        "planner",
+        "admin",
+        "viewer"
+      ],
+      "group": "po",
+      "notes": "Tranche 012: read-only PO detail; lines table degrades honestly when upstream omits lines[]; tranche 046: roles refreshed to match (po) layout viewer:read (all roles)"
+    },
+    {
+      "path": "/purchase-orders/placement-queue",
+      "status": "live",
+      "roles": [
+        "planner",
+        "admin"
+      ],
+      "group": "po",
+      "notes": "Tranche 086: office-manager placement queue — APPROVED_TO_ORDER POs awaiting price + payment terms; gated planning:execute; Hebrew/RTL page authorized in CLAUDE.md"
+    },
+    {
+      "path": "/admin/economics",
+      "status": "live",
+      "roles": [
+        "planner",
+        "admin"
+      ],
+      "group": "economics",
+      "notes": "URL keeps the /admin prefix but the page lives in the (economics) route group gated planning:execute (planner+admin, 2026-05-17 lift-out); middleware carves it out before the /admin prefix; added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/admin/decision-board",
+      "status": "live",
+      "roles": [
+        "planner",
+        "admin"
+      ],
+      "group": "economics",
+      "notes": "Tranche 090: Product Decision Board (tranche 080); lives in the (economics) route group gated planning:execute (planner+admin); URL keeps /admin prefix, middleware carves it out before /admin; was an orphan (live code + nav, no manifest row)"
+    },
+    {
+      "path": "/admin",
+      "status": "redirect",
+      "roles": [
+        "admin"
+      ],
+      "group": "admin",
+      "notes": "redirect stub to /admin/items (tranche 041 dead-end fix — bare bookmark lands on a real surface); added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/admin/items",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "admin"
+    },
+    {
+      "path": "/admin/items/[item_id]",
+      "status": "redirect",
+      "roles": [
+        "admin"
+      ],
+      "group": "admin",
+      "notes": "legacy redirect to /admin/products/[item_id]; tranche 046: status corrected to redirect (page is a server redirect, not a rendered surface)"
+    },
+    {
+      "path": "/admin/products/new",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "admin",
+      "notes": "7-step create-product wizard"
+    },
+    {
+      "path": "/admin/products/[item_id]",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "admin",
+      "notes": "Product 360 detail; InlineEditCell on 6 fields; detail redirect target from /admin/items/[item_id]"
+    },
+    {
+      "path": "/admin/components",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "admin"
+    },
+    {
+      "path": "/admin/components/[component_id]",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "admin",
+      "notes": "InlineEditCell on 9 fields"
+    },
+    {
+      "path": "/admin/groups",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "admin",
+      "notes": "Groups v1 taxonomy management (tranche 044); added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/admin/cost-drafts",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "admin",
+      "notes": "Price updates review queue (tranche 043); added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/admin/holidays",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "admin",
+      "notes": "added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/admin/boms",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "admin"
+    },
+    {
+      "path": "/admin/boms/[head_id]",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "admin",
+      "notes": "BOM head detail; versions list"
+    },
+    {
+      "path": "/admin/boms/[head_id]/versions/[version_id]",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "admin",
+      "notes": "version editor (Slice 6)"
+    },
+    {
+      "path": "/admin/masters/boms",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "admin",
+      "notes": "masters BOM list (nav 'BOMs' entry target); added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/admin/masters/boms/[bom_head_id]",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "admin",
+      "notes": "masters BOM head detail; added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/admin/masters/boms/[bom_head_id]/[version_id]",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "admin",
+      "notes": "masters BOM version detail; added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/admin/masters/boms/[bom_head_id]/[version_id]/edit",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "admin",
+      "notes": "BOM draft editor (Recipe-Readiness corridor, Hebrew operator labels per scoped UI-language exception); added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/admin/masters/components/[component_id]",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "admin",
+      "notes": "added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/admin/masters/items/[item_id]",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "admin",
+      "notes": "Recipe-Health item surface (Hebrew operator labels per scoped UI-language exception); added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/admin/masters/suppliers/[supplier_id]",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "admin",
+      "notes": "added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/admin/masters/archive",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "admin",
+      "notes": "added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/admin/masters/health",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "admin",
+      "notes": "Master Data Health; added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/admin/purchase-orders/parity-check",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "admin",
+      "notes": "PO parity-check diagnostic; added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/admin/suppliers",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "admin"
+    },
+    {
+      "path": "/admin/suppliers/[supplier_id]",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "admin",
+      "notes": "InlineEditCell on supplier fields"
+    },
+    {
+      "path": "/admin/supplier-items",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "admin",
+      "notes": "InlineEditCell on lead_time_days/moq/pack_conversion on the list itself"
+    },
+    {
+      "path": "/admin/sku-aliases",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "admin"
+    },
+    {
+      "path": "/admin/sku-health",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "admin",
+      "notes": "added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/admin/sku-map",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "admin",
+      "notes": "added by tranche 046 manifest regeneration"
+    },
+    {
+      "path": "/admin/planning-policy",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "admin"
+    },
+    {
+      "path": "/admin/integrations",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "admin",
+      "notes": "Tranche 001 quarantined this as <QuarantinedPage>; the real Integration Health page has since landed (exception-derived cards + Shopify sync-status card). T6 resolution 2026-06-11 — accepted as live control surfaces"
+    },
+    {
+      "path": "/admin/jobs",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "admin",
+      "notes": "Tranche 001 quarantined this as <QuarantinedPage>; the real Jobs Monitor (backed by /api/admin/jobs) has since landed. T6 resolution 2026-06-11 — accepted as live control surfaces"
+    },
+    {
+      "path": "/admin/users",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "admin",
+      "notes": "Tranche 001 quarantined this as <QuarantinedPage>; the real Users surface (role select + status, backed by /api/admin/users proxy) has since landed. T6 resolution 2026-06-11 — accepted as live control surfaces"
+    },
+    {
+      "path": "/apps",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "apps",
+      "notes": "Tranche 162 — post-login switchboard (factory / sales). Non-admin roles are forwarded to /home; a remembered choice (cookie gt.app.v1) forwards without a tap."
+    },
+    {
+      "path": "/sales",
+      "status": "redirect",
+      "roles": [
+        "admin"
+      ],
+      "group": "sales",
+      "notes": "Tranche 162 — redirects to /sales/today."
+    },
+    {
+      "path": "/sales/today",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "sales",
+      "notes": "Tranche 162 — the work queue: conversions, returning customers, new leads, due follow-ups, plus the one-tap outcome loop. Hebrew RTL."
+    },
+    {
+      "path": "/sales/leads",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "sales",
+      "notes": "Tranche 162 — full lead table: status tabs, search, drawer. Hebrew RTL."
+    },
+    {
+      "path": "/sales/orgs",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "sales",
+      "notes": "Tranche 162 — businesses behind the leads, with the dated customer snapshot. Hebrew RTL."
+    },
+    {
+      "path": "/sales/settings",
+      "status": "live",
+      "roles": [
+        "admin"
+      ],
+      "group": "sales",
+      "notes": "Tranche 162 — WhatsApp templates + SLA hours. Nothing else. Hebrew RTL."
+    }
   ]
 }
