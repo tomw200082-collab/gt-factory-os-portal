@@ -291,7 +291,10 @@ function MagicLinkLogin() {
   const params = useSearchParams();
   const urlError = params.get("error");
   const urlErrorDetail = params.get("detail");
-  const redirectTo = params.get("redirectTo") ?? "/home";
+  // /apps is the post-login fork (tranche 162). It forwards straight through
+  // for anyone with a single workspace or a remembered choice, so the extra
+  // stop is invisible to factory users.
+  const redirectTo = params.get("redirectTo") ?? "/apps";
 
   const [mode, setMode] = useState<"magic" | "password">("magic");
   const [email, setEmail] = useState("");

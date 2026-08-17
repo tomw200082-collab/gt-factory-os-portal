@@ -35,6 +35,7 @@ import {
   Inbox,
   Layers,
   LayoutDashboard,
+  LayoutGrid,
   LineChart,
   Link2,
   ListChecks,
@@ -158,6 +159,18 @@ export const NAV_MANIFEST: NavGroup[] = [
         min_role: "viewer",
         required_capability: "viewer:read",
         placement: "top", // Tranche 090 — pulse, lives in the TopBar
+      },
+      {
+        // Tranche 162 — the post-login fork between the factory and the sales
+        // workspace. Command-palette only: the rails belong to the surface you
+        // are already in, and only admins have a second workspace to switch to.
+        href: "/apps",
+        label: "Apps",
+        icon: LayoutGrid,
+        min_role: "viewer",
+        roles: ["admin"],
+        required_capability: "viewer:read",
+        placement: "command",
       },
     ],
   },

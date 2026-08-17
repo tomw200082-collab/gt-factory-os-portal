@@ -80,6 +80,40 @@ describe("middleware — auth gating", () => {
     expect(location).toContain("forbidden=%2Fadmin");
   });
 
+  // Tranche 162 — the sales workspace. This table stays dormant until
+  // app_users.role reaches the JWT, so these prove the prefix ordering rather
+  // than a live gate; the enforcing gates are (sales)/layout.tsx and the
+  // server-side check on every sales endpoint.
+  it("authenticated /sales with a non-admin role → 307 to /dashboard?forbidden", async () => {
+    mockUpdate.mockResolvedValue({
+      response: NextResponse.next(),
+      user: { app_metadata: { role: "planner" } },
+    });
+    const res = await run("/sales/today");
+    expect(res.status).toBe(307);
+    expect(res.headers.get("location")).toContain("forbidden=%2Fsales%2Ftoday");
+  });
+
+  it("authenticated /sales with admin role → passes through", async () => {
+    const next = NextResponse.next();
+    mockUpdate.mockResolvedValue({
+      response: next,
+      user: { app_metadata: { role: "admin" } },
+    });
+    const res = await run("/sales/today");
+    expect(res.status).toBe(200);
+  });
+
+  it("authenticated /apps is open to any role — it forwards on its own", async () => {
+    const next = NextResponse.next();
+    mockUpdate.mockResolvedValue({
+      response: next,
+      user: { app_metadata: { role: "operator" } },
+    });
+    const res = await run("/apps");
+    expect(res.status).toBe(200);
+  });
+
   it("authenticated /api/planning with admin role → passes through", async () => {
     const next = NextResponse.next();
     mockUpdate.mockResolvedValue({

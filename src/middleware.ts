@@ -50,6 +50,14 @@ const ROLE_GATES: Array<{ prefix: string; allow: string[] }> = [
   // More-specific first: /inbox/approvals/* must match before /inbox;
   // /admin/economics + /admin/decision-board before /admin; /stock/movement-log
   // before /stock.
+  // Tranche 162 — the sales workspace is admin-only in v1. Listed first
+  // because it is the narrowest gate here. Note this table is dormant until
+  // app_users.role reaches the JWT (see below); the gate that actually holds
+  // is the RoleGate in (sales)/layout.tsx plus the server-side check on every
+  // sales endpoint. /apps itself is open to any authenticated role — it
+  // forwards a non-admin straight to /home.
+  { prefix: "/sales", allow: ["admin"] },
+  { prefix: "/apps", allow: ["operator", "planner", "admin", "viewer"] },
   { prefix: "/inbox/approvals", allow: ["planner", "admin"] },
   { prefix: "/admin/economics", allow: ["planner", "admin"] },
   { prefix: "/admin/decision-board", allow: ["planner", "admin"] },
