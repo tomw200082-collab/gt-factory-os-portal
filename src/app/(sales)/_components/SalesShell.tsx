@@ -114,13 +114,20 @@ export function SalesShell({ children }: { children: ReactNode }) {
             <Settings size={18} aria-hidden />
           </Link>
 
+          {/* The phone is the primary device, and it had no way back to the
+              factory at all — the bottom bar holds the three sales
+              destinations, so leaving meant typing a URL. Icon-only here,
+              labelled from sm up, one control either way. */}
           <Link
             href="/home"
-            className="hidden items-center gap-1.5 text-[13px] sm:inline-flex"
+            aria-label={UI.switchToFactory}
+            title={UI.switchToFactory}
+            data-testid="sales-switch-factory"
+            className="grid h-10 w-10 place-items-center rounded-full sm:inline-flex sm:h-auto sm:w-auto sm:items-center sm:gap-1.5 sm:rounded-none sm:px-1 sm:text-[13px]"
             style={{ color: "hsl(var(--s-fg-muted))" }}
           >
             <ArrowLeftRight size={15} aria-hidden />
-            {UI.switchToFactory}
+            <span className="hidden sm:inline">{UI.switchToFactory}</span>
           </Link>
         </div>
       </header>

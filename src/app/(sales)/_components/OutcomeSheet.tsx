@@ -11,9 +11,9 @@
 // with a phone that was against an ear a second ago.
 
 import { useEffect, useRef, useState } from "react";
-import { LOST_REASONS, OUTCOME_LABELS, UI } from "../_lib/labels";
+import { LOST_REASONS, OUTCOME_LABELS, OUTCOME_TITLES, UI } from "../_lib/labels";
 import { toDateInputValue } from "../_lib/format";
-import type { OutcomeResult } from "../_lib/types";
+import type { OutcomeResult, OutreachChannel } from "../_lib/types";
 
 export interface OutcomeSubmit {
   result?: OutcomeResult;
@@ -32,6 +32,12 @@ export interface OutcomeSheetProps {
    * wherever the question is asked.
    */
   mode?: "outcome" | "next-touch" | "lost";
+  /**
+   * How the lead was reached. The sheet is raised by a WhatsApp hand-off as
+   * often as by a call, and "what happened in the call?" is then the wrong
+   * question about a conversation that was typed.
+   */
+  channel?: OutreachChannel;
   busy?: boolean;
   error?: string | null;
   onSubmit: (vars: OutcomeSubmit) => void;
@@ -51,6 +57,7 @@ function atNineAM(daysFromNow: number): string {
 export function OutcomeSheet({
   leadName,
   mode = "outcome",
+  channel,
   busy = false,
   error = null,
   onSubmit,
@@ -122,7 +129,7 @@ export function OutcomeSheet({
               ? UI.nextTouchTitle
               : mode === "lost"
                 ? UI.lostReasonTitle
-                : UI.outcomeTitle}
+                : OUTCOME_TITLES[channel ?? "call"]}
           </h2>
           <p className="truncate text-[13px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
             {leadName}

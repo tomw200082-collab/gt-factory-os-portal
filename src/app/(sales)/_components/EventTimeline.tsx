@@ -29,7 +29,7 @@ function describe(event: LeadEventRow): string | null {
     case "next_touch_set":
       return typeof p.at === "string" ? fmtDateTime(p.at) : null;
     case "assignment":
-      return typeof p.assignee === "string" && p.assignee ? p.assignee : UI.noNextTouch;
+      return typeof p.assignee === "string" && p.assignee ? p.assignee : UI.unassigned;
     case "outreach":
       return typeof p.channel === "string" ? (CHANNEL_LABELS[p.channel] ?? p.channel) : null;
     case "outcome": {

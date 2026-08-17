@@ -258,7 +258,7 @@ export function LeadDrawer({
             <Field label={UI.colAge} value={UI.ageDays(lead.age_days)} />
             <Field
               label={UI.colNextTouch}
-              value={lead.next_touch_at ? fmtDate(lead.next_touch_at) : UI.noNextTouch}
+              value={lead.next_touch_at ? fmtDate(lead.next_touch_at) : UI.notSet}
             />
             {lead.first_touch_at ? (
               <Field label={UI.timelineTitle} value={fmtDateTime(lead.first_touch_at)} />

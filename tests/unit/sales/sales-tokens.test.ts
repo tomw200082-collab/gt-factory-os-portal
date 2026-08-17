@@ -137,6 +137,10 @@ const PAIRS: Array<[string, string, string, number]> = [
   ["returning card: body", "--s-fg", "--s-accent-soft", 4.5],
   ["returning card: meta", "--s-fg-muted", "--s-accent-soft", 4.5],
   ["faint text and placeholders", "--s-fg-faint", "--s-surface", 4.5],
+  // Faint ink is used at 12px on all three grounds; testing only the white one
+  // let it ship at 4.28:1 on the sunken surface.
+  ["faint text on the page", "--s-fg-faint", "--s-bg", 4.5],
+  ["faint text on sunken", "--s-fg-faint", "--s-surface-sunken", 4.5],
   ["status pill: new", "--s-status-new", "--s-status-new-soft", 4.5],
   ["status pill: working", "--s-status-working", "--s-status-working-soft", 4.5],
   ["status pill: won", "--s-status-won", "--s-status-won-soft", 4.5],

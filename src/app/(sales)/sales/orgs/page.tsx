@@ -52,7 +52,7 @@ function OrgsScreen() {
       </header>
 
       {orgs.isLoading ? <QueueLoading /> : null}
-      {orgs.isError ? <QueueError onRetry={() => void orgs.refetch()} /> : null}
+      {orgs.isError ? <QueueError onRetry={() => void orgs.refetch()} what={UI.loadErrorOrgs} /> : null}
       {orgs.isSuccess && visible.length === 0 ? (
         <ListEmpty label={query ? UI.searchEmpty : UI.orgsEmpty} />
       ) : null}

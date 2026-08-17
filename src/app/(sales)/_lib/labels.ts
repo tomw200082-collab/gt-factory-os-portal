@@ -8,7 +8,7 @@
 // Schema values (new / working / won / lost) are never translated in data —
 // only on the way to the eye.
 
-import type { LeadStatus, OutcomeResult, TodayItemType } from "./types";
+import type { LeadStatus, OutcomeResult, OutreachChannel, TodayItemType } from "./types";
 
 export const STATUS_LABELS: Record<LeadStatus, string> = {
   new: "חדש",
@@ -46,6 +46,13 @@ export const EVENT_LABELS: Record<string, string> = {
   outcome: "תוצאת שיחה",
 };
 
+/** The outcome sheet's question, per channel it was raised by. */
+export const OUTCOME_TITLES: Record<OutreachChannel, string> = {
+  call: "מה קרה בשיחה?",
+  whatsapp: "מה קרה בוואטסאפ?",
+  email: "מה קרה במייל?",
+};
+
 export const CHANNEL_LABELS: Record<string, string> = {
   call: "שיחה",
   whatsapp: "וואטסאפ",
@@ -60,6 +67,14 @@ export const LOST_REASONS: string[] = [
   "לא עונה לאורך זמן",
   "אחר",
 ];
+
+/** Reads as a sentence: "אין לידים " + the word for that tab. */
+const EMPTY_TAB_WORDS: Record<LeadStatus, string> = {
+  new: "חדשים",
+  working: "בטיפול",
+  won: "שהומרו",
+  lost: "שסומנו כאבודים",
+};
 
 export const NAV_LABELS = {
   today: "היום",
@@ -80,13 +95,20 @@ export const UI = {
 
   // Today
   todayTitle: "היום",
+  // "השבוע" governs only the two weekly counts. working_now is how many are
+  // open right now, not how many were opened this week — filing it under the
+  // same prefix states something untrue about the number.
   statsLine: (n: number, working: number, converted: number) =>
-    `השבוע: ${n} לידים · ${working} בטיפול · ${converted} הומרו`,
+    `השבוע: ${n} לידים · ${converted} המרות · בטיפול כרגע: ${working}`,
   queueDone: "סיימת להיום ✓",
   queueDoneHint: "אין לידים שדורשים טיפול כרגע.",
   showMore: (n: number) => `הצג עוד ${n} לידים`,
-  showMoreDetail: (shown: number, remaining: number) => `עוד ${shown} · נותרו ${remaining}`,
+  showMoreRemaining: (remaining: number) => `נותרו ${remaining}`,
   queueError: "לא הצלחנו לטעון את התור",
+  loadError: (what: string) => `לא הצלחנו לטעון את ${what}`,
+  loadErrorLeads: "הלידים",
+  loadErrorOrgs: "העסקים",
+  loadErrorSettings: "ההגדרות",
   queueErrorHint: "בדוק את החיבור ונסה שוב.",
   retry: "נסה שוב",
   loading: "טוען…",
@@ -114,10 +136,14 @@ export const UI = {
   pickDate: "תאריך",
   nextTouchOn: (date: string) => `מגע הבא: ${date}`,
   noNextTouch: "לא נקבע מגע הבא",
+  // Field values, where the label already names the field.
+  notSet: "לא נקבע",
+  unassigned: "לא שויך",
 
   // outcome sheet
   outcomeTitle: "מה קרה בשיחה?",
   outcomeSaved: "נרשם ✓",
+  nextTouchSaved: "נקבע ✓",
   lostReasonTitle: "למה אבוד?",
   lostReasonOther: "פרט…",
   lostReasonOtherLabel: "סיבה אחרת",
@@ -139,7 +165,10 @@ export const UI = {
   colNextTouch: "מגע הבא",
   ageDays: (n: number) => (n === 0 ? "היום" : n === 1 ? "אתמול" : `לפני ${n} ימים`),
   duplicateBadge: "כפול?",
-  emptyForTab: (tab: string) => `אין לידים בסטטוס ${tab}`,
+  // Degrades to the bare "אין לידים" rather than interpolating undefined: a
+  // status this file has not been taught about should read as a shorter true
+  // sentence, never as the word "undefined" on a Hebrew screen.
+  emptyForTab: (status: LeadStatus) => `אין לידים ${EMPTY_TAB_WORDS[status] ?? ""}`.trimEnd(),
 
   // drawer
   timelineTitle: "היסטוריה",
@@ -153,7 +182,7 @@ export const UI = {
   // paragraph otherwise resolves its leading punctuation to the paragraph
   // direction and renders on the wrong side.
   wonBannerPrefix: "הומר — הזמנה",
-  wonBannerHint: "סטטוס 'הומר' נכתב מהזמנה בשופיפיי, ולא ידנית.",
+  wonBannerHint: "סטטוס 'הומר' נכתב מהזמנה ב-Shopify, ולא ידנית.",
   lostReasonLabel: "סיבת אובדן",
 
   // orgs
@@ -168,13 +197,13 @@ export const UI = {
   customerBadge: "לקוח קיים",
   customerContext: "היסטוריית לקוח",
   snapshotAsOf: (date: string) => `נכון ל-${date}`,
-  revenue12m: "הכנסה 12 חודשים",
+  revenue12m: "הכנסה ב-12 חודשים",
   orderCount: "הזמנות",
   daysSinceOrder: "ימים מההזמנה האחרונה",
   customerStatus: "סטטוס",
 
   // quick add
-  quickAdd: "+ ליד חדש",
+  quickAdd: "ליד חדש",
   quickAddTitle: "ליד חדש",
   contactName: "שם איש קשר",
   contactNameRequired: "שם איש קשר הוא שדה חובה",
@@ -203,7 +232,7 @@ export const UI = {
 
   // SLA badge
   slaWithin: "בזמן",
-  slaOverdue: "עבר SLA",
+  slaOverdue: "עבר זמן",
 
   // errors
   genericError: "משהו השתבש",
@@ -213,7 +242,7 @@ export const UI = {
 /** Server rule codes (SALES_*) rendered in Hebrew. */
 export const RULE_MESSAGES: Record<string, string> = {
   SALES_LOST_REQUIRES_REASON: "צריך לציין סיבה לאובדן.",
-  SALES_WON_IS_EVIDENCE_ONLY: "סטטוס 'הומר' נכתב מהזמנה בשופיפיי, ולא ידנית.",
+  SALES_WON_IS_EVIDENCE_ONLY: "סטטוס 'הומר' נכתב מהזמנה ב-Shopify, ולא ידנית.",
   SALES_NEXT_TOUCH_REQUIRED: "צריך לקבוע מתי חוזרים לליד.",
   SALES_OPEN_LEAD_WITHOUT_NEXT_TOUCH: "ליד פתוח חייב מגע הבא.",
   SALES_INVALID_CHANNEL: "ערוץ פנייה לא מוכר.",

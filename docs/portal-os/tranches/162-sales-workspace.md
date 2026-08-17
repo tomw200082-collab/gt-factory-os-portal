@@ -62,6 +62,10 @@ manifest:
 - src/app/(sales)/sales/leads/page.tsx
 - src/app/(sales)/sales/orgs/page.tsx
 - src/app/(sales)/sales/settings/page.tsx
+- src/app/(sales)/sales/today/layout.tsx
+- src/app/(sales)/sales/leads/layout.tsx
+- src/app/(sales)/sales/orgs/layout.tsx
+- src/app/(sales)/sales/settings/layout.tsx
 - src/app/(sales)/_components/SalesShell.tsx
 - src/app/(sales)/_components/TodayQueue.tsx
 - src/app/(sales)/_components/TodayCard.tsx

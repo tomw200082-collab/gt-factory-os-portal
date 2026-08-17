@@ -18,7 +18,7 @@ export default function SettingsPage() {
       </h1>
 
       {settings.isLoading ? <QueueLoading /> : null}
-      {settings.isError ? <QueueError onRetry={() => void settings.refetch()} /> : null}
+      {settings.isError ? <QueueError onRetry={() => void settings.refetch()} what={UI.loadErrorSettings} /> : null}
 
       {settings.isSuccess ? (
         <SettingsForm

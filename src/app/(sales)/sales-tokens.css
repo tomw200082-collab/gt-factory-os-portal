@@ -24,7 +24,7 @@
   /* ink */
   --s-fg: 220 15% 16%;
   --s-fg-muted: 220 10% 42%;
-  --s-fg-faint: 220 8% 47%;
+  --s-fg-faint: 220 8% 45%;
 
   /* hairlines — grouping only. A card boundary is not a control boundary, so
      it is exempt from WCAG 1.4.11 and stays a true hairline. */

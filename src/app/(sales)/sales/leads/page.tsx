@@ -134,10 +134,10 @@ function LeadsScreen() {
 
       <div id="leads-panel" role="tabpanel" aria-labelledby={`leads-tab-${tab}`}>
         {leads.isLoading ? <QueueLoading /> : null}
-        {leads.isError ? <QueueError onRetry={() => void leads.refetch()} /> : null}
+        {leads.isError ? <QueueError onRetry={() => void leads.refetch()} what={UI.loadErrorLeads} /> : null}
 
         {leads.isSuccess && visible.length === 0 ? (
-          <ListEmpty label={query ? UI.searchEmpty : UI.emptyForTab(STATUS_LABELS[tab])} />
+          <ListEmpty label={query ? UI.searchEmpty : UI.emptyForTab(tab)} />
         ) : null}
 
         {leads.isSuccess && visible.length > 0 ? (

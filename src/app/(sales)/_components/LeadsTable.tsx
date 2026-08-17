@@ -109,18 +109,16 @@ export function LeadsTable({ rows, onOpen }: LeadsTableProps) {
           </thead>
           <tbody>
             {rows.map((row) => (
+              // The row stays a row. Putting role="button" on the <tr> replaced
+              // its implicit role="row", which severs every cell from the column
+              // headers in the accessibility tree — a screen reader in table
+              // mode could no longer say which column it was reading. The real
+              // control lives in the row header cell instead; the row keeps its
+              // click target as a pointer-only convenience on top of that.
               <tr
                 key={row.id}
                 data-testid={`lead-row-${row.id}`}
                 onClick={() => onOpen(row)}
-                tabIndex={0}
-                role="button"
-                onKeyDown={(e) => {
-                  if (e.key === "Enter" || e.key === " ") {
-                    e.preventDefault();
-                    onOpen(row);
-                  }
-                }}
                 className="cursor-pointer border-t"
                 style={{ borderColor: "hsl(var(--s-border))" }}
               >
@@ -133,10 +131,21 @@ export function LeadsTable({ rows, onOpen }: LeadsTableProps) {
                     color: "hsl(var(--s-fg))",
                   }}
                 >
-                  <span className="flex items-center gap-1.5">
+                  <button
+                    type="button"
+                    data-testid={`lead-open-${row.id}`}
+                    onClick={(e) => {
+                      // The row handles the click too; without this the drawer
+                      // would open and immediately re-open.
+                      e.stopPropagation();
+                      onOpen(row);
+                    }}
+                    className="flex items-center gap-1.5 text-start font-semibold"
+                    style={{ color: "hsl(var(--s-fg))" }}
+                  >
                     {row.org_name}
                     <Badges row={row} />
-                  </span>
+                  </button>
                 </th>
                 <td className="px-2 py-2" style={{ color: "hsl(var(--s-fg-muted))" }}>
                   {row.contact_name ?? "—"}

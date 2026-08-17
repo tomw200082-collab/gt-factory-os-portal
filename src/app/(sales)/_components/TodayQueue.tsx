@@ -81,11 +81,16 @@ function Section({
         <button
           type="button"
           data-testid="today-show-more"
-          className="s-btn s-btn-ghost"
-          aria-label={UI.showMore(Math.min(remaining, PAGE))}
+          className="s-btn s-btn-ghost gap-2"
           onClick={() => setShown((n) => n + PAGE)}
         >
-          {UI.showMoreDetail(Math.min(remaining, PAGE), remaining)}
+          {/* The visible words are the accessible name (2.5.3). The button used
+              to read "עוד 12 · נותרו 173" while announcing something else, and
+              neither half said what pressing it does. */}
+          {UI.showMore(Math.min(remaining, PAGE))}
+          <span className="s-nums text-[12px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
+            {UI.showMoreRemaining(remaining)}
+          </span>
         </button>
       ) : null}
     </section>

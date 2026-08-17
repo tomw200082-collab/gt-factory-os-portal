@@ -122,6 +122,7 @@ export default function TodayPage() {
       {capture.pending && pendingRow ? (
         <OutcomeSheet
           leadName={pendingRow.contact_name ?? pendingRow.org_name}
+          channel={capture.pending.channel}
           busy={outcome.isPending}
           error={outcome.error?.message ?? null}
           onSubmit={submitOutcome}
@@ -144,7 +145,7 @@ export default function TodayPage() {
               {
                 onSuccess: () => {
                   setPostponing(null);
-                  setToast(UI.outcomeSaved);
+                  setToast(UI.nextTouchSaved);
                 },
               },
             );

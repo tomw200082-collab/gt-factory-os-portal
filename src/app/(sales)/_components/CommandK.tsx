@@ -66,11 +66,37 @@ export function CommandK({ leads, orgs, onClose }: CommandKProps) {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+  const panelRef = useRef<HTMLDivElement>(null);
 
+  // Escape closes, and Tab stays inside. aria-modal hides the background from a
+  // screen reader but does nothing to the tab order, so without this a keyboard
+  // user tabs straight out of the palette and onto shell links that are covered
+  // by the scrim — the same trap the drawer and the sheets already carry.
   useEffect(() => {
+    const panel = panelRef.current;
     inputRef.current?.focus();
+
     const onKeyDown = (e: KeyboardEvent) => {
-      if (e.key === "Escape") onClose();
+      if (e.key === "Escape") {
+        onClose();
+        return;
+      }
+      if (e.key !== "Tab" || !panel) return;
+      const focusable = Array.from(
+        panel.querySelectorAll<HTMLElement>(
+          'button:not([disabled]), [href], input:not([disabled]), [tabindex]:not([tabindex="-1"])',
+        ),
+      );
+      if (focusable.length === 0) return;
+      const first = focusable[0];
+      const last = focusable[focusable.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
@@ -96,6 +122,7 @@ export function CommandK({ leads, orgs, onClose }: CommandKProps) {
       }}
     >
       <div
+        ref={panelRef}
         role="dialog"
         aria-modal="true"
         aria-label={UI.commandTitle}

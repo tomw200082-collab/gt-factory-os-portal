@@ -24,7 +24,12 @@ export function QueueDone() {
   );
 }
 
-export function QueueError({ onRetry }: { onRetry: () => void }) {
+/**
+ * `what` names the thing that failed to load, in Hebrew, for the screens that
+ * are not the queue — "we couldn't load the queue" is simply untrue on the
+ * settings page. Omit it on Today, where the queue is what failed.
+ */
+export function QueueError({ onRetry, what }: { onRetry: () => void; what?: string }) {
   return (
     <div
       data-testid="queue-error"
@@ -34,7 +39,7 @@ export function QueueError({ onRetry }: { onRetry: () => void }) {
       <AlertCircle size={26} aria-hidden style={{ color: "hsl(var(--s-sla-overdue))" }} />
       <div>
         <p className="font-semibold" style={{ color: "hsl(var(--s-fg))" }}>
-          {UI.queueError}
+          {what ? UI.loadError(what) : UI.queueError}
         </p>
         <p className="mt-1 text-[13px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
           {UI.queueErrorHint}

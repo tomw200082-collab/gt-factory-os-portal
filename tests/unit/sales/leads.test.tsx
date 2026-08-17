@@ -91,10 +91,21 @@ describe("leads table", () => {
     expect(opened).toEqual(["L1"]);
   });
 
-  it("opens a lead from the keyboard", () => {
+  it("opens a lead from the keyboard, through a real control", () => {
+    // The row is a row: putting role="button" on the <tr> cut every cell loose
+    // from its column header in the accessibility tree. The keyboard path is
+    // the button in the row header cell, which a browser activates on Enter
+    // and Space without any key handling of our own.
     const opened: string[] = [];
-    render(<LeadsTable rows={[lead({})]} onOpen={(l) => opened.push(l.id)} />);
-    fireEvent.keyDown(screen.getByTestId("lead-row-L1"), { key: "Enter" });
+    const { container } = render(
+      <LeadsTable rows={[lead({})]} onOpen={(l) => opened.push(l.id)} />,
+    );
+
+    const row = screen.getByTestId("lead-row-L1");
+    expect(row.getAttribute("role")).toBeNull();
+    expect(container.querySelector("th[scope='row']")).not.toBeNull();
+
+    fireEvent.click(screen.getByTestId("lead-open-L1"));
     expect(opened).toEqual(["L1"]);
   });
 

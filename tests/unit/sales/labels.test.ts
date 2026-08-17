@@ -14,8 +14,10 @@ import {
 const HEBREW = /[֐-׿]/;
 
 /** Latin that is allowed to appear on a Hebrew screen: product names and the
- *  placeholder token the templates document. */
-const ALLOWED_LATIN = ["WhatsApp", "GT", "SLA", "{{name}}"];
+ *  placeholder token the templates document. Shopify joins WhatsApp for the
+ *  same reason — it is the product's own name, and the transliteration
+ *  ("שופיפיי") is not what a Hebrew speaker reads it as. */
+const ALLOWED_LATIN = ["WhatsApp", "Shopify", "GT", "SLA", "{{name}}"];
 
 function stripAllowed(value: string): string {
   return ALLOWED_LATIN.reduce((acc, token) => acc.split(token).join(""), value);
