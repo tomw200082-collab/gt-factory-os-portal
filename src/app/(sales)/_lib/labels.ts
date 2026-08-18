@@ -128,6 +128,15 @@ export const UI = {
   ageInDays: (days: number) => (days === 1 ? "בן יום" : `בן ${days} ימים`),
   uncontactableChip: (n: number) => `ללא פרטי קשר (${n})`,
   sortByAge: "מיין לפי גיל",
+  nextTouchPreview: (date: string) => `המגע הבא: ${date}`,
+  chooseAnotherDate: "שנה תאריך",
+  undo: "בטל",
+  undone: "שוחזר",
+  discardChanges: "יש שינויים שלא נשמרו — לצאת בכל זאת?",
+  saveNote: "שמור הערה",
+  saveDate: "קבע תאריך",
+  saveAssignee: "שייך",
+  workingNeedsDate: "מעבר לטיפול דורש תאריך למגע הבא",
   queueDone: "סיימת להיום ✓",
   queueDoneHint: "אין לידים שדורשים טיפול כרגע.",
   showMore: (n: number) => `הצג עוד ${leads(n)}`,
@@ -266,11 +275,13 @@ export const UI = {
 
   // errors
   genericError: "משהו השתבש",
-  saveFailed: "השמירה נכשלה",
+  saveFailed: "השמירה נכשלה — נסה שוב",
+  sessionExpired: "החיבור פג — רענן את הדף",
 } as const;
 
 /** Server rule codes (SALES_*) rendered in Hebrew. */
 export const RULE_MESSAGES: Record<string, string> = {
+  AUTH_EXPIRED: UI.sessionExpired,
   SALES_LOST_REQUIRES_REASON: "צריך לציין סיבה לאובדן.",
   SALES_WON_IS_EVIDENCE_ONLY: "סטטוס 'הומר' נכתב מהזמנה ב-Shopify, ולא ידנית.",
   SALES_NEXT_TOUCH_REQUIRED: "צריך לקבוע מתי חוזרים לליד.",

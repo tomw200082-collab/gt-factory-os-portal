@@ -9,6 +9,7 @@ import {
   useAssign,
   useLeadEvents,
   useLeads,
+  useOutcome,
   useOutreach,
   useSetNextTouch,
   useSetStatus,
@@ -21,6 +22,7 @@ import type { LeadStatus } from "../../_lib/types";
 import { ListEmpty, QueueError, QueueLoading } from "../../_components/EmptyStates";
 import { LeadsTable } from "../../_components/LeadsTable";
 import { LeadDrawer } from "../../_components/LeadDrawer";
+import { OutcomeSheet } from "../../_components/OutcomeSheet";
 import { Toast } from "../../_components/Toast";
 
 const TABS: LeadStatus[] = ["new", "working", "won", "lost"];
@@ -70,12 +72,21 @@ function LeadsScreen() {
   const setNextTouch = useSetNextTouch(openId ?? "");
   const assign = useAssign(openId ?? "");
 
-  // Arming from the drawer writes the same outreach event a Today card writes,
-  // and leaves the same owed intent. The outcome sheet stays owned by Today —
-  // one place asks "what happened", wherever the call was placed from.
+  // Arming from the drawer writes the same outreach event a Today card writes
+  // and leaves the same owed intent — and now raises the same sheet here. It
+  // used to be raised only on Today, so a call placed from this table came back
+  // to a screen that asked nothing and an intent that Today then discarded: the
+  // conversation was never logged and nothing said so (audit P0-4).
   const outreach = useOutreach();
   const capture = useOutcomeCapture();
   const [toast, setToast] = useState<string | null>(null);
+
+  const pendingRow = useMemo(
+    () => rows.find((r) => r.id === capture.pending?.leadId) ?? null,
+    [rows, capture.pending],
+  );
+  const outcome = useOutcome(capture.pending?.leadId ?? "");
+  const answerSheetOpen = Boolean(capture.pending && (pendingRow || outcome.isPending));
 
   useEffect(() => {
     if (!toast) return;
@@ -190,7 +201,10 @@ function LeadsScreen() {
           savingAssignee={assign.isPending}
           error={error}
           onClose={() => setOpenId(null)}
-          onStatus={(status, reason) => setStatus.mutate({ status, reason }, saved)}
+          lostReasons={settings.data?.lost_reasons}
+          onStatus={(status, reason, nextTouchAt) =>
+            setStatus.mutate({ status, reason, next_touch_at: nextTouchAt }, saved)
+          }
           onNote={(note, done) =>
             addNote.mutate(
               { note },
@@ -208,6 +222,31 @@ function LeadsScreen() {
             capture.arm(leadId, channel);
             outreach.mutate({ leadId, channel });
           }}
+        />
+      ) : null}
+
+      {answerSheetOpen && capture.pending ? (
+        <OutcomeSheet
+          leadName={pendingRow ? (pendingRow.contact_name ?? pendingRow.org_name) : ""}
+          lostReasons={settings.data?.lost_reasons}
+          channel={capture.pending.channel}
+          busy={outcome.isPending}
+          error={outcome.error?.message ?? null}
+          onSubmit={(vars) => {
+            if (!vars.result) return;
+            outcome.mutate(
+              { result: vars.result, next_touch_at: vars.next_touch_at, reason: vars.reason },
+              {
+                onSuccess: () => {
+                  capture.clear();
+                  setToast(UI.outcomeSaved);
+                },
+              },
+            );
+          }}
+          // Dismissal here means the same as on Today: the sheet closes, the
+          // intent stays owed, and the next return asks again.
+          onDismiss={capture.dismiss}
         />
       ) : null}
 

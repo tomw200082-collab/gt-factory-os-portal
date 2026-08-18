@@ -8,7 +8,22 @@
 import { X } from "lucide-react";
 import { UI } from "../_lib/labels";
 
-export function Toast({ message, onClose }: { message: string; onClose: () => void }) {
+export interface ToastAction {
+  label: string;
+  onAction: () => void;
+}
+
+export function Toast({
+  message,
+  action,
+  onClose,
+}: {
+  message: string;
+  /** An optional way back. A destructive action that can only be undone by
+   *  hunting the record down is a destructive action people stop trusting. */
+  action?: ToastAction;
+  onClose: () => void;
+}) {
   return (
     <div
       role="status"
@@ -22,6 +37,17 @@ export function Toast({ message, onClose }: { message: string; onClose: () => vo
       }}
     >
       {message}
+      {action ? (
+        <button
+          type="button"
+          data-testid="sales-toast-action"
+          onClick={action.onAction}
+          className="rounded-full px-3 py-1 font-medium underline"
+          style={{ color: "hsl(var(--s-bg))", minHeight: 44 }}
+        >
+          {action.label}
+        </button>
+      ) : null}
       <button
         type="button"
         onClick={onClose}

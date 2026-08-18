@@ -138,10 +138,14 @@ test("tabs, search, drawer, and a status change that is written @mocked", async 
   await expect(drawer).toBeVisible();
   await expect(drawer.getByTestId("event-timeline")).toBeVisible();
 
-  // A status change is a write.
+  // A status change is a write — and since 0324 it carries the next touch,
+  // because a working lead with no date leaves every queue silently.
   await page.getByTestId("drawer-set-working").click();
+  await page.getByTestId("drawer-working-confirm").click();
   await expect.poll(() => posted.length).toBeGreaterThan(0);
-  expect((posted[0].body as { status: string }).status).toBe("working");
+  const statusBody = posted[0].body as { status: string; next_touch_at?: string };
+  expect(statusBody.status).toBe("working");
+  expect(statusBody.next_touch_at).toBeTruthy();
 
   // Escape closes it.
   await page.keyboard.press("Escape");

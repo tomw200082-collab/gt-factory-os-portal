@@ -38,6 +38,11 @@ export class SalesApiError extends Error {
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
+  // A write that never left the phone is not a queue that failed to load.
+  // Reporting "לא הצלחנו לטעון את התור" after a tap on "אבוד" describes the
+  // wrong half of the app and invites the user to retry the wrong thing.
+  const isWrite = Boolean(init?.method && init.method !== "GET");
+
   let res: Response;
   try {
     res = await fetch(url, {
@@ -45,7 +50,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
       headers: { Accept: "application/json", ...(init?.headers ?? {}) },
     });
   } catch {
-    throw new SalesApiError(UI.queueError);
+    throw new SalesApiError(isWrite ? UI.saveFailed : UI.queueError);
   }
 
   if (!res.ok) {
@@ -60,7 +65,9 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     }
     // A rule the database refused reads in Hebrew; anything else degrades to a
     // generic sentence rather than showing an English code to the user.
-    const text = (code && RULE_MESSAGES[code]) || (code ? UI.saveFailed : message || UI.genericError);
+    const text =
+      (code && RULE_MESSAGES[code]) ||
+      (code ? UI.saveFailed : message || (isWrite ? UI.saveFailed : UI.genericError));
     throw new SalesApiError(text, code, res.status);
   }
 
@@ -163,10 +170,14 @@ function useSalesMutation<TVars, TData>(
   });
 }
 
+/** 0324: moving a lead to `working` leaves it carrying a next touch — either
+ *  one it already has, or this one, set in the same transaction. Without either
+ *  the database refuses with SALES_NEXT_TOUCH_REQUIRED. */
 export function useSetStatus(leadId: string) {
-  return useSalesMutation<{ status: "working" | "lost"; reason?: string | null }, unknown>((vars) =>
-    request(`/api/sales/leads/${leadId}/status`, jsonBody(vars)),
-  );
+  return useSalesMutation<
+    { status: "working" | "lost"; reason?: string | null; next_touch_at?: string | null },
+    unknown
+  >((vars) => request(`/api/sales/leads/${leadId}/status`, jsonBody(vars)));
 }
 
 export function useAddNote(leadId: string) {
