@@ -52,28 +52,34 @@ export function AttentionList({ rows, roster, onOpen }: AttentionListProps) {
                 <article
                   key={`${row.bucket}-${row.lead_id}`}
                   data-testid={`attention-row-${row.lead_id}-${row.bucket}`}
-                  className="s-card flex flex-wrap items-center gap-2 p-3"
+                  className="s-card flex flex-wrap items-center justify-between gap-x-3 gap-y-2 p-3"
                 >
-                  <button
-                    type="button"
-                    className="min-w-0 flex-1 text-start font-semibold"
-                    style={{ color: "hsl(var(--s-fg))" }}
-                    onClick={() => onOpen(row.lead_id)}
-                  >
-                    {row.org_name}
-                  </button>
+                  {/* Identity and its metadata travel together. A flex-1 name
+                      with the rest pushed to the far edge reads as a layout
+                      accident on a wide screen, and forces the eye across the
+                      whole row to connect a business to its number of days. */}
+                  <div className="flex min-w-0 flex-wrap items-center gap-2">
+                    <button
+                      type="button"
+                      className="min-w-0 text-start font-semibold"
+                      style={{ color: "hsl(var(--s-fg))" }}
+                      onClick={() => onOpen(row.lead_id)}
+                    >
+                      {row.org_name}
+                    </button>
 
-                  <span className="text-[12px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
-                    {assigneeName(row.assignee, roster) ?? UI.ownerNone}
-                  </span>
+                    {/* Days, in numerals, in the one colour that means late. */}
+                    <span
+                      className="s-badge s-badge-sla-overdue"
+                      data-testid={`attention-days-${row.lead_id}-${row.bucket}`}
+                    >
+                      <bdi dir="ltr">{UI.daysStuck(row.days_stuck)}</bdi>
+                    </span>
 
-                  {/* Days, in numerals, in the one colour that means late. */}
-                  <span
-                    className="s-badge s-badge-sla-overdue"
-                    data-testid={`attention-days-${row.lead_id}-${row.bucket}`}
-                  >
-                    <bdi dir="ltr">{UI.daysStuck(row.days_stuck)}</bdi>
-                  </span>
+                    <span className="text-[12px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
+                      {assigneeName(row.assignee, roster) ?? UI.ownerNone}
+                    </span>
+                  </div>
 
                   {tel ? (
                     <a href={tel} className="s-btn s-btn-ghost" aria-label={UI.call}>

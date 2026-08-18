@@ -212,6 +212,9 @@ function LeadsScreen() {
         {leads.isSuccess && visible.length > 0 ? (
           <LeadsTable
             rows={visible}
+            // The tabs are one status each, so the column would repeat the tab
+            // on every row. The prop stays so an "all" tab restores it.
+            showStatus={false}
             roster={roster}
             selected={selected}
             onToggle={(id) =>

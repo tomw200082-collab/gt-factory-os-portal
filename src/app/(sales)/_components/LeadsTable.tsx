@@ -17,6 +17,9 @@ import { StatusPill } from "./StatusPill";
 
 export interface LeadsTableProps {
   rows: SalesLeadRow[];
+  /** Hidden while a single-status tab is active: a column that reads "חדש" on
+   *  every row of the חדש tab spends width to repeat the tab's own label. */
+  showStatus?: boolean;
   /** For turning an assignee email into a person's name. */
   roster?: AssigneeEntry[];
   /** Selection lives on the page, because the bulk bar acts on it. Omit both
@@ -52,6 +55,7 @@ const PAGE = 20;
 
 export function LeadsTable({
   rows,
+  showStatus = false,
   roster = [],
   selected,
   onToggle,
@@ -165,7 +169,7 @@ export function LeadsTable({
                 UI.colBusiness,
                 UI.colContact,
                 UI.colPhone,
-                UI.statusLabel,
+                ...(showStatus ? [UI.statusLabel] : []),
                 UI.colCampaign,
                 UI.colOwner,
                 UI.colAge,
@@ -272,9 +276,11 @@ export function LeadsTable({
                 <td className="s-nums px-2 py-2" style={{ color: "hsl(var(--s-fg-muted))" }}>
                   <bdi dir="ltr">{fmtPhone(row.phone_e164)}</bdi>
                 </td>
-                <td className="px-2 py-2">
-                  <StatusPill status={row.status} />
-                </td>
+                {showStatus ? (
+                  <td className="px-2 py-2">
+                    <StatusPill status={row.status} />
+                  </td>
+                ) : null}
                 <td className="px-2 py-2" style={{ color: "hsl(var(--s-fg-muted))" }}>
                   {row.campaign_name ?? row.platform ?? "—"}
                 </td>

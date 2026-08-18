@@ -173,7 +173,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
 
         <main
           id="sales-main"
-          className="min-w-0 flex-1 pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] md:pb-10"
+          className="min-w-0 flex-1 pb-[calc(9rem+env(safe-area-inset-bottom,0px))] md:pb-24"
         >
           {children}
         </main>
@@ -181,6 +181,10 @@ export function SalesShell({ children }: { children: ReactNode }) {
 
       {/* Quick add: reachable from every screen, because a lead that arrives by
           phone must be as easy to capture as one Meta delivers. */}
+      {/* Not on settings: the one floating action is "add a lead", which is
+          not a thing you do from a settings form — and it sat on top of the
+          add-a-reason button, which is a floating action obscuring a real one. */}
+      {pathname === "/sales/settings" ? null : (
       <button
         type="button"
         data-testid="sales-quick-add"
@@ -198,6 +202,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
         <Plus size={18} aria-hidden />
         {UI.quickAdd}
       </button>
+      )}
 
       {searchOpen ? (
         <CommandK
