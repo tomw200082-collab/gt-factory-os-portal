@@ -9,7 +9,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowLeftRight, Building2, CalendarCheck, Plus, Search, Settings, Users } from "lucide-react";
+import { Activity, ArrowLeftRight, Building2, CalendarCheck, Plus, Search, Settings, Users } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { NAV_LABELS, UI } from "../_lib/labels";
 import { useLeads, useOrgs, useQuickAdd } from "../_lib/api";
@@ -23,10 +23,14 @@ interface Destination {
   icon: typeof CalendarCheck;
 }
 
+// Four now, not three. v1's "three screens, no more" was decided before the
+// admin console was asked for; the fourth answers the question the person
+// running this asks every morning, and burying it in a tab would hide it.
 const DESTINATIONS: Destination[] = [
   { href: "/sales/today", label: NAV_LABELS.today, icon: CalendarCheck },
   { href: "/sales/leads", label: NAV_LABELS.leads, icon: Users },
   { href: "/sales/orgs", label: NAV_LABELS.orgs, icon: Building2 },
+  { href: "/sales/attention", label: NAV_LABELS.attention, icon: Activity },
 ];
 
 function isActive(pathname: string, href: string): boolean {
