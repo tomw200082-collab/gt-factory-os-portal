@@ -74,6 +74,11 @@ export function OutcomeSheet({
   const panelRef = useRef<HTMLDivElement>(null);
 
   // Focus trap + Escape, mirroring MobileNav's dialog handling.
+  //
+  // `busy` is a dependency because the Escape handler reads it: guarding the
+  // dismiss button while leaving Escape open would have protected only the
+  // people using a pointer, and thrown the same error away for anyone on a
+  // keyboard.
   useEffect(() => {
     const panel = panelRef.current;
     if (!panel) return;
@@ -85,7 +90,10 @@ export function OutcomeSheet({
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
         e.preventDefault();
-        onDismiss();
+        // Not an emergency exit while a write is in the air: closing here
+        // discards the error the write is about to report. Tab still moves
+        // freely inside, so nobody is trapped.
+        if (!busy) onDismiss();
         return;
       }
       if (e.key !== "Tab" || focusable.length === 0) return;
@@ -101,7 +109,7 @@ export function OutcomeSheet({
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onDismiss, step]);
+  }, [onDismiss, step, busy]);
 
   const chosenReason = reason === "אחר" ? otherReason.trim() : reason;
   // A card's "דחה" only moves the date; the full loop also records the outcome.
