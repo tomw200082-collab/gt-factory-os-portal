@@ -106,3 +106,19 @@ describe("sales labels", () => {
     expect(UI.wonBannerHint).toMatch(HEBREW);
   });
 });
+
+describe("hebrew number agreement", () => {
+  // "1 לידים" is as wrong to a native reader as "1 leads". Every count in the
+  // surface goes through the same pair of helpers, so this covers all of them.
+  it("uses the singular noun at one and the numeral above it", () => {
+    expect(UI.showMore(1)).toBe("הצג עוד ליד אחד");
+    expect(UI.showMore(12)).toBe("הצג עוד 12 לידים");
+    expect(UI.orgLeads(1)).toBe("ליד אחד");
+    expect(UI.orgLeads(4)).toBe("4 לידים");
+  });
+
+  it("agrees the feminine המרה too, and scopes each stat to its own period", () => {
+    expect(UI.statsLine(1, 3, 1)).toBe("השבוע: ליד אחד · המרה אחת · בטיפול כרגע: 3");
+    expect(UI.statsLine(7, 3, 2)).toBe("השבוע: 7 לידים · 2 המרות · בטיפול כרגע: 3");
+  });
+});

@@ -68,6 +68,20 @@ export const LOST_REASONS: string[] = [
   "אחר",
 ];
 
+/**
+ * Hebrew agrees the noun with the count, so a bare `${n} לידים` prints
+ * "1 לידים" — as wrong to a native reader as "1 leads". Singular gets the
+ * word, everything else gets the numeral.
+ */
+function leads(n: number): string {
+  return n === 1 ? "ליד אחד" : `${n} לידים`;
+}
+
+/** Same, for the feminine המרה. */
+function conversions(n: number): string {
+  return n === 1 ? "המרה אחת" : `${n} המרות`;
+}
+
 /** Reads as a sentence: "אין לידים " + the word for that tab. */
 const EMPTY_TAB_WORDS: Record<LeadStatus, string> = {
   new: "חדשים",
@@ -99,10 +113,10 @@ export const UI = {
   // open right now, not how many were opened this week — filing it under the
   // same prefix states something untrue about the number.
   statsLine: (n: number, working: number, converted: number) =>
-    `השבוע: ${n} לידים · ${converted} המרות · בטיפול כרגע: ${working}`,
+    `השבוע: ${leads(n)} · ${conversions(converted)} · בטיפול כרגע: ${working}`,
   queueDone: "סיימת להיום ✓",
   queueDoneHint: "אין לידים שדורשים טיפול כרגע.",
-  showMore: (n: number) => `הצג עוד ${n} לידים`,
+  showMore: (n: number) => `הצג עוד ${leads(n)}`,
   showMoreRemaining: (remaining: number) => `נותרו ${remaining}`,
   queueError: "לא הצלחנו לטעון את התור",
   loadError: (what: string) => `לא הצלחנו לטעון את ${what}`,
@@ -187,7 +201,7 @@ export const UI = {
 
   // orgs
   orgsTitle: "עסקים",
-  orgLeads: (n: number) => `${n} לידים`,
+  orgLeads: (n: number) => leads(n),
   orgLastActivity: "פעילות אחרונה",
   orgNoActivity: "אין פעילות",
   orgLeadsTitle: "הלידים של העסק",
