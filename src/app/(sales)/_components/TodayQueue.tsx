@@ -10,7 +10,12 @@
 import { useState } from "react";
 import { TODAY_SECTION_LABELS, UI } from "../_lib/labels";
 import { SECTION_ALARM_COUNT, capRows } from "../_lib/queue";
-import type { TodayItemType, TodayRow, WhatsappTemplates } from "../_lib/types";
+import type {
+  AssigneeEntry,
+  TodayItemType,
+  TodayRow,
+  WhatsappTemplates,
+} from "../_lib/types";
 import { TodayCard } from "./TodayCard";
 
 const SECTION_ORDER: TodayItemType[] = [
@@ -36,6 +41,7 @@ export interface TodayQueueProps {
   rows: TodayRow[];
   dailyCap: number;
   slaHours: number;
+  roster?: AssigneeEntry[];
   templates: WhatsappTemplates | null;
   onArm: (leadId: string, channel: "call" | "whatsapp") => void;
   onPostpone: (row: TodayRow) => void;
@@ -47,6 +53,7 @@ function Section({
   rows,
   dailyCap,
   slaHours,
+  roster,
   templates,
   onArm,
   onPostpone,
@@ -99,6 +106,7 @@ function Section({
         <TodayCard
           key={row.lead_id}
           row={row}
+          roster={roster}
           slaHours={slaHours}
           templates={templates}
           onArm={onArm}
@@ -131,6 +139,7 @@ export function TodayQueue({
   rows,
   dailyCap,
   slaHours,
+  roster,
   templates,
   onArm,
   onPostpone,
@@ -148,6 +157,7 @@ export function TodayQueue({
             rows={section}
             dailyCap={dailyCap}
             slaHours={slaHours}
+            roster={roster}
             templates={templates}
             onArm={onArm}
             onPostpone={onPostpone}

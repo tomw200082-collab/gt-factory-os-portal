@@ -14,6 +14,8 @@ import {
   useWeekStats,
 } from "../../_lib/api";
 import { useOutcomeCapture } from "../../_lib/useOutcomeCapture";
+import { useQueueScope } from "../../_lib/useQueueScope";
+import { useSession } from "@/lib/auth/session-provider";
 import { UI } from "../../_lib/labels";
 import type { TodayRow } from "../../_lib/types";
 import { QueueDone, QueueError, QueueLoading } from "../../_components/EmptyStates";
@@ -27,7 +29,11 @@ import {
 import { Toast } from "../../_components/Toast";
 
 export default function TodayPage() {
-  const today = useToday();
+  const { session } = useSession();
+  const [scope, setScope] = useQueueScope();
+  // "mine" scopes to the signed-in person's leads plus everything unclaimed —
+  // the server decides that, this only says whose queue is being asked for.
+  const today = useToday(scope === "mine" ? session?.email : undefined);
   // Only for resolving an intent armed elsewhere; the queue itself is unchanged.
   const leads = useLeads();
   const stats = useWeekStats();
@@ -134,9 +140,28 @@ export default function TodayPage() {
   return (
     <div className="flex flex-col gap-4">
       <header className="flex flex-col gap-1">
-        <h1 className="text-xl font-semibold tracking-tight" style={{ color: "hsl(var(--s-fg))" }}>
-          {UI.todayTitle}
-        </h1>
+        <div className="flex flex-wrap items-center justify-between gap-2">
+          <h1 className="text-xl font-semibold tracking-tight" style={{ color: "hsl(var(--s-fg))" }}>
+            {scope === "mine" ? UI.queueMine : UI.queueAll}
+          </h1>
+          {/* Two states, not a menu: the question is only ever "everything, or
+              what is on me". It persists, because the answer should survive
+              closing the app. */}
+          <div className="flex gap-1" role="group" aria-label={UI.todayTitle}>
+            {(["all", "mine"] as const).map((option) => (
+              <button
+                key={option}
+                type="button"
+                data-testid={`queue-scope-${option}`}
+                aria-pressed={scope === option}
+                className={`s-tab ${scope === option ? "s-tab-active" : ""}`}
+                onClick={() => setScope(option)}
+              >
+                {option === "all" ? UI.scopeAll : UI.scopeMine}
+              </button>
+            ))}
+          </div>
+        </div>
         <StatsStrip stats={stats.data} />
       </header>
 
@@ -153,6 +178,7 @@ export default function TodayPage() {
             rows={rows}
             dailyCap={dailyCap}
             slaHours={slaHours}
+            roster={settings.data?.assignees ?? []}
             templates={settings.data?.whatsapp_templates ?? null}
             onArm={arm}
             onPostpone={setPostponing}

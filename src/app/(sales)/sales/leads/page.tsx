@@ -8,6 +8,7 @@ import {
   useAddNote,
   useAssign,
   useLeadEvents,
+  useBulkAssign,
   useLeads,
   useOutcome,
   useOutreach,
@@ -22,6 +23,8 @@ import type { LeadStatus } from "../../_lib/types";
 import { ListEmpty, QueueError, QueueLoading } from "../../_components/EmptyStates";
 import { LeadsTable } from "../../_components/LeadsTable";
 import { LeadDrawer } from "../../_components/LeadDrawer";
+import { assigneeName } from "../../_components/AssigneePicker";
+import { BulkBar } from "../../_components/BulkBar";
 import { OutcomeSheet } from "../../_components/OutcomeSheet";
 import { Toast } from "../../_components/Toast";
 
@@ -39,6 +42,8 @@ function LeadsScreen() {
   // history, so they stay here behind a chip that makes them findable and
   // fixable rather than silently dropped (audit P0-1, decision gate D2).
   const [uncontactableOnly, setUncontactableOnly] = useState(false);
+  const [unownedOnly, setUnownedOnly] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
   const [openId, setOpenId] = useState<string | null>(params?.get("lead") ?? null);
 
   const rows = useMemo(() => leads.data ?? [], [leads.data]);
@@ -52,6 +57,11 @@ function LeadsScreen() {
     () => rows.filter((r) => r.uncontactable).length,
     [rows],
   );
+  const unownedCount = useMemo(
+    () => rows.filter((r) => !r.assignee && (r.status === "new" || r.status === "working")).length,
+    [rows],
+  );
+  const roster = useMemo(() => settings.data?.assignees ?? [], [settings.data]);
 
   const visible = useMemo(
     () =>
@@ -59,9 +69,10 @@ function LeadsScreen() {
         (r) =>
           r.status === tab &&
           matchesQuery(r, query) &&
-          (!uncontactableOnly || r.uncontactable),
+          (!uncontactableOnly || r.uncontactable) &&
+          (!unownedOnly || !r.assignee),
       ),
-    [rows, tab, query, uncontactableOnly],
+    [rows, tab, query, uncontactableOnly, unownedOnly],
   );
 
   const openLead = rows.find((r) => r.id === openId) ?? null;
@@ -78,6 +89,7 @@ function LeadsScreen() {
   // to a screen that asked nothing and an intent that Today then discarded: the
   // conversation was never logged and nothing said so (audit P0-4).
   const outreach = useOutreach();
+  const bulkAssign = useBulkAssign();
   const capture = useOutcomeCapture();
   const [toast, setToast] = useState<string | null>(null);
 
@@ -162,17 +174,30 @@ function LeadsScreen() {
 
       {/* One chip, not a filter bar: this is the only cut of the table that
           answers a question the tabs cannot. */}
-      {leads.isSuccess && uncontactableCount > 0 ? (
+      {leads.isSuccess && (uncontactableCount > 0 || unownedCount > 0) ? (
         <div className="mb-2 flex flex-wrap gap-2">
-          <button
-            type="button"
-            data-testid="leads-chip-uncontactable"
-            aria-pressed={uncontactableOnly}
-            className={`s-tab ${uncontactableOnly ? "s-tab-active" : ""}`}
-            onClick={() => setUncontactableOnly((v) => !v)}
-          >
-            {UI.uncontactableChip(uncontactableCount)}
-          </button>
+          {unownedCount > 0 ? (
+            <button
+              type="button"
+              data-testid="leads-chip-unowned"
+              aria-pressed={unownedOnly}
+              className={`s-tab ${unownedOnly ? "s-tab-active" : ""}`}
+              onClick={() => setUnownedOnly((v) => !v)}
+            >
+              {UI.chipUnowned(unownedCount)}
+            </button>
+          ) : null}
+          {uncontactableCount > 0 ? (
+            <button
+              type="button"
+              data-testid="leads-chip-uncontactable"
+              aria-pressed={uncontactableOnly}
+              className={`s-tab ${uncontactableOnly ? "s-tab-active" : ""}`}
+              onClick={() => setUncontactableOnly((v) => !v)}
+            >
+              {UI.uncontactableChip(uncontactableCount)}
+            </button>
+          ) : null}
         </div>
       ) : null}
 
@@ -185,7 +210,25 @@ function LeadsScreen() {
         ) : null}
 
         {leads.isSuccess && visible.length > 0 ? (
-          <LeadsTable rows={visible} onOpen={(lead) => setOpenId(lead.id)} />
+          <LeadsTable
+            rows={visible}
+            roster={roster}
+            selected={selected}
+            onToggle={(id) =>
+              setSelected((prev) => {
+                const next = new Set(prev);
+                if (next.has(id)) next.delete(id);
+                else next.add(id);
+                return next;
+              })
+            }
+            onToggleAll={(ids) =>
+              setSelected((prev) =>
+                ids.every((id) => prev.has(id)) ? new Set() : new Set(ids),
+              )
+            }
+            onOpen={(lead) => setOpenId(lead.id)}
+          />
         ) : null}
       </div>
 
@@ -201,6 +244,7 @@ function LeadsScreen() {
           savingAssignee={assign.isPending}
           error={error}
           onClose={() => setOpenId(null)}
+          roster={roster}
           lostReasons={settings.data?.lost_reasons}
           onStatus={(status, reason, nextTouchAt) =>
             setStatus.mutate({ status, reason, next_touch_at: nextTouchAt }, saved)
@@ -217,11 +261,38 @@ function LeadsScreen() {
             )
           }
           onNextTouch={(at) => setNextTouch.mutate({ at }, saved)}
-          onAssign={(assignee) => assign.mutate({ assignee }, saved)}
+          onAssign={(assignee, nextTouchAt) =>
+            assign.mutate({ assignee, next_touch_at: nextTouchAt }, saved)
+          }
           onArm={(leadId, channel) => {
             capture.arm(leadId, channel);
             outreach.mutate({ leadId, channel });
           }}
+        />
+      ) : null}
+
+      {selected.size > 0 ? (
+        <BulkBar
+          count={selected.size}
+          roster={roster}
+          busy={bulkAssign.isPending}
+          onClear={() => setSelected(new Set())}
+          onAssign={(email, at) =>
+            bulkAssign.mutate(
+              { lead_ids: [...selected], assignee: email, next_touch_at: at },
+              {
+                onSuccess: (res) => {
+                  setToast(
+                    UI.bulkAssigned(
+                      res.assigned,
+                      assigneeName(email, roster) ?? email,
+                    ),
+                  );
+                  setSelected(new Set());
+                },
+              },
+            )
+          }
         />
       ) : null}
 

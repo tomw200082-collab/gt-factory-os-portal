@@ -10,7 +10,8 @@ import { X } from "lucide-react";
 import { fmtDate, fmtDateTime, fmtPhone, toDateInputValue } from "../_lib/format";
 import { LOST_REASONS, STATUS_LABELS, UI } from "../_lib/labels";
 import { mailtoHref, telHref, waHref, fillTemplate, templateFor } from "../_lib/wa";
-import type { LeadEventRow, SalesLeadRow, WhatsappTemplates } from "../_lib/types";
+import type { AssigneeEntry, LeadEventRow, SalesLeadRow, WhatsappTemplates } from "../_lib/types";
+import { AssigneePicker } from "./AssigneePicker";
 import { CustomerContext } from "./CustomerBadge";
 import { EventTimeline } from "./EventTimeline";
 import { SlaBadge } from "./SlaBadge";
@@ -41,7 +42,12 @@ export interface LeadDrawerProps {
   /** `done` runs only once the write lands, so a failed save keeps the text. */
   onNote: (note: string, done: () => void) => void;
   onNextTouch: (at: string) => void;
-  onAssign: (assignee: string) => void;
+  /** The date travels with the assignment: a lead handed over without one
+   *  lands in a name but in nobody's queue (audit P1-2). */
+  onAssign: (assignee: string, nextTouchAt?: string | null) => void;
+  /** The curated roster (0325). Free text is gone — it assigned leads to
+   *  ghosts and no screen ever said so. */
+  roster?: AssigneeEntry[];
   /**
    * Recording an outreach intent, the same way a Today card does. Without it a
    * call placed from here leaves no trace in the timeline and never raises the
@@ -85,11 +91,15 @@ export function LeadDrawer({
   onNote,
   onNextTouch,
   onAssign,
+  roster = [],
   onArm,
 }: LeadDrawerProps) {
   useReturnFocus();
   const [note, setNote] = useState("");
-  const [assignee, setAssignee] = useState(lead.assignee ?? "");
+  const [assignee, setAssignee] = useState<string | null>(lead.assignee);
+  const [assignDate, setAssignDate] = useState(
+    lead.next_touch_at ? toDateInputValue(new Date(lead.next_touch_at)) : toDateInputValue(new Date()),
+  );
   const [date, setDate] = useState(
     lead.next_touch_at ? toDateInputValue(new Date(lead.next_touch_at)) : toDateInputValue(new Date()),
   );
@@ -108,7 +118,7 @@ export function LeadDrawer({
   const chosenLostReason = lostReason === freeTextReason ? otherReason.trim() : lostReason;
 
   // What Escape and the backdrop would throw away.
-  const dirty = note.trim().length > 0 || assignee !== (lead.assignee ?? "");
+  const dirty = note.trim().length > 0 || (assignee ?? "") !== (lead.assignee ?? "");
   const panelRef = useRef<HTMLDivElement>(null);
 
   // Escape closes, and Tab stays inside: the drawer covers the list behind a
@@ -464,22 +474,47 @@ export function LeadDrawer({
               <label className="s-eyebrow" htmlFor="drawer-assignee">
                 {UI.assigneeLabel}
               </label>
-              <input
+              <AssigneePicker
                 id="drawer-assignee"
-                className="s-input"
-                inputMode="email"
-                placeholder={UI.assigneePlaceholder}
                 value={assignee}
-                onChange={(e) => setAssignee(e.target.value)}
+                roster={roster}
+                allowUnassign
+                disabled={savingAssignee}
+                onChange={setAssignee}
               />
+              {/* Handing the lead to somebody asks when it is due back;
+                  returning it to the pool does not. */}
+              {assignee ? (
+                <>
+                  <label className="s-eyebrow" htmlFor="drawer-assign-date">
+                    {UI.assignNeedsDate}
+                  </label>
+                  <input
+                    id="drawer-assign-date"
+                    type="date"
+                    className="s-input"
+                    value={assignDate}
+                    onChange={(e) => setAssignDate(e.target.value)}
+                  />
+                </>
+              ) : null}
               <button
                 type="button"
                 data-testid="drawer-assign-save"
-                // Nothing typed, nothing to save — otherwise an idle tap writes
-                // the value back to itself and reports success.
-                disabled={savingAssignee || assignee.trim() === (lead.assignee ?? "")}
+                // Nothing changed, nothing to save — otherwise an idle tap
+                // writes the value back to itself and reports success.
+                disabled={
+                  savingAssignee ||
+                  (assignee ?? "") === (lead.assignee ?? "") ||
+                  (Boolean(assignee) && !assignDate)
+                }
                 className="s-btn s-btn-ghost"
-                onClick={() => onAssign(assignee.trim())}
+                onClick={() =>
+                  onAssign(
+                    assignee ?? "",
+                    assignee ? new Date(`${assignDate}T09:00:00`).toISOString() : null,
+                  )
+                }
               >
                 {UI.saveAssignee}
               </button>

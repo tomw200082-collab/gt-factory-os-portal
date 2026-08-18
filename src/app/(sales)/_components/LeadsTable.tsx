@@ -9,13 +9,21 @@
 import { useMemo, useState } from "react";
 import { fmtDate, fmtPhone, fmtRelative } from "../_lib/format";
 import { UI } from "../_lib/labels";
-import type { SalesLeadRow } from "../_lib/types";
+import type { AssigneeEntry, SalesLeadRow } from "../_lib/types";
+import { assigneeName } from "./AssigneePicker";
 import { CustomerBadge } from "./CustomerBadge";
 import { SlaBadge } from "./SlaBadge";
 import { StatusPill } from "./StatusPill";
 
 export interface LeadsTableProps {
   rows: SalesLeadRow[];
+  /** For turning an assignee email into a person's name. */
+  roster?: AssigneeEntry[];
+  /** Selection lives on the page, because the bulk bar acts on it. Omit both
+   *  and the table renders without checkboxes. */
+  selected?: Set<string>;
+  onToggle?: (id: string) => void;
+  onToggleAll?: (ids: string[]) => void;
   onOpen: (lead: SalesLeadRow) => void;
 }
 
@@ -42,7 +50,14 @@ function Badges({ row }: { row: SalesLeadRow }) {
  */
 const PAGE = 20;
 
-export function LeadsTable({ rows, onOpen }: LeadsTableProps) {
+export function LeadsTable({
+  rows,
+  roster = [],
+  selected,
+  onToggle,
+  onToggleAll,
+  onOpen,
+}: LeadsTableProps) {
   const [shown, setShown] = useState(PAGE);
   // Descending by default: the oldest lead is the one most likely to be lost,
   // and sorting is here because 188 rows in arrival order hide urgency
@@ -57,6 +72,10 @@ export function LeadsTable({ rows, onOpen }: LeadsTableProps) {
 
   const visible = sorted.slice(0, shown);
   const remaining = sorted.length - visible.length;
+
+  const selectable = Boolean(selected && onToggle);
+  const visibleIds = sorted.map((r) => r.id);
+  const allSelected = selectable && visibleIds.length > 0 && visibleIds.every((id) => selected?.has(id));
 
   return (
     <>
@@ -124,12 +143,31 @@ export function LeadsTable({ rows, onOpen }: LeadsTableProps) {
                 Sticking one column left the other six scrolling away, and a
                 transparent sticky cell has 188 rows of text sliding under it. */}
             <tr style={{ color: "hsl(var(--s-fg-muted))" }}>
+              {selectable ? (
+                <th
+                  className="sticky top-0 z-10 border-b px-2 py-2 text-start font-medium"
+                  style={{
+                    background: "hsl(var(--s-surface))",
+                    borderColor: "hsl(var(--s-border))",
+                  }}
+                >
+                  <input
+                    type="checkbox"
+                    data-testid="leads-select-all"
+                    aria-label={UI.selectAllOnPage}
+                    className="h-5 w-5"
+                    checked={allSelected}
+                    onChange={() => onToggleAll?.(visibleIds)}
+                  />
+                </th>
+              ) : null}
               {[
                 UI.colBusiness,
                 UI.colContact,
                 UI.colPhone,
                 UI.statusLabel,
                 UI.colCampaign,
+                UI.colOwner,
                 UI.colAge,
                 UI.colNextTouch,
               ].map((label) => {
@@ -191,6 +229,18 @@ export function LeadsTable({ rows, onOpen }: LeadsTableProps) {
                 className="cursor-pointer border-t"
                 style={{ borderColor: "hsl(var(--s-border))" }}
               >
+                {selectable ? (
+                  <td className="px-2 py-2" onClick={(e) => e.stopPropagation()}>
+                    <input
+                      type="checkbox"
+                      data-testid={`lead-select-${row.id}`}
+                      aria-label={UI.selectLead}
+                      className="h-5 w-5"
+                      checked={selected?.has(row.id) ?? false}
+                      onChange={() => onToggle?.(row.id)}
+                    />
+                  </td>
+                ) : null}
                 <th
                   scope="row"
                   className="sticky px-2 py-2 text-start font-semibold"
@@ -227,6 +277,18 @@ export function LeadsTable({ rows, onOpen }: LeadsTableProps) {
                 </td>
                 <td className="px-2 py-2" style={{ color: "hsl(var(--s-fg-muted))" }}>
                   {row.campaign_name ?? row.platform ?? "—"}
+                </td>
+                {/* Ownership was delivered in every payload and rendered on no
+                    list at all, so "who has what" was answerable only by
+                    opening 188 drawers (audit P0-2). */}
+                <td
+                  data-testid={`lead-owner-${row.id}`}
+                  className="px-2 py-2"
+                  style={{
+                    color: row.assignee ? "hsl(var(--s-fg))" : "hsl(var(--s-fg-faint))",
+                  }}
+                >
+                  {assigneeName(row.assignee, roster) ?? UI.ownerNone}
                 </td>
                 <td className="s-nums px-2 py-2" style={{ color: "hsl(var(--s-fg-muted))" }}>
                   {UI.ageDays(row.age_days)}

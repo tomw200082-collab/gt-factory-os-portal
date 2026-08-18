@@ -11,12 +11,15 @@ import { fmtMoney, fmtPhone, fmtRelative } from "../_lib/format";
 import { UI } from "../_lib/labels";
 import { telHref, templateFor, waHref, fillTemplate } from "../_lib/wa";
 import { agedTone } from "../_lib/queue";
-import type { TodayRow, WhatsappTemplates } from "../_lib/types";
+import type { AssigneeEntry, TodayRow, WhatsappTemplates } from "../_lib/types";
+import { assigneeName } from "./AssigneePicker";
 import { CustomerBadge, CustomerContext } from "./CustomerBadge";
 import { SlaBadge } from "./SlaBadge";
 
 export interface TodayCardProps {
   row: TodayRow;
+  /** Turns an assignee email into a name. Empty until settings load. */
+  roster?: AssigneeEntry[];
   /** The live SLA parameter — the threshold the age tint respects, so the line
    *  Tom sets on the settings screen is the line the colour uses. */
   slaHours: number;
@@ -55,6 +58,7 @@ function ConversionCard({ row }: { row: TodayRow }) {
 
 export function TodayCard({
   row,
+  roster = [],
   slaHours,
   templates,
   onArm,
@@ -146,6 +150,10 @@ export function TodayCard({
           ? UI.nextTouchOn(fmtRelative(row.next_touch_at))
           : `${fmtRelative(row.created_at)} · ${UI.ageInDays(row.age_days)}`}
         {row.campaign_name ? ` · ${row.campaign_name}` : ""}
+        {/* Whose lead this is, on the card itself — with two people working the
+            same queue, a card with no owner reads as "anyone's", which is how
+            the same prospect gets called twice. */}
+        {row.assignee ? ` · ${assigneeName(row.assignee, roster)}` : ""}
       </p>
 
       <div className="mt-3 flex flex-wrap items-center gap-2">

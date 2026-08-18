@@ -171,6 +171,33 @@ export interface SalesSettings {
   last_changes: SettingChange[];
 }
 
+/** One row of the attention screen (0326). A lead can appear in two buckets —
+ *  each section answers a different question. */
+export interface AttentionRow {
+  lead_id: string;
+  org_name: string;
+  contact_name: string | null;
+  phone_e164: string | null;
+  assignee: string | null;
+  status: LeadStatus;
+  bucket: "overdue" | "unowned" | "stalled";
+  days_stuck: number;
+  next_touch_at: string | null;
+  last_event_at: string | null;
+}
+
+/** One row of the cross-lead activity feed (0327). */
+export interface ActivityRow {
+  event_id: string;
+  lead_id: string;
+  org_name: string;
+  contact_name: string | null;
+  event_type: string;
+  payload: Record<string, unknown> | null;
+  actor: string;
+  created_at: string;
+}
+
 /** What /api/sales/today returns: the rows plus the shape they were ordered by. */
 export interface TodayPayload {
   rows: TodayRow[];
