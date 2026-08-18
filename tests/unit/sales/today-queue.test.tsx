@@ -195,12 +195,17 @@ describe("today queue", () => {
     expect(armed).toEqual([["L7", "call"]]);
   });
 
-  it("disables the call when the lead has no phone, rather than faking a link", () => {
+  it("refuses the call when the lead has no phone, and says why", () => {
     renderQueue([row({ lead_id: "NP", phone_e164: null })]);
     const card = screen.getByTestId("today-card-NP");
     const call = within(card).getByText(UI.call).closest("button");
     expect(call).not.toBeNull();
-    expect((call as HTMLButtonElement).disabled).toBe(true);
+
+    // aria-disabled rather than disabled: iOS VoiceOver does not announce the
+    // title of a disabled button, so the reason never reached the person who
+    // most needed it. The control stays focusable and names why it is inert.
+    expect(call?.getAttribute("aria-disabled")).toBe("true");
+    expect(within(card).getByText(UI.noPhone)).toBeTruthy();
   });
 
   it("reveals a long section in batches, always naming the true total", () => {

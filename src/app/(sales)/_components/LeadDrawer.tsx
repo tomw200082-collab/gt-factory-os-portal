@@ -209,7 +209,7 @@ export function LeadDrawer({
             aria-label={UI.close}
             data-testid="drawer-close"
             onClick={onClose}
-            className="grid h-10 w-10 place-items-center rounded-full"
+            className="grid h-11 w-11 place-items-center rounded-full"
             style={{ color: "hsl(var(--s-fg-muted))" }}
           >
             <X size={18} aria-hidden />
@@ -381,7 +381,7 @@ export function LeadDrawer({
                   aria-label={UI.lostReasonGroupLabel}
                   className="flex flex-col gap-2"
                 >
-                  {reasons.map((r) => (
+                  {reasons.map((r, i) => (
                     <button
                       key={r}
                       type="button"
@@ -389,6 +389,19 @@ export function LeadDrawer({
                       data-testid={`drawer-lost-reason-${r}`}
                       disabled={savingStatus}
                       aria-checked={lostReason === r}
+                      // Same roving pattern as the outcome sheet: one tab stop,
+                      // arrows between the options.
+                      tabIndex={lostReason === r || (!lostReason && i === 0) ? 0 : -1}
+                      onKeyDown={(e) => {
+                        if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+                        e.preventDefault();
+                        const step = e.key === "ArrowDown" ? 1 : -1;
+                        const next = reasons[(i + step + reasons.length) % reasons.length];
+                        setLostReason(next);
+                        document
+                          .querySelector<HTMLElement>(`[data-testid="drawer-lost-reason-${next}"]`)
+                          ?.focus();
+                      }}
                       className={`s-btn s-btn-ghost min-h-[48px] ${lostReason === r ? "s-tab-active" : ""}`}
                       onClick={() => setLostReason(r)}
                     >
@@ -524,6 +537,11 @@ export function LeadDrawer({
 
         <section className="mt-5">
           <h3 className="s-eyebrow">{UI.timelineTitle}</h3>
+          {/* Opening the drawer mid-call to check when you last spoke should
+              not require tabbing around to discover the timeline arrived. */}
+          <span className="sr-only" role="status" aria-live="polite">
+            {eventsLoading ? "" : UI.eventsLoaded(events.length)}
+          </span>
           <div className="mt-2">
             {eventsLoading ? (
               <p className="text-[13px]" style={{ color: "hsl(var(--s-fg-faint))" }}>

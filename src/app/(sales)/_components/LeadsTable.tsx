@@ -202,7 +202,7 @@ export function LeadsTable({
                         }
                       >
                         {label}
-                        <span aria-hidden className="s-nums text-[11px]">
+                        <span aria-hidden className="s-nums text-[12px]">
                           {ageSort === "asc" ? "↑" : ageSort === "desc" ? "↓" : "↕"}
                         </span>
                       </button>

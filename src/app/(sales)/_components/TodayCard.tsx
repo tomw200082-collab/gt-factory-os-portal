@@ -35,7 +35,13 @@ function ConversionCard({ row }: { row: TodayRow }) {
     <article
       data-testid={`today-card-${row.lead_id}`}
       className="s-card s-enter flex items-start gap-3 p-4"
-      style={{ borderColor: "hsl(var(--s-status-won) / 0.35)" }}
+      // A 35%-opacity hairline was the only thing separating the best news in
+      // the product from an ordinary card. The tint does the work the border
+      // was being asked to do alone.
+      style={{
+        background: "hsl(var(--s-status-won-soft))",
+        borderColor: "hsl(var(--s-status-won) / 0.35)",
+      }}
     >
       <PartyPopper size={20} aria-hidden style={{ color: "hsl(var(--s-status-won))" }} />
       <div className="min-w-0 flex-1">
@@ -170,7 +176,18 @@ export function TodayCard({
             {UI.call}
           </a>
         ) : (
-          <button type="button" disabled title={UI.noPhone} className="s-btn s-btn-primary flex-1" style={{ opacity: 0.45 }}>
+          <button
+            type="button"
+            // aria-disabled, not disabled: iOS VoiceOver does not announce the
+            // title of a disabled button, so the reason never reached the one
+            // person who most needed it. This keeps the control focusable and
+            // names why it does nothing.
+            aria-disabled
+            aria-describedby={`no-phone-${row.lead_id}`}
+            className="s-btn s-btn-primary flex-1"
+            style={{ opacity: 0.45 }}
+            onClick={(e) => e.preventDefault()}
+          >
             <Phone size={16} aria-hidden />
             {UI.call}
           </button>
@@ -181,21 +198,54 @@ export function TodayCard({
             target="_blank"
             rel="noopener noreferrer"
             onClick={() => onArm(row.lead_id, "whatsapp")}
-            className="s-btn s-btn-ghost flex-1"
+            className={`s-btn flex-1 ${returning ? "s-btn-ghost-on-tint" : "s-btn-ghost"}`}
           >
             <MessageCircle size={16} aria-hidden />
             {UI.whatsapp}
           </a>
         ) : (
-          <button type="button" disabled title={UI.noPhone} className="s-btn s-btn-ghost flex-1" style={{ opacity: 0.45 }}>
+          <button
+            type="button"
+            aria-disabled
+            aria-describedby={`no-phone-${row.lead_id}`}
+            className="s-btn s-btn-ghost flex-1"
+            style={{ opacity: 0.45 }}
+            onClick={(e) => e.preventDefault()}
+          >
             <MessageCircle size={16} aria-hidden />
             {UI.whatsapp}
+            <span id={`no-phone-${row.lead_id}`} className="sr-only">
+              {UI.noPhone}
+            </span>
           </button>
         )}
-        <button type="button" className="s-btn s-btn-ghost" onClick={() => onPostpone(row)}>
+      </div>
+
+      {/* Demoted out of the button row on purpose. Both of these are exits from
+          the loop, and rendering them at the same weight as the call meant the
+          most visually salient control on a card repeated 149 times a morning
+          was the one that ends the conversation. They are still one tap; they
+          just stop competing. */}
+      <div className="mt-2 flex items-center gap-3 text-[13px]">
+        <button
+          type="button"
+          data-testid="card-postpone"
+          className="min-h-[44px] underline"
+          style={{ color: "hsl(var(--s-fg-muted))" }}
+          onClick={() => onPostpone(row)}
+        >
           {UI.postpone}
         </button>
-        <button type="button" className="s-btn s-btn-danger-quiet" onClick={() => onLost(row)}>
+        <span aria-hidden style={{ color: "hsl(var(--s-fg-faint))" }}>
+          ·
+        </span>
+        <button
+          type="button"
+          data-testid="card-lost"
+          className="min-h-[44px] underline"
+          style={{ color: "hsl(var(--s-danger-quiet))" }}
+          onClick={() => onLost(row)}
+        >
           {UI.markLost}
         </button>
       </div>

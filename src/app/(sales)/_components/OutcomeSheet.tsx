@@ -347,13 +347,28 @@ export function OutcomeSheet({
             <p className="s-eyebrow">{UI.lostReasonTitle}</p>
             {/* One reason, not five toggles — radio semantics say so. */}
             <div role="radiogroup" aria-label={UI.lostReasonGroupLabel} className="flex flex-col gap-2">
-              {reasons.map((r) => (
+              {reasons.map((r, i) => (
                 <button
                   key={r}
                   type="button"
                   role="radio"
                   data-testid={`lost-reason-${r}`}
                   disabled={busy}
+                  // ARIA's radio pattern: one stop in the tab order, arrows to
+                  // move. Making all five tabbable announced a radio group and
+                  // then ignored the keys a screen-reader user would reach for,
+                  // which reads as a broken control rather than a slow one.
+                  tabIndex={reason === r || (!reason && i === 0) ? 0 : -1}
+                  onKeyDown={(e) => {
+                    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+                    e.preventDefault();
+                    const step = e.key === "ArrowDown" ? 1 : -1;
+                    const next = reasons[(i + step + reasons.length) % reasons.length];
+                    setReason(next);
+                    document
+                      .querySelector<HTMLElement>(`[data-testid="lost-reason-${next}"]`)
+                      ?.focus();
+                  }}
                   className={`s-btn s-btn-ghost min-h-[48px] ${reason === r ? "s-tab-active" : ""}`}
                   onClick={() => setReason(r)}
                   aria-checked={reason === r}

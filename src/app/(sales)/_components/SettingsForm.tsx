@@ -312,7 +312,9 @@ export function SettingsForm({
 
       <section className="flex flex-col gap-2">
         <h2 className="s-eyebrow">{UI.slaTitle}</h2>
-        <p className="text-[12px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
+        {/* Given an id and pointed at from the field: a hint that only sits
+            near an input is invisible to anyone not looking at the screen. */}
+        <p id="sla-hint" className="text-[12px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
           {UI.slaHint}
         </p>
         <label className="flex items-center gap-2">
@@ -326,11 +328,25 @@ export function SettingsForm({
             value={slaHours}
             onChange={(e) => setSlaHours(e.target.value)}
             aria-invalid={!hoursValid}
+            aria-describedby="sla-hint sla-error"
           />
           <span className="text-[13px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
             {UI.slaHours}
           </span>
         </label>
+        {/* aria-invalid with nothing to read announces "invalid" and stops
+            there. The range is the whole of what the person needs. */}
+        {!hoursValid ? (
+          <p
+            id="sla-error"
+            role="alert"
+            data-testid="settings-sla-error"
+            className="text-[12px]"
+            style={{ color: "hsl(var(--s-sla-overdue))" }}
+          >
+            {UI.slaRange}
+          </p>
+        ) : null}
       </section>
 
       {error ? (

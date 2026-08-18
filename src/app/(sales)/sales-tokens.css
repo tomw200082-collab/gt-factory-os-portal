@@ -21,9 +21,15 @@
   --s-surface: 0 0% 100%;
   --s-surface-sunken: 40 16% 96%;
 
-  /* ink */
+  /* ink — three tiers that have to read as three.
+     The v2 audit found muted and faint 3 percentage points apart in lightness,
+     which is invisible at 13px on a phone: the hierarchy collapsed to two.
+     The obvious fix — lighten faint — would have dropped it under 4.5:1, and
+     the brief is explicit that legibility wins where the two fight. So the gap
+     opens upward instead: muted goes darker, faint stays where it is, and both
+     tiers gain contrast rather than spending it. */
   --s-fg: 220 15% 16%;
-  --s-fg-muted: 220 10% 42%;
+  --s-fg-muted: 220 12% 33%;
   --s-fg-faint: 220 8% 45%;
 
   /* hairlines — grouping only. A card boundary is not a control boundary, so
@@ -55,6 +61,12 @@
   --s-status-lost: 220 8% 44%;
   --s-status-lost-soft: 220 12% 95%;
 
+  /* Destructive, quietly. Separate from --s-sla-overdue on purpose: a card can
+     carry both an overdue badge and a "mark lost" button, and rendering the two
+     in the same red conflates a clock with a decision. Lower saturation reads
+     as caution rather than alarm, and still clears 4.5:1 on a card. */
+  --s-danger-quiet: 0 50% 40%;
+
   /* SLA — the only other place colour is allowed */
   --s-sla-ok: 152 55% 31%;
   --s-sla-ok-soft: 152 50% 94%;
@@ -69,7 +81,9 @@
   --s-radius: 8px;
   --s-radius-sm: 6px;
   --s-radius-pill: 999px;
-  --s-shadow-card: 0 1px 2px hsl(220 15% 16% / 0.04);
+  /* 4% was a shadow in the source and nothing on the screen. Cards read as
+     flat panels in daylight, which is where this product is used. */
+  --s-shadow-card: 0 1px 3px hsl(220 15% 16% / 0.08);
   --s-shadow-sheet: 0 -8px 32px hsl(220 15% 16% / 0.12);
   --s-motion: 170ms;
   --s-ease: cubic-bezier(0.22, 1, 0.36, 1);
@@ -89,8 +103,8 @@
   --s-surface: 220 14% 13%;
   --s-surface-sunken: 220 16% 11%;
   --s-fg: 40 20% 96%;
-  --s-fg-muted: 220 8% 68%;
-  --s-fg-faint: 220 8% 55%;
+  --s-fg-muted: 220 10% 78%;
+  --s-fg-faint: 220 8% 58%;
   --s-border: 220 12% 22%;
   --s-border-strong: 220 12% 30%;
   --s-border-field: 220 12% 45%;
@@ -113,6 +127,7 @@
   --s-sla-ok-soft: 152 35% 18%;
   --s-sla-overdue: 0 72% 69%;
   --s-sla-overdue-soft: 0 40% 22%;
+  --s-danger-quiet: 0 50% 66%;
   --s-overlay: 0 0% 0% / 0.6;
   --s-shadow-card: 0 1px 2px hsl(0 0% 0% / 0.3);
   --s-shadow-sheet: 0 -8px 32px hsl(0 0% 0% / 0.5);
@@ -182,7 +197,9 @@
   padding-block: 2px;
   padding-inline: 8px;
   border-radius: var(--s-radius-pill);
-  font-size: 11px;
+  /* 12px floor: 11px is 22 device pixels on a phone, which is the practical
+     limit at arm's length in daylight — and this product is used in a van. */
+  font-size: 12px;
   font-weight: 500;
   font-variant-numeric: tabular-nums;
 }
@@ -257,10 +274,24 @@
 [data-app="sales"] .s-btn-danger-quiet {
   background: hsl(var(--s-surface));
   border-color: hsl(var(--s-border-field));
-  color: hsl(var(--s-sla-overdue));
+  /* Its own red, not the SLA alarm's: a clock and a decision should not look
+     like the same thing on a card that carries both. */
+  color: hsl(var(--s-danger-quiet));
 }
 [data-app="sales"] .s-btn-danger-quiet:hover {
   background: hsl(var(--s-sla-overdue-soft));
+}
+
+/* A ghost button on a tinted card. The plain ghost fills with --s-surface,
+   which lands as a white rectangle on the returning-customer card and breaks
+   the one surface that is deliberately tinted. */
+[data-app="sales"] .s-btn-ghost-on-tint {
+  background: transparent;
+  border-color: hsl(var(--s-accent) / 0.4);
+  color: hsl(var(--s-fg));
+}
+[data-app="sales"] .s-btn-ghost-on-tint:hover {
+  background: hsl(var(--s-surface) / 0.5);
 }
 
 /* --- input ---------------------------------------------------------------- */
@@ -305,8 +336,10 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  min-height: 40px;
-  padding-block: 8px;
+  /* 44px, like every other control here: this is the most-tapped thing on the
+     second-most-visited screen, and it was the one below the floor. */
+  min-height: 44px;
+  padding-block: 10px;
   padding-inline: 14px;
   border: 0;
   border-radius: var(--s-radius-pill);
@@ -326,6 +359,14 @@
 [data-app="sales"] .s-tab-active {
   background: hsl(var(--s-fg) / 0.06);
   color: hsl(var(--s-fg));
+  /* Weight, not only colour: which filter is active must survive greyscale,
+     a printout, and reduced colour sensitivity (WCAG 1.4.1). */
+  font-weight: 600;
+}
+
+/* A row you can click should say so before you click it. */
+[data-app="sales"] tbody tr:hover {
+  background: hsl(var(--s-surface-sunken));
 }
 
 /* --- section headings ----------------------------------------------------- */
