@@ -41,7 +41,8 @@ export default function AuthCallbackPage() {
 
     void (async () => {
       const url = new URL(window.location.href);
-      const next = url.searchParams.get("next") ?? "/home";
+      // Same default as the login form: the /apps fork, which forwards on.
+      const next = url.searchParams.get("next") ?? "/apps";
 
       const supabase = createSupabaseBrowserClient();
 

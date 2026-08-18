@@ -1,5 +1,21 @@
 # Portal Readiness: 94/100 (delta: +50 total, +0 this update)
 
+> **2026-08-17 GT Sales Workspace (Tranche 162).** **+0 — deliberately no
+> numeric delta, and no category moved.** This rubric measures the factory
+> portal; the sales workspace is a new module surface that sits outside all ten
+> categories, so scoring it here would be inventing a number. The gate for the
+> tranche was that no factory category regress, and none did: every category
+> holds its prior value, no factory route changed role, and no role's rail
+> changed a row (`/apps` enters `NAV_MANIFEST` as `placement:"command"`,
+> admin-only). What shipped: `/apps` post-login switchboard and the `(sales)`
+> route group — Today queue with the one-tap outcome loop, leads table +
+> drawer, orgs, quick-add, ⌘K search, scoped PWA, settings — Hebrew RTL,
+> admin-only, on the live 188-lead `sales_core` data. Backend companions are
+> migrations 0322/0323 and `api/src/sales/**` (gt-factory-os PR #220).
+> Evidence: pgTAP 24/24 (0322) + 16/16 (0323) + 11/11 regression on the
+> neighbouring invariants, handler SQL 10/10 against prod, vitest 1298/1298,
+> playwright 5/5 on the sales specs, Next build green (161 pages).
+
 > **2026-07-23 lean-nav (Tranche 138).** **+0 — deliberately no numeric
 > delta.** A per-role nav pruning + role-scoping pass (Tom-approved D1 fold
 > list + D2 hidden-doctrine, 2026-07-23). Its target category `nav_integrity`

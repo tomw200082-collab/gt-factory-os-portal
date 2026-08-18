@@ -62,13 +62,21 @@ const PERSONA_GROUPS = [
   "po",
   "shared",
   "auth",
+  // Groups the guard had never covered: (economics) and (production) predate
+  // this list, (sales) arrives with tranche 162.
+  "economics",
+  "production",
+  "sales",
 ];
 
 // Match route-group tokens of the form "(<persona>)/" embedded in a
 // string literal (single-quote, double-quote, or backtick) or template
 // expression. We look for the literal "(persona)/" — if we only saw
 // "(persona)" we'd false-positive on destructuring and type casts.
-const STRING_RE = /(['"`])([^'"`]*?\((admin|operator|planner|ops|planning|inbox|po|shared|auth)\)\/[^'"`]*?)\1/g;
+const STRING_RE = new RegExp(
+  `(['"\`])([^'"\`]*?\\((${PERSONA_GROUPS.join("|")})\\)/[^'"\`]*?)\\1`,
+  "g",
+);
 
 // Additionally match bare `href="(persona)/"` just in case the string
 // uses backslashes or other weirdness we didn't anticipate. Belt-and-
@@ -125,6 +133,23 @@ async function scanFile(path) {
     if (trimmed.startsWith("//")) continue;
     // Skip block-comment-ish lines (not perfect but good enough for noise).
     if (trimmed.startsWith("*") || trimmed.startsWith("/*")) continue;
+
+    // Skip module specifiers. A route group IS a directory, so an import path
+    // legitimately contains "(planning)/" — the rule this script enforces is
+    // about navigation targets (href, router.push, redirect), not about how
+    // TypeScript resolves a file at build time. Without this, the guard fails
+    // on a dozen pre-existing imports and can never go green, which is how it
+    // came to be excluded from CI. Matches `import … from "…"`, a bare
+    // `import "…"`, `export … from "…"`, a continuation line ending in
+    // `} from "…"`, and dynamic `import("…")`.
+    if (
+      /^import\s/.test(trimmed) ||
+      /^export\s[^=]*\sfrom\s/.test(trimmed) ||
+      /^\}?\s*from\s+['"]/.test(trimmed) ||
+      /\bimport\(\s*['"]/.test(trimmed)
+    ) {
+      continue;
+    }
 
     STRING_RE.lastIndex = 0;
     BARE_RE.lastIndex = 0;

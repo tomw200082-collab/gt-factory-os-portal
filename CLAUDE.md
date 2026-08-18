@@ -34,6 +34,7 @@ Drive it by PR comment: `@claude /portal-audit`, `/portal-scorecard`, `/portal-t
 | `/credit-tracking` | picking-shortage tracking (bookkeeper) | 2026-06-17 |
 | `/purchase-orders/placement-queue` + `PlacementRow` | office-manager order placement | 2026-06-20 |
 | `/home` — **viewer role only** (strings in `src/features/home/cockpit.ts` `he` field) | bookkeeper cockpit; admin/planner/operator views stay English | 2026-06-26 |
+| /apps + route group (sales) — all screens | sales workspace, Hebrew-first | 2026-08-17 |
 
 `/stock/receipts` and all other operator surfaces: English.
 
