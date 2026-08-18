@@ -146,10 +146,13 @@ const PAIRS: Array<[string, string, string, number]> = [
   ["status pill: won", "--s-status-won", "--s-status-won-soft", 4.5],
   ["status pill: lost", "--s-status-lost", "--s-status-lost-soft", 4.5],
   ["SLA badge: within", "--s-sla-ok", "--s-sla-ok-soft", 4.5],
+  // Its own red, so a clock and a decision stop looking like the same thing.
+  // Held to the same 4.5:1 as everything else that carries meaning.
+  ["quiet danger button", "--s-danger-quiet", "--s-surface", 4.5],
+  ["quiet danger button on the page", "--s-danger-quiet", "--s-bg", 4.5],
   ["SLA badge: overdue", "--s-sla-overdue", "--s-sla-overdue-soft", 4.5],
   ["primary action label", "--s-accent-fg", "--s-accent", 4.5],
   ["ghost button label", "--s-fg", "--s-surface", 4.5],
-  ["quiet-danger button label", "--s-sla-overdue", "--s-surface", 4.5],
   // 1.4.11: non-text contrast for controls and focus indication.
   ["focus ring against a card", "--s-accent", "--s-surface", 3],
   ["focus ring against the page", "--s-accent", "--s-bg", 3],
@@ -165,5 +168,27 @@ describe.each([
     expect(tokens[ink], ink).toBeDefined();
     expect(tokens[ground], ground).toBeDefined();
     expect(contrast(tokens[ink], tokens[ground])).toBeGreaterThanOrEqual(minimum);
+  });
+});
+
+// The audit found muted and faint three percentage points of lightness apart,
+// which is invisible at 13px on a phone: the three-tier hierarchy collapsed to
+// two. Widening it by lightening `faint` would have dropped that tier under
+// 4.5:1, so the gap opens upward instead — and this pins both halves of that
+// decision, because the tempting fix is the one that spends contrast.
+describe.each([
+  ["light", LIGHT],
+  ["dark", DARK],
+])("%s theme keeps three legible ink tiers", (_theme, tokens) => {
+  it("separates muted from faint by enough to see", () => {
+    const muted = contrast(tokens["--s-fg-muted"], tokens["--s-surface"]);
+    const faint = contrast(tokens["--s-fg-faint"], tokens["--s-surface"]);
+    expect(muted / faint).toBeGreaterThanOrEqual(1.3);
+  });
+
+  it("never buys that separation by dropping a tier below AA", () => {
+    for (const token of ["--s-fg", "--s-fg-muted", "--s-fg-faint"]) {
+      expect(contrast(tokens[token], tokens["--s-surface"])).toBeGreaterThanOrEqual(4.5);
+    }
   });
 });

@@ -71,7 +71,12 @@ describe("sales labels", () => {
 
   it("ships no English UI string", () => {
     for (const [key, value] of Object.entries(UI)) {
-      const rendered = typeof value === "function" ? String(value(1, 2, 3)) : String(value);
+      // Four arguments, not three: triageLine takes four counts, and calling
+      // it with three printed the word "undefined" — which this guard then
+      // correctly flagged as English. The arity of the call is the fixture,
+      // not the rule being tested.
+      const rendered =
+        typeof value === "function" ? String(value(1, 2, 3, 4)) : String(value);
       const residue = stripAllowed(rendered);
       expect(/[A-Za-z]{2,}/.test(residue), `${key}: ${rendered}`).toBe(false);
     }

@@ -14,13 +14,17 @@ import {
 } from "@tanstack/react-query";
 import { RULE_MESSAGES, UI } from "./labels";
 import type {
+  ActivityRow,
+  AssigneeEntry,
+  AttentionRow,
   LeadEventRow,
+  TodayPayload,
   OrgRow,
   OutcomeResult,
   OutreachChannel,
   SalesLeadRow,
+  QueueSettings,
   SalesSettings,
-  TodayRow,
   WeekStats,
   WhatsappTemplates,
 } from "./types";
@@ -38,6 +42,11 @@ export class SalesApiError extends Error {
 }
 
 async function request<T>(url: string, init?: RequestInit): Promise<T> {
+  // A write that never left the phone is not a queue that failed to load.
+  // Reporting "לא הצלחנו לטעון את התור" after a tap on "אבוד" describes the
+  // wrong half of the app and invites the user to retry the wrong thing.
+  const isWrite = Boolean(init?.method && init.method !== "GET");
+
   let res: Response;
   try {
     res = await fetch(url, {
@@ -45,7 +54,7 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
       headers: { Accept: "application/json", ...(init?.headers ?? {}) },
     });
   } catch {
-    throw new SalesApiError(UI.queueError);
+    throw new SalesApiError(isWrite ? UI.saveFailed : UI.queueError);
   }
 
   if (!res.ok) {
@@ -60,7 +69,9 @@ async function request<T>(url: string, init?: RequestInit): Promise<T> {
     }
     // A rule the database refused reads in Hebrew; anything else degrades to a
     // generic sentence rather than showing an English code to the user.
-    const text = (code && RULE_MESSAGES[code]) || (code ? UI.saveFailed : message || UI.genericError);
+    const text =
+      (code && RULE_MESSAGES[code]) ||
+      (code ? UI.saveFailed : message || (isWrite ? UI.saveFailed : UI.genericError));
     throw new SalesApiError(text, code, res.status);
   }
 
@@ -79,7 +90,9 @@ function jsonBody(body: unknown): RequestInit {
 
 export const salesKeys = {
   all: ["sales"] as const,
-  today: () => ["sales", "today"] as const,
+  today: (scope?: string) => ["sales", "today", scope ?? "all"] as const,
+  attention: () => ["sales", "attention"] as const,
+  activity: (limit: number) => ["sales", "activity", limit] as const,
   leads: () => ["sales", "leads"] as const,
   events: (leadId: string) => ["sales", "events", leadId] as const,
   orgs: () => ["sales", "orgs"] as const,
@@ -89,10 +102,38 @@ export const salesKeys = {
 
 // ---- reads -----------------------------------------------------------------
 
-export function useToday(): UseQueryResult<TodayRow[], SalesApiError> {
+/**
+ * The queue, and the shape it was ordered by.
+ *
+ * The payload carries `queue` because the cap is a product decision the admin
+ * owns (0326) and the rows arrive complete: the screen defers the remainder
+ * and says how many, rather than the server hiding them and the count lying.
+ */
+export function useToday(scope?: string): UseQueryResult<TodayPayload, SalesApiError> {
+  // "mine or unclaimed" is decided server-side (queries_handler); the portal
+  // only says whose queue it is asking for. The parameter has existed since v1
+  // and had no caller until now (audit P0-2).
+  const url = scope ? `/api/sales/today?assignee=${encodeURIComponent(scope)}` : "/api/sales/today";
   return useQuery({
-    queryKey: salesKeys.today(),
-    queryFn: async () => (await request<{ rows: TodayRow[] }>("/api/sales/today")).rows,
+    queryKey: salesKeys.today(scope),
+    queryFn: async () => await request<TodayPayload>(url),
+    staleTime: 30_000,
+  });
+}
+
+export function useAttention(): UseQueryResult<AttentionRow[], SalesApiError> {
+  return useQuery({
+    queryKey: salesKeys.attention(),
+    queryFn: async () => (await request<{ rows: AttentionRow[] }>("/api/sales/attention")).rows,
+    staleTime: 30_000,
+  });
+}
+
+export function useActivity(limit = 50): UseQueryResult<ActivityRow[], SalesApiError> {
+  return useQuery({
+    queryKey: salesKeys.activity(limit),
+    queryFn: async () =>
+      (await request<{ rows: ActivityRow[] }>(`/api/sales/activity?limit=${limit}`)).rows,
     staleTime: 30_000,
   });
 }
@@ -156,10 +197,14 @@ function useSalesMutation<TVars, TData>(
   });
 }
 
+/** 0324: moving a lead to `working` leaves it carrying a next touch — either
+ *  one it already has, or this one, set in the same transaction. Without either
+ *  the database refuses with SALES_NEXT_TOUCH_REQUIRED. */
 export function useSetStatus(leadId: string) {
-  return useSalesMutation<{ status: "working" | "lost"; reason?: string | null }, unknown>((vars) =>
-    request(`/api/sales/leads/${leadId}/status`, jsonBody(vars)),
-  );
+  return useSalesMutation<
+    { status: "working" | "lost"; reason?: string | null; next_touch_at?: string | null },
+    unknown
+  >((vars) => request(`/api/sales/leads/${leadId}/status`, jsonBody(vars)));
 }
 
 export function useAddNote(leadId: string) {
@@ -168,16 +213,61 @@ export function useAddNote(leadId: string) {
   );
 }
 
+/**
+ * Push a lead's next touch out, optimistically.
+ *
+ * Postponing is the same gesture as answering — the card should leave the
+ * queue on the tap, not after a round trip. This was the one write in the loop
+ * that waited, so "דחה" felt broken on a slow connection while every other
+ * action felt instant; the row comes back if the write fails (gate P1).
+ */
 export function useSetNextTouch(leadId: string) {
-  return useSalesMutation<{ at: string }, unknown>((vars) =>
-    request(`/api/sales/leads/${leadId}/next-touch`, jsonBody(vars)),
+  const qc = useQueryClient();
+  return useMutation<
+    unknown,
+    SalesApiError,
+    { at: string },
+    { previous: Array<[readonly unknown[], TodayPayload | undefined]> }
+  >({
+    mutationFn: (vars) => request(`/api/sales/leads/${leadId}/next-touch`, jsonBody(vars)),
+    onMutate: async () => {
+      await qc.cancelQueries({ queryKey: TODAY_PREFIX });
+      return { previous: dropFromTodayCaches(qc, leadId) };
+    },
+    onError: (_err, _vars, context) => {
+      restoreTodayCaches(qc, context?.previous);
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: salesKeys.all });
+    },
+  });
+}
+
+/**
+ * Hand a lead to somebody, with the date it is due back.
+ *
+ * The date is not optional in the UI even though the contract allows it: an
+ * assignment without a next action is a to-do that rots (audit P1-2), so the
+ * picker collects one and this passes it through in the same transaction.
+ */
+export function useAssign(leadId: string) {
+  return useSalesMutation<{ assignee: string; next_touch_at?: string | null }, unknown>((vars) =>
+    request(`/api/sales/leads/${leadId}/assign`, jsonBody(vars)),
   );
 }
 
-export function useAssign(leadId: string) {
-  return useSalesMutation<{ assignee: string }, unknown>((vars) =>
-    request(`/api/sales/leads/${leadId}/assign`, jsonBody(vars)),
-  );
+/**
+ * Hand over a batch in one call.
+ *
+ * 188 leads could not be distributed one drawer at a time (audit P0-2), and
+ * doing it as N requests would leave a half-assigned backlog on any failure.
+ * sales_core.bulk_assign is one transaction with the roster checked once.
+ */
+export function useBulkAssign() {
+  return useSalesMutation<
+    { lead_ids: string[]; assignee: string; next_touch_at?: string | null },
+    { assigned: number }
+  >((vars) => request("/api/sales/bulk-assign", jsonBody(vars)));
 }
 
 /**
@@ -193,6 +283,45 @@ export function useOutreach() {
   );
 }
 
+/** Every cached Today queue, whatever scope it was fetched under. */
+const TODAY_PREFIX = ["sales", "today"] as const;
+
+/**
+ * Drop a lead from every cached Today queue, and hand back what was there.
+ *
+ * The scope is part of the query key — `salesKeys.today(scope)` is
+ * `["sales","today", scope ?? "all"]` — so an optimistic write aimed at
+ * `salesKeys.today()` patches the "all" entry and nothing else. On `שלי` the
+ * live cache is keyed by the signed-in email, so the card the person just
+ * answered for stayed on screen until the refetch settled: the one scope a
+ * second salesperson works in was the one where the queue felt broken.
+ * Matching on the prefix patches whichever scopes are cached.
+ */
+function dropFromTodayCaches(
+  qc: ReturnType<typeof useQueryClient>,
+  leadId: string,
+): Array<[readonly unknown[], TodayPayload | undefined]> {
+  const entries = qc.getQueriesData<TodayPayload>({ queryKey: TODAY_PREFIX });
+  for (const [key, payload] of entries) {
+    if (!payload) continue;
+    qc.setQueryData<TodayPayload>(key, {
+      ...payload,
+      rows: payload.rows.filter((row) => row.lead_id !== leadId),
+    });
+  }
+  return entries;
+}
+
+/** Put back exactly what `dropFromTodayCaches` found, key by key. */
+function restoreTodayCaches(
+  qc: ReturnType<typeof useQueryClient>,
+  previous: Array<[readonly unknown[], TodayPayload | undefined]> | undefined,
+): void {
+  for (const [key, payload] of previous ?? []) {
+    if (payload) qc.setQueryData(key, payload);
+  }
+}
+
 export interface OutcomeVars {
   result: OutcomeResult;
   next_touch_at?: string | null;
@@ -206,21 +335,19 @@ export interface OutcomeVars {
  */
 export function useOutcome(leadId: string) {
   const qc = useQueryClient();
-  return useMutation<unknown, SalesApiError, OutcomeVars, { previous?: TodayRow[] }>({
+  return useMutation<
+    unknown,
+    SalesApiError,
+    OutcomeVars,
+    { previous: Array<[readonly unknown[], TodayPayload | undefined]> }
+  >({
     mutationFn: (vars) => request(`/api/sales/leads/${leadId}/outcome`, jsonBody(vars)),
     onMutate: async () => {
-      await qc.cancelQueries({ queryKey: salesKeys.today() });
-      const previous = qc.getQueryData<TodayRow[]>(salesKeys.today());
-      if (previous) {
-        qc.setQueryData<TodayRow[]>(
-          salesKeys.today(),
-          previous.filter((row) => row.lead_id !== leadId),
-        );
-      }
-      return { previous };
+      await qc.cancelQueries({ queryKey: TODAY_PREFIX });
+      return { previous: dropFromTodayCaches(qc, leadId) };
     },
     onError: (_err, _vars, context) => {
-      if (context?.previous) qc.setQueryData(salesKeys.today(), context.previous);
+      restoreTodayCaches(qc, context?.previous);
     },
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: salesKeys.all });
@@ -243,7 +370,13 @@ export function useQuickAdd() {
 
 export function useSaveSettings() {
   return useSalesMutation<
-    { sla_hours?: number; whatsapp_templates?: WhatsappTemplates },
+    {
+      sla_hours?: number;
+      whatsapp_templates?: WhatsappTemplates;
+      lost_reasons?: string[];
+      queue?: QueueSettings;
+      assignees?: AssigneeEntry[];
+    },
     unknown
   >((vars) =>
     request("/api/sales/settings", {

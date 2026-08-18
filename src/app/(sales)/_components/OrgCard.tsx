@@ -105,7 +105,7 @@ export function OrgCard({
             aria-label={UI.close}
             data-testid="org-close"
             onClick={onClose}
-            className="grid h-10 w-10 place-items-center rounded-full"
+            className="grid h-11 w-11 place-items-center rounded-full"
             style={{ color: "hsl(var(--s-fg-muted))" }}
           >
             <X size={18} aria-hidden />
@@ -126,7 +126,7 @@ export function OrgCard({
                 <Link
                   href={`/sales/leads?lead=${encodeURIComponent(lead.id)}`}
                   data-testid={`org-lead-${lead.id}`}
-                  className="flex items-center justify-between gap-2 rounded-[var(--s-radius-sm)] px-2 py-2"
+                  className="flex min-h-[44px] items-center justify-between gap-2 rounded-[var(--s-radius-sm)] px-2 py-2"
                   style={{ background: "hsl(var(--s-surface-sunken))" }}
                 >
                   <span className="min-w-0 flex-1 truncate text-[13px]" style={{ color: "hsl(var(--s-fg))" }}>

@@ -125,7 +125,11 @@ describe("leads table", () => {
 
 describe("lead drawer", () => {
   function renderDrawer(over: Partial<SalesLeadRow> = {}, events: LeadEventRow[] = []) {
-    const calls = { status: [] as unknown[], note: [] as string[], closed: 0 };
+    const calls = {
+      status: [] as [string, string | null | undefined, string | null | undefined][],
+      note: [] as string[],
+      closed: 0,
+    };
     render(
       <LeadDrawer
         lead={lead(over)}
@@ -133,7 +137,7 @@ describe("lead drawer", () => {
         eventsLoading={false}
         templates={null}
         onClose={() => (calls.closed += 1)}
-        onStatus={(s, r) => calls.status.push([s, r])}
+        onStatus={(s, r, at) => calls.status.push([s, r, at])}
         onNote={(n) => calls.note.push(n)}
         onNextTouch={noop}
         onAssign={noop}
@@ -155,10 +159,17 @@ describe("lead drawer", () => {
     expect(calls.closed).toBe(1);
   });
 
-  it("moves a lead to working", () => {
+  it("asks for a next touch before moving an undated lead to working", () => {
+    // 0324 refuses a working lead with no next touch, and this is the path
+    // that used to drop leads out of every queue with no reminder at all.
     const calls = renderDrawer();
     fireEvent.click(screen.getByTestId("drawer-set-working"));
-    expect(calls.status).toEqual([["working", undefined]]);
+    expect(calls.status).toEqual([]);
+
+    fireEvent.click(screen.getByTestId("drawer-working-confirm"));
+    expect(calls.status).toHaveLength(1);
+    expect(calls.status[0][0]).toBe("working");
+    expect(calls.status[0][2]).toBeTruthy();
   });
 
   it("will not lose a lead without a reason", () => {
@@ -167,11 +178,11 @@ describe("lead drawer", () => {
     const confirm = screen.getByTestId("drawer-lost-confirm") as HTMLButtonElement;
     expect(confirm.disabled).toBe(true);
 
-    fireEvent.change(screen.getByLabelText(UI.lostReasonTitle), {
-      target: { value: "אין תקציב" },
-    });
+    // The drawer now uses the same radio group as the outcome sheet, so the
+    // two surfaces answer the same question the same way.
+    fireEvent.click(screen.getByTestId("drawer-lost-reason-אין תקציב"));
     fireEvent.click(screen.getByTestId("drawer-lost-confirm"));
-    expect(calls.status).toEqual([["lost", "אין תקציב"]]);
+    expect(calls.status).toEqual([["lost", "אין תקציב", undefined]]);
   });
 
   it("refuses to save an empty note", () => {

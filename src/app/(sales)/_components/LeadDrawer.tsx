@@ -10,7 +10,8 @@ import { X } from "lucide-react";
 import { fmtDate, fmtDateTime, fmtPhone, toDateInputValue } from "../_lib/format";
 import { LOST_REASONS, STATUS_LABELS, UI } from "../_lib/labels";
 import { mailtoHref, telHref, waHref, fillTemplate, templateFor } from "../_lib/wa";
-import type { LeadEventRow, SalesLeadRow, WhatsappTemplates } from "../_lib/types";
+import type { AssigneeEntry, LeadEventRow, SalesLeadRow, WhatsappTemplates } from "../_lib/types";
+import { AssigneePicker } from "./AssigneePicker";
 import { CustomerContext } from "./CustomerBadge";
 import { EventTimeline } from "./EventTimeline";
 import { SlaBadge } from "./SlaBadge";
@@ -29,11 +30,24 @@ export interface LeadDrawerProps {
   savingStatus?: boolean;
   error?: string | null;
   onClose: () => void;
-  onStatus: (status: "working" | "lost", reason?: string) => void;
+  /** The third argument exists because 0324 will not move a lead to working
+   *  without a next touch — status and date travel together or not at all. */
+  onStatus: (
+    status: "working" | "lost",
+    reason?: string | null,
+    nextTouchAt?: string | null,
+  ) => void;
+  /** The admin-editable list (0326); falls back to the shipped constant. */
+  lostReasons?: string[];
   /** `done` runs only once the write lands, so a failed save keeps the text. */
   onNote: (note: string, done: () => void) => void;
   onNextTouch: (at: string) => void;
-  onAssign: (assignee: string) => void;
+  /** The date travels with the assignment: a lead handed over without one
+   *  lands in a name but in nobody's queue (audit P1-2). */
+  onAssign: (assignee: string, nextTouchAt?: string | null) => void;
+  /** The curated roster (0325). Free text is gone — it assigned leads to
+   *  ghosts and no screen ever said so. */
+  roster?: AssigneeEntry[];
   /**
    * Recording an outreach intent, the same way a Today card does. Without it a
    * call placed from here leaves no trace in the timeline and never raises the
@@ -73,19 +87,38 @@ export function LeadDrawer({
   error = null,
   onClose,
   onStatus,
+  lostReasons,
   onNote,
   onNextTouch,
   onAssign,
+  roster = [],
   onArm,
 }: LeadDrawerProps) {
   useReturnFocus();
   const [note, setNote] = useState("");
-  const [assignee, setAssignee] = useState(lead.assignee ?? "");
+  const [assignee, setAssignee] = useState<string | null>(lead.assignee);
+  const [assignDate, setAssignDate] = useState(
+    lead.next_touch_at ? toDateInputValue(new Date(lead.next_touch_at)) : toDateInputValue(new Date()),
+  );
   const [date, setDate] = useState(
     lead.next_touch_at ? toDateInputValue(new Date(lead.next_touch_at)) : toDateInputValue(new Date()),
   );
   const [losing, setLosing] = useState(false);
   const [lostReason, setLostReason] = useState("");
+  const [otherReason, setOtherReason] = useState("");
+  // 0324 refuses to move a lead to working without a next touch, so the button
+  // collects one instead of failing after the tap.
+  const [working, setWorking] = useState(false);
+  const [workingDate, setWorkingDate] = useState(toDateInputValue(new Date()));
+
+  const reasons = lostReasons?.length ? lostReasons : LOST_REASONS;
+  // Positional, not a literal: the list is Tom's to rename (0326), and keying
+  // free text off the string "אחר" would break silently the day he does.
+  const freeTextReason = reasons[reasons.length - 1];
+  const chosenLostReason = lostReason === freeTextReason ? otherReason.trim() : lostReason;
+
+  // What Escape and the backdrop would throw away.
+  const dirty = note.trim().length > 0 || (assignee ?? "") !== (lead.assignee ?? "");
   const panelRef = useRef<HTMLDivElement>(null);
 
   // Escape closes, and Tab stays inside: the drawer covers the list behind a
@@ -97,6 +130,9 @@ export function LeadDrawer({
 
     const onKeyDown = (e: KeyboardEvent) => {
       if (e.key === "Escape") {
+        // Typed text is work. Closing over it without asking is the same class
+        // of loss as a dropped save, and it happened on a key nobody aims for.
+        if (dirty && !window.confirm(UI.discardChanges)) return;
         onClose();
         return;
       }
@@ -119,7 +155,7 @@ export function LeadDrawer({
     };
     document.addEventListener("keydown", onKeyDown);
     return () => document.removeEventListener("keydown", onKeyDown);
-  }, [onClose]);
+  }, [onClose, dirty]);
 
   const name = lead.contact_name ?? lead.org_name;
   const wa = waHref(
@@ -143,7 +179,12 @@ export function LeadDrawer({
       className="fixed inset-0 z-40 flex justify-start"
       style={{ background: "hsl(var(--s-overlay))" }}
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target !== e.currentTarget) return;
+        // Escape asks before discarding an unsaved note; the backdrop did not,
+        // so the same keystroke-equivalent gesture threw away typed work
+        // depending only on how the drawer was dismissed (gate P1).
+        if (dirty && !window.confirm(UI.discardChanges)) return;
+        onClose();
       }}
     >
       <div
@@ -173,7 +214,7 @@ export function LeadDrawer({
             aria-label={UI.close}
             data-testid="drawer-close"
             onClick={onClose}
-            className="grid h-10 w-10 place-items-center rounded-full"
+            className="grid h-11 w-11 place-items-center rounded-full"
             style={{ color: "hsl(var(--s-fg-muted))" }}
           >
             <X size={18} aria-hidden />
@@ -281,7 +322,15 @@ export function LeadDrawer({
                   data-testid="drawer-set-working"
                   disabled={savingStatus}
                   className="s-btn s-btn-ghost"
-                  onClick={() => onStatus("working")}
+                  aria-expanded={working}
+                  onClick={() => {
+                    // Already carrying a date? Then the move is a single tap and
+                    // the database is satisfied. Otherwise ask, because this is
+                    // the path that used to drop leads out of every queue with
+                    // no reminder at all (audit P0-3).
+                    if (lead.next_touch_at) onStatus("working");
+                    else setWorking((v) => !v);
+                  }}
                 >
                   {STATUS_LABELS.working}
                 </button>
@@ -298,30 +347,88 @@ export function LeadDrawer({
               </button>
             </div>
 
-            {losing ? (
+            {working && !lead.next_touch_at ? (
               <div className="flex flex-col gap-2">
-                <label className="s-eyebrow" htmlFor="lost-reason-select">
-                  {UI.lostReasonTitle}
+                <label className="s-eyebrow" htmlFor="drawer-working-date">
+                  {UI.workingNeedsDate}
                 </label>
-                <select
-                  id="lost-reason-select"
+                <input
+                  id="drawer-working-date"
+                  type="date"
                   className="s-input"
-                  value={lostReason}
-                  onChange={(e) => setLostReason(e.target.value)}
+                  value={workingDate}
+                  onChange={(e) => setWorkingDate(e.target.value)}
+                />
+                <button
+                  type="button"
+                  data-testid="drawer-working-confirm"
+                  disabled={savingStatus || !workingDate}
+                  className="s-btn s-btn-ghost"
+                  onClick={() =>
+                    onStatus("working", null, new Date(`${workingDate}T09:00:00`).toISOString())
+                  }
                 >
-                  <option value="">—</option>
-                  {LOST_REASONS.map((r) => (
-                    <option key={r} value={r}>
+                  {UI.saveDate}
+                </button>
+              </div>
+            ) : null}
+
+            {losing ? (
+              // The same control the outcome sheet uses, including the free-text
+              // branch it always had and this surface did not: choosing the last
+              // reason here used to store the word itself as the reason, which is
+              // exactly the "a lost lead with no reason teaches nothing" failure
+              // the schema exists to prevent (audit P1-6).
+              <div className="flex flex-col gap-2">
+                <p className="s-eyebrow">{UI.lostReasonTitle}</p>
+                <div
+                  role="radiogroup"
+                  aria-label={UI.lostReasonGroupLabel}
+                  className="flex flex-col gap-2"
+                >
+                  {reasons.map((r, i) => (
+                    <button
+                      key={r}
+                      type="button"
+                      role="radio"
+                      data-testid={`drawer-lost-reason-${r}`}
+                      disabled={savingStatus}
+                      aria-checked={lostReason === r}
+                      // Same roving pattern as the outcome sheet: one tab stop,
+                      // arrows between the options.
+                      tabIndex={lostReason === r || (!lostReason && i === 0) ? 0 : -1}
+                      onKeyDown={(e) => {
+                        if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+                        e.preventDefault();
+                        const step = e.key === "ArrowDown" ? 1 : -1;
+                        const next = reasons[(i + step + reasons.length) % reasons.length];
+                        setLostReason(next);
+                        document
+                          .querySelector<HTMLElement>(`[data-testid="drawer-lost-reason-${next}"]`)
+                          ?.focus();
+                      }}
+                      className={`s-btn s-btn-ghost min-h-[48px] ${lostReason === r ? "s-tab-active" : ""}`}
+                      onClick={() => setLostReason(r)}
+                    >
                       {r}
-                    </option>
+                    </button>
                   ))}
-                </select>
+                </div>
+                {lostReason === freeTextReason ? (
+                  <input
+                    className="s-input"
+                    aria-label={UI.lostReasonOtherLabel}
+                    placeholder={UI.lostReasonOther}
+                    value={otherReason}
+                    onChange={(e) => setOtherReason(e.target.value)}
+                  />
+                ) : null}
                 <button
                   type="button"
                   data-testid="drawer-lost-confirm"
-                  disabled={savingStatus || !lostReason}
+                  disabled={savingStatus || !chosenLostReason}
                   className="s-btn s-btn-danger-quiet"
-                  onClick={() => onStatus("lost", lostReason)}
+                  onClick={() => onStatus("lost", chosenLostReason)}
                 >
                   {UI.save}
                 </button>
@@ -351,7 +458,7 @@ export function LeadDrawer({
                 // signal.
                 onClick={() => onNote(note.trim(), () => setNote(""))}
               >
-                {UI.save}
+                {UI.saveNote}
               </button>
             </div>
 
@@ -377,7 +484,7 @@ export function LeadDrawer({
                 className="s-btn s-btn-ghost"
                 onClick={() => onNextTouch(new Date(`${date}T09:00:00`).toISOString())}
               >
-                {UI.save}
+                {UI.saveDate}
               </button>
             </div>
 
@@ -385,24 +492,49 @@ export function LeadDrawer({
               <label className="s-eyebrow" htmlFor="drawer-assignee">
                 {UI.assigneeLabel}
               </label>
-              <input
+              <AssigneePicker
                 id="drawer-assignee"
-                className="s-input"
-                inputMode="email"
-                placeholder={UI.assigneePlaceholder}
                 value={assignee}
-                onChange={(e) => setAssignee(e.target.value)}
+                roster={roster}
+                allowUnassign
+                disabled={savingAssignee}
+                onChange={setAssignee}
               />
+              {/* Handing the lead to somebody asks when it is due back;
+                  returning it to the pool does not. */}
+              {assignee ? (
+                <>
+                  <label className="s-eyebrow" htmlFor="drawer-assign-date">
+                    {UI.assignNeedsDate}
+                  </label>
+                  <input
+                    id="drawer-assign-date"
+                    type="date"
+                    className="s-input"
+                    value={assignDate}
+                    onChange={(e) => setAssignDate(e.target.value)}
+                  />
+                </>
+              ) : null}
               <button
                 type="button"
                 data-testid="drawer-assign-save"
-                // Nothing typed, nothing to save — otherwise an idle tap writes
-                // the value back to itself and reports success.
-                disabled={savingAssignee || assignee.trim() === (lead.assignee ?? "")}
+                // Nothing changed, nothing to save — otherwise an idle tap
+                // writes the value back to itself and reports success.
+                disabled={
+                  savingAssignee ||
+                  (assignee ?? "") === (lead.assignee ?? "") ||
+                  (Boolean(assignee) && !assignDate)
+                }
                 className="s-btn s-btn-ghost"
-                onClick={() => onAssign(assignee.trim())}
+                onClick={() =>
+                  onAssign(
+                    assignee ?? "",
+                    assignee ? new Date(`${assignDate}T09:00:00`).toISOString() : null,
+                  )
+                }
               >
-                {UI.save}
+                {UI.saveAssignee}
               </button>
             </div>
           </section>
@@ -410,6 +542,11 @@ export function LeadDrawer({
 
         <section className="mt-5">
           <h3 className="s-eyebrow">{UI.timelineTitle}</h3>
+          {/* Opening the drawer mid-call to check when you last spoke should
+              not require tabbing around to discover the timeline arrived. */}
+          <span className="sr-only" role="status" aria-live="polite">
+            {eventsLoading ? "" : UI.eventsLoaded(events.length)}
+          </span>
           <div className="mt-2">
             {eventsLoading ? (
               <p className="text-[13px]" style={{ color: "hsl(var(--s-fg-faint))" }}>

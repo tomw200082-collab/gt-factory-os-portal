@@ -12,7 +12,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { LOST_REASONS, OUTCOME_LABELS, OUTCOME_TITLES, UI } from "../_lib/labels";
-import { toDateInputValue } from "../_lib/format";
+import { fmtDate, toDateInputValue } from "../_lib/format";
 import type { OutcomeResult, OutreachChannel } from "../_lib/types";
 import { useReturnFocus } from "../_lib/useReturnFocus";
 
@@ -24,6 +24,9 @@ export interface OutcomeSubmit {
 
 export interface OutcomeSheetProps {
   leadName: string;
+  /** The admin-editable list (0326). Falls back to the shipped constant while
+   *  settings load, so the sheet is never a blank list. */
+  lostReasons?: string[];
   /**
    * "outcome"     — the full loop, raised on return from a call.
    * "next-touch"  — the דחה button on a card: pick a date, nothing else.
@@ -55,8 +58,30 @@ function atNineAM(daysFromNow: number): string {
   return d.toISOString();
 }
 
+/**
+ * What the server will schedule if the user does not pick a date.
+ *
+ * A faithful mirror of sales_core.next_business_touch (migration 0324): N days
+ * out, 09:00 Israel time, rolled off Friday and Saturday onto Sunday. The body
+ * still omits next_touch_at unless the user changes it — the server remains the
+ * source of truth and this is an echo, not a second opinion — but a tap that
+ * commits a date should say which date before it commits it.
+ */
+export function nextBusinessTouchPreview(days: number, from: Date = new Date()): Date {
+  const d = new Date(from);
+  d.setDate(d.getDate() + days);
+  d.setHours(9, 0, 0, 0);
+  // getDay(): 5 = Friday, 6 = Saturday. The Israeli weekend, not the American
+  // one — a "tomorrow" that lands on Shabbat is not a call anyone will make.
+  const day = d.getDay();
+  if (day === 5) d.setDate(d.getDate() + 2);
+  else if (day === 6) d.setDate(d.getDate() + 1);
+  return d;
+}
+
 export function OutcomeSheet({
   leadName,
+  lostReasons,
   mode = "outcome",
   channel,
   busy = false,
@@ -111,7 +136,13 @@ export function OutcomeSheet({
     return () => document.removeEventListener("keydown", onKeyDown);
   }, [onDismiss, step, busy]);
 
-  const chosenReason = reason === "אחר" ? otherReason.trim() : reason;
+  // The list is Tom's to edit, so "which one opens a free-text field" cannot be
+  // a literal string comparison any more: renaming the last entry would have
+  // silently killed free-text capture. The rule is positional and stated on the
+  // settings screen — the last reason always takes text.
+  const reasons = lostReasons?.length ? lostReasons : LOST_REASONS;
+  const freeTextReason = reasons[reasons.length - 1];
+  const chosenReason = reason === freeTextReason ? otherReason.trim() : reason;
   // A card's "דחה" only moves the date; the full loop also records the outcome.
   const progressing: OutcomeSubmit =
     mode === "outcome" ? { result: "answered_progressing" } : {};
@@ -122,7 +153,10 @@ export function OutcomeSheet({
       className="fixed inset-0 z-50 flex items-end justify-center"
       style={{ background: "hsl(var(--s-overlay))" }}
       onClick={(e) => {
-        if (e.target === e.currentTarget) onDismiss();
+        // Same guard the dismiss button and Escape already carried: closing
+        // mid-write discards the error the write is about to report, and a
+        // backdrop tap is the easiest of the three to do by accident.
+        if (e.target === e.currentTarget && !busy) onDismiss();
       }}
     >
       <div
@@ -171,23 +205,51 @@ export function OutcomeSheet({
             >
               {OUTCOME_LABELS.answered_progressing}
             </button>
+            <div className="flex flex-col gap-1">
+              <button
+                type="button"
+                data-testid="outcome-no_answer"
+                disabled={busy}
+                className="s-btn s-btn-ghost min-h-[56px] text-base"
+                onClick={() => onSubmit({ result: "no_answer" })}
+              >
+                {OUTCOME_LABELS.no_answer}
+              </button>
+              {/* The date this tap is about to commit, before it commits it. */}
+              <p
+                data-testid="outcome-preview-no_answer"
+                className="s-nums text-[12px]"
+                style={{ color: "hsl(var(--s-fg-muted))" }}
+              >
+                {UI.nextTouchPreview(fmtDate(nextBusinessTouchPreview(1).toISOString()))}
+              </p>
+            </div>
+            <div className="flex flex-col gap-1">
+              <button
+                type="button"
+                data-testid="outcome-whatsapp_sent"
+                disabled={busy}
+                className="s-btn s-btn-ghost min-h-[56px] text-base"
+                onClick={() => onSubmit({ result: "whatsapp_sent" })}
+              >
+                {OUTCOME_LABELS.whatsapp_sent}
+              </button>
+              <p
+                data-testid="outcome-preview-whatsapp_sent"
+                className="s-nums text-[12px]"
+                style={{ color: "hsl(var(--s-fg-muted))" }}
+              >
+                {UI.nextTouchPreview(fmtDate(nextBusinessTouchPreview(2).toISOString()))}
+              </p>
+            </div>
             <button
               type="button"
-              data-testid="outcome-no_answer"
+              data-testid="outcome-pick-date"
               disabled={busy}
-              className="s-btn s-btn-ghost min-h-[56px] text-base"
-              onClick={() => onSubmit({ result: "no_answer" })}
+              className="s-btn s-btn-ghost"
+              onClick={() => setStep("next-touch")}
             >
-              {OUTCOME_LABELS.no_answer}
-            </button>
-            <button
-              type="button"
-              data-testid="outcome-whatsapp_sent"
-              disabled={busy}
-              className="s-btn s-btn-ghost min-h-[56px] text-base"
-              onClick={() => onSubmit({ result: "whatsapp_sent" })}
-            >
-              {OUTCOME_LABELS.whatsapp_sent}
+              {UI.chooseAnotherDate}
             </button>
             <button
               type="button"
@@ -285,13 +347,28 @@ export function OutcomeSheet({
             <p className="s-eyebrow">{UI.lostReasonTitle}</p>
             {/* One reason, not five toggles — radio semantics say so. */}
             <div role="radiogroup" aria-label={UI.lostReasonGroupLabel} className="flex flex-col gap-2">
-              {LOST_REASONS.map((r) => (
+              {reasons.map((r, i) => (
                 <button
                   key={r}
                   type="button"
                   role="radio"
                   data-testid={`lost-reason-${r}`}
                   disabled={busy}
+                  // ARIA's radio pattern: one stop in the tab order, arrows to
+                  // move. Making all five tabbable announced a radio group and
+                  // then ignored the keys a screen-reader user would reach for,
+                  // which reads as a broken control rather than a slow one.
+                  tabIndex={reason === r || (!reason && i === 0) ? 0 : -1}
+                  onKeyDown={(e) => {
+                    if (e.key !== "ArrowDown" && e.key !== "ArrowUp") return;
+                    e.preventDefault();
+                    const step = e.key === "ArrowDown" ? 1 : -1;
+                    const next = reasons[(i + step + reasons.length) % reasons.length];
+                    setReason(next);
+                    document
+                      .querySelector<HTMLElement>(`[data-testid="lost-reason-${next}"]`)
+                      ?.focus();
+                  }}
                   className={`s-btn s-btn-ghost min-h-[48px] ${reason === r ? "s-tab-active" : ""}`}
                   onClick={() => setReason(r)}
                   aria-checked={reason === r}
@@ -300,7 +377,7 @@ export function OutcomeSheet({
                 </button>
               ))}
             </div>
-            {reason === "אחר" ? (
+            {reason === freeTextReason ? (
               <input
                 className="s-input"
                 aria-label={UI.lostReasonOtherLabel}

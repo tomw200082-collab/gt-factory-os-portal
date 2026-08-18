@@ -136,7 +136,15 @@ export function CommandK({ leads, orgs, onClose }: CommandKProps) {
           ref={inputRef}
           type="search"
           className="s-input"
-          style={{ border: 0, borderRadius: 0 }}
+          style={{
+            // Not border: 0 — an input with no boundary fails 1.4.11 the moment
+            // focus moves away. A single separator keeps the flush look and
+            // still draws the edge of the field.
+            borderInline: 0,
+            borderBlockStart: 0,
+            borderBlockEnd: "1px solid hsl(var(--s-border-field))",
+            borderRadius: 0,
+          }}
           placeholder={UI.commandPlaceholder}
           aria-label={UI.commandPlaceholder}
           data-testid="command-input"

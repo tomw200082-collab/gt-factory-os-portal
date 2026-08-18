@@ -95,7 +95,14 @@ export async function proxyRequest(
     }
 
     if (!session?.access_token) {
-      return NextResponse.json({ error: "Not authenticated" }, { status: 401 });
+      // The code is what a client branches on; the English sentence is for a
+      // log. Without it an expired session surfaced "Not authenticated"
+      // verbatim inside a Hebrew UI, because the caller had nothing else to
+      // key a translation off. Additive: existing callers ignore the field.
+      return NextResponse.json(
+        { error: "Not authenticated", code: "AUTH_EXPIRED" },
+        { status: 401 },
+      );
     }
     headers["Authorization"] = `Bearer ${session.access_token}`;
   }

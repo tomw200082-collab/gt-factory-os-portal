@@ -111,9 +111,15 @@ export function QuickAddSheet({ busy = false, error = null, onSubmit, onDismiss 
 
         <div className="flex flex-col gap-3">
           <label className="flex flex-col gap-1">
-            <span className="s-eyebrow">{UI.contactName}</span>
+            {/* Required, and said so before the submit rather than after it:
+                a three-field form that fails on the first tap is friction in
+                exactly the flow designed to take ten seconds. */}
+            <span className="s-eyebrow">
+              {UI.contactName} {UI.requiredMark}
+            </span>
             <input
               ref={firstFieldRef}
+              required
               className="s-input"
               data-testid="quick-add-name"
               value={contactName}

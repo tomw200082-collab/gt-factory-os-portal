@@ -9,7 +9,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { ArrowLeftRight, Building2, CalendarCheck, Plus, Search, Settings, Users } from "lucide-react";
+import { Activity, ArrowLeftRight, Building2, CalendarCheck, Plus, Search, Settings, Users } from "lucide-react";
 import { useEffect, useState, type ReactNode } from "react";
 import { NAV_LABELS, UI } from "../_lib/labels";
 import { useLeads, useOrgs, useQuickAdd } from "../_lib/api";
@@ -23,10 +23,14 @@ interface Destination {
   icon: typeof CalendarCheck;
 }
 
+// Four now, not three. v1's "three screens, no more" was decided before the
+// admin console was asked for; the fourth answers the question the person
+// running this asks every morning, and burying it in a tab would hide it.
 const DESTINATIONS: Destination[] = [
   { href: "/sales/today", label: NAV_LABELS.today, icon: CalendarCheck },
   { href: "/sales/leads", label: NAV_LABELS.leads, icon: Users },
   { href: "/sales/orgs", label: NAV_LABELS.orgs, icon: Building2 },
+  { href: "/sales/attention", label: NAV_LABELS.attention, icon: Activity },
 ];
 
 function isActive(pathname: string, href: string): boolean {
@@ -99,7 +103,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
             title={UI.commandTitle}
             data-testid="sales-search-open"
             onClick={() => setSearchOpen(true)}
-            className="grid h-10 w-10 place-items-center rounded-full"
+            className="grid h-11 w-11 place-items-center rounded-full"
             style={{ color: "hsl(var(--s-fg-muted))" }}
           >
             <Search size={18} aria-hidden />
@@ -109,7 +113,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
             href="/sales/settings"
             aria-label={NAV_LABELS.settings}
             title={NAV_LABELS.settings}
-            className="grid h-10 w-10 place-items-center rounded-full"
+            className="grid h-11 w-11 place-items-center rounded-full"
             style={{ color: "hsl(var(--s-fg-muted))" }}
           >
             <Settings size={18} aria-hidden />
@@ -124,7 +128,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
             aria-label={UI.switchToFactory}
             title={UI.switchToFactory}
             data-testid="sales-switch-factory"
-            className="grid h-10 w-10 place-items-center rounded-full sm:inline-flex sm:h-auto sm:w-auto sm:items-center sm:gap-1.5 sm:rounded-none sm:px-1 sm:text-[13px]"
+            className="grid h-11 w-11 place-items-center rounded-full sm:inline-flex sm:h-auto sm:min-h-[44px] sm:w-auto sm:items-center sm:gap-1.5 sm:rounded-none sm:px-1 sm:text-[13px]"
             style={{ color: "hsl(var(--s-fg-muted))" }}
           >
             <ArrowLeftRight size={15} aria-hidden />
@@ -169,7 +173,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
 
         <main
           id="sales-main"
-          className="min-w-0 flex-1 pb-[calc(5.5rem+env(safe-area-inset-bottom,0px))] md:pb-10"
+          className="min-w-0 flex-1 pb-[calc(9rem+env(safe-area-inset-bottom,0px))] md:pb-24"
         >
           {children}
         </main>
@@ -177,13 +181,20 @@ export function SalesShell({ children }: { children: ReactNode }) {
 
       {/* Quick add: reachable from every screen, because a lead that arrives by
           phone must be as easy to capture as one Meta delivers. */}
+      {/* Not on settings: the one floating action is "add a lead", which is
+          not a thing you do from a settings form — and it sat on top of the
+          add-a-reason button, which is a floating action obscuring a real one. */}
+      {pathname === "/sales/settings" ? null : (
       <button
         type="button"
         data-testid="sales-quick-add"
         onClick={() => setAddOpen(true)}
         className="s-btn s-btn-primary fixed z-30 shadow-lg"
         style={{
-          insetInlineEnd: 16,
+          // insetInlineStart resolves to the physical right in RTL, which is
+          // the thumb arc of a right-handed phone grip. insetInlineEnd put the
+          // one floating action on the far side of the screen from the thumb.
+          insetInlineStart: 16,
           bottom: "calc(5rem + env(safe-area-inset-bottom, 0px))",
           borderRadius: "var(--s-radius-pill)",
         }}
@@ -191,6 +202,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
         <Plus size={18} aria-hidden />
         {UI.quickAdd}
       </button>
+      )}
 
       {searchOpen ? (
         <CommandK
@@ -238,7 +250,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
                   href={d.href}
                   aria-current={active ? "page" : undefined}
                   data-testid={`sales-tab-${d.href}`}
-                  className="flex min-h-[56px] flex-col items-center justify-center gap-1 text-[11px] font-medium"
+                  className="flex min-h-[56px] flex-col items-center justify-center gap-1 text-[12px] font-medium"
                   style={{
                     color: active ? "hsl(var(--s-accent))" : "hsl(var(--s-fg-muted))",
                   }}

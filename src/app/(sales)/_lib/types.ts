@@ -67,6 +67,8 @@ export interface SalesLeadRow {
   sla_deadline_at: string;
   sla_state: SlaState;
   next_touch_overdue: boolean;
+  /** Neither phone nor email: real history, but nobody can call it (0326). */
+  uncontactable: boolean;
 }
 
 export interface TodayRow {
@@ -92,6 +94,8 @@ export interface TodayRow {
   converted_at: string | null;
   sla_deadline_at: string;
   sla_state: SlaState;
+  age_days: number;
+  uncontactable: boolean;
 }
 
 export interface LeadEventRow {
@@ -123,6 +127,13 @@ export interface WeekStats {
   week_new_leads: number;
   working_now: number;
   week_converted: number;
+  /** The triage counts (0326). The three above describe steady state and read
+   *  zero for as long as a batch-imported backlog is being cleared. */
+  queue_today: number;
+  overdue_count: number;
+  unassigned_open_count: number;
+  never_contacted_count: number;
+  uncontactable_count: number;
 }
 
 export interface WhatsappTemplates {
@@ -131,7 +142,64 @@ export interface WhatsappTemplates {
   returning_customer: string;
 }
 
+/** Queue shape — Tom's, not a constant in the code (0326). */
+export interface QueueSettings {
+  daily_cap: number;
+  order: "newest_first" | "oldest_first";
+}
+
+/** One person who may be handed leads. Curated, never derived from app_users —
+ *  that table carries ~100 test accounts. */
+export interface AssigneeEntry {
+  email: string;
+  name: string;
+  active: boolean;
+}
+
+export interface SettingChange {
+  key: string;
+  actor: string;
+  at: string;
+}
+
 export interface SalesSettings {
   sla_hours: number;
   whatsapp_templates: WhatsappTemplates;
+  lost_reasons: string[];
+  queue: QueueSettings;
+  assignees: AssigneeEntry[];
+  last_changes: SettingChange[];
+}
+
+/** One row of the attention screen (0326). A lead can appear in two buckets —
+ *  each section answers a different question. */
+export interface AttentionRow {
+  lead_id: string;
+  org_name: string;
+  contact_name: string | null;
+  phone_e164: string | null;
+  assignee: string | null;
+  status: LeadStatus;
+  bucket: "overdue" | "unowned" | "stalled";
+  days_stuck: number;
+  next_touch_at: string | null;
+  last_event_at: string | null;
+}
+
+/** One row of the cross-lead activity feed (0327). */
+export interface ActivityRow {
+  event_id: string;
+  lead_id: string;
+  org_name: string;
+  contact_name: string | null;
+  event_type: string;
+  payload: Record<string, unknown> | null;
+  actor: string;
+  created_at: string;
+}
+
+/** What /api/sales/today returns: the rows plus the shape they were ordered by. */
+export interface TodayPayload {
+  rows: TodayRow[];
+  queue: QueueSettings;
 }

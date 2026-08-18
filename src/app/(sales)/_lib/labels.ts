@@ -94,6 +94,7 @@ export const NAV_LABELS = {
   today: "היום",
   leads: "לידים",
   orgs: "עסקים",
+  attention: "מצב",
   settings: "הגדרות",
 } as const;
 
@@ -114,6 +115,101 @@ export const UI = {
   // same prefix states something untrue about the number.
   statsLine: (n: number, working: number, converted: number) =>
     `השבוע: ${leads(n)} · ${conversions(converted)} · בטיפול כרגע: ${working}`,
+  // The triage line. The weekly counts above describe steady state and read
+  // zero for as long as a batch-imported backlog is being worked down, which
+  // is exactly when someone needs to know the shape of the morning.
+  triageLine: (queue: number, overdue: number, unowned: number, never: number) =>
+    `בתור היום: ${queue} · באיחור: ${overdue} · ללא בעלים: ${unowned} · טרם נוצר קשר: ${never}`,
+  // The same four facts as fields rather than one sentence, because at 390px
+  // the sentence wrapped to four lines and swallowed the header.
+  triageQueueToday: "בתור היום",
+  triageOverdue: "באיחור",
+  triageUnowned: "ללא בעלים",
+  triageNever: "טרם נוצר קשר",
+  // Nothing is hidden — the rest is deferred, and the number says how much.
+  dailyCommitment: (shown: number, remaining: number) =>
+    `היום: ${shown} שיחות · עוד ${remaining} ממתינות בתור`,
+  // Distinct from ageDays below, which reads "לפני N ימים" — a point in the
+  // past. This one states the lead's age as a property of the lead, which is
+  // what makes an old lead feel old on the card.
+  ageInDays: (days: number) => (days === 1 ? "בן יום" : `בן ${days} ימים`),
+  uncontactableChip: (n: number) => `ללא פרטי קשר (${n})`,
+  sortByAge: "מיין לפי גיל",
+  nextTouchPreview: (date: string) => `המגע הבא: ${date}`,
+  chooseAnotherDate: "שנה תאריך",
+  undo: "בטל",
+  undone: "שוחזר",
+  discardChanges: "יש שינויים שלא נשמרו — לצאת בכל זאת?",
+  saveNote: "שמור הערה",
+  saveDate: "קבע תאריך",
+  saveAssignee: "שייך",
+  workingNeedsDate: "מעבר לטיפול דורש תאריך למגע הבא",
+  noOwnerOption: "— ללא בעלים —",
+  colOwner: "בעלים",
+  ownerNone: "—",
+  assignNeedsDate: "שיוך חייב תאריך מגע — ליד בלי תאריך נרקב",
+  assignAction: "שייך",
+  clearSelection: "נקה",
+  bulkBarLabel: "פעולות על לידים שנבחרו",
+  // Hebrew agrees the verb with the count: "1 נבחרו" is as wrong as "1 were
+  // selected". Every other counted string in this file guards n===1.
+  bulkSelected: (n: number) => (n === 1 ? "נבחר 1" : `${n} נבחרו`),
+  bulkAssigned: (n: number, name: string) =>
+    n === 1 ? `שויך ליד אחד ל${name}` : `שויכו ${n} לידים ל${name}`,
+  selectLead: "בחר ליד",
+  selectAllOnPage: "בחר את כל הלידים המוצגים",
+  // Twenty checkboxes that all announce "בחר ליד" name nothing. The visible
+  // label stays the icon; the accessible name carries the business.
+  selectLeadNamed: (org: string) => `בחר ליד – ${org}`,
+  bulkDateLabel: "תאריך מגע הבא",
+  bulkAssignFailed: "השיוך נכשל — הבחירה נשמרה, אפשר לנסות שוב",
+  queueScopeGroupLabel: "טווח התור",
+  callOrg: (org: string) => `התקשר ל${org}`,
+  seeAllWaiting: "לכל הלידים",
+  scopeAll: "הכל",
+  scopeMine: "שלי",
+  queueMine: "התור שלי",
+  queueAll: "כל התור",
+  chipUnowned: (n: number) => `ללא בעלים (${n})`,
+  attentionTitle: "מצב",
+  attentionHint: "מה תקוע, מה ללא בעלים, מה השתתק",
+  attentionClear: "אין תקועים. ככה זה צריך להיראות.",
+  bucketOverdue: (n: number) => `באיחור (${n})`,
+  bucketUnowned: (n: number) => `ללא בעלים (${n})`,
+  bucketStalled: (n: number) => `תקועים (${n})`,
+  daysStuck: (n: number) => (n === 1 ? "יום א׳" : `${n} ימ׳`),
+  activityTitle: "פעילות אחרונה",
+  activityError: "הפעילות",
+  activityEmpty: "אין עדיין פעילות.",
+  lostReasonsTitle: "סיבות אבוד",
+  lostReasonsHint: "הסיבה האחרונה תמיד פותחת שדה חופשי",
+  // The field had the section's title as its accessible name, which named the
+  // group rather than the input — and once the section itself was properly
+  // labelled, the two collided.
+  lostReasonNew: "סיבה חדשה",
+  settingsHint: "מה שנקבע כאן חל על כל מי שעובד בתור",
+  queueShapeTitle: "צורת התור",
+  queueCapLabel: "כמה שיחות ביום",
+  queueCapRange: "בין 1 ל־100 שיחות",
+  slaRange: "בין 1 ל־168 שעות",
+  eventsLoaded: (n: number) => (n === 1 ? "אירוע אחד" : `${n} אירועים`),
+  requiredMark: "(חובה)",
+  queueOrderNewest: "חדשים קודם",
+  queueOrderOldest: "ישנים קודם",
+  removeItem: "הסר",
+  removeItemNamed: (what: string) => `הסר ${what}`,
+  addItem: "הוסף",
+  lastChangedBy: (actor: string, when: string) => `שונה על ידי ${actor} · ${when}`,
+  peopleTitle: "אנשי מכירות",
+  personName: "שם",
+  personEmail: "אימייל",
+  personActive: "פעיל",
+  personActiveNamed: (name: string) => `פעיל – ${name}`,
+  addPerson: "הוסף",
+  deactivateWarning: (n: number) =>
+    n === 1
+      ? "יש לו ליד פתוח אחד — שייך אותו קודם"
+      : `יש לו ${n} לידים פתוחים — שייך אותם קודם`,
   queueDone: "סיימת להיום ✓",
   queueDoneHint: "אין לידים שדורשים טיפול כרגע.",
   showMore: (n: number) => `הצג עוד ${leads(n)}`,
@@ -148,7 +244,7 @@ export const UI = {
   inThreeDays: "עוד 3 ימים",
   inAWeek: "עוד שבוע",
   pickDate: "תאריך",
-  nextTouchOn: (date: string) => `מגע הבא: ${date}`,
+  nextTouchOn: (date: string) => `המגע הבא: ${date}`,
   noNextTouch: "לא נקבע מגע הבא",
   // Field values, where the label already names the field.
   notSet: "לא נקבע",
@@ -186,7 +282,7 @@ export const UI = {
   // drawer
   timelineTitle: "היסטוריה",
   detailsTitle: "פרטים",
-  assigneeLabel: "אחראי",
+  assigneeLabel: "בעלים",
   assigneePlaceholder: "אימייל",
   notePlaceholder: "מה קרה?",
   statusLabel: "סטטוס",
@@ -245,16 +341,20 @@ export const UI = {
   settingsSaved: "נשמר ✓",
 
   // SLA badge
-  slaWithin: "בזמן",
+  // slaWithin was deliberately retired in tranche 164: the calm state gets no
+  // badge, so the red one means something. Kept out of the object rather than
+  // left dangling — an unused string is a future mistake.
   slaOverdue: "עבר זמן",
 
   // errors
   genericError: "משהו השתבש",
-  saveFailed: "השמירה נכשלה",
+  saveFailed: "השמירה נכשלה — נסה שוב",
+  sessionExpired: "החיבור פג — רענן את הדף",
 } as const;
 
 /** Server rule codes (SALES_*) rendered in Hebrew. */
 export const RULE_MESSAGES: Record<string, string> = {
+  AUTH_EXPIRED: UI.sessionExpired,
   SALES_LOST_REQUIRES_REASON: "צריך לציין סיבה לאובדן.",
   SALES_WON_IS_EVIDENCE_ONLY: "סטטוס 'הומר' נכתב מהזמנה ב-Shopify, ולא ידנית.",
   SALES_NEXT_TOUCH_REQUIRED: "צריך לקבוע מתי חוזרים לליד.",

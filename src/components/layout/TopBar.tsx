@@ -223,15 +223,22 @@ export function SalesSwitch() {
   if (session.role !== "admin") return null;
 
   return (
+    // Tranche 163 shipped this icon-only below `sm`, among five other topbar
+    // icons, named only by a hover title a phone never shows — and Tom asked
+    // for the feature as missing the same day it went live. It was not
+    // missing; it was invisible. The label is now always rendered and the
+    // control carries a border, so it reads as a doorway rather than as one
+    // more glyph. Discoverability beats minimalism for a crossing that is used
+    // once a day by the one person who holds both roles.
     <Link
       href="/sales/today"
-      className="btn btn-ghost gap-1.5"
+      className="btn btn-ghost gap-1.5 border border-[var(--border)]"
       title="Switch to the sales workspace"
       aria-label="Switch to the sales workspace"
       data-testid="topbar-switch-sales"
     >
       <ArrowLeftRight className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
-      <span className="hidden sm:inline">Sales</span>
+      <span>Sales</span>
     </Link>
   );
 }

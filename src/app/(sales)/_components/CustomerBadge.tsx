@@ -21,9 +21,18 @@ const FACT_LABELS: Record<string, string> = {
   days_since_last_order: UI.daysSinceOrder,
 };
 
+/** The tracker's own words for a customer's state. English enum values leaked
+ *  straight onto a Hebrew card — "active" beside "לקוח קיים" — which is the
+ *  raw-enum failure the portal UX standard forbids. */
+const SNAPSHOT_STATUS: Record<string, string> = {
+  active: "פעיל",
+  disabled: "לא פעיל",
+};
+
 function renderValue(key: string, value: string): string {
   if (key === "rev12") return fmtMoney(value);
   if (key === "orders" || key === "days_since_last_order") return fmtCount(value);
+  if (key === "status") return SNAPSHOT_STATUS[value] ?? value;
   return value;
 }
 
@@ -54,7 +63,7 @@ export function CustomerContext({
       <dl className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
         {facts.map((fact) => (
           <div key={fact.key} className="flex items-baseline gap-1.5">
-            <dt className="text-[11px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
+            <dt className="text-[12px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
               {FACT_LABELS[fact.key] ?? fact.key}
             </dt>
             <dd
@@ -67,7 +76,7 @@ export function CustomerContext({
         ))}
       </dl>
       {snapshotAt ? (
-        <p className="mt-1 text-[11px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
+        <p className="mt-1 text-[12px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
           {UI.snapshotAsOf(fmtDate(snapshotAt))}
         </p>
       ) : null}

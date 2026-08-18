@@ -29,6 +29,8 @@ const base: TodayRow = {
   converted_at: null,
   sla_deadline_at: new Date(Date.now() + 20 * 3600e3).toISOString(),
   sla_state: "within",
+  age_days: 0,
+  uncontactable: false,
 };
 
 function row(over: Partial<TodayRow>): TodayRow {
@@ -37,9 +39,19 @@ function row(over: Partial<TodayRow>): TodayRow {
 
 const noop = () => {};
 
-function renderQueue(rows: TodayRow[]) {
+/** The cap defaults high so the existing cases keep testing what they were
+ *  written to test; the cases that are about capping pass their own. */
+function renderQueue(rows: TodayRow[], dailyCap = 500) {
   return render(
-    <TodayQueue rows={rows} templates={null} onArm={noop} onPostpone={noop} onLost={noop} />,
+    <TodayQueue
+      rows={rows}
+      dailyCap={dailyCap}
+      slaHours={24}
+      templates={null}
+      onArm={noop}
+      onPostpone={noop}
+      onLost={noop}
+    />,
   );
 }
 
@@ -171,6 +183,8 @@ describe("today queue", () => {
     render(
       <TodayQueue
         rows={[row({ lead_id: "L7" })]}
+        dailyCap={500}
+        slaHours={24}
         templates={null}
         onArm={(id, ch) => armed.push([id, ch])}
         onPostpone={noop}
@@ -181,12 +195,17 @@ describe("today queue", () => {
     expect(armed).toEqual([["L7", "call"]]);
   });
 
-  it("disables the call when the lead has no phone, rather than faking a link", () => {
+  it("refuses the call when the lead has no phone, and says why", () => {
     renderQueue([row({ lead_id: "NP", phone_e164: null })]);
     const card = screen.getByTestId("today-card-NP");
     const call = within(card).getByText(UI.call).closest("button");
     expect(call).not.toBeNull();
-    expect((call as HTMLButtonElement).disabled).toBe(true);
+
+    // aria-disabled rather than disabled: iOS VoiceOver does not announce the
+    // title of a disabled button, so the reason never reached the person who
+    // most needed it. The control stays focusable and names why it is inert.
+    expect(call?.getAttribute("aria-disabled")).toBe("true");
+    expect(within(card).getByText(UI.noPhone)).toBeTruthy();
   });
 
   it("reveals a long section in batches, always naming the true total", () => {
@@ -198,5 +217,97 @@ describe("today queue", () => {
     expect(within(section).getByTestId("today-section-count").textContent).toBe("40");
     expect(within(section).getAllByTestId(/^today-card-/).length).toBeLessThan(40);
     expect(within(section).getByTestId("today-show-more")).toBeTruthy();
+  });
+
+  it("caps the backlog at the daily commitment and says what is waiting", () => {
+    // 40 untouched leads, a commitment of 15: the section shows the true count,
+    // renders the first batch of the committed set, and states the remainder in
+    // words rather than quietly dropping 25 rows.
+    renderQueue(
+      Array.from({ length: 40 }, (_, i) => row({ lead_id: `N${i}`, item_type: "new_lead" })),
+      15,
+    );
+    const section = screen.getByTestId("today-section-new_lead");
+    expect(within(section).getByTestId("today-section-count").textContent).toBe("40");
+    expect(within(section).getByTestId("today-daily-commitment").textContent).toContain(
+      UI.dailyCommitment(15, 25),
+    );
+    // A sentence that names 25 waiting leads and offers no way to reach them is
+    // a dead end; the count opens the list it is counting.
+    expect(
+      within(section).getByTestId("today-deferred-link").getAttribute("href"),
+    ).toBe("/sales/leads");
+  });
+
+  it("spends one daily budget across the queue, not one per section", () => {
+    // A cap of 15 used to mean 15 new leads *and* 15 follow-ups — thirty calls
+    // from a setting whose label reads "כמה שיחות ביום" (gate P1).
+    renderQueue(
+      [
+        ...Array.from({ length: 20 }, (_, i) => row({ lead_id: `N${i}`, item_type: "new_lead" })),
+        ...Array.from({ length: 20 }, (_, i) =>
+          row({ lead_id: `F${i}`, item_type: "due_follow_up" }),
+        ),
+      ],
+      15,
+    );
+    // New leads render first and take the whole budget; follow-ups get none of
+    // it and say so, rather than opening a second allowance.
+    const newSection = screen.getByTestId("today-section-new_lead");
+    expect(within(newSection).getByTestId("today-daily-commitment").textContent).toContain(
+      UI.dailyCommitment(15, 5),
+    );
+    const followSection = screen.getByTestId("today-section-due_follow_up");
+    expect(within(followSection).getByTestId("today-daily-commitment").textContent).toContain(
+      UI.dailyCommitment(0, 20),
+    );
+  });
+
+  it("never defers a conversion or a returning customer behind the cap", () => {
+    renderQueue(
+      [
+        row({ lead_id: "R1", item_type: "returning_customer", is_existing_customer: true }),
+        ...Array.from({ length: 30 }, (_, i) => row({ lead_id: `N${i}`, item_type: "new_lead" })),
+      ],
+      1,
+    );
+    // The returning customer is the case that must never go quiet again, so a
+    // cap of one still leaves it on screen alongside the one committed lead.
+    expect(
+      within(screen.getByTestId("today-section-returning_customer")).getAllByTestId(
+        /^today-card-/,
+      ).length,
+    ).toBe(1);
+    expect(
+      screen.queryByTestId("today-section-returning_customer")?.querySelector(
+        '[data-testid="today-daily-commitment"]',
+      ),
+    ).toBeNull();
+  });
+
+  it("states a lead's age in days, and turns it red past the SLA", () => {
+    renderQueue([row({ lead_id: "OLD", age_days: 19 })]);
+    const age = within(screen.getByTestId("today-card-OLD")).getByTestId("today-age");
+    expect(age.textContent).toContain(UI.ageInDays(19));
+    expect(age.getAttribute("data-tone")).toBe("overdue");
+  });
+
+  it("leaves a fresh lead's age calm", () => {
+    renderQueue([row({ lead_id: "NEW", age_days: 0 })]);
+    const age = within(screen.getByTestId("today-card-NEW")).getByTestId("today-age");
+    expect(age.getAttribute("data-tone")).toBe("muted");
+  });
+
+  it("shows no SLA badge until a lead is actually overdue", () => {
+    renderQueue([row({ lead_id: "OK", sla_state: "within" })]);
+    expect(
+      within(screen.getByTestId("today-card-OK")).queryByTestId("sla-badge"),
+    ).toBeNull();
+
+    cleanup();
+    renderQueue([row({ lead_id: "LATE", sla_state: "overdue" })]);
+    expect(
+      within(screen.getByTestId("today-card-LATE")).getByTestId("sla-badge").textContent,
+    ).toBe(UI.slaOverdue);
   });
 });

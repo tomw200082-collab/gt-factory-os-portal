@@ -65,7 +65,7 @@ export function EventTimeline({ events }: { events: LeadEventRow[] }) {
                   {detail}
                 </p>
               ) : null}
-              <p className="s-nums text-[11px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
+              <p className="s-nums text-[12px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
                 {fmtDateTime(event.created_at)} · {event.actor}
               </p>
             </div>

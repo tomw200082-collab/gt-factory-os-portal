@@ -57,14 +57,22 @@ describe("SalesSwitch", () => {
     });
   }
 
-  it("T5 — keeps an accessible name at the width where the label is hidden", () => {
+  it("T5 — is labelled at every width, phone included", () => {
     renderAs("admin");
-    // The visible word is `sm:`-gated, so on a phone the control is icon-only.
-    // Without the aria-label it would reach a screen reader as an unnamed link.
     const link = screen.getByLabelText("Switch to the sales workspace");
     expect(link.getAttribute("data-testid")).toBe("topbar-switch-sales");
+
+    // Tranche 163 gated the word behind `sm:`, so on a phone this was one
+    // unlabelled glyph among six — and Tom reported the feature as missing the
+    // same day it shipped. A control nobody can find is a control nobody has.
     const label = link.querySelector("span");
-    expect(label?.className).toContain("hidden");
-    expect(label?.className).toContain("sm:inline");
+    expect(label?.textContent).toBe("Sales");
+    expect(label?.className ?? "").not.toContain("hidden");
+  });
+
+  it("T6 — reads as a control, not as a bare glyph", () => {
+    renderAs("admin");
+    const link = screen.getByLabelText("Switch to the sales workspace");
+    expect(link.className).toContain("border");
   });
 });

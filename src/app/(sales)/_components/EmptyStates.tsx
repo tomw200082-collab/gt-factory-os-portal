@@ -61,7 +61,7 @@ export function QueueLoading() {
           key={i}
           aria-hidden
           className="s-card animate-pulse"
-          style={{ height: 132, opacity: 1 - i * 0.22 }}
+          style={{ height: 188, opacity: 1 - i * 0.22 }}
         />
       ))}
     </div>

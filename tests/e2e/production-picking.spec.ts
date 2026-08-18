@@ -102,7 +102,12 @@ test.describe("@mocked production picking", () => {
     await page.goto("/production");
     await page.getByTestId("run-card-RUN1").click();
 
-    await expect(page).toHaveURL(/\/production\/runs\/RUN1/);
+    // GAP-030: CI runs `next dev`, so /production/runs/[run_id] compiles on
+    // demand at the moment of this click. The default 5s assertion timeout was
+    // passing at 4.6s on one runner and failing on the next with byte-identical
+    // application code — a red build that taught readers to discount red
+    // builds. The wait is for a compiler, not for the app.
+    await expect(page).toHaveURL(/\/production\/runs\/RUN1/, { timeout: 15_000 });
     await expect(page.getByTestId("pick-list")).toBeVisible();
     await expect(page.getByTestId("pick-row-base-C1")).toBeVisible();
     // The number button carries the prefilled requirement (14).
