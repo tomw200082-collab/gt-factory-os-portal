@@ -209,6 +209,37 @@ Logged, deliberately not built (per the 2026-08-17 UX-iteration addendum):
   nav/gate changes from tranches 139/141/143/155 never folded in, and four
   pre-existing pages with no `route-manifest.json` row).
 
+### Deferred by the UX release gate (P2, logged not built)
+
+Every P0 and P1 the gate raised was fixed in the two iterations. These are the P2s,
+kept as a list rather than quietly built:
+
+*Interaction and flow* — the orgs list renders all 186 rows unpaginated (the Today queue's
+show-more pattern would drop straight in); `/apps` shows a blank block while the session
+loads instead of a skeleton; an out-of-range SLA value disables Save with no visible reason;
+quick-add marks its one required field only after a failed submit; the outcome sheet's
+dismiss does not say the question will come back; the command palette opens a lead's drawer
+but leaves the tab on "new"; settings keeps "נשמר ✓" on screen while you edit unsaved
+changes; the drawer's lost-reason is a native select where the sheet uses large buttons; a
+failed outreach write drops out of the timeline silently.
+
+*Visual* — `.s-card` used as a button has no hover state; the type scale lives in
+`text-[13px]`-style brackets rather than `--s-text-*` tokens; `/apps` renders the factory
+card before the sales one.
+
+*Accessibility* — the three "שמור" buttons share one visible label and have no distinct
+`aria-label`s; the SLA-hours hint and error are not programmatically associated with the
+input; the disabled call/WhatsApp buttons carry their reason in `title`, which screen
+readers do not reliably announce on a disabled control; `/apps`'s loading text is
+`sr-only` but not in a live region.
+
+### Considered and deliberately not taken
+
+The visual pass proposed replacing the conversion card's `hsl(var(--s-status-won) / 0.35)`
+border with `--s-status-won-soft`. Rejected: the soft token is near-white, so the swap would
+make the one celebration card in the queue *less* distinct, and the alpha composition is
+already correct in both themes now that `--s-status-won` is remapped for dark.
+
 ## Open question for Tom (surfaced, not decided)
 
 The Today queue currently holds **188 items** — 185 untouched new leads plus 3
