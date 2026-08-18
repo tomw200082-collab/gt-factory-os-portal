@@ -61,3 +61,24 @@ describe("sales PWA manifest", () => {
     expect(rootLayout).not.toContain("manifest");
   });
 });
+
+describe("per-route document titles", () => {
+  // All four sales routes shipped one shared title, so a screen reader
+  // announced no change on navigation (WCAG 2.4.2). The pages are client
+  // components and cannot export metadata, so each segment carries a
+  // title-only server layout — which is easy to delete by accident.
+  const SEGMENTS = ["today", "leads", "orgs", "settings"] as const;
+
+  it("gives every sales route its own title", () => {
+    const titles = SEGMENTS.map((seg) => {
+      const src = fs.readFileSync(
+        path.join(process.cwd(), `src/app/(sales)/sales/${seg}/layout.tsx`),
+        "utf8",
+      );
+      return src.match(/title:\s*"([^"]+)"/)?.[1];
+    });
+
+    expect(titles.every(Boolean), `missing title: ${titles}`).toBe(true);
+    expect(new Set(titles).size).toBe(SEGMENTS.length);
+  });
+});
