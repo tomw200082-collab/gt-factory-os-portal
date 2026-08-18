@@ -218,5 +218,53 @@ the size of the whole table is not the "call these two, follow up on these
 three" shape the masterprompt describes. Working the backlog down, or a
 deliberate daily cap, is a product decision and was left alone.
 
-## Actual evidence (filled in by the Phase B run)
-<pending Phase B completion>
+## Actual evidence (Phase B)
+
+Recorded at `d583dc2` on `claude/caveman-mode-oenfxl`. Parent commit `3952b9b`.
+
+### Gates
+
+| Check | Result | Where |
+|---|---|---|
+| `portal-pr-guard` (install · eslint · tsc · vitest · playwright `@mocked`) | **green** | GitHub Actions run 32079573243, commit `e035076` |
+| `npx tsc --noEmit` | 0 errors | local + CI |
+| `npx vitest run` | **1348/1348**, 148/148 files | local + CI |
+| `npx playwright test --grep @mocked` | **62/62** chromium | CI (see note below) |
+| `npx eslint .` | **0 errors**, 556 warnings (repo-wide, pre-existing; the guard gates on errors) | local + CI |
+| `npx next build` | green, 165 pages | local |
+| impeccable detector | **0 findings** across `src/app/(sales)` + `src/app/apps` | `node .claude/skills/impeccable/scripts/detect.mjs` |
+| Manifest compliance | 235 files changed vs parent; every one inside the manifest or a declared exempt class | check run directly, see below |
+| Factory scorecard delta | **+0 on all ten categories**; only a `_notes` append | `docs/portal-os/scorecard.json` |
+| `portal-regression-sentinel` | **PASS — 0 critical, 0 high** | agent run, 2026-08-17 |
+
+### Backend lane (gt-factory-os, same branch)
+
+pgTAP **24/24** (0322) and **16/16** (0323) via the MCP bridge; **11/11** regression on the
+neighbouring invariants; each handler's exact SQL executed against prod **10/10**.
+`api/test/sales_workspace.test.ts` is written and typechecked but could not execute in this
+container — outbound 5432/6543 are blocked, which stops the whole pre-existing api suite, not
+just this file. The prod SQL runs are the substitute, stated as such rather than counted as
+unit-test evidence.
+
+### Regression sentinel — the questions that mattered
+
+No factory role's rail moved: viewer 11, operator 9, planner 19, admin 36 — computed, unchanged.
+Nine baseline role-gates byte-identical with unchanged order; the two new `(sales)` rows are
+prefixes no factory route matches. Zero `X-Fake-Session` / `X-Test-Session` in `src/`. No nav
+item points at a non-`live` route.
+
+### Notes on how this evidence was produced
+
+- **CI is the authority for the full e2e suite.** A full local `--grep @mocked` sweep is
+  unreliable in this container: the `next dev` server dies partway through the ~7-minute run and
+  every test after it fails in ~300ms. The same suite is green in CI, and each sales spec passes
+  locally in isolation (`sales-today` 4/4, `sales-leads` 2/2). Recorded rather than papered over.
+- **`portal-tranche-verifier` did not complete.** It was dispatched twice and both runs were
+  killed by container restarts, not by a failing check. Its checks were then run directly and are
+  the rows above; manifest compliance in particular was computed against the parent commit rather
+  than asserted.
+- **`tests/e2e/mobile-sales-today.spec.ts` is deliberately outside CI.** It needs WebKit and
+  `portal-pr-guard` installs chromium only, matching the documented convention in three sibling
+  `mobile-*` specs. `--grep @mocked` therefore selects 62 chromium tests and zero WebKit ones.
+  Logged in the deferred list above.
+
