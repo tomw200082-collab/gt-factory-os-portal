@@ -90,6 +90,8 @@ manifest:
 - src/app/(sales)/_lib/wa.ts
 - src/app/(sales)/_lib/useOutcomeCapture.ts
 - src/app/(sales)/_lib/format.ts
+- src/app/(sales)/_lib/useReturnFocus.ts
+- src/app/(sales)/_components/Toast.tsx
 - src/app/api/sales/today/route.ts
 - src/app/api/sales/leads/route.ts
 - src/app/api/sales/leads/[lead_id]/events/route.ts

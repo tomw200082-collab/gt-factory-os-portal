@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, afterEach } from "vitest";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { OutcomeSheet } from "@/app/(sales)/_components/OutcomeSheet";
-import { OUTCOME_LABELS, UI } from "@/app/(sales)/_lib/labels";
+import { OUTCOME_LABELS, OUTCOME_TITLES, UI } from "@/app/(sales)/_lib/labels";
 
 afterEach(cleanup);
 
@@ -111,7 +111,7 @@ describe("outcome sheet", () => {
     expect(dialog.getAttribute("aria-modal")).toBe("true");
     expect(dialog.getAttribute("aria-labelledby")).toBe("outcome-sheet-title");
     expect(dialog.getAttribute("dir")).toBe("rtl");
-    expect(screen.getByRole("heading", { level: 2 }).textContent).toBe(UI.outcomeTitle);
+    expect(screen.getByRole("heading", { level: 2 }).textContent).toBe(OUTCOME_TITLES.call);
   });
 
   it("lets a mis-tap go back instead of stranding the user", () => {

@@ -2,7 +2,7 @@
 
 // The home of the workspace: what to do now, in order.
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   useOutcome,
   useOutreach,
@@ -18,6 +18,7 @@ import { QueueDone, QueueError, QueueLoading } from "../../_components/EmptyStat
 import { StatsStrip } from "../../_components/StatsStrip";
 import { TodayQueue } from "../../_components/TodayQueue";
 import { OutcomeSheet, type OutcomeSubmit } from "../../_components/OutcomeSheet";
+import { Toast } from "../../_components/Toast";
 
 export default function TodayPage() {
   const today = useToday();
@@ -68,7 +69,20 @@ export default function TodayPage() {
     return () => clearTimeout(id);
   }, [toast]);
 
-  const anySheetOpen = Boolean((capture.pending && pendingRow) || postponing || losing);
+  // The card leaves the queue the instant an outcome is submitted, so
+  // pendingRow goes null while the write is still in flight. Holding the last
+  // name lets the sheet stay on screen through the round-trip — otherwise it
+  // vanishes, exposes the queue behind it, and only comes back if the write
+  // fails. On a factory phone that gap is seconds of looking at the wrong
+  // thing. The effect runs after the render that nulled pendingRow, so the ref
+  // still holds the previous value when it is needed.
+  const lastLeadName = useRef<string | null>(null);
+  useEffect(() => {
+    if (pendingRow) lastLeadName.current = pendingRow.contact_name ?? pendingRow.org_name;
+  }, [pendingRow]);
+
+  const answerSheetOpen = Boolean(capture.pending && (pendingRow || outcome.isPending));
+  const anySheetOpen = Boolean(answerSheetOpen || postponing || losing);
 
   function arm(leadId: string, channel: "call" | "whatsapp") {
     capture.arm(leadId, channel);
@@ -119,9 +133,11 @@ export default function TodayPage() {
         ) : null}
       </div>
 
-      {capture.pending && pendingRow ? (
+      {answerSheetOpen && capture.pending ? (
         <OutcomeSheet
-          leadName={pendingRow.contact_name ?? pendingRow.org_name}
+          leadName={
+            pendingRow ? (pendingRow.contact_name ?? pendingRow.org_name) : (lastLeadName.current ?? "")
+          }
           channel={capture.pending.channel}
           busy={outcome.isPending}
           error={outcome.error?.message ?? null}
@@ -176,21 +192,7 @@ export default function TodayPage() {
         />
       ) : null}
 
-      {toast ? (
-        <div
-          role="status"
-          aria-live="polite"
-          data-testid="sales-toast"
-          className="fixed inset-x-0 mx-auto w-fit rounded-full px-4 py-2 text-[13px]"
-          style={{
-            background: "hsl(var(--s-fg))",
-            color: "hsl(var(--s-bg))",
-            bottom: "calc(5.5rem + env(safe-area-inset-bottom, 0px))",
-          }}
-        >
-          {toast}
-        </div>
-      ) : null}
+      {toast ? <Toast message={toast} onClose={() => setToast(null)} /> : null}
     </div>
   );
 }

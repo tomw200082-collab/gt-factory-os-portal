@@ -8,6 +8,7 @@
 
 import { useEffect, useRef, useState } from "react";
 import { UI } from "../_lib/labels";
+import { useReturnFocus } from "../_lib/useReturnFocus";
 
 export interface QuickAddSheetProps {
   busy?: boolean;
@@ -22,6 +23,7 @@ export interface QuickAddSheetProps {
 }
 
 export function QuickAddSheet({ busy = false, error = null, onSubmit, onDismiss }: QuickAddSheetProps) {
+  useReturnFocus();
   const [contactName, setContactName] = useState("");
   const [phone, setPhone] = useState("");
   const [business, setBusiness] = useState("");

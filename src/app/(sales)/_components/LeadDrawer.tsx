@@ -15,6 +15,7 @@ import { CustomerContext } from "./CustomerBadge";
 import { EventTimeline } from "./EventTimeline";
 import { SlaBadge } from "./SlaBadge";
 import { StatusPill } from "./StatusPill";
+import { useReturnFocus } from "../_lib/useReturnFocus";
 
 export interface LeadDrawerProps {
   lead: SalesLeadRow;
@@ -77,6 +78,7 @@ export function LeadDrawer({
   onAssign,
   onArm,
 }: LeadDrawerProps) {
+  useReturnFocus();
   const [note, setNote] = useState("");
   const [assignee, setAssignee] = useState(lead.assignee ?? "");
   const [date, setDate] = useState(
@@ -394,7 +396,9 @@ export function LeadDrawer({
               <button
                 type="button"
                 data-testid="drawer-assign-save"
-                disabled={savingAssignee}
+                // Nothing typed, nothing to save — otherwise an idle tap writes
+                // the value back to itself and reports success.
+                disabled={savingAssignee || assignee.trim() === (lead.assignee ?? "")}
                 className="s-btn s-btn-ghost"
                 onClick={() => onAssign(assignee.trim())}
               >

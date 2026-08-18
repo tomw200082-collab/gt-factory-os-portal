@@ -15,6 +15,7 @@ import { NAV_LABELS, UI } from "../_lib/labels";
 import { useLeads, useOrgs, useQuickAdd } from "../_lib/api";
 import { CommandK } from "./CommandK";
 import { QuickAddSheet } from "./QuickAddSheet";
+import { Toast } from "./Toast";
 
 interface Destination {
   href: string;
@@ -215,17 +216,7 @@ export function SalesShell({ children }: { children: ReactNode }) {
         />
       ) : null}
 
-      {toast ? (
-        <div
-          role="status"
-          aria-live="polite"
-          data-testid="sales-shell-toast"
-          className="fixed inset-x-0 bottom-24 mx-auto w-fit rounded-full px-4 py-2 text-[13px]"
-          style={{ background: "hsl(var(--s-fg))", color: "hsl(var(--s-bg))" }}
-        >
-          {toast}
-        </div>
-      ) : null}
+      {toast ? <Toast message={toast} onClose={() => setToast(null)} /> : null}
 
       {/* Phone tab bar. Three destinations, thumb-height, safe-area aware. */}
       <nav

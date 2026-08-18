@@ -214,6 +214,46 @@ test("a failed outcome keeps the sheet open instead of silently losing the call 
   expect(stored).not.toBeNull();
 });
 
+test("the sheet stays put while the outcome is being written @mocked", async ({ page }) => {
+  // Submitting removes the card optimistically, so the lead looks absent while
+  // the write is still in the air. If the sheet is keyed on the card, it
+  // vanishes mid-write and the user is left looking at the queue for the length
+  // of a mobile round-trip — then the error, if any, arrives from nowhere.
+  await page.route("**/api/sales/week-stats**", (r) =>
+    r.fulfill({ json: { stats: { week_new_leads: 1, working_now: 0, week_converted: 0 } } }),
+  );
+  await page.route("**/api/sales/settings**", (r) => r.fulfill({ json: SETTINGS }));
+  await page.route("**/api/sales/leads**", (r) => r.fulfill({ json: { rows: [] } }));
+  await page.route("**/api/sales/orgs**", (r) => r.fulfill({ json: { rows: [] } }));
+  await page.route("**/api/sales/today**", (r) => r.fulfill({ json: { rows: [newLead] } }));
+  await page.route("**/api/sales/leads/*/outreach", (r) =>
+    r.fulfill({ json: { lead_id: "L1", event_id: "E1" } }),
+  );
+
+  // Held open until the assertion below has run.
+  let release: () => void = () => {};
+  const inFlight = new Promise<void>((resolve) => (release = resolve));
+  await page.route("**/api/sales/leads/*/outcome", async (route) => {
+    await inFlight;
+    return route.fulfill({ json: { lead_id: "L1", status: "working" } });
+  });
+
+  await page.goto("/sales/today");
+  await page.getByTestId("today-card-L1").getByRole("link", { name: "התקשר" }).click();
+  await leaveAndReturn(page);
+  await expect(page.getByTestId("outcome-sheet")).toBeVisible();
+
+  await page.getByTestId("outcome-answered_progressing").dispatchEvent("click");
+  await page.getByTestId("next-touch-tomorrow").dispatchEvent("click");
+
+  // Mid-write: the card is already gone from the queue, the sheet is not.
+  await expect(page.getByTestId("today-card-L1")).toBeHidden();
+  await expect(page.getByTestId("outcome-sheet")).toBeVisible();
+
+  release();
+  await expect(page.getByTestId("outcome-sheet")).toBeHidden();
+});
+
 test("an empty queue is a finished day, not a blank screen @mocked", async ({ page }) => {
   await stubSales(page, []);
   await page.goto("/sales/today");

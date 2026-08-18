@@ -21,6 +21,7 @@ import type { LeadStatus } from "../../_lib/types";
 import { ListEmpty, QueueError, QueueLoading } from "../../_components/EmptyStates";
 import { LeadsTable } from "../../_components/LeadsTable";
 import { LeadDrawer } from "../../_components/LeadDrawer";
+import { Toast } from "../../_components/Toast";
 
 const TABS: LeadStatus[] = ["new", "working", "won", "lost"];
 
@@ -178,21 +179,7 @@ function LeadsScreen() {
         />
       ) : null}
 
-      {toast ? (
-        <div
-          role="status"
-          aria-live="polite"
-          data-testid="sales-toast"
-          className="fixed inset-x-0 mx-auto w-fit rounded-full px-4 py-2 text-[13px]"
-          style={{
-            background: "hsl(var(--s-fg))",
-            color: "hsl(var(--s-bg))",
-            bottom: "calc(5.5rem + env(safe-area-inset-bottom, 0px))",
-          }}
-        >
-          {toast}
-        </div>
-      ) : null}
+      {toast ? <Toast message={toast} onClose={() => setToast(null)} /> : null}
     </div>
   );
 }

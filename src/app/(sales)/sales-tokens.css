@@ -287,8 +287,13 @@
   color: hsl(var(--s-fg-faint));
 }
 
+/* Every focusable control wears the same ring. The leads row-header button and
+   the mobile lead card are real buttons that deliberately do not carry .s-btn
+   (they own their own layout), and were falling back to the browser default. */
 [data-app="sales"] .s-input:focus-visible,
 [data-app="sales"] .s-btn:focus-visible,
+[data-app="sales"] .s-card:focus-visible,
+[data-app="sales"] th button:focus-visible,
 [data-app="sales"] .s-tab:focus-visible {
   outline: 2px solid hsl(var(--s-accent));
   outline-offset: 2px;

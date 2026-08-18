@@ -155,7 +155,6 @@ export const UI = {
   unassigned: "לא שויך",
 
   // outcome sheet
-  outcomeTitle: "מה קרה בשיחה?",
   outcomeSaved: "נרשם ✓",
   nextTouchSaved: "נקבע ✓",
   lostReasonTitle: "למה אבוד?",
@@ -229,6 +228,7 @@ export const UI = {
   // search palette
   commandTitle: "חיפוש",
   commandPlaceholder: "שם, עסק או מספר טלפון",
+  searchResults: (n: number) => (n === 1 ? "תוצאה אחת" : `${n} תוצאות`),
   commandHintLeads: "לידים",
   commandHintOrgs: "עסקים",
 

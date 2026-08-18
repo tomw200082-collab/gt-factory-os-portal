@@ -14,6 +14,7 @@ import type { LeadEventRow, OrgRow, SalesLeadRow } from "../_lib/types";
 import { CustomerContext } from "./CustomerBadge";
 import { EventTimeline } from "./EventTimeline";
 import { StatusPill } from "./StatusPill";
+import { useReturnFocus } from "../_lib/useReturnFocus";
 
 export interface OrgCardProps {
   org: OrgRow;
@@ -33,6 +34,7 @@ export function OrgCard({
   timelineLeadName = null,
   onClose,
 }: OrgCardProps) {
+  useReturnFocus();
   const panelRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

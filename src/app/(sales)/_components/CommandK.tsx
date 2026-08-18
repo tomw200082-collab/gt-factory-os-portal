@@ -11,6 +11,7 @@ import { useRouter } from "next/navigation";
 import { fmtPhone, phoneSearchKey } from "../_lib/format";
 import { UI } from "../_lib/labels";
 import type { OrgRow, SalesLeadRow } from "../_lib/types";
+import { useReturnFocus } from "../_lib/useReturnFocus";
 
 export interface CommandKProps {
   leads: SalesLeadRow[];
@@ -63,6 +64,7 @@ export function searchAll(leads: SalesLeadRow[], orgs: OrgRow[], query: string):
 }
 
 export function CommandK({ leads, orgs, onClose }: CommandKProps) {
+  useReturnFocus();
   const router = useRouter();
   const [query, setQuery] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
@@ -141,6 +143,13 @@ export function CommandK({ leads, orgs, onClose }: CommandKProps) {
           value={query}
           onChange={(e) => setQuery(e.target.value)}
         />
+
+        {/* The list below changes as you type. Without this, nothing says so:
+            a screen-reader user pastes a number and hears silence, then has to
+            Tab into the list to find out whether it matched anyone. */}
+        <p className="sr-only" role="status" aria-live="polite">
+          {query.trim() ? (hits.length === 0 ? UI.searchEmpty : UI.searchResults(hits.length)) : ""}
+        </p>
 
         {query.trim() && hits.length === 0 ? (
           <p className="px-3 py-4 text-[13px]" style={{ color: "hsl(var(--s-fg-faint))" }}>

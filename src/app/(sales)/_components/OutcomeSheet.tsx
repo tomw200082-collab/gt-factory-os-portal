@@ -14,6 +14,7 @@ import { useEffect, useRef, useState } from "react";
 import { LOST_REASONS, OUTCOME_LABELS, OUTCOME_TITLES, UI } from "../_lib/labels";
 import { toDateInputValue } from "../_lib/format";
 import type { OutcomeResult, OutreachChannel } from "../_lib/types";
+import { useReturnFocus } from "../_lib/useReturnFocus";
 
 export interface OutcomeSubmit {
   result?: OutcomeResult;
@@ -63,6 +64,7 @@ export function OutcomeSheet({
   onSubmit,
   onDismiss,
 }: OutcomeSheetProps) {
+  useReturnFocus();
   const [step, setStep] = useState<Step>(
     mode === "next-touch" ? "next-touch" : mode === "lost" ? "lost-reason" : "root",
   );
@@ -315,7 +317,7 @@ export function OutcomeSheet({
               {UI.save}
             </button>
             {!chosenReason ? (
-              <p className="text-[12px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
+              <p role="status" aria-live="polite" className="text-[12px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
                 {UI.lostReasonRequired}
               </p>
             ) : null}
@@ -325,6 +327,9 @@ export function OutcomeSheet({
         <button
           type="button"
           data-testid="outcome-dismiss"
+          // Dismissing mid-write closes the sheet before onError can show what
+          // went wrong, and the failure passes in silence.
+          disabled={busy}
           className="s-btn s-btn-ghost mt-3 w-full text-[13px]"
           style={{ color: "hsl(var(--s-fg-faint))" }}
           onClick={onDismiss}
