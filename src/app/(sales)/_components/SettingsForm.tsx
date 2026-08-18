@@ -212,17 +212,15 @@ export function SettingsForm({
           value={dailyCap}
           onChange={(e) => setDailyCap(e.target.value)}
         />
-        {!capValid ? (
-          <p
-            id="queue-cap-error"
-            role="alert"
-            data-testid="queue-cap-error"
-            className="text-[12px]"
-            style={{ color: "hsl(var(--s-sla-overdue))" }}
-          >
-            {UI.queueCapRange}
-          </p>
-        ) : null}
+        <p
+          id="queue-cap-error"
+          role="alert"
+          data-testid="queue-cap-error"
+          className="text-[12px]"
+          style={{ color: "hsl(var(--s-sla-overdue))" }}
+        >
+          {!capValid ? UI.queueCapRange : ""}
+        </p>
 
         <div className="flex gap-1" role="group" aria-label={UI.queueShapeTitle}>
           {(["newest_first", "oldest_first"] as const).map((option) => (
@@ -264,7 +262,7 @@ export function SettingsForm({
                 // A text link, not a button shell: four bordered 44px controls
                 // in a stacked list outweigh the reasons they modify. The
                 // touch target stays 44px, the visual weight does not.
-                className="min-h-[44px] underline"
+                className="inline-flex min-h-[44px] items-center justify-center px-3 underline"
                 style={{ color: "hsl(var(--s-danger-quiet))" }}
                 // Never empty: the drawer and the sheet both read this list,
                 // and an empty one would make a lead impossible to close.
@@ -361,17 +359,15 @@ export function SettingsForm({
         </label>
         {/* aria-invalid with nothing to read announces "invalid" and stops
             there. The range is the whole of what the person needs. */}
-        {!hoursValid ? (
-          <p
-            id="sla-error"
-            role="alert"
-            data-testid="settings-sla-error"
-            className="text-[12px]"
-            style={{ color: "hsl(var(--s-sla-overdue))" }}
-          >
-            {UI.slaRange}
-          </p>
-        ) : null}
+        <p
+          id="sla-error"
+          role="alert"
+          data-testid="settings-sla-error"
+          className="text-[12px]"
+          style={{ color: "hsl(var(--s-sla-overdue))" }}
+        >
+          {!hoursValid ? UI.slaRange : ""}
+        </p>
       </section>
 
       {error ? (

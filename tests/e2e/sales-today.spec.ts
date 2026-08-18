@@ -293,3 +293,39 @@ test("a failed queue load offers a way out @mocked", async ({ page }) => {
   await expect(page.getByTestId("queue-error")).toBeVisible();
   await expect(page.getByRole("button", { name: "נסה שוב" })).toBeVisible();
 });
+
+test("the card leaves the queue optimistically on שלי, not only on הכל @mocked", async ({
+  page,
+}) => {
+  // Gate iteration 2, INTER-NEW-2. The scope is part of the query key —
+  // salesKeys.today(scope) is ["sales","today", scope ?? "all"] — and both
+  // optimistic writers reached for salesKeys.today(), which is the "all"
+  // entry. On שלי the live cache is keyed by the signed-in email, so the
+  // optimistic patch landed on a cache nobody was reading and the answered
+  // card sat there until the refetch settled. The one scope a second
+  // salesperson works in was the one where the queue felt broken.
+  await stubSales(page, [newLead]);
+
+  // Hold the outcome open so the only thing that can clear the card is the
+  // optimistic update, never the server's answer.
+  let release: () => void = () => {};
+  const held = new Promise<void>((r) => (release = r));
+  await page.route("**/api/sales/leads/*/outcome", async (route) => {
+    await held;
+    return route.fulfill({
+      json: { lead_id: "L1", status: "working", next_touch_at: null, first_touch_at: null },
+    });
+  });
+
+  await page.goto("/sales/today");
+  await page.getByTestId("queue-scope-mine").click();
+  await expect(page.getByTestId("today-card-L1")).toBeVisible();
+
+  await page.getByTestId("today-card-L1").getByText("התקשר").click();
+  await leaveAndReturn(page);
+  await page.getByTestId("outcome-no_answer").click();
+
+  // Still in flight, and the card is already gone.
+  await expect(page.getByTestId("today-card-L1")).toBeHidden();
+  release();
+});

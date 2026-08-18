@@ -325,6 +325,7 @@
 [data-app="sales"] .s-btn:focus-visible,
 [data-app="sales"] .s-card:focus-visible,
 [data-app="sales"] th button:focus-visible,
+[data-app="sales"] .s-link:focus-visible,
 [data-app="sales"] .s-tab:focus-visible {
   outline: 2px solid hsl(var(--s-accent));
   outline-offset: 2px;
@@ -409,6 +410,12 @@
    The rule: any bare button or anchor acting as a card's primary target takes
    .s-link or a .s-btn shell. Nothing primary is styled by weight alone. */
 [data-app="sales"] .s-link {
+  /* inline-flex, not inline: min-height does nothing to an inline box, and
+     this is the primary tap target on every attention card — it was rendering
+     at the height of its own text, ~20px, beside a 44px call button. */
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
   color: hsl(var(--s-accent));
   text-decoration: underline;
   text-underline-offset: 2px;

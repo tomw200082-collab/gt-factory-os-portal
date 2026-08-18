@@ -256,3 +256,42 @@ test("the activity feed says it is loading rather than showing nothing @mocked",
   release();
   await expect(page.getByTestId("activity-feed")).toBeVisible();
 });
+
+test("a call placed from the drawer on /attention is answered for too @mocked", async ({
+  page,
+}) => {
+  // Gate iteration 2: tranche 171 armed the attention *cards* and left the
+  // drawer opened from those same cards unarmed — the same hole, one tap
+  // deeper. A call placed from inside the drawer dialled and asked nothing.
+  const outreach: string[] = [];
+  await stub(page, { leads: [LEAD_LATE], outreach });
+  await page.goto("/sales/attention");
+
+  await page.getByTestId("attention-open-L-LATE-overdue").click();
+  await expect(page.getByTestId("lead-drawer")).toBeVisible();
+  await page.getByTestId("drawer-call").click();
+
+  await expect.poll(() => outreach.length).toBeGreaterThan(0);
+  expect(outreach[0]).toContain("/L-LATE/outreach");
+
+  await leaveAndReturn(page);
+  await expect(page.getByTestId("outcome-sheet")).toBeVisible();
+});
+
+test("the queue is hidden from assistive tech while a sheet is open @mocked", async ({
+  page,
+}) => {
+  // aria-modal is only partly honoured on iOS, so /sales/today wraps the
+  // content behind a sheet in aria-hidden. The sheet arrived on this screen
+  // without that wrapper.
+  await stub(page, { leads: [LEAD_LATE] });
+  await page.goto("/sales/attention");
+
+  const body = page.getByTestId("attention-body");
+  await expect(body).not.toHaveAttribute("aria-hidden", "true");
+
+  await page.getByTestId("attention-call-L-LATE-overdue").click();
+  await leaveAndReturn(page);
+  await expect(page.getByTestId("outcome-sheet")).toBeVisible();
+  await expect(body).toHaveAttribute("aria-hidden", "true");
+});

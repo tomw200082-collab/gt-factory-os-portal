@@ -223,21 +223,19 @@ export function useAddNote(leadId: string) {
  */
 export function useSetNextTouch(leadId: string) {
   const qc = useQueryClient();
-  return useMutation<unknown, SalesApiError, { at: string }, { previous?: TodayPayload }>({
+  return useMutation<
+    unknown,
+    SalesApiError,
+    { at: string },
+    { previous: Array<[readonly unknown[], TodayPayload | undefined]> }
+  >({
     mutationFn: (vars) => request(`/api/sales/leads/${leadId}/next-touch`, jsonBody(vars)),
     onMutate: async () => {
-      await qc.cancelQueries({ queryKey: salesKeys.today() });
-      const previous = qc.getQueryData<TodayPayload>(salesKeys.today());
-      if (previous) {
-        qc.setQueryData<TodayPayload>(salesKeys.today(), {
-          ...previous,
-          rows: previous.rows.filter((row) => row.lead_id !== leadId),
-        });
-      }
-      return { previous };
+      await qc.cancelQueries({ queryKey: TODAY_PREFIX });
+      return { previous: dropFromTodayCaches(qc, leadId) };
     },
     onError: (_err, _vars, context) => {
-      if (context?.previous) qc.setQueryData(salesKeys.today(), context.previous);
+      restoreTodayCaches(qc, context?.previous);
     },
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: salesKeys.all });
@@ -285,6 +283,45 @@ export function useOutreach() {
   );
 }
 
+/** Every cached Today queue, whatever scope it was fetched under. */
+const TODAY_PREFIX = ["sales", "today"] as const;
+
+/**
+ * Drop a lead from every cached Today queue, and hand back what was there.
+ *
+ * The scope is part of the query key — `salesKeys.today(scope)` is
+ * `["sales","today", scope ?? "all"]` — so an optimistic write aimed at
+ * `salesKeys.today()` patches the "all" entry and nothing else. On `שלי` the
+ * live cache is keyed by the signed-in email, so the card the person just
+ * answered for stayed on screen until the refetch settled: the one scope a
+ * second salesperson works in was the one where the queue felt broken.
+ * Matching on the prefix patches whichever scopes are cached.
+ */
+function dropFromTodayCaches(
+  qc: ReturnType<typeof useQueryClient>,
+  leadId: string,
+): Array<[readonly unknown[], TodayPayload | undefined]> {
+  const entries = qc.getQueriesData<TodayPayload>({ queryKey: TODAY_PREFIX });
+  for (const [key, payload] of entries) {
+    if (!payload) continue;
+    qc.setQueryData<TodayPayload>(key, {
+      ...payload,
+      rows: payload.rows.filter((row) => row.lead_id !== leadId),
+    });
+  }
+  return entries;
+}
+
+/** Put back exactly what `dropFromTodayCaches` found, key by key. */
+function restoreTodayCaches(
+  qc: ReturnType<typeof useQueryClient>,
+  previous: Array<[readonly unknown[], TodayPayload | undefined]> | undefined,
+): void {
+  for (const [key, payload] of previous ?? []) {
+    if (payload) qc.setQueryData(key, payload);
+  }
+}
+
 export interface OutcomeVars {
   result: OutcomeResult;
   next_touch_at?: string | null;
@@ -298,21 +335,19 @@ export interface OutcomeVars {
  */
 export function useOutcome(leadId: string) {
   const qc = useQueryClient();
-  return useMutation<unknown, SalesApiError, OutcomeVars, { previous?: TodayPayload }>({
+  return useMutation<
+    unknown,
+    SalesApiError,
+    OutcomeVars,
+    { previous: Array<[readonly unknown[], TodayPayload | undefined]> }
+  >({
     mutationFn: (vars) => request(`/api/sales/leads/${leadId}/outcome`, jsonBody(vars)),
     onMutate: async () => {
-      await qc.cancelQueries({ queryKey: salesKeys.today() });
-      const previous = qc.getQueryData<TodayPayload>(salesKeys.today());
-      if (previous) {
-        qc.setQueryData<TodayPayload>(salesKeys.today(), {
-          ...previous,
-          rows: previous.rows.filter((row) => row.lead_id !== leadId),
-        });
-      }
-      return { previous };
+      await qc.cancelQueries({ queryKey: TODAY_PREFIX });
+      return { previous: dropFromTodayCaches(qc, leadId) };
     },
     onError: (_err, _vars, context) => {
-      if (context?.previous) qc.setQueryData(salesKeys.today(), context.previous);
+      restoreTodayCaches(qc, context?.previous);
     },
     onSettled: () => {
       void qc.invalidateQueries({ queryKey: salesKeys.all });

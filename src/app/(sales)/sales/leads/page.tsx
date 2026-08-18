@@ -113,13 +113,27 @@ function LeadsScreen() {
     return () => clearTimeout(id);
   }, [toast]);
 
-  // Selection belongs to the rows on screen. Change the tab or a chip and the
-  // rows change under it, so the bulk bar would keep acting on leads the person
-  // is no longer looking at — select eight on חדש, switch to אבוד, press שייך,
-  // and eight invisible leads move (gate P0, INTER-001).
+  // Selection belongs to the rows on screen — and the invariant is exactly
+  // that, not "clear it when the tab changes". Clearing on the tab and the two
+  // chips left the search open: select eight leads, type a query that narrows
+  // the list to three, press שייך, and five leads nobody is looking at move.
+  // Same defect, a different door (gate P0, INTER-001).
+  //
+  // So the effect prunes rather than clears. Anything that changes the visible
+  // set — tab, chip, query, or the rows themselves arriving — drops whatever
+  // left the screen and keeps what is still on it, which also means refining a
+  // search no longer throws away a selection the person is still building.
+  // Returning `prev` unchanged is load-bearing: a fresh Set every run would
+  // re-trigger this effect forever.
+  const visibleIds = useMemo(() => visible.map((r) => r.id), [visible]);
   useEffect(() => {
-    setSelected(new Set());
-  }, [tab, uncontactableOnly, unownedOnly]);
+    setSelected((prev) => {
+      if (prev.size === 0) return prev;
+      const shown = new Set(visibleIds);
+      const kept = [...prev].filter((id) => shown.has(id));
+      return kept.length === prev.size ? prev : new Set(kept);
+    });
+  }, [visibleIds]);
 
   const error =
     setStatus.error?.message ??
@@ -302,7 +316,13 @@ function LeadsScreen() {
           count={selected.size}
           roster={roster}
           busy={bulkAssign.isPending}
-          error={bulkAssign.error?.message ?? null}
+          // The server's own words when it gave any, a plain sentence when it
+          // did not — an errored write must never render an empty alert.
+          error={
+            bulkAssign.isError
+              ? (bulkAssign.error?.message || UI.bulkAssignFailed)
+              : null
+          }
           onClear={() => setSelected(new Set())}
           onAssign={(email, at) =>
             bulkAssign.mutate(
@@ -317,9 +337,6 @@ function LeadsScreen() {
                   );
                   setSelected(new Set());
                 },
-                // A write that fails silently invites the same press again.
-                // The selection is deliberately kept: retrying is the point.
-                onError: () => setToast(UI.bulkAssignFailed),
               },
             )
           }

@@ -47,7 +47,7 @@ export function AttentionList({ rows, roster, onOpen, onArm }: AttentionListProp
             aria-labelledby={`attention-title-${bucket}`}
             className="flex flex-col gap-2"
           >
-            <h2 id={`attention-title-${bucket}`} className="s-eyebrow" style={{ margin: 0 }}>
+            <h2 id={`attention-title-${bucket}`} className="s-section-heading">
               {BUCKET_LABELS[bucket](section.length)}
             </h2>
 

@@ -186,17 +186,45 @@ test("a selection never outlives the rows it was made on @mocked", async ({ page
   await expect(page.getByTestId("bulk-bar")).toBeVisible();
 
   await page.getByTestId("leads-tab-won").click();
+  await expect(page.getByTestId("lead-row-L1")).toBeHidden();
   await expect(page.getByTestId("bulk-bar")).toBeHidden();
 
-  // and the same for the chips, which cut the same table a different way
+  // The rule is "the selection is what is on screen", not "any filter wipes
+  // it". L1 is itself unowned, so the unowned chip does not hide it — and a
+  // selection the person is still building survives a filter that keeps its
+  // rows. A blunt clear-on-any-change would throw that away for nothing.
   await page.getByTestId("leads-tab-new").click();
   await page.getByTestId("lead-select-L1").check();
-  await expect(page.getByTestId("bulk-bar")).toBeVisible();
   const unowned = page.getByTestId("leads-chip-unowned");
-  if (await unowned.isVisible()) {
-    await unowned.click();
-    await expect(page.getByTestId("bulk-bar")).toBeHidden();
-  }
+  await unowned.click();
+  await expect(page.getByTestId("lead-row-L1")).toBeVisible();
+  await expect(page.getByTestId("bulk-bar")).toBeVisible();
+});
+
+test("a search that hides a selected lead un-selects it @mocked", async ({ page }) => {
+  // Gate iteration 2 re-opened INTER-001 as P0: clearing on the tab and the two
+  // chips left the search open. Select rows, type a query that narrows the list,
+  // and the bar still offered to assign leads that had scrolled out of
+  // existence. The invariant is "the selection is what is on screen", so the
+  // effect prunes rather than clears — which also means refining a search no
+  // longer throws away a selection still being built.
+  await stub(page);
+  await page.goto("/sales/leads");
+
+  await page.getByTestId("lead-select-L1").check();
+  await expect(page.getByTestId("bulk-live")).toHaveText(/1/);
+
+  // L1 is "קפה בדיקה"; this query matches nothing it contains.
+  await page.getByTestId("leads-search").fill("0529999999");
+  await expect(page.getByTestId("lead-row-L1")).toBeHidden();
+  await expect(page.getByTestId("bulk-bar")).toBeHidden();
+  await expect(page.getByTestId("bulk-live")).toHaveText("");
+
+  // Clearing the search does not resurrect it: it left the screen, so it left
+  // the selection.
+  await page.getByTestId("leads-search").fill("");
+  await expect(page.getByTestId("lead-row-L1")).toBeVisible();
+  await expect(page.getByTestId("bulk-bar")).toBeHidden();
 });
 
 test("the bulk bar announces itself, and says when a batch fails @mocked", async ({ page }) => {

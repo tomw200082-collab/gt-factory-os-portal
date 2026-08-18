@@ -158,6 +158,10 @@ export default function TodayPage() {
                 type="button"
                 data-testid={`queue-scope-${option}`}
                 aria-pressed={scope === option}
+                // Inert while a sheet is open: the queue behind it is already
+                // hidden from pointer and AT, and changing scope there swaps
+                // the list out from under a question that is still being asked.
+                disabled={anySheetOpen}
                 className={`s-tab ${scope === option ? "s-tab-active" : ""}`}
                 onClick={() => setScope(option)}
               >

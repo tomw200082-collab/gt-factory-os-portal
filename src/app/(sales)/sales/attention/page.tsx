@@ -83,6 +83,11 @@ export default function AttentionPage() {
         </p>
       </header>
 
+      {/* While a sheet is open the screen behind it is unreachable by pointer;
+          hiding it from assistive technology keeps the two contexts from being
+          read as one. aria-modal alone is only partly honoured on iOS — the
+          same reason /sales/today does this. */}
+      <div data-testid="attention-body" aria-hidden={answerSheetOpen || undefined}>
       {attention.isLoading ? <QueueLoading /> : null}
       {attention.isError ? (
         <QueueError onRetry={() => void attention.refetch()} what={UI.attentionTitle} />
@@ -115,15 +120,30 @@ export default function AttentionPage() {
           {UI.activityTitle}
         </h2>
         {activity.isLoading ? (
-          <p data-testid="activity-loading" className="text-[13px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
+          <ul data-testid="activity-loading" aria-hidden className="flex flex-col gap-2">
+            {[0, 1, 2, 3].map((i) => (
+              <li
+                key={i}
+                className="animate-pulse rounded"
+                style={{ height: 20, background: "hsl(var(--s-surface-sunken))" }}
+              />
+            ))}
+          </ul>
+        ) : null}
+        {/* Outside the aria-hidden skeleton — a status buried inside it would
+            be hidden along with the shapes it is describing. */}
+        {activity.isLoading ? (
+          <span role="status" aria-live="polite" className="sr-only">
             {UI.loading}
-          </p>
+          </span>
         ) : null}
         {activity.isError ? (
           <QueueError onRetry={() => void activity.refetch()} what={UI.activityError} />
         ) : null}
         {activity.isSuccess ? <ActivityFeed rows={activity.data} /> : null}
       </section>
+
+      </div>
 
       {openLead ? (
         <LeadDrawer
@@ -155,6 +175,12 @@ export default function AttentionPage() {
           onAssign={(assignee, nextTouchAt) =>
             assign.mutate({ assignee, next_touch_at: nextTouchAt }, saved)
           }
+          // The drawer dials too, and a call placed from inside it owes the
+          // same answer as one placed from the card behind it.
+          onArm={(leadId, channel) => {
+            capture.arm(leadId, channel);
+            outreach.mutate({ leadId, channel });
+          }}
         />
       ) : null}
 

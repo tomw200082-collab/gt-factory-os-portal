@@ -1,4 +1,6 @@
 import { describe, it, expect, afterEach } from "vitest";
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
 import { BulkBar } from "@/app/(sales)/_components/BulkBar";
 import { SettingsForm } from "@/app/(sales)/_components/SettingsForm";
@@ -12,6 +14,8 @@ import type {
   SalesSettings,
   TodayRow,
 } from "@/app/(sales)/_lib/types";
+
+const TOKENS = join(process.cwd(), "src/app/(sales)/sales-tokens.css");
 
 afterEach(cleanup);
 
@@ -307,5 +311,66 @@ describe("daily budget", () => {
     const { visible, remaining } = capRows(uncapped, 0);
     expect(visible).toHaveLength(2);
     expect(remaining).toBe(0);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Gate iteration 2 — the defects the fixes themselves introduced
+// ---------------------------------------------------------------------------
+
+describe("touch targets on the controls that changed shape", () => {
+  it("keeps the attention org-name button on the 44px floor", () => {
+    // It became the card's primary target this tranche and was styled with a
+    // colour and an underline and no size — ~20px tall beside a 44px call
+    // button. min-height does nothing to an inline box, so .s-link is
+    // inline-flex.
+    const css = readFileSync(TOKENS, "utf8");
+    const rule = css.slice(css.indexOf('[data-app="sales"] .s-link {'));
+    const body = rule.slice(0, rule.indexOf("}"));
+    expect(body).toContain("min-height: 44px");
+    expect(body).toContain("inline-flex");
+  });
+
+  it("gives the settings remove buttons width as well as height", () => {
+    // 44px is bidirectional. Dropping the .s-btn shell dropped its
+    // padding-inline with it, so the target kept its height and lost its width.
+    render(<SettingsForm settings={settings} onSave={noop} />);
+    const remove = screen.getByLabelText(UI.removeItemNamed("אין תקציב"));
+    expect(remove.className).toContain("min-h-[44px]");
+    expect(remove.className).toContain("px-3");
+  });
+
+  it("rings a .s-link with the workspace accent, not the browser default", () => {
+    // The focus rule enumerates each focusable pattern by hand, so a new one
+    // is invisible to it until it is added.
+    const css = readFileSync(TOKENS, "utf8");
+    expect(css).toContain('[data-app="sales"] .s-link:focus-visible');
+  });
+});
+
+describe("described-by contracts that resolve", () => {
+  it("keeps both settings error elements in the DOM when valid", () => {
+    // aria-describedby pointed at an id that only existed while the field was
+    // invalid. AT ignores a dangling reference, so nothing announced wrongly —
+    // but a contract that is only sometimes true is not a contract.
+    render(<SettingsForm settings={settings} onSave={noop} />);
+    expect(screen.getByTestId("queue-cap-error").textContent).toBe("");
+    expect(screen.getByTestId("settings-sla-error").textContent).toBe("");
+
+    fireEvent.change(screen.getByTestId("queue-cap"), { target: { value: "0" } });
+    expect(screen.getByTestId("queue-cap-error").textContent).toBe(UI.queueCapRange);
+  });
+});
+
+describe("section headings obey their own rule", () => {
+  it("uses .s-section-heading on the attention buckets too", () => {
+    // The rule was written this tranche and applied in one of the two places
+    // that needed it.
+    const { container } = render(
+      <AttentionList rows={[attentionRow()]} roster={[]} onOpen={noop} onArm={noop} />,
+    );
+    const heading = container.querySelector("#attention-title-overdue");
+    expect(heading?.className).toContain("s-section-heading");
+    expect(heading?.className).not.toContain("s-eyebrow");
   });
 });
