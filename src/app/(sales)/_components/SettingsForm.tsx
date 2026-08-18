@@ -80,7 +80,12 @@ export function SettingsForm({
 
   return (
     <form
-      className="flex flex-col gap-6"
+      // A settings row is a label and its control, and at full width they sat
+      // 700px apart — "אין תקציב" at one edge and its own הסר at the other,
+      // which is the spreading tranche 170 fixed on the attention cards. A form
+      // reads at a measure; the textareas were too wide to scan at full width
+      // for the same reason.
+      className="flex w-full max-w-2xl flex-col gap-6"
       data-testid="settings-form"
       onSubmit={(e) => {
         e.preventDefault();
@@ -96,8 +101,8 @@ export function SettingsForm({
     >
       {/* People first: it is the control that unblocks a second person, and
           the one whose absence made every assignment a guess. */}
-      <section className="flex flex-col gap-2" data-testid="settings-people">
-        <h2 className="s-eyebrow">{UI.peopleTitle}</h2>
+      <section className="flex flex-col gap-2" aria-labelledby="settings-people-title" data-testid="settings-people">
+        <h2 id="settings-people-title" className="s-section-heading">{UI.peopleTitle}</h2>
 
         <ul className="flex flex-col gap-2">
           {roster.map((person, i) => {
@@ -108,17 +113,24 @@ export function SettingsForm({
                 data-testid={`person-${person.email}`}
                 className="flex flex-wrap items-center gap-2"
               >
-                <span className="flex-1" style={{ color: "hsl(var(--s-fg))" }}>
+                <span className="font-medium" style={{ color: "hsl(var(--s-fg))" }}>
                   {person.name}
                 </span>
                 <bdi dir="ltr" className="text-[12px]" style={{ color: "hsl(var(--s-fg-muted))" }}>
                   {person.email}
                 </bdi>
+                {/* The toggle and the warning sit at the far end together, so
+                    the row has two groups rather than four scattered items. */}
+                <span className="ms-auto flex flex-wrap items-center gap-2">
                 <label className="flex items-center gap-1 text-[13px]">
                   <input
                     type="checkbox"
                     className="h-5 w-5"
                     data-testid={`person-active-${person.email}`}
+                    aria-label={UI.personActiveNamed(person.name)}
+                    // Native checkboxes render the OS accent — system blue,
+                    // which is nowhere in this palette.
+                    style={{ accentColor: "hsl(var(--s-accent))" }}
                     checked={person.active}
                     onChange={() =>
                       setRoster((prev) =>
@@ -128,7 +140,7 @@ export function SettingsForm({
                   />
                   {UI.personActive}
                 </label>
-                {person.active && open > 0 ? (
+                {open > 0 ? (
                   <span
                     data-testid={`person-open-${person.email}`}
                     className="text-[12px]"
@@ -137,6 +149,7 @@ export function SettingsForm({
                     {UI.deactivateWarning(open)}
                   </span>
                 ) : null}
+                </span>
               </li>
             );
           })}
@@ -180,8 +193,8 @@ export function SettingsForm({
       {/* The queue's shape. This is the answer to "188 leads is not a queue":
           how many belong to a day, and which end of the backlog to start from.
           It was a constant in two files and needed a deploy to change. */}
-      <section className="flex flex-col gap-2" data-testid="settings-queue">
-        <h2 className="s-eyebrow">{UI.queueShapeTitle}</h2>
+      <section className="flex flex-col gap-2" aria-labelledby="settings-queue-title" data-testid="settings-queue">
+        <h2 id="settings-queue-title" className="s-section-heading">{UI.queueShapeTitle}</h2>
 
         <label className="s-eyebrow" htmlFor="queue-cap">
           {UI.queueCapLabel}
@@ -195,11 +208,18 @@ export function SettingsForm({
           max={100}
           inputMode="numeric"
           aria-invalid={!capValid}
+          aria-describedby="queue-cap-error"
           value={dailyCap}
           onChange={(e) => setDailyCap(e.target.value)}
         />
         {!capValid ? (
-          <p role="alert" className="text-[12px]" style={{ color: "hsl(var(--s-sla-overdue))" }}>
+          <p
+            id="queue-cap-error"
+            role="alert"
+            data-testid="queue-cap-error"
+            className="text-[12px]"
+            style={{ color: "hsl(var(--s-sla-overdue))" }}
+          >
             {UI.queueCapRange}
           </p>
         ) : null}
@@ -227,22 +247,25 @@ export function SettingsForm({
 
       {/* The lost-reason vocabulary. Hardcoded in labels.ts until now, which
           made "we should split this reason in two" a code change. */}
-      <section className="flex flex-col gap-2" data-testid="settings-lost-reasons">
-        <h2 className="s-eyebrow">{UI.lostReasonsTitle}</h2>
+      <section className="flex flex-col gap-2" aria-labelledby="settings-reasons-title" data-testid="settings-lost-reasons">
+        <h2 id="settings-reasons-title" className="s-section-heading">{UI.lostReasonsTitle}</h2>
         <p className="text-[12px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
           {UI.lostReasonsHint}
         </p>
 
         <ul className="flex flex-col gap-2">
           {lostReasons.map((reason, i) => (
-            <li key={reason} className="flex items-center gap-2">
-              <span className="flex-1" style={{ color: "hsl(var(--s-fg))" }}>
-                {reason}
-              </span>
+            <li key={reason} className="flex items-center gap-3">
+              <span style={{ color: "hsl(var(--s-fg))" }}>{reason}</span>
               <button
                 type="button"
                 data-testid={`lost-reason-remove-${reason}`}
-                className="s-btn s-btn-ghost"
+                aria-label={UI.removeItemNamed(reason)}
+                // A text link, not a button shell: four bordered 44px controls
+                // in a stacked list outweigh the reasons they modify. The
+                // touch target stays 44px, the visual weight does not.
+                className="min-h-[44px] underline"
+                style={{ color: "hsl(var(--s-danger-quiet))" }}
                 // Never empty: the drawer and the sheet both read this list,
                 // and an empty one would make a lead impossible to close.
                 disabled={lostReasons.length <= 1}
@@ -257,7 +280,9 @@ export function SettingsForm({
         <div className="flex items-center gap-2">
           <input
             className="s-input flex-1"
-            aria-label={UI.lostReasonsTitle}
+            data-testid="lost-reason-new"
+            aria-label={UI.lostReasonNew}
+            placeholder={UI.lostReasonNew}
             value={newReason}
             onChange={(e) => setNewReason(e.target.value)}
           />
@@ -282,8 +307,8 @@ export function SettingsForm({
         </div>
       </section>
 
-      <section className="flex flex-col gap-2">
-        <h2 className="s-eyebrow">{UI.templatesTitle}</h2>
+      <section className="flex flex-col gap-2" aria-labelledby="settings-templates-title">
+        <h2 id="settings-templates-title" className="s-section-heading">{UI.templatesTitle}</h2>
         <p className="text-[12px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
           {UI.templatesHint}
         </p>
@@ -310,8 +335,8 @@ export function SettingsForm({
         ))}
       </section>
 
-      <section className="flex flex-col gap-2">
-        <h2 className="s-eyebrow">{UI.slaTitle}</h2>
+      <section className="flex flex-col gap-2" aria-labelledby="settings-sla-title">
+        <h2 id="settings-sla-title" className="s-section-heading">{UI.slaTitle}</h2>
         {/* Given an id and pointed at from the field: a hint that only sits
             near an input is invisible to anyone not looking at the screen. */}
         <p id="sla-hint" className="text-[12px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
@@ -364,7 +389,7 @@ export function SettingsForm({
       <div>
         <button
           type="submit"
-          disabled={busy || !hoursValid}
+          disabled={busy || !hoursValid || !capValid}
           data-testid="settings-save"
           className="s-btn s-btn-primary"
         >

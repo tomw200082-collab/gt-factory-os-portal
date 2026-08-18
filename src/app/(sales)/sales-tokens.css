@@ -364,6 +364,22 @@
   font-weight: 600;
 }
 
+/* A toggle chip is a tab that is usually off.
+   A .s-tab in its idle state has no border and no background, which reads
+   correctly inside a tablist — one of them is always tinted, so the set is
+   legibly a set. The leads chips are independent toggles and are usually all
+   off, so the row rendered as two right-aligned strings carrying counts, in a
+   filter bar, with nothing to say they could be pressed.
+
+   The rule: any count-bearing control outside a tablist takes .s-chip. */
+[data-app="sales"] .s-chip {
+  border: 1px solid hsl(var(--s-border));
+}
+
+[data-app="sales"] .s-chip.s-tab-active {
+  border-color: hsl(var(--s-fg) / 0.24);
+}
+
 /* A row you can click should say so before you click it. */
 [data-app="sales"] tbody tr:hover {
   background: hsl(var(--s-surface-sunken));
@@ -376,6 +392,34 @@
   font-weight: 600;
   letter-spacing: 0.02em;
   color: hsl(var(--s-fg-muted));
+}
+
+/* A section heading is not a field label, and until now both were .s-eyebrow:
+   identical size, weight and ink, so "צורת התור" and "כמה שיחות ביום" —
+   a section and a field inside it — rendered as the same tier and five
+   sections collapsed into one flat list of small-caps strings.
+
+   The rule: section headings are --s-fg at 14px; field labels inside them
+   stay .s-eyebrow at --s-fg-muted 12px. The two never share a class. */
+/* A plain <button> that is the primary way into something must look like one.
+   The attention card's business name — the only route to a lead from that
+   screen — rendered as unstyled bold text beside a phone button with a real
+   shell, so the card read as "tap the number".
+
+   The rule: any bare button or anchor acting as a card's primary target takes
+   .s-link or a .s-btn shell. Nothing primary is styled by weight alone. */
+[data-app="sales"] .s-link {
+  color: hsl(var(--s-accent));
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  cursor: pointer;
+}
+
+[data-app="sales"] .s-section-heading {
+  font-size: 14px;
+  font-weight: 600;
+  color: hsl(var(--s-fg));
+  margin: 0;
 }
 
 /* --- motion --------------------------------------------------------------- */

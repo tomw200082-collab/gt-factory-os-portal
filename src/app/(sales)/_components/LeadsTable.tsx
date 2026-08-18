@@ -80,6 +80,7 @@ export function LeadsTable({
   const selectable = Boolean(selected && onToggle);
   const visibleIds = sorted.map((r) => r.id);
   const allSelected = selectable && visibleIds.length > 0 && visibleIds.every((id) => selected?.has(id));
+  const someSelected = selectable && visibleIds.some((id) => selected?.has(id));
 
   return (
     <>
@@ -161,6 +162,12 @@ export function LeadsTable({
                     aria-label={UI.selectAllOnPage}
                     className="h-5 w-5"
                     checked={allSelected}
+                    // "Some" is a third state, and it only exists as a DOM
+                    // property — a partial selection rendered identically to
+                    // an empty one for anyone reading the value.
+                    ref={(el) => {
+                      if (el) el.indeterminate = someSelected && !allSelected;
+                    }}
                     onChange={() => onToggleAll?.(visibleIds)}
                   />
                 </th>
@@ -238,7 +245,7 @@ export function LeadsTable({
                     <input
                       type="checkbox"
                       data-testid={`lead-select-${row.id}`}
-                      aria-label={UI.selectLead}
+                      aria-label={UI.selectLeadNamed(row.org_name)}
                       className="h-5 w-5"
                       checked={selected?.has(row.id) ?? false}
                       onChange={() => onToggle?.(row.id)}

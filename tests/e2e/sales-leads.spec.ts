@@ -78,6 +78,12 @@ async function stub(page: Page): Promise<Posted[]> {
       json: {
         sla_hours: 24,
         whatsapp_templates: { new_lead: "היי {{name}}", reminder: "ה", returning_customer: "ל" },
+        // The bulk bar's assign button stays inert without a roster to pick
+        // from, so the two bulk tests below need one.
+        assignees: [{ name: "דנה", email: "dana@gt.co.il", active: true }],
+        lost_reasons: ["אין תקציב", "אחר"],
+        queue: QUEUE,
+        last_changes: [],
       },
     }),
   );
@@ -105,6 +111,10 @@ async function stub(page: Page): Promise<Posted[]> {
       },
     }),
   );
+  await page.route("**/api/sales/bulk-assign", (r) => {
+    posted.push({ url: r.request().url(), body: r.request().postDataJSON() });
+    return r.fulfill({ json: { assigned: 1, rows: [] } });
+  });
   await page.route("**/api/sales/leads/*/status", (r) => {
     posted.push({ url: r.request().url(), body: r.request().postDataJSON() });
     return r.fulfill({ json: { lead_id: "L1", status: "working" } });
@@ -163,4 +173,54 @@ test("a won lead is evidence, never an editable status @mocked", async ({ page }
   await expect(drawer.getByTestId("won-banner")).toContainText("#1042");
   await expect(drawer.getByTestId("drawer-set-working")).toBeHidden();
   await expect(drawer.getByTestId("drawer-set-lost")).toBeHidden();
+});
+
+test("a selection never outlives the rows it was made on @mocked", async ({ page }) => {
+  // Gate P0 (INTER-001). Select on חדש, switch tab, and the bulk bar used to
+  // stay — still holding a lead that is no longer on screen, one press away
+  // from assigning it. The screen said "1 selected" about nothing visible.
+  await stub(page);
+  await page.goto("/sales/leads");
+
+  await page.getByTestId("lead-select-L1").check();
+  await expect(page.getByTestId("bulk-bar")).toBeVisible();
+
+  await page.getByTestId("leads-tab-won").click();
+  await expect(page.getByTestId("bulk-bar")).toBeHidden();
+
+  // and the same for the chips, which cut the same table a different way
+  await page.getByTestId("leads-tab-new").click();
+  await page.getByTestId("lead-select-L1").check();
+  await expect(page.getByTestId("bulk-bar")).toBeVisible();
+  const unowned = page.getByTestId("leads-chip-unowned");
+  if (await unowned.isVisible()) {
+    await unowned.click();
+    await expect(page.getByTestId("bulk-bar")).toBeHidden();
+  }
+});
+
+test("the bulk bar announces itself, and says when a batch fails @mocked", async ({ page }) => {
+  // Gate P0 ×2. role="region" does not announce on mount, so selecting rows
+  // gave a screen-reader user no signal that bulk actions existed (A11Y-001);
+  // and a failed write went spinner → idle with nothing said (INTER-002).
+  await stub(page);
+  await page.route("**/api/sales/bulk-assign", (r) =>
+    r.fulfill({ status: 422, json: { error: "SALES_UNKNOWN_ASSIGNEE" } }),
+  );
+  await page.goto("/sales/leads");
+
+  // The live region is mounted before there is anything to say, or the message
+  // arrives with the element and is never announced.
+  const live = page.getByTestId("bulk-live");
+  await expect(live).toHaveAttribute("aria-live", "polite");
+  await expect(live).toHaveText("");
+
+  await page.getByTestId("lead-select-L1").check();
+  await expect(live).toHaveText(/1/);
+
+  await page.getByTestId("bulk-bar").getByTestId("assignee-picker").selectOption("dana@gt.co.il");
+  await page.getByTestId("bulk-assign-confirm").click();
+  await expect(page.getByTestId("bulk-error")).toBeVisible();
+  // The selection survives the failure: retrying is the point.
+  await expect(page.getByTestId("bulk-bar")).toBeVisible();
 });

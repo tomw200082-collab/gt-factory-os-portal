@@ -8,7 +8,7 @@
 // one question the person running this asks every day, so it gets a screen —
 // the fourth, and the last (decision gate D5).
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   useActivity,
   useAddNote,
@@ -16,15 +16,19 @@ import {
   useAttention,
   useLeadEvents,
   useLeads,
+  useOutcome,
+  useOutreach,
   useSetNextTouch,
   useSetStatus,
   useSettings,
 } from "../../_lib/api";
+import { useOutcomeCapture } from "../../_lib/useOutcomeCapture";
 import { UI } from "../../_lib/labels";
 import { QueueError, QueueLoading } from "../../_components/EmptyStates";
 import { ActivityFeed } from "../../_components/ActivityFeed";
 import { AttentionList } from "../../_components/AttentionList";
 import { LeadDrawer } from "../../_components/LeadDrawer";
+import { OutcomeSheet } from "../../_components/OutcomeSheet";
 import { Toast } from "../../_components/Toast";
 
 export default function AttentionPage() {
@@ -45,6 +49,28 @@ export default function AttentionPage() {
   const setNextTouch = useSetNextTouch(openId ?? "");
   const assign = useAssign(openId ?? "");
   const saved = { onSuccess: () => setToast(UI.saved) };
+
+  // A call placed from this screen owes an outcome, the same as one placed
+  // from Today. Until now this screen dialled and asked nothing, so the one
+  // surface built for "what is stuck" was itself a way to leave a lead stuck
+  // with no record of the conversation (gate flow P1 / INTER-008).
+  const outreach = useOutreach();
+  const capture = useOutcomeCapture();
+  const pendingLead = leads.data?.find((l) => l.id === capture.pending?.leadId) ?? null;
+  const outcome = useOutcome(capture.pending?.leadId ?? "");
+  const answerSheetOpen = Boolean(capture.pending && (pendingLead || outcome.isPending));
+
+  // The answered lead leaves /attention the moment it is answered for, and the
+  // sheet asking about it is still open.
+  const lastLeadName = useRef<string | null>(null);
+  useEffect(() => {
+    if (pendingLead) lastLeadName.current = pendingLead.contact_name ?? pendingLead.org_name;
+  }, [pendingLead]);
+
+  function arm(leadId: string, channel: "call") {
+    capture.arm(leadId, channel);
+    outreach.mutate({ leadId, channel });
+  }
 
   return (
     <div className="flex flex-col gap-4">
@@ -70,11 +96,32 @@ export default function AttentionPage() {
       ) : null}
 
       {attention.isSuccess && attention.data.length > 0 ? (
-        <AttentionList rows={attention.data} roster={roster} onOpen={setOpenId} />
+        <AttentionList
+          rows={attention.data}
+          roster={roster}
+          onOpen={setOpenId}
+          onArm={arm}
+        />
       ) : null}
 
-      <section className="mt-2 flex flex-col gap-2">
-        <h2 className="s-eyebrow">{UI.activityTitle}</h2>
+      {/* Given its own rule and card: on a wide screen the buckets end near the
+          middle of the viewport and the feed floated on the background below
+          them, so the page read as one that stopped partway. */}
+      <section
+        className="s-card mt-6 flex flex-col gap-2 p-3"
+        aria-labelledby="activity-feed-title"
+      >
+        <h2 id="activity-feed-title" className="s-eyebrow" style={{ margin: 0 }}>
+          {UI.activityTitle}
+        </h2>
+        {activity.isLoading ? (
+          <p data-testid="activity-loading" className="text-[13px]" style={{ color: "hsl(var(--s-fg-faint))" }}>
+            {UI.loading}
+          </p>
+        ) : null}
+        {activity.isError ? (
+          <QueueError onRetry={() => void activity.refetch()} what={UI.activityError} />
+        ) : null}
         {activity.isSuccess ? <ActivityFeed rows={activity.data} /> : null}
       </section>
 
@@ -108,6 +155,33 @@ export default function AttentionPage() {
           onAssign={(assignee, nextTouchAt) =>
             assign.mutate({ assignee, next_touch_at: nextTouchAt }, saved)
           }
+        />
+      ) : null}
+
+      {answerSheetOpen && capture.pending ? (
+        <OutcomeSheet
+          leadName={
+            pendingLead
+              ? (pendingLead.contact_name ?? pendingLead.org_name)
+              : (lastLeadName.current ?? "")
+          }
+          lostReasons={settings.data?.lost_reasons}
+          channel={capture.pending.channel}
+          busy={outcome.isPending}
+          error={outcome.error?.message ?? null}
+          onSubmit={(vars) => {
+            if (!vars.result) return;
+            outcome.mutate(
+              { result: vars.result, next_touch_at: vars.next_touch_at, reason: vars.reason },
+              {
+                onSuccess: () => {
+                  capture.clear();
+                  setToast(UI.outcomeSaved);
+                },
+              },
+            );
+          }}
+          onDismiss={capture.dismiss}
         />
       ) : null}
 

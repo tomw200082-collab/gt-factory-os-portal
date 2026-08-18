@@ -229,8 +229,37 @@ describe("today queue", () => {
     );
     const section = screen.getByTestId("today-section-new_lead");
     expect(within(section).getByTestId("today-section-count").textContent).toBe("40");
-    expect(within(section).getByTestId("today-daily-commitment").textContent).toBe(
+    expect(within(section).getByTestId("today-daily-commitment").textContent).toContain(
       UI.dailyCommitment(15, 25),
+    );
+    // A sentence that names 25 waiting leads and offers no way to reach them is
+    // a dead end; the count opens the list it is counting.
+    expect(
+      within(section).getByTestId("today-deferred-link").getAttribute("href"),
+    ).toBe("/sales/leads");
+  });
+
+  it("spends one daily budget across the queue, not one per section", () => {
+    // A cap of 15 used to mean 15 new leads *and* 15 follow-ups — thirty calls
+    // from a setting whose label reads "כמה שיחות ביום" (gate P1).
+    renderQueue(
+      [
+        ...Array.from({ length: 20 }, (_, i) => row({ lead_id: `N${i}`, item_type: "new_lead" })),
+        ...Array.from({ length: 20 }, (_, i) =>
+          row({ lead_id: `F${i}`, item_type: "due_follow_up" }),
+        ),
+      ],
+      15,
+    );
+    // New leads render first and take the whole budget; follow-ups get none of
+    // it and say so, rather than opening a second allowance.
+    const newSection = screen.getByTestId("today-section-new_lead");
+    expect(within(newSection).getByTestId("today-daily-commitment").textContent).toContain(
+      UI.dailyCommitment(15, 5),
+    );
+    const followSection = screen.getByTestId("today-section-due_follow_up");
+    expect(within(followSection).getByTestId("today-daily-commitment").textContent).toContain(
+      UI.dailyCommitment(0, 20),
     );
   });
 

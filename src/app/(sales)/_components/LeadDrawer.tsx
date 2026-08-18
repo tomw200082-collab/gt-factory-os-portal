@@ -179,7 +179,12 @@ export function LeadDrawer({
       className="fixed inset-0 z-40 flex justify-start"
       style={{ background: "hsl(var(--s-overlay))" }}
       onClick={(e) => {
-        if (e.target === e.currentTarget) onClose();
+        if (e.target !== e.currentTarget) return;
+        // Escape asks before discarding an unsaved note; the backdrop did not,
+        // so the same keystroke-equivalent gesture threw away typed work
+        // depending only on how the drawer was dismissed (gate P1).
+        if (dirty && !window.confirm(UI.discardChanges)) return;
+        onClose();
       }}
     >
       <div

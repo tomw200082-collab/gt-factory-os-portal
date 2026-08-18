@@ -27,9 +27,14 @@ export interface AttentionListProps {
   rows: AttentionRow[];
   roster: AssigneeEntry[];
   onOpen: (leadId: string) => void;
+  /** Placing a call from here owes an outcome, exactly as it does on Today and
+   *  in the drawer. Without it this screen was the one place in v2 where a
+   *  conversation could happen and nothing would ask what came of it — the
+   *  defect the whole outcome loop exists to close (gate flow P1). */
+  onArm: (leadId: string, channel: "call") => void;
 }
 
-export function AttentionList({ rows, roster, onOpen }: AttentionListProps) {
+export function AttentionList({ rows, roster, onOpen, onArm }: AttentionListProps) {
   return (
     <div className="flex flex-col gap-6">
       {BUCKETS.map((bucket) => {
@@ -52,6 +57,7 @@ export function AttentionList({ rows, roster, onOpen }: AttentionListProps) {
                 <article
                   key={`${row.bucket}-${row.lead_id}`}
                   data-testid={`attention-row-${row.lead_id}-${row.bucket}`}
+                  aria-label={row.org_name}
                   className="s-card flex flex-wrap items-center justify-between gap-x-3 gap-y-2 p-3"
                 >
                   {/* Identity and its metadata travel together. A flex-1 name
@@ -61,8 +67,8 @@ export function AttentionList({ rows, roster, onOpen }: AttentionListProps) {
                   <div className="flex min-w-0 flex-wrap items-center gap-2">
                     <button
                       type="button"
-                      className="min-w-0 text-start font-semibold"
-                      style={{ color: "hsl(var(--s-fg))" }}
+                      data-testid={`attention-open-${row.lead_id}-${row.bucket}`}
+                      className="s-link min-w-0 text-start font-semibold"
                       onClick={() => onOpen(row.lead_id)}
                     >
                       {row.org_name}
@@ -82,7 +88,13 @@ export function AttentionList({ rows, roster, onOpen }: AttentionListProps) {
                   </div>
 
                   {tel ? (
-                    <a href={tel} className="s-btn s-btn-ghost" aria-label={UI.call}>
+                    <a
+                      href={tel}
+                      className="s-btn s-btn-ghost"
+                      data-testid={`attention-call-${row.lead_id}-${row.bucket}`}
+                      aria-label={UI.callOrg(row.org_name)}
+                      onClick={() => onArm(row.lead_id, "call")}
+                    >
                       <Phone size={16} aria-hidden />
                       <bdi dir="ltr" className="s-nums text-[12px]">
                         {fmtPhone(row.phone_e164)}

@@ -213,10 +213,36 @@ export function useAddNote(leadId: string) {
   );
 }
 
+/**
+ * Push a lead's next touch out, optimistically.
+ *
+ * Postponing is the same gesture as answering — the card should leave the
+ * queue on the tap, not after a round trip. This was the one write in the loop
+ * that waited, so "דחה" felt broken on a slow connection while every other
+ * action felt instant; the row comes back if the write fails (gate P1).
+ */
 export function useSetNextTouch(leadId: string) {
-  return useSalesMutation<{ at: string }, unknown>((vars) =>
-    request(`/api/sales/leads/${leadId}/next-touch`, jsonBody(vars)),
-  );
+  const qc = useQueryClient();
+  return useMutation<unknown, SalesApiError, { at: string }, { previous?: TodayPayload }>({
+    mutationFn: (vars) => request(`/api/sales/leads/${leadId}/next-touch`, jsonBody(vars)),
+    onMutate: async () => {
+      await qc.cancelQueries({ queryKey: salesKeys.today() });
+      const previous = qc.getQueryData<TodayPayload>(salesKeys.today());
+      if (previous) {
+        qc.setQueryData<TodayPayload>(salesKeys.today(), {
+          ...previous,
+          rows: previous.rows.filter((row) => row.lead_id !== leadId),
+        });
+      }
+      return { previous };
+    },
+    onError: (_err, _vars, context) => {
+      if (context?.previous) qc.setQueryData(salesKeys.today(), context.previous);
+    },
+    onSettled: () => {
+      void qc.invalidateQueries({ queryKey: salesKeys.all });
+    },
+  });
 }
 
 /**

@@ -2,7 +2,7 @@
 
 // The full table: every lead GT has ever received, in one place.
 
-import { Suspense, useEffect, useMemo, useState } from "react";
+import { Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { useSearchParams } from "next/navigation";
 import {
   useAddNote,
@@ -97,6 +97,13 @@ function LeadsScreen() {
     () => rows.find((r) => r.id === capture.pending?.leadId) ?? null,
     [rows, capture.pending],
   );
+  // An answered lead leaves the list, and the sheet asking about it is still
+  // open. Without this the heading empties mid-interaction and the question
+  // becomes "what happened?" about nothing.
+  const lastLeadName = useRef<string | null>(null);
+  useEffect(() => {
+    if (pendingRow) lastLeadName.current = pendingRow.contact_name ?? pendingRow.org_name;
+  }, [pendingRow]);
   const outcome = useOutcome(capture.pending?.leadId ?? "");
   const answerSheetOpen = Boolean(capture.pending && (pendingRow || outcome.isPending));
 
@@ -105,6 +112,14 @@ function LeadsScreen() {
     const id = setTimeout(() => setToast(null), 4500);
     return () => clearTimeout(id);
   }, [toast]);
+
+  // Selection belongs to the rows on screen. Change the tab or a chip and the
+  // rows change under it, so the bulk bar would keep acting on leads the person
+  // is no longer looking at — select eight on חדש, switch to אבוד, press שייך,
+  // and eight invisible leads move (gate P0, INTER-001).
+  useEffect(() => {
+    setSelected(new Set());
+  }, [tab, uncontactableOnly, unownedOnly]);
 
   const error =
     setStatus.error?.message ??
@@ -181,7 +196,7 @@ function LeadsScreen() {
               type="button"
               data-testid="leads-chip-unowned"
               aria-pressed={unownedOnly}
-              className={`s-tab ${unownedOnly ? "s-tab-active" : ""}`}
+              className={`s-tab s-chip ${unownedOnly ? "s-tab-active" : ""}`}
               onClick={() => setUnownedOnly((v) => !v)}
             >
               {UI.chipUnowned(unownedCount)}
@@ -192,7 +207,7 @@ function LeadsScreen() {
               type="button"
               data-testid="leads-chip-uncontactable"
               aria-pressed={uncontactableOnly}
-              className={`s-tab ${uncontactableOnly ? "s-tab-active" : ""}`}
+              className={`s-tab s-chip ${uncontactableOnly ? "s-tab-active" : ""}`}
               onClick={() => setUncontactableOnly((v) => !v)}
             >
               {UI.uncontactableChip(uncontactableCount)}
@@ -274,11 +289,20 @@ function LeadsScreen() {
         />
       ) : null}
 
+      {/* Mounted always, and empty when nothing is selected. A live region that
+          appears already carrying its message never announces it — so the bar
+          arriving was silent to anyone not looking at the screen, and bulk
+          assignment was undiscoverable by keyboard (gate P0, A11Y-001). */}
+      <span role="status" aria-live="polite" className="sr-only" data-testid="bulk-live">
+        {selected.size > 0 ? UI.bulkSelected(selected.size) : ""}
+      </span>
+
       {selected.size > 0 ? (
         <BulkBar
           count={selected.size}
           roster={roster}
           busy={bulkAssign.isPending}
+          error={bulkAssign.error?.message ?? null}
           onClear={() => setSelected(new Set())}
           onAssign={(email, at) =>
             bulkAssign.mutate(
@@ -293,6 +317,9 @@ function LeadsScreen() {
                   );
                   setSelected(new Set());
                 },
+                // A write that fails silently invites the same press again.
+                // The selection is deliberately kept: retrying is the point.
+                onError: () => setToast(UI.bulkAssignFailed),
               },
             )
           }
@@ -301,7 +328,11 @@ function LeadsScreen() {
 
       {answerSheetOpen && capture.pending ? (
         <OutcomeSheet
-          leadName={pendingRow ? (pendingRow.contact_name ?? pendingRow.org_name) : ""}
+          leadName={
+            pendingRow
+              ? (pendingRow.contact_name ?? pendingRow.org_name)
+              : (lastLeadName.current ?? "")
+          }
           lostReasons={settings.data?.lost_reasons}
           channel={capture.pending.channel}
           busy={outcome.isPending}

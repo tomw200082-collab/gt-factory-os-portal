@@ -19,18 +19,31 @@ export function StatsStrip({ stats }: { stats: WeekStats | undefined }) {
   // (audit P0-5), so it goes second and quieter.
   return (
     <div className="flex flex-col gap-0.5">
-      <p
+      {/* A grid, not a bullet-joined string. Four counts serialised into one
+          <p> wrapped to four lines at 390px and took over the header, so the
+          preamble outweighed the first card on the screen that is read
+          one-handed more than any other (gate P1). Any strip of four or more
+          data points is a grid — bullet strings are not reflow-safe. */}
+      <dl
         data-testid="stats-strip"
-        className="s-nums text-[13px]"
-        style={{ color: "hsl(var(--s-fg))" }}
+        className="s-nums grid grid-cols-2 gap-x-4 gap-y-0.5 text-[13px] sm:grid-cols-4"
       >
-        {UI.triageLine(
-          stats.queue_today,
-          stats.overdue_count,
-          stats.unassigned_open_count,
-          stats.never_contacted_count,
-        )}
-      </p>
+        {(
+          [
+            [UI.triageQueueToday, stats.queue_today],
+            [UI.triageOverdue, stats.overdue_count],
+            [UI.triageUnowned, stats.unassigned_open_count],
+            [UI.triageNever, stats.never_contacted_count],
+          ] as Array<[string, number]>
+        ).map(([label, value]) => (
+          <div key={label} className="flex items-baseline gap-1.5">
+            <dt style={{ color: "hsl(var(--s-fg-faint))" }}>{label}</dt>
+            <dd className="m-0 font-semibold" style={{ color: "hsl(var(--s-fg))" }}>
+              {value}
+            </dd>
+          </div>
+        ))}
+      </dl>
       <p
         data-testid="stats-strip-week"
         className="s-nums text-[12px]"

@@ -7,9 +7,10 @@
 // quiet again), then untouched new leads, then today's follow-ups. The view
 // already returns rows in this order; grouping here makes the reason legible.
 
+import Link from "next/link";
 import { useState } from "react";
 import { TODAY_SECTION_LABELS, UI } from "../_lib/labels";
-import { SECTION_ALARM_COUNT, capRows } from "../_lib/queue";
+import { SECTION_ALARM_COUNT, budgetSpent, capRows } from "../_lib/queue";
 import type {
   AssigneeEntry,
   TodayItemType,
@@ -62,7 +63,8 @@ function Section({
   const [shown, setShown] = useState(PAGE);
 
   // Two limits, in order: the daily commitment decides what is owed today, the
-  // batch decides how much of it is on screen right now.
+  // batch decides how much of it is on screen right now. dailyCap here is this
+  // section's share of one queue-wide budget, not a fresh allowance.
   const { visible: committed, remaining: deferred } = capRows(rows, dailyCap);
   const visible = committed.slice(0, shown);
   const remaining = committed.length - visible.length;
@@ -98,7 +100,17 @@ function Section({
           className="s-nums text-[12px]"
           style={{ color: "hsl(var(--s-fg-muted))" }}
         >
-          {UI.dailyCommitment(committed.length, deferred)}
+          {UI.dailyCommitment(committed.length, deferred)}{" "}
+          {/* The sentence named a number of waiting leads and offered no way to
+              reach them — a count that states a backlog should open it. */}
+          <Link
+            href="/sales/leads"
+            data-testid="today-deferred-link"
+            className="underline"
+            style={{ color: "hsl(var(--s-accent))" }}
+          >
+            {UI.seeAllWaiting}
+          </Link>
         </p>
       ) : null}
 
@@ -145,17 +157,24 @@ export function TodayQueue({
   onPostpone,
   onLost,
 }: TodayQueueProps) {
+  // "כמה שיחות ביום" is one number for the day. Handing the full cap to every
+  // section spent it twice — 15 new leads and 15 follow-ups from a cap of 15
+  // (gate P1). Sections draw from a single budget in render order instead.
+  let budget = dailyCap;
+
   return (
     <div className="flex flex-col gap-6">
       {SECTION_ORDER.map((type) => {
         const section = rows.filter((r) => r.item_type === type);
         if (section.length === 0) return null;
+        const share = budget;
+        budget -= budgetSpent(section, budget);
         return (
           <Section
             key={type}
             type={type}
             rows={section}
-            dailyCap={dailyCap}
+            dailyCap={share}
             slaHours={slaHours}
             roster={roster}
             templates={templates}

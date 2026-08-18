@@ -17,11 +17,15 @@ export interface BulkBarProps {
   count: number;
   roster: AssigneeEntry[];
   busy?: boolean;
+  /** A failed batch, said out loud. Without this the bar went spinner → idle
+   *  with nothing changed and nothing stated, and the natural next move was to
+   *  press the same button again (gate P0, INTER-002). */
+  error?: string | null;
   onAssign: (email: string, nextTouchAt: string) => void;
   onClear: () => void;
 }
 
-export function BulkBar({ count, roster, busy, onAssign, onClear }: BulkBarProps) {
+export function BulkBar({ count, roster, busy, error = null, onAssign, onClear }: BulkBarProps) {
   const [assignee, setAssignee] = useState<string | null>(null);
   const [date, setDate] = useState(toDateInputValue(new Date()));
 
@@ -47,7 +51,7 @@ export function BulkBar({ count, roster, busy, onAssign, onClear }: BulkBarProps
       <input
         type="date"
         className="s-input w-auto"
-        aria-label={UI.saveDate}
+        aria-label={UI.bulkDateLabel}
         value={date}
         disabled={busy}
         onChange={(e) => setDate(e.target.value)}
@@ -69,6 +73,17 @@ export function BulkBar({ count, roster, busy, onAssign, onClear }: BulkBarProps
       <button type="button" data-testid="bulk-clear" className="s-btn s-btn-ghost" onClick={onClear}>
         {UI.clearSelection}
       </button>
+
+      {error ? (
+        <p
+          role="alert"
+          data-testid="bulk-error"
+          className="w-full text-[12px]"
+          style={{ color: "hsl(var(--s-sla-overdue))" }}
+        >
+          {error}
+        </p>
+      ) : null}
     </div>
   );
 }

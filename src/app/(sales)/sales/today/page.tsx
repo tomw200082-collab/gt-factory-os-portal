@@ -139,15 +139,19 @@ export default function TodayPage() {
 
   return (
     <div className="flex flex-col gap-4">
-      <header className="flex flex-col gap-1">
-        <div className="flex flex-wrap items-center justify-between gap-2">
-          <h1 className="text-xl font-semibold tracking-tight" style={{ color: "hsl(var(--s-fg))" }}>
-            {scope === "mine" ? UI.queueMine : UI.queueAll}
-          </h1>
+      <header className="flex flex-col gap-2">
+        {/* The title holds its own row. Sharing one with the scope pills gave a
+            44px-tall filter control the same visual mass as the page name at
+            390px, where the pair took the whole width. */}
+        <h1 className="text-xl font-semibold tracking-tight" style={{ color: "hsl(var(--s-fg))" }}>
+          {scope === "mine" ? UI.queueMine : UI.queueAll}
+        </h1>
+        <div className="flex flex-wrap items-center gap-2">
           {/* Two states, not a menu: the question is only ever "everything, or
               what is on me". It persists, because the answer should survive
-              closing the app. */}
-          <div className="flex gap-1" role="group" aria-label={UI.todayTitle}>
+              closing the app. The group is named for what it controls — it
+              used to be labelled with the page's own title. */}
+          <div className="flex gap-1" role="group" aria-label={UI.queueScopeGroupLabel}>
             {(["all", "mine"] as const).map((option) => (
               <button
                 key={option}

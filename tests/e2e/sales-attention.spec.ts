@@ -58,7 +58,10 @@ const ACTIVITY = [
   },
 ];
 
-async function stub(page: Page, opts: { attention?: unknown[]; saved?: unknown[] } = {}) {
+async function stub(
+  page: Page,
+  opts: { attention?: unknown[]; saved?: unknown[]; leads?: unknown[]; outreach?: string[] } = {},
+) {
   await page.route("**/api/sales/week-stats**", (r) =>
     r.fulfill({
       json: {
@@ -77,7 +80,13 @@ async function stub(page: Page, opts: { attention?: unknown[]; saved?: unknown[]
   );
   await page.route("**/api/sales/orgs**", (r) => r.fulfill({ json: { rows: [] } }));
   await page.route("**/api/sales/leads/*/events**", (r) => r.fulfill({ json: { rows: [] } }));
-  await page.route("**/api/sales/leads**", (r) => r.fulfill({ json: { rows: [] } }));
+  await page.route("**/api/sales/leads**", (r) =>
+    r.fulfill({ json: { rows: opts.leads ?? [] } }),
+  );
+  await page.route("**/api/sales/leads/*/outreach", (r) => {
+    opts.outreach?.push(r.request().url());
+    return r.fulfill({ json: { lead_id: "L-LATE", event_id: "E9" } });
+  });
   await page.route("**/api/sales/today**", (r) => r.fulfill({ json: { rows: [], queue: QUEUE } }));
   await page.route("**/api/sales/attention**", (r) =>
     r.fulfill({ json: { rows: opts.attention ?? ATTENTION } }),
@@ -92,8 +101,22 @@ async function stub(page: Page, opts: { attention?: unknown[]; saved?: unknown[]
   });
 }
 
+/** A real trip away from the app and back — the sheet is raised on return,
+ *  never on the tap, because the tap is when the dialler takes over. */
+async function leaveAndReturn(page: Page) {
+  await page.evaluate(() => {
+    Object.defineProperty(document, "visibilityState", { value: "hidden", configurable: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+    Object.defineProperty(document, "visibilityState", { value: "visible", configurable: true });
+    document.dispatchEvent(new Event("visibilitychange"));
+  });
+}
+
 test.beforeEach(async ({ page }) => {
   await setFakeRole(page, "admin");
+  await page.addInitScript(() => {
+    window.__GT_SALES_OUTCOME_DELAY_MS__ = 0;
+  });
 });
 
 test("attention buckets what is overdue and what nobody owns @mocked", async ({ page }) => {
@@ -147,7 +170,7 @@ test("lost reasons are editable without a deploy @mocked", async ({ page }) => {
   await stub(page, { saved });
   await page.goto("/sales/settings");
 
-  await page.getByLabel("סיבות אבוד").fill("מחיר");
+  await page.getByTestId("lost-reason-new").fill("מחיר");
   await page.getByTestId("lost-reason-add").click();
   await page.getByTestId("settings-save").click();
 
@@ -156,4 +179,80 @@ test("lost reasons are editable without a deploy @mocked", async ({ page }) => {
   expect(body.lost_reasons).toContain("מחיר");
   // The free-text entry stays last, because that is the rule the hint states.
   expect(body.lost_reasons[body.lost_reasons.length - 1]).toBe("אחר");
+});
+
+/** The lead behind L-LATE, as /leads returns it — the outcome sheet names its
+ *  subject from there. */
+const LEAD_LATE = {
+  id: "L-LATE",
+  org_id: "O-LATE",
+  org_name: "מסעדה מאחרת",
+  contact_name: "יעל",
+  phone_e164: "+972521234567",
+  email: null,
+  source: "manual",
+  campaign_name: null,
+  ad_name: null,
+  platform: null,
+  is_organic: false,
+  status: "working",
+  lost_reason: null,
+  assignee: "tom@gteveryday.com",
+  next_touch_at: iso(new Date(now.getTime() - 4 * 86400e3)),
+  first_touch_at: null,
+  possible_duplicate_of: null,
+  converted_order_ref: null,
+  converted_amount: null,
+  created_at: iso(new Date(now.getTime() - 10 * 86400e3)),
+  is_existing_customer: false,
+  shopify_customer_id: null,
+  shopify_snapshot: null,
+  shopify_snapshot_at: null,
+  age_days: 10,
+  sla_deadline_at: null,
+  sla_state: "overdue",
+  next_touch_overdue: true,
+  uncontactable: false,
+};
+
+test("a call placed from /attention is answered for on /attention @mocked", async ({ page }) => {
+  // Gate flow P1 / INTER-008. This screen dialled and asked nothing — so the
+  // one surface built for "what is stuck" was itself a way to have a
+  // conversation that no record ever showed, which is the exact defect the
+  // outcome loop exists to close.
+  const outreach: string[] = [];
+  await stub(page, { leads: [LEAD_LATE], outreach });
+  await page.goto("/sales/attention");
+
+  await page.getByTestId("attention-call-L-LATE-overdue").click();
+
+  // The intent is recorded server-side …
+  await expect.poll(() => outreach.length).toBeGreaterThan(0);
+  expect(outreach[0]).toContain("/L-LATE/outreach");
+
+  await leaveAndReturn(page);
+
+  // … and the screen asks what came of it, naming the business.
+  const sheet = page.getByTestId("outcome-sheet");
+  await expect(sheet).toBeVisible();
+  await expect(sheet).toContainText("יעל");
+});
+
+test("the activity feed says it is loading rather than showing nothing @mocked", async ({
+  page,
+}) => {
+  // A blank <section> while the query was in flight was indistinguishable from
+  // "no activity has ever happened" (gate flow P1).
+  await stub(page);
+  let release: () => void = () => {};
+  const held = new Promise<void>((r) => (release = r));
+  await page.route("**/api/sales/activity**", async (r) => {
+    await held;
+    return r.fulfill({ json: { rows: ACTIVITY } });
+  });
+
+  await page.goto("/sales/attention");
+  await expect(page.getByTestId("activity-loading")).toBeVisible();
+  release();
+  await expect(page.getByTestId("activity-feed")).toBeVisible();
 });
