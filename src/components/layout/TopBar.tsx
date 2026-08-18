@@ -1,6 +1,6 @@
 "use client";
 
-import { ChevronDown, Eye, LogOut, Moon, Sun } from "lucide-react";
+import { ArrowLeftRight, ChevronDown, Eye, LogOut, Moon, Sun } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
@@ -118,6 +118,11 @@ export function TopBar() {
           {/* Global search / command palette (⌘K) — Tranche 090 */}
           <CommandPalette />
 
+          {/* Cross-app switch (Tranche 163). Tranche 162 shipped the crossing
+              in one direction only: the sales shell can reach /home, but from
+              here sales was a URL you had to remember. */}
+          <SalesSwitch />
+
           {DEV_SHIM_ENABLED ? (
             <>
               {/* Review mode button — dev-shim only; never renders in production */}
@@ -194,6 +199,40 @@ export function TopBar() {
         </div>
       </div>
     </header>
+  );
+}
+
+/**
+ * The way into the sales workspace, mirroring the `מעבר לייצור` control the
+ * sales shell already carries — same icon, same icon-only-on-phone shape, so
+ * the crossing looks like one feature from either side rather than two.
+ *
+ * Straight to /sales/today, not to /apps: the sales-side control goes straight
+ * to /home, and a switchboard on only one of the two directions would be an
+ * asymmetry the user has to learn.
+ *
+ * Admin-only, matching the predicate on /apps and the RoleGate wrapping the
+ * (sales) route group. Everyone else sees the topbar exactly as before.
+ *
+ * The label stays English. The factory shell is English-first; the portal
+ * CLAUDE.md Hebrew exception covers /apps and the (sales) group, and this
+ * control lives in neither.
+ */
+export function SalesSwitch() {
+  const { session } = useSession();
+  if (session.role !== "admin") return null;
+
+  return (
+    <Link
+      href="/sales/today"
+      className="btn btn-ghost gap-1.5"
+      title="Switch to the sales workspace"
+      aria-label="Switch to the sales workspace"
+      data-testid="topbar-switch-sales"
+    >
+      <ArrowLeftRight className="h-3.5 w-3.5" strokeWidth={1.75} aria-hidden />
+      <span className="hidden sm:inline">Sales</span>
+    </Link>
   );
 }
 
