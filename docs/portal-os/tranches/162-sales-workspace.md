@@ -46,6 +46,7 @@ manifest:
 - CLAUDE.md
 - PRODUCT.md
 - .gitignore
+- .claude/settings.json
 - package.json
 - package-lock.json
 - scripts/check-no-persona-in-urls.mjs
