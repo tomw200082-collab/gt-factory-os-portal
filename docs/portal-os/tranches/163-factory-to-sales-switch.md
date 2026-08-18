@@ -43,6 +43,7 @@ src/components/layout/TopBar.tsx
 src/components/layout/TopBar.switch.test.tsx
 docs/portal-os/tranches/163-factory-to-sales-switch.md
 docs/portal-os/tranches/_active.txt
+docs/portal-os/registry.md
 ```
 
 ## Checklist
@@ -52,4 +53,5 @@ docs/portal-os/tranches/_active.txt
 - [x] Points at `/sales/today`
 - [x] Label hidden below `sm`, accessible name present at every width
 - [x] `NAV_MANIFEST` unchanged — no new primary-nav entry, no quarantine re-entry
+- [x] Registered in `docs/portal-os/registry.md` (the PR guard fails the build otherwise)
 - [x] tsc clean · vitest green
