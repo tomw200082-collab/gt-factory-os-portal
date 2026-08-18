@@ -211,6 +211,20 @@ Logged, deliberately not built (per the 2026-08-17 UX-iteration addendum):
   nav/gate changes from tranches 139/141/143/155 never folded in, and four
   pre-existing pages with no `route-manifest.json` row).
 
+### UX release gate — verdict SHIP, 3 iterations
+
+| Run | Result |
+|---|---|
+| 1 | **HOLD** — 4 P0, 21 P1 across the five dimensions |
+| *iteration 1* | the silent-outcome-loss P0 + the flow/interaction/visual P1s |
+| *iteration 2* | three WCAG level-A P0s, contrast on two untested grounds, the copy set |
+| 2 | **0 P0**, 4 P1. Visual **GREEN**, copy **GREEN** |
+| *iteration 3* | all four P1s + five P2s |
+| 3 | **0 new P0, 0 new P1** — all nine iteration-3 changes verified CORRECT; one new P2 found and fixed |
+
+**Verdict: SHIP** — zero P0 across all five dimensions, and every named P1 closed.
+Three fix iterations, inside the bound of three set by Tom's 2026-08-17 addendum.
+
 ### Deferred by the UX release gate (P2, logged not built)
 
 Every P0 and P1 the gate raised was fixed in the two iterations. These are the P2s,
